@@ -322,7 +322,7 @@ export const copilotInvoke: TaskDefinition<
         reasoningEffort?: "low" | "medium" | "high" | "xhigh";
         repairBudget?: number;
     },
-    Record<string, unknown>
+    unknown
 > = {
     name: "copilot.invoke",
     sideEffects: true,
@@ -356,12 +356,9 @@ export const copilotInvoke: TaskDefinition<
             },
         },
     },
-    outputSchema: {
-        // `copilot.invoke`'s schema-guided turn loop registers a synthetic
-        // `submit_response` tool whose JSON Schema parameters block must be an
-        // object (LLM tool-call APIs require object parameters).
-        type: "object",
-    },
+    // `copilot.invoke`'s actual per-call output shape is whatever the
+    // dispatching node declares (`{}` is JSONSchema for `any`).
+    outputSchema: {},
     async execute(input, ctx) {
         // Validate any attachment paths against the same allowed roots
         // file.read / file.write enforce.

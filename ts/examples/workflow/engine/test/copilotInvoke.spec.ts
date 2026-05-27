@@ -130,22 +130,26 @@ describe("copilot.invoke (decision 0010)", () => {
     }): WorkflowIR {
         return {
             kind: "workflow",
-            name: "copilotTest",
             version: "1",
-            inputSchema: { type: "object" },
-            outputSchema: { type: "object" },
-            nodes: {
-                step: {
-                    kind: "task",
-                    task: "copilot.invoke",
-                    inputSchema: copilotInvoke.inputSchema,
+            entry: "copilotTest",
+            workflows: {
+                copilotTest: {
+                    inputSchema: { type: "object" },
                     outputSchema: opts.outputSchema,
-                    inputs: opts.inputs as any,
-                    bind: "result",
+                    entry: "step",
+                    nodes: {
+                        step: {
+                            kind: "task",
+                            task: "copilot.invoke",
+                            inputSchema: copilotInvoke.inputSchema,
+                            outputSchema: opts.outputSchema,
+                            inputs: opts.inputs as any,
+                            bind: "result",
+                        },
+                    },
+                    output: { $from: "scope", name: "result" } as any,
                 },
             },
-            entry: "step",
-            output: { $from: "scope", name: "result" } as any,
         };
     }
 
@@ -328,14 +332,31 @@ describe("copilot.invoke (decision 0010)", () => {
         expect(sessions[0]!.sentPrompts.length).toBe(1);
     });
 
-    it("rejects non-object IR outputSchema (defense-in-depth)", async () => {
-        // Invalid outputSchema for copilot.invoke — should fail before
-        // we even call the SDK. The factory should not be invoked.
-        let factoryCalled = false;
-        setCopilotClientFactory(async () => {
-            factoryCalled = true;
-            throw new Error("factory should not be called");
-        });
+    it("string outputSchema: wraps submit_response and unwraps the bare value", async () => {
+        let observedParams: unknown;
+        const { client } = makeMockClient([
+            {
+                async onSend(_prompt, callSubmit) {
+                    // Free-text mode: node declared `outputSchema: { type: "string" }`,
+                    // so submit_response is wrapped as `{ value: <string> }`.
+                    await callSubmit({ value: "hello world" });
+                },
+            },
+        ]);
+        // Spy on the synthetic tool's parameters via createSession.
+        const wrappedClient: MinimalCopilotClient = {
+            ...client,
+            async createSession(config) {
+                const submitTool = (config.tools ?? []).find(
+                    (t: Tool) => t.name === "submit_response",
+                );
+                observedParams = (
+                    submitTool as { parameters?: unknown } | undefined
+                )?.parameters;
+                return client.createSession(config);
+            },
+        };
+        setCopilotClientFactory(async () => wrappedClient);
 
         const eng = makeEngine();
         const ir = makeIR({
@@ -344,14 +365,18 @@ describe("copilot.invoke (decision 0010)", () => {
         });
 
         const result = await eng.run(ir, { policy: allowAllPolicy });
-        expect(result.success).toBe(false);
-        expect(factoryCalled).toBe(false);
-        // Either the engine's IR-level drift check fires, or our
-        // defense-in-depth check inside invokeCopilotAgent fires.
-        // Either way we want a clear non-object schema message.
-        expect(result.error?.message.toLowerCase()).toMatch(
-            /object|outputschema/,
-        );
+        expect(result.success).toBe(true);
+        // Output is unwrapped to the bare string, not the `{value: ...}`
+        // envelope.
+        expect(result.output).toBe("hello world");
+        // submit_response's params were wrapped so the LLM tool-call
+        // constraint (object-typed params) is satisfied.
+        expect(observedParams).toEqual({
+            type: "object",
+            properties: { value: { type: "string" } },
+            required: ["value"],
+            additionalProperties: false,
+        });
     });
 
     it("validates repairBudget bounds", async () => {

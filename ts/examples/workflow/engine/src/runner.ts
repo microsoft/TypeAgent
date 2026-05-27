@@ -550,9 +550,7 @@ export class WorkflowEngine {
                 data?: unknown;
             } = {
                 message: err instanceof Error ? err.message : String(err),
-                ...(isTaskFailure
-                    ? { nodeId: err.nodeId }
-                    : {}),
+                ...(isTaskFailure ? { nodeId: err.nodeId } : {}),
                 ...(isTaskFailure && err.taskError.data !== undefined
                     ? { data: err.taskError.data }
                     : {}),
@@ -893,11 +891,8 @@ export class WorkflowEngine {
                 scopePath: [...scopePath],
                 signal: taskSignal,
                 ...(constraints ? { constraints } : {}),
-                // Expose the dispatching node's declared output schema
-                // to schema-guided tasks like copilot.invoke.
-                ...(node.outputSchema
-                    ? { outputSchema: node.outputSchema }
-                    : {}),
+                // The dispatching node's declared output schema.
+                outputSchema: node.outputSchema,
             };
 
             let result: TaskResult;

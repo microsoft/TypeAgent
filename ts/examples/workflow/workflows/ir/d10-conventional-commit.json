@@ -1,0 +1,1102 @@
+{
+  "kind": "workflow",
+  "version": "1",
+  "description": "Generate a Conventional Commits message from staged git changes. Plumbing (file enumeration, per-file diff, templating, joining, looping) is fully deterministic; copilot.invoke is used twice with schema-guided structured output (decisions 0010/0011): once per file to categorize the change, then once at the end to synthesize the final message.",
+  "constants": {
+    "categorizePromptTemplate": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "You are categorizing one file change for a Conventional Commits message.\n\nFile: {{file}}\n\nGit diff (staged):\n{{diff}}\n\nCall the `submit_response` tool with:\n- `type`: one of feat, fix, refactor, perf, docs, test, style, chore, build, ci. Pick the type that best describes the dominant change in this file.\n- `scope`: a short lower-case scope (1-2 words, e.g. a package or module name). Use \"\" if no obvious scope.\n- `summary`: a single concise imperative-mood phrase (≤ 80 chars) describing what changed in this file. No trailing period."
+    },
+    "synthesizePromptTemplate": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "You are composing a single Conventional Commits message that covers all of the following per-file changes.\n\n{{bullets}}\n\nCall the `submit_response` tool with:\n- `type`: the dominant Conventional Commits type across the files (feat, fix, refactor, perf, docs, test, style, chore, build, ci). When mixed, prefer feat > fix > refactor > perf > test > docs > build > ci > style > chore.\n- `scope`: a short lower-case scope shared by the changes, or \"\" if there is no single coherent scope.\n- `subject`: an imperative-mood subject line ≤ 72 chars, no trailing period, summarizing the overall intent of the commit (NOT a list of files).\n- `body`: a 1-3 paragraph body explaining what changed and why, not how. Use plain prose, no markdown headings, no bullet lists."
+    },
+    "subjectWithScopeTemplate": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "{{type}}({{scope}}): {{subject}}"
+    },
+    "subjectNoScopeTemplate": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "{{type}}: {{subject}}"
+    },
+    "finalMessageTemplate": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "{{header}}\n\n{{body}}\n\n# Files\n{{bullets}}\n"
+    }
+  },
+  "entry": "d10-conventional-commit",
+  "workflows": {
+    "d10-conventional-commit": {
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "repoPath"
+        ],
+        "properties": {
+          "repoPath": {
+            "type": "string",
+            "description": "Absolute path to the git repo with staged changes."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "message",
+          "type",
+          "scope",
+          "subject",
+          "body",
+          "fileBullets"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Final conventional commit message ready to pass to git commit -m."
+          },
+          "type": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "fileBullets": {
+            "type": "string"
+          }
+        }
+      },
+      "entry": "getFileList",
+      "nodes": {
+        "getFileList": {
+          "kind": "task",
+          "task": "shell.exec",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "object",
+            "required": [
+              "stdout",
+              "stderr",
+              "exitCode"
+            ],
+            "properties": {
+              "stdout": {
+                "type": "string"
+              },
+              "stderr": {
+                "type": "string"
+              },
+              "exitCode": {
+                "type": "integer"
+              }
+            }
+          },
+          "inputs": {
+            "command": "git",
+            "args": [
+              "diff",
+              "--staged",
+              "--name-only"
+            ],
+            "cwd": {
+              "$from": "input",
+              "name": "repoPath"
+            }
+          },
+          "next": "splitFiles",
+          "bind": "fileListResult"
+        },
+        "splitFiles": {
+          "kind": "task",
+          "task": "string.split",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "text",
+              "delimiter"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "delimiter": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputs": {
+            "text": {
+              "$from": "scope",
+              "name": "fileListResult",
+              "path": [
+                "stdout"
+              ]
+            },
+            "delimiter": "\n"
+          },
+          "next": "fileLoop",
+          "bind": "files"
+        },
+        "fileLoop": {
+          "kind": "loop",
+          "inputs": {
+            "files": {
+              "$from": "scope",
+              "name": "files"
+            },
+            "repoPath": {
+              "$from": "input",
+              "name": "repoPath"
+            },
+            "categorizePromptTemplate": {
+              "$from": "constant",
+              "name": "categorizePromptTemplate"
+            }
+          },
+          "state": {
+            "i": {
+              "schema": {
+                "type": "integer"
+              },
+              "initial": 0
+            },
+            "bullets": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "initial": []
+            }
+          },
+          "body": {
+            "entry": "pickFile",
+            "nodes": {
+              "pickFile": {
+                "kind": "task",
+                "task": "list.elementAt",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "list",
+                    "index"
+                  ],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    },
+                    "index": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "input",
+                    "name": "files"
+                  },
+                  "index": {
+                    "$from": "state",
+                    "name": "i"
+                  }
+                },
+                "next": "getFileDiff",
+                "bind": "picked"
+              },
+              "getFileDiff": {
+                "kind": "task",
+                "task": "shell.exec",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "command"
+                  ],
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "cwd": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "object",
+                  "required": [
+                    "stdout",
+                    "stderr",
+                    "exitCode"
+                  ],
+                  "properties": {
+                    "stdout": {
+                      "type": "string"
+                    },
+                    "stderr": {
+                      "type": "string"
+                    },
+                    "exitCode": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "inputs": {
+                  "command": "git",
+                  "args": [
+                    "diff",
+                    "--staged",
+                    "--",
+                    {
+                      "$from": "scope",
+                      "name": "picked"
+                    }
+                  ],
+                  "cwd": {
+                    "$from": "input",
+                    "name": "repoPath"
+                  }
+                },
+                "next": "buildCategorizePrompt",
+                "bind": "fileDiff"
+              },
+              "buildCategorizePrompt": {
+                "kind": "task",
+                "task": "text.template",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "template",
+                    "vars"
+                  ],
+                  "properties": {
+                    "template": {
+                      "type": "string"
+                    },
+                    "vars": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "template": {
+                    "$from": "input",
+                    "name": "categorizePromptTemplate"
+                  },
+                  "vars": {
+                    "file": {
+                      "$from": "scope",
+                      "name": "picked"
+                    },
+                    "diff": {
+                      "$from": "scope",
+                      "name": "fileDiff",
+                      "path": [
+                        "stdout"
+                      ]
+                    }
+                  }
+                },
+                "next": "categorize",
+                "bind": "categorizePrompt"
+              },
+              "categorize": {
+                "kind": "task",
+                "task": "copilot.invoke",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "prompt"
+                  ],
+                  "properties": {
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "allowedTools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "scope",
+                    "summary"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "feat",
+                        "fix",
+                        "refactor",
+                        "perf",
+                        "docs",
+                        "test",
+                        "style",
+                        "chore",
+                        "build",
+                        "ci"
+                      ],
+                      "description": "Conventional Commits type for this file."
+                    },
+                    "scope": {
+                      "type": "string",
+                      "description": "Short lower-case scope, or empty string."
+                    },
+                    "summary": {
+                      "type": "string",
+                      "description": "Imperative-mood phrase ≤ 80 chars describing the file change."
+                    }
+                  }
+                },
+                "inputs": {
+                  "prompt": {
+                    "$from": "scope",
+                    "name": "categorizePrompt"
+                  },
+                  "model": "claude-sonnet-4.6",
+                  "allowedTools": []
+                },
+                "next": "formatBullet",
+                "bind": "categorization"
+              },
+              "formatBullet": {
+                "kind": "task",
+                "task": "text.template",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "template",
+                    "vars"
+                  ],
+                  "properties": {
+                    "template": {
+                      "type": "string"
+                    },
+                    "vars": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "template": "- {{type}} ({{scope}}) {{file}}: {{summary}}",
+                  "vars": {
+                    "type": {
+                      "$from": "scope",
+                      "name": "categorization",
+                      "path": [
+                        "type"
+                      ]
+                    },
+                    "scope": {
+                      "$from": "scope",
+                      "name": "categorization",
+                      "path": [
+                        "scope"
+                      ]
+                    },
+                    "file": {
+                      "$from": "scope",
+                      "name": "picked"
+                    },
+                    "summary": {
+                      "$from": "scope",
+                      "name": "categorization",
+                      "path": [
+                        "summary"
+                      ]
+                    }
+                  }
+                },
+                "next": "appendBullet",
+                "bind": "bullet"
+              },
+              "appendBullet": {
+                "kind": "task",
+                "task": "list.append",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "list",
+                    "item"
+                  ],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    },
+                    "item": {}
+                  }
+                },
+                "outputSchema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "state",
+                    "name": "bullets"
+                  },
+                  "item": {
+                    "$from": "scope",
+                    "name": "bullet"
+                  }
+                },
+                "next": "stepIndex",
+                "bind": "appended"
+              },
+              "stepIndex": {
+                "kind": "task",
+                "task": "math.add",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "left",
+                    "right"
+                  ],
+                  "properties": {
+                    "left": {
+                      "type": "number"
+                    },
+                    "right": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "number"
+                },
+                "inputs": {
+                  "left": {
+                    "$from": "state",
+                    "name": "i"
+                  },
+                  "right": 1
+                },
+                "next": "computeLength",
+                "bind": "stepped"
+              },
+              "computeLength": {
+                "kind": "task",
+                "task": "list.length",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "list"
+                  ],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "integer"
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "input",
+                    "name": "files"
+                  }
+                },
+                "next": "compareIndex",
+                "bind": "fileCount"
+              },
+              "compareIndex": {
+                "kind": "task",
+                "task": "compare.lessThan",
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "left",
+                    "right"
+                  ],
+                  "properties": {
+                    "left": {
+                      "type": "number"
+                    },
+                    "right": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "boolean"
+                },
+                "inputs": {
+                  "left": {
+                    "$from": "scope",
+                    "name": "stepped"
+                  },
+                  "right": {
+                    "$from": "scope",
+                    "name": "fileCount"
+                  }
+                },
+                "bind": "hasMore"
+              }
+            },
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "files",
+                "repoPath",
+                "categorizePromptTemplate"
+              ],
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "repoPath": {
+                  "type": "string"
+                },
+                "categorizePromptTemplate": {
+                  "type": "string"
+                }
+              }
+            },
+            "output": {
+              "$from": "scope",
+              "name": "appended"
+            },
+            "outputSchema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "continueWhen": {
+            "$from": "scope",
+            "name": "hasMore"
+          },
+          "iterateState": {
+            "i": {
+              "$from": "scope",
+              "name": "stepped"
+            },
+            "bullets": {
+              "$from": "scope",
+              "name": "appended"
+            }
+          },
+          "maxIterations": 200,
+          "next": "joinBullets",
+          "bind": "fileBullets"
+        },
+        "joinBullets": {
+          "kind": "task",
+          "task": "string.join",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "list",
+              "delimiter"
+            ],
+            "properties": {
+              "list": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "delimiter": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "inputs": {
+            "list": {
+              "$from": "scope",
+              "name": "fileBullets"
+            },
+            "delimiter": "\n"
+          },
+          "next": "buildSynthesisPrompt",
+          "bind": "bulletsText"
+        },
+        "buildSynthesisPrompt": {
+          "kind": "task",
+          "task": "text.template",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "template",
+              "vars"
+            ],
+            "properties": {
+              "template": {
+                "type": "string"
+              },
+              "vars": {
+                "type": "object"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "inputs": {
+            "template": {
+              "$from": "constant",
+              "name": "synthesizePromptTemplate"
+            },
+            "vars": {
+              "bullets": {
+                "$from": "scope",
+                "name": "bulletsText"
+              }
+            }
+          },
+          "next": "synthesize",
+          "bind": "synthesisPrompt"
+        },
+        "synthesize": {
+          "kind": "task",
+          "task": "copilot.invoke",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "prompt"
+            ],
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "allowedTools": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "object",
+            "required": [
+              "type",
+              "scope",
+              "subject",
+              "body"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "feat",
+                  "fix",
+                  "refactor",
+                  "perf",
+                  "docs",
+                  "test",
+                  "style",
+                  "chore",
+                  "build",
+                  "ci"
+                ],
+                "description": "Dominant Conventional Commits type across the staged files."
+              },
+              "scope": {
+                "type": "string",
+                "description": "Shared scope, or empty string."
+              },
+              "subject": {
+                "type": "string",
+                "description": "Imperative-mood subject line, ≤ 72 chars, no trailing period."
+              },
+              "body": {
+                "type": "string",
+                "description": "1-3 paragraph plain-prose body explaining what changed and why."
+              }
+            }
+          },
+          "inputs": {
+            "prompt": {
+              "$from": "scope",
+              "name": "synthesisPrompt"
+            },
+            "model": "claude-sonnet-4.6",
+            "allowedTools": []
+          },
+          "next": "buildSubject",
+          "bind": "synthesis"
+        },
+        "buildSubject": {
+          "kind": "branch",
+          "selector": {
+            "$from": "scope",
+            "name": "synthesis",
+            "path": [
+              "scope"
+            ]
+          },
+          "selectorSchema": {
+            "type": "string"
+          },
+          "cases": {
+            "": {
+              "inputs": {
+                "type": {
+                  "$from": "scope",
+                  "name": "synthesis",
+                  "path": [
+                    "type"
+                  ]
+                },
+                "subject": {
+                  "$from": "scope",
+                  "name": "synthesis",
+                  "path": [
+                    "subject"
+                  ]
+                },
+                "tmpl": {
+                  "$from": "constant",
+                  "name": "subjectNoScopeTemplate"
+                }
+              },
+              "scope": {
+                "inputSchema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "subject",
+                    "tmpl"
+                  ],
+                  "properties": {
+                    "tmpl": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "entry": "build",
+                "nodes": {
+                  "build": {
+                    "kind": "task",
+                    "task": "text.template",
+                    "inputSchema": {
+                      "type": "object",
+                      "required": [
+                        "template",
+                        "vars"
+                      ],
+                      "properties": {
+                        "template": {
+                          "type": "string"
+                        },
+                        "vars": {
+                          "type": "object"
+                        }
+                      }
+                    },
+                    "outputSchema": {
+                      "type": "string"
+                    },
+                    "inputs": {
+                      "template": {
+                        "$from": "input",
+                        "name": "tmpl"
+                      },
+                      "vars": {
+                        "type": {
+                          "$from": "input",
+                          "name": "type"
+                        },
+                        "subject": {
+                          "$from": "input",
+                          "name": "subject"
+                        }
+                      }
+                    },
+                    "bind": "header"
+                  }
+                },
+                "output": {
+                  "$from": "scope",
+                  "name": "header"
+                },
+                "outputSchema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "inputs": {
+              "type": {
+                "$from": "scope",
+                "name": "synthesis",
+                "path": [
+                  "type"
+                ]
+              },
+              "subject": {
+                "$from": "scope",
+                "name": "synthesis",
+                "path": [
+                  "subject"
+                ]
+              },
+              "tmpl": {
+                "$from": "constant",
+                "name": "subjectWithScopeTemplate"
+              },
+              "scope": {
+                "$from": "scope",
+                "name": "synthesis",
+                "path": [
+                  "scope"
+                ]
+              }
+            },
+            "scope": {
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "scope",
+                  "subject",
+                  "tmpl"
+                ],
+                "properties": {
+                  "tmpl": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                }
+              },
+              "entry": "build",
+              "nodes": {
+                "build": {
+                  "kind": "task",
+                  "task": "text.template",
+                  "inputSchema": {
+                    "type": "object",
+                    "required": [
+                      "template",
+                      "vars"
+                    ],
+                    "properties": {
+                      "template": {
+                        "type": "string"
+                      },
+                      "vars": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "outputSchema": {
+                    "type": "string"
+                  },
+                  "inputs": {
+                    "template": {
+                      "$from": "input",
+                      "name": "tmpl"
+                    },
+                    "vars": {
+                      "type": {
+                        "$from": "input",
+                        "name": "type"
+                      },
+                      "subject": {
+                        "$from": "input",
+                        "name": "subject"
+                      },
+                      "scope": {
+                        "$from": "input",
+                        "name": "scope"
+                      }
+                    }
+                  },
+                  "bind": "header"
+                }
+              },
+              "output": {
+                "$from": "scope",
+                "name": "header"
+              },
+              "outputSchema": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "bind": "header",
+          "next": "formatFinal"
+        },
+        "formatFinal": {
+          "kind": "task",
+          "task": "text.template",
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "template",
+              "vars"
+            ],
+            "properties": {
+              "template": {
+                "type": "string"
+              },
+              "vars": {
+                "type": "object"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "inputs": {
+            "template": {
+              "$from": "constant",
+              "name": "finalMessageTemplate"
+            },
+            "vars": {
+              "header": {
+                "$from": "scope",
+                "name": "header"
+              },
+              "body": {
+                "$from": "scope",
+                "name": "synthesis",
+                "path": [
+                  "body"
+                ]
+              },
+              "bullets": {
+                "$from": "scope",
+                "name": "bulletsText"
+              }
+            }
+          },
+          "bind": "finalMessage"
+        }
+      },
+      "output": {
+        "message": {
+          "$from": "scope",
+          "name": "finalMessage"
+        },
+        "type": {
+          "$from": "scope",
+          "name": "synthesis",
+          "path": [
+            "type"
+          ]
+        },
+        "scope": {
+          "$from": "scope",
+          "name": "synthesis",
+          "path": [
+            "scope"
+          ]
+        },
+        "subject": {
+          "$from": "scope",
+          "name": "synthesis",
+          "path": [
+            "subject"
+          ]
+        },
+        "body": {
+          "$from": "scope",
+          "name": "synthesis",
+          "path": [
+            "body"
+          ]
+        },
+        "fileBullets": {
+          "$from": "scope",
+          "name": "bulletsText"
+        }
+      }
+    }
+  }
+}
