@@ -6338,7 +6338,6 @@ describe("validateWorkflowIR", () => {
     });
 
     describe("branch arm state isolation", () => {
-
         it("rejects $from:state ref in a branch arm node input", () => {
             // Branch arms are isolated sub-scopes with no state namespace.
             // $from:"state" inside an arm is invalid; state must be threaded

@@ -14,7 +14,6 @@ import {
     BranchNode,
     BranchArm,
     Template,
-
     JSONSchema,
     ConstantDef,
     LoopStateVar,
@@ -1527,10 +1526,7 @@ function validateNodeInputTemplates(
             );
             if (computed !== undefined) {
                 const consumerPropDef = inputProps[fieldName];
-                if (
-                    consumerPropDef &&
-                    typeof consumerPropDef !== "boolean"
-                ) {
+                if (consumerPropDef && typeof consumerPropDef !== "boolean") {
                     if (
                         !checkUnknownAssignability(
                             computed,
@@ -2191,7 +2187,6 @@ function resolveSchemaPath(
     return current;
 }
 
-
 /** Normalize a JSON Schema type (string or array) to an array of type strings. */
 function normalizeTypeSet(type: unknown): string[] {
     if (Array.isArray(type)) return type as string[];
@@ -2206,7 +2201,6 @@ function normalizeTypeSet(type: unknown): string[] {
 function typeAssignableTo(a: string, b: string): boolean {
     return a === b || (a === "integer" && b === "number");
 }
-
 
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
@@ -2383,7 +2377,11 @@ function validateScope(
             typeCtx,
             errors,
         );
-        if (outputResolved && scope.outputSchema && !isEmptySchema(scope.outputSchema)) {
+        if (
+            outputResolved &&
+            scope.outputSchema &&
+            !isEmptySchema(scope.outputSchema)
+        ) {
             if (
                 !checkUnknownAssignability(
                     outputResolved,
@@ -3608,4 +3606,3 @@ function collectTemplateRefs(
     }
     return refs;
 }
-
