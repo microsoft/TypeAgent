@@ -87,7 +87,7 @@ G.steps := ParseDemoFile(G.demoFile)
 if G.steps.Length = 0
     Die("Demo file is empty: " G.demoFile)
 
-InitSapi()
+InitTts()
 HudInit()
 HudShow("Loaded " G.steps.Length " steps. Ctrl+Right to start, Esc to abort.")
 RegisterHotkeys()
@@ -370,31 +370,59 @@ ParseDuration(value) {
 }
 
 ; ============================================================
-; SAPI / TTS
+; TTS — Azure Speech via tools/azure-tts.mjs (SAPI fallback)
 ; ============================================================
+; Prefers the Node helper at tools/azure-tts.mjs, which calls Azure Speech with
+; identity-mode auth (same path as ts/packages/shell). Falls back to SAPI when
+; node or the helper script is unavailable, so the driver still works on a
+; machine without the Azure prerequisites.
 
-InitSapi() {
+InitTts() {
     if !G.ttsEnabled
         return
+    G.ttsHelper := A_ScriptDir . "\tools\dist\azure-tts.mjs"
+    G.currentVoice := ""
+    G.ttsAsyncPid := 0
+    G.ttsProvider := ""
+
+    if FileExist(G.ttsHelper) && NodeAvailable() {
+        G.ttsProvider := "azure"
+        OutputDebug "TTS provider: azure"
+        return
+    }
+
     try {
         G.sapi := ComObject("SAPI.SpVoice")
+        G.ttsProvider := "sapi"
+        OutputDebug "TTS provider: sapi"
     } catch as err {
-        OutputDebug "SAPI init failed: " err.Message
+        OutputDebug "TTS init failed: " err.Message
         G.sapi := ""
         G.ttsEnabled := false
     }
 }
 
+NodeAvailable() {
+    try {
+        return RunWait('node --version', , 'Hide') = 0
+    } catch {
+        return false
+    }
+}
+
 SelectVoice(name) {
-    if !G.ttsEnabled || G.sapi = ""
+    if !G.ttsEnabled || name = ""
         return
-    if name = ""
+    if G.ttsProvider = "azure" {
+        G.currentVoice := name
+        return
+    }
+    if G.sapi = ""
         return
     voices := G.sapi.GetVoices()
     Loop voices.Count {
         v := voices.Item(A_Index - 1)
-        desc := v.GetDescription()
-        if InStr(desc, name) {
+        if InStr(v.GetDescription(), name) {
             G.sapi.Voice := v
             return
         }
@@ -402,8 +430,31 @@ SelectVoice(name) {
     HudShow('Voice not found: "' name '" (continuing with default)')
 }
 
+EscapeForCmdArg(s) {
+    return StrReplace(s, '"', '\"')
+}
+
 Speak(text, async := false) {
-    if !G.ttsEnabled || G.sapi = ""
+    if !G.ttsEnabled
+        return
+    if G.ttsProvider = "azure" {
+        if !FileExist(G.ttsHelper)
+            return
+        voiceArg := G.currentVoice != "" ? ' --voice "' . G.currentVoice . '"' : ''
+        cmd := 'node "' . G.ttsHelper . '" --text "' . EscapeForCmdArg(text) . '"' . voiceArg
+        try {
+            if async {
+                Run(cmd, , 'Hide', &pid)
+                G.ttsAsyncPid := pid
+            } else {
+                RunWait(cmd, , 'Hide')
+            }
+        } catch as err {
+            OutputDebug "TTS speak failed: " err.Message
+        }
+        return
+    }
+    if G.sapi = ""
         return
     ; flag bits: 1 = async, 2 = purge before speak
     flag := async ? 1 : 0
@@ -415,12 +466,18 @@ Speak(text, async := false) {
 }
 
 PurgeSpeech() {
-    if !G.ttsEnabled || G.sapi = ""
+    if !G.ttsEnabled
         return
-    try {
-        G.sapi.Speak("", 2)
-    } catch {
+    if G.ttsProvider = "azure" {
+        if G.ttsAsyncPid {
+            try RunWait('taskkill /F /T /PID ' . G.ttsAsyncPid, , 'Hide')
+            G.ttsAsyncPid := 0
+        }
+        return
     }
+    if G.sapi = ""
+        return
+    try G.sapi.Speak("", 2)
 }
 
 ; ============================================================

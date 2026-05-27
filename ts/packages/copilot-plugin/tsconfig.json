@@ -4,7 +4,10 @@
     "composite": true
   },
   "include": [],
-  "references": [{ "path": "./src" }],
+  "references": [
+    { "path": "./src" },
+    { "path": "./demo/driver/tools" }
+  ],
   "ts-node": {
     "esm": true
   }
