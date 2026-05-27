@@ -1531,13 +1531,31 @@ describe("type checker", () => {
         `);
     });
 
-    test("number is assignable to integer", () => {
-        expectNoErrors(`
-            workflow test(): integer {
+    test("number is NOT assignable to integer (G10)", () => {
+        expectError(
+            `workflow test(): integer {
                 const x: number = 5;
                 return x;
-            }
-        `);
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("number parameter is NOT assignable to integer return (G10)", () => {
+        expectError(
+            `workflow test(x: number): integer { return x; }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("number value is NOT assignable to integer const annotation (G10)", () => {
+        expectError(
+            `workflow test(x: number): number {
+                const y: integer = x;
+                return y;
+            }`,
+            "not assignable",
+        );
     });
 
     test("array literal infers element type from first element", () => {

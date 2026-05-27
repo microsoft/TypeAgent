@@ -19,8 +19,10 @@ new surface area:
    surfaces real structural mismatches, switch error messages from the
    collapsed `'object'` rendering to the existing `formatType` output so
    users can see which fields differ.
-5. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
-   one-way before adding more type-system expressiveness.
+5. ~~**G10: Fix `integer`/`number` assignability.**~~ **DONE.** Assignability
+   is now one-way (`integer` widens to `number`; `number` does not narrow to
+   `integer`). Integer-only arithmetic (`+`, `-`, `*`, `%`) preserves the
+   `integer` type. See §G10 below for details.
 6. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
 7. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
@@ -58,8 +60,8 @@ pending a `.wf` survey and G18 (union types).
 Dependency spine:
 
 - `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
-- `G10 -> G3 -> G4 -> G18` builds type-system features on sound
-  assignability (G13 resolved the structural-comparison prerequisite).
+- `G3 -> G4 -> G18` builds type-system features on sound assignability
+  (G10 and G13 are resolved).
 
 ## G1: Sub-workflow calls ✅ Resolved
 
@@ -229,36 +231,38 @@ bindings with synthetic names? The current approach works but:
 3. If adding `ExpressionStatement`: update parser, ast.ts, emitter, and
    graph extractor.
 
-## G10: integer/number bidirectional compatibility
+## G10: integer/number bidirectional compatibility ✅ Resolved
 
 **Context:** JSON Schema defines `integer` as a subtype of `number`
 (one-way: integer values satisfy a number schema, but not vice versa).
-The DSL type checker treats them as bidirectionally compatible.
+The DSL type checker previously treated them as bidirectionally
+compatible, which let a fractional `number` silently flow into an
+`integer` slot.
 
-**Current state:**
+**Status:** Resolved. `isAssignableTo` now only widens `integer` to
+`number`; assigning a `number` to an `integer` target is a type error.
+Integer arithmetic (`+`, `-`, `*`, `%`) on two `integer` operands keeps
+the `integer` type via `inferBinaryExpr`; division stays `number`.
+Equality (`===`/`!==`) between `integer` and `number` remains permitted
+in both directions (handled by `isEqualityComparable`), since comparing
+the two is not a precision-loss bug.
 
-- The type checker's `isAssignable` function treats `integer` and
-  `number` as interchangeable in both directions
-  (typeChecker.ts ~line 99-104).
-- You can pass a `number` value where `integer` is expected without a
-  type error, which is a silent precision-loss bug.
-- Additionally, arithmetic on two `integer` operands always returns
-  `number` (typeChecker.ts ~line 713), even though the result could
-  safely remain `integer` for `+`, `-`, `*`.
+**What landed:**
 
-**What needs to happen:**
-
-1. Make assignability one-way: `integer` assignable to `number`, but
-   `number` NOT assignable to `integer` without an explicit conversion.
-2. Consider returning `integer` from integer-only arithmetic (`+`, `-`,
-   `*`) and `number` only when a `number` operand is involved or for
-   division.
-3. Add type error tests for cases like passing a `number` variable to
-   an input that expects `integer`.
-4. Audit existing task schemas: some tasks (e.g., `math.floor`,
-   `math.round`, `math.ceil`) correctly return `integer`; verify that
-   their results can still flow into `number`-typed inputs after the
-   one-way fix.
+- `typeChecker.ts` `isAssignableTo` primitive case: dropped the
+  `number → integer` direction; only `integer → number` is allowed.
+- `typeChecker.ts` `inferBinaryExpr`: integer-only `+`, `-`, `*`, `%`
+  narrow back to `integer`; `/` stays `number`.
+- Enum-vs-primitive assignability (`primitiveMatchesEnumBase` and
+  the inline enum case) already had the asymmetric rule for the same
+  reason; no change needed there.
+- Tests: replaced `"number is assignable to integer"` with the negative
+  cases `"number is NOT assignable to integer (G10)"`,
+  `"number parameter is NOT assignable to integer return (G10)"`, and
+  `"number value is NOT assignable to integer const annotation (G10)"`.
+- Built-in task audit: `math.floor`, `math.round`, `math.ceil`,
+  `list.length` etc. return `integer`, which still flows into
+  `number`-typed slots — no regressions.
 
 ## G11: Bind stripping removes names from side-effect tasks
 
