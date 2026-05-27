@@ -8,7 +8,10 @@ import {
     CommandHandler,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayStatus, displayWarn } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     CollisionEvent,
@@ -77,10 +80,7 @@ class CollisionEventsCommandHandler implements CommandHandler {
             | CollisionEventKind
             | undefined;
 
-        if (
-            kindFilter !== undefined &&
-            !VALID_KINDS.includes(kindFilter)
-        ) {
+        if (kindFilter !== undefined && !VALID_KINDS.includes(kindFilter)) {
             displayWarn(
                 `Unknown --kind "${kindFilter}". Valid values: ${VALID_KINDS.join(", ")}.`,
                 context,
@@ -243,7 +243,8 @@ function renderCollisionEventsHTML(
 
     const headStyle =
         "padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
-    const cellStyle = "padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
+    const cellStyle =
+        "padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
 
     let rows = "";
     // Render newest first so the most recent event is at the top — testers
@@ -394,8 +395,7 @@ class CollisionSimilarCommandHandler implements CommandHandler {
                 default: "balanced",
             },
             "all-strategies": {
-                description:
-                    "Run every strategy and render a comparison view",
+                description: "Run every strategy and render a comparison view",
                 type: "boolean",
                 default: false,
             },
@@ -406,8 +406,7 @@ class CollisionSimilarCommandHandler implements CommandHandler {
                 default: false,
             },
             top: {
-                description:
-                    "Maximum clusters / pairs to render (default 50)",
+                description: "Maximum clusters / pairs to render (default 50)",
                 char: "n",
                 type: "number",
                 default: 50,
@@ -465,17 +464,13 @@ class CollisionSimilarCommandHandler implements CommandHandler {
             } catch (err) {
                 skipped.push({
                     schemaName: config.schemaName,
-                    reason:
-                        err instanceof Error ? err.message : String(err),
+                    reason: err instanceof Error ? err.message : String(err),
                 });
             }
         }
 
         if (inputs.length === 0) {
-            displayWarn(
-                "No agent action schemas available to scan.",
-                context,
-            );
+            displayWarn("No agent action schemas available to scan.", context);
             return;
         }
 
@@ -715,7 +710,9 @@ function renderSingleStrategyHTML(
         ? renderPairsView(applied, top)
         : renderClustersView(applied, top);
 
-    return wrap + header + strategyHeader + summary + histogram + view + `</div>`;
+    return (
+        wrap + header + strategyHeader + summary + histogram + view + `</div>`
+    );
 }
 
 /**
@@ -728,14 +725,18 @@ function renderScoreHistogramHTML(
     scan: ActionSimilarityScanResult,
     applied: AppliedStrategy,
 ): string {
-    const buckets: { label: string; min: number; count: number; color: string }[] =
-        [
-            { label: "0.55+", min: 0.55, count: 0, color: "#888" },
-            { label: "0.65+", min: 0.65, count: 0, color: "#888" },
-            { label: "0.75+", min: 0.75, count: 0, color: "#36c" },
-            { label: "0.85+", min: 0.85, count: 0, color: "#080" },
-            { label: "0.95+", min: 0.95, count: 0, color: "#c44" },
-        ];
+    const buckets: {
+        label: string;
+        min: number;
+        count: number;
+        color: string;
+    }[] = [
+        { label: "0.55+", min: 0.55, count: 0, color: "#888" },
+        { label: "0.65+", min: 0.65, count: 0, color: "#888" },
+        { label: "0.75+", min: 0.75, count: 0, color: "#36c" },
+        { label: "0.85+", min: 0.85, count: 0, color: "#080" },
+        { label: "0.95+", min: 0.95, count: 0, color: "#c44" },
+    ];
     let scored = 0;
     for (const pair of scan.pairs) {
         const score = applied.strategy.score(pair.scores);
@@ -888,7 +889,8 @@ function renderAllStrategiesHTML(
     // Comparison table: one row per strategy with totals.
     const headStyle =
         "padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
-    const cellStyle = "padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
+    const cellStyle =
+        "padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
     let rows = "";
     for (const a of applied) {
         rows += `<tr>
@@ -1028,8 +1030,7 @@ class CollisionProbeCommandHandler implements CommandHandler {
     public readonly parameters = {
         flags: {
             top: {
-                description:
-                    "Top-K candidates to render (default 5)",
+                description: "Top-K candidates to render (default 5)",
                 char: "n",
                 type: "number",
                 default: 5,
@@ -1056,8 +1057,7 @@ class CollisionProbeCommandHandler implements CommandHandler {
         },
         args: {
             phrase: {
-                description:
-                    'The utterance to probe, e.g. "turn on wifi"',
+                description: 'The utterance to probe, e.g. "turn on wifi"',
                 type: "string",
             },
         },
@@ -1070,14 +1070,14 @@ class CollisionProbeCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const phrase = params.args.phrase.trim();
         if (!phrase) {
-            displayWarn(
-                "Probe phrase must be non-empty.",
-                context,
-            );
+            displayWarn("Probe phrase must be non-empty.", context);
             return;
         }
         const top = Math.max(1, params.flags.top ?? 5);
-        const delta = Math.max(0, params.flags.delta ?? LLM_SELECT_DELTA_DEFAULT);
+        const delta = Math.max(
+            0,
+            params.flags.delta ?? LLM_SELECT_DELTA_DEFAULT,
+        );
         const expected = params.flags.expected?.trim() || undefined;
         const filter = params.flags["include-inactive"]
             ? () => true
@@ -1180,10 +1180,7 @@ function renderProbeHTML(
             label: "FAIL",
             detail: `top-1 is <code>${escapeHtml(top1.schemaName + "." + top1.actionName)}</code>, expected <code>${escapeHtml(expected)}</code>.`,
         };
-    } else if (
-        top1.deltaToNext !== undefined &&
-        top1.deltaToNext < delta
-    ) {
+    } else if (top1.deltaToNext !== undefined && top1.deltaToNext < delta) {
         verdict = {
             color: "#c80",
             label: "AMBIGUOUS",
@@ -1203,7 +1200,8 @@ function renderProbeHTML(
 
     const headStyle =
         "padding:6px 8px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
-    const cellStyle = "padding:6px 8px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
+    const cellStyle =
+        "padding:6px 8px;border-bottom:1px solid #f0f0f0;vertical-align:top;";
     let rowsHTML = "";
     for (const row of rows) {
         const ambiguous =
@@ -1253,7 +1251,9 @@ function renderProbeText(
 ): string[] {
     const rows = buildProbeRows(results, expected);
     const lines: string[] = [];
-    lines.push(`Probe: "${phrase}"${expected ? ` (expected: ${expected})` : ""}`);
+    lines.push(
+        `Probe: "${phrase}"${expected ? ` (expected: ${expected})` : ""}`,
+    );
     lines.push("");
     for (const row of rows) {
         const flag = row.isExpected ? " ✓" : "";

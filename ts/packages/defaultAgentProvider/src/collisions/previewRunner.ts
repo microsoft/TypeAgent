@@ -40,10 +40,7 @@ function parseArgs(): Args {
     return {
         workdir:
             get("workdir") ??
-            path.join(
-                process.env.TEMP || "f:/tmp",
-                "collision-corpus-smoke",
-            ),
+            path.join(process.env.TEMP || "f:/tmp", "collision-corpus-smoke"),
         threshold: get("threshold") ?? "0.78",
     };
 }

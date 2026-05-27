@@ -18,10 +18,7 @@ import type { ActionContext } from "@typeagent/agent-sdk";
 import type { CommandHandlerContext } from "../../context/commandHandlerContext.js";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import type { TranslationProbeFile } from "../../translation/translationProbeRunner.js";
-import {
-    computeActionGravity,
-    type ActionGravity,
-} from "../actionGravity.js";
+import { computeActionGravity, type ActionGravity } from "../actionGravity.js";
 import type { Neighborhood } from "../types.js";
 
 import { analyzeCase } from "./caseAnalyzer.js";
@@ -34,16 +31,8 @@ import {
     revertAllFromOriginal,
     snapshotSandboxOriginal,
 } from "./sandboxRevert.js";
-import type {
-    CaseResult,
-    EvaluationResult,
-    OptimizationRun,
-} from "./types.js";
-import {
-    DEFAULT_CONCURRENCY,
-    ensureDir,
-    pmap,
-} from "./util.js";
+import type { CaseResult, EvaluationResult, OptimizationRun } from "./types.js";
+import { DEFAULT_CONCURRENCY, ensureDir, pmap } from "./util.js";
 
 import { openai, type ChatModel } from "aiclient";
 import { schemaGuidelines } from "../../translation/schemaGuidelines.js";
@@ -271,7 +260,11 @@ export async function runCorpusLoop(
                     }
                     // Dry-run fallthrough — should not be reached when dryRun
                     // is set because caseLoop short-circuits before calling.
-                    return { rescues: 0, regressions: 0, regressionPhrases: [] };
+                    return {
+                        rescues: 0,
+                        regressions: 0,
+                        regressionPhrases: [],
+                    };
                 },
                 revertSandbox: () => {
                     // Revert ALL schemas — the stacked-winner flow in Phase 5
@@ -294,12 +287,7 @@ export async function runCorpusLoop(
         caseResults.push(result);
 
         // Append patterns.jsonl rows (one per attempt).
-        appendPatternsJsonl(
-            opts.workdir,
-            runId,
-            caseSlug,
-            result,
-        );
+        appendPatternsJsonl(opts.workdir, runId, caseSlug, result);
     }
 
     // ---- Stack winners + combined re-probe (optional Phase 3) ----
@@ -536,10 +524,7 @@ function buildApplyCtx(
 // =============================================================================
 
 function newRunId(): string {
-    return new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")
-        .replace(/Z$/, "");
+    return new Date().toISOString().replace(/[:.]/g, "-").replace(/Z$/, "");
 }
 
 interface NeighborhoodsFile {
@@ -595,9 +580,7 @@ function rankNeighborhoods(
             g.length === 0 ||
             g.some((m) => {
                 const tier =
-                    m.severityTier === "clean"
-                        ? "minor"
-                        : m.severityTier;
+                    m.severityTier === "clean" ? "minor" : m.severityTier;
                 return tier !== undefined && severities.has(tier);
             });
         if (!matchesSeverity) continue;
@@ -606,7 +589,7 @@ function rankNeighborhoods(
         if (score === 0) {
             // Fall back to total misroute count when translator gravity
             // didn't populate.
-            const ranker = (n.evidence.misrouteCount ?? 0);
+            const ranker = n.evidence.misrouteCount ?? 0;
             const tx = totalTranslatorEdgeCount(
                 n.evidence.translatorMisrouteEdges,
             );
@@ -617,7 +600,9 @@ function rankNeighborhoods(
     ranked.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         if (b.neighborhood.members.length !== a.neighborhood.members.length) {
-            return b.neighborhood.members.length - a.neighborhood.members.length;
+            return (
+                b.neighborhood.members.length - a.neighborhood.members.length
+            );
         }
         return a.neighborhood.id.localeCompare(b.neighborhood.id);
     });
@@ -625,9 +610,7 @@ function rankNeighborhoods(
 }
 
 function totalTranslatorEdgeCount(
-    edges:
-        | import("../types.js").MisrouteEdgeEvidence[]
-        | undefined,
+    edges: import("../types.js").MisrouteEdgeEvidence[] | undefined,
 ): number {
     if (!edges) return 0;
     let n = 0;

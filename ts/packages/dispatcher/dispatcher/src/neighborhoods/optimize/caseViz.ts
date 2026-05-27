@@ -85,15 +85,12 @@ export interface BuildCaseHTMLResult {
     bestScore: number;
 }
 
-export function buildCaseHTML(
-    opts: BuildCaseHTMLOpts,
-): BuildCaseHTMLResult {
+export function buildCaseHTML(opts: BuildCaseHTMLOpts): BuildCaseHTMLResult {
     const caseDesc = readCaseDescription(opts.caseDir);
     const attempts = readAttempts(opts.caseDir);
     const winner = readWinner(opts.caseDir);
 
-    const winnerAttemptId =
-        winner?.attemptId ?? winner?.hypothesis?.id ?? null;
+    const winnerAttemptId = winner?.attemptId ?? winner?.hypothesis?.id ?? null;
     const bestScore = attempts.reduce(
         (best, a) => Math.max(best, a.evaluation.score),
         -Infinity,
@@ -359,18 +356,14 @@ function renderAttemptsTable(
         .map((a) => {
             const isWinner = a.id === winnerId;
             const hasError = !!a.evaluation.applyError;
-            const cls = [
-                isWinner ? "winner" : "",
-                hasError ? "has-error" : "",
-            ]
+            const cls = [isWinner ? "winner" : "", hasError ? "has-error" : ""]
                 .filter(Boolean)
                 .join(" ");
             const badges: string[] = [];
             if (isWinner) badges.push(`<span class="badge winner">WIN</span>`);
             if (a.proposal.dryRun)
                 badges.push(`<span class="badge dry">DRY</span>`);
-            if (hasError)
-                badges.push(`<span class="badge error">ERR</span>`);
+            if (hasError) badges.push(`<span class="badge error">ERR</span>`);
             return (
                 `<tr class="${cls}">` +
                 `<td><a href="#${esc(a.id)}">${esc(a.id)}</a></td>` +

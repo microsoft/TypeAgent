@@ -20,7 +20,10 @@ function writeJsonl(filePath: string, rows: object[]): void {
     );
 }
 
-function row(isWinner: boolean, overrides: Record<string, unknown> = {}): object {
+function row(
+    isWinner: boolean,
+    overrides: Record<string, unknown> = {},
+): object {
     return {
         runId: "r1",
         caseId: "c1",
@@ -99,11 +102,7 @@ describe("runDistillStep", () => {
     });
 
     it("writes not-enough-data markdown when winners < minAttempts", async () => {
-        writeJsonl(patternsFile, [
-            row(true),
-            row(true),
-            row(false),
-        ]);
+        writeJsonl(patternsFile, [row(true), row(true), row(false)]);
         const result = await runDistillStep({
             patternsFile,
             candidatesFile,

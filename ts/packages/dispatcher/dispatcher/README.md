@@ -178,12 +178,12 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 Grammar commands let you inspect runtime-learned rules and scan loaded `.agr` files for cross-agent collisions.
 
-| Command                                     | Description                                                                                                                                          |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@grammar` _(or)_ `@grammar list [<agent>]` | List grammar rules learned at runtime by the dispatcher. Optionally filter by agent name. Default subcommand. Shows risk icons (munch / completion). |
-| `@grammar show <id>`                        | Show a single learned rule's pattern, anchor words, and risk analysis.                                                                               |
-| `@grammar delete <id>`                      | Delete a learned rule by ID. Rebuilds the in-memory NFA for the affected schema.                                                                     |
-| `@grammar clear [<agent>]`                  | Clear all learned rules. Optionally scope to one agent.                                                                                              |
+| Command                                     | Description                                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@grammar` _(or)_ `@grammar list [<agent>]` | List grammar rules learned at runtime by the dispatcher. Optionally filter by agent name. Default subcommand. Shows risk icons (munch / completion).                                                                                                                              |
+| `@grammar show <id>`                        | Show a single learned rule's pattern, anchor words, and risk analysis.                                                                                                                                                                                                            |
+| `@grammar delete <id>`                      | Delete a learned rule by ID. Rebuilds the in-memory NFA for the affected schema.                                                                                                                                                                                                  |
+| `@grammar clear [<agent>]`                  | Clear all learned rules. Optionally scope to one agent.                                                                                                                                                                                                                           |
 | `@grammar collisions [--json <path>]`       | NFA-product-construction collision detector across all loaded agent grammars. Reports concrete witness inputs that both grammars accept, plus the action interpretation each grammar produces. With `--json <path>`, also writes a structured report for offline post-processing. |
 
 **About the collision scanner:**
@@ -331,17 +331,17 @@ Each event carries `kind` (detection point), `strategy`, `candidates[]` (with pe
 
 Runtime opt-in via `@config collision …` and ring-buffer inspection via `@collision events`:
 
-| Command                                                     | Effect                                                                                                |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `@config collision`                                         | Render the current collision config as an HTML status table.                                          |
-| `@config collision <point> detect [on\|off]`                | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.    |
-| `@config collision <point> strategy <name>`                 | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`). |
-| `@config collision priority [<list>]`                       | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                       |
-| `@config collision telemetry emit [on\|off]`                | Toggle the ring-buffer + JSONL capture.                                                                |
-| `@config collision telemetry debugLog [on\|off]`            | Toggle the `typeagent:dispatcher:collision` debug log.                                                |
-| `@config collision telemetry experimentId [<id>]`           | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                  |
-| `@collision events [-n <N>] [-k <kind>]`                    | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`. |
-| `@config log db [on\|off]`                                  | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).          |
+| Command                                           | Effect                                                                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@config collision`                               | Render the current collision config as an HTML status table.                                                                                                  |
+| `@config collision <point> detect [on\|off]`      | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                       |
+| `@config collision <point> strategy <name>`       | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                       |
+| `@config collision priority [<list>]`             | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                               |
+| `@config collision telemetry emit [on\|off]`      | Toggle the ring-buffer + JSONL capture.                                                                                                                       |
+| `@config collision telemetry debugLog [on\|off]`  | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                        |
+| `@config collision telemetry experimentId [<id>]` | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                          |
+| `@collision events [-n <N>] [-k <kind>]`          | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`. |
+| `@config log db [on\|off]`                        | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                  |
 
 Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `similarityThreshold`) are intentionally not exposed via `@config collision` — they're long-tail tuning, not opt-in toggles, and the same `data.json` accepts hand edits when needed.
 
@@ -349,11 +349,11 @@ Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `s
 
 For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships rules engineered to collide with the **list** agent on these inputs:
 
-| Test phrase                          | Collides on                       |
-| ------------------------------------ | --------------------------------- |
-| `add eggs to my grocery list`        | `list.addItems` vs `vampire.addItems` |
-| `remove eggs from my grocery list`   | `list.removeItems` vs `vampire.removeItems` |
-| `what is on my grocery list`         | `list.getList` vs `vampire.getList` |
+| Test phrase                        | Collides on                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `add eggs to my grocery list`      | `list.addItems` vs `vampire.addItems`       |
+| `remove eggs from my grocery list` | `list.removeItems` vs `vampire.removeItems` |
+| `what is on my grocery list`       | `list.getList` vs `vampire.getList`         |
 
 (The `<Play>` rule in `vampireSchema.agr` claims it collides with `player.play` but the current player grammar requires `play <track> by <artist>`, so a bare `play X` only matches vampire today — kept for reference but not a working collision target until player grows back a bare `play <song>` rule.)
 

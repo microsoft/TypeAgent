@@ -79,12 +79,9 @@ function parseArgs(): Args {
         const i = argv.indexOf(`--${name}`);
         return i >= 0 ? argv[i + 1] : undefined;
     };
-    const mode = (get("user-context-mode") ?? "none") as Args["userContextMode"];
-    if (
-        mode !== "none" &&
-        mode !== "expected-schema" &&
-        mode !== "fixed"
-    ) {
+    const mode = (get("user-context-mode") ??
+        "none") as Args["userContextMode"];
+    if (mode !== "none" && mode !== "expected-schema" && mode !== "fixed") {
         throw new Error(
             `Invalid --user-context-mode '${mode}'. Expected: none | expected-schema | fixed.`,
         );
@@ -187,18 +184,16 @@ async function main() {
         instanceDir,
         args.workdir,
     );
-    const defaultAppAgentProviders = getDefaultAppAgentProviders(
-        probeConfigProvider,
-    );
+    const defaultAppAgentProviders =
+        getDefaultAppAgentProviders(probeConfigProvider);
     const defaultConstructionProvider = getDefaultConstructionProvider();
     // Pass the SAME injected config to the indexing-service builder. Otherwise
     // it spins up its own provider chain via `instanceDir`, with no MCP args,
     // and triggers a duplicate boot-time `connectTransport` that fails with
     // "Missing required server script args" — leaving the manifest in error
     // state for the rest of the run.
-    const indexingServiceRegistry = await getIndexingServiceRegistry(
-        probeConfigProvider,
-    );
+    const indexingServiceRegistry =
+        await getIndexingServiceRegistry(probeConfigProvider);
 
     process.stderr.write(
         "Spinning up dispatcher (translation enabled, actions/cache/explainer off)…\n",

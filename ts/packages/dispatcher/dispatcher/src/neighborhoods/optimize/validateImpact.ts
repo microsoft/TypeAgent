@@ -25,10 +25,7 @@ import type {
     TranslationProbeFile,
 } from "../../translation/translationProbeRunner.js";
 
-import {
-    buildImpactPayload,
-    type ImpactPayload,
-} from "./impactPayload.js";
+import { buildImpactPayload, type ImpactPayload } from "./impactPayload.js";
 import { buildImpactHTML } from "./impactViz.js";
 import { initBuiltInLevers } from "./levers/index.js";
 import { loadSandboxProvider } from "./sandboxProvider.js";
@@ -76,8 +73,7 @@ export async function runValidate(
     opts.onProgress?.(`reading ${runRoot}…`);
     const run = readOptimizationRun(runRoot);
 
-    const baselinePath =
-        opts.baselinePathOverride ?? run.inputs.baseline;
+    const baselinePath = opts.baselinePathOverride ?? run.inputs.baseline;
     if (!fs.existsSync(baselinePath)) {
         throw new Error(
             `validate: baseline ${baselinePath} not found. Pass --baseline to override.`,
@@ -94,9 +90,9 @@ export async function runValidate(
         ...(opts.includeWinners && { include: opts.includeWinners }),
         ...(opts.excludeWinners && { exclude: opts.excludeWinners }),
     });
-    const droppedByFilter = run.cases.length - filteredCases.filter(
-        (c) => c.winner !== null,
-    ).length;
+    const droppedByFilter =
+        run.cases.length -
+        filteredCases.filter((c) => c.winner !== null).length;
 
     // Stack all winners. This reverts sandbox to .original/ then applies
     // each winner via its lever. Fails loud on apply errors.
@@ -147,10 +143,7 @@ export async function runValidate(
 
     const impactJsonPath = path.join(runRoot, "optimization-impact.json");
     const impactHtmlPath = path.join(runRoot, "optimization-impact.html");
-    fs.writeFileSync(
-        impactJsonPath,
-        JSON.stringify(impact, undefined, 2),
-    );
+    fs.writeFileSync(impactJsonPath, JSON.stringify(impact, undefined, 2));
     fs.writeFileSync(impactHtmlPath, buildImpactHTML(impact));
 
     return {
@@ -181,12 +174,8 @@ function applyWinnerFilter(
     filter: WinnerFilter,
 ): CaseResult[] {
     if (!filter.include && !filter.exclude) return cases;
-    const includeSet = filter.include
-        ? new Set(filter.include)
-        : undefined;
-    const excludeSet = filter.exclude
-        ? new Set(filter.exclude)
-        : undefined;
+    const includeSet = filter.include ? new Set(filter.include) : undefined;
+    const excludeSet = filter.exclude ? new Set(filter.exclude) : undefined;
     return cases.map((c) => {
         if (!c.winner) return c;
         const id = c.winner.hypothesis.id;
@@ -201,9 +190,7 @@ function resolveRunRoot(workdir: string, runId?: string): string {
     if (runId) {
         const candidate = path.join(workdir, `optimization-run-${runId}`);
         if (!fs.existsSync(candidate)) {
-            throw new Error(
-                `validate: run dir ${candidate} not found`,
-            );
+            throw new Error(`validate: run dir ${candidate} not found`);
         }
         return candidate;
     }
@@ -214,8 +201,7 @@ function resolveRunRoot(workdir: string, runId?: string): string {
     const entries = fs
         .readdirSync(workdir, { withFileTypes: true })
         .filter(
-            (e) =>
-                e.isDirectory() && e.name.startsWith("optimization-run-"),
+            (e) => e.isDirectory() && e.name.startsWith("optimization-run-"),
         )
         .map((e) => {
             const full = path.join(workdir, e.name);
@@ -264,7 +250,10 @@ function buildCorpusFromBaseline(
         }
     >();
     for (const row of baseline.results) {
-        if (memberKeys && !memberKeys.has(`${row.expectedSchema}.${row.expectedAction}`)) {
+        if (
+            memberKeys &&
+            !memberKeys.has(`${row.expectedSchema}.${row.expectedAction}`)
+        ) {
             continue;
         }
         const key = `${row.expectedSchema}.${row.expectedAction}`;

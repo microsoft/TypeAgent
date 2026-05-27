@@ -204,7 +204,12 @@ function reconstruct(
         }
         cur = cur.parent;
     }
-    return { witness: tokens, ruleIndexA: ruleA, ruleIndexB: ruleB, hasPlaceholders };
+    return {
+        witness: tokens,
+        ruleIndexA: ruleA,
+        ruleIndexB: ruleB,
+        hasPlaceholders,
+    };
 }
 
 function pairKey(a: number, b: number): string {
@@ -534,22 +539,28 @@ function wildcardIntersectSample(
         return { token: "x", placeholder: false };
     }
     if (aUnc) {
-        return concreteSample(b.typeName!) ?? {
-            token: `<${b.typeName}>`,
-            placeholder: true,
-        };
+        return (
+            concreteSample(b.typeName!) ?? {
+                token: `<${b.typeName}>`,
+                placeholder: true,
+            }
+        );
     }
     if (bUnc) {
-        return concreteSample(a.typeName!) ?? {
-            token: `<${a.typeName}>`,
-            placeholder: true,
-        };
+        return (
+            concreteSample(a.typeName!) ?? {
+                token: `<${a.typeName}>`,
+                placeholder: true,
+            }
+        );
     }
     if (a.typeName === b.typeName) {
-        return concreteSample(a.typeName!) ?? {
-            token: `<${a.typeName}>`,
-            placeholder: true,
-        };
+        return (
+            concreteSample(a.typeName!) ?? {
+                token: `<${a.typeName}>`,
+                placeholder: true,
+            }
+        );
     }
     // Different custom types — try a sample of either side and check it
     // validates against the other.  If neither validates we still emit a

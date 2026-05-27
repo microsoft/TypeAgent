@@ -151,10 +151,7 @@ export function computeActionGravity(
         const sim =
             pairScoreLookup?.(parseMemberKey(e.from), parseMemberKey(e.to)) ??
             1;
-        weighted.set(
-            e.from,
-            (weighted.get(e.from) ?? 0) + e.count * sim,
-        );
+        weighted.set(e.from, (weighted.get(e.from) ?? 0) + e.count * sim);
 
         // Translator-class accumulation. Ranker edges may carry confirmed/
         // rescued counts directly; translator-only edges (NEW_FAILURE) live in
@@ -175,8 +172,7 @@ export function computeActionGravity(
             if (e.translatorRescuedCount !== undefined) {
                 rescuedOut.set(
                     e.from,
-                    (rescuedOut.get(e.from) ?? 0) +
-                        e.translatorRescuedCount,
+                    (rescuedOut.get(e.from) ?? 0) + e.translatorRescuedCount,
                 );
             }
         }
@@ -202,8 +198,7 @@ export function computeActionGravity(
         }
         const entanglement = partners + bidirectionalPartners;
         const weightedConfusion = weighted.get(key) ?? 0;
-        const shareInNeighborhood =
-            totalOwed > 0 ? owedTraffic / totalOwed : 0;
+        const shareInNeighborhood = totalOwed > 0 ? owedTraffic / totalOwed : 0;
 
         const ag: ActionGravity = {
             member: m,
@@ -239,8 +234,7 @@ export function computeActionGravity(
             ag.endUserOwedTraffic = confirmed + newFailure;
             ag.translatorOwedTraffic = newFailure;
             const denom = rescued + confirmed;
-            ag.translatorRecoveryRate =
-                denom > 0 ? rescued / denom : 0;
+            ag.translatorRecoveryRate = denom > 0 ? rescued / denom : 0;
             // Severity tier:
             //   - clean: barely any user-visible misroutes.
             //   - leaky: ranker leaks but LLM mostly rescues (low blocker risk).
@@ -280,12 +274,8 @@ export function topOffender(
 ): ActionGravity | undefined {
     const all = computeActionGravity(n, pairScoreLookup);
     if (all.length === 0) return undefined;
-    const hasTranslator = all.some(
-        (a) => a.endUserOwedTraffic !== undefined,
-    );
-    const hasCorpus = all.some(
-        (a) => a.owedTraffic > 0 || a.stolenTraffic > 0,
-    );
+    const hasTranslator = all.some((a) => a.endUserOwedTraffic !== undefined);
+    const hasCorpus = all.some((a) => a.owedTraffic > 0 || a.stolenTraffic > 0);
     const sorted = [...all].sort((a, b) => {
         if (hasTranslator) {
             const ae = a.endUserOwedTraffic ?? 0;

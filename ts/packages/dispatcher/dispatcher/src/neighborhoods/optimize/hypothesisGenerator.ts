@@ -11,11 +11,7 @@
 // ordering makes attempt directories deterministic across runs (useful
 // for diffing two attempts archives produced by the same corpus).
 
-import type {
-    AttemptRecord,
-    CaseDescription,
-    Hypothesis,
-} from "./types.js";
+import type { AttemptRecord, CaseDescription, Hypothesis } from "./types.js";
 import {
     listLevers,
     type LeverPlugin,

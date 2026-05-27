@@ -15,9 +15,7 @@ describe("mergeTranslatorEvidence (forward-compat stub)", () => {
             ],
             evidence: {
                 misrouteCount: 5,
-                misrouteEdges: [
-                    { from: "a.x", to: "b.y", count: 5 },
-                ],
+                misrouteEdges: [{ from: "a.x", to: "b.y", count: 5 }],
             },
             sources: ["corpus"],
         },

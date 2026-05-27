@@ -42,7 +42,10 @@ const PROBES: Probe[] = [
     // Cluster 1 — 7 members, "toggle developer mode" cluster
     { phrase: "toggle developer mode", expected: "config.toggleDeveloperMode" },
     { phrase: "turn on wifi", expected: "desktop.EnableWifi" },
-    { phrase: "lock screen rotation", expected: "desktop-display.RotationLock" },
+    {
+        phrase: "lock screen rotation",
+        expected: "desktop-display.RotationLock",
+    },
     { phrase: "enable the touchpad", expected: "desktop-input.EnableTouchPad" },
     {
         phrase: "enable transparency effects",
@@ -88,9 +91,15 @@ function extractText(message: DisplayContent): string {
     if (typeof message === "string") return message;
     if (Array.isArray(message)) return message.join("\n");
     if (!message || typeof message !== "object") return "";
-    const m = message as { type?: string; content?: MessageContent; alternates?: { type: string; content: MessageContent }[] };
+    const m = message as {
+        type?: string;
+        content?: MessageContent;
+        alternates?: { type: string; content: MessageContent }[];
+    };
     if (m.type === "text") {
-        return Array.isArray(m.content) ? m.content.join("\n") : String(m.content);
+        return Array.isArray(m.content)
+            ? m.content.join("\n")
+            : String(m.content);
     }
     if (m.alternates) {
         for (const alt of m.alternates) {
@@ -124,7 +133,8 @@ async function main() {
     const instanceDir = getInstanceDir();
     const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
     const defaultConstructionProvider = getDefaultConstructionProvider();
-    const indexingServiceRegistry = await getIndexingServiceRegistry(instanceDir);
+    const indexingServiceRegistry =
+        await getIndexingServiceRegistry(instanceDir);
 
     process.stderr.write(
         "Spinning up dispatcher (read-only — no actions / translation / cache)…\n",
@@ -161,7 +171,8 @@ async function main() {
                 continue;
             }
 
-            const allText = captured.join("\n").trim() || "(no output captured)";
+            const allText =
+                captured.join("\n").trim() || "(no output captured)";
             process.stdout.write("=".repeat(72) + "\n");
             process.stdout.write(`PROBE: ${probe.phrase}\n`);
             if (probe.expected) {

@@ -42,14 +42,10 @@ describe("findGrammarOverlap", () => {
 
     it("detects literal-prefix overlap with a concrete witness", () => {
         const a: Grammar = {
-            alternatives: [
-                { parts: [createStringPart(["play"])] },
-            ],
+            alternatives: [{ parts: [createStringPart(["play"])] }],
         };
         const b: Grammar = {
-            alternatives: [
-                { parts: [createStringPart(["play"])] },
-            ],
+            alternatives: [{ parts: [createStringPart(["play"])] }],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));
         expect(overlap).toBeDefined();
@@ -96,14 +92,10 @@ describe("findGrammarOverlap", () => {
 
     it("returns undefined for grammars with disjoint literal prefixes", () => {
         const a: Grammar = {
-            alternatives: [
-                { parts: [createStringPart(["pause"])] },
-            ],
+            alternatives: [{ parts: [createStringPart(["pause"])] }],
         };
         const b: Grammar = {
-            alternatives: [
-                { parts: [createStringPart(["resume"])] },
-            ],
+            alternatives: [{ parts: [createStringPart(["resume"])] }],
         };
         const overlap = findGrammarOverlap(nfa(a, "A"), nfa(b, "B"));
         expect(overlap).toBeUndefined();

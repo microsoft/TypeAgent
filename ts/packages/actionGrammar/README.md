@@ -84,29 +84,29 @@ LLM-powered grammar generation from schemas and examples:
 
 ## Key Source Files
 
-| File                       | Purpose                                                                   |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `grammarRuleParser.ts`     | Recursive descent parser for `.agr` files                                 |
-| `grammarCompiler.ts`       | Compiles parsed rules into the in-memory `Grammar` representation         |
-| `grammarTypes.ts`          | Types for in-memory and serialized grammar representations                |
-| `grammarMatcher.ts`        | Recursive backtracking matcher                                            |
-| `grammarCompletion.ts`     | Completion system (partial-match completions from grammar rules)          |
-| `nfaCompiler.ts`           | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
-| `nfaInterpreter.ts`        | Parallel NFA execution with priority ranking                              |
-| `nfaIntersection.ts`       | NFA product-construction overlap detector — `findGrammarOverlap()`        |
+| File                         | Purpose                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `grammarRuleParser.ts`       | Recursive descent parser for `.agr` files                                 |
+| `grammarCompiler.ts`         | Compiles parsed rules into the in-memory `Grammar` representation         |
+| `grammarTypes.ts`            | Types for in-memory and serialized grammar representations                |
+| `grammarMatcher.ts`          | Recursive backtracking matcher                                            |
+| `grammarCompletion.ts`       | Completion system (partial-match completions from grammar rules)          |
+| `nfaCompiler.ts`             | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
+| `nfaInterpreter.ts`          | Parallel NFA execution with priority ranking                              |
+| `nfaIntersection.ts`         | NFA product-construction overlap detector — `findGrammarOverlap()`        |
 | `grammarCollisionScanner.ts` | Pairwise cross-schema scanner with tail-call strip + JSON-friendly result |
-| `dfaCompiler.ts`           | NFA→DFA subset construction                                               |
-| `dfaMatcher.ts`            | DFA-based matching and completion                                         |
-| `entityRegistry.ts`        | Entity registry with validators and converters                            |
-| `builtInEntities.ts`       | Built-in entity converters (dates, times, ordinals, cardinals)            |
-| `builtInPhraseMatchers.ts` | Phrase set registry (Polite, Greeting, Acknowledgement, FillerWord)       |
-| `environment.ts`           | Slot-based environment system for NFA/DFA variable capture                |
-| `grammarStore.ts`          | Persists dynamically generated grammar rules with auto-save               |
-| `grammarMerger.ts`         | Utilities for merging and combining grammars                              |
-| `grammarMetadata.ts`       | Enriches grammars with checked-variable metadata from `.pas.json` schemas |
-| `dynamicGrammarLoader.ts`  | Runtime rule loading, entity validation, NFA compilation                  |
-| `agentGrammarRegistry.ts`  | Per-agent grammar management with dynamic rule addition                   |
-| `grammarRuleWriter.ts`     | Pretty-prints grammar parse results back to `.agr` format                 |
+| `dfaCompiler.ts`             | NFA→DFA subset construction                                               |
+| `dfaMatcher.ts`              | DFA-based matching and completion                                         |
+| `entityRegistry.ts`          | Entity registry with validators and converters                            |
+| `builtInEntities.ts`         | Built-in entity converters (dates, times, ordinals, cardinals)            |
+| `builtInPhraseMatchers.ts`   | Phrase set registry (Polite, Greeting, Acknowledgement, FillerWord)       |
+| `environment.ts`             | Slot-based environment system for NFA/DFA variable capture                |
+| `grammarStore.ts`            | Persists dynamically generated grammar rules with auto-save               |
+| `grammarMerger.ts`           | Utilities for merging and combining grammars                              |
+| `grammarMetadata.ts`         | Enriches grammars with checked-variable metadata from `.pas.json` schemas |
+| `dynamicGrammarLoader.ts`    | Runtime rule loading, entity validation, NFA compilation                  |
+| `agentGrammarRegistry.ts`    | Per-agent grammar management with dynamic rule addition                   |
+| `grammarRuleWriter.ts`       | Pretty-prints grammar parse results back to `.agr` format                 |
 
 ## File Formats
 
@@ -158,12 +158,12 @@ node ./dist/generation/analyze-grammar-collisions-cli.js [options]
 analyze-grammar-collisions [options]
 ```
 
-| Option              | Description                                                              |
-| ------------------- | ------------------------------------------------------------------------ |
-| `-d, --dir <path>`  | Recurse this directory for `*.ag.json` files (default: cwd).             |
-| `-o, --out <path>`  | Write JSON report to this file (default: stdout).                        |
-| `-q, --quiet`       | Suppress progress messages on stderr.                                    |
-| `-h, --help`        | Show usage and exit.                                                     |
+| Option             | Description                                                  |
+| ------------------ | ------------------------------------------------------------ |
+| `-d, --dir <path>` | Recurse this directory for `*.ag.json` files (default: cwd). |
+| `-o, --out <path>` | Write JSON report to this file (default: stdout).            |
+| `-q, --quiet`      | Suppress progress messages on stderr.                        |
+| `-h, --help`       | Show usage and exit.                                         |
 
 The report shape is `CollisionScanResult` (see [`grammarCollisionScanner.ts`](src/grammarCollisionScanner.ts)):
 

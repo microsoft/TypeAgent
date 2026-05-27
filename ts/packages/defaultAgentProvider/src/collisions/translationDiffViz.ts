@@ -670,7 +670,10 @@ export function buildDiffPayload(
         phraseText: string;
     }) => `${r.expectedSchema}${r.expectedAction}${r.phraseText}`;
 
-    const candidateByKey = new Map<string, (typeof candidate.results)[number]>();
+    const candidateByKey = new Map<
+        string,
+        (typeof candidate.results)[number]
+    >();
     for (const r of candidate.results) {
         candidateByKey.set(keyOf(r), r);
     }
@@ -708,13 +711,21 @@ export function buildDiffPayload(
         const tc = classifyTransition(b.outcome, c.outcome);
         const baselineEntry: DiffTransitionRow["baseline"] = {
             outcome: b.outcome,
-            ...(b.chosenSchema !== undefined && { chosenSchema: b.chosenSchema }),
-            ...(b.chosenAction !== undefined && { chosenAction: b.chosenAction }),
+            ...(b.chosenSchema !== undefined && {
+                chosenSchema: b.chosenSchema,
+            }),
+            ...(b.chosenAction !== undefined && {
+                chosenAction: b.chosenAction,
+            }),
         };
         const candidateEntry: DiffTransitionRow["candidate"] = {
             outcome: c.outcome,
-            ...(c.chosenSchema !== undefined && { chosenSchema: c.chosenSchema }),
-            ...(c.chosenAction !== undefined && { chosenAction: c.chosenAction }),
+            ...(c.chosenSchema !== undefined && {
+                chosenSchema: c.chosenSchema,
+            }),
+            ...(c.chosenAction !== undefined && {
+                chosenAction: c.chosenAction,
+            }),
         };
         // Prefer the candidate's phraseSources (more recent provenance)
         // when both sides report them; fall back to baseline. Empty array

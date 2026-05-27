@@ -117,10 +117,7 @@ export function buildSandbox(opts: BuildSandboxOpts): BuildSandboxResult {
         } catch (err) {
             skipped.push({
                 schemaName,
-                reason:
-                    err instanceof Error
-                        ? err.message
-                        : String(err),
+                reason: err instanceof Error ? err.message : String(err),
             });
         }
     }

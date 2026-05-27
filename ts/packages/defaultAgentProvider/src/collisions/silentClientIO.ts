@@ -9,9 +9,7 @@
 
 import type { ClientIO } from "agent-dispatcher";
 
-export function silentClientIO(
-    overrides: Partial<ClientIO> = {},
-): ClientIO {
+export function silentClientIO(overrides: Partial<ClientIO> = {}): ClientIO {
     const noop = () => {};
     const noopAsync = async () => {};
     const base: ClientIO = {

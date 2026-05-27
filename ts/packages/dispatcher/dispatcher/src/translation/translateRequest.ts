@@ -13,9 +13,7 @@ import {
     ParamObjectType,
     RequestAction,
 } from "agent-cache";
-import {
-    DispatcherClarifyName,
-} from "../context/dispatcher/dispatcherUtils.js";
+import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
 import { AgentMatchCandidate } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 import {
@@ -253,8 +251,7 @@ async function pickInitialSchema(
     systemContext: CommandHandlerContext,
 ): Promise<PickInitialSchemaResult> {
     const switchConfig = systemContext.session.getConfig().translation.switch;
-    const collisionCfg =
-        systemContext.session.getConfig().collision.llmSelect;
+    const collisionCfg = systemContext.session.getConfig().collision.llmSelect;
     if (switchConfig.fixed !== "") {
         if (!activeSchemas.has(switchConfig.fixed)) {
             throw new Error("Fixed initial schema not active");

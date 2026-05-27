@@ -14,9 +14,7 @@ import type {
     CaseResult,
 } from "../src/neighborhoods/optimize/types.js";
 
-function row(
-    overrides: Partial<TranslationProbeRow>,
-): TranslationProbeRow {
+function row(overrides: Partial<TranslationProbeRow>): TranslationProbeRow {
     return {
         expectedSchema: "player",
         expectedAction: "playTrack",
@@ -32,9 +30,7 @@ function row(
     };
 }
 
-function probeFile(
-    rows: TranslationProbeRow[],
-): TranslationProbeFile {
+function probeFile(rows: TranslationProbeRow[]): TranslationProbeFile {
     return {
         summary: {
             scannedAt: new Date().toISOString(),
@@ -120,12 +116,8 @@ describe("classifyTransition", () => {
         expect(classifyTransition("CLEAN", "MISROUTE")).toBe("regression");
         expect(classifyTransition("CLEAN", "CLARIFY")).toBe("regression");
         expect(classifyTransition("CLEAN", "CLEAN")).toBe("clean-stable");
-        expect(classifyTransition("MISROUTE", "MISROUTE")).toBe(
-            "still-broken",
-        );
-        expect(classifyTransition("CLARIFY", "CLARIFY")).toBe(
-            "still-clarify",
-        );
+        expect(classifyTransition("MISROUTE", "MISROUTE")).toBe("still-broken");
+        expect(classifyTransition("CLARIFY", "CLARIFY")).toBe("still-clarify");
         expect(classifyTransition("MISROUTE", "CLARIFY")).toBe("other");
     });
 });
@@ -452,9 +444,7 @@ describe("buildImpactPayload", () => {
         const baseRows = [];
         const candRows = [];
         for (let i = 0; i < 12; i++) {
-            baseRows.push(
-                row({ phraseText: `p${i}`, outcome: "MISROUTE" }),
-            );
+            baseRows.push(row({ phraseText: `p${i}`, outcome: "MISROUTE" }));
             candRows.push(row({ phraseText: `p${i}`, outcome: "CLEAN" }));
         }
         const result = buildImpactPayload({

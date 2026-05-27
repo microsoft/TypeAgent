@@ -680,7 +680,8 @@ function markDeprecatedPasImpl(opts: ApplyMarkDeprecatedOpts): ApplyResult {
     target.comments = target.comments ?? [];
     const first = target.comments[0] ?? "";
     if (!first.startsWith(DEPRECATED_PREFIX)) {
-        target.comments[0] = `${DEPRECATED_PREFIX}${opts.reason}. ${first}`.trimEnd();
+        target.comments[0] =
+            `${DEPRECATED_PREFIX}${opts.reason}. ${first}`.trimEnd();
         // If there was no first line at all, just stamp the deprecation marker.
         if (target.comments[0].trim() === DEPRECATED_PREFIX.trim()) {
             target.comments[0] = `${DEPRECATED_PREFIX}${opts.reason}`;

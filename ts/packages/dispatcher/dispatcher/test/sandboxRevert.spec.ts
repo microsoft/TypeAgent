@@ -60,12 +60,7 @@ describe("sandboxRevert", () => {
             "agents",
             "alpha",
         );
-        const originalBeta = path.join(
-            sandbox,
-            ".original",
-            "agents",
-            "beta",
-        );
+        const originalBeta = path.join(sandbox, ".original", "agents", "beta");
         expect(fs.existsSync(path.join(originalAlpha, "manifest.json"))).toBe(
             true,
         );
@@ -92,13 +87,7 @@ describe("sandboxRevert", () => {
         );
         snapshotSandboxOriginal(sandbox);
         const snap = readFile(
-            path.join(
-                sandbox,
-                ".original",
-                "agents",
-                "alpha",
-                "schema.ts",
-            ),
+            path.join(sandbox, ".original", "agents", "alpha", "schema.ts"),
         );
         expect(snap).toBe("v2");
     });
@@ -115,12 +104,7 @@ describe("sandboxRevert", () => {
         snapshotSandboxOriginal(sandbox);
 
         // Mutate alpha and beta.
-        const alphaSchema = path.join(
-            sandbox,
-            "agents",
-            "alpha",
-            "schema.ts",
-        );
+        const alphaSchema = path.join(sandbox, "agents", "alpha", "schema.ts");
         const betaSchema = path.join(sandbox, "agents", "beta", "schema.ts");
         fs.writeFileSync(alphaSchema, "mutated alpha");
         fs.writeFileSync(betaSchema, "mutated beta");
@@ -142,24 +126,13 @@ describe("sandboxRevert", () => {
         });
         snapshotSandboxOriginal(sandbox);
 
-        const alphaSchema = path.join(
-            sandbox,
-            "agents",
-            "alpha",
-            "schema.ts",
-        );
+        const alphaSchema = path.join(sandbox, "agents", "alpha", "schema.ts");
         fs.writeFileSync(alphaSchema, "completely different");
         revertSandboxFromOriginal("alpha", sandbox);
 
         const restored = fs.readFileSync(alphaSchema);
         const snapshot = fs.readFileSync(
-            path.join(
-                sandbox,
-                ".original",
-                "agents",
-                "alpha",
-                "schema.ts",
-            ),
+            path.join(sandbox, ".original", "agents", "alpha", "schema.ts"),
         );
         // Byte-identical comparison.
         expect(restored.equals(snapshot)).toBe(true);

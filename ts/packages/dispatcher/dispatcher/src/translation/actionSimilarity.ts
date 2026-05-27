@@ -326,7 +326,9 @@ function buildClusters(
     // Build the initial candidate edges sorted by aggregate score desc.
     // Only edges connecting distinct singletons at start are candidates;
     // as we merge, candidates get re-evaluated against the new cluster.
-    const candidates = pairs.slice().sort((a, b) => b.aggregateScore - a.aggregateScore);
+    const candidates = pairs
+        .slice()
+        .sort((a, b) => b.aggregateScore - a.aggregateScore);
 
     // Track which cluster each entry is in.
     const ownerOf = new Map<number, number>();
@@ -434,14 +436,10 @@ export async function computeActionSimilarity(
         const actionMap =
             input.actionSchemaFile.parsedActionSchema.actionSchemas;
         for (const [actionName, definition] of actionMap) {
-            entries.push(
-                buildEntry(input, actionName, definition),
-            );
+            entries.push(buildEntry(input, actionName, definition));
         }
     }
-    debug(
-        `Built ${entries.length} entries across ${inputs.length} schema(s).`,
-    );
+    debug(`Built ${entries.length} entries across ${inputs.length} schema(s).`);
 
     const cache = await loadEmbeddingCache(options.cachePath);
     const cacheUpdated = await embedAllVectors(
@@ -500,9 +498,7 @@ export async function computeActionSimilarity(
     }
 
     const schemaSet = new Set(entries.map((e) => e.schemaName));
-    debug(
-        `Kept ${pairs.length} pair(s) above keepThreshold=${keepThreshold}.`,
-    );
+    debug(`Kept ${pairs.length} pair(s) above keepThreshold=${keepThreshold}.`);
     return {
         scannedAt: new Date().toISOString(),
         actionCount: entries.length,
@@ -661,7 +657,9 @@ async function embedAllVectors(
         model,
         missingTexts,
     );
-    debug(`Embedded ${embeddings.length} vector(s) in ${Date.now() - start}ms.`);
+    debug(
+        `Embedded ${embeddings.length} vector(s) in ${Date.now() - start}ms.`,
+    );
 
     for (let i = 0; i < missingEntries.length; i++) {
         cache.set(missingEntries[i][0], embeddings[i]);

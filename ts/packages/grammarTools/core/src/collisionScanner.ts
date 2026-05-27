@@ -116,7 +116,12 @@ export interface ScanOptions {
      * Optional per-step progress callback.  Two phases: compile (one call
      * per schema) and pairwise (one call per pair).  No-op by default.
      */
-    onProgress?: (phase: "compile" | "pair", index: number, total: number, label: string) => void;
+    onProgress?: (
+        phase: "compile" | "pair",
+        index: number,
+        total: number,
+        label: string,
+    ) => void;
 }
 
 /**
@@ -235,8 +240,12 @@ export function scanGrammarCollisions(
                 hasPlaceholders: overlap.hasPlaceholders,
                 ruleIndexA: overlap.ruleIndexA,
                 ruleIndexB: overlap.ruleIndexB,
-                rulePatternA: ruleA ? formatRulePartsText(ruleA.parts) : undefined,
-                rulePatternB: ruleB ? formatRulePartsText(ruleB.parts) : undefined,
+                rulePatternA: ruleA
+                    ? formatRulePartsText(ruleA.parts)
+                    : undefined,
+                rulePatternB: ruleB
+                    ? formatRulePartsText(ruleB.parts)
+                    : undefined,
                 matchA,
                 matchB,
             };
@@ -294,8 +303,7 @@ function formatPartText(part: GrammarPart): string {
         case "phraseSet":
             return `<${part.matcherName}>`;
         case "rules": {
-            const opt =
-                (part.optional ? "?" : "") + (part.repeat ? "*" : "");
+            const opt = (part.optional ? "?" : "") + (part.repeat ? "*" : "");
             return `<rules>${opt}`;
         }
         default:

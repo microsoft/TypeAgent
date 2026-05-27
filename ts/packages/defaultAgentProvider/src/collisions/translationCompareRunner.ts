@@ -55,8 +55,12 @@ function parseArgs(): Args {
     return {
         baseline: path.resolve(baseline),
         candidate: path.resolve(candidate),
-        outJson: path.resolve(get("out-json") ?? path.join(dir, "translation-compare.json")),
-        outHtml: path.resolve(get("out-html") ?? path.join(dir, "translation-compare.html")),
+        outJson: path.resolve(
+            get("out-json") ?? path.join(dir, "translation-compare.json"),
+        ),
+        outHtml: path.resolve(
+            get("out-html") ?? path.join(dir, "translation-compare.html"),
+        ),
     };
 }
 
@@ -73,8 +77,10 @@ function pad(s: string, n: number): string {
 
 function printSummary(payload: DiffPayload): void {
     const total = payload.transitions.length;
-    const baseCounts: Record<TranslationOutcome, number> = payload.baseline.summary.counts;
-    const candCounts: Record<TranslationOutcome, number> = payload.candidate.summary.counts;
+    const baseCounts: Record<TranslationOutcome, number> =
+        payload.baseline.summary.counts;
+    const candCounts: Record<TranslationOutcome, number> =
+        payload.candidate.summary.counts;
     process.stdout.write(
         `\n=== translation diff ===\n` +
             `baseline:  ${payload.baseline.path}  (userContextMode=${payload.baseline.summary.userContextMode})\n` +
@@ -93,7 +99,9 @@ function printSummary(payload: DiffPayload): void {
         );
     }
 
-    process.stdout.write(`\nTransition matrix (baseline rows × candidate cols):\n`);
+    process.stdout.write(
+        `\nTransition matrix (baseline rows × candidate cols):\n`,
+    );
     const header = `  ${pad("", 9)}${OUTCOMES.map((c) => pad(c, 9)).join("")}\n`;
     process.stdout.write(header);
     for (const r of OUTCOMES) {
@@ -180,9 +188,7 @@ function main(): void {
     fs.writeFileSync(args.outHtml, buildTranslationDiffHTML(payload));
 
     printSummary(payload);
-    process.stdout.write(
-        `Wrote ${args.outJson}\nWrote ${args.outHtml}\n`,
-    );
+    process.stdout.write(`Wrote ${args.outJson}\nWrote ${args.outHtml}\n`);
 }
 
 try {

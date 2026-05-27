@@ -55,9 +55,7 @@ export function buildRunHTML(opts: BuildRunHTMLOpts): BuildRunHTMLResult {
             fs.writeFileSync(htmlPath, result.html);
             perCaseHTMLPaths.push(htmlPath);
 
-            const caseDesc = JSON.parse(
-                fs.readFileSync(caseJsonPath, "utf-8"),
-            );
+            const caseDesc = JSON.parse(fs.readFileSync(caseJsonPath, "utf-8"));
             perCaseRows.push({
                 slug: caseSlug,
                 neighborhoodId: caseDesc.neighborhoodId,

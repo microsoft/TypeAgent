@@ -152,12 +152,7 @@ describe("stackWinners", () => {
                 );
                 return {
                     filesWritten: [
-                        path.join(
-                            sandbox,
-                            "agents",
-                            "player",
-                            "applied.txt",
-                        ),
+                        path.join(sandbox, "agents", "player", "applied.txt"),
                     ],
                 };
             },
@@ -218,11 +213,7 @@ describe("stackWinners", () => {
             sourceProvider: {} as any,
         });
         // Sorted by neighborhoodId then attemptId.
-        expect(order).toEqual([
-            "h01-tracking",
-            "h05-tracking",
-            "h02-tracking",
-        ]);
+        expect(order).toEqual(["h01-tracking", "h05-tracking", "h02-tracking"]);
     });
 
     it("throws when an unregistered lever is referenced", async () => {
@@ -244,12 +235,7 @@ describe("stackWinners", () => {
     it("reverts sandbox to .original before applying", async () => {
         // Mutate a sandbox file BEFORE stack runs — stack should revert
         // it back to the original "x" content (per the snapshot above).
-        const schemaPath = path.join(
-            sandbox,
-            "agents",
-            "player",
-            "schema.ts",
-        );
+        const schemaPath = path.join(sandbox, "agents", "player", "schema.ts");
         fs.writeFileSync(schemaPath, "mutated content");
 
         registerLever({
@@ -270,9 +256,7 @@ describe("stackWinners", () => {
         });
 
         const cases = [
-            caseResultWith("h01-checkstate", "checkstate", "nbh-a", [
-                "player",
-            ]),
+            caseResultWith("h01-checkstate", "checkstate", "nbh-a", ["player"]),
         ];
         await stackWinners({
             sandboxDir: sandbox,
@@ -295,9 +279,7 @@ describe("stackWinners", () => {
                 throw new Error("synthetic apply failure");
             },
         });
-        const cases = [
-            caseResultWith("h01-boom", "boom", "nbh-x", ["player"]),
-        ];
+        const cases = [caseResultWith("h01-boom", "boom", "nbh-x", ["player"])];
         await expect(
             stackWinners({
                 sandboxDir: sandbox,

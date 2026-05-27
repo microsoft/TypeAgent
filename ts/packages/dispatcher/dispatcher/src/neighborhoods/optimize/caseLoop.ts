@@ -23,10 +23,7 @@ import type {
     Hypothesis,
 } from "./types.js";
 import type { ApplyContext, ProposeContext } from "./registry.js";
-import {
-    evaluateHypothesis,
-    type DiffPayload,
-} from "./hypothesisEvaluator.js";
+import { evaluateHypothesis, type DiffPayload } from "./hypothesisEvaluator.js";
 import { generateHypotheses } from "./hypothesisGenerator.js";
 import { getLever } from "./registry.js";
 import { ensureDir } from "./util.js";

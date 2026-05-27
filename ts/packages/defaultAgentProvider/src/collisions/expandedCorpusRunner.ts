@@ -79,7 +79,8 @@ async function main() {
     const instanceDir = getInstanceDir();
     const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
     const defaultConstructionProvider = getDefaultConstructionProvider();
-    const indexingServiceRegistry = await getIndexingServiceRegistry(instanceDir);
+    const indexingServiceRegistry =
+        await getIndexingServiceRegistry(instanceDir);
 
     process.stderr.write(
         `Spinning up dispatcher (translation enabled, actions/cache/explainer off)…\n` +

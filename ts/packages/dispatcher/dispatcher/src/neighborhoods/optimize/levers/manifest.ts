@@ -30,10 +30,7 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { replaceManifestDescription } from "../apply.js";
-import {
-    formatMembersBlock,
-    isValidMemberReference,
-} from "./promptUtils.js";
+import { formatMembersBlock, isValidMemberReference } from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:manifest");
 
@@ -237,7 +234,10 @@ function buildProposePrompt(
     const priorBlock =
         priorAttempts.length > 0
             ? `\n\nRetry depth ${priorAttempts[0]!.hypothesis.depth + 1}. Prior mechanisms regressed: ${priorAttempts
-                  .map((a) => `${a.hypothesis.mechanism} (${a.evaluation.regressions} regressed)`)
+                  .map(
+                      (a) =>
+                          `${a.hypothesis.mechanism} (${a.evaluation.regressions} regressed)`,
+                  )
                   .join(", ")}. Pick a different mechanism.`
             : "";
 

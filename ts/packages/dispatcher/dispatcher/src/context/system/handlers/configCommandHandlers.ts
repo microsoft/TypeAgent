@@ -2180,9 +2180,7 @@ function renderCollisionShowHTML(cfg: {
             <td style="${monoCell}">scorer=${scorerLabel}, static=${statusPill(cfg.fuzzy.staticEnabled)}, runtime=${statusPill(cfg.fuzzy.runtimeEnabled)}, threshold=${cfg.fuzzy.similarityThreshold}</td>`,
     });
 
-    const tableRows = rows
-        .map((r) => `<tr>${r.row}</tr>`)
-        .join("");
+    const tableRows = rows.map((r) => `<tr>${r.row}</tr>`).join("");
 
     const priorityVal = cfg.priorityOrder
         ? `<code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.priorityOrder)}"</code>`
@@ -2278,13 +2276,12 @@ function renderCollisionShowText(cfg: {
 }
 
 class CollisionShowCommandHandler implements CommandHandler {
-    public readonly description =
-        "Show the current collision detection config";
+    public readonly description = "Show the current collision detection config";
     public readonly parameters = {} as const;
 
     public async run(context: ActionContext<CommandHandlerContext>) {
-        const cfg = context.sessionContext.agentContext.session.getConfig()
-            .collision;
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
         const html = renderCollisionShowHTML(cfg);
         const text = renderCollisionShowText(cfg);
         context.actionIO.appendDisplay({
@@ -2330,10 +2327,7 @@ class CollisionStrategyCommandHandler implements CommandHandler {
             collision: { [this.point]: { strategy } },
         } as SessionOptions;
         await changeContextConfig(options, context);
-        displayResult(
-            `${this.point}.strategy = ${strategy}`,
-            context,
-        );
+        displayResult(`${this.point}.strategy = ${strategy}`, context);
     }
 }
 
@@ -2355,8 +2349,8 @@ class CollisionExperimentIdCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const cfg = context.sessionContext.agentContext.session.getConfig()
-            .collision;
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
         if (params.args.id === undefined) {
             const cur = cfg.telemetry.experimentId;
             displayResult(
@@ -2374,10 +2368,7 @@ class CollisionExperimentIdCommandHandler implements CommandHandler {
             } as SessionOptions,
             context,
         );
-        displayResult(
-            `experimentId = ${id ? `"${id}"` : "(empty)"}`,
-            context,
-        );
+        displayResult(`experimentId = ${id ? `"${id}"` : "(empty)"}`, context);
     }
 }
 
@@ -2399,8 +2390,8 @@ class CollisionPriorityCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const cfg = context.sessionContext.agentContext.session.getConfig()
-            .collision;
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
         if (params.args.order === undefined) {
             displayResult(
                 `priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
@@ -2420,9 +2411,7 @@ class CollisionPriorityCommandHandler implements CommandHandler {
     }
 }
 
-function getCollisionPointHandlers(
-    point: CollisionPoint,
-): CommandHandlerTable {
+function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
     const allowedStrategies = strategiesFor(point);
     return {
         description: `Configure ${point} collision detection`,
@@ -2489,8 +2478,7 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
                             );
                         },
                     ),
-                    experimentId:
-                        new CollisionExperimentIdCommandHandler(),
+                    experimentId: new CollisionExperimentIdCommandHandler(),
                 },
             },
         },

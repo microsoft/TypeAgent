@@ -26,9 +26,10 @@ function neighborhood(
 ): Neighborhood {
     return {
         id: "nbh-test",
-        kind: new Set(members.map((m) => m.schemaName)).size === 1
-            ? "same-schema"
-            : "cross-schema",
+        kind:
+            new Set(members.map((m) => m.schemaName)).size === 1
+                ? "same-schema"
+                : "cross-schema",
         members,
         evidence: {},
         sources: ["corpus"],
@@ -36,7 +37,9 @@ function neighborhood(
     };
 }
 
-function probeFile(rows: TranslationProbeFile["results"]): TranslationProbeFile {
+function probeFile(
+    rows: TranslationProbeFile["results"],
+): TranslationProbeFile {
     return {
         summary: {
             scannedAt: new Date().toISOString(),
@@ -202,7 +205,8 @@ describe("analyzeCase", () => {
             neighborhood: neighborhood(members),
             translationResults: probeFile(rows),
             provider: emptyProvider(),
-            createModel: () => mockModel('{"failurePattern":"cross-agent-verb"}'),
+            createModel: () =>
+                mockModel('{"failurePattern":"cross-agent-verb"}'),
             schemaGuidelines: GUIDELINES,
             skipChecksumValidation: true,
         });

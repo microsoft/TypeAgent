@@ -177,8 +177,7 @@ const PHRASE_STYLE_DEFS: ReadonlyArray<{
     {
         key: "casual",
         label: "CASUAL",
-        description:
-            "short, idiomatic, may abbreviate or omit articles.",
+        description: "short, idiomatic, may abbreviate or omit articles.",
     },
     {
         key: "polite",
@@ -476,10 +475,7 @@ async function pmap<T, R>(
             onProgress?.(done, items.length);
         }
     }
-    const workers = Array.from(
-        { length: Math.max(1, concurrency) },
-        worker,
-    );
+    const workers = Array.from({ length: Math.max(1, concurrency) }, worker);
     await Promise.all(workers);
     return results;
 }
@@ -503,9 +499,10 @@ function describeParameters(definition: any): string | undefined {
     const paramType = params.type;
     if (!paramType || paramType.type !== "object") return undefined;
     const lines: string[] = [];
-    for (const [propName, propField] of Object.entries(
-        paramType.fields,
-    ) as [string, any][]) {
+    for (const [propName, propField] of Object.entries(paramType.fields) as [
+        string,
+        any,
+    ][]) {
         const propDoc = (propField.comments ?? [])
             .map((c: string) => c.trim())
             .filter(Boolean)
@@ -533,8 +530,7 @@ function enumerateActions(
     for (const cfg of sampled) {
         let schemaFile;
         try {
-            schemaFile =
-                systemContext.agents.getActionSchemaFileForConfig(cfg);
+            schemaFile = systemContext.agents.getActionSchemaFileForConfig(cfg);
         } catch (err) {
             failedSchemas.push({
                 schemaName: cfg.schemaName,
@@ -576,14 +572,14 @@ function buildCorpusPrompt(
 ): string {
     const styleDefs = styles
         .map((k) => PHRASE_STYLES_BY_KEY.get(k))
-        .filter((d): d is (typeof PHRASE_STYLE_DEFS)[number] => d !== undefined);
+        .filter(
+            (d): d is (typeof PHRASE_STYLE_DEFS)[number] => d !== undefined,
+        );
     const styleLines = styleDefs.map(
         (d, i) => `  ${i + 1}. ${d.label} — ${d.description}`,
     );
     const jsonShape =
-        "{" +
-        styleDefs.map((d) => `"${d.key}":"…"`).join(",") +
-        "}";
+        "{" + styleDefs.map((d) => `"${d.key}":"…"`).join(",") + "}";
     const word = styles.length === 3 ? "three" : `${styles.length}`;
     return [
         "You are helping calibrate a natural-language action-routing system.",
@@ -643,7 +639,12 @@ async function generateCorpus(
     corpus: Corpus;
     errorCount: number;
     failedSchemas: { schemaName: string; error: string }[];
-    perCallErrors: { schemaName: string; actionName: string; model: string; error: string }[];
+    perCallErrors: {
+        schemaName: string;
+        actionName: string;
+        model: string;
+        error: string;
+    }[];
 }> {
     onProgress?.("loading");
     const { actions, failedSchemas } = enumerateActions(
@@ -668,7 +669,11 @@ async function generateCorpus(
     interface Task {
         action: CorpusActionInfo;
         modelName: string;
-        model: { complete: (prompt: string) => Promise<{ success: boolean; data?: string; message?: string }> };
+        model: {
+            complete: (
+                prompt: string,
+            ) => Promise<{ success: boolean; data?: string; message?: string }>;
+        };
     }
     const tasks: Task[] = [];
     for (const action of actions) {
@@ -1071,10 +1076,7 @@ function aggregateProbeResults(
 // Reanalyze (prefix-aware reclassification)
 // =============================================================================
 
-function reanalyzeProbeResults(
-    probeFile: ProbeFile,
-    delta: number,
-): ProbeFile {
+function reanalyzeProbeResults(probeFile: ProbeFile, delta: number): ProbeFile {
     for (const r of probeFile.results) {
         if (r.error || !r.top1) continue;
         const top1 = r.rows[0] ?? r.top1;
@@ -2321,7 +2323,10 @@ function buildVisualizationPayload(
         total: number;
         edges: Map<string, number>;
         /** Per-style breakdown so the viz chip filter can re-aggregate. */
-        byStyle: Map<string, { CLEAN: number; TIGHT: number; MISROUTE: number }>;
+        byStyle: Map<
+            string,
+            { CLEAN: number; TIGHT: number; MISROUTE: number }
+        >;
     }
     const schemaMatrix = new Map<string, Map<string, Cell>>();
     function bumpMatrix(
@@ -2395,10 +2400,7 @@ function buildVisualizationPayload(
                     byStyle = new Map();
                     edgeCountsByStyle.set(edgeK, byStyle);
                 }
-                byStyle.set(
-                    phraseStyle,
-                    (byStyle.get(phraseStyle) ?? 0) + 1,
-                );
+                byStyle.set(phraseStyle, (byStyle.get(phraseStyle) ?? 0) + 1);
             }
             let samples = edgeSamples.get(edgeK);
             if (!samples) {
@@ -2437,7 +2439,11 @@ function buildVisualizationPayload(
     // a corpus edge in either direction. Counted symmetrically so cells
     // (A,B) and (B,A) both reflect the pair.
     const simCellCount = new Map<string, { sim: number; both: number }>();
-    function bumpSimCell(rowSchema: string, colSchema: string, hasCorpus: boolean) {
+    function bumpSimCell(
+        rowSchema: string,
+        colSchema: string,
+        hasCorpus: boolean,
+    ) {
         const k = `${rowSchema}|${colSchema}`;
         let v = simCellCount.get(k);
         if (!v) {
@@ -2449,7 +2455,9 @@ function buildVisualizationPayload(
     }
     // The corpus key uses the SEP separator; check both directions.
     function hasCorpusFor(a: string, b: string): boolean {
-        return edgeCounts.has(`${a}${SEP}${b}`) || edgeCounts.has(`${b}${SEP}${a}`);
+        return (
+            edgeCounts.has(`${a}${SEP}${b}`) || edgeCounts.has(`${b}${SEP}${a}`)
+        );
     }
     for (const sp of similarityEdges) {
         const aSchema = schemaOf(sp.a);
@@ -2481,15 +2489,18 @@ function buildVisualizationPayload(
         ...rowSimCount.keys(),
     ]);
     const rowSchemas = [...allRowSchemas]
-        .filter(s => (rowMisCount.get(s) ?? 0) + (rowSimCount.get(s) ?? 0) > 0)
-        .map(schema => ({
+        .filter(
+            (s) => (rowMisCount.get(s) ?? 0) + (rowSimCount.get(s) ?? 0) > 0,
+        )
+        .map((schema) => ({
             schema,
             mis: rowMisCount.get(schema) ?? 0,
             sim: rowSimCount.get(schema) ?? 0,
         }))
-        .sort((a, b) =>
-            (b.mis + b.sim) - (a.mis + a.sim) ||
-            a.schema.localeCompare(b.schema),
+        .sort(
+            (a, b) =>
+                b.mis + b.sim - (a.mis + a.sim) ||
+                a.schema.localeCompare(b.schema),
         );
 
     const colMisCount = new Map<string, number>();
@@ -2511,15 +2522,18 @@ function buildVisualizationPayload(
         ...colSimCount.keys(),
     ]);
     const colSchemas = [...allColSchemas]
-        .filter(s => (colMisCount.get(s) ?? 0) + (colSimCount.get(s) ?? 0) > 0)
-        .map(schema => ({
+        .filter(
+            (s) => (colMisCount.get(s) ?? 0) + (colSimCount.get(s) ?? 0) > 0,
+        )
+        .map((schema) => ({
             schema,
             mis: colMisCount.get(schema) ?? 0,
             sim: colSimCount.get(schema) ?? 0,
         }))
-        .sort((a, b) =>
-            (b.mis + b.sim) - (a.mis + a.sim) ||
-            a.schema.localeCompare(b.schema),
+        .sort(
+            (a, b) =>
+                b.mis + b.sim - (a.mis + a.sim) ||
+                a.schema.localeCompare(b.schema),
         );
 
     const matrixCells: VizCell[] = [];
@@ -2540,14 +2554,19 @@ function buildVisualizationPayload(
                       .sort((a, b) => b.count - a.count)
                       .slice(0, 5)
                 : [];
-            const countsByStyle = cell && cell.byStyle.size > 0
-                ? Object.fromEntries(
-                      [...cell.byStyle.entries()].map(([style, v]) => [
-                          style,
-                          { misroute: v.MISROUTE, tight: v.TIGHT, clean: v.CLEAN },
-                      ]),
-                  )
-                : undefined;
+            const countsByStyle =
+                cell && cell.byStyle.size > 0
+                    ? Object.fromEntries(
+                          [...cell.byStyle.entries()].map(([style, v]) => [
+                              style,
+                              {
+                                  misroute: v.MISROUTE,
+                                  tight: v.TIGHT,
+                                  clean: v.CLEAN,
+                              },
+                          ]),
+                      )
+                    : undefined;
             matrixCells.push({
                 row: r.schema,
                 col: c.schema,
@@ -2573,9 +2592,10 @@ function buildVisualizationPayload(
             const [exp, act] = k.split(SEP);
             const score = simByPair.get(pairKey(exp, act));
             const styleMap = edgeCountsByStyle.get(k);
-            const countsByStyle = styleMap && styleMap.size > 0
-                ? Object.fromEntries(styleMap.entries())
-                : undefined;
+            const countsByStyle =
+                styleMap && styleMap.size > 0
+                    ? Object.fromEntries(styleMap.entries())
+                    : undefined;
             return {
                 expected: exp,
                 actual: act,
@@ -3407,10 +3427,7 @@ function renderProbeSummaryHTML(probeFile: ProbeFile, label: string): string {
     );
 }
 
-function renderProbeSummaryText(
-    probeFile: ProbeFile,
-    label: string,
-): string[] {
+function renderProbeSummaryText(probeFile: ProbeFile, label: string): string[] {
     const c = probeFile.summary.counts;
     const total = probeFile.summary.totalPhrases;
     const elapsedSec = (probeFile.summary.elapsedMs / 1000).toFixed(1);
@@ -3535,8 +3552,8 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
                             const eta =
                                 done && total && done > 0
                                     ? `, ETA ~${Math.round(
-                                          ((Date.now() - t0) / done) *
-                                              (total - done) /
+                                          (((Date.now() - t0) / done) *
+                                              (total - done)) /
                                               1000,
                                       )}s`
                                     : "";
@@ -3788,7 +3805,7 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             },
             "user-context-json": {
                 description:
-                    "JSON object parsed as UserContext when --user-context-mode=fixed. E.g. '{\"activeApp\":\"spotify\",\"activeAppDescription\":\"Spotify music agent\"}'.",
+                    'JSON object parsed as UserContext when --user-context-mode=fixed. E.g. \'{"activeApp":"spotify","activeAppDescription":"Spotify music agent"}\'.',
                 type: "string",
                 optional: true,
             },
@@ -3867,7 +3884,9 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
             "expected-schema",
             "fixed",
         ]);
-        if (!validUserContextModes.has(userContextModeFlag as UserContextMode)) {
+        if (
+            !validUserContextModes.has(userContextModeFlag as UserContextMode)
+        ) {
             displayWarn(
                 `Unknown --user-context-mode '${userContextModeFlag}'. Expected one of: ${[...validUserContextModes].join(", ")}.`,
                 context,
@@ -4323,7 +4342,7 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
 
         const sizeKB = (fs.statSync(outPath).size / 1024).toFixed(0);
         const simNote = skipSim
-            ? "<div style=\"font-size:11px;color:#c80;margin-top:4px;\">similarity overlay disabled (--no-similarity)</div>"
+            ? '<div style="font-size:11px;color:#c80;margin-top:4px;">similarity overlay disabled (--no-similarity)</div>'
             : `<div style="font-size:11px;color:#777;margin-top:4px;">similarity overlay: ${simEdges.length} pair(s) at threshold ${simThreshold} (strategy <code>${escapeShellHtml(simStrategy)}</code>)</div>`;
         const skipNote = simSkipped.length
             ? `<div style="font-size:11px;color:#c80;margin-top:4px;">${simSkipped.length} schema(s) failed to load: ${simSkipped.map((s) => `<code>${escapeShellHtml(s.schemaName)}</code>`).join(", ")}</div>`
@@ -4503,10 +4522,7 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                             }
                         },
                     );
-                fs.writeFileSync(
-                    files.corpus,
-                    JSON.stringify(corpus, null, 2),
-                );
+                fs.writeFileSync(files.corpus, JSON.stringify(corpus, null, 2));
                 const sec = ((Date.now() - tStep) / 1000).toFixed(1);
                 displayResult(
                     `Step 1/4 generate: ${corpus.actionCount} actions in ${sec}s${errorCount ? ` (${errorCount} call errors)` : ""}${failedSchemas.length ? ` (${failedSchemas.length} schemas skipped)` : ""}`,
@@ -4587,9 +4603,7 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                 );
                 const html = buildVisualizationHTML(payload);
                 fs.writeFileSync(files.html, html);
-                const sizeKB = (
-                    fs.statSync(files.html).size / 1024
-                ).toFixed(0);
+                const sizeKB = (fs.statSync(files.html).size / 1024).toFixed(0);
                 displaySuccess(
                     `Step 4/4 visualize: ${files.html} (${sizeKB} KB) — open in browser. Similarity overlay: ${simResult.edges.length} pair(s).`,
                     context,
@@ -4646,8 +4660,7 @@ function renderRecoveryHTML(analysis: RecoveryAnalysis): string {
             return `<rect x="${x}" y="0" width="${w}" height="22" fill="${RECOVERY_BUCKET_COLORS[b]}"></rect>`;
         })
         .join("");
-    const barSvg =
-        `<svg width="${barWidth}" height="22" style="display:block;border-radius:3px;overflow:hidden;margin:8px 0 12px;">${barSegments}</svg>`;
+    const barSvg = `<svg width="${barWidth}" height="22" style="display:block;border-radius:3px;overflow:hidden;margin:8px 0 12px;">${barSegments}</svg>`;
 
     const legendRows = order
         .map((b) => {
@@ -4960,7 +4973,8 @@ export function getCollisionCorpusCommandHandlers(): CommandHandlerTable {
             reanalyze: new CollisionCorpusReanalyzeCommandHandler(),
             recovery: new CollisionCorpusRecoveryCommandHandler(),
             visualize: new CollisionCorpusVisualizeCommandHandler(),
-            "visualize-recovery": new CollisionCorpusVisualizeRecoveryCommandHandler(),
+            "visualize-recovery":
+                new CollisionCorpusVisualizeRecoveryCommandHandler(),
             run: new CollisionCorpusRunCommandHandler(),
         },
     };

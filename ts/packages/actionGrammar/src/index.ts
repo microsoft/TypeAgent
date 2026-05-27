@@ -11,10 +11,7 @@ export type {
     CompiledSpacingMode,
 } from "./grammarTypes.js";
 // Factory helpers for tests / programmatic grammar construction.
-export {
-    createStringPart,
-    createWildcardPart,
-} from "./grammarTypes.js";
+export { createStringPart, createWildcardPart } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";

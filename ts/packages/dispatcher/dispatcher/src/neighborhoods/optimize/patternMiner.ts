@@ -101,10 +101,7 @@ export interface PatternsReport {
     /** Primary grid: aggregated across levers. */
     byMechanism: Record<string, Record<string, CellStats>>;
     /** Per-lever drill-down. Top-level key is lever name. */
-    byLeverMechanism: Record<
-        string,
-        Record<string, Record<string, CellStats>>
-    >;
+    byLeverMechanism: Record<string, Record<string, Record<string, CellStats>>>;
     /** Lever-effectiveness view. */
     byLever: Record<string, Record<string, CellStats>>;
     /** Heuristic vs. LLM classifier agreement. */
@@ -255,14 +252,9 @@ function finalize(
             const final: CellStats = {
                 attempts: cell.attempts,
                 wins: cell.wins,
-                winRate:
-                    cell.attempts > 0
-                        ? cell.wins / cell.attempts
-                        : 0,
+                winRate: cell.attempts > 0 ? cell.wins / cell.attempts : 0,
                 meanScore:
-                    cell.attempts > 0
-                        ? cell.scoreSum / cell.attempts
-                        : 0,
+                    cell.attempts > 0 ? cell.scoreSum / cell.attempts : 0,
                 regressionRate:
                     cell.attempts > 0
                         ? cell.regressionAttempts / cell.attempts
@@ -278,9 +270,7 @@ function finalize(
 // Classifier agreement
 // =============================================================================
 
-function computeClassifierAgreement(
-    rows: PatternRow[],
-): ClassifierAgreement {
+function computeClassifierAgreement(rows: PatternRow[]): ClassifierAgreement {
     const perPattern: ClassifierAgreement["perPattern"] = {};
     let overallAttempts = 0;
     let overallMatches = 0;
@@ -326,9 +316,7 @@ function computeClassifierAgreement(
             attempts: overallAttempts,
             heuristicMatches: overallMatches,
             disagreementRate:
-                overallAttempts > 0
-                    ? 1 - overallMatches / overallAttempts
-                    : 0,
+                overallAttempts > 0 ? 1 - overallMatches / overallAttempts : 0,
         },
     };
 }

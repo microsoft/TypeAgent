@@ -82,7 +82,7 @@ const STUB_CASE: CaseDescription = {
 };
 
 const STUB_PROPOSE_CTX: ProposeContext = {
-    createModel: () => ({} as any),
+    createModel: () => ({}) as any,
     pmap,
     workdir: "",
     outDir: "",
@@ -113,20 +113,14 @@ describe("rankAttempts", () => {
         const a = makeAttempt(3, 2, "h01-x");
         const b = makeAttempt(3, 0, "h02-x");
         const ranked = rankAttempts([a, b]);
-        expect(ranked.map((r) => r.hypothesis.id)).toEqual([
-            "h02-x",
-            "h01-x",
-        ]);
+        expect(ranked.map((r) => r.hypothesis.id)).toEqual(["h02-x", "h01-x"]);
     });
 
     it("tie-breaks on id when score and regressions match", () => {
         const a = makeAttempt(3, 1, "h02-x");
         const b = makeAttempt(3, 1, "h01-x");
         const ranked = rankAttempts([a, b]);
-        expect(ranked.map((r) => r.hypothesis.id)).toEqual([
-            "h01-x",
-            "h02-x",
-        ]);
+        expect(ranked.map((r) => r.hypothesis.id)).toEqual(["h01-x", "h02-x"]);
     });
 });
 
@@ -290,9 +284,7 @@ describe("runCaseLoop", () => {
                 const h = stubHypothesis("reverb");
                 // Tag mechanism so we can verify it propagates.
                 h.mechanism =
-                    callIdx === 0
-                        ? "widen-identity"
-                        : "add-important-line";
+                    callIdx === 0 ? "widen-identity" : "add-important-line";
                 callIdx++;
                 return [h];
             },
@@ -321,9 +313,7 @@ describe("runCaseLoop", () => {
         expect(recordedPriorAttempts[1]![0]!.hypothesis.mechanism).toBe(
             "widen-identity",
         );
-        expect(
-            recordedPriorAttempts[1]![0]!.evaluation.regressions,
-        ).toBe(1);
+        expect(recordedPriorAttempts[1]![0]!.evaluation.regressions).toBe(1);
         expect(
             recordedPriorAttempts[1]![0]!.evaluation.regressionPhrases,
         ).toEqual(["bad phrase"]);
@@ -360,9 +350,7 @@ describe("runCaseLoop", () => {
             }),
             revertSandbox: () => {},
         });
-        const attemptDirs = fs
-            .readdirSync(path.join(dir, "attempts"))
-            .sort();
+        const attemptDirs = fs.readdirSync(path.join(dir, "attempts")).sort();
         // 2 attempts: h01-reverb (depth 0) and h02-reverb-r1 (depth 1).
         expect(attemptDirs).toHaveLength(2);
         const depth0 = JSON.parse(

@@ -29,10 +29,7 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { replaceJSDoc, replacePasActionDescription } from "../apply.js";
-import {
-    formatMembersBlock,
-    isValidMemberReference,
-} from "./promptUtils.js";
+import { formatMembersBlock, isValidMemberReference } from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:jsdoc");
 
@@ -115,9 +112,7 @@ export const jsdocLever: LeverPlugin = {
         );
         const result = await model.complete(prompt);
         if (!result.success) {
-            throw new Error(
-                `jsdoc lever LLM call failed: ${result.message}`,
-            );
+            throw new Error(`jsdoc lever LLM call failed: ${result.message}`);
         }
         const parsed = extractJSON<JsdocLLMResponse>(result.data);
         if (!parsed || !Array.isArray(parsed.hypotheses)) {
@@ -277,8 +272,7 @@ function computeDiffSummary(
         // Identity line is the LAST non-blank line of the comment block per
         // schemaGuidelines convention.
         touchesIdentityLine:
-            oldLines[oldLines.length - 1] !==
-            newLines[newLines.length - 1],
+            oldLines[oldLines.length - 1] !== newLines[newLines.length - 1],
         addsAntiExample: /\b(DO NOT|don't use|do not use)\b/i.test(
             payload.newText,
         ),
@@ -337,7 +331,10 @@ function buildProposePrompt(
     const priorBlock =
         priorAttempts.length > 0
             ? `\n\nDepth ${priorAttempts[0]!.hypothesis.depth + 1} retry. Mechanisms that already regressed: ${priorAttempts
-                  .map((a) => `'${a.hypothesis.mechanism}' (regressed ${a.evaluation.regressions} phrases)`)
+                  .map(
+                      (a) =>
+                          `'${a.hypothesis.mechanism}' (regressed ${a.evaluation.regressions} phrases)`,
+                  )
                   .join(", ")}. Try a DIFFERENT mechanism this time.`
             : "";
 

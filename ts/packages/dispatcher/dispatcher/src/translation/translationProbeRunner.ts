@@ -187,10 +187,7 @@ async function pmap<T, R>(
             onProgress?.(done, items.length);
         }
     }
-    const workers = Array.from(
-        { length: Math.max(1, concurrency) },
-        worker,
-    );
+    const workers = Array.from({ length: Math.max(1, concurrency) }, worker);
     await Promise.all(workers);
     return results;
 }
@@ -203,12 +200,7 @@ function normalizeAction(name: string): string {
     return name.replace(/Action$/i, "").toLowerCase();
 }
 
-function strictMatch(
-    s1: string,
-    a1: string,
-    s2: string,
-    a2: string,
-): boolean {
+function strictMatch(s1: string, a1: string, s2: string, a2: string): boolean {
     return s1 === s2 && normalizeAction(a1) === normalizeAction(a2);
 }
 
@@ -320,9 +312,7 @@ export async function runTranslationProbe(
     // schemas from the override so optimizer-edited schemas show up even
     // if the live agent manager doesn't know about them.
     const allSchemas = opts.actionConfigProvider
-        ? opts.actionConfigProvider
-              .getActionConfigs()
-              .map((c) => c.schemaName)
+        ? opts.actionConfigProvider.getActionConfigs().map((c) => c.schemaName)
         : systemContext.agents.getSchemaNames();
 
     const t0 = Date.now();
@@ -425,9 +415,7 @@ export async function runTranslationProbe(
                 t.expectedSchema,
                 t.expectedAction,
             );
-            const outcome: TranslationOutcome = isMatch
-                ? "CLEAN"
-                : "MISROUTE";
+            const outcome: TranslationOutcome = isMatch ? "CLEAN" : "MISROUTE";
             return {
                 expectedSchema: t.expectedSchema,
                 expectedAction: t.expectedAction,

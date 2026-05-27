@@ -477,9 +477,7 @@ async function addAppAgentProviders(
                 try {
                     await runStaticCollisionDetection(context, true);
                 } catch (e) {
-                    debugError(
-                        `Async static collision detection failed: ${e}`,
-                    );
+                    debugError(`Async static collision detection failed: ${e}`);
                 }
             };
             for (const provider of appAgentProviders) {
@@ -840,7 +838,9 @@ export async function runStaticCollisionDetection(
                     `Action collision detected across agents: ${summary}`,
                 );
             }
-            debug(`[collision.static] ${collisions.length} collision(s) found: ${summary}`);
+            debug(
+                `[collision.static] ${collisions.length} collision(s) found: ${summary}`,
+            );
         }
     }
 
@@ -854,8 +854,14 @@ export async function runStaticCollisionDetection(
                 {
                     kind: "fuzzy",
                     candidates: [
-                        { schemaName: c.a.schemaName, actionName: c.a.actionName },
-                        { schemaName: c.b.schemaName, actionName: c.b.actionName },
+                        {
+                            schemaName: c.a.schemaName,
+                            actionName: c.a.actionName,
+                        },
+                        {
+                            schemaName: c.b.schemaName,
+                            actionName: c.b.actionName,
+                        },
                     ],
                     strategy: cfg.fuzzy.strategy,
                     elapsedMs: performance.now() - startedAt,

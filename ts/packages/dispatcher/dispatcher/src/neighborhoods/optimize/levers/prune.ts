@@ -31,10 +31,7 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { markDeprecated, writeActionConfigOverride } from "../apply.js";
-import {
-    formatMembersBlock,
-    isValidMemberReference,
-} from "./promptUtils.js";
+import { formatMembersBlock, isValidMemberReference } from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:prune");
 

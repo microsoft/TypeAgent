@@ -230,12 +230,12 @@ describe("minePatterns — classifier agreement", () => {
         ];
         const report = minePatterns({ rows });
         // Overall: 1 match out of 3 = 67% disagreement rate.
-        expect(
-            report.classifierAgreement.overall.disagreementRate,
-        ).toBeCloseTo(2 / 3, 5);
+        expect(report.classifierAgreement.overall.disagreementRate).toBeCloseTo(
+            2 / 3,
+            5,
+        );
         // similar-verb pattern: 1 match out of 2 cases.
-        const similar =
-            report.classifierAgreement.perPattern["similar-verb"]!;
+        const similar = report.classifierAgreement.perPattern["similar-verb"]!;
         expect(similar.attempts).toBe(2);
         expect(similar.heuristicMatches).toBe(1);
         expect(similar.disagreementRate).toBeCloseTo(0.5, 5);

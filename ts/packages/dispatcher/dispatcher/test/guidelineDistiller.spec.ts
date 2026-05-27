@@ -140,10 +140,7 @@ describe("distillGuidelineCandidates", () => {
         expect(report.candidates).toHaveLength(2);
         // Both groups produce one candidate each.
         const mechanisms = report.candidates.map((c) => c.mechanism).sort();
-        expect(mechanisms).toEqual([
-            "add-important-line",
-            "widen-identity",
-        ]);
+        expect(mechanisms).toEqual(["add-important-line", "widen-identity"]);
     });
 
     it("drops groups below the per-group threshold", async () => {
@@ -256,9 +253,7 @@ describe("distillGuidelineCandidates", () => {
         ).length;
         expect(sharedCount).toBeLessThanOrEqual(1);
         // Total distinct neighborhoods recorded in evidence = 6.
-        expect(
-            report.candidates[0]!.evidence.distinctNeighborhoods,
-        ).toBe(6);
+        expect(report.candidates[0]!.evidence.distinctNeighborhoods).toBe(6);
     });
 
     it("falls back gracefully when the LLM returns malformed JSON", async () => {
@@ -353,9 +348,7 @@ describe("distillGuidelineCandidates", () => {
             schemaGuidelines: "(test)",
             createModel: () => mockModel(SAMPLE_CANNED),
         });
-        expect(
-            report.candidates[0]!.evidence.distinctNeighborhoods,
-        ).toBe(6);
+        expect(report.candidates[0]!.evidence.distinctNeighborhoods).toBe(6);
     });
 });
 

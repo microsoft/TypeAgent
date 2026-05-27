@@ -21,24 +21,15 @@ import {
     type BuildNeighborhoodsFromTranslatorOptions,
 } from "../merge.js";
 import { buildNeighborhoodPreviewHTML } from "../previewViz.js";
-import {
-    computeActionGravity,
-    type ActionGravity,
-} from "../actionGravity.js";
+import { computeActionGravity, type ActionGravity } from "../actionGravity.js";
 import type { TranslationProbeFile } from "../../translation/translationProbeRunner.js";
 
 import { runCorpusLoop } from "./corpusLoop.js";
-import type {
-    CaseDescription,
-    Hypothesis,
-} from "./types.js";
+import type { CaseDescription, Hypothesis } from "./types.js";
 import type { DiffPayload } from "./hypothesisEvaluator.js";
 import { runValidate } from "./validateImpact.js";
 import { initBuiltInLevers } from "./levers/index.js";
-import {
-    minePatterns,
-    parsePatternsJsonl,
-} from "./patternMiner.js";
+import { minePatterns, parsePatternsJsonl } from "./patternMiner.js";
 import { buildPatternsHTML } from "./patternsViz.js";
 import { distillGuidelineCandidates } from "./guidelineDistiller.js";
 import { buildCandidatesMarkdown } from "./guidelinesViz.js";
@@ -308,8 +299,7 @@ async function runExploreStep(
         neighborhoodsPath: files.neighborhoodsJson,
         baselinePath: files.baseline,
         workdir,
-        sourceProvider:
-            opts.context.sessionContext.agentContext.agents,
+        sourceProvider: opts.context.sessionContext.agentContext.agents,
         context: opts.context,
         top: opts.top ?? 5,
         ...(opts.severities && { severities: opts.severities }),
@@ -330,8 +320,7 @@ async function runValidateStep(
 ): Promise<void> {
     await runValidate({
         workdir,
-        sourceProvider:
-            opts.context.sessionContext.agentContext.agents,
+        sourceProvider: opts.context.sessionContext.agentContext.agents,
         context: opts.context,
     });
 }
@@ -358,10 +347,7 @@ async function runPatternsStep(
     const rows = parsePatternsJsonl(content);
     const report = minePatterns({ rows });
     fs.writeFileSync(files.patternsJson, JSON.stringify(report, undefined, 2));
-    fs.writeFileSync(
-        files.patternsHtml,
-        buildPatternsHTML(report, {}),
-    );
+    fs.writeFileSync(files.patternsHtml, buildPatternsHTML(report, {}));
     void workdir;
     void opts;
 }
@@ -402,11 +388,9 @@ export interface RunDistillStepOpts {
 export async function runDistillStep(
     opts: RunDistillStepOpts,
 ): Promise<"completed" | "not-enough-data"> {
-    const schemaGuidelines =
-        opts.schemaGuidelines ?? canonicalSchemaGuidelines;
+    const schemaGuidelines = opts.schemaGuidelines ?? canonicalSchemaGuidelines;
     const createModel =
-        opts.createModel ??
-        ((name: string) => openai.createChatModel(name));
+        opts.createModel ?? ((name: string) => openai.createChatModel(name));
 
     if (!fs.existsSync(opts.patternsFile)) {
         fs.writeFileSync(
@@ -439,8 +423,7 @@ function findLatestRunRoot(workdir: string): string | null {
     const dirs = fs
         .readdirSync(workdir, { withFileTypes: true })
         .filter(
-            (e) =>
-                e.isDirectory() && e.name.startsWith("optimization-run-"),
+            (e) => e.isDirectory() && e.name.startsWith("optimization-run-"),
         )
         .map((e) => {
             const full = path.join(workdir, e.name);
@@ -464,9 +447,7 @@ async function runRealProbe(
     const sandboxDir = path.join(runRoot, "sandbox");
     const { provider: sandboxProvider } = loadSandboxProvider(sandboxDir);
     const corpus = buildFocusedCorpus(caseDesc);
-    const baseline = JSON.parse(
-        fs.readFileSync(baselinePath, "utf-8"),
-    );
+    const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf-8"));
     const baselineByPhrase = new Map<
         string,
         { chosenSchema?: string; chosenAction?: string; outcome: string }

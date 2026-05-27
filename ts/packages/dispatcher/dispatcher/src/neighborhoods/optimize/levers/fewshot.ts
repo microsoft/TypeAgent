@@ -32,10 +32,7 @@ import type {
 } from "../registry.js";
 import { extractJSON } from "../util.js";
 import { appendExampleTag } from "../apply.js";
-import {
-    formatMembersBlock,
-    isValidMemberReference,
-} from "./promptUtils.js";
+import { formatMembersBlock, isValidMemberReference } from "./promptUtils.js";
 
 const debug = registerDebug("typeagent:collision:optimize:fewshot");
 
@@ -113,9 +110,7 @@ export const fewshotLever: LeverPlugin = {
         );
         const result = await model.complete(prompt);
         if (!result.success) {
-            throw new Error(
-                `fewshot lever LLM call failed: ${result.message}`,
-            );
+            throw new Error(`fewshot lever LLM call failed: ${result.message}`);
         }
         const parsed = extractJSON<FewShotLLMResponse>(result.data);
         if (!parsed || !Array.isArray(parsed.hypotheses)) {

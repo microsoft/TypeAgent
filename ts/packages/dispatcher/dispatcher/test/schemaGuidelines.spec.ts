@@ -37,6 +37,8 @@ describe("schemaGuidelines", () => {
         // anti-examples ("DO NOT use for") are a LAST RESORT. Levers
         // should read this and bias accordingly.
         expect(schemaGuidelines).toContain("Anti-examples are a last resort");
-        expect(schemaGuidelines).toContain("positive parameters channel priors");
+        expect(schemaGuidelines).toContain(
+            "positive parameters channel priors",
+        );
     });
 });

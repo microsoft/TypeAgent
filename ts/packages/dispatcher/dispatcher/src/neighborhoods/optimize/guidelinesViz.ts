@@ -49,10 +49,7 @@ export function buildCandidatesMarkdown(
     return lines.join("\n");
 }
 
-function formatCandidate(
-    idx: number,
-    candidate: GuidelineCandidate,
-): string {
+function formatCandidate(idx: number, candidate: GuidelineCandidate): string {
     const block: string[] = [];
     block.push(`## Candidate ${idx} — ${candidate.title}`);
     block.push(``);

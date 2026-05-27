@@ -131,10 +131,7 @@ function readSandboxManifest(
         return raw;
     }
 
-    const schemaContent = inlineSchemaContent(
-        schemaDir,
-        raw.schema.schemaFile,
-    );
+    const schemaContent = inlineSchemaContent(schemaDir, raw.schema.schemaFile);
     const grammarContent = inlineGrammarContent(
         schemaDir,
         raw.schema.grammarFile,

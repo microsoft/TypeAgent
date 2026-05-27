@@ -80,7 +80,11 @@ describe("replaceManifestDescription", () => {
     it("throws on checksum mismatch", () => {
         writeAgent(sandbox, "player", {
             "manifest.json": JSON.stringify({
-                schema: { description: "x", schemaType: "X", schemaFile: "./s.ts" },
+                schema: {
+                    description: "x",
+                    schemaType: "X",
+                    schemaFile: "./s.ts",
+                },
             }),
         });
         expect(() =>

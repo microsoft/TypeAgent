@@ -342,8 +342,7 @@ function attributeToWinners(
                 }
             }
         }
-        const localNet =
-            localRescues - localRegressions - causedRegressions;
+        const localNet = localRescues - localRegressions - causedRegressions;
         out.push({
             attemptId: caseResult.winner.hypothesis.id,
             caseId: caseResult.case.neighborhoodId,

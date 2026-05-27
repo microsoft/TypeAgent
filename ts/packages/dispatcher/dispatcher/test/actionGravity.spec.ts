@@ -47,14 +47,11 @@ function nbhd(
 
 describe("computeActionGravity", () => {
     it("computes owedTraffic and stolenTraffic from corpus edges", () => {
-        const n = nbhd(
-            [m("music", "setVolume"), m("desktop", "setVolume")],
-            {
-                misrouteEdges: [
-                    edge("music", "setVolume", "desktop", "setVolume", 17),
-                ],
-            },
-        );
+        const n = nbhd([m("music", "setVolume"), m("desktop", "setVolume")], {
+            misrouteEdges: [
+                edge("music", "setVolume", "desktop", "setVolume", 17),
+            ],
+        });
         const g = computeActionGravity(n);
         const music = g.find((x) => x.member.schemaName === "music")!;
         const desktop = g.find((x) => x.member.schemaName === "desktop")!;
@@ -65,15 +62,12 @@ describe("computeActionGravity", () => {
     });
 
     it("handles bidirectional edges and counts entanglement correctly", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y")],
-            {
-                misrouteEdges: [
-                    edge("a", "x", "b", "y", 3),
-                    edge("b", "y", "a", "x", 5),
-                ],
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y")], {
+            misrouteEdges: [
+                edge("a", "x", "b", "y", 3),
+                edge("b", "y", "a", "x", 5),
+            ],
+        });
         const g = computeActionGravity(n);
         const ax = g.find((x) => x.member.schemaName === "a")!;
         expect(ax.owedTraffic).toBe(3);
@@ -84,15 +78,12 @@ describe("computeActionGravity", () => {
     });
 
     it("computes shareInNeighborhood as a fraction of total owed", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y"), m("c", "z")],
-            {
-                misrouteEdges: [
-                    edge("a", "x", "c", "z", 6),
-                    edge("b", "y", "c", "z", 4),
-                ],
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y"), m("c", "z")], {
+            misrouteEdges: [
+                edge("a", "x", "c", "z", 6),
+                edge("b", "y", "c", "z", 4),
+            ],
+        });
         const g = computeActionGravity(n);
         const ax = g.find((x) => x.member.schemaName === "a")!;
         const by = g.find((x) => x.member.schemaName === "b")!;
@@ -103,12 +94,9 @@ describe("computeActionGravity", () => {
     });
 
     it("weightedConfusion multiplies count by pair similarity, default 1", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y")],
-            {
-                misrouteEdges: [edge("a", "x", "b", "y", 10)],
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y")], {
+            misrouteEdges: [edge("a", "x", "b", "y", 10)],
+        });
         const noLookup = computeActionGravity(n);
         expect(
             noLookup.find((x) => x.member.schemaName === "a")!
@@ -160,10 +148,9 @@ describe("computeActionGravity", () => {
     });
 
     it("translator-derived fields stay undefined when no translator data", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y")],
-            { misrouteEdges: [edge("a", "x", "b", "y", 5)] },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y")], {
+            misrouteEdges: [edge("a", "x", "b", "y", 5)],
+        });
         const g = computeActionGravity(n);
         for (const a of g) {
             expect(a.endUserOwedTraffic).toBeUndefined();
@@ -174,23 +161,20 @@ describe("computeActionGravity", () => {
     });
 
     it("translator-derived fields populate when crossVerdict counts are present on edges", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y"), m("c", "z")],
-            {
-                misrouteEdges: [
-                    // a→b: 10 misroutes; 6 confirmed by translator, 4 rescued
-                    edge("a", "x", "b", "y", 10, {
-                        translatorConfirmedCount: 6,
-                        translatorRescuedCount: 4,
-                    }),
-                ],
-                translatorMisrouteEdges: [
-                    // c→a: NEW_FAILURE — ranker said correct, translator wrong
-                    edge("c", "z", "a", "x", 3),
-                ],
-                crossVerdicts: { CONFIRMED: 6, RESCUED: 4, NEW_FAILURE: 3 },
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y"), m("c", "z")], {
+            misrouteEdges: [
+                // a→b: 10 misroutes; 6 confirmed by translator, 4 rescued
+                edge("a", "x", "b", "y", 10, {
+                    translatorConfirmedCount: 6,
+                    translatorRescuedCount: 4,
+                }),
+            ],
+            translatorMisrouteEdges: [
+                // c→a: NEW_FAILURE — ranker said correct, translator wrong
+                edge("c", "z", "a", "x", 3),
+            ],
+            crossVerdicts: { CONFIRMED: 6, RESCUED: 4, NEW_FAILURE: 3 },
+        });
         const g = computeActionGravity(n);
         const ax = g.find((x) => x.member.schemaName === "a")!;
         const cz = g.find((x) => x.member.schemaName === "c")!;
@@ -208,18 +192,15 @@ describe("computeActionGravity", () => {
     });
 
     it("severityTier marks an action as 'leaky' when LLM rescues most ranker misroutes", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y")],
-            {
-                misrouteEdges: [
-                    edge("a", "x", "b", "y", 10, {
-                        translatorConfirmedCount: 0,
-                        translatorRescuedCount: 10,
-                    }),
-                ],
-                crossVerdicts: { RESCUED: 10 },
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y")], {
+            misrouteEdges: [
+                edge("a", "x", "b", "y", 10, {
+                    translatorConfirmedCount: 0,
+                    translatorRescuedCount: 10,
+                }),
+            ],
+            crossVerdicts: { RESCUED: 10 },
+        });
         const g = computeActionGravity(n);
         const ax = g.find((x) => x.member.schemaName === "a")!;
         expect(ax.endUserOwedTraffic).toBe(0);
@@ -229,9 +210,7 @@ describe("computeActionGravity", () => {
 
     it("7-member neighborhood with a hub action: hub has highest entanglement", () => {
         const hub = m("hub", "do");
-        const others = ["a", "b", "c", "d", "e", "f"].map((s) =>
-            m(s, "do"),
-        );
+        const others = ["a", "b", "c", "d", "e", "f"].map((s) => m(s, "do"));
         const members = [hub, ...others];
         const edges = others.map((other) =>
             edge(other.schemaName, "do", "hub", "do", 2),
@@ -246,9 +225,7 @@ describe("computeActionGravity", () => {
         expect(hubGravity.entanglement).toBe(7);
         // Every other action has just hub as a partner.
         for (const other of others) {
-            const og = g.find(
-                (x) => x.member.schemaName === other.schemaName,
-            )!;
+            const og = g.find((x) => x.member.schemaName === other.schemaName)!;
             expect(og.partners).toBe(1);
         }
     });
@@ -256,37 +233,31 @@ describe("computeActionGravity", () => {
 
 describe("topOffender", () => {
     it("picks the action with the highest owedTraffic by default", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y"), m("c", "z")],
-            {
-                misrouteEdges: [
-                    edge("a", "x", "c", "z", 7),
-                    edge("b", "y", "c", "z", 3),
-                ],
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y"), m("c", "z")], {
+            misrouteEdges: [
+                edge("a", "x", "c", "z", 7),
+                edge("b", "y", "c", "z", 3),
+            ],
+        });
         const t = topOffender(n);
         expect(t).toBeDefined();
         expect(t!.member.schemaName).toBe("a");
     });
 
     it("prefers endUserOwedTraffic when translator data is present", () => {
-        const n = nbhd(
-            [m("a", "x"), m("b", "y"), m("c", "z")],
-            {
-                misrouteEdges: [
-                    // a is a heavy ranker-loser but the LLM rescues all of it.
-                    edge("a", "x", "c", "z", 100, {
-                        translatorRescuedCount: 100,
-                    }),
-                    // b loses fewer but the LLM does NOT rescue them.
-                    edge("b", "y", "c", "z", 5, {
-                        translatorConfirmedCount: 5,
-                    }),
-                ],
-                crossVerdicts: { CONFIRMED: 5, RESCUED: 100 },
-            },
-        );
+        const n = nbhd([m("a", "x"), m("b", "y"), m("c", "z")], {
+            misrouteEdges: [
+                // a is a heavy ranker-loser but the LLM rescues all of it.
+                edge("a", "x", "c", "z", 100, {
+                    translatorRescuedCount: 100,
+                }),
+                // b loses fewer but the LLM does NOT rescue them.
+                edge("b", "y", "c", "z", 5, {
+                    translatorConfirmedCount: 5,
+                }),
+            ],
+            crossVerdicts: { CONFIRMED: 5, RESCUED: 100 },
+        });
         const t = topOffender(n);
         expect(t!.member.schemaName).toBe("b");
     });

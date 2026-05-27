@@ -24,19 +24,12 @@ import * as path from "node:path";
 import type { ChatModel } from "aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import { getSchemaContent } from "../../translation/actionConfig.js";
-import type {
-    Neighborhood,
-    NeighborhoodMember,
-} from "../types.js";
+import type { Neighborhood, NeighborhoodMember } from "../types.js";
 import type {
     TranslationProbeFile,
     TranslationProbeRow,
 } from "../../translation/translationProbeRunner.js";
-import type {
-    CaseDescription,
-    FailurePattern,
-    PhraseRecord,
-} from "./types.js";
+import type { CaseDescription, FailurePattern, PhraseRecord } from "./types.js";
 import { extractJSON } from "./util.js";
 
 const ALL_FAILURE_PATTERNS: FailurePattern[] = [
@@ -91,9 +84,7 @@ export async function analyzeCase(
     const cap = opts.sampleCap ?? 40;
 
     const memberKeys = new Set(
-        neighborhood.members.map(
-            (m) => `${m.schemaName}.${m.actionName}`,
-        ),
+        neighborhood.members.map((m) => `${m.schemaName}.${m.actionName}`),
     );
 
     // ---- Phrase classification ----
@@ -116,7 +107,11 @@ export async function analyzeCase(
             }
             continue;
         }
-        if (chosenKey && memberKeys.has(chosenKey) && row.outcome === "MISROUTE") {
+        if (
+            chosenKey &&
+            memberKeys.has(chosenKey) &&
+            row.outcome === "MISROUTE"
+        ) {
             // Result-side reverse-direction phrase. Catches the case where
             // a lever widening one member action absorbs phrases that
             // should have gone to a neighbor.

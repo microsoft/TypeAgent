@@ -169,7 +169,8 @@ export class CollisionNeighborhoodsCommandHandler implements CommandHandler {
         const includeSameSchema = params.flags["include-same-schema"] ?? true;
         const samplesPerCategoryCap = Math.max(
             1,
-            params.flags["samples-per-category"] ?? DEFAULT_SAMPLES_PER_CATEGORY,
+            params.flags["samples-per-category"] ??
+                DEFAULT_SAMPLES_PER_CATEGORY,
         );
 
         displayStatus(`Neighborhoods · merging…`, context);
@@ -246,4 +247,3 @@ export class CollisionNeighborhoodsCommandHandler implements CommandHandler {
         });
     }
 }
-

@@ -658,8 +658,9 @@ export class AppAgentManager implements ActionConfigProvider {
                         // ActionSchemaTypeDefinition.comments is the schema doc;
                         // safe-fall back to no description if absent.
                         description:
-                            (def as unknown as { comments?: string[] })
-                                .comments?.join(" ") ?? undefined,
+                            (
+                                def as unknown as { comments?: string[] }
+                            ).comments?.join(" ") ?? undefined,
                     });
                 }
             } catch {

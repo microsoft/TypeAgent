@@ -264,11 +264,13 @@ type LoadedSchema = {
 
 type PreloadSkipReason = "no-grammar" | "wrong-format" | "parse-error";
 
-type SchemaSkipExt = SchemaSkip | {
-    schemaName: string;
-    reason: PreloadSkipReason;
-    error?: string;
-};
+type SchemaSkipExt =
+    | SchemaSkip
+    | {
+          schemaName: string;
+          reason: PreloadSkipReason;
+          error?: string;
+      };
 
 async function runCollisionScan(
     context: ActionContext<CommandHandlerContext>,
@@ -477,9 +479,7 @@ function renderPartHTML(part: GrammarPart, depth: number): string {
                             .join(" "),
                     )
                     .join(` <span style="color:${C_OP}">|</span> `);
-                return (
-                    `<span style="color:${C_PUNCT}">(</span>${expansion}<span style="color:${C_PUNCT}">)</span>${optHTML}`
-                );
+                return `<span style="color:${C_PUNCT}">(</span>${expansion}<span style="color:${C_PUNCT}">)</span>${optHTML}`;
             }
             const label =
                 alts.length > 0 ? `${alts.length} alternatives` : "rules";
@@ -625,10 +625,7 @@ function renderSkipBreakdownHTML(
     const strippedCount = Object.values(result.schemas).filter(
         (s) => s.compiledWithStripping,
     ).length;
-    const total = Array.from(buckets.values()).reduce(
-        (n, b) => n + b.count,
-        0,
-    );
+    const total = Array.from(buckets.values()).reduce((n, b) => n + b.count, 0);
     if (total === 0 && strippedCount === 0) return "";
 
     const items: string[] = [];
@@ -701,9 +698,7 @@ function renderCollisionsReportHTML(
         );
     }
 
-    const placeholderCount = collisions.filter(
-        (c) => c.hasPlaceholders,
-    ).length;
+    const placeholderCount = collisions.filter((c) => c.hasPlaceholders).length;
     const summary =
         `Scanned ${result.totalRules} rule(s) across ${schemasScanned} schema(s)${skipText}` +
         ` — found <b>${collisions.length}</b> overlapping pair(s)` +
@@ -868,9 +863,7 @@ function renderCollisionsReportText(
         return lines;
     }
 
-    const placeholderCount = collisions.filter(
-        (c) => c.hasPlaceholders,
-    ).length;
+    const placeholderCount = collisions.filter((c) => c.hasPlaceholders).length;
     lines.push(
         `Found ${collisions.length} overlapping pair(s)` +
             (placeholderCount > 0
@@ -882,10 +875,8 @@ function renderCollisionsReportText(
         const flag = c.hasPlaceholders ? "  ⚠" : "";
         lines.push(`${c.schemaA} × ${c.schemaB}${flag}`);
         lines.push(`  witness: ${c.witnessText}`);
-        if (c.rulePatternA)
-            lines.push(`  ${c.schemaA}: ${c.rulePatternA}`);
-        if (c.rulePatternB)
-            lines.push(`  ${c.schemaB}: ${c.rulePatternB}`);
+        if (c.rulePatternA) lines.push(`  ${c.schemaA}: ${c.rulePatternA}`);
+        if (c.rulePatternB) lines.push(`  ${c.schemaB}: ${c.rulePatternB}`);
         lines.push("");
     }
     return lines;

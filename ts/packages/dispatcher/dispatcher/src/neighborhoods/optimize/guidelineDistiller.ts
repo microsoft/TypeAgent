@@ -26,10 +26,7 @@ import * as path from "node:path";
 
 import type { ChatModel } from "aiclient";
 import type { GuidelineHook, Mechanism } from "./types.js";
-import {
-    parsePatternsJsonl,
-    type PatternRow,
-} from "./patternMiner.js";
+import { parsePatternsJsonl, type PatternRow } from "./patternMiner.js";
 import { extractJSON } from "./util.js";
 
 // =============================================================================
@@ -299,10 +296,7 @@ async function distillGroup(
     };
 }
 
-function pickSamples(
-    winners: PatternRow[],
-    cap: number,
-): PatternRow[] {
+function pickSamples(winners: PatternRow[], cap: number): PatternRow[] {
     // Sort by net-delta desc (the "best" wins first), de-dup by
     // neighborhoodId so we don't sample the same case repeatedly.
     const sorted = [...winners].sort((a, b) => b.netDelta - a.netDelta);
@@ -351,10 +345,7 @@ function defaultTitle(group: WinnerGroup): string {
     return `${group.mechanism} pattern (${hook})`;
 }
 
-function coerceExtendsSection(
-    raw: unknown,
-    group: WinnerGroup,
-): string {
+function coerceExtendsSection(raw: unknown, group: WinnerGroup): string {
     if (typeof raw === "string" && raw.length > 0) {
         if (ALL_GUIDELINE_HOOKS.includes(raw as any) || raw === "new-section") {
             return raw;

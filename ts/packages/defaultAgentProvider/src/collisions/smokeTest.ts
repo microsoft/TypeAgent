@@ -64,7 +64,8 @@ async function main() {
     const instanceDir = getInstanceDir();
     const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
     const defaultConstructionProvider = getDefaultConstructionProvider();
-    const indexingServiceRegistry = await getIndexingServiceRegistry(instanceDir);
+    const indexingServiceRegistry =
+        await getIndexingServiceRegistry(instanceDir);
 
     process.stderr.write("Spinning up read-only dispatcher…\n");
     const dispatcher = await createDispatcher("smoke-test-collision-corpus", {
@@ -126,7 +127,10 @@ async function main() {
         process.stderr.write("\n--- @collision corpus reanalyze ---\n");
         const probeIn = path.join(workdir, "probe-results.json");
         fs.copyFileSync(inFile, probeIn);
-        const reclassFresh = path.join(workdir, "probe-results-reclassified.json");
+        const reclassFresh = path.join(
+            workdir,
+            "probe-results-reclassified.json",
+        );
         const beforeMtime = fs.statSync(reclassFresh).mtimeMs;
         await new Promise((r) => setTimeout(r, 50));
         await dispatcher.processCommand(
@@ -144,16 +148,16 @@ async function main() {
         );
         process.stderr.write("✓ recovery handler ran\n");
 
-        process.stderr.write("\n--- @collision corpus visualize-recovery ---\n");
+        process.stderr.write(
+            "\n--- @collision corpus visualize-recovery ---\n",
+        );
         const recoveryHtml = path.join(workdir, "recovery-viz.html");
         if (fs.existsSync(recoveryHtml)) fs.unlinkSync(recoveryHtml);
         await dispatcher.processCommand(
             `@collision corpus visualize-recovery --workdir "${workdir}"`,
         );
         if (!fs.existsSync(recoveryHtml)) {
-            throw new Error(
-                `Recovery HTML not created: ${recoveryHtml}`,
-            );
+            throw new Error(`Recovery HTML not created: ${recoveryHtml}`);
         }
         const rsizeKB = (fs.statSync(recoveryHtml).size / 1024).toFixed(0);
         process.stderr.write(

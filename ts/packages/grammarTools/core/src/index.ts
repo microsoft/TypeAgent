@@ -90,10 +90,7 @@ export { diffGrammars } from "./diff.js";
 
 // Cross-agent grammar collision detection (NFA product construction).
 export { findGrammarOverlap } from "./nfaIntersection.js";
-export type {
-    GrammarOverlap,
-    FindOverlapOptions,
-} from "./nfaIntersection.js";
+export type { GrammarOverlap, FindOverlapOptions } from "./nfaIntersection.js";
 export {
     scanGrammarCollisions,
     formatRulePartsText,

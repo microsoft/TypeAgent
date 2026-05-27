@@ -20,10 +20,7 @@ import {
     DispatcherClarifyName,
     DispatcherName,
 } from "../context/dispatcher/dispatcherUtils.js";
-import {
-    isCollision,
-    resolveGrammarCollision,
-} from "./matchCollision.js";
+import { isCollision, resolveGrammarCollision } from "./matchCollision.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 

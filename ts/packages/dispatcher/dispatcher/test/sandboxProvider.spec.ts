@@ -9,7 +9,9 @@ import type { SchemaContent } from "@typeagent/agent-sdk";
 import { loadSandboxProvider } from "../src/neighborhoods/optimize/sandboxProvider.js";
 
 function tmpdir(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-sandbox-provider-"));
+    return fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-sandbox-provider-"),
+    );
 }
 
 function writeSandboxAgent(
@@ -207,10 +209,12 @@ describe("loadSandboxProvider", () => {
 
         const { provider, schemaNames } = loadSandboxProvider(sandbox);
         expect(schemaNames.sort()).toEqual(["alpha", "beta"]);
-        expect(provider.getActionConfigs().map((c) => c.schemaName).sort()).toEqual([
-            "alpha",
-            "beta",
-        ]);
+        expect(
+            provider
+                .getActionConfigs()
+                .map((c) => c.schemaName)
+                .sort(),
+        ).toEqual(["alpha", "beta"]);
     });
 
     it("throws when sandbox/agents/ is missing", () => {

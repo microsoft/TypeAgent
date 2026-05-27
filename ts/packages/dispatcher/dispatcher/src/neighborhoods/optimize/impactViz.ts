@@ -101,13 +101,7 @@ function renderWinnersTable(winners: WinnerImpact[]): string {
 }
 
 function renderTransitionMatrix(payload: ImpactPayload): string {
-    const outs = [
-        "CLEAN",
-        "MISROUTE",
-        "CLARIFY",
-        "INVALID",
-        "ERROR",
-    ] as const;
+    const outs = ["CLEAN", "MISROUTE", "CLARIFY", "INVALID", "ERROR"] as const;
     const head = `<tr><th></th>${outs.map((o) => `<th>${o}</th>`).join("")}</tr>`;
     const body = outs
         .map((b) => {

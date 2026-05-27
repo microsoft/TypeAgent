@@ -46,10 +46,7 @@ export async function pmap<T, R>(
             onProgress?.(done, items.length);
         }
     }
-    const workers = Array.from(
-        { length: Math.max(1, concurrency) },
-        worker,
-    );
+    const workers = Array.from({ length: Math.max(1, concurrency) }, worker);
     await Promise.all(workers);
     return results;
 }

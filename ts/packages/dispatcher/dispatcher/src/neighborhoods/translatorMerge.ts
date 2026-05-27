@@ -144,12 +144,11 @@ export function mergeTranslatorEvidence(
                     ...e,
                     samples: e.samples?.map((s) => ({ ...s })),
                 })),
-                translatorMisrouteEdges: n.evidence.translatorMisrouteEdges?.map(
-                    (e) => ({
+                translatorMisrouteEdges:
+                    n.evidence.translatorMisrouteEdges?.map((e) => ({
                         ...e,
                         samples: e.samples?.map((s) => ({ ...s })),
-                    }),
-                ),
+                    })),
                 crossVerdicts: n.evidence.crossVerdicts
                     ? { ...n.evidence.crossVerdicts }
                     : undefined,
@@ -191,7 +190,10 @@ export function mergeTranslatorEvidence(
         if (verdict === "CONFIRMED" || verdict === "RESCUED") {
             // Find the ranker-derived edge in any neighborhood whose members
             // include both (expected) and (rankerTop1).
-            const expectedKey = memberKey(rec.expectedSchema, rec.expectedAction);
+            const expectedKey = memberKey(
+                rec.expectedSchema,
+                rec.expectedAction,
+            );
             const rankerKey = memberKey(
                 rec.rankerTop1Schema,
                 rec.rankerTop1Action,
@@ -213,7 +215,10 @@ export function mergeTranslatorEvidence(
             // got right. Attach to neighborhoods that already contain both
             // (expected) and (translator-chosen). Pure translator-only pairs
             // are dropped with a stat for transparency.
-            const expectedKey = memberKey(rec.expectedSchema, rec.expectedAction);
+            const expectedKey = memberKey(
+                rec.expectedSchema,
+                rec.expectedAction,
+            );
             const translatorKey = memberKey(
                 rec.translatorSchema,
                 rec.translatorAction,
@@ -362,7 +367,9 @@ function tagSampleCategory(
         return;
     }
 
-    const inCategory = edge.samples.filter((s) => s.category === category).length;
+    const inCategory = edge.samples.filter(
+        (s) => s.category === category,
+    ).length;
     if (inCategory >= samplesCap) return;
     edge.samples.push({
         phrase: rec.phrase,

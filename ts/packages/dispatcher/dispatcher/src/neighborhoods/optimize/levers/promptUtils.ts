@@ -52,18 +52,14 @@ export function isValidMemberReference(
     targetSchema: unknown,
     targetAction: unknown,
 ): boolean {
-    if (
-        typeof targetSchema !== "string" ||
-        typeof targetAction !== "string"
-    ) {
+    if (typeof targetSchema !== "string" || typeof targetAction !== "string") {
         debug(
             `rejecting: non-string targetSchema/targetAction (got ${typeof targetSchema}/${typeof targetAction})`,
         );
         return false;
     }
     const match = members.some(
-        (m) =>
-            m.schemaName === targetSchema && m.actionName === targetAction,
+        (m) => m.schemaName === targetSchema && m.actionName === targetAction,
     );
     if (!match) {
         debug(

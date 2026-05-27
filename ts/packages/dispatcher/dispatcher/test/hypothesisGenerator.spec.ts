@@ -70,7 +70,7 @@ const STUB_CASE: CaseDescription = {
 };
 
 const STUB_CTX: ProposeContext = {
-    createModel: () => ({} as any),
+    createModel: () => ({}) as any,
     pmap,
     workdir: "",
     outDir: "",
@@ -136,11 +136,7 @@ describe("generateHypotheses", () => {
         });
         expect(out).toHaveLength(3);
         // Renumbered sequentially across levers.
-        expect(out.map((h) => h.id)).toEqual([
-            "h01-a",
-            "h02-a",
-            "h03-b",
-        ]);
+        expect(out.map((h) => h.id)).toEqual(["h01-a", "h02-a", "h03-b"]);
     });
 
     it("renumbers ids ignoring lever-supplied original ids", async () => {

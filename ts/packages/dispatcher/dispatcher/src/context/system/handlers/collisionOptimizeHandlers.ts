@@ -17,16 +17,17 @@ import {
     CommandHandler,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayStatus, displayWarn } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { listLevers } from "../../../neighborhoods/optimize/registry.js";
 import { initBuiltInLevers } from "../../../neighborhoods/optimize/levers/index.js";
 import { runCorpusLoop } from "../../../neighborhoods/optimize/corpusLoop.js";
 import { loadSandboxProvider } from "../../../neighborhoods/optimize/sandboxProvider.js";
-import {
-    translateCorpusWithProvider,
-} from "../../../neighborhoods/optimize/sandboxTranslate.js";
+import { translateCorpusWithProvider } from "../../../neighborhoods/optimize/sandboxTranslate.js";
 import {
     defaultPath,
     fileLinkMd,
@@ -251,8 +252,7 @@ class CollisionOptimizeExploreCommandHandler implements CommandHandler {
                     onProgress,
                 });
 
-                const skippedCases =
-                    run.corpusCoverage.skippedCases ?? [];
+                const skippedCases = run.corpusCoverage.skippedCases ?? [];
                 const text = [
                     `Optimize run ${run.runId} written`,
                     `  cases: ${run.cases.length}`,
@@ -264,7 +264,9 @@ class CollisionOptimizeExploreCommandHandler implements CommandHandler {
                                   (s) =>
                                       `${s.neighborhoodId}: ${s.reason.slice(0, 100)}${s.reason.length > 100 ? "…" : ""}`,
                               )
-                              .join("\n    ")}${skippedCases.length > 3 ? "\n    …" : ""}`
+                              .join(
+                                  "\n    ",
+                              )}${skippedCases.length > 3 ? "\n    …" : ""}`
                         : "",
                     `  sandbox: ${run.sandboxRoot}`,
                     `  coverage: ${run.corpusCoverage.reachableMass}/${run.corpusCoverage.totalCollisionMass} mass`,
@@ -414,9 +416,7 @@ function parseCsvList(raw?: string): string[] | undefined {
 
 function parseSeverities(
     raw: string | undefined,
-):
-    | ("blocker" | "leaky" | "minor")[]
-    | undefined {
+): ("blocker" | "leaky" | "minor")[] | undefined {
     const allowed = new Set(["blocker", "leaky", "minor"]);
     const list = parseCsvList(raw);
     if (!list) return ["blocker", "leaky"];
@@ -487,9 +487,7 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
         const workdir = resolveWorkdir(systemContext, params.flags.workdir);
 
         const includeWinners = parseCsvList(params.flags.winners);
-        const excludeWinners = parseCsvList(
-            params.flags["leave-one-out"],
-        );
+        const excludeWinners = parseCsvList(params.flags["leave-one-out"]);
         if (includeWinners && excludeWinners) {
             displayWarn(
                 `--winners and --leave-one-out are mutually exclusive.`,
@@ -590,7 +588,8 @@ class CollisionOptimizePatternsCommandHandler implements CommandHandler {
                 default: "0.5",
             },
             out: {
-                description: "Output JSON path (default <workdir>/patterns.json).",
+                description:
+                    "Output JSON path (default <workdir>/patterns.json).",
                 type: "string",
                 optional: true,
             },
@@ -642,10 +641,7 @@ class CollisionOptimizePatternsCommandHandler implements CommandHandler {
             return;
         }
 
-        const minAttempts = Math.max(
-            1,
-            params.flags["min-attempts"] ?? 5,
-        );
+        const minAttempts = Math.max(1, params.flags["min-attempts"] ?? 5);
         const surfaceDisagreementRaw = parseFloat(
             params.flags["surface-disagreement"] ?? "0.5",
         );
@@ -778,8 +774,7 @@ class CollisionOptimizeRunCommandHandler implements CommandHandler {
 
         const dryRun = params.flags["dry-run"] ?? false;
         const skipDistill = params.flags["skip-distill"] ?? false;
-        const distillMinAttempts =
-            params.flags["distill-min-attempts"] ?? 10;
+        const distillMinAttempts = params.flags["distill-min-attempts"] ?? 10;
 
         try {
             const result = await runPipeline({
@@ -982,9 +977,7 @@ class CollisionOptimizeBrowseCommandHandler implements CommandHandler {
         if (incomplete.length > 0) {
             const incompleteLines = [
                 `Skipped ${incomplete.length} incomplete run dir(s) (missing optimization-run.json — likely crashed mid-explore):`,
-                ...incomplete
-                    .slice(0, 5)
-                    .map((d) => `  ${path.basename(d)}`),
+                ...incomplete.slice(0, 5).map((d) => `  ${path.basename(d)}`),
                 incomplete.length > 5 ? `  …` : "",
             ];
             md.push(...incompleteLines);
@@ -1028,8 +1021,7 @@ function collectRunDirs(
     const entries = fs
         .readdirSync(workdir, { withFileTypes: true })
         .filter(
-            (e) =>
-                e.isDirectory() && e.name.startsWith("optimization-run-"),
+            (e) => e.isDirectory() && e.name.startsWith("optimization-run-"),
         )
         .map((e) => path.join(workdir, e.name));
 

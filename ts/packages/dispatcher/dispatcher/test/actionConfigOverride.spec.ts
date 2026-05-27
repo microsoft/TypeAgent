@@ -29,7 +29,9 @@ function fakeSchemaFile(
 ): ActionSchemaFile {
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
     for (const n of actionNames) actionSchemas.set(n, fakeActionDef(n));
-    const parsedActionSchema = { actionSchemas } as unknown as ParsedActionSchema;
+    const parsedActionSchema = {
+        actionSchemas,
+    } as unknown as ParsedActionSchema;
     return {
         schemaName,
         sourceHash: `hash:${schemaName}`,
@@ -37,9 +39,10 @@ function fakeSchemaFile(
     };
 }
 
-function makeBase(
-    map: Record<string, string[]>,
-): { provider: ActionConfigProvider; configs: Record<string, ActionConfig> } {
+function makeBase(map: Record<string, string[]>): {
+    provider: ActionConfigProvider;
+    configs: Record<string, ActionConfig>;
+} {
     const configs: Record<string, ActionConfig> = {};
     const schemaFiles: Record<string, ActionSchemaFile> = {};
     for (const [name, actions] of Object.entries(map)) {
@@ -94,9 +97,12 @@ describe("withActionConfigOverride", () => {
         const wrapped = withActionConfigOverride(provider, {
             player: { schemaVersion: 1, droppedActions: ["pause"] },
         });
-        expect(wrapped.getActionConfigs().map((c) => c.schemaName).sort()).toEqual(
-            ["email", "player"],
-        );
+        expect(
+            wrapped
+                .getActionConfigs()
+                .map((c) => c.schemaName)
+                .sort(),
+        ).toEqual(["email", "player"]);
     });
 
     it("returns identical ActionSchemaFile when no actions are dropped for a schema", () => {

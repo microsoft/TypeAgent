@@ -52,15 +52,13 @@ function memberKey(m: NeighborhoodMember): string {
 }
 
 function membersToSortedArray(set: Set<string>): NeighborhoodMember[] {
-    return [...set]
-        .sort()
-        .map((key) => {
-            const idx = key.indexOf(".");
-            return {
-                schemaName: key.slice(0, idx),
-                actionName: key.slice(idx + 1),
-            };
-        });
+    return [...set].sort().map((key) => {
+        const idx = key.indexOf(".");
+        return {
+            schemaName: key.slice(0, idx),
+            actionName: key.slice(idx + 1),
+        };
+    });
 }
 
 function deriveKind(members: NeighborhoodMember[]): NeighborhoodKind {
@@ -341,8 +339,7 @@ function mergeEvidence(
             a.similarityScore ?? 0,
             b.similarityScore,
         );
-        out.similarityStrategy =
-            a.similarityStrategy ?? b.similarityStrategy;
+        out.similarityStrategy = a.similarityStrategy ?? b.similarityStrategy;
     }
     if (b.misrouteCount !== undefined) {
         out.misrouteCount = (a.misrouteCount ?? 0) + b.misrouteCount;
@@ -436,10 +433,7 @@ function mergeCountsByStyle(
 ): MisrouteEdgeEvidence["countsByStyle"] {
     if (!a && !b) return undefined;
     const out: NonNullable<MisrouteEdgeEvidence["countsByStyle"]> = {};
-    const keys = new Set([
-        ...Object.keys(a ?? {}),
-        ...Object.keys(b ?? {}),
-    ]);
+    const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
     for (const k of keys) {
         const av = a?.[k];
         const bv = b?.[k];
@@ -677,9 +671,7 @@ export function buildNeighborhoodsFromTranslator(
     };
 }
 
-function totalEdgeCount(
-    edges: MisrouteEdgeEvidence[] | undefined,
-): number {
+function totalEdgeCount(edges: MisrouteEdgeEvidence[] | undefined): number {
     if (!edges) return 0;
     let total = 0;
     for (const e of edges) total += e.count;
@@ -706,10 +698,7 @@ function translatorEdgesToCandidates(
     for (const r of rows) {
         if (r.outcome !== "MISROUTE") continue;
         if (!r.chosenSchema || !r.chosenAction) continue;
-        if (
-            !opts.includeSameSchema &&
-            r.expectedSchema === r.chosenSchema
-        ) {
+        if (!opts.includeSameSchema && r.expectedSchema === r.chosenSchema) {
             continue;
         }
         // Skip self-edges (shouldn't happen for MISROUTE but be defensive).

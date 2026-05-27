@@ -12,11 +12,7 @@
 
 import type { ChatModel } from "aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
-import type {
-    AttemptRecord,
-    CaseDescription,
-    Hypothesis,
-} from "./types.js";
+import type { AttemptRecord, CaseDescription, Hypothesis } from "./types.js";
 import { pmap } from "./util.js";
 
 // =============================================================================
@@ -145,9 +141,7 @@ export function getLever(name: string): LeverPlugin | undefined {
 
 /** Return all registered levers, sorted by name. */
 export function listLevers(): LeverPlugin[] {
-    return [...registry.values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
-    );
+    return [...registry.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Testing-only: clear the registry. Tests register their fixtures, then

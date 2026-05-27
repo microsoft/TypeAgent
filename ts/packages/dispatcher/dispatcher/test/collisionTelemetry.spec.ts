@@ -293,9 +293,7 @@ describe("collisionTelemetry", () => {
     describe("per-session JSONL append (M4)", () => {
         let tmpDir: string;
         beforeEach(() => {
-            tmpDir = fs.mkdtempSync(
-                path.join(os.tmpdir(), "collision-jsonl-"),
-            );
+            tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "collision-jsonl-"));
         });
         afterEach(() => {
             fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -307,9 +305,7 @@ describe("collisionTelemetry", () => {
                 emitCollisionEvent(
                     {
                         kind: "grammarMatch",
-                        candidates: [
-                            { schemaName: "a", actionName: `x${i}` },
-                        ],
+                        candidates: [{ schemaName: "a", actionName: `x${i}` }],
                         strategy: "first-match",
                     },
                     host,

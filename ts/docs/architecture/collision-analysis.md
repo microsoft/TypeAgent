@@ -21,11 +21,11 @@ rescues.
 The tooling described here is how we **see** that data, **measure** it
 against changes, and **plan** policy work. It exists in three layers:
 
-| Layer | Purpose | Surface |
-| --- | --- | --- |
-| **Detection** | Catch collisions at the four runtime points | `@config collision`, `@collision events` |
-| **Measurement** | Generate a corpus of phrases, replay through the embedding ranker, classify | `@collision corpus *` |
-| **Analysis** | Cluster confusable actions, preview "neighborhoods" with policy in mind | `@collision similar`, `@collision probe`, `@collision neighborhoods preview` |
+| Layer           | Purpose                                                                     | Surface                                                                      |
+| --------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Detection**   | Catch collisions at the four runtime points                                 | `@config collision`, `@collision events`                                     |
+| **Measurement** | Generate a corpus of phrases, replay through the embedding ranker, classify | `@collision corpus *`                                                        |
+| **Analysis**    | Cluster confusable actions, preview "neighborhoods" with policy in mind     | `@collision similar`, `@collision probe`, `@collision neighborhoods preview` |
 
 The runtime detection layer is documented elsewhere; this doc covers
 **measurement and analysis**.
@@ -40,17 +40,17 @@ two detection methods are below; the probe tracks live in the corpus
 section further down. All three feed the neighborhood preview from
 different angles.
 
-| | **NFA product construction** | **Multi-vector embedding similarity** |
-| --- | --- | --- |
-| **Lives in** | [`grammar-tools-core`](../../packages/grammarTools/core/src/) — `nfaIntersection.ts`, `collisionScanner.ts` | [`agent-dispatcher`](../../packages/dispatcher/dispatcher/src/translation/actionSimilarity.ts) — `actionSimilarity.ts` |
-| **Surfaced via** | `@grammar collisions` (in-shell), `grammar-tools collisions` (CLI) | `@collision similar` (in-shell) |
-| **Input** | Two compiled grammars (`Grammar` from `.ag.json`) | Action schemas — name, description, parameter shape, agent context |
-| **Detects** | Sentences that **both** grammars formally accept | Actions whose **meaning** the embedding model considers similar |
-| **Algorithm** | BFS over the joint NFA state pair `(qA, qB)`. A reachable accepting pair → an overlap; a witness phrase falls out of the BFS path. | Six per-vector cosine similarities (`desc`, `params`, `nameShape`, `agentContext`, `agentAndAction`, `combined`), aggregated by a named strategy (`balanced` etc.), then complete-linkage agglomerative clustering above a threshold. |
-| **Output** | `CollisionScanResult` — per pair: a concrete witness token sequence + the rule each grammar matched | `ActionSimilarityScanResult` — every cross-schema pair above `keepThreshold` (0.5), with per-vector scores; clusters formed at the user's strategy threshold |
-| **Strengths** | Symbolic, deterministic, exact. Witness is reproducible — paste the phrase into the shell and watch both grammars validate it. Catches lexical aliases the embedding misses. | Catches semantic neighbors the grammar can't see (`delete` ⇄ `remove`, `pause` ⇄ `stop`). Cross-agent only; needs no shared vocabulary. |
-| **Weaknesses** | Cross-agent only by design (pairwise across schemas). Misses semantic overlap when grammars use disjoint vocabulary. Single-token entity validation is coarse — collisions that only emerge from multi-token entity matches aren't detected. | Fuzzy. False positives from generic verbs (`delete file` ↔ `delete email`), false negatives when descriptions are sparse. Cross-schema only — same-schema sibling clashes (`email.send` ↔ `email.reply`) are invisible. Embedding cost. |
-| **Feeds…** | The actionGrammar tuning track (T1 in the rollout plan) — operator looks at witnesses, tightens `.agr` patterns, re-scans. | The neighborhood preview's `similarity` source; clusters become candidate neighborhoods. |
+|                  | **NFA product construction**                                                                                                                                                                                                                 | **Multi-vector embedding similarity**                                                                                                                                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lives in**     | [`grammar-tools-core`](../../packages/grammarTools/core/src/) — `nfaIntersection.ts`, `collisionScanner.ts`                                                                                                                                  | [`agent-dispatcher`](../../packages/dispatcher/dispatcher/src/translation/actionSimilarity.ts) — `actionSimilarity.ts`                                                                                                                    |
+| **Surfaced via** | `@grammar collisions` (in-shell), `grammar-tools collisions` (CLI)                                                                                                                                                                           | `@collision similar` (in-shell)                                                                                                                                                                                                           |
+| **Input**        | Two compiled grammars (`Grammar` from `.ag.json`)                                                                                                                                                                                            | Action schemas — name, description, parameter shape, agent context                                                                                                                                                                        |
+| **Detects**      | Sentences that **both** grammars formally accept                                                                                                                                                                                             | Actions whose **meaning** the embedding model considers similar                                                                                                                                                                           |
+| **Algorithm**    | BFS over the joint NFA state pair `(qA, qB)`. A reachable accepting pair → an overlap; a witness phrase falls out of the BFS path.                                                                                                           | Six per-vector cosine similarities (`desc`, `params`, `nameShape`, `agentContext`, `agentAndAction`, `combined`), aggregated by a named strategy (`balanced` etc.), then complete-linkage agglomerative clustering above a threshold.     |
+| **Output**       | `CollisionScanResult` — per pair: a concrete witness token sequence + the rule each grammar matched                                                                                                                                          | `ActionSimilarityScanResult` — every cross-schema pair above `keepThreshold` (0.5), with per-vector scores; clusters formed at the user's strategy threshold                                                                              |
+| **Strengths**    | Symbolic, deterministic, exact. Witness is reproducible — paste the phrase into the shell and watch both grammars validate it. Catches lexical aliases the embedding misses.                                                                 | Catches semantic neighbors the grammar can't see (`delete` ⇄ `remove`, `pause` ⇄ `stop`). Cross-agent only; needs no shared vocabulary.                                                                                                   |
+| **Weaknesses**   | Cross-agent only by design (pairwise across schemas). Misses semantic overlap when grammars use disjoint vocabulary. Single-token entity validation is coarse — collisions that only emerge from multi-token entity matches aren't detected. | Fuzzy. False positives from generic verbs (`delete file` ↔ `delete email`), false negatives when descriptions are sparse. Cross-schema only — same-schema sibling clashes (`email.send` ↔ `email.reply`) are invisible. Embedding cost. |
+| **Feeds…**       | The actionGrammar tuning track (T1 in the rollout plan) — operator looks at witnesses, tightens `.agr` patterns, re-scans.                                                                                                                   | The neighborhood preview's `similarity` source; clusters become candidate neighborhoods.                                                                                                                                                  |
 
 **What they miss together** — and why the corpus pipeline sits on top:
 
@@ -58,25 +58,25 @@ different angles.
 - **Similarity** doesn't see formal grammar overlap.
 - **Neither** observes what the LLM translator would actually do at runtime.
 
-The corpus pipeline closes that gap by replaying phrases through *two
-distinct probes* and comparing them. Together with similarity, they form
+The corpus pipeline closes that gap by replaying phrases through _two
+distinct probes_ and comparing them. Together with similarity, they form
 the **three signals that feed the neighborhood preview**:
 
-| | **Similarity** | **Embedding probe** (S2/S3) | **Translation probe** (S4) |
-| --- | --- | --- | --- |
-| **What it observes** | Pure embedding distance between action **descriptions** | The embedding ranker's top-K **for an actual phrase** (the same `semanticSearchActionSchema` call `llmSelect` consumes) | The LLM translator's chosen `(schema, action)` **for an actual phrase** |
-| **Phrases needed?** | No | Yes (corpus) | Yes (corpus) |
-| **Closest to runtime ground truth** | Lowest | Middle — covers the candidate-selection step but stops there | Highest — also captures the LLM's pick among the candidates, which is the runtime decision |
-| **Cost** | Embedding API only | Embedding API per phrase | Chat-completion API per phrase (~10× embedding) |
-| **Catches** | Semantic neighbors regardless of grammar | Phrases the embedding ranker drops the right schema for | Phrases the embedding *would* rank fine but the translator still picks wrong; same-schema sibling confusions the ranker can't see |
-| **Misses** | False positives from generic verbs; same-schema clashes | Anything beyond the candidate-selection step | Phrases where the embedding ranker already excluded the right schema (translator never sees it) |
-| **Surfaced via** | `@collision similar` | `@collision corpus probe` | `@collision corpus translate` |
+|                                     | **Similarity**                                          | **Embedding probe** (S2/S3)                                                                                             | **Translation probe** (S4)                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **What it observes**                | Pure embedding distance between action **descriptions** | The embedding ranker's top-K **for an actual phrase** (the same `semanticSearchActionSchema` call `llmSelect` consumes) | The LLM translator's chosen `(schema, action)` **for an actual phrase**                                                           |
+| **Phrases needed?**                 | No                                                      | Yes (corpus)                                                                                                            | Yes (corpus)                                                                                                                      |
+| **Closest to runtime ground truth** | Lowest                                                  | Middle — covers the candidate-selection step but stops there                                                            | Highest — also captures the LLM's pick among the candidates, which is the runtime decision                                        |
+| **Cost**                            | Embedding API only                                      | Embedding API per phrase                                                                                                | Chat-completion API per phrase (~10× embedding)                                                                                   |
+| **Catches**                         | Semantic neighbors regardless of grammar                | Phrases the embedding ranker drops the right schema for                                                                 | Phrases the embedding _would_ rank fine but the translator still picks wrong; same-schema sibling confusions the ranker can't see |
+| **Misses**                          | False positives from generic verbs; same-schema clashes | Anything beyond the candidate-selection step                                                                            | Phrases where the embedding ranker already excluded the right schema (translator never sees it)                                   |
+| **Surfaced via**                    | `@collision similar`                                    | `@collision corpus probe`                                                                                               | `@collision corpus translate`                                                                                                     |
 
 **Why a translation probe at all?** The embedding probe shows where the
 ranker would feed `llmSelect` the wrong candidate set. But even when the
 ranker is correct, the LLM translator can still pick the wrong action
 (especially in same-schema clusters: `email.send` vs `email.reply`).
-Conversely, when the ranker is *wrong* but the right schema is in the
+Conversely, when the ranker is _wrong_ but the right schema is in the
 top-K, the translator often rescues. Without a translation probe we
 guess at both sides; with one we measure them.
 
@@ -97,12 +97,12 @@ per phrase (~$0.05–0.10 per phrase × ~4k phrases = single-digit dollars
 for a full run; not a concern per the project's "API cost is not a
 constraint" stance).
 
-The runtime path *also* has four collision detection points (`static`,
+The runtime path _also_ has four collision detection points (`static`,
 `grammarMatch`, `llmSelect`, `fuzzy` — see the
 [Action Collision Detection section of the dispatcher package README](../../packages/dispatcher/dispatcher/README.md#action-collision-detection)
 for that surface). Those fire while a request is being routed; the
 methods above are the offline-analysis siblings that surface candidates
-*before* any user types a phrase.
+_before_ any user types a phrase.
 
 ## End-to-end pipeline
 
@@ -189,14 +189,14 @@ That single command sequences:
 
 Common knobs:
 
-| Flag | Purpose |
-| --- | --- |
-| `--schemas player,localPlayer` | Restrict corpus generation to a subset of schemas |
-| `--models GPT_4_1` | Limit which chat-model names generate phrases (default uses all configured) |
-| `--concurrency 16` | Bump parallelism (default 8); `corpus probe` is now `pmap`-parallel and scales close to linearly until the embedding API rate-limits |
-| `--from probe` | Skip generation, reuse existing `corpus.json` |
-| `--from visualize` | Cheapest re-render — just rebuild the HTML from existing reclassified results |
-| `--sankey-top 100` | Show more sankey edges in the hotspot map |
+| Flag                           | Purpose                                                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `--schemas player,localPlayer` | Restrict corpus generation to a subset of schemas                                                                                    |
+| `--models GPT_4_1`             | Limit which chat-model names generate phrases (default uses all configured)                                                          |
+| `--concurrency 16`             | Bump parallelism (default 8); `corpus probe` is now `pmap`-parallel and scales close to linearly until the embedding API rate-limits |
+| `--from probe`                 | Skip generation, reuse existing `corpus.json`                                                                                        |
+| `--from visualize`             | Cheapest re-render — just rebuild the HTML from existing reclassified results                                                        |
+| `--sankey-top 100`             | Show more sankey edges in the hotspot map                                                                                            |
 
 If you'd rather drive the stages individually:
 
@@ -239,16 +239,16 @@ shell.
 
 Common knobs:
 
-| Flag | Purpose |
-| --- | --- |
-| `--strategy balanced` | Similarity strategy (run `@collision list-strategies` for options) |
-| `--threshold 0.65` | Cluster threshold for similarity-driven neighborhoods (default 0.78). The page also has a separate **confirm-threshold slider** that retags corpus pairs as `both` based on their pair score — drag it without re-running |
-| `--corpus <path>` | Override default corpus location; defaults to `<workdir>/probe-results-reclassified.json` |
-| `--min-misroute 3` | Drop weak corpus edges with fewer than N occurrences |
-| `--include-same-schema=false` | Skip same-schema sibling neighborhoods |
-| `--no-cache` | Bypass the on-disk embedding cache (force re-embed) |
-| `--out custom.html` | Non-default output path |
-| `--workdir <dir>` | Non-default workdir (overrides the `<instanceDir>/collisions/` default) |
+| Flag                          | Purpose                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--strategy balanced`         | Similarity strategy (run `@collision list-strategies` for options)                                                                                                                                                        |
+| `--threshold 0.65`            | Cluster threshold for similarity-driven neighborhoods (default 0.78). The page also has a separate **confirm-threshold slider** that retags corpus pairs as `both` based on their pair score — drag it without re-running |
+| `--corpus <path>`             | Override default corpus location; defaults to `<workdir>/probe-results-reclassified.json`                                                                                                                                 |
+| `--min-misroute 3`            | Drop weak corpus edges with fewer than N occurrences                                                                                                                                                                      |
+| `--include-same-schema=false` | Skip same-schema sibling neighborhoods                                                                                                                                                                                    |
+| `--no-cache`                  | Bypass the on-disk embedding cache (force re-embed)                                                                                                                                                                       |
+| `--out custom.html`           | Non-default output path                                                                                                                                                                                                   |
+| `--workdir <dir>`             | Non-default workdir (overrides the `<instanceDir>/collisions/` default)                                                                                                                                                   |
 
 Open the report:
 
@@ -267,21 +267,21 @@ The page is interactive at every level:
 
 ### Telemetry / events
 
-| Command | Purpose |
-| --- | --- |
+| Command                                | Purpose                                                                                                                                                                                                                                                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@collision events [-n N] [-k <kind>]` | Show recent runtime events from the in-memory ring buffer; ⚡ marks rows where the chosen candidate diverged from `first-match`. Backed by per-session JSONL at `<sessionDir>/collision-events.jsonl` and (if `@config log db on`) Cosmos `dispatcherlogs`. |
 
 ### Action similarity (S1)
 
 `@collision similar` computes pairwise multi-vector embedding similarity
 across every loaded cross-schema action pair and groups the surviving
-edges into clusters. Useful for spotting actions that *look* similar to
+edges into clusters. Useful for spotting actions that _look_ similar to
 the embedding model regardless of whether they actually misroute.
 
-| Command | Purpose |
-| --- | --- |
+| Command                                                                                                                    | Purpose                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@collision similar [-s <strategy>] [-t <threshold>] [--all-strategies] [--pairs] [-n <top>] [--json <path>] [--no-cache]` | Run the scan and render an HTML cluster (or pair) view. `--all-strategies` renders a comparison table; `--json` writes a structured scan + applied-strategy result. |
-| `@collision list-strategies` | List the named strategies (`balanced`, `desc`, `params`, `nameShape`, `agentContext`, `agentAndAction`). |
+| `@collision list-strategies`                                                                                               | List the named strategies (`balanced`, `desc`, `params`, `nameShape`, `agentContext`, `agentAndAction`).                                                            |
 
 The on-disk embedding cache is keyed by content hash and lives at
 `<instanceDir>/agentCache/actionSimilarity/embeddings.json` so subsequent
@@ -290,12 +290,12 @@ runs are fast.
 ### Single-phrase probe
 
 `@collision probe` calls the same `semanticSearchActionSchema` ranker
-that `llmSelect` consumes at runtime. Lets you ask "what *would* the
+that `llmSelect` consumes at runtime. Lets you ask "what _would_ the
 embedding pick for this phrase?" without running the full translation
 pipeline.
 
-| Command | Purpose |
-| --- | --- |
+| Command                                                                                    | Purpose                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `@collision probe "<phrase>" [-e schema.action] [-n top] [--delta n] [--include-inactive]` | Render the top-K candidates with scores + Δ-to-next; flags rows that match `--expected` and marks the verdict CLEAN / AMBIGUOUS / FAIL. |
 
 ### Corpus pipeline (S2 / S3)
@@ -304,16 +304,16 @@ The corpus pipeline is how we measure dispatch ambiguity at scale: ask
 LLMs to write user utterances for every action, replay them through the
 embedding ranker, classify each phrase, and visualize.
 
-| Command | Purpose |
-| --- | --- |
-| `@collision corpus generate [--schemas …] [--models …] [--styles …] [--concurrency N] [--out …] [--workdir …]` | LLM-authored phrase corpus. Default 3 styles × 3 models per action across all loaded schemas (~12 min for the full set). Available styles: `imperative`, `conversational`, `casual` (default trio); opt-in `polite` (effusive), `curt` (rude/terse), `slang` (idioms), `typos` (natural mistypes). Pass any subset/expansion via `--styles a,b,c`. Multi-step phrases (`open X then Y`) are out of scope here — they need a different eval frame and will land separately. |
-| `@collision corpus probe [--in …] [--out …] [--top N] [--delta n] [--workdir …]` | Replay a corpus through `semanticSearchActionSchema` (embedding ranker only). Each phrase classified CLEAN / TIGHT / MISROUTE. |
+| Command                                                                                                                                       | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@collision corpus generate [--schemas …] [--models …] [--styles …] [--concurrency N] [--out …] [--workdir …]`                                | LLM-authored phrase corpus. Default 3 styles × 3 models per action across all loaded schemas (~12 min for the full set). Available styles: `imperative`, `conversational`, `casual` (default trio); opt-in `polite` (effusive), `curt` (rude/terse), `slang` (idioms), `typos` (natural mistypes). Pass any subset/expansion via `--styles a,b,c`. Multi-step phrases (`open X then Y`) are out of scope here — they need a different eval frame and will land separately.                                                                   |
+| `@collision corpus probe [--in …] [--out …] [--top N] [--delta n] [--workdir …]`                                                              | Replay a corpus through `semanticSearchActionSchema` (embedding ranker only). Each phrase classified CLEAN / TIGHT / MISROUTE.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `@collision corpus translate [--in …] [--out …] [--workdir …] [--concurrency N] [--strategy first-match] [--max-phrases N] [--model-label …]` | Replay a corpus through the **LLM translator** with the construction cache, grammar matcher, action execution, and fuzzy collision path all bypassed. Captures `(chosenSchema, chosenAction)` per phrase. Forces `--strategy first-match` by default (suppresses user-clarify short-circuit so we always see the translator's verdict; future runs will sweep). Output: `translation-results.json` with outcome buckets CLEAN / MISROUTE / CLARIFY / INVALID / ERROR. Distinct from the embedding probe — see the three-signals table above. |
-| `@collision corpus reanalyze [--in …] [--out …] [--delta n] [--workdir …]` | Prefix-aware reclassification — recovers misroutes that were just naming differences (`Debug` vs `DebugAutoShellAction`). |
-| `@collision corpus recovery [--in …] [--delta n] [--workdir …]` | Runtime-aware decomposition of MISROUTE results: same-schema (likely-benign) vs cross-schema in-cluster (`llmSelect`-tunable) vs cross-schema out-of-cluster (widen threshold) vs cross-schema off-list (structural). HTML + text in the shell. |
-| `@collision corpus visualize [--in …] [--out …] [-n top] [--workdir …]` | Interactive HTML hotspot view — schema heatmap, top-N action sankey, filterable misroute-edge table. |
-| `@collision corpus visualize-recovery [--in …] [--out …] [--delta n] [--workdir …]` | Interactive recovery breakdown: stacked bar of the four runtime buckets, per-action profile, action-rank histogram, click-to-filter, click-row-to-expand-phrases. |
-| `@collision corpus run [--from <step>] [--workdir …] [pass-through args]` | Orchestrator. `--from <step>` resumes at `generate` / `probe` / `reanalyze` / `visualize` so you don't re-pay LLM cost when iterating on later stages. |
+| `@collision corpus reanalyze [--in …] [--out …] [--delta n] [--workdir …]`                                                                    | Prefix-aware reclassification — recovers misroutes that were just naming differences (`Debug` vs `DebugAutoShellAction`).                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@collision corpus recovery [--in …] [--delta n] [--workdir …]`                                                                               | Runtime-aware decomposition of MISROUTE results: same-schema (likely-benign) vs cross-schema in-cluster (`llmSelect`-tunable) vs cross-schema out-of-cluster (widen threshold) vs cross-schema off-list (structural). HTML + text in the shell.                                                                                                                                                                                                                                                                                              |
+| `@collision corpus visualize [--in …] [--out …] [-n top] [--workdir …]`                                                                       | Interactive HTML hotspot view — schema heatmap, top-N action sankey, filterable misroute-edge table.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@collision corpus visualize-recovery [--in …] [--out …] [--delta n] [--workdir …]`                                                           | Interactive recovery breakdown: stacked bar of the four runtime buckets, per-action profile, action-rank histogram, click-to-filter, click-row-to-expand-phrases.                                                                                                                                                                                                                                                                                                                                                                            |
+| `@collision corpus run [--from <step>] [--workdir …] [pass-through args]`                                                                     | Orchestrator. `--from <step>` resumes at `generate` / `probe` / `reanalyze` / `visualize` so you don't re-pay LLM cost when iterating on later stages.                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ### Neighborhoods (analysis layer)
 
@@ -324,8 +324,8 @@ similarity scan with the corpus probe results into a preview HTML; **no
 persistence, no runtime hooks.** Phase 1+ will add a persisted index,
 per-neighborhood policy, runtime resolution, and incremental updates.
 
-| Command | Purpose |
-| --- | --- |
+| Command                                                                                                                                                | Purpose                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@collision neighborhoods preview [--strategy] [--threshold] [--corpus] [--min-misroute] [--include-same-schema] [--no-cache] [--out …] [--workdir …]` | Build neighborhoods in-memory from current similarity + corpus data; write an interactive HTML viz with a confirm-threshold slider, filterable table with phrase samples, and a hierarchical edge-bundling chart. |
 
 ### Static grammar collisions (separate track)
@@ -424,16 +424,16 @@ how much pain that one action is causing. Computed by
 [`actionGravity.ts`](../../packages/dispatcher/dispatcher/src/neighborhoods/actionGravity.ts).
 Available scores:
 
-| Score | Meaning |
-| --- | --- |
-| `owedTraffic` | Σ count where the action is the `from` of a ranker misroute. Phrases meant for it that went elsewhere. **Default primary score.** |
-| `stolenTraffic` | Σ count where the action is the `to`. Phrases meant for others that landed on it. |
-| `partners` / `entanglement` | Distinct partners with any edge, plus a bonus per bidirectional pair. Higher = more structurally confused. |
-| `weightedConfusion` | `Σ count × similarity(from, to)` — empirical volume × semantic similarity. Where corpus + embeddings agree. |
-| `shareInNeighborhood` | `owedTraffic / Σ owedTraffic` for the neighborhood. |
-| `endUserOwedTraffic` | (translator-only) Σ CONFIRMED + NEW_FAILURE outflow — ground-truth user-visible misroutes. **Becomes the primary score when translator data is loaded.** |
-| `translatorRecoveryRate` | (translator-only) `RESCUED / (RESCUED + CONFIRMED)`. High = LLM bails the ranker out (cosmetic problem). Low = ranker misroutes correlate with real harm. |
-| `severityTier` | (translator-only) `blocker` / `leaky` / `clean`. Drives node color in the force graph. |
+| Score                       | Meaning                                                                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owedTraffic`               | Σ count where the action is the `from` of a ranker misroute. Phrases meant for it that went elsewhere. **Default primary score.**                         |
+| `stolenTraffic`             | Σ count where the action is the `to`. Phrases meant for others that landed on it.                                                                         |
+| `partners` / `entanglement` | Distinct partners with any edge, plus a bonus per bidirectional pair. Higher = more structurally confused.                                                |
+| `weightedConfusion`         | `Σ count × similarity(from, to)` — empirical volume × semantic similarity. Where corpus + embeddings agree.                                               |
+| `shareInNeighborhood`       | `owedTraffic / Σ owedTraffic` for the neighborhood.                                                                                                       |
+| `endUserOwedTraffic`        | (translator-only) Σ CONFIRMED + NEW_FAILURE outflow — ground-truth user-visible misroutes. **Becomes the primary score when translator data is loaded.**  |
+| `translatorRecoveryRate`    | (translator-only) `RESCUED / (RESCUED + CONFIRMED)`. High = LLM bails the ranker out (cosmetic problem). Low = ranker misroutes correlate with real harm. |
+| `severityTier`              | (translator-only) `blocker` / `leaky` / `clean`. Drives node color in the force graph.                                                                    |
 
 The `--translator-corpus <path>` flag (default
 `<workdir>/probe-results-translated.json`) is forward-compatible with

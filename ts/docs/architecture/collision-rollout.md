@@ -49,7 +49,7 @@ local JSONL fallback for offline triage.
   but the extension point is one call to `logger.logEvent("collision", ...)`
   inside `emitCollisionEvent`.
 - **Runtime config flip path today:** none from the shell (no `@config
-  collision`). Edit JSON, restart. M1 below removes that constraint.
+collision`). Edit JSON, restart. M1 below removes that constraint.
 
 ## Tooling milestones (gate Phase 1)
 
@@ -68,26 +68,20 @@ These ship before any user-facing experiment runs.
       `kind` (detection point), `strategy`, `candidates`, `chosen`,
       `elapsedMs`, `request`, `note`, `timestamp`. For experiment analysis
       we need to add — once, before logging lands, so we don't schema-
-      migrate later:
-      - `firstMatchCandidate?: CollisionCandidate` — the candidate
-        `first-match` would have picked. Lets every Cosmos query answer
-        "did the experiment strategy pick differently than legacy?" without
-        re-running anything offline.
-      - `classifier?: "distinctActions" | "tiedHeuristics" | undefined` —
-        only meaningful for `kind="grammarMatch"`; records which classifier
-        flagged the collision.
-      - `candidates[].matchedCount?`, `nonOptionalCount?`,
-        `wildcardCharCount?`, `priorityRank?` — heuristic counters per
-        candidate so offline analysis can recompute alternative rankings
-        without replay. (Today only an optional `score` is captured.)
-      - `requestId?: string` — correlation key tying multiple events from
-        the same user request (e.g. a `grammarMatch` collision followed by
-        a `user-clarify` follow-up event).
-      - `experimentId?: string` — copy of `collision.telemetry.experimentId`
-        from session config (new field). Lets testers tag a window of
-        events (`E2.1-2026-05-12`) for clean attribution; defaults unset.
-      - `sessionId: string` — copy of the dispatcher session name so per-
-        tester analysis can filter on it without joining other tables.
+      migrate later: - `firstMatchCandidate?: CollisionCandidate` — the candidate
+      `first-match` would have picked. Lets every Cosmos query answer
+      "did the experiment strategy pick differently than legacy?" without
+      re-running anything offline. - `classifier?: "distinctActions" | "tiedHeuristics" | undefined` —
+      only meaningful for `kind="grammarMatch"`; records which classifier
+      flagged the collision. - `candidates[].matchedCount?`, `nonOptionalCount?`,
+      `wildcardCharCount?`, `priorityRank?` — heuristic counters per
+      candidate so offline analysis can recompute alternative rankings
+      without replay. (Today only an optional `score` is captured.) - `requestId?: string` — correlation key tying multiple events from
+      the same user request (e.g. a `grammarMatch` collision followed by
+      a `user-clarify` follow-up event). - `experimentId?: string` — copy of `collision.telemetry.experimentId`
+      from session config (new field). Lets testers tag a window of
+      events (`E2.1-2026-05-12`) for clean attribution; defaults unset. - `sessionId: string` — copy of the dispatcher session name so per-
+      tester analysis can filter on it without joining other tables.
       _Touches:_ [`collisionTelemetry.ts`](ts/packages/dispatcher/dispatcher/src/context/collisionTelemetry.ts)
       (type + emit), [`session.ts`](ts/packages/dispatcher/dispatcher/src/context/session.ts)
       (add `experimentId` to `CollisionConfig.telemetry`), and the four
@@ -165,12 +159,12 @@ Outcomes are byte-identical to legacy behavior; only telemetry changes.
 Goal: establish baseline collision rates per detection point in real
 traffic.
 
-| ID    | Experiment                              | Config diff                                                                                              | Status  | Started | Notes |
-| ----- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------- | ------- | ----- |
-| E1.1  | `static` detection, warn-only           | `static.detect=true`, `static.strategy="warn"`, `telemetry.emit=true`, `dblogging=true`                  | planned |         |       |
-| E1.2  | `grammarMatch` detection, no re-routing | `grammarMatch.detect=true`, `grammarMatch.strategy="first-match"`                                        | planned |         |       |
-| E1.3  | `llmSelect` detection, no re-routing    | `llmSelect.detect=true`, `llmSelect.strategy="first-match"`                                              | planned |         |       |
-| E1.4  | `fuzzy.staticEnabled` baseline          | `fuzzy.staticEnabled=true` (still `PlaceholderScorer` → vacuous; deferred until F1 lands)                | blocked |         | blocked on F1 |
+| ID   | Experiment                              | Config diff                                                                               | Status  | Started | Notes         |
+| ---- | --------------------------------------- | ----------------------------------------------------------------------------------------- | ------- | ------- | ------------- |
+| E1.1 | `static` detection, warn-only           | `static.detect=true`, `static.strategy="warn"`, `telemetry.emit=true`, `dblogging=true`   | planned |         |               |
+| E1.2 | `grammarMatch` detection, no re-routing | `grammarMatch.detect=true`, `grammarMatch.strategy="first-match"`                         | planned |         |               |
+| E1.3 | `llmSelect` detection, no re-routing    | `llmSelect.detect=true`, `llmSelect.strategy="first-match"`                               | planned |         |               |
+| E1.4 | `fuzzy.staticEnabled` baseline          | `fuzzy.staticEnabled=true` (still `PlaceholderScorer` → vacuous; deferred until F1 lands) | blocked |         | blocked on F1 |
 
 **Run cadence:** sequence E1.1 → E1.2 → E1.3, ~1 week each, multiple
 testers in parallel. E1.4 parked until Phase 3 / F1.
@@ -200,14 +194,14 @@ candidates so post-hoc analysis can answer "how often did the new strategy
 pick differently than `first-match` would have?" by comparing the
 heuristically-first candidate against `chosen`.
 
-| ID    | Experiment                       | Config diff                                                | Risk     | Status  |
-| ----- | -------------------------------- | ---------------------------------------------------------- | -------- | ------- |
-| E2.1  | `grammarMatch` → `score-rank`    | `grammarMatch.strategy="score-rank"`                       | low      | planned |
-| E2.2  | `llmSelect` → `score-rank`       | `llmSelect.strategy="score-rank"`                          | low      | planned |
-| E2.3  | `grammarMatch` → `priority`      | `grammarMatch.strategy="priority"`, set `priorityOrder`    | medium   | planned |
-| E2.4  | `llmSelect` → `priority`         | `llmSelect.strategy="priority"`                            | medium   | planned |
-| E2.5  | `grammarMatch` → `user-clarify`  | `grammarMatch.strategy="user-clarify"`                     | high     | planned |
-| E2.6  | `llmSelect` → `user-clarify`     | `llmSelect.strategy="user-clarify"`                        | high     | planned |
+| ID   | Experiment                      | Config diff                                             | Risk   | Status  |
+| ---- | ------------------------------- | ------------------------------------------------------- | ------ | ------- |
+| E2.1 | `grammarMatch` → `score-rank`   | `grammarMatch.strategy="score-rank"`                    | low    | planned |
+| E2.2 | `llmSelect` → `score-rank`      | `llmSelect.strategy="score-rank"`                       | low    | planned |
+| E2.3 | `grammarMatch` → `priority`     | `grammarMatch.strategy="priority"`, set `priorityOrder` | medium | planned |
+| E2.4 | `llmSelect` → `priority`        | `llmSelect.strategy="priority"`                         | medium | planned |
+| E2.5 | `grammarMatch` → `user-clarify` | `grammarMatch.strategy="user-clarify"`                  | high   | planned |
+| E2.6 | `llmSelect` → `user-clarify`    | `llmSelect.strategy="user-clarify"`                     | high   | planned |
 
 **Risk reasoning:**
 
@@ -235,9 +229,9 @@ Sequential; code lands before experiments run.
 
 - [ ] **F1.** Real `ActionEmbeddingScorer` — wraps the multi-vector
       similarity engine built in **Phase 5 / S1** (see below) so the
-      fuzzy detection point can call into it directly.  Replaces
+      fuzzy detection point can call into it directly. Replaces
       `PlaceholderScorer` as the default when `scorer: "actionEmbedding"`
-      is set.  Blocked on S1.
+      is set. Blocked on S1.
       _Touches:_ [`fuzzyCollision.ts`](ts/packages/dispatcher/dispatcher/src/translation/fuzzyCollision.ts).
 - [ ] **F2.** Wire runtime fuzzy hook — `isFuzzyCollisionForMatch()` exists
       but has zero call sites. Add the post-resolver call site in
@@ -258,7 +252,7 @@ Independent of the runtime experiments. Uses the JSON output of the static
 scanner.
 
 - [ ] **T1.** Generate baseline: `analyze-grammar-collisions --dir packages/agents
-      --out collisions-baseline.json`. Commit to repo as the reference set.
+    --out collisions-baseline.json`. Commit to repo as the reference set.
 - [ ] **T2.** Categorize the 103 collisions:
   - **Tier 1 (real bugs, fix first):** short witness + concrete (no
     placeholders) + matched actions diverge in a way the user would notice.
@@ -276,27 +270,27 @@ scanner.
 Surfaces collisions that the grammar / NFA path can't see — actions that
 are semantically the same kind of operation (`browser.openWebPage` ⟷
 `desktop.openFile` ⟷ `archives.expand`) even when their `.agr` patterns
-don't overlap.  Output of this phase becomes the engine for the F1
+don't overlap. Output of this phase becomes the engine for the F1
 milestone above; until S1 lands, fuzzy detection is inert.
 
 Sequential — each milestone uses the artifacts of the previous one.
 
-- [x] **S1. `@collision similar` — multi-vector cross-schema similarity (semantic neighborhoods).** _Demoted from "find dispatch collisions" — see findings below._  Embeds each loaded action under multiple independent vectors (desc / params / nameShape / agentContext / agentAndAction), runs pairwise scoring across cross-schema pairs under one of six named strategies, and clusters via complete-linkage agglomeration.  HTML cluster view, `--json` export, score-distribution histogram.
+- [x] **S1. `@collision similar` — multi-vector cross-schema similarity (semantic neighborhoods).** _Demoted from "find dispatch collisions" — see findings below._ Embeds each loaded action under multiple independent vectors (desc / params / nameShape / agentContext / agentAndAction), runs pairwise scoring across cross-schema pairs under one of six named strategies, and clusters via complete-linkage agglomeration. HTML cluster view, `--json` export, score-distribution histogram.
       _Status:_ shipped (S1 → S1.2 → `@collision probe`).
       _What it answers:_ "Which actions are the same kind of operation, regardless of agent?" — a **semantic-neighborhoods** scanner.
-      _What it does NOT answer:_ "Which actions actually compete at the dispatcher's routing path?"  Validated empirically against the toggle clusters: 12 hand-crafted probes ran through `@collision probe`; 11 of 12 routed to the expected target as top-1 — the cross-agent embedding cluster was a semantic neighborhood, not a dispatch collision.  The competitors that matter are within-agent siblings, which `@collision similar` skips by design (cross-schema-only).
-      _Useful for:_ surfacing naming inconsistencies, finding duplicate-purpose actions across the agent set, action-tuning candidates.  Keep as is, but stop framing it as the rollout's primary collision tool.
+      _What it does NOT answer:_ "Which actions actually compete at the dispatcher's routing path?" Validated empirically against the toggle clusters: 12 hand-crafted probes ran through `@collision probe`; 11 of 12 routed to the expected target as top-1 — the cross-agent embedding cluster was a semantic neighborhood, not a dispatch collision. The competitors that matter are within-agent siblings, which `@collision similar` skips by design (cross-schema-only).
+      _Useful for:_ surfacing naming inconsistencies, finding duplicate-purpose actions across the agent set, action-tuning candidates. Keep as is, but stop framing it as the rollout's primary collision tool.
 
 - [ ] **S1b. Within-schema sibling analysis.** Add `--within-schema`
       mode to `@collision similar` that runs the same multi-vector
-      analysis on action pairs *within* each agent.  Per the today's-
+      analysis on action pairs _within_ each agent. Per the today's-
       findings, runtime ambiguity comes from sibling pairs like
       (`ConnectWifi`, `EnableWifi`, `DisconnectWifi`) or
-      (`EnableFilterKeys`, `EnableStickyKeys`).  Same engine, different
+      (`EnableFilterKeys`, `EnableStickyKeys`). Same engine, different
       filter; small change.
 
 - [x] **S2. LLM-synthesized phrase corpus per action — multi-model.**
-      _Done._  See findings below.
+      _Done._ See findings below.
 
       Original spec follows for reference:
       For each loaded action, prompt **every available chat model** (via
@@ -320,10 +314,10 @@ Sequential — each milestone uses the artifacts of the previous one.
       existing model client + cache directory.
 
 - [x] **S3. Replay the corpus through the semantic ranker.**
-      _Done._  Implemented as
+      _Done._ Implemented as
       [`packages/cli/scripts/probe-corpus-runner.mjs`](ts/packages/cli/scripts/probe-corpus-runner.mjs)
       (calls `agents.semanticSearchActionSchema` directly rather than going
-      through `@collision probe`'s HTML output).  Reanalyzed with a
+      through `@collision probe`'s HTML output). Reanalyzed with a
       prefix-aware matcher in
       [`reanalyze-probe-results.mjs`](ts/packages/cli/scripts/reanalyze-probe-results.mjs)
       to fold out type-name-vs-enum-name false misroutes.
@@ -337,11 +331,11 @@ Sequential — each milestone uses the artifacts of the previous one.
 
 **Corpus** ([`corpus-runner.mjs`](ts/packages/cli/scripts/corpus-runner.mjs)
 output, run 2026-05-07): 489 actions across 65 schemas (1 schema —
-`mcpfilesystem` — failed to load and was skipped).  Three working
-OpenAI-family models (`GPT_4_1`, `GPT_5`, `GPT_5_NANO`).  Each (action,
+`mcpfilesystem` — failed to load and was skipped). Three working
+OpenAI-family models (`GPT_4_1`, `GPT_5`, `GPT_5_NANO`). Each (action,
 model) call asks for 3 phrases in distinct styles (imperative,
-conversational, casual).  **4392 raw model outputs → 4258 unique
-phrases (96.9% dedup keep-rate)** = high stylistic variance.  Run time
+conversational, casual). **4392 raw model outputs → 4258 unique
+phrases (96.9% dedup keep-rate)** = high stylistic variance. Run time
 ~25 min at concurrency 8.
 
 `GPT_4_O` and `GPT_4_O_MINI` are broken in this checkout (stale API
@@ -350,13 +344,13 @@ version pin / wrong API key) and would add more variance once fixed.
 **Probe replay** ([`probe-corpus-runner.mjs`](ts/packages/cli/scripts/probe-corpus-runner.mjs)
 on the corpus, delta=0.05, top=5):
 
-| Verdict   | Count | %      | Meaning                                                 |
-| --------- | ----- | ------ | ------------------------------------------------------- |
-| CLEAN     | 419   | 9.8%   | top-1 correct AND Δ to #2 ≥ 0.05                        |
-| TIGHT     | 1983  | 46.6%  | top-1 correct but Δ < 0.05 (`llmSelect` would flag)     |
-| MISROUTE  | 1856  | 43.6%  | top-1 wrong                                             |
+| Verdict  | Count | %     | Meaning                                             |
+| -------- | ----- | ----- | --------------------------------------------------- |
+| CLEAN    | 419   | 9.8%  | top-1 correct AND Δ to #2 ≥ 0.05                    |
+| TIGHT    | 1983  | 46.6% | top-1 correct but Δ < 0.05 (`llmSelect` would flag) |
+| MISROUTE | 1856  | 43.6% | top-1 wrong                                         |
 
-**Misroute split: 55% cross-agent, 45% within-agent.**  Both buckets
+**Misroute split: 55% cross-agent, 45% within-agent.** Both buckets
 are big enough to matter.
 
 **Per-style:** terse phrasing wrecks routing.
@@ -372,19 +366,19 @@ Probably because nano outputs are shorter and more imperative on
 average — closer to the action description voice — which the ranker
 can pin down.
 
-| Model        | CLEAN | TIGHT | MISROUTE |
-| ------------ | ----- | ----- | -------- |
-| GPT_5_NANO   | 13.5% | 49.0% | 38.0%    |
-| GPT_4_1      | 9.4%  | 45.6% | 45.5%    |
-| GPT_5        | 8.9%  | 46.3% | 45.6%    |
+| Model      | CLEAN | TIGHT | MISROUTE |
+| ---------- | ----- | ----- | -------- |
+| GPT_5_NANO | 13.5% | 49.0% | 38.0%    |
+| GPT_4_1    | 9.4%  | 45.6% | 45.5%    |
+| GPT_5      | 8.9%  | 46.3% | 45.6%    |
 
 ### Five misroute patterns the data exposes
 
 The signal isn't uniform — it concentrates in five distinct categories,
 each calling for a different fix.
 
-- **A. Cross-agent semantic hubs.**  One generic action absorbs phrases
-  meant for siblings across multiple agents.  The exemplar:
+- **A. Cross-agent semantic hubs.** One generic action absorbs phrases
+  meant for siblings across multiple agents. The exemplar:
   `desktop.SetVolumeAction` is the universal sink for any volume-related
   phrase generated for `player.setVolume`, `player.setMaxVolume`,
   `player.changeVolume`, `localPlayer.setVolume`, `localPlayer.changeVolume`,
@@ -394,8 +388,8 @@ each calling for a different fix.
   just "set volume"), or add `priorityOrder` so music agents win when
   both match.
 
-- **B. Within-agent disambiguation hubs.**  One action absorbs phrases
-  meant for siblings *inside the same agent*.  `player.PlayArtistAction`
+- **B. Within-agent disambiguation hubs.** One action absorbs phrases
+  meant for siblings _inside the same agent_. `player.PlayArtistAction`
   steals from `playTrack` (9×), `playGenre` (8×), `addSongsToPlaylist`
   (7×); `list.GetListAction` steals from `createList` (7×) and others.
   These don't show up in `@collision similar`'s output at all because
@@ -403,31 +397,31 @@ each calling for a different fix.
   _Fix candidate:_ tighten the hub action's description to be more
   specific; add example utterances to siblings' descriptions.
 
-- **C. Near-duplicate agents.**  `localPlayer` (local file player) and
+- **C. Near-duplicate agents.** `localPlayer` (local file player) and
   `player` (Spotify) cover the same conceptual surface; phrases
-  generated for one routinely route to the other.  `localPlayer.shuffle
-  → player.ShuffleAction` (8×), `localPlayer.mute → desktop.MuteVolumeAction`
+  generated for one routinely route to the other. `localPlayer.shuffle
+→ player.ShuffleAction` (8×), `localPlayer.mute → desktop.MuteVolumeAction`
   (9×), several volume edges.
   _Fix candidate:_ document the agent boundary explicitly in agent
   descriptions ("local file" vs "Spotify"); or accept the collision and
   use `priorityOrder` to bias the more common case.
 
-- **D. Engineered collisions firing as designed.**  `vampire.createCalendarEvent
-  → calendar.ScheduleEventAction` (7×), `vampire.revive → player.PlayArtistAction`
-  (7×).  Vampire is doing what it was designed to do — these aren't
+- **D. Engineered collisions firing as designed.** `vampire.createCalendarEvent
+→ calendar.ScheduleEventAction` (7×), `vampire.revive → player.PlayArtistAction`
+  (7×). Vampire is doing what it was designed to do — these aren't
   bugs, they're the test fixtures detecting collisions correctly.
 
-- **E. Naming-hygiene noise.**  TypeScript type names sometimes carry
+- **E. Naming-hygiene noise.** TypeScript type names sometimes carry
   prefixes the action description doesn't (`code.code-editor.saveAllFiles`
   → `EditorActionSaveAllFiles` ×9; similar for other `EditorAction*`
-  types).  Routing is *correct* — the embedder just doesn't realize
+  types). Routing is _correct_ — the embedder just doesn't realize
   it because the type-name and the description don't share vocabulary.
   _Fix candidate:_ rename the types to drop the `EditorAction` prefix.
   Pure refactor, doesn't change runtime behavior.
 
 ### Cleanest actions (calibration anchors)
 
-These set the bar for what good disambiguation looks like.  Common
+These set the bar for what good disambiguation looks like. Common
 pattern: distinctive vocabulary + no within-agent siblings competing.
 
 ```
@@ -444,30 +438,30 @@ desktop.ListThemes                                  7 CLEAN
 ### What this means for Phase 1 / Phase 2 baseline
 
 The 9.8% / 46.6% / 43.6% split is the **before-corrective-action
-baseline** for the rollout's empirical questions.  Expectations:
+baseline** for the rollout's empirical questions. Expectations:
 
 - **Phase 1 / E1.3 (`llmSelect.detect=on`)**: with the current
   scoreDeltaThreshold of 0.05, 56.4% of phrases would emit a collision
-  event (TIGHT + MISROUTE).  That's a high event rate; if the
+  event (TIGHT + MISROUTE). That's a high event rate; if the
   experiment ratio holds for real traffic, the JSONL/Cosmos pipeline
-  will see ~1 collision per ~1.8 user requests.  Plan capacity
+  will see ~1 collision per ~1.8 user requests. Plan capacity
   accordingly.
 - **Phase 2 / E2.x (strategy A/B)**: the divergence rate (chosen ≠
   `firstMatchCandidate`) under non-`first-match` strategies will be at
-  least 56.4% — strategies have something to act on.  If Phase 2
+  least 56.4% — strategies have something to act on. If Phase 2
   measures divergence well below that, the strategies aren't
   triggering.
 
 - [ ] **S4. Cross-pollinate with real-world telemetry.** The collision
       events JSONL accumulating from Phase 1 has actual user requests in
-      its `request` field.  Feed those through the same probe path as
-      S3 to extend the synthetic corpus with real phrasing.  The
+      its `request` field. Feed those through the same probe path as
+      S3 to extend the synthetic corpus with real phrasing. The
       synthetic-vs-real divergence is itself a calibration signal.
 
 - [ ] **S5. Wire S1 as the `actionEmbedding` scorer (= F1).** Once S1's
       similarity scores are stable, replace `PlaceholderScorer` in
       [`fuzzyCollision.ts`](ts/packages/dispatcher/dispatcher/src/translation/fuzzyCollision.ts)
-      with a thin adapter calling into the S1 engine.  This unblocks
+      with a thin adapter calling into the S1 engine. This unblocks
       Phase 1 / E1.4 and Phase 3 / F2-F4.
 
 ## Cross-cutting items (track but don't block phases)
@@ -672,7 +666,7 @@ First execution-mode steps after this plan is approved:
    - `@config collision priority <comma,separated,agents>`
    - `@config collision telemetry [emit|debugLog|experimentId] <value>`
    - `@config collision` (no args → echo current config)
-   Add unit coverage to the existing dispatcher test suite.
+     Add unit coverage to the existing dispatcher test suite.
 3. **M2 — Enrich `CollisionEvent`.** Update the type and the four
    detection-point call sites to populate `firstMatchCandidate`,
    `classifier`, per-candidate heuristic counters, `requestId`,
@@ -686,7 +680,7 @@ First execution-mode steps after this plan is approved:
 6. **M5 — `@collision events`.** New handler reading recent events from
    the ring buffer (or JSONL if buffer is empty).
 7. **Validate end-to-end.** Enable vampire agent + `@config collision
-   grammarMatch detect on` + `@config log db on`; trigger a known
+grammarMatch detect on` + `@config log db on`; trigger a known
    colliding utterance; confirm the event lands in (a) the ring buffer
    via `@collision events`, (b) the local JSONL, and (c) the
    `dispatcherlogs` Cosmos collection.

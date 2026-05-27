@@ -133,11 +133,13 @@ function schemaNameFor(file: string): string {
     return base.endsWith("Schema") ? base.slice(0, -"Schema".length) : base;
 }
 
-type PreloadSkip = SchemaSkip | {
-    schemaName: string;
-    reason: "no-grammar" | "wrong-format" | "parse-error";
-    error?: string;
-};
+type PreloadSkip =
+    | SchemaSkip
+    | {
+          schemaName: string;
+          reason: "no-grammar" | "wrong-format" | "parse-error";
+          error?: string;
+      };
 
 export async function runAnalyzeCollisions(args: string[]): Promise<number> {
     const opts = parseArgs(args);
@@ -204,9 +206,7 @@ export async function runAnalyzeCollisions(args: string[]): Promise<number> {
     const t0 = Date.now();
     const result = scanGrammarCollisions(inputs, {
         onProgress: (phase, index, total, label) => {
-            log(
-                `[${phase}] [${index}/${total}] ${label}`,
-            );
+            log(`[${phase}] [${index}/${total}] ${label}`);
         },
     });
     const elapsedMs = Date.now() - t0;
