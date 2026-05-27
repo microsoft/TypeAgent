@@ -85,6 +85,27 @@ export function compile(
         return { errors };
     }
 
+    return compileCheckedWorkflows(workflows, workflows, taskSchemas, options);
+}
+
+/**
+ * Shared post-load pipeline for both compile APIs.
+ *
+ * - `workflows` is the full set to type-check and emit.
+ * - `entryWorkflows` is the set used for entry selection.
+ *
+ * `compile` passes the full workflow set for both arguments.
+ * `compileFile` passes all loaded workflows for checking/emission but
+ * restricts entry selection to workflows declared in the entry file.
+ */
+function compileCheckedWorkflows(
+    workflows: WorkflowDecl[],
+    entryWorkflows: WorkflowDecl[],
+    taskSchemas: TaskSchemaInfo[],
+    options?: CompileOptions,
+): CompileResult {
+    const errors: CompileError[] = [];
+
     // Type check all workflows together so cross-workflow calls
     // resolve and recursion is detectable.
     const checker = new TypeChecker(taskSchemas);
@@ -105,7 +126,7 @@ export function compile(
     // Pick the entry workflow. The emitter takes the full workflow list
     // and emits a workflow table keyed by name, with `entry` pointing
     // to the selected entry workflow.
-    const entry = selectEntry(workflows, options?.entry);
+    const entry = selectEntry(entryWorkflows, options?.entry);
     if (!entry.ok) {
         errors.push({
             phase: "typecheck",
@@ -139,7 +160,6 @@ export function compile(
     }
 
     maybeValidate(ir ?? null, errors, options);
-
     return { ir: ir ?? undefined, errors };
 }
 
@@ -247,56 +267,12 @@ export function compileFile(
     const workflows = load.workflows;
     const entryWorkflows = load.entryWorkflows;
 
-    // Type check
-    const checker = new TypeChecker(taskSchemas);
-    const typeErrors = checker.checkAll(workflows);
-    for (const e of typeErrors) {
-        errors.push({
-            phase: "typecheck",
-            message: e.message,
-            line: e.line,
-            col: e.col,
-            length: e.length,
-        });
-    }
-    if (typeErrors.length > 0) return { errors };
-
-    // Entry selection — restricted to the entry file's workflows, so
-    // that imports don't accidentally become the entry point.
-    const entry = selectEntry(entryWorkflows, options?.entry);
-    if (!entry.ok) {
-        errors.push({
-            phase: "typecheck",
-            message: entry.message,
-            line: entry.line,
-            col: entry.col,
-            length: 1,
-        });
-        return { errors };
-    }
-
-    const symbolTypes = checker.collectSymbolTypes(workflows);
-    const emitter = new Emitter(
-        taskSchemas,
-        checker.resolvedSchemas,
-        symbolTypes,
-    );
-    const { ir, errors: emitErrors } = emitter.emitAll(
+    return compileCheckedWorkflows(
         workflows,
-        entry.value.name,
+        entryWorkflows,
+        taskSchemas,
+        options,
     );
-    for (const e of emitErrors) {
-        errors.push({
-            phase: "emit",
-            message: e.message,
-            line: e.line,
-            col: e.col,
-            length: e.length,
-        });
-    }
-
-    maybeValidate(ir ?? null, errors, options);
-    return { ir: ir ?? undefined, errors };
 }
 
 function loadErrorToCompileError(e: LoadError): CompileError {
