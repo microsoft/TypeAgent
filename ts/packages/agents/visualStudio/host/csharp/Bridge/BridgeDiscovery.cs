@@ -42,12 +42,22 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
         private const string AgentServerPortEnv = "AGENT_SERVER_PORT";
 
         // Must match AGENT_SERVER_DEFAULT_PORT in agentServer/protocol.
-        private const int DefaultAgentServerPort = 8999;
+        private const uint DefaultAgentServerPort = 8999;
 
         // Names this client uses to look itself up. Must match the role
         // registered by visualStudioActionHandler.ts.
         private const string AgentName = "visualStudio";
         private const string Role = "default";
+
+        // The dispatcher's discovery channel always lives on the loopback
+        // agent-server. Keep this as a const so the URL only appears in
+        // one place; if/when the host becomes configurable, change here.
+        private const string AgentServerHost = "ws://localhost";
+
+        // Sanity cap on the discovery response payload. The protocol only
+        // ever returns a tiny JSON envelope (~100 bytes); anything larger
+        // is treated as a malformed/unexpected response.
+        private const int MaxDiscoveryResponseBytes = 64 * 1024;
 
         /// <summary>
         /// Resolve the bridge port via discovery. Returns the discovered
@@ -56,11 +66,11 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
         /// Throws on transport failure (agent-server unreachable, timeout,
         /// malformed response) so the caller can log and retry.
         /// </summary>
-        public static async Task<int?> ResolveBridgePortAsync(CancellationToken cancellation)
+        public static async Task<uint?> ResolveBridgePortAsync(CancellationToken cancellation)
         {
-            int agentServerPort = GetAgentServerPort();
-            int? discovered = await LookupPortAsync(agentServerPort, cancellation).ConfigureAwait(false);
-            if (discovered is int p)
+            uint agentServerPort = GetAgentServerPort();
+            uint? discovered = await LookupPortAsync(agentServerPort, cancellation).ConfigureAwait(false);
+            if (discovered is uint p)
             {
                 Debug.WriteLine($"[TypeAgent] Discovery resolved bridge port {p}");
             }
@@ -71,19 +81,19 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
             return discovered;
         }
 
-        private static int GetAgentServerPort()
+        private static uint GetAgentServerPort()
         {
             string? raw = Environment.GetEnvironmentVariable(AgentServerPortEnv);
-            if (int.TryParse(raw, out int p) && p > 0 && p <= 65535)
+            if (uint.TryParse(raw, out uint p) && p > 0 && p <= 65535)
             {
                 return p;
             }
             return DefaultAgentServerPort;
         }
 
-        private static async Task<int?> LookupPortAsync(int agentServerPort, CancellationToken cancellation)
+        private static async Task<uint?> LookupPortAsync(uint agentServerPort, CancellationToken cancellation)
         {
-            var uri = new Uri($"ws://localhost:{agentServerPort}/");
+            var uri = new Uri($"{AgentServerHost}:{agentServerPort}/");
             using var ws = new ClientWebSocket();
             // Cap the discovery call so a hung agent-server doesn't stall
             // the whole reconnect loop. The outer AgentBridgeClient loop
@@ -133,34 +143,66 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
 
             var root = JObject.Parse(responseText);
             string? name = root.Value<string>("name");
-            if (name != "discovery") return null;
+            if (name != "discovery")
+            {
+                return null;
+            }
             var inner = root["message"] as JObject;
-            if (inner == null) return null;
+            if (inner == null)
+            {
+                return null;
+            }
             string? type = inner.Value<string>("type");
             if (type == "invokeError")
             {
                 throw new InvalidOperationException(
                     inner.Value<string>("error") ?? "Discovery returned invokeError");
             }
-            if (type != "invokeResult") return null;
-            if (inner.Value<int?>("callId") != callId) return null;
+            if (type != "invokeResult")
+            {
+                return null;
+            }
+            if (inner.Value<int?>("callId") != callId)
+            {
+                return null;
+            }
             var result = inner["result"] as JObject;
-            if (result == null) return null;
-            // `port` is `int|null`; JObject returns null cleanly for both.
-            return result.Value<int?>("port");
+            if (result == null)
+            {
+                return null;
+            }
+            // `port` is `int|null` on the wire; clamp to the valid port
+            // range and surface anything else as "not registered".
+            int? portValue = result.Value<int?>("port");
+            if (portValue is int pv && pv > 0 && pv <= 65535)
+            {
+                return (uint)pv;
+            }
+            return null;
         }
 
         private static async Task<string> ReceiveFullMessageAsync(ClientWebSocket ws, CancellationToken cancellation)
         {
+            // 16KB receive chunk; we loop until EndOfMessage so this is a
+            // chunk size, not a hard message cap. The MaxDiscoveryResponseBytes
+            // guard below bounds the total payload to protect against a
+            // misbehaving peer streaming garbage.
             var buffer = new ArraySegment<byte>(new byte[16 * 1024]);
             var sb = new StringBuilder();
             WebSocketReceiveResult result;
+            int totalBytes = 0;
             do
             {
                 result = await ws.ReceiveAsync(buffer, cancellation).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     throw new InvalidOperationException("Discovery WS closed before response");
+                }
+                totalBytes += result.Count;
+                if (totalBytes > MaxDiscoveryResponseBytes)
+                {
+                    throw new InvalidOperationException(
+                        $"Discovery response exceeded {MaxDiscoveryResponseBytes} bytes; aborting");
                 }
                 sb.Append(Encoding.UTF8.GetString(buffer.Array!, 0, result.Count));
             } while (!result.EndOfMessage);

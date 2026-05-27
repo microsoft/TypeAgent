@@ -62,7 +62,7 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                     // have restarted on a different ephemeral port since the
                     // last loop iteration, and the standalone shell may have
                     // come up while we were retrying.
-                    int? resolved = ResolvePortOverride()
+                    uint? resolved = ResolvePortOverride()
                         ?? await BridgeDiscovery.ResolveBridgePortAsync(linked.Token).ConfigureAwait(false);
                     if (resolved is null)
                     {
@@ -72,7 +72,7 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
                     }
                     else
                     {
-                        port = resolved.Value;
+                        port = (int)resolved.Value;
                         await ConnectAndReceiveAsync(port, linked.Token).ConfigureAwait(false);
                     }
                 }
@@ -98,11 +98,14 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
         // Returns an explicit port override from `TYPEAGENT_VS_BRIDGE_PORT`,
         // or null when the env var is unset/malformed (caller falls through
         // to discovery). Mirrors `CODE_WEBSOCKET_HOST` from coda.
-        private static int? ResolvePortOverride()
+        private static uint? ResolvePortOverride()
         {
             string? raw = Environment.GetEnvironmentVariable(BridgePortOverrideEnv);
-            if (string.IsNullOrEmpty(raw)) return null;
-            if (int.TryParse(raw, out int p) && p > 0 && p <= 65535)
+            if (string.IsNullOrEmpty(raw))
+            {
+                return null;
+            }
+            if (uint.TryParse(raw, out uint p) && p > 0 && p <= 65535)
             {
                 Debug.WriteLine($"[TypeAgent] {BridgePortOverrideEnv} override active: {p}");
                 return p;
