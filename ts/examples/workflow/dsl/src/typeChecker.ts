@@ -348,12 +348,16 @@ function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
     if (target.kind !== source.kind) return false;
     switch (target.kind) {
         case "primitive": {
+            // Safe: the `target.kind !== source.kind` guard above proves
+            // source is also a PrimitiveType. Cast matches the pattern
+            // used by the object/array/tuple cases below.
             const s = source as PrimitiveType;
-            if (
-                (target.name === "integer" && s.name === "number") ||
-                (target.name === "number" && s.name === "integer")
-            )
-                return true;
+            // JSON Schema treats `integer` as a subtype of `number`:
+            // every integer satisfies a number schema, but a number may
+            // be fractional and so does NOT satisfy an integer schema.
+            // Assignability is therefore one-way: integer to number is
+            // allowed; number to integer is rejected.
+            if (target.name === "number" && s.name === "integer") return true;
             return target.name === s.name;
         }
         case "object": {
