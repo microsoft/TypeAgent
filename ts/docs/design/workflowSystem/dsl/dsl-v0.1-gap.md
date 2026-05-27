@@ -871,11 +871,17 @@ The two most common patterns are:
 
 ```typescript
 // early-return style — TypeScript: fine; DSL: hard error
-if (flag) { return r; }
+if (flag) {
+  return r;
+}
 return null;
 
 // full-symmetry style — both legal in TypeScript and DSL
-if (flag) { return r; } else { return null; }
+if (flag) {
+  return r;
+} else {
+  return null;
+}
 ```
 
 The DSL rejects the early-return style. It also rejects any switch where
@@ -904,13 +910,13 @@ Value-producing `if`/`switch` is legal when:
 
 ### Error diagnostics
 
-| Pattern | Error |
-|---------|-------|
-| Then-arm returns, no else arm | `Then-arm returns a value of type X but there is no else-arm.` |
-| Then-arm returns, else does not | `Then-arm returns a value … but the else-arm does not return.` |
-| Else-arm returns, then does not | `Else-arm returns a value … but the then-arm does not return.` |
-| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.` |
-| Switch arms return different types | `switch arms must return the same type: arm N returns 'X' but arm 1 returns 'Y'` |
+| Pattern                             | Error                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| Then-arm returns, no else arm       | `Then-arm returns a value of type X but there is no else-arm.`                   |
+| Then-arm returns, else does not     | `Then-arm returns a value … but the else-arm does not return.`                   |
+| Else-arm returns, then does not     | `Else-arm returns a value … but the then-arm does not return.`                   |
+| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.`                   |
+| Switch arms return different types  | `switch arms must return the same type: arm N returns 'X' but arm 1 returns 'Y'` |
 
 ### Examples
 

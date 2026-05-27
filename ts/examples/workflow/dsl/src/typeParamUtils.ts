@@ -163,7 +163,11 @@ function substituteMarkers(
                 resolvedRec[k] = resolveOne(v);
             }
             result[key] = resolvedRec;
-        } else if (key === "dependencies" && value && typeof value === "object") {
+        } else if (
+            key === "dependencies" &&
+            value &&
+            typeof value === "object"
+        ) {
             // `dependencies` values are either sub-schemas or string[]; only
             // recurse into the sub-schema case.
             const resolvedDeps: Record<string, unknown> = {};

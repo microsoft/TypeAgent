@@ -14,17 +14,17 @@ closed. This document records both the principle and the enforcement target.
 
 `outputSchema: {}` appears in two semantically different roles across the IR
 today, but the validator treats both identically as **"any"** — it skips all
-subtype checks when the producer schema is `{}`.  This is unsound for the
+subtype checks when the producer schema is `{}`. This is unsound for the
 second role.
 
-| Role | Example nodes | Semantics needed |
-|------|--------------|-----------------|
-| Pure CFG node, no consumer | `noop`, `merge` (no `bind`) | `{}` is irrelevant; skip silently ✓ |
+| Role                                  | Example nodes                        | Semantics needed                             |
+| ------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| Pure CFG node, no consumer            | `noop`, `merge` (no `bind`)          | `{}` is irrelevant; skip silently ✓          |
 | Bound producer, type not yet inferred | `BranchNode` with `bind`, arm scopes | `{}` means **unknown** — warn on path access |
-| Bound producer, type IS knowable | emitter gap (e.g. forkMap body) | Fix the emitter; emit the real schema |
+| Bound producer, type IS knowable      | emitter gap (e.g. forkMap body)      | Fix the emitter; emit the real schema        |
 
-The IR specification (§1.1) requires that *"every type check… is determinable
-from the IR alone, cheaply."* A `{}` on a bound producer makes that impossible:
+The IR specification (§1.1) requires that _"every type check… is determinable
+from the IR alone, cheaply."_ A `{}` on a bound producer makes that impossible:
 the validator cannot verify that downstream consumers use the value correctly.
 
 ---
@@ -75,11 +75,12 @@ Concretely:
         { "not": {} }   (never / bottom)
 ```
 
-`{}` is the **top type**: every other schema is a subtype of it.  Reading
-*from* the top type is the unsafe operation (you know nothing about the shape).
-Writing *to* the top type is always safe (anything is a subtype).
+`{}` is the **top type**: every other schema is a subtype of it. Reading
+_from_ the top type is the unsafe operation (you know nothing about the shape).
+Writing _to_ the top type is always safe (anything is a subtype).
 
 This mirrors TypeScript's `unknown`:
+
 - `T → unknown`: always safe ✓
 - `unknown → T`: requires narrowing (here: a concrete schema) — warn if absent
 
@@ -94,27 +95,28 @@ Two warning sites in `validate.ts`:
 
 ```typescript
 // checkStructuralSubtype (currently line ~2562)
-if (isTopSchema(consumer)) return;                     // still silent ✓
-if (isTopSchema(producer) && !isTopSchema(consumer)) { // was: silent skip
-    warnings.push({
-        path,
-        message:
-            `Producer schema is unconstrained ({}); cannot verify ` +
-            `assignability to ${formatSchemaType(consumer)}. ` +
-            `Add a concrete outputSchema to enable static checking.`,
-    });
-    return;
+if (isTopSchema(consumer)) return; // still silent ✓
+if (isTopSchema(producer) && !isTopSchema(consumer)) {
+  // was: silent skip
+  warnings.push({
+    path,
+    message:
+      `Producer schema is unconstrained ({}); cannot verify ` +
+      `assignability to ${formatSchemaType(consumer)}. ` +
+      `Add a concrete outputSchema to enable static checking.`,
+  });
+  return;
 }
 
 // resolveSchemaPath — when called with a non-empty path on a {} schema
 if (isTopSchema(schema) && path.length > 0) {
-    warnings.push({
-        path: refPath,
-        message:
-            `Path [${path.join(".")}] accessed on unconstrained schema ({}); ` +
-            `cannot verify the field exists at runtime.`,
-    });
-    return {};   // current behaviour preserved; warning added
+  warnings.push({
+    path: refPath,
+    message:
+      `Path [${path.join(".")}] accessed on unconstrained schema ({}); ` +
+      `cannot verify the field exists at runtime.`,
+  });
+  return {}; // current behaviour preserved; warning added
 }
 ```
 
@@ -127,10 +129,10 @@ on any bound producer. This requires two tracks:
 
 **Track A — immediately fixable (type already known):**
 
-| Site | Fix |
-|------|-----|
-| `forkMap` body `outputSchema` (emitter.ts ~2397) | Wire the already-computed `elementSchema` into `body.outputSchema` |
-| `fork` parallel branch body `outputSchema` (~2278) | Compute terminal node's outputSchema; same pattern as forkMap |
+| Site                                               | Fix                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `forkMap` body `outputSchema` (emitter.ts ~2397)   | Wire the already-computed `elementSchema` into `body.outputSchema` |
+| `fork` parallel branch body `outputSchema` (~2278) | Compute terminal node's outputSchema; same pattern as forkMap      |
 
 **Track B — requires G29 resolution (branch/arm types):**
 
@@ -148,13 +150,13 @@ G29 is resolved prescriptively here:
 
 Once Track A and B are done:
 
-| Site | Fix |
-|------|-----|
-| `if/else` branch `outputSchema` (~603) | Read from `_resolvedSchemas` at `s.loc.offset` |
-| `switch` branch `outputSchema` (~729) | Same |
-| Ternary branch `outputSchema` (~1419) | Read from `_resolvedSchemas` at `e.loc.offset` |
-| Arm `scope.outputSchema` (via `buildArmScope`) | Pass resolved type instead of `{}` |
-| Ternary literal identity wrappers (~1366, ~1397) | Infer from literal value's JSON Schema type |
+| Site                                             | Fix                                            |
+| ------------------------------------------------ | ---------------------------------------------- |
+| `if/else` branch `outputSchema` (~603)           | Read from `_resolvedSchemas` at `s.loc.offset` |
+| `switch` branch `outputSchema` (~729)            | Same                                           |
+| Ternary branch `outputSchema` (~1419)            | Read from `_resolvedSchemas` at `e.loc.offset` |
+| Arm `scope.outputSchema` (via `buildArmScope`)   | Pass resolved type instead of `{}`             |
+| Ternary literal identity wrappers (~1366, ~1397) | Infer from literal value's JSON Schema type    |
 
 ---
 
@@ -163,8 +165,8 @@ Once Track A and B are done:
 §4.1 pass 7 (type compatibility) should add a note:
 
 > A producer schema of `{}` (the universal top type) is treated as **unknown**
-> for validation purposes. Assignability *to* `{}` is unconditionally satisfied.
-> Assignability *from* `{}` to a typed consumer, or path projection on `{}`,
+> for validation purposes. Assignability _to_ `{}` is unconditionally satisfied.
+> Assignability _from_ `{}` to a typed consumer, or path projection on `{}`,
 > is a validation **error**. (During the transition period while emitter gaps
 > are being closed, this is a warning; it becomes an error once the DSL
 > compiler no longer emits `{}` on bound producers.)
@@ -175,7 +177,7 @@ Once Track A and B are done:
 
 - **Decision 0001 (bound outputs):** A node without `bind` has no addressable
   output. Its `outputSchema` is required by the IR grammar but is irrelevant to
-  consumers. The unknown semantics decision applies only to *bound* producers.
+  consumers. The unknown semantics decision applies only to _bound_ producers.
 - **G29 (branch arm output types):** Resolved prescriptively in §6 above.
   Same-type enforcement for if/switch arms, partial-return as type error, and
   result type storage in `_resolvedSchemas` are the three required type-checker

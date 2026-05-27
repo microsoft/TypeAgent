@@ -1546,7 +1546,15 @@ function validateScopeNodes(
                 validateBranchNode(node, path, nodeIds, tasks, ctx, errors);
                 break;
             case "loop":
-                validateLoopNode(node, path, nodeIds, nodes, tasks, ctx, errors);
+                validateLoopNode(
+                    node,
+                    path,
+                    nodeIds,
+                    nodes,
+                    tasks,
+                    ctx,
+                    errors,
+                );
                 break;
             case "fork":
                 validateForkNode(node, path, nodeIds, tasks, ctx, errors);
@@ -1827,8 +1835,6 @@ function validateNodeInputTemplates(
         );
     }
 }
-
-
 
 function validateWorkflowCallNode(
     node: WorkflowCallNode,
@@ -2565,9 +2571,24 @@ function validateScope(
         recoveryTriggerInputSchema: undefined,
     };
 
-    validateScopeNodes(scope.nodes, prefix, tasks, ctx, typeCtx, recoveryTriggerSchemas, errors);
+    validateScopeNodes(
+        scope.nodes,
+        prefix,
+        tasks,
+        ctx,
+        typeCtx,
+        recoveryTriggerSchemas,
+        errors,
+    );
     validateSchemaCompat(scope.nodes, prefix, errors, bindings);
-    validateScopeCFG(scope.nodes, scope.entry, prefix, errors, scope.output, `${basePath}.output`);
+    validateScopeCFG(
+        scope.nodes,
+        scope.entry,
+        prefix,
+        errors,
+        scope.output,
+        `${basePath}.output`,
+    );
 
     // Scope-level output template checks.
     if (scope.output) {
@@ -3270,7 +3291,6 @@ function isProvablyNarrowedTo(
     return false;
 }
 
-
 /**
  * Check that every binder of a phi-merged name produces a type
  * compatible with each consumer's expected type (pass 7 phi-merge).
@@ -3742,7 +3762,6 @@ function checkReservedTemplateKeys(
     }
 }
 
-
 /**
  * A reference extracted from a template expression (e.g. $from: "scope"
  * or $from: "state").
@@ -3904,7 +3923,6 @@ function validateSchemaCompat(
         }
     }
 }
-
 
 /**
  * Check all `$from "input"` and `$from "constant"` refs within a single

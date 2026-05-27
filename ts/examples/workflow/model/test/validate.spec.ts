@@ -7844,10 +7844,7 @@ describe("validateWorkflowIR", () => {
         it("rejects bound loop with body.outputSchema {}", () => {
             const ir = makeMinimalIR({
                 nodes: {
-                    start: makeLoopNode(
-                        { bind: "out" },
-                        { outputSchema: {} },
-                    ),
+                    start: makeLoopNode({ bind: "out" }, { outputSchema: {} }),
                 },
                 output: { $from: "scope", name: "out" },
             });
@@ -8198,19 +8195,19 @@ describe("validateWorkflowIR", () => {
                         workflows:
                             kind === "workflowCall"
                                 ? {
-                                    main,
-                                    helper: {
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { not: {} },
-                                        entry: "s",
-                                        nodes: {
-                                            s: makeTaskNode({
-                                                outputSchema: { not: {} },
-                                            }),
-                                        },
-                                        output: { $literal: {} },
-                                    },
-                                }
+                                      main,
+                                      helper: {
+                                          inputSchema: { type: "object" },
+                                          outputSchema: { not: {} },
+                                          entry: "s",
+                                          nodes: {
+                                              s: makeTaskNode({
+                                                  outputSchema: { not: {} },
+                                              }),
+                                          },
+                                          output: { $literal: {} },
+                                      },
+                                  }
                                 : { main },
                     };
                     const result = validateWorkflowIR(ir, taskMap("noop"));

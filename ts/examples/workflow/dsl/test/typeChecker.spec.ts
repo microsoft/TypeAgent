@@ -3,7 +3,11 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { TypeChecker, TypeError, typeInfoToSchema } from "../src/typeChecker.js";
+import {
+    TypeChecker,
+    TypeError,
+    typeInfoToSchema,
+} from "../src/typeChecker.js";
 import { TaskSchemaInfo } from "../src/emitter.js";
 import { compile } from "../src/compiler.js";
 
@@ -2399,10 +2403,7 @@ describe("TypeChecker.diagnoseMalformedEnums", () => {
                 name: "t.oneOf",
                 inputSchema: { type: "object" },
                 outputSchema: {
-                    oneOf: [
-                        { type: "string" },
-                        { type: "string", enum: [] },
-                    ],
+                    oneOf: [{ type: "string" }, { type: "string", enum: [] }],
                 },
             },
         ]);
@@ -2436,9 +2437,7 @@ describe("typeInfoToSchema: tuple lowering (review #5)", () => {
     });
 
     test("empty tuple emits a fixed-length zero array", () => {
-        expect(
-            typeInfoToSchema({ kind: "tuple", elements: [] }),
-        ).toEqual({
+        expect(typeInfoToSchema({ kind: "tuple", elements: [] })).toEqual({
             type: "array",
             items: [],
             minItems: 0,
@@ -2515,9 +2514,9 @@ describe("EnumType: boolean base (review #6)", () => {
         const checker = new TypeChecker(schemas);
         const errors = checker.checkAll(module.workflows);
         expect(errors.length).toBeGreaterThan(0);
-        expect(
-            errors.some((e) => e.message.includes("not assignable")),
-        ).toBe(true);
+        expect(errors.some((e) => e.message.includes("not assignable"))).toBe(
+            true,
+        );
     });
 });
 

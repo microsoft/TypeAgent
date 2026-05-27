@@ -547,9 +547,7 @@ function classifyEnumValues(values: unknown[]): EnumClassification {
         return { kind: "string", values: values as string[] };
     }
     if (values.every((v) => typeof v === "number")) {
-        const allIntegers = values.every((v) =>
-            Number.isInteger(v as number),
-        );
+        const allIntegers = values.every((v) => Number.isInteger(v as number));
         return {
             kind: "number",
             base: allIntegers ? "integer" : "number",
@@ -659,7 +657,11 @@ export class TypeChecker {
     static diagnoseMalformedEnums(
         taskSchemas: TaskSchemaInfo[],
     ): { taskName: string; path: string; reason: "empty" | "mixed" }[] {
-        const out: { taskName: string; path: string; reason: "empty" | "mixed" }[] = [];
+        const out: {
+            taskName: string;
+            path: string;
+            reason: "empty" | "mixed";
+        }[] = [];
         const walk = (
             schema: unknown,
             taskName: string,
@@ -706,7 +708,11 @@ export class TypeChecker {
                     );
                 }
             }
-            const recordKeys = ["properties", "patternProperties", "definitions"];
+            const recordKeys = [
+                "properties",
+                "patternProperties",
+                "definitions",
+            ];
             for (const k of recordKeys) {
                 const v = s[k];
                 if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -727,9 +733,7 @@ export class TypeChecker {
             }
             const items = s["items"];
             if (Array.isArray(items)) {
-                items.forEach((sub, i) =>
-                    walk(sub, taskName, `${path}[${i}]`),
-                );
+                items.forEach((sub, i) => walk(sub, taskName, `${path}[${i}]`));
             } else if (items) {
                 walk(items, taskName, `${path}[]`);
             }
@@ -1239,9 +1243,7 @@ export class TypeChecker {
                     defType.kind !== "unresolved";
                 const allArmsReturn =
                     armTypes.every((t) => t.kind !== "unresolved") &&
-                    (s.default_
-                        ? defType.kind !== "unresolved"
-                        : true);
+                    (s.default_ ? defType.kind !== "unresolved" : true);
                 if (anyArmReturns && !allArmsReturn) {
                     // Identify the first arm that doesn't return so the
                     // diagnostic points at concrete work, not just the
@@ -1263,7 +1265,9 @@ export class TypeChecker {
                     }
                     this.addError(
                         `Switch has arms that return a value but not all arms return ` +
-                            (firstSilent ? `(${firstSilent} does not return). ` : "") +
+                            (firstSilent
+                                ? `(${firstSilent} does not return). `
+                                : "") +
                             `All arms must return a value, or none should.`,
                         s.loc.line,
                         s.loc.col,
@@ -1275,7 +1279,11 @@ export class TypeChecker {
                 // enum discriminant (Q4).
                 let resultType: TypeInfo = UNRESOLVED;
                 const hasDefaultCoverage = s.default_ || exhaustiveByEnum;
-                if (allArmsReturn && hasDefaultCoverage && armTypes.length > 0) {
+                if (
+                    allArmsReturn &&
+                    hasDefaultCoverage &&
+                    armTypes.length > 0
+                ) {
                     const allTypes = s.default_
                         ? [...armTypes, defType]
                         : armTypes;
@@ -1288,9 +1296,10 @@ export class TypeChecker {
                             // #11: identify which arm disagrees with arm 0
                             // (or the default).  Arms are 1-indexed in
                             // diagnostics for author convenience.
-                            const otherLabel = s.default_ && i === allTypes.length - 1
-                                ? "default arm"
-                                : `arm ${i + 1}`;
+                            const otherLabel =
+                                s.default_ && i === allTypes.length - 1
+                                    ? "default arm"
+                                    : `arm ${i + 1}`;
                             this.addError(
                                 `switch arms must return the same type: ${otherLabel} returns '${typeName(allTypes[i]!)}' but arm 1 returns '${typeName(resultType)}'`,
                                 s.loc.line,
