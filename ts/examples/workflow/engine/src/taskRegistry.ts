@@ -1,8 +1,35 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TaskDefinition } from "workflow-model";
+import { JSONSchema, TaskDefinition, isGenericTask } from "workflow-model";
+import { resolveTypeParams } from "workflow-dsl";
 import { createAjv } from "./ajv.js";
+
+/**
+ * Get the effective input/output schemas for a task definition.
+ * For generic tasks, resolves templates using default type arguments.
+ */
+function getSchemas(task: TaskDefinition): {
+    inputSchema: JSONSchema;
+    outputSchema: JSONSchema;
+} {
+    if (isGenericTask(task)) {
+        const defaults = task.typeParameters.map((p) => p.default ?? {});
+        return {
+            inputSchema: resolveTypeParams(
+                task.inputSchemaTemplate,
+                task.typeParameters,
+                defaults,
+            ),
+            outputSchema: resolveTypeParams(
+                task.outputSchemaTemplate,
+                task.typeParameters,
+                defaults,
+            ),
+        };
+    }
+    return { inputSchema: task.inputSchema, outputSchema: task.outputSchema };
+}
 
 /**
  * In-memory registry for task definitions.
@@ -15,8 +42,9 @@ export class TaskRegistry {
         if (this.tasks.has(task.name)) {
             throw new Error(`Task "${task.name}" is already registered.`);
         }
+        const { inputSchema, outputSchema } = getSchemas(task);
         try {
-            this.ajv.compile(task.inputSchema);
+            this.ajv.compile(inputSchema);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             throw new Error(
@@ -24,7 +52,7 @@ export class TaskRegistry {
             );
         }
         try {
-            this.ajv.compile(task.outputSchema);
+            this.ajv.compile(outputSchema);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             throw new Error(

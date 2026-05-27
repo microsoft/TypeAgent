@@ -7,10 +7,14 @@
  * of any transitive runtime deps like `aiclient`).
  */
 
-import { getBuiltinTaskSchemas } from "workflow-engine/schemas";
+import {
+    getBuiltinTaskSchemas,
+    isGenericBuiltinSchema,
+} from "workflow-engine/schemas";
 import type { BuiltinTaskSchema } from "workflow-engine/schemas";
 
 export type TaskSchema = BuiltinTaskSchema;
+export { isGenericBuiltinSchema as isGenericTaskSchema };
 
 let cached: TaskSchema[] | undefined;
 

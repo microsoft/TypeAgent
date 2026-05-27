@@ -43,11 +43,17 @@ new surface area:
 13. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
+14. ~~**G29 + G30: `if`/`switch` as value producers.**~~ G30 (mixed-return errors) **DONE**; G29 (deprecate value-producing if/switch?) deferred pending `.wf` survey + G18.
 
 G1 (sub-workflow calls and cross-file composition) is now resolved; see its
 section below for the landed surface. G24-G28 capture follow-up design
 questions raised during the G1 implementation that have not yet been
-scheduled.
+scheduled. G29 and G30 are treated as a unified gap (see §G29+G30 below):
+both arise from the same root cause — `if`/`switch` statements trying to
+act as value-producing expressions in an SSA compiler without a CFG pass.
+G30 (mixed-return errors) is resolved; G29's open question (whether to
+deprecate value-producing `if`/`switch` in favour of ternary) is deferred
+pending a `.wf` survey and G18 (union types).
 
 Dependency spine:
 
@@ -853,3 +859,143 @@ runtime value is an integer ≥ 1 (the same constraint
   shape (param ref, const, arithmetic, task call) and a runtime test
   that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
   fork entry with a useful error pointing at the option name.
+
+## G29 + G30: value-producing `if`/`switch` — restricted symmetry
+
+**Status:** Mechanically sound; design open.
+
+### The gap
+
+In TypeScript, `if`/`switch` produce values implicitly through control flow.
+The two most common patterns are:
+
+```typescript
+// early-return style — TypeScript: fine; DSL: hard error
+if (flag) {
+  return r;
+}
+return null;
+
+// full-symmetry style — both legal in TypeScript and DSL
+if (flag) {
+  return r;
+} else {
+  return null;
+}
+```
+
+The DSL rejects the early-return style. It also rejects any switch where
+returning and non-returning arms are mixed. Both are hard errors.
+
+The restrictions exist because the DSL has no control-flow graph pass. It
+processes statements in order without look-ahead, so it cannot see that
+`if (flag) { return r; }` followed by `return null;` are meant to produce
+a single conditional value. Without that analysis, the then-arm's return
+would be silently dropped — a correctness bug. Rejecting the pattern is
+the only sound fix under the current architecture.
+
+### What is allowed
+
+Value-producing `if`/`switch` is legal when:
+
+1. **All arms return the same type.** Returning and non-returning arms
+   cannot be mixed; arm types cannot differ.
+
+2. **Coverage is complete.**
+   - `if`/`else`: both branches must return.
+   - `switch` with `default`: always covered.
+   - `switch` without `default`: discriminant must be an `EnumType` (from a
+     JSON Schema `enum` field) and every enum value must appear as a literal
+     case arm.
+
+### Error diagnostics
+
+| Pattern                             | Error                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| Then-arm returns, no else arm       | `Then-arm returns a value of type X but there is no else-arm.`                   |
+| Then-arm returns, else does not     | `Then-arm returns a value … but the else-arm does not return.`                   |
+| Else-arm returns, then does not     | `Else-arm returns a value … but the then-arm does not return.`                   |
+| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.`                   |
+| Switch arms return different types  | `switch arms must return the same type: arm N returns 'X' but arm 1 returns 'Y'` |
+
+### Examples
+
+**Exhaustive enum switch without `default` (Q4).** When the task output
+constrains a field with a JSON Schema `enum`, the type checker exposes
+that as an `EnumType` and treats the switch as value-producing without a
+`default`:
+
+```ts
+// test.classify returns { label: "low" | "medium" | "high" }
+workflow priority(text: string): string {
+    const c = test.classify(text: text);
+    switch (c.label) {       // enum discriminant
+        case "low":    return "L";
+        case "medium": return "M";
+        case "high":   return "H";
+    }
+}
+```
+
+**What does NOT count as exhaustive:**
+
+```ts
+// ❌ Missing enum value — `default` would be required.
+switch (c.label) {
+    case "low":    return "L";
+    case "medium": return "M";
+    // "high" is missing → switch is not exhaustive
+}
+
+// ❌ Non-literal arm — coverage cannot be proven statically.
+const target = "low";
+switch (c.label) {
+    case target:   return "L";   // variable, not literal
+    case "medium": return "M";
+    case "high":   return "H";
+}
+
+// ❌ Plain `string` discriminant — no enum constraint to exhaust.
+workflow test(x: string): string {
+    switch (x) {
+        case "a": return "A";
+        case "b": return "B";
+    }   // → not value-producing
+}
+```
+
+In each rejected case the switch is silently treated as non-value-producing
+(no error today). Attempting to bind its result downstream surfaces the
+missing schema. A future tightening may add an "expected exhaustive"
+warning surface backed by the structured `EnumExhaustivenessResult`
+returned by `isEnumExhaustive` (it distinguishes "missing value X" from
+"arm K is non-literal").
+
+### Design examination
+
+Three directions, each with a different tradeoff:
+
+**A — Keep current restrictions.**
+Simple invariant: value-producing `if`/`switch` requires full explicit
+symmetry. Users who want early-return style use ternary instead. The cost
+is that idiomatic TypeScript patterns become errors at the DSL boundary.
+
+**B — Pre-pass if-return fusion.**
+Before type-checking, fuse `if (cond) { …; return x; }` + `return y;`
+into a synthetic `if … else`. This restores the early-return idiom without
+a full CFG pass — only the narrow pattern of a bare `if` (no `else`)
+immediately followed by a `return` at the same scope level. Cost: a
+special-case pre-pass and more complex error attribution.
+
+**C — Remove value-producing `if`/`switch` entirely.**
+Make `return` inside an `if`/`switch` a type error. All conditional value
+production moves to ternary (`?:`). The language invariant becomes clean:
+expressions produce values, statements produce side effects. Cost: awkward
+when arms need multiple `const` bindings before returning (ternary can't
+span statements). Viable if a survey of `.wf` files shows no such patterns
+in practice. Also blocked on G18 (union types) — once arms can return
+different types, `if`/`switch` becomes strictly more expressive than ternary.
+
+**Current choice:** A, with C as the intended long-term direction.
+
+Related: G7 (branch arm covariance), G18 (union types).
