@@ -88,6 +88,16 @@ export function compile(
     return compileCheckedWorkflows(workflows, workflows, taskSchemas, options);
 }
 
+/**
+ * Shared post-load pipeline for both compile APIs.
+ *
+ * - `workflows` is the full set to type-check and emit.
+ * - `entryWorkflows` is the set used for entry selection.
+ *
+ * `compile` passes the full workflow set for both arguments.
+ * `compileFile` passes all loaded workflows for checking/emission but
+ * restricts entry selection to workflows declared in the entry file.
+ */
 function compileCheckedWorkflows(
     workflows: import("./ast.js").WorkflowDecl[],
     entryWorkflows: import("./ast.js").WorkflowDecl[],
