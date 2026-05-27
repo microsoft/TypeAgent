@@ -13,6 +13,7 @@ import * as path from "node:path";
 import {
     commands,
     ExtensionContext,
+    LogOutputChannel,
     window,
     workspace,
     TextDocument as VsTextDocument,
@@ -34,7 +35,7 @@ import {
 
 let client: LanguageClient | undefined;
 let clientReady: Promise<void> | undefined;
-let serverOutputChannel: import("vscode").LogOutputChannel | undefined;
+let serverOutputChannel: LogOutputChannel | undefined;
 
 /** A map from .wf URI → currently-open IR preview document. */
 const irPreviewDocs = new Map<string, VsTextDocument>();
