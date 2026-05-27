@@ -394,10 +394,7 @@ export class Emitter {
 
     // ---- Const binding ----
 
-    private emitConst(
-        stmt: ConstStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitConst(stmt: ConstStatement, scope: ScopeContext): void {
         const expr = stmt.value;
 
         // Check if the RHS is a pure literal (no task calls, no refs)
@@ -795,10 +792,7 @@ export class Emitter {
 
     // ---- Throw statement ----
 
-    private emitThrow(
-        stmt: ThrowStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitThrow(stmt: ThrowStatement, scope: ScopeContext): void {
         const valueTemplate = this.emitExpr(stmt.value, scope);
         const nodeId = this.freshId("throw");
         const node: TaskNode = {
