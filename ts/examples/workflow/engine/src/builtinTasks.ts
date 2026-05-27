@@ -308,13 +308,13 @@ export const llmGenerateJson: GenericTaskDefinition<
         const outSchema = ctx.outputSchema;
         const jsonSchema =
             outSchema &&
-                typeof outSchema !== "boolean" &&
-                Object.keys(outSchema).length > 0
+            typeof outSchema !== "boolean" &&
+            Object.keys(outSchema).length > 0
                 ? {
-                    name: "response",
-                    strict: true as const,
-                    schema: sealObjects(outSchema) as Record<string, unknown>,
-                }
+                      name: "response",
+                      strict: true as const,
+                      schema: sealObjects(outSchema) as Record<string, unknown>,
+                  }
                 : undefined;
         const result = await model.complete(
             input.prompt,

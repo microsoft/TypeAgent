@@ -8243,19 +8243,19 @@ describe("validateWorkflowIR", () => {
                         workflows:
                             kind === "workflowCall"
                                 ? {
-                                    main,
-                                    helper: {
-                                        inputSchema: { type: "object" },
-                                        outputSchema: { not: {} },
-                                        entry: "s",
-                                        nodes: {
-                                            s: makeTaskNode({
-                                                outputSchema: { not: {} },
-                                            }),
-                                        },
-                                        output: { $literal: {} },
-                                    },
-                                }
+                                      main,
+                                      helper: {
+                                          inputSchema: { type: "object" },
+                                          outputSchema: { not: {} },
+                                          entry: "s",
+                                          nodes: {
+                                              s: makeTaskNode({
+                                                  outputSchema: { not: {} },
+                                              }),
+                                          },
+                                          output: { $literal: {} },
+                                      },
+                                  }
                                 : { main },
                     };
                     const result = validateWorkflowIR(ir, taskMap("noop"));

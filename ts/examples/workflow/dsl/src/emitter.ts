@@ -587,30 +587,30 @@ export class Emitter {
         const thenArm =
             thenScope.nodeOrder.length > 0
                 ? this.buildArmScope(
-                    thenScope,
-                    resultBind !== undefined
-                        ? (thenOutput ?? null)
-                        : undefined,
-                    resultBind !== undefined ? resultSchema : undefined,
-                )
+                      thenScope,
+                      resultBind !== undefined
+                          ? (thenOutput ?? null)
+                          : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
+                  )
                 : resultBind !== undefined && thenOutput !== undefined
-                    ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
-                    : this.makeNoopArm();
+                  ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
+                  : this.makeNoopArm();
 
         const falseArm =
             elseScope && elseScope.nodeOrder.length > 0
                 ? this.buildArmScope(
-                    elseScope,
-                    resultBind !== undefined
-                        ? (elseOutput ?? null)
-                        : undefined,
-                    resultBind !== undefined ? resultSchema : undefined,
-                )
+                      elseScope,
+                      resultBind !== undefined
+                          ? (elseOutput ?? null)
+                          : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
+                  )
                 : resultBind !== undefined &&
                     elseOutput !== undefined &&
                     elseScope
-                    ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
-                    : this.makeNoopArm();
+                  ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
+                  : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
         // treated as an implicit enum [true, false] by the validator,
@@ -722,20 +722,20 @@ export class Emitter {
             cases[caseKey] =
                 armScope.nodeOrder.length > 0
                     ? this.buildArmScope(
-                        armScope,
-                        resultBind !== undefined ? armOutput : undefined,
-                        resultBind !== undefined ? resultSchema : undefined,
-                    )
+                          armScope,
+                          resultBind !== undefined ? armOutput : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
+                      )
                     : this.makeNoopArm();
         }
         if (hasSourceDefault) {
             defaultArm =
                 defScope!.nodeOrder.length > 0
                     ? this.buildArmScope(
-                        defScope!,
-                        resultBind !== undefined ? defOutput : undefined,
-                        resultBind !== undefined ? resultSchema : undefined,
-                    )
+                          defScope!,
+                          resultBind !== undefined ? defOutput : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
+                      )
                     : this.makeNoopArm();
         }
 
@@ -1169,17 +1169,17 @@ export class Emitter {
         const genericResolved: ResolvedTaskSchemas | undefined =
             schema && isGenericSchema(schema)
                 ? (this.resolvedSchemas.get(expr.loc.offset) ??
-                    resolveGenericSchemas(schema, []))
+                  resolveGenericSchemas(schema, []))
                 : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
             inputSchema: concreteSchema?.inputSchema ??
                 genericResolved?.inputSchema ?? {
-                type: "object",
-                required: ["left", "right"],
-                properties: { left: {}, right: {} },
-            },
+                    type: "object",
+                    required: ["left", "right"],
+                    properties: { left: {}, right: {} },
+                },
             outputSchema:
                 concreteSchema?.outputSchema ??
                 genericResolved?.outputSchema ??
@@ -1259,17 +1259,17 @@ export class Emitter {
         const genericResolved: ResolvedTaskSchemas | undefined =
             schema && isGenericSchema(schema)
                 ? (this.resolvedSchemas.get(expr.loc.offset) ??
-                    resolveGenericSchemas(schema, []))
+                  resolveGenericSchemas(schema, []))
                 : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
             inputSchema: concreteSchema?.inputSchema ??
                 genericResolved?.inputSchema ?? {
-                type: "object",
-                required: ["value"],
-                properties: { value: {} },
-            },
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
             outputSchema:
                 concreteSchema?.outputSchema ??
                 genericResolved?.outputSchema ??
@@ -2309,20 +2309,20 @@ export class Emitter {
                     : undefined;
                 const outputBind =
                     lastNode &&
-                        (lastNode.kind === "task" ||
-                            lastNode.kind === "loop" ||
-                            lastNode.kind === "fork" ||
-                            lastNode.kind === "forkMap" ||
-                            lastNode.kind === "branch" ||
-                            lastNode.kind === "workflowCall") &&
-                        lastNode.bind
+                    (lastNode.kind === "task" ||
+                        lastNode.kind === "loop" ||
+                        lastNode.kind === "fork" ||
+                        lastNode.kind === "forkMap" ||
+                        lastNode.kind === "branch" ||
+                        lastNode.kind === "workflowCall") &&
+                    lastNode.bind
                         ? lastNode.bind
                         : undefined;
                 branchOutput = outputBind
                     ? ({
-                        $from: "scope",
-                        name: outputBind,
-                    } as unknown as Template)
+                          $from: "scope",
+                          name: outputBind,
+                      } as unknown as Template)
                     : null;
             }
 
@@ -2337,9 +2337,9 @@ export class Emitter {
                         type: "object",
                         ...(outer.required.length > 0
                             ? {
-                                required: outer.required,
-                                properties: outer.properties,
-                            }
+                                  required: outer.required,
+                                  properties: outer.properties,
+                              }
                             : {}),
                     },
                     entry: branchScope.nodeOrder[0] ?? "",
@@ -2428,20 +2428,20 @@ export class Emitter {
                 : undefined;
             const outputBind =
                 lastNode &&
-                    (lastNode.kind === "task" ||
-                        lastNode.kind === "loop" ||
-                        lastNode.kind === "fork" ||
-                        lastNode.kind === "forkMap" ||
-                        lastNode.kind === "branch" ||
-                        lastNode.kind === "workflowCall") &&
-                    lastNode.bind
+                (lastNode.kind === "task" ||
+                    lastNode.kind === "loop" ||
+                    lastNode.kind === "fork" ||
+                    lastNode.kind === "forkMap" ||
+                    lastNode.kind === "branch" ||
+                    lastNode.kind === "workflowCall") &&
+                lastNode.bind
                     ? lastNode.bind
                     : undefined;
             bodyOutput = outputBind
                 ? ({
-                    $from: "scope",
-                    name: outputBind,
-                } as unknown as Template)
+                      $from: "scope",
+                      name: outputBind,
+                  } as unknown as Template)
                 : null;
         }
 
@@ -2487,9 +2487,9 @@ export class Emitter {
         const inputs: Record<string, Template> = {};
         const paramNames = schema
             ? Object.keys(
-                ((schema.inputSchema as Record<string, unknown>)
-                    .properties as Record<string, unknown>) ?? {},
-            )
+                  ((schema.inputSchema as Record<string, unknown>)
+                      .properties as Record<string, unknown>) ?? {},
+              )
             : [];
 
         // Single object-literal arg: unwrap entries into named inputs
@@ -2785,9 +2785,9 @@ export class Emitter {
                 type: "object",
                 ...(outer.required.length > 0
                     ? {
-                        required: outer.required,
-                        properties: outer.properties,
-                    }
+                          required: outer.required,
+                          properties: outer.properties,
+                      }
                     : {}),
             },
             entry: childScope.nodeOrder[0] ?? "",
@@ -2935,11 +2935,7 @@ export class Emitter {
                 node.state,
             );
         } else if (node.kind === "forkMap") {
-            this.patchAndRecurseScope(
-                node.body,
-                node.inputs ?? {},
-                parentCtx,
-            );
+            this.patchAndRecurseScope(node.body, node.inputs ?? {}, parentCtx);
         } else if (node.kind === "fork") {
             for (const branch of Object.values(node.branches)) {
                 this.patchAndRecurseScope(

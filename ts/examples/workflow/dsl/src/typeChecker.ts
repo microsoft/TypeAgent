@@ -189,10 +189,10 @@ function isUnresolved(t: TypeInfo): boolean {
 export type EnumExhaustivenessResult =
     | { exhaustive: true }
     | {
-        exhaustive: false;
-        missingValues: readonly (string | number | boolean)[];
-        nonLiteralArmIndex?: number;
-    };
+          exhaustive: false;
+          missingValues: readonly (string | number | boolean)[];
+          nonLiteralArmIndex?: number;
+      };
 
 /**
  * Returns whether `arms` exhaustively cover every value in `discType`.
@@ -227,10 +227,10 @@ function isEnumExhaustive(
     }
     return firstNonLiteral !== undefined
         ? {
-            exhaustive: false,
-            missingValues: missing,
-            nonLiteralArmIndex: firstNonLiteral,
-        }
+              exhaustive: false,
+              missingValues: missing,
+              nonLiteralArmIndex: firstNonLiteral,
+          }
         : { exhaustive: false, missingValues: missing };
 }
 
@@ -452,7 +452,7 @@ export function formatType(t: TypeInfo): string {
 
 class Scope {
     private bindings = new Map<string, TypeInfo>();
-    constructor(private parent?: Scope) { }
+    constructor(private parent?: Scope) {}
 
     get(name: string): TypeInfo | undefined {
         return this.bindings.get(name) ?? this.parent?.get(name);
@@ -1024,7 +1024,7 @@ export class TypeChecker {
         if (thenReturns && !hasElseBlock) {
             this.addError(
                 `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
-                `Add an explicit else block or use a ternary expression.`,
+                    `Add an explicit else block or use a ternary expression.`,
                 line,
                 col,
             );
@@ -1033,7 +1033,7 @@ export class TypeChecker {
         if (thenReturns) {
             this.addError(
                 `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
-                `Both arms must return a value, or neither should.`,
+                    `Both arms must return a value, or neither should.`,
                 line,
                 col,
             );
@@ -1042,7 +1042,7 @@ export class TypeChecker {
         // elseReturns && !thenReturns
         this.addError(
             `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
-            `Both arms must return a value, or neither should.`,
+                `Both arms must return a value, or neither should.`,
             line,
             col,
         );
@@ -1271,10 +1271,10 @@ export class TypeChecker {
                     }
                     this.addError(
                         `Switch has arms that return a value but not all arms return ` +
-                        (firstSilent
-                            ? `(${firstSilent} does not return). `
-                            : "") +
-                        `All arms must return a value, or none should.`,
+                            (firstSilent
+                                ? `(${firstSilent} does not return). `
+                                : "") +
+                            `All arms must return a value, or none should.`,
                         s.loc.line,
                         s.loc.col,
                     );
@@ -1815,10 +1815,10 @@ export class TypeChecker {
                         e.op === "+"
                             ? "math.add"
                             : e.op === "-"
-                                ? "math.subtract"
-                                : e.op === "*"
-                                    ? "math.multiply"
-                                    : "math.modulo";
+                              ? "math.subtract"
+                              : e.op === "*"
+                                ? "math.multiply"
+                                : "math.modulo";
                     const opSchema = this.taskSchemaMap.get(taskName);
                     if (opSchema && isGenericSchema(opSchema)) {
                         const resolved = resolveGenericSchemas(opSchema, [
