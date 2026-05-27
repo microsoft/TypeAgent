@@ -1294,6 +1294,28 @@ requestId?)`.
   automatically inherits the `completion` promise via the same wire
   split.
 
+**Pitfall: local short-circuits must explicitly fire `commandComplete`.**
+
+Any wrapper that intercepts `submitCommand` and returns a synthesized
+`{ok:true, entry, completion}` _without_ routing through the in-dispatcher
+command pipeline (which is where `commandComplete` is normally emitted by
+`commandHandlerContext`) must explicitly fire
+`clientIO.notify(rid, "commandComplete", { result }, source)` for the
+synthesized `entry.requestId`. Otherwise an RPC client's
+completion promise — synthesized by `dispatcherClient.attachCompletion`
+from the `commandComplete` push event — will never resolve and any
+caller awaiting it (e.g. `awaitCommand`, `MessageGroup`'s pending bubble)
+will hang forever. The in-process `completion: Promise.resolve(...)`
+the wrapper returns is stripped by `dispatcherServer.toWire` and
+replaced on the client side, so it is not a substitute. The Shell's
+`@shell run` / `@shell run interactive` short-circuit in
+`packages/shell/src/main/instance.ts` is the canonical example: it
+synthesizes a `QueuedRequest` with `state: "succeeded"` and a
+matching `RequestId`, then calls `clientIO.notify(rid,
+"commandComplete", { result: null }, "shell")` before returning. The
+RPC client's `settledEarly` correlation map absorbs the notify if it
+arrives ahead of the submit RPC reply.
+
 **Note.** The internal helpers named `processCommand` and
 `processCommandNoLock` inside
 `packages/dispatcher/dispatcher/src/command/command.ts` (the in-dispatcher
