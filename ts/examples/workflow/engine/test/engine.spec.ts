@@ -490,7 +490,7 @@ function makeA4IR(): WorkflowIR {
                                     index: { type: "integer" },
                                 },
                             },
-                            outputSchema: {},
+                            outputSchema: { type: "string" },
                             inputs: {
                                 list: { $from: "input", name: "repos" },
                                 index: { $from: "state", name: "i" },
@@ -3112,7 +3112,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.slow",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },
@@ -4036,7 +4036,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -4093,7 +4093,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
                     },
@@ -4312,7 +4312,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -4342,7 +4342,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "test.echo",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     return {
                         kind: "ok" as const,
@@ -4365,7 +4365,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "string" },
                         inputs: {
                             value: {
                                 $from: "scope",
@@ -4607,7 +4607,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {
                             data: {
                                 $literal: {
@@ -5364,7 +5364,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },
@@ -5446,7 +5446,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.slow200",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },

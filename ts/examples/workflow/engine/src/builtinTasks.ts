@@ -308,13 +308,13 @@ export const llmGenerateJson: GenericTaskDefinition<
         const outSchema = ctx.outputSchema;
         const jsonSchema =
             outSchema &&
-            typeof outSchema !== "boolean" &&
-            Object.keys(outSchema).length > 0
+                typeof outSchema !== "boolean" &&
+                Object.keys(outSchema).length > 0
                 ? {
-                      name: "response",
-                      strict: true as const,
-                      schema: sealObjects(outSchema) as Record<string, unknown>,
-                  }
+                    name: "response",
+                    strict: true as const,
+                    schema: sealObjects(outSchema) as Record<string, unknown>,
+                }
                 : undefined;
         const result = await model.complete(
             input.prompt,
@@ -680,7 +680,7 @@ export const mathSubtract: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    ...taskSchema("math.subtract"),
+    ...genericTaskSchema("math.subtract"),
     sideEffects: false,
     async execute(input) {
         return { kind: "ok", output: input.left - input.right };
@@ -691,7 +691,7 @@ export const mathMultiply: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    ...taskSchema("math.multiply"),
+    ...genericTaskSchema("math.multiply"),
     sideEffects: false,
     async execute(input) {
         return { kind: "ok", output: input.left * input.right };
@@ -713,7 +713,7 @@ export const mathModulo: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    ...taskSchema("math.modulo"),
+    ...genericTaskSchema("math.modulo"),
     sideEffects: false,
     async execute(input) {
         return { kind: "ok", output: input.left % input.right };
@@ -721,7 +721,7 @@ export const mathModulo: TaskDefinition<
 };
 
 export const mathNegate: TaskDefinition<{ value: number }, number> = {
-    ...taskSchema("math.negate"),
+    ...genericTaskSchema("math.negate"),
     sideEffects: false,
     async execute(input) {
         return { kind: "ok", output: -input.value };

@@ -175,23 +175,34 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "math.subtract",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.multiply",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
+        // Division is intentionally NOT generic: integer / integer
+        // can produce a non-integer (e.g. 1 / 2 = 0.5), so the
+        // output cannot be narrowed to integer from integer operands.
         name: "math.divide",
         inputSchema: {
             type: "object",
@@ -202,21 +213,26 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "math.modulo",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.negate",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["value"],
-            properties: { value: { type: "number" } },
+            properties: { value: { $typeParam: "N" } },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.floor",

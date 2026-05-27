@@ -4242,12 +4242,13 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        // ---- Top schema ({}) lenient behavior ----
+        // ---- Top schema ({}) consumer-side rejection ----
 
-        it("accepts top-schema producer feeding constrained consumer (lenient)", () => {
-            // A task with outputSchema {} (unknown/unconstrained) produces a
-            // value consumed by a task expecting { type: "string" }. The
-            // validator is lenient: can't prove incompatibility from {}.
+        it("rejects top-schema producer feeding constrained consumer", () => {
+            // A task with outputSchema {} (unknown/top) produces a value
+            // consumed by a task expecting { type: "string" }. Per
+            // Decision 0011, reading an unknown value as a typed value is
+            // unsound and is rejected at the consumer site.
             const ir = makeMinimalIR({
                 nodes: {
                     producer: {
@@ -4285,7 +4286,12 @@ describe("validateWorkflowIR", () => {
                 entry: "producer",
             });
             const result = validateWorkflowIR(ir);
-            expect(result.valid).toBe(true);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    /resolves to \{\} \(unknown\)/.test(e.message),
+                ),
+            ).toBe(true);
         });
 
         it("accepts top-schema consumer receiving constrained producer", () => {
@@ -7769,44 +7775,29 @@ describe("validateWorkflowIR", () => {
         });
     });
 
-    // ---- Decision 0011: bound `{}` producer enforcement ----
+    // ---- Decision 0011: `{}` = unknown semantics ----
     //
-    // A bound producer (any node with `bind` set) must declare a concrete
-    // `outputSchema`. An empty schema `{}` is treated as `unknown` (not `any`)
-    // and is rejected. These tests pin the enforcement at every node kind
-    // that can carry `bind` + `outputSchema`.
+    // A bound producer may legally publish `outputSchema: {}` (the top
+    // type, i.e. "unknown"). The value is opaque: only consumers whose
+    // expected schema is also `{}` (i.e., accept unknown) may read it.
+    // These tests pin:
+    //   1. bound `{}` producers are accepted (no producer-side rejection)
+    //      at every node kind that can carry `bind` + `outputSchema`; and
+    //   2. reading from a `{}` producer into a typed consumer is rejected
+    //      with the consumer-side "schema is {} (unknown)" diagnostic.
 
-    describe("Decision 0011: bound `{}` producer rejection", () => {
-        // Matches the canonical message shape emitted by
-        // checkBoundProducerSchema:
-        //   Bound <kind> "<bind>" [...] has <field> {} (unknown). ...
-        // The regex is intentionally loose on the parenthesized context so
-        // that contextual additions (task name, workflow ref) do not break
-        // tests; semantic substructure ("Bound <kind> ... <field> ...")
-        // is still checked.
-        const boundEmptyMessage = (
-            kind: string,
-            bind: string,
-            field: string = "outputSchema",
-        ): RegExp =>
-            new RegExp(
-                `Bound ${kind} "${bind}".* has ${field.replace(
-                    /\./g,
-                    "\\.",
-                )} \\{\\} \\(unknown\\)`,
-            );
-        const expectBoundEmptyError = (
-            result: { errors: { message: string }[] },
-            kind: string,
-            bind: string,
-            field: string = "outputSchema",
-        ): void => {
-            const re = boundEmptyMessage(kind, bind, field);
-            expect(result.errors.some((e) => re.test(e.message))).toBe(true);
-        };
+    describe("Decision 0011: `{}` = unknown semantics", () => {
+        // Matches the consumer-side diagnostic emitted by
+        // checkUnknownAssignability when a template resolves to {} and is
+        // read into a typed slot.
+        const unknownConsumerRe =
+            /resolves to \{\} \(unknown\); not assignable to/;
 
-        it("rejects bound task with outputSchema {}", () => {
+        // 1) Producer-side: bound `{}` is accepted (no "Bound …" rejection).
+
+        it("accepts bound task with outputSchema {}", () => {
             const ir = makeMinimalIR({
+                outputSchema: {},
                 nodes: {
                     start: makeTaskNode({
                         bind: "out",
@@ -7815,12 +7806,12 @@ describe("validateWorkflowIR", () => {
                 },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "task", "out");
+            expect(result.valid).toBe(true);
         });
 
-        it("rejects bound branch with outputSchema {}", () => {
+        it("accepts bound branch with outputSchema {}", () => {
             const ir = makeMinimalIR({
+                outputSchema: {},
                 nodes: {
                     start: {
                         kind: "branch",
@@ -7837,24 +7828,24 @@ describe("validateWorkflowIR", () => {
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "branch", "out");
+            expect(result.valid).toBe(true);
         });
 
-        it("rejects bound loop with body.outputSchema {}", () => {
+        it("accepts bound loop with body.outputSchema {}", () => {
             const ir = makeMinimalIR({
+                outputSchema: {},
                 nodes: {
                     start: makeLoopNode({ bind: "out" }, { outputSchema: {} }),
                 },
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "loop", "out", "body.outputSchema");
+            expect(result.valid).toBe(true);
         });
 
-        it("rejects bound fork with outputSchema {}", () => {
+        it("accepts bound fork with outputSchema {}", () => {
             const ir = makeMinimalIR({
+                outputSchema: {},
                 nodes: {
                     start: {
                         kind: "fork",
@@ -7891,12 +7882,12 @@ describe("validateWorkflowIR", () => {
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "fork", "out");
+            expect(result.valid).toBe(true);
         });
 
-        it("rejects bound forkMap with outputSchema {}", () => {
+        it("accepts bound forkMap with outputSchema {}", () => {
             const ir = makeMinimalIR({
+                outputSchema: {},
                 nodes: {
                     start: {
                         kind: "forkMap",
@@ -7929,11 +7920,10 @@ describe("validateWorkflowIR", () => {
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "forkMap", "out");
+            expect(result.valid).toBe(true);
         });
 
-        it("rejects bound workflowCall with outputSchema {}", () => {
+        it("accepts bound workflowCall with outputSchema {} when callee returns {}", () => {
             const ir: WorkflowIR = {
                 kind: "workflow",
                 version: "1",
@@ -7941,7 +7931,7 @@ describe("validateWorkflowIR", () => {
                 workflows: {
                     main: {
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         entry: "callHelper",
                         nodes: {
                             callHelper: {
@@ -7957,7 +7947,7 @@ describe("validateWorkflowIR", () => {
                     },
                     helper: {
                         inputSchema: { type: "object" },
-                        outputSchema: { type: "object" },
+                        outputSchema: {},
                         entry: "step",
                         nodes: {
                             step: makeTaskNode({ bind: "out" }),
@@ -7967,13 +7957,11 @@ describe("validateWorkflowIR", () => {
                 },
             };
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            expect(result.valid).toBe(false);
-            expectBoundEmptyError(result, "workflowCall", "result");
+            expect(result.valid).toBe(true);
         });
 
-        it("accepts unbound task with outputSchema {} (no bind → no enforcement)", () => {
-            // Unbound nodes may legally retain {} since their output is
-            // not addressable by name in any template.
+        it("accepts unbound task with outputSchema {}", () => {
+            // Unbound nodes have no addressable output, so {} is moot.
             const ir = makeMinimalIR({
                 nodes: {
                     start: makeTaskNode({
@@ -7988,10 +7976,70 @@ describe("validateWorkflowIR", () => {
                 output: { $from: "scope", name: "out" },
             });
             const result = validateWorkflowIR(ir, taskMap("noop"));
-            // Should not produce any "Bound …" rejection.
+            expect(result.valid).toBe(true);
+        });
+
+        // 2) Consumer-side: reading a `{}` producer into a typed slot errors.
+
+        it("rejects feeding bound `{}` producer into a typed workflow output", () => {
+            // Workflow declares outputSchema { type: "object" } but its
+            // output references a bound `{}` producer \u2014 the unknown value
+            // is not assignable to the typed consumer.
+            const ir = makeMinimalIR({
+                outputSchema: { type: "object" },
+                nodes: {
+                    start: makeTaskNode({
+                        bind: "out",
+                        outputSchema: {},
+                    }),
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) => /^Bound \w+/.test(e.message)),
-            ).toBe(false);
+                result.errors.some((e) => unknownConsumerRe.test(e.message)),
+            ).toBe(true);
+        });
+
+        it("rejects feeding bound `{}` producer into a typed task input", () => {
+            const ir = makeMinimalIR({
+                outputSchema: {},
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "opaque",
+                        inputSchema: { type: "object" },
+                        outputSchema: {},
+                        inputs: {},
+                        bind: "p",
+                        next: "consumer",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "typed",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            text: { $from: "scope", name: "p" },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "producer",
+            });
+            const result = validateWorkflowIR(
+                ir,
+                taskMap("opaque", "typed", "noop"),
+            );
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => unknownConsumerRe.test(e.message)),
+            ).toBe(true);
         });
     });
 
@@ -8195,19 +8243,19 @@ describe("validateWorkflowIR", () => {
                         workflows:
                             kind === "workflowCall"
                                 ? {
-                                      main,
-                                      helper: {
-                                          inputSchema: { type: "object" },
-                                          outputSchema: { not: {} },
-                                          entry: "s",
-                                          nodes: {
-                                              s: makeTaskNode({
-                                                  outputSchema: { not: {} },
-                                              }),
-                                          },
-                                          output: { $literal: {} },
-                                      },
-                                  }
+                                    main,
+                                    helper: {
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { not: {} },
+                                        entry: "s",
+                                        nodes: {
+                                            s: makeTaskNode({
+                                                outputSchema: { not: {} },
+                                            }),
+                                        },
+                                        output: { $literal: {} },
+                                    },
+                                }
                                 : { main },
                     };
                     const result = validateWorkflowIR(ir, taskMap("noop"));

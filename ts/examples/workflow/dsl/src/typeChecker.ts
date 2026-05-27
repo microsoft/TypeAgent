@@ -189,10 +189,10 @@ function isUnresolved(t: TypeInfo): boolean {
 export type EnumExhaustivenessResult =
     | { exhaustive: true }
     | {
-          exhaustive: false;
-          missingValues: readonly (string | number | boolean)[];
-          nonLiteralArmIndex?: number;
-      };
+        exhaustive: false;
+        missingValues: readonly (string | number | boolean)[];
+        nonLiteralArmIndex?: number;
+    };
 
 /**
  * Returns whether `arms` exhaustively cover every value in `discType`.
@@ -227,10 +227,10 @@ function isEnumExhaustive(
     }
     return firstNonLiteral !== undefined
         ? {
-              exhaustive: false,
-              missingValues: missing,
-              nonLiteralArmIndex: firstNonLiteral,
-          }
+            exhaustive: false,
+            missingValues: missing,
+            nonLiteralArmIndex: firstNonLiteral,
+        }
         : { exhaustive: false, missingValues: missing };
 }
 
@@ -452,7 +452,7 @@ export function formatType(t: TypeInfo): string {
 
 class Scope {
     private bindings = new Map<string, TypeInfo>();
-    constructor(private parent?: Scope) {}
+    constructor(private parent?: Scope) { }
 
     get(name: string): TypeInfo | undefined {
         return this.bindings.get(name) ?? this.parent?.get(name);
@@ -1024,7 +1024,7 @@ export class TypeChecker {
         if (thenReturns && !hasElseBlock) {
             this.addError(
                 `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
-                    `Add an explicit else block or use a ternary expression.`,
+                `Add an explicit else block or use a ternary expression.`,
                 line,
                 col,
             );
@@ -1033,7 +1033,7 @@ export class TypeChecker {
         if (thenReturns) {
             this.addError(
                 `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
-                    `Both arms must return a value, or neither should.`,
+                `Both arms must return a value, or neither should.`,
                 line,
                 col,
             );
@@ -1042,7 +1042,7 @@ export class TypeChecker {
         // elseReturns && !thenReturns
         this.addError(
             `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
-                `Both arms must return a value, or neither should.`,
+            `Both arms must return a value, or neither should.`,
             line,
             col,
         );
@@ -1174,8 +1174,14 @@ export class TypeChecker {
                 // none return a value (statement form). Mixed arms silently
                 // drop the returning arm's value — a correctness bug.
                 const hasElse = !!(s.else_ && s.else_.length > 0);
-                const thenReturns = thenType.kind !== "unresolved";
-                const elseReturns = elseType.kind !== "unresolved";
+                // A `throw` (type `never`) diverges and does not produce a
+                // value the caller can observe — treat it like a non-returning
+                // arm so `if (x) throw ...; return v;` is well-formed without
+                // an explicit else.
+                const thenReturns =
+                    thenType.kind !== "unresolved" && thenType.kind !== "never";
+                const elseReturns =
+                    elseType.kind !== "unresolved" && elseType.kind !== "never";
                 this.reportIfReturnAsymmetry(
                     thenType,
                     elseType,
@@ -1265,10 +1271,10 @@ export class TypeChecker {
                     }
                     this.addError(
                         `Switch has arms that return a value but not all arms return ` +
-                            (firstSilent
-                                ? `(${firstSilent} does not return). `
-                                : "") +
-                            `All arms must return a value, or none should.`,
+                        (firstSilent
+                            ? `(${firstSilent} does not return). `
+                            : "") +
+                        `All arms must return a value, or none should.`,
                         s.loc.line,
                         s.loc.col,
                     );
@@ -1792,18 +1798,30 @@ export class TypeChecker {
                         e.right.loc.col,
                     );
                 }
-                // math.add is generic in N; when both operands are integer
-                // resolve the concrete schemas and cache for the emitter.
+                // Generic math ops (math.add/subtract/multiply/modulo)
+                // are generic in N; when both operands are integer,
+                // resolve the concrete schemas and cache for the emitter
+                // so the bound result type narrows to integer.
+                // Division is excluded: integer / integer can produce a
+                // non-integer value, so its output type is always number.
                 if (
-                    e.op === "+" &&
+                    e.op !== "/" &&
                     left.kind === "primitive" &&
                     left.name === "integer" &&
                     right.kind === "primitive" &&
                     right.name === "integer"
                 ) {
-                    const addSchema = this.taskSchemaMap.get("math.add");
-                    if (addSchema && isGenericSchema(addSchema)) {
-                        const resolved = resolveGenericSchemas(addSchema, [
+                    const taskName =
+                        e.op === "+"
+                            ? "math.add"
+                            : e.op === "-"
+                                ? "math.subtract"
+                                : e.op === "*"
+                                    ? "math.multiply"
+                                    : "math.modulo";
+                    const opSchema = this.taskSchemaMap.get(taskName);
+                    if (opSchema && isGenericSchema(opSchema)) {
+                        const resolved = resolveGenericSchemas(opSchema, [
                             { type: "integer" },
                         ]);
                         this._resolvedSchemas.set(e.loc.offset, resolved);
@@ -1899,6 +1917,22 @@ export class TypeChecker {
                         e.operand.loc.line,
                         e.operand.loc.col,
                     );
+                }
+                // math.negate is generic in N; when the operand is an
+                // integer, resolve and cache the concrete schemas so the
+                // result type narrows to integer.
+                if (
+                    operand.kind === "primitive" &&
+                    operand.name === "integer"
+                ) {
+                    const negSchema = this.taskSchemaMap.get("math.negate");
+                    if (negSchema && isGenericSchema(negSchema)) {
+                        const resolved = resolveGenericSchemas(negSchema, [
+                            { type: "integer" },
+                        ]);
+                        this._resolvedSchemas.set(e.loc.offset, resolved);
+                        return { kind: "primitive", name: "integer" };
+                    }
                 }
                 return NUMBER;
         }
