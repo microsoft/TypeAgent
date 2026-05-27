@@ -99,8 +99,8 @@ export function compile(
  * restricts entry selection to workflows declared in the entry file.
  */
 function compileCheckedWorkflows(
-    workflows: import("./ast.js").WorkflowDecl[],
-    entryWorkflows: import("./ast.js").WorkflowDecl[],
+    workflows: WorkflowDecl[],
+    entryWorkflows: WorkflowDecl[],
     taskSchemas: TaskSchemaInfo[],
     options?: CompileOptions,
 ): CompileResult {
