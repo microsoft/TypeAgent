@@ -27,14 +27,16 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format, FormatOptions } from "../src/formatter.js";
+import { FormatOptions } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { WorkflowDecl, IfStatement, SwitchStatement } from "../src/ast.js";
 
 function parse(src: string): WorkflowDecl {
     const { tokens, comments, errors: lexErrors } = lex(src);
     expect(lexErrors).toEqual([]);
     const p = new Parser(tokens, comments);
-    const { ast, errors } = p.parseSingle();
+    const { module: __m, errors } = p.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;

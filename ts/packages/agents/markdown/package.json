@@ -57,7 +57,7 @@
     "telemetry": "workspace:*",
     "typechat": "^0.1.1",
     "unist-util-visit": "^4.1.2",
-    "ws": "^8.20.1",
+    "ws": "^8.21.0",
     "y-prosemirror": "^1.2.3",
     "y-protocols": "^1.0.5",
     "y-websocket": "^3.0.0",

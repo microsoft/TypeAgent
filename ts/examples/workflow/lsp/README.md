@@ -24,10 +24,10 @@ Standard LSP capabilities:
 
 TypeAgent custom requests:
 
-| Method                  | Params            | Result                                                            |
-| ----------------------- | ----------------- | ----------------------------------------------------------------- |
-| `workflow/compileIR`    | `{ uri: string }` | `{ ir?, errors: { phase, message, line, col }[] }`                |
-| `workflow/previewGraph` | `{ uri: string }` | `{ graph?: GraphModel, errors: { phase, message, line, col }[] }` |
+| Method                  | Params            | Result                                                                                                    |
+| ----------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `workflow/compileIR`    | `{ uri: string }` | `{ ir?, errors: { phase, message, line, col }[] }`                                                        |
+| `workflow/previewGraph` | `{ uri: string }` | `{ graph?: GraphModel, graphs?: { name, graph: GraphModel }[], errors: { phase, message, line, col }[] }` |
 
 `GraphModel` is re-exported from `workflow-dsl` and is covered by a
 snapshot test (`test/graphShape.spec.ts`) so editors can rely on the

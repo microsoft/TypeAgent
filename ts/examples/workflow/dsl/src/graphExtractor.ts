@@ -31,6 +31,7 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    TypeExpr,
 } from "./ast.js";
 import { decodeStringLiteral } from "./literal.js";
 
@@ -763,7 +764,7 @@ class GraphExtractor {
         }
     }
 
-    private typeToString(type: import("./ast.js").TypeExpr): string {
+    private typeToString(type: TypeExpr): string {
         switch (type.kind) {
             case "NamedType":
                 return type.name;

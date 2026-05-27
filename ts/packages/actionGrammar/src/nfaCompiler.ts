@@ -69,63 +69,163 @@ interface RuleCompilationContext {
 }
 
 /**
- * Extract completion metadata (actionName and variable→propertyPath map) from a value expression.
- * Only works for ActionExpression values; other expression types are ignored.
+ * Extract completion metadata from a rule's value expression.
+ *
+ * Returns:
+ *  - `actionName`: present when the top-level value is an ActionExpression
+ *    (canonical action shape `{ actionName, parameters }`).  Undefined for
+ *    plain object values like `{ name, artist }`, array values, or expressions.
+ *  - `propertyPaths`: variable-name → dotted-property-path the variable
+ *    populates within the value object.  For action values the paths are
+ *    rooted at `parameters.X`; for plain object/array values they are rooted
+ *    at the property/index path directly (no `parameters.` prefix).
  */
 function extractCompletionMetadata(expr: ValueExpression): {
     actionName?: string;
     propertyPaths: Map<string, string>;
 } {
     const propertyPaths = new Map<string, string>();
-    if (expr.type !== "action") {
-        return { propertyPaths };
+    if (expr.type === "action") {
+        for (const [paramName, paramExpr] of expr.parameters) {
+            collectVariablePaths(
+                paramExpr,
+                `parameters.${paramName}`,
+                propertyPaths,
+            );
+        }
+        return { actionName: expr.actionName, propertyPaths };
     }
-    const actionName = expr.actionName;
-    // Walk parameters to find variable references
-    for (const [paramName, paramExpr] of expr.parameters) {
-        collectVariablePaths(
-            paramExpr,
-            `parameters.${paramName}`,
-            propertyPaths,
-        );
-    }
-    return { actionName, propertyPaths };
+    // Plain object / array / variable / expression — no actionName, walk
+    // any variable references and emit raw property paths.
+    collectVariablePaths(expr, "", propertyPaths);
+    return { propertyPaths };
+}
+
+function joinPath(prefix: string, segment: string): string {
+    return prefix.length === 0 ? segment : `${prefix}.${segment}`;
 }
 
 /**
  * Recursively collect variable name → property path mappings from a value expression.
+ *
+ * Handles both legacy ValueExpression shape (variableName/properties/elements/
+ * parameters) and the new CompiledValueExprNode shapes (binaryExpression,
+ * memberExpression, callExpression, conditionalExpression, unaryExpression,
+ * templateLiteral, spreadElement, plus object/array nodes with `value` field
+ * carrying spread entries).  Unknown node types are ignored — completion
+ * metadata is best-effort.
  */
 function collectVariablePaths(
     expr: ValueExpression,
     currentPath: string,
     result: Map<string, string>,
 ): void {
-    switch (expr.type) {
-        case "variable":
-            if (expr.variableName) {
-                result.set(expr.variableName, currentPath);
+    if (!expr || typeof expr !== "object") return;
+    const node = expr as any;
+    switch (node.type) {
+        case "variable": {
+            const name = node.variableName ?? node.name;
+            if (name) {
+                result.set(name, currentPath);
             }
             break;
-        case "object":
-            for (const [key, value] of expr.properties) {
-                collectVariablePaths(value, `${currentPath}.${key}`, result);
+        }
+        case "object": {
+            // Legacy: properties is a Map.
+            if (node.properties instanceof Map) {
+                for (const [key, value] of node.properties) {
+                    collectVariablePaths(
+                        value,
+                        joinPath(currentPath, key),
+                        result,
+                    );
+                }
+                break;
+            }
+            // Compiled: value is an array of {type:"property"|"spread", key, value, argument}.
+            if (Array.isArray(node.value)) {
+                for (const elem of node.value) {
+                    if (!elem) continue;
+                    if (elem.type === "spread") {
+                        collectVariablePaths(
+                            elem.argument,
+                            currentPath,
+                            result,
+                        );
+                    } else if (elem.value === null && elem.key) {
+                        // Shorthand `{ k }` — variable named k bound at path
+                        // joinPath(currentPath, k).
+                        result.set(elem.key, joinPath(currentPath, elem.key));
+                    } else if (elem.key !== undefined) {
+                        collectVariablePaths(
+                            elem.value,
+                            joinPath(currentPath, elem.key),
+                            result,
+                        );
+                    }
+                }
             }
             break;
-        case "array":
+        }
+        case "array": {
             // Don't append array index — completion metadata uses the base
             // parameter name (e.g. "parameters.artists" not "parameters.artists[0]")
-            for (let i = 0; i < expr.elements.length; i++) {
-                collectVariablePaths(expr.elements[i], currentPath, result);
+            const items = node.elements ?? node.value;
+            if (Array.isArray(items)) {
+                for (const elem of items) {
+                    if (elem && elem.type === "spreadElement") {
+                        collectVariablePaths(
+                            elem.argument,
+                            currentPath,
+                            result,
+                        );
+                    } else {
+                        collectVariablePaths(elem, currentPath, result);
+                    }
+                }
             }
             break;
+        }
         case "action":
-            for (const [key, value] of expr.parameters) {
+            for (const [key, value] of node.parameters) {
                 collectVariablePaths(
                     value,
-                    `${currentPath}.parameters.${key}`,
+                    joinPath(currentPath, `parameters.${key}`),
                     result,
                 );
             }
+            break;
+        case "binaryExpression":
+            collectVariablePaths(node.left, currentPath, result);
+            collectVariablePaths(node.right, currentPath, result);
+            break;
+        case "unaryExpression":
+            collectVariablePaths(node.argument, currentPath, result);
+            break;
+        case "conditionalExpression":
+            collectVariablePaths(node.test, currentPath, result);
+            collectVariablePaths(node.consequent, currentPath, result);
+            collectVariablePaths(node.alternate, currentPath, result);
+            break;
+        case "memberExpression":
+            collectVariablePaths(node.object, currentPath, result);
+            break;
+        case "callExpression":
+            if (Array.isArray(node.arguments)) {
+                for (const a of node.arguments) {
+                    collectVariablePaths(a, currentPath, result);
+                }
+            }
+            break;
+        case "templateLiteral":
+            if (Array.isArray(node.expressions)) {
+                for (const e of node.expressions) {
+                    collectVariablePaths(e, currentPath, result);
+                }
+            }
+            break;
+        case "spreadElement":
+            collectVariablePaths(node.argument, currentPath, result);
             break;
     }
 }
@@ -899,9 +999,23 @@ function compileStringPart(
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
     // compare correctly against the normalized input tokens from tokenizeRequest().
-    const normalized = part.value
-        .map(normalizeToken)
-        .filter((t) => t.length > 0);
+    // `display` keeps the original grammar tokens (case + punctuation preserved)
+    // index-aligned with `normalized`; completion uses these so output reflects
+    // how the keyword was written ("hello," not "hello").
+    //
+    // A grammar segment may carry *internal* whitespace when the author used
+    // escape-space (`hello\ world` parses as one segment with the space
+    // embedded).  We keep that as a single transition so completion can
+    // surface it as one string ("hello world"); the runtime walker handles
+    // the multi-input-token case by joining consecutive input tokens with
+    // a single space and comparing against the segment's normalized form.
+    const pairs: { norm: string; display: string }[] = [];
+    for (const raw of part.value) {
+        const n = normalizeToken(raw);
+        if (n.length > 0) pairs.push({ norm: n, display: raw });
+    }
+    const normalized = pairs.map((p) => p.norm);
+    const display = pairs.map((p) => p.display);
 
     if (normalized.length === 0) {
         // Empty string - epsilon transition
@@ -920,10 +1034,13 @@ function compileStringPart(
     // segments, so we emit one token transition for the concatenated form.
     if (spacingMode === "none") {
         const fused = normalized.join("");
+        const fusedDisplay = display.join("");
         builder.addTokenTransition(
             fromState,
             toState,
             [fused],
+            [fusedDisplay],
+            spacingMode,
             captureSlotIndex,
             captureSlotValue,
         );
@@ -947,6 +1064,8 @@ function compileStringPart(
             fromState,
             toState,
             normalized,
+            display,
+            spacingMode,
             captureSlotIndex,
             captureSlotValue,
         );
@@ -968,11 +1087,19 @@ function compileStringPart(
                 currentState,
                 nextState,
                 [token],
+                [display[i]],
+                spacingMode,
                 captureSlotIndex,
                 captureSlotValue,
             );
         } else {
-            builder.addTokenTransition(currentState, nextState, [token]);
+            builder.addTokenTransition(
+                currentState,
+                nextState,
+                [token],
+                [display[i]],
+                spacingMode,
+            );
         }
         currentState = nextState;
     }
@@ -1121,13 +1248,17 @@ function compileWildcardPartWithSlots(
         context.checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 
-    // Completion metadata for checked wildcards
-    const completionActionName = isChecked
-        ? context.completionActionName
-        : undefined;
-    const completionPropertyPath = isChecked
-        ? context.completionPropertyPaths?.get(variableName)
-        : undefined;
+    // Completion metadata.  The `isChecked` flag controls *matching*
+    // (whether input is validated against an entity type), not *completion*
+    // (whether the wildcard surfaces as a property the agent can fill).
+    // The canonical matcher emits a property completion for ANY frontier
+    // wildcard when the enclosing rule's action references the variable —
+    // checked entity slots and free-form wildcards alike.  We mirror that
+    // here by populating the completion annotations regardless of
+    // `isChecked`.
+    const completionActionName = context.completionActionName;
+    const completionPropertyPath =
+        context.completionPropertyPaths?.get(variableName);
 
     if (part.optional) {
         // Optional wildcard: can skip via epsilon or match one or more tokens
@@ -1366,10 +1497,10 @@ function compileRulesPartWithSlots(
     // Annotate nested entry state with completion metadata from parent context
     // This allows the completion system to identify property completions
     // when the user types a prefix that reaches a nested rules reference
-    if (effectiveVariable && context.completionActionName) {
+    if (effectiveVariable) {
         const propertyPath =
             context.completionPropertyPaths?.get(effectiveVariable);
-        if (propertyPath) {
+        if (propertyPath !== undefined) {
             const entryState = builder.getState(nestedEntry);
             entryState.completionActionName = context.completionActionName;
             entryState.completionPropertyPath = propertyPath;

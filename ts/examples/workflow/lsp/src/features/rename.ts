@@ -10,7 +10,7 @@ import {
     ResponseError,
     ErrorCodes,
 } from "vscode-languageserver/node.js";
-import { getParsed } from "../parsedDocument.js";
+import { getParsed, findWorkflowAt } from "../parsedDocument.js";
 import { findReferenceAt, type SymbolDef } from "../symbolResolver.js";
 import { pointRange } from "../util/position.js";
 
@@ -33,7 +33,7 @@ function defAt(
     position: Position,
 ): { def: SymbolDef; range: Range } | null {
     const parsed = getParsed(doc);
-    if (!parsed.ast || !parsed.symbols) return null;
+    if (parsed.workflows.length === 0) return null;
     const symbols = parsed.symbols;
 
     const line1 = position.line + 1;
@@ -83,13 +83,15 @@ export function computeRename(
     if (!hit) return null;
 
     const parsed = getParsed(doc);
-    if (!parsed.symbols) return null;
+    if (parsed.workflows.length === 0) return null;
     const def = hit.def;
 
-    // Reject if the new name is already declared in the same scope.
-    const conflict = parsed.symbols.defs.find(
-        (d) => d !== def && d.name === newName,
-    );
+    // Reject if the new name is already declared in the same workflow.
+    // Cross-workflow name collisions are intentionally allowed: two
+    // workflows can have independent locals/params with the same name.
+    const ownerWf = findWorkflowAt(parsed, def.loc.line, def.loc.col);
+    const conflictPool = ownerWf?.symbols.defs ?? parsed.symbols.defs;
+    const conflict = conflictPool.find((d) => d !== def && d.name === newName);
     if (conflict) {
         throw new ResponseError(
             ErrorCodes.InvalidRequest,

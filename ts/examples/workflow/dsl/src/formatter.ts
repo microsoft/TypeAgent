@@ -24,6 +24,8 @@
 
 import {
     WorkflowDecl,
+    Module,
+    ImportDecl,
     ParamDecl,
     TypeExpr,
     Statement,
@@ -37,6 +39,7 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    ObjectType,
 } from "./ast.js";
 import { quoteStringLiteral } from "./literal.js";
 
@@ -67,8 +70,12 @@ interface ResolvedOptions {
     keepBlankLines: boolean;
 }
 
-/** Format a single workflow declaration as DSL source text. */
-export function format(decl: WorkflowDecl, options?: FormatOptions): string {
+/**
+ * Format a parsed `Module` (imports plus one or more workflow
+ * declarations) back to DSL source text. This is the canonical
+ * formatter entry point.
+ */
+export function formatModule(module: Module, options?: FormatOptions): string {
     const opts: ResolvedOptions = {
         indent: options?.indent ?? 4,
         eol: options?.eol ?? "\n",
@@ -77,7 +84,7 @@ export function format(decl: WorkflowDecl, options?: FormatOptions): string {
     };
     validateFormatOptions(opts);
     const p = new Printer(opts);
-    p.printWorkflow(decl);
+    p.printModule(module);
     return p.toString();
 }
 
@@ -378,10 +385,50 @@ class Printer {
         }
     }
 
+    // ---- Module / imports ----
+
+    /**
+     * Emit a complete module: any imports first, then each workflow
+     * declaration separated by a blank line. A blank line also
+     * separates the imports block from the first workflow when both
+     * are present.
+     */
+    printModule(module: Module): void {
+        for (const imp of module.imports) {
+            this.printImport(imp);
+        }
+        if (module.imports.length > 0 && module.workflows.length > 0) {
+            this.newline();
+        }
+        module.workflows.forEach((wf, i) => {
+            if (i > 0) this.newline();
+            this.printWorkflow(wf);
+        });
+    }
+
+    /**
+     * Emit a single `import { name, other as alias } from "./path";`
+     * declaration. Leading comments attached to the import are emitted
+     * on their own lines above the statement.
+     */
+    private printImport(decl: ImportDecl): void {
+        this.printLeadingComments(decl.leadingComments);
+        this.write("import { ");
+        decl.names.forEach((s, i) => {
+            if (i > 0) this.write(", ");
+            this.write(s.name);
+            if (s.alias !== undefined) this.write(` as ${s.alias}`);
+        });
+        this.write(" } from ");
+        this.write(quoteStringLiteral(decl.source));
+        this.line(";");
+    }
+
     // ---- Workflow ----
 
     printWorkflow(decl: WorkflowDecl): void {
         this.printLeadingComments(decl.leadingComments);
+        if (decl.exported) this.write("export ");
         this.write(`workflow ${decl.name}(`);
         this.printParamList(decl, decl.params, decl.paramInnerComments);
         this.write("): ");
@@ -559,7 +606,7 @@ class Printer {
      * param lists: comments force multi-line; otherwise preserve the
      * source layout unless overflow forces a switch.
      */
-    private printObjectType(t: import("./ast.js").ObjectType): void {
+    private printObjectType(t: ObjectType): void {
         const hasFieldComments = t.fields.some(
             (f) => f.leadingComments?.length || f.trailingComments?.length,
         );
@@ -592,7 +639,7 @@ class Printer {
         this.write("}");
     }
 
-    private writeObjectTypeInline(t: import("./ast.js").ObjectType): void {
+    private writeObjectTypeInline(t: ObjectType): void {
         if (t.fields.length === 0) {
             this.write("{}");
             return;
@@ -835,7 +882,16 @@ class Printer {
                 return;
             }
             case "TaskCallExpr": {
-                this.write(`${e.task}(`);
+                this.write(`${e.task}`);
+                if (e.typeArgs && e.typeArgs.length > 0) {
+                    this.write("<");
+                    for (let i = 0; i < e.typeArgs.length; i++) {
+                        if (i > 0) this.write(", ");
+                        this.printType(e.typeArgs[i]!);
+                    }
+                    this.write(">");
+                }
+                this.write("(");
                 this.printArgs(e.args);
                 this.write(")");
                 return;

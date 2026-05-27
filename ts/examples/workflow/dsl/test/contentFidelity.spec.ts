@@ -42,7 +42,8 @@ import { fileURLToPath } from "url";
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { formatModule } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,13 +61,36 @@ function parseAndFormat(src: string): string {
         );
     }
     const p = new Parser(tokens, comments);
-    const { ast, errors } = p.parseSingle();
+    const { module: __m, errors } = p.parseModule();
+    const ast = __m.workflows[0];
     if (errors.length > 0) {
         throw new Error(
             `parse errors: ${errors.map((e) => e.message).join(", ")}`,
         );
     }
     return format(ast!);
+}
+
+/**
+ * Multi-workflow round-trip: parse as a Module (imports + multiple
+ * workflows) and re-emit via `formatModule`. Used for fixtures that
+ * contain `import` or `export`.
+ */
+function parseAndFormatModule(src: string): string {
+    const { tokens, errors: lexErrors, comments } = lex(src);
+    if (lexErrors.length > 0) {
+        throw new Error(
+            `lex errors: ${lexErrors.map((e) => e.message).join(", ")}`,
+        );
+    }
+    const p = new Parser(tokens, comments);
+    const { module, errors } = p.parseModule();
+    if (errors.length > 0) {
+        throw new Error(
+            `parse errors: ${errors.map((e) => e.message).join(", ")}`,
+        );
+    }
+    return formatModule(module);
 }
 
 interface Multiset {
@@ -134,12 +158,20 @@ function multisetDiff(
 }
 
 function assertDataFidelity(src: string, label: string): void {
-    const formatted = parseAndFormat(src);
+    const formatted = isModuleSource(src)
+        ? parseAndFormatModule(src)
+        : parseAndFormat(src);
     const before = dataMultisetOf(src);
     const after = dataMultisetOf(formatted);
     const diff = multisetDiff(label, before, after);
     if (diff) throw new Error(diff);
     expect(true).toBe(true);
+}
+
+/** A source is a Module source (must use parseModule/formatModule) iff
+ *  it contains `import` or `export` at statement position. */
+function isModuleSource(src: string): boolean {
+    return /^\s*(import|export)\b/m.test(src);
 }
 
 function tokenStreamDiff(
@@ -373,9 +405,8 @@ describe("content fidelity (data): examples/*.wf preserve all identifiers, liter
     for (const f of files) {
         test(`example: ${f}`, () => {
             const src = fs.readFileSync(path.join(EXAMPLES_DIR, f), "utf8");
-            // Parse first to confirm the example is well-formed. Any
-            // tokens beyond the first workflow are out of scope for the
-            // formatter (parseSingle reads one workflow).
+            // Parse first to confirm the example is well-formed. The
+            // single/multi-workflow split is handled by assertDataFidelity.
             assertDataFidelity(src, f);
         });
     }
@@ -591,7 +622,8 @@ describe("documented canonicalizations: trailing comma on multi-line lists", () 
             Array.from({ length: 20 }, (_, i) => `p${i}: string`).join(", ") +
             `): string {\n    return p0;\n}\n`;
         const { tokens, comments } = lex(src);
-        const { ast } = new Parser(tokens, comments).parseSingle();
+        const { module } = new Parser(tokens, comments).parseModule();
+        const ast = module.workflows[0];
         const out = format(ast!, { printWidth: Infinity });
         // Still one line — no trailing comma inserted because we stayed inline.
         expect(out).toContain("p19: string)");

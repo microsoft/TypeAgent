@@ -14,16 +14,16 @@ function parseWf(source: string): WorkflowDecl {
         );
     }
     const parser = new Parser(tokens);
-    const ast = parser.parse();
-    if (ast.errors.length > 0) {
+    const { module, errors } = parser.parseModule();
+    if (errors.length > 0) {
         throw new Error(
-            `Parse errors: ${ast.errors.map((e: { message: string }) => e.message).join(", ")}`,
+            `Parse errors: ${errors.map((e: { message: string }) => e.message).join(", ")}`,
         );
     }
-    if (ast.workflows.length === 0) {
+    if (module.workflows.length === 0) {
         throw new Error("No workflow found");
     }
-    return ast.workflows[0];
+    return module.workflows[0];
 }
 
 function extract(source: string): GraphModel {

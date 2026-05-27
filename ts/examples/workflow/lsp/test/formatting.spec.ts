@@ -66,3 +66,31 @@ describe("formatDocumentRange", () => {
         expect(edits).toEqual([]);
     });
 });
+
+describe("formatting — multi-workflow", () => {
+    it("formats every workflow in a multi-workflow file", () => {
+        const src = `workflow a(  x:string  ):string{const y=x;return y;}\nworkflow b(  n:integer  ):integer{const m=n;return m;}\n`;
+        const edits = formatDocument(doc(src));
+        expect(edits.length).toBe(1);
+        const newText = edits[0]!.newText;
+        // Both workflows must appear in the formatted output, each with
+        // canonical spacing — a single-workflow formatter would emit
+        // only the first one.
+        expect(newText).toContain("workflow a(x: string): string");
+        expect(newText).toContain("workflow b(n: integer): integer");
+    });
+
+    it("returns no edits when a multi-workflow file is already canonical", () => {
+        const canonical =
+            "workflow a(x: string): string {\n" +
+            "    const y = x;\n" +
+            "    return y;\n" +
+            "}\n" +
+            "\n" +
+            "workflow b(n: integer): integer {\n" +
+            "    const m = n;\n" +
+            "    return m;\n" +
+            "}\n";
+        expect(formatDocument(doc(canonical))).toEqual([]);
+    });
+});

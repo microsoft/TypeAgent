@@ -30,9 +30,9 @@ export function generateDynamicSchema(
     }
 
     const tools = [...workflows.values()].map((ir) => ({
-        name: ir.name,
+        name: ir.entry,
         description: ir.description,
-        inputSchema: ir.inputSchema,
+        inputSchema: ir.workflows[ir.entry].inputSchema,
     }));
 
     const parsed = parseToolsJsonSchema(tools, "WorkflowAction", {
