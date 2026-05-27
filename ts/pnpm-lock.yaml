@@ -1784,6 +1784,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -3297,6 +3300,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../../../dispatcher/types
       chat-ui:
         specifier: workspace:*
         version: link:../../../../chat-ui

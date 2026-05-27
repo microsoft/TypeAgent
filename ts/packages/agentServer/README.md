@@ -41,7 +41,7 @@ Each WebSocket connection multiplexes independent JSON-RPC channels:
 | Channel                       | Direction       | Purpose                                                                           |
 | ----------------------------- | --------------- | --------------------------------------------------------------------------------- |
 | `agent-server`                | client → server | Conversation lifecycle: `joinConversation`, `leaveConversation`, CRUD, `shutdown` |
-| `dispatcher:<conversationId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.                          |
+| `dispatcher:<conversationId>` | client → server | Commands: `submitCommand`, `getCommandCompletion`, etc.                           |
 | `clientio:<conversationId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.                     |
 
 The dispatcher and clientIO channels are namespaced by `conversationId`, allowing a single WebSocket connection to participate in multiple conversations simultaneously.

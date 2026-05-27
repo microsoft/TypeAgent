@@ -195,11 +195,19 @@ async function createLiveDispatcher(
                 /* ignore */
             }
 
-            const result = await dispatcher.processCommand(command);
+            const submit = await dispatcher.submitCommand(command);
+            if (!submit.ok) {
+                throw new Error(
+                    submit.error === "queue_full"
+                        ? `Queue full (maxDepth=${submit.maxDepth})`
+                        : "Server stopping",
+                );
+            }
+            const result = await submit.completion;
 
             // Poll for display output. Script execution results arrive
-            // asynchronously through the agent RPC layer — processCommand
-            // resolves but display entries may still be in flight.
+            // asynchronously through the agent RPC layer — submitCommand's
+            // completion resolves but display entries may still be in flight.
             // Poll until the display log stabilizes (no new entries for 1s)
             // or we hit a 15s timeout.
             const pollStart = Date.now();

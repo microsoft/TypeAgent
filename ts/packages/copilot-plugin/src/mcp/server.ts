@@ -19,6 +19,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher, IAgentMessage } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     createClientIO,
@@ -233,7 +234,7 @@ class TypeAgentMcpServer {
             });
 
             dispatcher = await connectToTypeAgent(clientIO);
-            const result = await dispatcher.processCommand(command);
+            const result = await awaitCommand(dispatcher, command);
 
             if (result?.lastError) {
                 return toolResult(`Error: ${result.lastError}`);

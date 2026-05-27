@@ -328,29 +328,23 @@ export function createDispatcherFromContext(
         get connectionId() {
             return connectionId;
         },
-        processCommand(
+        async submitCommand(
             command,
-            clientRequestId,
             attachments,
             options,
+            clientRequestId,
             requestId,
         ) {
-            const entry = context.requestQueue.submit(
-                submitInput(
-                    command,
-                    clientRequestId,
-                    attachments,
-                    options,
-                    requestId,
-                ),
-            );
-            return entry.completion;
-        },
-        async submitCommand(command, attachments, options, clientRequestId) {
             let entry;
             try {
                 entry = context.requestQueue.submit(
-                    submitInput(command, clientRequestId, attachments, options),
+                    submitInput(
+                        command,
+                        clientRequestId,
+                        attachments,
+                        options,
+                        requestId,
+                    ),
                 );
             } catch (e) {
                 if (e instanceof QueueFullError) {
@@ -365,12 +359,16 @@ export function createDispatcherFromContext(
                 }
                 throw e;
             }
-            void entry.completion.catch(() => {
-                // Ack-only callers don't await; swallow rejections so the
-                // drain loop's rejection (or shutdown abandon) doesn't surface
-                // as unhandledRejection. Other awaiters keep their own catch.
-            });
-            return { ok: true, entry: wireCopy(entry) };
+            // Defensive: keep an absorbing handler so a caller that ignores
+            // `completion` doesn't surface as unhandledRejection on drain
+            // failure or shutdown abandon. Callers that DO await `completion`
+            // see rejections normally via their own handler.
+            void entry.completion.catch(() => {});
+            return {
+                ok: true,
+                entry: wireCopy(entry),
+                completion: entry.completion,
+            };
         },
         async getQueueSnapshot() {
             return context.requestQueue.getSnapshot();
@@ -394,9 +392,7 @@ export function createDispatcherFromContext(
                 }
                 throw e;
             }
-            void entry.completion.catch(() => {
-                // ack-only; see submitCommand
-            });
+            void entry.completion.catch(() => {});
             // Cancel any previously-running entry, using the snapshot taken
             // *after* the unshift so we don't cancel the interrupting entry.
             const snap = context.requestQueue.getSnapshot();
@@ -413,7 +409,11 @@ export function createDispatcherFromContext(
                 );
                 controller?.abort();
             }
-            return { ok: true, entry: wireCopy(entry) };
+            return {
+                ok: true,
+                entry: wireCopy(entry),
+                completion: entry.completion,
+            };
         },
         getCommandCompletion(prefix, direction) {
             return getCommandCompletion(prefix, direction, context);

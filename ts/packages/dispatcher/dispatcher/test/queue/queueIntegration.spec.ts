@@ -9,7 +9,6 @@
 
 import type {
     CommandResult,
-    Dispatcher,
     QueueCancelReason,
     QueuedRequest,
     QueueSnapshot,
@@ -80,7 +79,7 @@ class MultiClientBus implements QueueBroadcaster {
 }
 
 /** Controllable inner dispatcher; drain loop awaits processCommand. */
-class ControllableDispatcher implements Pick<Dispatcher, "processCommand"> {
+class ControllableDispatcher {
     public calls: Array<{
         command: string;
         requestId: string | undefined;

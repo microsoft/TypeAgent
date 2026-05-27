@@ -4,7 +4,7 @@
 // Server-side message queue contract. Per-conversation, FIFO, single in-flight
 // entry. See `docs/architecture/messageQueueing-serverSide.md` for the design.
 
-import type { ProcessCommandOptions } from "./dispatcher.js";
+import type { CommandResult, ProcessCommandOptions } from "./dispatcher.js";
 
 /**
  * Lifecycle states of a queued request.
@@ -169,11 +169,31 @@ export class ServerStoppingError extends Error {
 }
 
 /**
- * Discriminated result returned by `Dispatcher.submitCommand`. Failure modes
- * are data (not thrown) because the RPC layer flattens errors to plain
- * `Error` on the wire, dropping subclass identity and structured fields.
+ * Discriminated result returned by `Dispatcher.submitCommand`.
+ *
+ * Failure modes are data (not thrown) because the RPC layer flattens errors
+ * to plain `Error` on the wire, dropping subclass identity and structured
+ * fields.
+ *
+ * On success the result carries both an `entry` (server ack) and a
+ * `completion` promise that resolves with the eventual `CommandResult`
+ * (or `{cancelled: true}` for cancelled requests, or rejects with
+ * `ServerStoppingError` if the server abandoned the entry). Callers who
+ * only need ack-on-enqueue semantics can ignore `completion`; callers
+ * that previously used `processCommand` await `completion` after the
+ * `ok:true` check.
+ *
+ * For in-process dispatchers the `completion` promise is the queue's
+ * internal entry promise directly. For RPC clients the `completion` is
+ * synthesized by the client wrapper from `commandComplete` and
+ * `requestCancelled` ClientIO push events — see `WireSubmitResult` for
+ * the RPC-layer transport type.
  */
 export type SubmitResult =
-    | { ok: true; entry: QueuedRequest }
+    | {
+          ok: true;
+          entry: QueuedRequest;
+          completion: Promise<CommandResult | undefined>;
+      }
     | { ok: false; error: "queue_full"; maxDepth: number }
     | { ok: false; error: "server_stopping" };

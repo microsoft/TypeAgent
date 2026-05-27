@@ -18,9 +18,11 @@
 > **Superseded:** the original client-side queue design and its review
 > live in [`_deprecated/`](./_deprecated/) for historical context.
 
-**Status:** Draft — design landed.
+**Status:** Draft — design landed; §14.1 (unify `processCommand` +
+`submitCommand`) has now also shipped — `Dispatcher.processCommand` is
+removed and `submitCommand` is the single entry point.
 **Last Updated:** 2026-05-22 (editorial pass; removed forward-pointers to
-forthcoming steering doc).
+forthcoming steering doc). §14.1 marked Shipped on 2026-05-29.
 
 ---
 
@@ -58,10 +60,15 @@ queue snapshot on `joinConversation`, runs the no-clients grace
 timer, and (in v1.5) drives server-restart persistence. It owns no
 queue state — `Dispatcher` is the source of truth.
 
-The existing `Dispatcher.processCommand` contract is preserved
-(`Promise<CommandResult>`); we add `submitCommand` for ack-on-enqueue
-semantics plus `ClientIO` push events so every connected client sees
-the queue's lifecycle in real time.
+The original `Dispatcher.processCommand` contract has been folded into
+`Dispatcher.submitCommand` (see §14.1, **Shipped**): the unified entry
+returns `Promise<SubmitResult>` where the `ok:true` variant carries
+both the queue ack (`entry`) and a `completion: Promise<CommandResult
+| undefined>`. Hosts that want to await completion `await r.completion`
+after checking `r.ok`; ack-on-enqueue callers use `r.entry` and ignore
+`r.completion`. Push events on `ClientIO` (`requestQueued`,
+`requestStarted`, `commandComplete`, `requestCancelled`) let every
+connected client follow the queue's lifecycle in real time.
 
 ---
 
@@ -124,47 +131,46 @@ _block on the lock_; clients see this as "the agent is busy."
 ## 3. The change on one screen
 
 ```
-BEFORE                                AFTER
-──────                                ─────
+BEFORE                                AFTER (§14.1 SHIPPED)
+──────                                ──────────────────────
 
-processCommand                        processCommand     submitCommand
-                                      (await-complete)   (ack-on-enqueue)
-       │                                     │                  │
-       ▼                                     └────────┬─────────┘
-SharedDispatcher                                      │  (1)
-       │                                              ▼
-       ▼                                       RequestQueue.submit
-Dispatcher.processCommand                             │
-       │                                              ▼
-       ▼                                       tail.push(entry); drain()    (2)
-commandLock (serializes here)                         │
-       │                                              ▼
-       ▼                                       drain loop (inside Dispatcher):
-agent.executeAction                              head = tail.shift()
-                                                 emits requestStarted via ClientIO
-                                                 processCommand(head, …)    (3)
-                                                      │
-                                                      ▼
-                                              commandLock — no contention
-                                                      │
-                                                      ▼
-                                              agent.executeAction
+processCommand                        submitCommand          (unified entry)
+                                          │  returns Promise<SubmitResult>
+       │                                  │  • ok:true → {entry, completion}
+       ▼                                  │  • ok:false → typed failure
+SharedDispatcher                          ▼
+       │                              RequestQueue.submit
+       ▼                                  │
+Dispatcher.processCommand                 ▼
+       │                              tail.push(entry); drain()    (2)
+       ▼                                  │
+commandLock (serializes here)             ▼
+       │                              drain loop (inside Dispatcher):
+       ▼                                  head = tail.shift()
+agent.executeAction                       emits requestStarted via ClientIO
+                                          processCommand(head, …)    (3)
+                                              │
+                                              ▼
+                                          commandLock — no contention
+                                              │
+                                              ▼
+                                          agent.executeAction
 ```
 
-(1) `processCommand` and `submitCommand` are sibling first-class
-`Dispatcher` entries — both internally call `requestQueue.submit(...)`.
-They differ only in the return contract:
+(1) Hosts pick their await semantics from the unified result:
 
-- **`processCommand`** returns `Promise<CommandResult | undefined>` and
-  resolves when the request **finishes** (await-completion). Throws on
-  `queue_full` / `server_stopping`. **Used by Shell main + renderer and
-  every scripted CLI command path** (~14 callsites).
+- **Await-completion callers** (Shell main + renderer, scripted CLI
+  paths, MCP/VSCode/web bridges, benchmarks): check `r.ok`, then
+  `await r.completion`. The
+  [`awaitCommand(dispatcher, text, …)`](../../packages/dispatcher/types/src/awaitCommand.ts)
+  utility from `@typeagent/dispatcher-types` packages this into a
+  one-liner that throws on submit failure for code that just wants the
+  old `Promise<CommandResult>` shape.
 
-- **`submitCommand`** returns `Promise<SubmitResult>` and resolves when
-  the request is **accepted onto the queue** (ack-on-enqueue), with
-  typed failure modes returned as data. **Used only by the CLI
-  interactive REPL** so the prompt becomes responsive immediately;
-  completion is observed via the `commandComplete` ClientIO push event.
+- **Ack-on-enqueue callers** (the CLI interactive REPL): check `r.ok`,
+  track `r.entry`, ignore `r.completion`. The prompt becomes
+  responsive immediately; completion is observed via the
+  `commandComplete` `ClientIO` push event.
 
 `SharedDispatcher` wraps the host `ClientIO` so queue lifecycle events
 (`requestQueued`, `requestStarted`, `requestCancelled`,
@@ -174,7 +180,8 @@ the execution path.
 (2) Emits `requestQueued` through `ClientIO` at this point.
 
 (3) Original `processCommand` pipeline body (the in-dispatcher command
-runner, distinct from the `Dispatcher.processCommand` entry method).
+runner — an internal helper inside `command.ts`, unrelated to the
+removed `Dispatcher.processCommand` entry method).
 `commandLock` is kept as defense-in-depth (see §5.3); the drain loop
 guarantees no contention.
 
@@ -184,10 +191,12 @@ clients regardless of which entry point they use. `SharedDispatcher`
 adds nothing to the execution path — it only wraps the host `ClientIO`
 so lifecycle events reach every connected client.
 
-> **Wart.** The dual-entry shape is recognized debt — both methods
-> ultimately call `requestQueue.submit(...)` and differ only in how they
-> return. See §14.1 for the planned unification into a single `submit()`
-> that carries both an ack and the completion promise.
+> **Wart resolved.** The dual-entry shape called out here as recognized
+> debt has now been unified per §14.1 — `submitCommand` is the single
+> entry, returning both an ack and the completion promise. The
+> historical narrative in §§2–8 still describes the original two-entry
+> shape (preserved for design context); §14.1 records the shipped
+> migration.
 
 ---
 
@@ -1165,20 +1174,12 @@ event. See the deprecated docs for the earlier draft that had both.
 
 ### 14.1 Unify `processCommand` and `submitCommand` into one entry
 
-**Status:** tracked as a follow-up after this branch lands.
+**Status:** Shipped (2026-05-29).
 
-Today the Dispatcher exposes two sibling entry points that both call
-`requestQueue.submit(...)` and differ only in their return contract:
-
-| Entry            | Returns                                       | Failure delivery                                | Used by                                               |
-| ---------------- | --------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| `processCommand` | `Promise<CommandResult \| undefined>`         | Throws `QueueFullError` / `ServerStoppingError` | Shell main + renderer, ~13 scripted CLI command paths |
-| `submitCommand`  | `Promise<SubmitResult>` (discriminated union) | Typed `{ok:false, error}`                       | CLI interactive REPL only (ack-on-enqueue, no await)  |
-
-The duplication is real cognitive overhead — every code-review of the
-dispatcher trips on it. Unification is feasible without losing
-semantics by collapsing both into a single `submit()` that returns a
-discriminated result carrying **both** the ack and the completion
+Originally this section tracked the unification as future work; it has
+since been implemented. `Dispatcher.processCommand` is removed; the
+unified entry point is `Dispatcher.submitCommand`, returning a
+discriminated result that carries **both** the ack and the completion
 promise:
 
 ```ts
@@ -1191,48 +1192,117 @@ type SubmitResult =
     | { ok: false; error: "queue_full"; maxDepth: number }
     | { ok: false; error: "server_stopping" };
 
-submit(
+submitCommand(
     text: string,
     attachments?: string[],
     options?: ProcessCommandOptions,
     clientRequestId?: unknown,
+    requestId?: string,
 ): Promise<SubmitResult>;
 ```
 
-- **In-process** (local dispatcher, tests): the server returns
-  `entry.completion` directly.
-- **Across RPC**: the server returns only `{ok, entry}` over the wire
-  (as today); the RPC client wrapper attaches
+- **In-process** (local dispatcher, tests): the dispatcher returns
+  `entry.completion` directly in the `ok:true` variant.
+- **Across RPC**: the server returns only `{ok, entry}` over the wire;
+  the RPC client wrapper attaches
   `completion: waitForCommandComplete(entry.requestId)` — a promise
-  resolved by the existing `commandComplete` ClientIO push event via a
-  one-shot correlation map. No new server-side wire RPC required.
+  resolved by the `commandComplete` `ClientIO` push event via a
+  per-client one-shot correlation map, and rejected on
+  `requestCancelled` with `reason: "server_stopping"`. No new
+  server-side wire RPC was required. `notifyCommandComplete` /
+  `notifyRequestCancelled` hooks are exposed from the RPC client
+  factory and wired into each host's `ClientIO`.
 
-**Caller migration shape:**
+**Caller migration shape (as shipped):**
 
-- Await-completion callers (today's `processCommand` users):
+- Await-completion callers (former `processCommand` users) use one of
+  two equivalent shapes:
+
+  - Direct `submitCommand` + `r.completion` await — used by Shell main
+    (`processShellRequest`) and the renderer chatView, which both want
+    to wrap the completion promise with post-completion side effects
+    (focus + summary update, MessageGroup attach).
+  - The `awaitCommand(dispatcher, text, attachments?, options?,
+clientRequestId?, requestId?)` utility in
+    `@typeagent/dispatcher-types` — used by scripted CLI command paths
+    (~13 callsites: `connect`, `run/{request,translate,explain}`,
+    `replay`, `test/translate`), the MCP server, copilot-plugin hooks,
+    web/MCP/VS Code bridges, the URI handler, command-executor, and
+    benchmark/agent recursive callers (onboarding,
+    `browser/benchmark/test-webflow-grammar.mts`). It is a thin
+    throw-on-submit-failure wrapper that returns
+    `Promise<CommandResult | undefined>`, matching the old
+    `processCommand` shape exactly.
+
   ```ts
-  const r = await dispatcher.submit(text, ...);
-  if (!r.ok) throw new Error(r.error);
-  return r.completion;
+  // Direct shape (Shell):
+  const r = await dispatcher.submitCommand(
+    text,
+    attachments,
+    options,
+    cid,
+    rid,
+  );
+  if (!r.ok) {
+    throw r.error === "queue_full"
+      ? new QueueFullError(r.maxDepth)
+      : new ServerStoppingError();
+  }
+  return r.completion.then(postProcess);
+
+  // Utility shape (scripted CLI / MCP / bridges):
+  const result = await awaitCommand(dispatcher, text);
   ```
-- Ack-on-enqueue callers (today's `submitCommand` users): no change —
-  the existing `if (!r.ok) ...; trackId(r.entry)` shape applies directly.
 
-**Migration cost:**
+- Ack-on-enqueue callers (the CLI interactive REPL): no behaviour
+  change. Existing `if (!r.ok) ...; trackId(r.entry)` shape still
+  applies; `r.completion` is simply ignored.
 
-- ~14 callsites: mechanical 1→3 line change each.
-- ~30 LOC completion-correlation helper in
-  `packages/dispatcher/rpc/src/dispatcherClient.ts` + tests.
-- Delete `Dispatcher.processCommand` (method + RPC pass-through +
+**Shipped changes:**
+
+- Removed `Dispatcher.processCommand` (method, RPC pass-through, and
   `dispatcherServer.ts` handler).
-- Rename `submitCommand` → `submit` (or keep the name).
-- Update the CLI REPL to drop its
-  `typeof submitCommand === "function"` feature-detect fallback.
+- Added `requestId?: string` as the 5th positional parameter on
+  `Dispatcher.submitCommand` (and the RPC pass-through), preserving the
+  shape former `processCommand` callers needed for Shell / VS Code
+  client-request-id forwarding.
+- Added `awaitCommand` utility in
+  `packages/dispatcher/types/src/awaitCommand.ts`, exported from
+  `@typeagent/dispatcher-types`. Signature:
+  `(dispatcher, command, attachments?, options?, clientRequestId?,
+requestId?)`.
+- Added a wire-vs-call-site type split: `SubmitResult` (carries
+  `completion`) is the in-process / call-site type; the RPC wire
+  payload is the same `ok`/`error` shape with `completion` stripped.
+  The RPC client synthesizes a fresh `completion` from the correlation
+  map before returning.
+- RPC client factory return type changed from `Dispatcher` to
+  `{ dispatcher, notifyCommandComplete, notifyRequestCancelled }`; the
+  5 RPC client construction sites (agent-server client, Shell
+  renderer + preload, VS Code webview, browser extension service
+  worker) were updated to wire these hooks into their host's
+  `ClientIO.notify` and `ClientIO.requestCancelled`.
+- `sharedDispatcher.notify` no longer skips the originator for
+  `commandComplete` — the originator now needs the push event to
+  resolve its correlation-map completion promise.
+- Dropped the CLI REPL's
+  `typeof submitCommand === "function"` feature-detect fallback (the
+  unconditional `submitCommand` path is now the only one for live
+  dispatchers; the caller-supplied legacy path is retained only as a
+  null-dispatcher test-stub branch).
+- `Dispatcher.interrupt` (already returning `SubmitResult`)
+  automatically inherits the `completion` promise via the same wire
+  split.
 
-**Why not in this branch:** scope. The Phase 1 mechanism (queue
-ownership, drain loop, fan-out, reconnect snapshot, cancel surface,
-client mirrors) is already broad; the unification deserves its own PR
-with its own review.
+**Note.** The internal helpers named `processCommand` and
+`processCommandNoLock` inside
+`packages/dispatcher/dispatcher/src/command/command.ts` (the in-dispatcher
+command-pipeline body), and the unrelated `processCommand` parameter
+names in `interactiveApp` callbacks, are **not** the deleted
+`Dispatcher.processCommand` interface method and were left untouched.
+Likewise the MCP public tool name `typeagent-processCommand` exposed
+by `copilot-plugin/src/mcp/server.ts` is a public API contract identifier
+and remains unchanged.
 
 ---
 

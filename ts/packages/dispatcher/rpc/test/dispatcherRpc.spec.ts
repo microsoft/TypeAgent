@@ -53,7 +53,6 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         get connectionId() {
             return undefined;
         },
-        processCommand: notImplemented("processCommand") as any,
         submitCommand: notImplemented("submitCommand") as any,
         interrupt: notImplemented("interrupt") as any,
         getQueueSnapshot: notImplemented("getQueueSnapshot") as any,
@@ -118,7 +117,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         // cancelInteraction returns void synchronously — not a Promise
         const result = client.cancelInteraction("id-42");
@@ -138,7 +137,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         client.cancelInteraction("abc");
         client.cancelInteraction("xyz");
@@ -153,7 +152,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
         // is not a Promise.
         const { serverChannel, clientChannel } = createChannelPair();
         createDispatcherRpcServer(makeStubDispatcher(), serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const ret = client.cancelInteraction("no-reply");
 
@@ -166,7 +165,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         await expect(
             client.respondToInteraction(makeResponse()),
@@ -183,7 +182,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
     it("returns a Promise (awaitable)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         createDispatcherRpcServer(makeStubDispatcher(), serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const ret = client.respondToInteraction(makeResponse());
 
@@ -199,7 +198,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         await expect(
             client.respondToInteraction(makeResponse()),
@@ -215,7 +214,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const response: PendingInteractionResponse = {
             interactionId: "interact-99",
@@ -234,7 +233,7 @@ describe("dispatcher RPC — cancelCommand (now returns CancelResult)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const result = await client.cancelCommand("req-1");
 
@@ -268,7 +267,9 @@ describe("dispatcher RPC — transport symmetry", () => {
         clientNotify = clientAdapter.notifyMessage;
 
         createDispatcherRpcServer(makeStubDispatcher(), serverAdapter.channel);
-        const client = createDispatcherRpcClient(clientAdapter.channel);
+        const { dispatcher: client } = createDispatcherRpcClient(
+            clientAdapter.channel,
+        );
 
         client.cancelInteraction("id-1");
         void client.cancelCommand("req-1");
@@ -312,7 +313,9 @@ describe("dispatcher RPC — transport symmetry", () => {
         clientNotify = clientAdapter.notifyMessage;
 
         createDispatcherRpcServer(makeStubDispatcher(), serverAdapter.channel);
-        const client = createDispatcherRpcClient(clientAdapter.channel);
+        const { dispatcher: client } = createDispatcherRpcClient(
+            clientAdapter.channel,
+        );
 
         await client.respondToInteraction(makeResponse());
 

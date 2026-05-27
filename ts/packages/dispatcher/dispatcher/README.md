@@ -240,7 +240,7 @@ Use `createDispatcher` to create a dispatcher instance `createDispatcher`. The m
 - persistDir: The directory to save states, including cache and session (if enabled)
 - persistSession: whether to save and restore session state across runs.
 
-After creation, use the `processCommand` API on the instance to start process any user requests.
+After creation, use the `submitCommand` API on the instance to start process any user requests. The unified `submitCommand` returns `{ok, entry, completion}`; await `completion` for the request result, or use the `awaitCommand(dispatcher, …)` helper from `@typeagent/dispatcher-types` for a one-liner that throws on submit failure.
 
 ## Trademarks
 
