@@ -39,6 +39,7 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    ObjectType,
 } from "./ast.js";
 import { quoteStringLiteral } from "./literal.js";
 
@@ -605,7 +606,7 @@ class Printer {
      * param lists: comments force multi-line; otherwise preserve the
      * source layout unless overflow forces a switch.
      */
-    private printObjectType(t: import("./ast.js").ObjectType): void {
+    private printObjectType(t: ObjectType): void {
         const hasFieldComments = t.fields.some(
             (f) => f.leadingComments?.length || f.trailingComments?.length,
         );
@@ -638,7 +639,7 @@ class Printer {
         this.write("}");
     }
 
-    private writeObjectTypeInline(t: import("./ast.js").ObjectType): void {
+    private writeObjectTypeInline(t: ObjectType): void {
         if (t.fields.length === 0) {
             this.write("{}");
             return;

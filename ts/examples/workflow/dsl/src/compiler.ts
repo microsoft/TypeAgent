@@ -15,6 +15,7 @@ import { Parser } from "./parser.js";
 import { TypeChecker } from "./typeChecker.js";
 import { Emitter, TaskSchemaInfo } from "./emitter.js";
 import { loadModuleTree, FileResolver, LoadError } from "./fileLoader.js";
+import type { WorkflowDecl } from "./ast.js";
 
 export interface CompileError {
     phase: "lex" | "parse" | "typecheck" | "emit" | "validate";
@@ -143,11 +144,11 @@ export function compile(
 }
 
 type EntrySelection =
-    | { ok: true; value: import("./ast.js").WorkflowDecl }
+    | { ok: true; value: WorkflowDecl }
     | { ok: false; message: string; line: number; col: number };
 
 function selectEntry(
-    workflows: import("./ast.js").WorkflowDecl[],
+    workflows: WorkflowDecl[],
     requested: string | undefined,
 ): EntrySelection {
     if (requested) {
