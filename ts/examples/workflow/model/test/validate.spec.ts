@@ -7997,4 +7997,232 @@ describe("validateWorkflowIR", () => {
             ).toBe(false);
         });
     });
+
+    // ---- Per-kind validation coverage ----
+    //
+    // These tests drive a per-kind table to assert that every WorkflowNode
+    // kind is structurally validated for the obligations that apply to it.
+    // They are intended to fail loudly when a new node kind is added but
+    // the dispatch in `validateScopeNodes` is not updated (the
+    // `default: assertNever(node)` guarantees a compile-time failure, but
+    // these tests also catch missed obligations such as dangling
+    // next/onError or never-output guards).
+    describe("per-kind validation coverage", () => {
+        // The set of kinds we expect to exist. If WorkflowNode["kind"]
+        // changes, this list must change too — keeping the obligation
+        // matrix in sync with the type definition.
+        const ALL_KINDS: WorkflowNode["kind"][] = [
+            "task",
+            "branch",
+            "loop",
+            "fork",
+            "forkMap",
+            "workflowCall",
+        ];
+
+        /** Build a minimal valid node of the given kind, with optional overrides on next/onError/etc. */
+        function makeNodeOfKind(
+            kind: WorkflowNode["kind"],
+            overrides: { next?: string; onError?: string } = {},
+        ): WorkflowNode {
+            switch (kind) {
+                case "task":
+                    return makeTaskNode(overrides);
+                case "branch":
+                    return {
+                        kind: "branch",
+                        selector: { $literal: "a" },
+                        selectorSchema: { type: "string", enum: ["a"] },
+                        cases: { a: makeSimpleArm() },
+                        ...overrides,
+                    } as BranchNode;
+                case "loop":
+                    return makeLoopNode(overrides);
+                case "fork":
+                    return {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "s",
+                                    nodes: { s: makeTaskNode() },
+                                    output: null,
+                                    outputSchema: { type: "null" },
+                                },
+                            },
+                            b: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "s",
+                                    nodes: { s: makeTaskNode() },
+                                    output: null,
+                                    outputSchema: { type: "null" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        ...overrides,
+                    } as ForkNode;
+                case "forkMap":
+                    return {
+                        kind: "forkMap",
+                        collection: { $literal: [] },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "x",
+                        body: {
+                            inputSchema: { type: "object" },
+                            entry: "s",
+                            nodes: { s: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        outputSchema: { type: "object" },
+                        ...overrides,
+                    } as ForkMapNode;
+                case "workflowCall":
+                    return {
+                        kind: "workflowCall",
+                        workflowRef: { name: "helper" },
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        ...overrides,
+                    } as WorkflowCallNode;
+            }
+        }
+
+        /** Wrap `node` as the entry of an IR. For workflowCall, also adds a "helper" workflow. */
+        function irWith(node: WorkflowNode): WorkflowIR {
+            const main: WorkflowBody = {
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "n",
+                nodes: { n: node },
+                output: { $literal: {} },
+            };
+            if (node.kind !== "workflowCall") {
+                return {
+                    kind: "workflow",
+                    version: "1",
+                    entry: "main",
+                    workflows: { main },
+                };
+            }
+            const helper: WorkflowBody = {
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                entry: "s",
+                nodes: { s: makeTaskNode({ bind: "out" }) },
+                output: { $from: "scope", name: "out" },
+            };
+            return {
+                kind: "workflow",
+                version: "1",
+                entry: "main",
+                workflows: { main, helper },
+            };
+        }
+
+        describe.each(ALL_KINDS)("kind=%s", (kind) => {
+            it("reports dangling `next`", () => {
+                const node = makeNodeOfKind(kind, {
+                    next: "does-not-exist",
+                });
+                const ir = irWith(node);
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.path === "workflows.main.nodes.n.next" &&
+                            /does not exist/.test(e.message),
+                    ),
+                ).toBe(true);
+            });
+
+            it("reports dangling `onError`", () => {
+                const node = makeNodeOfKind(kind, {
+                    onError: "does-not-exist",
+                });
+                const ir = irWith(node);
+                const result = validateWorkflowIR(ir, taskMap("noop"));
+                expect(
+                    result.errors.some(
+                        (e) =>
+                            e.path === "workflows.main.nodes.n.onError" &&
+                            /does not exist/.test(e.message),
+                    ),
+                ).toBe(true);
+            });
+        });
+
+        // Kinds that own an `outputSchema` field on the node itself and
+        // therefore must enforce never-output guards on next/bind/onError.
+        // (loop's bound schema lives on body.outputSchema, branch's
+        // outputSchema is meaningful only with bind; both are exercised by
+        // dedicated test suites and are intentionally excluded here.)
+        const KINDS_WITH_NEVER_GUARDS: WorkflowNode["kind"][] = [
+            "task",
+            "workflowCall",
+        ];
+
+        describe.each(KINDS_WITH_NEVER_GUARDS)(
+            "never-output guards (kind=%s)",
+            (kind) => {
+                it("rejects `next` when outputSchema is never", () => {
+                    const base = makeNodeOfKind(kind) as
+                        | TaskNode
+                        | WorkflowCallNode;
+                    const node = {
+                        ...(base as object),
+                        outputSchema: { not: {} },
+                        next: "other",
+                    } as unknown as WorkflowNode;
+                    // Add a second node so `next: "other"` is not also a dangling-target error.
+                    const main: WorkflowBody = {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "n",
+                        nodes: { n: node, other: makeTaskNode() },
+                        output: { $literal: {} },
+                    };
+                    const ir: WorkflowIR = {
+                        kind: "workflow",
+                        version: "1",
+                        entry: "main",
+                        workflows:
+                            kind === "workflowCall"
+                                ? {
+                                    main,
+                                    helper: {
+                                        inputSchema: { type: "object" },
+                                        outputSchema: { not: {} },
+                                        entry: "s",
+                                        nodes: {
+                                            s: makeTaskNode({
+                                                outputSchema: { not: {} },
+                                            }),
+                                        },
+                                        output: { $literal: {} },
+                                    },
+                                }
+                                : { main },
+                    };
+                    const result = validateWorkflowIR(ir, taskMap("noop"));
+                    expect(
+                        result.errors.some(
+                            (e) =>
+                                e.path === "workflows.main.nodes.n.next" &&
+                                /never/.test(e.message),
+                        ),
+                    ).toBe(true);
+                });
+            },
+        );
+    });
 });

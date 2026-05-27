@@ -3,7 +3,7 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { TypeChecker, TypeError } from "../src/typeChecker.js";
+import { TypeChecker, TypeError, typeInfoToSchema } from "../src/typeChecker.js";
 import { TaskSchemaInfo } from "../src/emitter.js";
 import { compile } from "../src/compiler.js";
 
@@ -2391,5 +2391,213 @@ describe("TypeChecker.diagnoseMalformedEnums", () => {
             },
         ]);
         expect(warnings).toEqual([]);
+    });
+
+    test("flags empty enum nested under oneOf (review #1)", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.oneOf",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    oneOf: [
+                        { type: "string" },
+                        { type: "string", enum: [] },
+                    ],
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            {
+                taskName: "t.oneOf",
+                path: "outputSchema.oneOf[1]",
+                reason: "empty",
+            },
+        ]);
+    });
+});
+
+// ---- Tests for review fixes (#1, #2, #5, #6, #9) ----
+
+describe("typeInfoToSchema: tuple lowering (review #5)", () => {
+    test("tuple emits JSON Schema 7 array form with min/maxItems", () => {
+        const tuple = {
+            kind: "tuple" as const,
+            elements: [
+                { kind: "primitive" as const, name: "string" as const },
+                { kind: "primitive" as const, name: "number" as const },
+            ],
+        };
+        expect(typeInfoToSchema(tuple)).toEqual({
+            type: "array",
+            items: [{ type: "string" }, { type: "number" }],
+            minItems: 2,
+            maxItems: 2,
+        });
+    });
+
+    test("empty tuple emits a fixed-length zero array", () => {
+        expect(
+            typeInfoToSchema({ kind: "tuple", elements: [] }),
+        ).toEqual({
+            type: "array",
+            items: [],
+            minItems: 0,
+            maxItems: 0,
+        });
+    });
+});
+
+describe("primitive -> enum assignability (review #2)", () => {
+    test("string parameter is assignable to an enum-typed generic argument", () => {
+        // The DSL doesn't widen string literals to single-value EnumTypes,
+        // so a `string` value flowing into an enum-typed slot must be
+        // accepted (with runtime validation as the final enforcer).
+        const { tokens } = lex(`
+            workflow test(label: string): string {
+                const c = test.acceptsLabel<string>(label: label);
+                return c.echo;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.acceptsLabel",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["label"],
+                    properties: {
+                        // Enum-typed input field: a plain string source
+                        // must be accepted at the call site.
+                        label: { type: "string", enum: ["low", "high"] },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["echo"],
+                    properties: { echo: { type: "string" } },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+});
+
+describe("EnumType: boolean base (review #6)", () => {
+    test("boolean-enum schema produces an EnumType, not UNKNOWN", () => {
+        // If the schema were treated as UNKNOWN, returning the field as
+        // `string` would silently succeed.  With EnumType base "boolean",
+        // the type checker rejects the mismatched return.
+        const { tokens } = lex(`
+            workflow test(): string {
+                const r = test.boolEnum();
+                return r.flag;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.boolEnum",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["flag"],
+                    properties: {
+                        flag: { type: "boolean", enum: [true, false] },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors.length).toBeGreaterThan(0);
+        expect(
+            errors.some((e) => e.message.includes("not assignable")),
+        ).toBe(true);
+    });
+});
+
+describe("$typeParam resolution under nested keywords (review #1)", () => {
+    test("$typeParam inside oneOf is substituted in the resolved schema", () => {
+        const { tokens } = lex(`
+            workflow test(): string {
+                const r = test.unionGeneric<string>(prompt: "x");
+                return "ok";
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.unionGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: {
+                        // Marker buried under oneOf: pre-fix the walker
+                        // didn't recurse here so the marker leaked through
+                        // to the resolved schema.
+                        value: {
+                            oneOf: [{ $typeParam: "T" }, { type: "null" }],
+                        },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        const [resolved] = Array.from(checker.resolvedSchemas.values());
+        expect(resolved).toBeDefined();
+        const valueSchema = (
+            (resolved.outputSchema as Record<string, unknown>)
+                .properties as Record<string, unknown>
+        ).value as Record<string, unknown>;
+        expect(valueSchema.oneOf).toEqual([
+            { type: "string" },
+            { type: "null" },
+        ]);
+    });
+});
+
+describe("switch asymmetry diagnostic names the offending arm (review #9)", () => {
+    test("case arm is named by 1-based index when it doesn't return", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": const y = "skip";
+                    default: return "z";
+                }
+                return "done";
+            }`,
+            "arm 2",
+        );
+    });
+
+    test("default arm is named when only the default doesn't return", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": return "y";
+                    default: const z = "skip";
+                }
+                return "done";
+            }`,
+            "default arm",
+        );
     });
 });

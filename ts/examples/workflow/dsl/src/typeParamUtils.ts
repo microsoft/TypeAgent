@@ -49,7 +49,9 @@ export function typeExprToSchema(te: TypeExpr): JSONSchema {
                 props[f.name] = typeExprToSchema(f.type);
                 if (!f.optional) req.push(f.name);
             }
-            return { type: "object", required: req, properties: props };
+            const out: JSONSchema = { type: "object", properties: props };
+            if (req.length > 0) out.required = req;
+            return out;
         }
     }
 }
@@ -81,6 +83,13 @@ export function resolveTypeParams(
 /**
  * Walk a schema recursively, replacing `{ "$typeParam": "X" }` nodes
  * with the bound schema for X.
+ *
+ * Recurses into every JSON Schema 7 sub-schema-bearing keyword (see
+ * `SchemaRefKeys` in workflow-model/ir.ts) so markers nested under
+ * `oneOf` / `anyOf` / `allOf` / `not` / `if` / `then` / `else` /
+ * tuple-form `items` / `patternProperties` / `propertyNames` /
+ * `additionalItems` / `contains` / `dependencies` / `definitions`
+ * are also resolved.
  */
 function substituteMarkers(
     schema: SchemaTemplate,
@@ -88,7 +97,6 @@ function substituteMarkers(
 ): JSONSchema {
     if (typeof schema !== "object" || schema === null || Array.isArray(schema))
         return schema as JSONSchema;
-    if (typeof schema === "boolean") return schema as unknown as JSONSchema;
 
     // Check if this node is a $typeParam marker
     if (isTypeParamRef(schema)) {
@@ -97,56 +105,83 @@ function substituteMarkers(
         return bound !== undefined ? bound : (schema as unknown as JSONSchema);
     }
 
-    // Recurse into schema-bearing keywords
+    // Keywords whose value is a single sub-schema.
+    const SINGLE_SCHEMA_KEYS = new Set([
+        "additionalItems",
+        "contains",
+        "additionalProperties",
+        "propertyNames",
+        "if",
+        "then",
+        "else",
+        "not",
+    ]);
+    // Keywords whose value is an array of sub-schemas.
+    const ARRAY_SCHEMA_KEYS = new Set(["allOf", "anyOf", "oneOf"]);
+    // Keywords whose value is a record of sub-schemas.
+    const RECORD_SCHEMA_KEYS = new Set([
+        "properties",
+        "patternProperties",
+        "definitions",
+    ]);
+
     let changed = false;
     const result: Record<string, unknown> = {};
 
+    const resolveOne = (v: unknown): unknown => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+            const r = substituteMarkers(v as SchemaTemplate, bindings);
+            if (r !== v) changed = true;
+            return r;
+        }
+        return v;
+    };
+
     for (const [key, value] of Object.entries(schema)) {
-        if (
-            key === "properties" &&
-            typeof value === "object" &&
-            value !== null
-        ) {
-            const resolvedProps: Record<string, unknown> = {};
-            let propsChanged = false;
-            for (const [pk, pv] of Object.entries(
-                value as Record<string, SchemaTemplate>,
-            )) {
-                const resolved = substituteMarkers(pv, bindings);
-                if (resolved !== pv) propsChanged = true;
-                resolvedProps[pk] = resolved;
+        if (key === "items") {
+            // `items` is either a single sub-schema OR an array (tuple form).
+            if (Array.isArray(value)) {
+                const arr = value.map(resolveOne);
+                result[key] = arr;
+            } else {
+                result[key] = resolveOne(value);
             }
-            result[key] = propsChanged ? resolvedProps : value;
-            if (propsChanged) changed = true;
+        } else if (SINGLE_SCHEMA_KEYS.has(key)) {
+            result[key] = resolveOne(value);
+        } else if (ARRAY_SCHEMA_KEYS.has(key) && Array.isArray(value)) {
+            result[key] = value.map(resolveOne);
         } else if (
-            key === "items" &&
+            RECORD_SCHEMA_KEYS.has(key) &&
+            value &&
             typeof value === "object" &&
-            value !== null
+            !Array.isArray(value)
         ) {
-            const resolved = substituteMarkers(
-                value as SchemaTemplate,
-                bindings,
-            );
-            result[key] = resolved;
-            if (resolved !== value) changed = true;
-        } else if (
-            key === "additionalProperties" &&
-            typeof value === "object" &&
-            value !== null
-        ) {
-            const resolved = substituteMarkers(
-                value as SchemaTemplate,
-                bindings,
-            );
-            result[key] = resolved;
-            if (resolved !== value) changed = true;
+            const resolvedRec: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(
+                value as Record<string, unknown>,
+            )) {
+                resolvedRec[k] = resolveOne(v);
+            }
+            result[key] = resolvedRec;
+        } else if (key === "dependencies" && value && typeof value === "object") {
+            // `dependencies` values are either sub-schemas or string[]; only
+            // recurse into the sub-schema case.
+            const resolvedDeps: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(
+                value as Record<string, unknown>,
+            )) {
+                if (Array.isArray(v)) {
+                    resolvedDeps[k] = v;
+                } else {
+                    resolvedDeps[k] = resolveOne(v);
+                }
+            }
+            result[key] = resolvedDeps;
         } else {
             result[key] = value;
         }
     }
 
-    // If nothing changed, the schema is returned as-is. The cast is safe
-    // because the caller guarantees that all markers will be resolved.
     return changed ? (result as JSONSchema) : (schema as unknown as JSONSchema);
 }
 
