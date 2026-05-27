@@ -5072,7 +5072,95 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
-        it("rejects unknown $-prefixed key in fork branch scope.output", () => {
+        it("rejects fork branch inputs with $from scope ref to unknown binding", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {
+                                    x: {
+                                        $from: "scope",
+                                        name: "noSuchBinding",
+                                    },
+                                },
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "out",
+                    } as ForkNode,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("noSuchBinding") &&
+                        e.message.includes("no node in this scope"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects fork branch inputs with $from input ref to undeclared input name", () => {
+            const ir = makeMinimalIR({
+                entry: "fork_0",
+                inputSchema: {
+                    type: "object",
+                    properties: { declared: { type: "string" } },
+                },
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        branches: {
+                            a: {
+                                inputs: {
+                                    x: {
+                                        $from: "input",
+                                        name: "notDeclared",
+                                    },
+                                },
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "a_step",
+                                    nodes: {
+                                        a_step: makeTaskNode({ bind: "aOut" }),
+                                    },
+                                    output: { $from: "scope", name: "aOut" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "out",
+                    } as ForkNode,
+                },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("notDeclared") &&
+                        e.message.includes("not declared in scope inputSchema"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects unknown $-prefixed key in fork branch scope output", () => {
             const ir = makeMinimalIR({
                 entry: "fork_0",
                 nodes: {
@@ -5202,6 +5290,61 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(false);
             expect(
                 result.errors.some((e) => e.message.includes('"$weirdInputs"')),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap.inputs with $from scope ref to unknown binding", () => {
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "items" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        inputs: {
+                            extra: {
+                                $from: "scope",
+                                name: "noSuchBinding",
+                            },
+                        },
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as ForkMapNode,
+                },
+                inputSchema: {
+                    type: "object",
+                    required: ["items"],
+                    properties: {
+                        items: { type: "array", items: { type: "string" } },
+                    },
+                },
+                outputSchema: { type: "array", items: { type: "object" } },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("noSuchBinding") &&
+                        e.message.includes("no node in this scope"),
+                ),
             ).toBe(true);
         });
 
@@ -6112,9 +6255,90 @@ describe("validateWorkflowIR", () => {
                 result.errors.some((e) => e.message.includes("continueWhen")),
             ).toBe(true);
         });
+
+        it("rejects continueWhen referencing undeclared body inputSchema property", () => {
+            // continueWhen is resolved against the body scope (body.inputSchema),
+            // not the outer scope's inputSchema.
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: {
+                                type: "object",
+                                properties: { flag: { type: "boolean" } },
+                            },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {},
+                        iterateState: {},
+                        continueWhen: {
+                            $from: "input",
+                            name: "notInBodySchema",
+                        },
+                    } as LoopNode,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("notInBodySchema") &&
+                        e.message.includes("not declared in scope inputSchema"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects iterateState template referencing undeclared body inputSchema property", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "loop",
+                        inputs: {},
+                        body: {
+                            inputSchema: {
+                                type: "object",
+                                properties: { count: { type: "integer" } },
+                            },
+                            entry: "step",
+                            nodes: { step: makeTaskNode() },
+                            output: null,
+                            outputSchema: { type: "null" },
+                        },
+                        state: {
+                            i: { schema: { type: "integer" }, initial: 0 },
+                        },
+                        iterateState: {
+                            i: { $from: "input", name: "notInBodySchema" },
+                        },
+                        continueWhen: { $literal: false },
+                        maxIterations: 10,
+                    } as LoopNode,
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("notInBodySchema") &&
+                        e.message.includes("not declared in scope inputSchema"),
+                ),
+            ).toBe(true);
+        });
     });
 
     describe("branch arm state isolation", () => {
+
         it("rejects $from:state ref in a branch arm node input", () => {
             // Branch arms are isolated sub-scopes with no state namespace.
             // $from:"state" inside an arm is invalid; state must be threaded
