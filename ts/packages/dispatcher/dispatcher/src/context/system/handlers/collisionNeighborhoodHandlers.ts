@@ -30,6 +30,8 @@ import type { TranslationProbeFile } from "../../../translation/translationProbe
 import {
     defaultPath,
     ensureDir,
+    fileLinkHtml,
+    fileLinkMd,
     resolveWorkdir,
 } from "../../../neighborhoods/optimize/util.js";
 
@@ -218,10 +220,16 @@ export class CollisionNeighborhoodsCommandHandler implements CommandHandler {
             `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:900px;">` +
             `<h3 style="margin:0 0 6px;font-size:14px;">Neighborhoods written</h3>` +
             `<div style="font-size:12px;color:#777;margin-bottom:6px;"><b>${total}</b> neighborhood(s) · ${cross} cross-schema · ${same} same-schema</div>` +
-            `<div style="font-size:12px;">JSON: <code>${outPath}</code></div>` +
-            `<div style="font-size:12px;">HTML: <code>${outHtmlPath}</code></div>` +
+            `<div style="font-size:12px;">JSON: ${fileLinkHtml(outPath)}</div>` +
+            `<div style="font-size:12px;">HTML: ${fileLinkHtml(outHtmlPath)}</div>` +
             `<div style="font-size:11px;color:#777;margin-top:6px;">Source: ${corpusPath}</div>` +
             `</div>`;
+        const summaryMd = [
+            `Neighborhoods written: ${fileLinkMd(outPath)}`,
+            `  ${total} neighborhood(s) · ${cross} cross-schema · ${same} same-schema`,
+            `  HTML: ${fileLinkMd(outHtmlPath)}`,
+            `  Source: ${corpusPath}`,
+        ];
         const summaryText = [
             `Neighborhoods written: ${outPath}`,
             `  ${total} neighborhood(s) · ${cross} cross-schema · ${same} same-schema`,
@@ -231,7 +239,10 @@ export class CollisionNeighborhoodsCommandHandler implements CommandHandler {
         context.actionIO.appendDisplay({
             type: "html",
             content: summaryHtml,
-            alternates: [{ type: "text", content: summaryText }],
+            alternates: [
+                { type: "markdown", content: summaryMd },
+                { type: "text", content: summaryText },
+            ],
         });
     }
 }

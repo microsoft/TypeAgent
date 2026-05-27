@@ -154,9 +154,41 @@ Picks the latest run, stacks all winners, re-probes the full corpus.
 Writes:
 
 - `optimization-impact.html` — open in browser. Top of the page shows
-  total `rescued` / `regressed`, plus the **winners table** with
-  cross-neighborhood-regression flags.
+  total `rescued` / `regressed`, plus the **winners table** sorted by
+  `localNet` (descending — best at top).
 - `optimization-impact.json` — the same data, machine-readable.
+
+### Reading the winners table
+
+Each winner row carries two complementary attribution signals:
+
+| Column | Meaning |
+|---|---|
+| `localRescues` / `localRegressions` | Phrases whose `expectedSchema` is in this winner's `schemasTouched`. The neighborhood "owns" these phrases. |
+| `causedRegressions` | Regressions where the candidate routed to one of this winner's schemas. Strongest "this winner pulled the phrase into the wrong target" signal. |
+| `localNet` | `localRescues − localRegressions − causedRegressions`. Negative means net-harmful. |
+| `causedRegression` flag | Set when `causedRegressions > localRescues`. Reviewer should consider dropping. |
+
+### Subsetting the stack
+
+Two flags to focus the validation on specific winners:
+
+```
+# Stack ONLY the named attemptIds, drop the rest.
+@collision optimize validate --winners h07-manifest,h09-manifest \
+    --workdir D:\collisions
+
+# Stack everything EXCEPT the named attemptIds (ablation).
+@collision optimize validate --leave-one-out h02-fewshot \
+    --workdir D:\collisions
+```
+
+`--winners` is most useful after you've picked a small set of safe-looking
+winners and want to confirm their joint impact in isolation.
+`--leave-one-out` is the ablation knob: drop a suspected harmful winner
+and see whether the global numbers improve.
+
+The two flags are mutually exclusive.
 
 Negative-test idea: hand-edit one winner's `proposal.json` to point at
 a different action that doesn't exist, re-run `validate` — should
@@ -164,7 +196,87 @@ explode loudly.
 
 ---
 
-## 7. Full sweep (real cost)
+## 7. Browse the attempts archive
+
+The JSON archive is comprehensive but tedious to navigate by hand. The
+`browse` subcommand generates a sortable HTML hierarchy:
+
+```
+# Latest run only.
+@collision optimize browse --workdir D:\collisions
+
+# Specific run.
+@collision optimize browse --run 2026-05-24T14-00-27-437 \
+    --workdir D:\collisions
+
+# Every optimization-run-* directory under the workdir.
+@collision optimize browse --all --workdir D:\collisions
+```
+
+No LLM calls. Re-running is idempotent — overwrites the HTML from current
+JSON. The command output shows each `browse.html` path as a clickable
+`file://` link in the shell (and as a plain path in CLI mode) — same goes
+for `neighborhoods.html`, `optimization-impact.html`, and `patterns.html`
+from the other subcommands.
+
+### What gets written
+
+Per run directory:
+
+```
+optimization-run-<ts>/
+├── browse.html                       ← run index (open this)
+└── cases/case-NNN-…/case.html        ← per-case attempt browser
+```
+
+### Run index (`browse.html`)
+
+- Summary cards: cases run, cases-with-winner, cases-with-positive-best-score,
+  total attempts.
+- **Sortable cases table.** Click any column header to re-sort.
+  Each row links into the case's `case.html`.
+- Skipped cases section with the reasons (non-materializable schemas,
+  caseLoop crashes, etc.).
+
+### Case browser (`case.html`)
+
+Three sections in each case page:
+
+1. **Case context** (expandable): members, failure pattern, severity tier,
+   sample misroute phrases.
+2. **Attempts table** sorted by score. Winner row green; apply-errored
+   attempts grey-italic; dry-run attempts tagged.
+3. **Per-attempt detail** (expandable): rationale, **side-by-side
+   BEFORE/AFTER diff** reconstructed from the proposal payload, regression
+   phrases list, apply error (if any), raw payload JSON.
+
+The diff is what the lever asked the LLM to change, reconstructed without
+needing to actually re-apply anything. Covers all four levers:
+
+- **jsdoc** — current JSDoc/PAS description vs. `payload.newText`
+- **manifest** — current `schema.description` vs. `payload.newDescription`
+- **fewshot** — current docs vs. `examples` prepended
+- **prune** — `(active)` vs. `@deprecated <reason>`
+
+Incomplete run directories (crashed mid-explore, never wrote
+`optimization-run.json`) are listed in the output but skipped silently —
+they have nothing browsable.
+
+### Compare workflow
+
+To compare attempts within a case: open the case's `case.html`. Each
+attempt's detail block has its own anchored URL, so two attempts can be
+opened in separate browser tabs and scrolled side by side. The
+reconstructed BEFORE/AFTER diff makes it obvious which mechanism each
+attempt picked — see why the winner won and the runners-up didn't.
+
+To compare across runs: open multiple `browse.html` pages and use the
+sortable table to find the same case slug. Each links into its own
+per-run `case.html`.
+
+---
+
+## 8. Full sweep (real cost)
 
 ```
 @collision optimize explore --top 5 --depth 2 --workdir D:\collisions
@@ -183,7 +295,7 @@ Cost-reducing knobs:
 
 ---
 
-## 8. The 5-step pipeline (everything end-to-end)
+## 9. The 5-step pipeline (everything end-to-end)
 
 ```
 @collision optimize run --top 3 --workdir D:\collisions
@@ -203,7 +315,7 @@ placeholder rather than producing junk candidates.
 
 ---
 
-## 9. Cross-run pattern mining + guideline distillation
+## 10. Cross-run pattern mining + guideline distillation
 
 After a few `run` cycles, `patterns.jsonl` accumulates. Once you cross
 ~10 winners:
@@ -242,7 +354,7 @@ import the same constant. The optimizer learns from its own wins.
 
 ---
 
-## 10. Out-of-process / scheduled (no dispatcher shell)
+## 11. Out-of-process / scheduled (no dispatcher shell)
 
 ```bash
 node packages/defaultAgentProvider/dist/collisions/optimizationRunner.js \
@@ -312,8 +424,8 @@ D:\collisions\                                  ← --workdir
 ├── translation-results.json                    ← step 1b output (baseline)
 ├── neighborhoods.{json,html}                   ← step 3 output
 ├── patterns.jsonl                              ← appends across runs
-├── patterns.{json,html}                        ← step 9 output
-├── schemaGuidelines.candidates.md              ← step 9 output (operator promotes)
+├── patterns.{json,html}                        ← step 10 output
+├── schemaGuidelines.candidates.md              ← step 10 output (operator promotes)
 └── optimization-run-<ts>/
     ├── optimization-run.json                   ← index of cases + coverage
     ├── optimization-impact.{json,html}         ← validate output
@@ -330,6 +442,6 @@ D:\collisions\                                  ← --workdir
             └── evaluation.json
 ```
 
-Start with steps 1–5. Once that loop feels predictable, move to step 8
+Start with steps 1–5. Once that loop feels predictable, move to step 9
 and let `patterns.jsonl` accumulate. Promote distilled candidates into
 `schemaGuidelines.ts` after a few cycles to close the feedback loop.

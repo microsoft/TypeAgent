@@ -29,6 +29,7 @@ import {
 } from "../../../neighborhoods/optimize/sandboxTranslate.js";
 import {
     defaultPath,
+    fileLinkMd,
     resolveWorkdir,
     withReadOnlySession,
 } from "../../../neighborhoods/optimize/util.js";
@@ -39,6 +40,7 @@ import type {
 import type { DiffPayload } from "../../../neighborhoods/optimize/hypothesisEvaluator.js";
 import type { TranslationCorpus } from "../../../translation/translationProbeRunner.js";
 import { runValidate } from "../../../neighborhoods/optimize/validateImpact.js";
+import { writeRunBrowseHTML } from "../../../neighborhoods/optimize/runViz.js";
 import {
     minePatterns,
     parsePatternsJsonl,
@@ -521,24 +523,33 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
                     (w) => w.causedRegression,
                 ).length;
                 const winnersStacked = result.impact.winners.length;
+                const filterLine = includeWinners
+                    ? ` (filter: --winners ${includeWinners.join(",")})`
+                    : excludeWinners
+                      ? ` (filter: --leave-one-out ${excludeWinners.join(",")})`
+                      : "";
+                const md = [
+                    `Validate written: ${fileLinkMd(result.impactJsonPath)}`,
+                    `  HTML: ${fileLinkMd(result.impactHtmlPath)}`,
+                    `  winners stacked: ${winnersStacked}${filterLine}`,
+                    `  rescued: ${t.rescued} · regressed: ${t.regressed} · total: ${t.total}`,
+                    flagged > 0
+                        ? `  ⚠ ${flagged} winner(s) flagged: causedRegressions > localRescues. See HTML for details.`
+                        : "",
+                ].filter((l) => l.length > 0);
                 const text = [
                     `Validate written: ${result.impactJsonPath}`,
                     `  HTML: ${result.impactHtmlPath}`,
-                    `  winners stacked: ${winnersStacked}${
-                        includeWinners
-                            ? ` (filter: --winners ${includeWinners.join(",")})`
-                            : excludeWinners
-                              ? ` (filter: --leave-one-out ${excludeWinners.join(",")})`
-                              : ""
-                    }`,
+                    `  winners stacked: ${winnersStacked}${filterLine}`,
                     `  rescued: ${t.rescued} · regressed: ${t.regressed} · total: ${t.total}`,
                     flagged > 0
                         ? `  ⚠ ${flagged} winner(s) flagged: causedRegressions > localRescues. See HTML for details.`
                         : "",
                 ].filter((l) => l.length > 0);
                 context.actionIO.appendDisplay({
-                    type: "text",
-                    content: text,
+                    type: "markdown",
+                    content: md,
+                    alternates: [{ type: "text", content: text }],
                 });
             });
         } catch (err) {
@@ -655,15 +666,22 @@ class CollisionOptimizePatternsCommandHandler implements CommandHandler {
             }),
         );
 
-        const lines = [
+        const md = [
+            `Patterns written: ${fileLinkMd(outPath)}`,
+            `  HTML: ${fileLinkMd(outHtmlPath)}`,
+            `  attempts: ${report.totalAttempts} across ${report.totalRuns} run(s)`,
+            `  --min-attempts=${minAttempts} --surface-disagreement=${surfaceDisagreement}`,
+        ];
+        const text = [
             `Patterns written: ${outPath}`,
             `  HTML: ${outHtmlPath}`,
             `  attempts: ${report.totalAttempts} across ${report.totalRuns} run(s)`,
             `  --min-attempts=${minAttempts} --surface-disagreement=${surfaceDisagreement}`,
         ];
         context.actionIO.appendDisplay({
-            type: "text",
-            content: lines,
+            type: "markdown",
+            content: md,
+            alternates: [{ type: "text", content: text }],
         });
     }
 }
@@ -852,14 +870,24 @@ class CollisionOptimizeDistillCommandHandler implements CommandHandler {
             const skipped = result.stepsSkipped.find(
                 (s) => s.step === "distill",
             );
+            const candidatesPath = path.join(
+                workdir,
+                "schemaGuidelines.candidates.md",
+            );
+            const md = [
+                skipped
+                    ? `distill skipped: ${skipped.reason}`
+                    : `distill complete — wrote ${fileLinkMd(candidatesPath)}`,
+            ];
             const text = [
                 skipped
                     ? `distill skipped: ${skipped.reason}`
-                    : `distill complete — wrote ${path.join(workdir, "schemaGuidelines.candidates.md")}`,
+                    : `distill complete — wrote ${candidatesPath}`,
             ];
             context.actionIO.appendDisplay({
-                type: "text",
-                content: text,
+                type: "markdown",
+                content: md,
+                alternates: [{ type: "text", content: text }],
             });
         } catch (err) {
             displayWarn(
@@ -869,6 +897,165 @@ class CollisionOptimizeDistillCommandHandler implements CommandHandler {
             throw err;
         }
     }
+}
+
+// =============================================================================
+// browse — per-run + per-case HTML browser
+// =============================================================================
+
+class CollisionOptimizeBrowseCommandHandler implements CommandHandler {
+    public readonly description =
+        "Generate browse.html for one or more optimization-run-* directories. Walks the run, writes a sortable case index plus a self-contained case.html per case showing every attempt with before/after diffs.";
+    public readonly parameters = {
+        flags: {
+            run: {
+                description:
+                    "Run timestamp suffix (the <ts> in optimization-run-<ts>/). Default: latest run under <workdir>.",
+                type: "string",
+                optional: true,
+            },
+            all: {
+                description:
+                    "Generate browse.html for ALL optimization-run-* directories under <workdir>. Overrides --run.",
+                type: "boolean",
+                default: false,
+            },
+            workdir: {
+                description:
+                    "Directory containing optimization-run-* subdirectories. Default: <instanceDir>/collisions.",
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const workdir = resolveWorkdir(systemContext, params.flags.workdir);
+
+        const { complete, incomplete } = collectRunDirs(workdir, {
+            ...(params.flags.run && { runId: params.flags.run }),
+            all: params.flags.all ?? false,
+        });
+        if (complete.length === 0 && incomplete.length === 0) {
+            displayWarn(
+                `No optimization-run-* directories found under ${workdir}.`,
+                context,
+            );
+            return;
+        }
+
+        const mdLines: string[] = [];
+        const textLines: string[] = [];
+        const failures: { runDir: string; reason: string }[] = [];
+        for (const runDir of complete) {
+            displayStatus(
+                `Browse · generating ${path.basename(runDir)}…`,
+                context,
+            );
+            try {
+                const result = writeRunBrowseHTML(runDir);
+                const browsePath = path.join(runDir, "browse.html");
+                mdLines.push(
+                    `  ${fileLinkMd(browsePath)} — ${result.casesWritten} case page(s)`,
+                );
+                textLines.push(
+                    `  ${browsePath} — ${result.casesWritten} case page(s)`,
+                );
+            } catch (err) {
+                failures.push({
+                    runDir,
+                    reason: err instanceof Error ? err.message : String(err),
+                });
+            }
+        }
+
+        const md: string[] = [];
+        const text: string[] = [];
+        if (mdLines.length > 0) {
+            md.push(`Browse pages written:`, ...mdLines);
+            text.push(`Browse pages written:`, ...textLines);
+        }
+        if (incomplete.length > 0) {
+            const incompleteLines = [
+                `Skipped ${incomplete.length} incomplete run dir(s) (missing optimization-run.json — likely crashed mid-explore):`,
+                ...incomplete
+                    .slice(0, 5)
+                    .map((d) => `  ${path.basename(d)}`),
+                incomplete.length > 5 ? `  …` : "",
+            ];
+            md.push(...incompleteLines);
+            text.push(...incompleteLines);
+        }
+        if (failures.length > 0) {
+            const failureLines = [
+                `Failed on ${failures.length} run dir(s):`,
+                ...failures.map(
+                    (f) => `  ${path.basename(f.runDir)}: ${f.reason}`,
+                ),
+            ];
+            md.push(...failureLines);
+            text.push(...failureLines);
+        }
+        if (mdLines.length > 0) {
+            const footer = `Open the browse.html in your browser. Each case slug links to its case.html with the attempt-by-attempt diff view.`;
+            md.push(footer);
+            text.push(footer);
+        }
+        context.actionIO.appendDisplay({
+            type: "markdown",
+            content: md.filter((l) => l.length > 0),
+            alternates: [
+                { type: "text", content: text.filter((l) => l.length > 0) },
+            ],
+        });
+    }
+}
+
+/**
+ * Enumerate run directories under workdir. Returns two buckets:
+ *   - `complete`: dirs with `optimization-run.json` (renderable)
+ *   - `incomplete`: dirs without it (crashed mid-explore, skip with warning)
+ */
+function collectRunDirs(
+    workdir: string,
+    opts: { runId?: string; all: boolean },
+): { complete: string[]; incomplete: string[] } {
+    if (!fs.existsSync(workdir)) return { complete: [], incomplete: [] };
+    const entries = fs
+        .readdirSync(workdir, { withFileTypes: true })
+        .filter(
+            (e) =>
+                e.isDirectory() && e.name.startsWith("optimization-run-"),
+        )
+        .map((e) => path.join(workdir, e.name));
+
+    let targets: string[];
+    if (opts.all) {
+        targets = entries.sort();
+    } else if (opts.runId) {
+        const target = path.join(workdir, `optimization-run-${opts.runId}`);
+        targets = entries.includes(target) ? [target] : [];
+    } else {
+        const sortedByMtime = entries
+            .map((full) => ({ full, mtime: fs.statSync(full).mtimeMs }))
+            .sort((a, b) => b.mtime - a.mtime);
+        targets = sortedByMtime.length > 0 ? [sortedByMtime[0]!.full] : [];
+    }
+
+    const complete: string[] = [];
+    const incomplete: string[] = [];
+    for (const dir of targets) {
+        if (fs.existsSync(path.join(dir, "optimization-run.json"))) {
+            complete.push(dir);
+        } else {
+            incomplete.push(dir);
+        }
+    }
+    return { complete, incomplete };
 }
 
 // =============================================================================
@@ -887,6 +1074,7 @@ export function getCollisionOptimizeCommandHandlers(): CommandHandlerTable {
             patterns: new CollisionOptimizePatternsCommandHandler(),
             run: new CollisionOptimizeRunCommandHandler(),
             distill: new CollisionOptimizeDistillCommandHandler(),
+            browse: new CollisionOptimizeBrowseCommandHandler(),
         },
     };
 }

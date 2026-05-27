@@ -9,6 +9,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { ActionContext } from "@typeagent/agent-sdk";
 import {
@@ -169,6 +170,25 @@ export async function withReadOnlySession<T>(
             await changeContextConfig({ cache: { enabled: true } }, context);
         }
     }
+}
+
+// =============================================================================
+// Display helpers — clickable file paths in dispatcher output.
+// =============================================================================
+
+/** Render an absolute filesystem path as a markdown link the shell/VS Code
+ *  extension can render as `<a href="file:///…">`. Encodes spaces and
+ *  Windows backslashes via `pathToFileURL`. */
+export function fileLinkMd(p: string, label?: string): string {
+    const href = pathToFileURL(p).href;
+    return `[${label ?? p}](${href})`;
+}
+
+/** Same as `fileLinkMd` but emits an HTML anchor for `type: "html"`
+ *  displays. */
+export function fileLinkHtml(p: string, label?: string): string {
+    const href = pathToFileURL(p).href;
+    return `<a href="${href}">${label ?? p}</a>`;
 }
 
 // =============================================================================
