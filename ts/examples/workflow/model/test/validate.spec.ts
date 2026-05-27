@@ -7774,8 +7774,115 @@ describe("validateWorkflowIR", () => {
             });
         });
     });
+    // ---- Single-pass walk: remaining coverage gaps ----
 
-    // ---- Decision 0011: `{}` = unknown semantics ----
+    describe("single-pass walk coverage", () => {
+        it("rejects unknown $from namespace value", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        inputs: {
+                            x: { $from: "badns" as any, name: "x" },
+                        },
+                        bind: "out",
+                    }),
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Unknown $from namespace") &&
+                        e.message.includes("badns"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects forkMap collection template with type incompatible with collectionSchema", () => {
+            // collection template resolves to a string literal; collectionSchema
+            // declares an array — the walk should detect the mismatch.
+            const ir = makeMinimalIR({
+                entry: "forkMap_0",
+                nodes: {
+                    forkMap_0: {
+                        kind: "forkMap",
+                        collection: { $literal: "not-an-array" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        elementParam: "item",
+                        body: {
+                            inputSchema: {},
+                            entry: "body_step",
+                            nodes: {
+                                body_step: makeTaskNode({ bind: "stepOut" }),
+                            },
+                            output: { $from: "scope", name: "stepOut" },
+                            outputSchema: { type: "object" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "object" },
+                        },
+                        bind: "out",
+                    } as ForkMapNode,
+                },
+                outputSchema: { type: "array", items: { type: "object" } },
+                output: { $from: "scope", name: "out" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("collection") &&
+                        e.message.includes("not assignable"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts optional $from state ref to undeclared state variable", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeLoopNode(
+                        {
+                            bind: "out",
+                        },
+                        {
+                            nodes: {
+                                step: makeTaskNode({
+                                    inputSchema: {
+                                        type: "object",
+                                        properties: { x: { type: "string" } },
+                                    },
+                                    inputs: {
+                                        x: {
+                                            $from: "state",
+                                            name: "notDeclared",
+                                            optional: true,
+                                        },
+                                    },
+                                }),
+                            },
+                            output: { $from: "state", name: "i" },
+                            outputSchema: { type: "integer" },
+                        },
+                    ),
+                },
+                output: null,
+                outputSchema: { type: "null" },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("no state variable"),
+                ),
+            ).toBe(false);
+        });
+    });
+
     //
     // A bound producer may legally publish `outputSchema: {}` (the top
     // type, i.e. "unknown"). The value is opaque: only consumers whose

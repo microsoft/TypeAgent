@@ -1709,12 +1709,37 @@ function validateNodeInputTemplates(
 
     // ---- ForkMap collection and optional inputs ----
     if (node.kind === "forkMap") {
-        walkTemplateAndComputeType(
+        const collectionType = walkTemplateAndComputeType(
             node.collection,
             `${path}.collection`,
             typeCtx,
             errors,
         );
+        if (
+            collectionType !== undefined &&
+            node.collectionSchema &&
+            !isEmptySchema(node.collectionSchema)
+        ) {
+            if (
+                !checkUnknownAssignability(
+                    collectionType,
+                    node.collectionSchema,
+                    `${path}.collection`,
+                    errors,
+                    "Resolved collection",
+                    "collectionSchema",
+                )
+            ) {
+                checkStructuralSubtype(
+                    collectionType,
+                    node.collectionSchema,
+                    `${path}.collection`,
+                    errors,
+                    "Resolved collection",
+                    "collectionSchema",
+                );
+            }
+        }
         if (node.inputs) {
             for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
                 walkTemplateAndComputeType(
