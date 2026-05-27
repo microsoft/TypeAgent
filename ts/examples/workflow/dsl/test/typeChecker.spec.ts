@@ -1531,7 +1531,7 @@ describe("type checker", () => {
         `);
     });
 
-    test("number is NOT assignable to integer (G10)", () => {
+    test("number is NOT assignable to integer", () => {
         expectError(
             `workflow test(): integer {
                 const x: number = 5;
@@ -1541,21 +1541,55 @@ describe("type checker", () => {
         );
     });
 
-    test("number parameter is NOT assignable to integer return (G10)", () => {
+    test("number parameter is NOT assignable to integer return", () => {
         expectError(
             `workflow test(x: number): integer { return x; }`,
             "not assignable to declared type",
         );
     });
 
-    test("number value is NOT assignable to integer const annotation (G10)", () => {
+    test("number value is NOT assignable to integer const annotation", () => {
         expectError(
             `workflow test(x: number): number {
                 const y: integer = x;
                 return y;
             }`,
+            "Type 'number' is not assignable to type 'integer'",
+        );
+    });
+
+    test("number field is NOT assignable to integer field (nested)", () => {
+        expectError(
+            `workflow test(x: number): { n: integer } {
+                return { n: x };
+            }`,
             "not assignable",
         );
+    });
+
+    test("number[] is NOT assignable to integer[] (array element)", () => {
+        expectError(
+            `workflow test(xs: number[]): integer[] {
+                return xs;
+            }`,
+            "not assignable",
+        );
+    });
+
+    test("integer field IS assignable to number field (nested widening)", () => {
+        expectNoErrors(`
+            workflow test(x: integer): { n: number } {
+                return { n: x };
+            }
+        `);
+    });
+
+    test("integer[] IS assignable to number[] (array widening)", () => {
+        expectNoErrors(`
+            workflow test(xs: integer[]): number[] {
+                return xs;
+            }
+        `);
     });
 
     test("array literal infers element type from first element", () => {

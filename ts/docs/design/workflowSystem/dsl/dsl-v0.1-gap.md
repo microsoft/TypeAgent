@@ -41,8 +41,13 @@ new surface area:
 12. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
-13. **G29: Revisit value-producing `if`/`switch`.** Deprecation of
-    value-producing `if`/`switch` is deferred pending `.wf` survey + G18.
+13. **G29 (open part): Decide whether to deprecate value-producing
+    `if`/`switch` in favour of ternary.** The arm-type checking part of
+    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
+    as a type error) is resolved; see decision 0011 §6 and the
+    `G29 + G30` section below. The remaining open question - whether
+    value-producing `if`/`switch` should be deprecated entirely - is
+    deferred pending a `.wf` survey + G18 (union types).
 
 G24-G28 capture follow-up design questions raised during the workflow
 composition implementation that have not yet been scheduled.
@@ -628,7 +633,7 @@ therefore a non-standard extension with no TypeScript precedent.
 TypeScript (positional only, or explicit destructuring) or keep the
 named-record convenience syntax as a DSL-specific ergonomic feature?
 
-**Raised during:** G1 workflow composition implementation (designing workflow
+**Raised during:** the workflow composition implementation (designing workflow
 call syntax).
 
 ## G25: `export` conflates entry-point selection with cross-file importability; no library compile mode
@@ -672,7 +677,7 @@ concrete problems:
   stem) as the entry when no explicit `--entry` is given, making `export`
   purely a visibility qualifier.
 
-**Raised during:** G1 workflow composition implementation (designing
+**Raised during:** the workflow composition implementation (designing
 export / entry-point semantics).
 
 ## G26: No DSL syntax for `timeoutMs` on workflow calls
@@ -697,7 +702,7 @@ field is only reachable by tools that build IR directly.
   — declares max runtime on the callee declaration rather than each call
   site. Simpler but less flexible (no per-call override).
 
-**Raised during:** G1 workflow composition implementation (designing
+**Raised during:** the workflow composition implementation (designing
 sub-workflow call nodes in the IR).
 
 ## G27: No per-file namespacing for exported workflows in IR
@@ -721,7 +726,7 @@ schema for registry-style resolution) but it is not used by the bundler today.
 - **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
   expose a `workflowOrigins` side-table mapping mangled name → original path + name.
 
-**Raised during:** G1 workflow composition implementation (building the
+**Raised during:** the workflow composition implementation (building the
 cross-file bundler and name mangling strategy).
 
 ## G28: `maxConcurrency` only accepts literal integers

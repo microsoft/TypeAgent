@@ -108,18 +108,18 @@ sub-scopes that capture typed bindings don't see `{}` at runtime.
 The emitter should produce concrete `outputSchema` on all bound producers
 where the type is statically known. Current coverage:
 
-| Site                                           | Status                                             |
-| ---------------------------------------------- | -------------------------------------------------- |
-| Generic task calls                             | Done (resolvedSchemas)                             |
-| `forkMap` body outputSchema                    | Done                                               |
-| `fork` parallel branch body outputSchema       | Done                                               |
-| `attempts` loop body output                    | Done                                               |
-| Destructuring pick nodes                       | Done (symbolTypes)                                 |
-| Pure-literal return identity wrapper           | Done                                               |
-| Branch `outputSchema` (if/switch/ternary bind) | Done                                               |
-| Arm `scope.outputSchema`                       | Done                                               |
-| Ternary literal identity wrappers              | Uses `{}` (accepted; consumer-side catches misuse) |
-| Noop merge nodes                               | Uses `{}` (unbound; irrelevant)                    |
+| Site                                           | Status                                                               |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| Generic task calls                             | Done (resolvedSchemas)                                               |
+| `forkMap` body outputSchema                    | Done                                                                 |
+| `fork` parallel branch body outputSchema       | Done                                                                 |
+| `attempts` loop body output                    | Done                                                                 |
+| Destructuring pick nodes                       | Done (symbolTypes)                                                   |
+| Pure-literal return identity wrapper           | Done                                                                 |
+| Branch `outputSchema` (if/switch/ternary bind) | Done                                                                 |
+| Arm `scope.outputSchema`                       | Done                                                                 |
+| Ternary literal identity wrappers              | Done (uses `_resolvedSchemas`; `{}` only as error-recovery fallback) |
+| Noop merge nodes                               | Uses `{}` (unbound; irrelevant)                                      |
 
 ---
 
