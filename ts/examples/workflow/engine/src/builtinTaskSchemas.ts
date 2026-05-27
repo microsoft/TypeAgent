@@ -162,12 +162,16 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "math.add",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.subtract",

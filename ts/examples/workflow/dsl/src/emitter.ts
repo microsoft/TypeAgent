@@ -54,7 +54,11 @@ import {
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
-import { ResolvedTaskSchemas, typeExprToSchema } from "./typeParamUtils.js";
+import {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
 import { TypeInfo, typeInfoToSchema } from "./typeChecker.js";
 
 export interface TaskSchemaTypeParam {
@@ -1149,16 +1153,29 @@ export class Emitter {
         const schema = this.taskSchemas.get(taskName);
         const concreteSchema =
             schema && !isGenericSchema(schema) ? schema : undefined;
+        // For generic arithmetic tasks (e.g. math.add<N>), use the cached
+        // resolved schemas from the type checker when it narrowed N (e.g.
+        // integer+integer). Fall back to the schema's declared defaults so
+        // the emitted inputSchema and outputSchema always resolve N to the
+        // same concrete type (required for checkTypeParamConsistency).
+        const genericResolved: ResolvedTaskSchemas | undefined =
+            schema && isGenericSchema(schema)
+                ? (this.resolvedSchemas.get(expr.loc.offset) ??
+                  resolveGenericSchemas(schema, []))
+                : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: concreteSchema?.inputSchema ?? {
-                type: "object",
-                required: ["left", "right"],
-                properties: { left: {}, right: {} },
-            },
+            inputSchema:
+                concreteSchema?.inputSchema ??
+                genericResolved?.inputSchema ?? {
+                    type: "object",
+                    required: ["left", "right"],
+                    properties: { left: {}, right: {} },
+                },
             outputSchema:
                 concreteSchema?.outputSchema ??
+                genericResolved?.outputSchema ??
                 this.binaryOpOutputSchema(expr.op),
             inputs: { left, right },
             bind: nodeId,
@@ -1483,9 +1500,9 @@ export class Emitter {
             }
         }
 
-        // State: attempt counter
+        // State: attempt counter (always a non-negative integer).
         const state: Record<string, LoopStateVar> = {
-            attempt: { schema: { type: "number" }, initial: 0 },
+            attempt: { schema: { type: "integer" }, initial: 0 },
         };
 
         // --- Success path: set _should_retry = false so the loop exits.
@@ -1528,11 +1545,11 @@ export class Emitter {
                 type: "object",
                 required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: {
                     $from: "state",
@@ -1836,11 +1853,11 @@ export class Emitter {
                 type: "object",
                 required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
@@ -2124,11 +2141,11 @@ export class Emitter {
                 type: "object",
                 required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,

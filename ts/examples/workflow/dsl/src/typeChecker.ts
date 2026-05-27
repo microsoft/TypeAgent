@@ -1792,6 +1792,24 @@ export class TypeChecker {
                         e.right.loc.col,
                     );
                 }
+                // math.add is generic in N; when both operands are integer
+                // resolve the concrete schemas and cache for the emitter.
+                if (
+                    e.op === "+" &&
+                    left.kind === "primitive" &&
+                    left.name === "integer" &&
+                    right.kind === "primitive" &&
+                    right.name === "integer"
+                ) {
+                    const addSchema = this.taskSchemaMap.get("math.add");
+                    if (addSchema && isGenericSchema(addSchema)) {
+                        const resolved = resolveGenericSchemas(addSchema, [
+                            { type: "integer" },
+                        ]);
+                        this._resolvedSchemas.set(e.loc.offset, resolved);
+                        return { kind: "primitive", name: "integer" };
+                    }
+                }
                 return NUMBER;
 
             case "===":

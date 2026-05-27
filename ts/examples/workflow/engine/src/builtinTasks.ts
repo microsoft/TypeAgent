@@ -665,14 +665,16 @@ export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
 
 // ---- math tasks ----
 
-export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
-    {
-        ...taskSchema("math.add"),
-        sideEffects: false,
-        async execute(input) {
-            return { kind: "ok", output: input.left + input.right };
-        },
-    };
+export const mathAdd: GenericTaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...genericTaskSchema("math.add"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left + input.right };
+    },
+};
 
 export const mathSubtract: TaskDefinition<
     { left: number; right: number },
