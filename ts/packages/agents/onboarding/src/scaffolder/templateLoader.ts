@@ -40,16 +40,21 @@ export function loadTemplate(
     filename: string,
     vars: Record<string, string>,
 ): string {
-    let tpl = fs.readFileSync(templatePath(filename), "utf-8");
-    for (const [key, value] of Object.entries(vars)) {
-        tpl = tpl.split(`{{${key}}}`).join(value);
-    }
-    const leftover = tpl.match(/\{\{[A-Z0-9_]+\}\}/g);
+    const tpl = fs.readFileSync(templatePath(filename), "utf-8");
+    // Single-pass regex replacement so a substituted value that happens to
+    // contain `{{KEY}}` text is NOT re-processed by a later iteration --
+    // important if a future caller ever passes a var derived from user
+    // input. Unknown placeholders are left in place and surfaced by the
+    // leftover check below.
+    const out = tpl.replace(/\{\{([A-Z0-9_]+)\}\}/g, (match, key) =>
+        key in vars ? vars[key] : match,
+    );
+    const leftover = out.match(/\{\{[A-Z0-9_]+\}\}/g);
     if (leftover && leftover.length > 0) {
         const unique = Array.from(new Set(leftover)).join(", ");
         throw new Error(
             `Template ${filename} has unsubstituted placeholders: ${unique}`,
         );
     }
-    return tpl;
+    return out;
 }
