@@ -18,6 +18,7 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
 import sanitizeFilename from "sanitize-filename";
+import { isAllowedViewOrigin } from "./originAllowlist.js";
 
 const debug = registerDebug("typeagent:markdown:service");
 
@@ -26,6 +27,23 @@ const port = parseInt(process.argv[2]);
 if (isNaN(port)) {
     throw new Error("Port must be a number");
 }
+
+// Origin allowlist — runs before everything else so non-loopback
+// requests get HTTP 403 without consuming rate-limit budget or hitting
+// the route handlers. The server binds to localhost, but any local
+// browser tab can still hit `http://localhost:<port>` via fetch/XHR;
+// the gate stops cross-origin reads of the live document and uploaded
+// files. The Y.js WebSocket upgrade is gated separately in
+// createYjsWSServer.
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (isAllowedViewOrigin(origin)) {
+        next();
+        return;
+    }
+    debug(`Rejecting request from origin ${origin}`);
+    res.status(403).send("Origin not allowed");
+});
 const limiter = rateLimit({
     windowMs: 60000,
     max: 100, // limit each IP to 100 requests per windowMs
@@ -2211,6 +2229,24 @@ function createYjsWSServer(server: http.Server): WebSocketServer {
 
     server.on("upgrade", (request, socket, head) => {
         try {
+            // Origin gate — same allowlist as the HTTP middleware. The
+            // Yjs WS carries the full document content + edit stream,
+            // so loopback bind alone isn't enough; any local web page
+            // could otherwise open a WS to localhost:<port> and read /
+            // mutate the live doc.
+            const origin = request.headers.origin as string | undefined;
+            if (!isAllowedViewOrigin(origin)) {
+                debug(`Rejecting WS upgrade from origin ${origin}`);
+                socket.write(
+                    "HTTP/1.1 403 Forbidden\r\n" +
+                        "Connection: close\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "\r\n",
+                );
+                socket.destroy();
+                return;
+            }
+
             // Extract room name from URL path
             const url = new URL(
                 request.url || "/",

@@ -10,7 +10,6 @@
  * to steer the LLM toward TypeAgent's PowerShell agent for system operations.
  */
 
-import { shouldTryTypeAgent } from "../shared/route-detector.js";
 import type { HookInput, HookOutput } from "./types.js";
 
 /**
@@ -59,15 +58,6 @@ function getSpecialPrefixGuidance(prompt: string): string | undefined {
 }
 
 export function handleMcpRedirect(input: HookInput): HookOutput {
-    if (!shouldTryTypeAgent(input.prompt)) {
-        // Even for non-TypeAgent prompts on Windows, inject TypeAgent PowerShell guidance
-        const psGuidance = getPowerShellSessionGuidance();
-        if (psGuidance) {
-            return { additionalContext: psGuidance };
-        }
-        return {};
-    }
-
     const psGuidance = getPowerShellSessionGuidance() ?? "";
     const prefixGuidance = getSpecialPrefixGuidance(input.prompt) ?? "";
 

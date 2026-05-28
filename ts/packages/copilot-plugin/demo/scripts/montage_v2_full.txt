@@ -1,0 +1,288 @@
+# ============================================================
+# Montage v2 — Personal agent with memory across domains
+#
+# Reproduces the original Montage 2 demo (runtime ~7 min). Narration
+# wording is drawn from the original VTT transcript; typed commands
+# are from the original shell demo file (montage _v2.txt). Timings
+# in @sleep beats are seeded from the VTT timestamps so the cadence
+# roughly matches the recorded version.
+#
+# Designed for the AHK driver in manual mode (the default). Each
+# typed line pauses for Ctrl+Right so the recorder controls pace.
+# @say lines speak in parallel with the next typed command;
+# @say-block lines block until narration completes.
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\montage-setup.ps1
+
+# ------------------------------------------------------------
+# Phase 0 — Pre-roll. Settle the recording before narration starts.
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+# ------------------------------------------------------------
+# Phase 1 — Intro
+# (VTT 00:01 – 00:18)
+# ------------------------------------------------------------
+
+@say-block "This demo shows a single personal agent that integrates actions from multiple domains. The agent has memory, allowing it to pull information from past conversations into the current context. To show this value, we'll follow along in a day in the life of a developer."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — Music: launch Spotify, set device, play Nocturne, volume
+# (VTT 00:18 – 00:44)
+# ------------------------------------------------------------
+
+@say "To get our day of coding started, let's get some music going. We'll start by asking our agent to launch Spotify."
+
+please launch spotify
+@expect "Spotify" timeout=15s on-timeout=warn
+
+@say "Now we set the playback device and play Nocturne."
+
+set playback device to kibo
+@expect "kibo" timeout=10s on-timeout=continue
+
+Please play Nocturne No. 2 by Frédéric Chopin
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Let's raise the volume a little bit."
+
+set the music volume to 30
+@wait-completion timeout=10s on-timeout=continue
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 3 — VS Code: window actions and theme with clarification
+# (VTT 00:44 – 01:17)
+# ------------------------------------------------------------
+
+@say "Now we can switch to VS Code. We can take actions such as splitting the window, reverting that change, and customizing the theme."
+
+switch to vscode window
+@expect "Code" timeout=10s on-timeout=warn
+
+split window into two columns
+@wait-completion timeout=10s on-timeout=continue
+
+Revert back to a single column
+@wait-completion timeout=10s on-timeout=continue
+
+change my code color scheme
+@wait-completion timeout=15s on-timeout=warn
+
+# Expect a clarification prompt from the agent — the recorder answers
+# with the next typed line.
+@say "Notice — the agent asks for clarification."
+
+Solarized Light
+@wait-completion timeout=10s on-timeout=continue
+
+@say "And we can switch it back."
+
+Actually I want the color to be monokai
+@wait-completion timeout=15s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 4 — Window management + Edge launch
+# (VTT 01:17 – 01:35)
+# ------------------------------------------------------------
+
+@say "We spend a lot of time in the browser as well. Our desktop agent lets us launch the browser and take actions such as tiling windows and maximizing within the desktop."
+
+Launch edge
+@expect "Edge" timeout=10s on-timeout=warn
+
+Tile vs code the left and edge to the right
+@wait-completion timeout=10s on-timeout=continue
+
+Maximize Edge
+@wait-completion timeout=10s on-timeout=continue
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 5 — Browser navigation via natural language
+# (VTT 01:35 – 01:54)
+# ------------------------------------------------------------
+
+@say "We can also control navigation and other actions using natural language."
+
+Go To the microsoft homepage
+@expect "microsoft" timeout=15s on-timeout=warn
+
+Scroll down
+@wait-completion timeout=8s on-timeout=continue
+
+Scroll up
+@wait-completion timeout=8s on-timeout=continue
+
+Zoom in
+@wait-completion timeout=8s on-timeout=continue
+
+Zoom out
+@wait-completion timeout=8s on-timeout=continue
+
+Follow Teams link
+@wait-completion timeout=15s on-timeout=warn
+
+@say "All these actions happened using natural language."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 6 — PBDB site: history recall, site-specific schema,
+#           natural-language → taxonomic + geologic terms
+# (VTT 01:59 – 03:18)
+# ------------------------------------------------------------
+
+@say-block "Since we run in the context of the browser, we have access to the user's browsing history. So we can invoke actions like the next one."
+
+Show PBDB site I saw yesterday
+@expect "PBDB" timeout=20s on-timeout=warn
+
+@say-block "The PaleoBioDB site provides rich visualization of fossil records. I'll use it to illustrate how a web developer can register actions specifically for their site. They expose a TypeScript schema that defines the actions and parameters."
+
+@pause
+
+@say "The user can use natural language for actions like setting the location."
+
+Set location to Denver
+@wait-completion timeout=15s on-timeout=warn
+
+@say "And zooming in — notice this applies to the map control, not the whole browser like before."
+
+Zoom in
+@wait-completion timeout=10s on-timeout=continue
+
+@say "They can also take other actions, like showing fossil records from 100 million years ago."
+
+Show fossils from 100 million years ago
+@wait-completion timeout=20s on-timeout=warn
+
+@say "And T-Rex fossils. Notice the user described terms in everyday speech — 100 million years ago, T-Rex fossils."
+
+Show T-Rex fossils
+@wait-completion timeout=20s on-timeout=warn
+
+@say-block "These were translated into the precise taxonomic group — Tyrannosaurus Rex — and the geologic period, Cretaceous, which is what the PaleoBioDB site needs. All of that is mediated by the large language model."
+
+clear filters
+@wait-completion timeout=10s on-timeout=continue
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 7 — Conversation memory: Kevin Scott podcast
+# (VTT 03:24 – 04:12)
+# ------------------------------------------------------------
+
+@say-block "Talking about translating user utterances into precise groups reminded me of something. There's a podcast I discussed with the agent some time back — the Kevin Scott podcast."
+
+in that Kevin Scott podcast we talked about last month, what were the books Adrian and Kevin mentioned?
+@expect "Children of Time" timeout=30s on-timeout=warn
+
+@say-block "So this reaches into conversation history, pulls up the conversation about that podcast, and queries it. We can see the books mentioned — Children of Time and Empire of Black and Gold."
+
+@pause
+
+@say "We can ask further questions, like what Kevin said about AI in that podcast."
+
+what did Kevin say about AI in that podcast?
+@wait-completion timeout=30s on-timeout=warn
+
+@say "It pulls a lot of information from conversation history."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 8 — Calendar via Graph API
+# (VTT 04:12 – 04:50)
+# ------------------------------------------------------------
+
+@say "Time to switch gears. Let's set up a meeting to review some code. This interacts with our calendar agent and uses the Graph API."
+
+Create a code review meeting next Monday at 11:00 AM
+@wait-completion timeout=20s on-timeout=warn
+
+@say "And we can add participants to the meeting."
+
+Add Isaiah to the code review meeting
+@wait-completion timeout=15s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 9 — Notifications stream: GitHub PR check
+# (VTT 04:51 – 05:04)
+# ------------------------------------------------------------
+
+@say "We can also check on previous actions, like the status of a PR. The agent has access to my notification stream."
+
+did the PR about semanticRefs get checked in?
+@wait-completion timeout=20s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 10 — Email via Graph API
+# (VTT 05:04 – 05:48)
+# ------------------------------------------------------------
+
+@say "I can take other actions too, like replying to an email that Megan sent about meeting up for coffee."
+
+Reply to the email from Megan saying you will be happy to meet for coffee
+@wait-completion timeout=20s on-timeout=warn
+
+@say "And forward that email to Isaiah to see if he wants to join."
+
+Forward the mail from Megan to Isaiah asking if he wants to join us for coffee
+@wait-completion timeout=20s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 11 — Web search + list management
+# (VTT 05:49 – 06:35)
+# ------------------------------------------------------------
+
+@say "As I wrap up my day, I want to look at a garden project I was working on. Let's find out more about snowdrops."
+
+lookup snowdrops on the web
+@wait-completion timeout=20s on-timeout=warn
+
+@say "The agent runs a general web search, summarizes the information, and I can take actions on it."
+
+@pause
+
+what was the name of the list we made for the bulb order?
+@expect "bulb" timeout=15s on-timeout=warn
+
+@say "This goes into history and we get back that the list name is bulb 25."
+
+add snowdrops to that list
+@wait-completion timeout=15s on-timeout=continue
+
+what is on the list?
+@wait-completion timeout=15s on-timeout=continue
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 12 — Recap
+# (VTT 06:35 – end)
+# ------------------------------------------------------------
+
+@say-block "To recap, we've shown the user interacting with a single agent while taking actions across multiple domains. The user interacted with desktop, VS Code, the browser, individual website agents, the Microsoft Graph API, and more. The agent switched between these actions seamlessly, and the user was able to call up information from application memory and conversation memory."
+
+@sleep 1s
+@record-stop
+@teardown teardown\montage-teardown.ps1

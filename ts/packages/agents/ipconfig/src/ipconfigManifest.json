@@ -1,0 +1,12 @@
+{
+  "emojiChar": "🔎",
+  "description": "Windows IP configuration command-line tool that displays and manages network adapter settings",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Ipconfig agent actions",
+    "originalSchemaFile": "./ipconfigSchema.ts",
+    "schemaFile": "../dist/ipconfigSchema.pas.json",
+    "grammarFile": "../dist/ipconfigSchema.ag.json",
+    "schemaType": "IpconfigActions"
+  }
+}

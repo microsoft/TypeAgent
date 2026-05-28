@@ -10,6 +10,7 @@ import path from "path";
 import sharp from "sharp";
 import fs from "node:fs";
 import registerDebug from "debug";
+import { isAllowedViewOrigin } from "./originAllowlist.js";
 
 const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
@@ -32,6 +33,21 @@ let rootImageFolder: string;
 
 // The last message sent to the clients
 let lastMessage: any = {};
+
+// Origin allowlist — runs before everything else so non-loopback
+// requests get HTTP 403 without consuming rate-limit budget or hitting
+// the route handlers. The server binds to localhost, but any local
+// browser tab can still hit `http://localhost:<port>` via fetch/XHR;
+// the gate stops cross-origin reads of indexed images and folders.
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (isAllowedViewOrigin(origin)) {
+        next();
+        return;
+    }
+    debug(`Rejecting request from origin ${origin}`);
+    res.status(403).send("Origin not allowed");
+});
 
 // limit request rage
 const limiter = rateLimit({
