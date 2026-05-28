@@ -798,24 +798,7 @@ async function updateBrowserContext(
         }
     } else {
         // shut down service
-        if (context.agentContext.browserProcess) {
-            context.agentContext.browserProcess.kill();
-            context.agentContext.browserProcess = undefined;
-        }
-
-        if (context.agentContext.viewProcess) {
-            context.agentContext.viewProcess.kill();
-            context.agentContext.viewProcess = undefined;
-            context.agentContext.viewPortRegistration?.release();
-            context.agentContext.viewPortRegistration = undefined;
-            // Reset to OS-assigned so a subsequent re-enable forks
-            // server.mjs with arg "0" instead of the stale port. The
-            // killed child may still hold the old port for a brief
-            // window (SIGTERM is async on Windows), so re-binding the
-            // same port races with EADDRINUSE.
-            context.agentContext.localHostPort = 0;
-        }
-
+        shutdownBrowserChildProcesses(context.agentContext);
         await cleanupBrowserSession(context.agentContext);
     }
 }
@@ -824,16 +807,26 @@ async function closeBrowserContext(
     context: SessionContext<BrowserActionContext>,
 ) {
     await cleanupBrowserSession(context.agentContext);
-    if (context.agentContext.browserProcess) {
-        context.agentContext.browserProcess.kill();
-        context.agentContext.browserProcess = undefined;
+    shutdownBrowserChildProcesses(context.agentContext);
+}
+
+// Tear down the browser + view child processes and release their
+// PortRegistrar entry. Safe to call multiple times; resets
+// `localHostPort` to 0 so a subsequent re-enable forks server.mjs
+// with arg "0" instead of the stale port. The killed view child may
+// still hold the old port briefly (SIGTERM is async on Windows), so
+// re-binding the same port would race with EADDRINUSE.
+function shutdownBrowserChildProcesses(agentContext: BrowserActionContext) {
+    if (agentContext.browserProcess) {
+        agentContext.browserProcess.kill();
+        agentContext.browserProcess = undefined;
     }
-    if (context.agentContext.viewProcess) {
-        context.agentContext.viewProcess.kill();
-        context.agentContext.viewProcess = undefined;
-        context.agentContext.viewPortRegistration?.release();
-        context.agentContext.viewPortRegistration = undefined;
-        context.agentContext.localHostPort = 0;
+    if (agentContext.viewProcess) {
+        agentContext.viewProcess.kill();
+        agentContext.viewProcess = undefined;
+        agentContext.viewPortRegistration?.release();
+        agentContext.viewPortRegistration = undefined;
+        agentContext.localHostPort = 0;
     }
 }
 
