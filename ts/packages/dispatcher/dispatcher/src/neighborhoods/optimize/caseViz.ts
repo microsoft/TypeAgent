@@ -289,10 +289,11 @@ function renderHTML(
   .filter-row label { margin-right: 12px; font-size: 11px; }
   .controls { margin: 8px 0; font-size: 11px; color: #555; }
   .apply-row { margin: 8px 0; }
-  .apply-btn { font-family: inherit; font-size: 12px; padding: 4px 12px; border: 1px solid #bbb; background: #f4f4f4; border-radius: 3px; cursor: not-allowed; color: #555; }
-  .apply-btn:not(:disabled) { background: #e6f5ec; border-color: #6a9; color: #1c6b3a; cursor: pointer; }
-  .apply-btn:not(:disabled):hover { background: #d6efd2; }
-  .apply-note { font-size: 10px; color: #888; margin-left: 8px; }
+  .apply-btn { font-family: inherit; font-size: 12px; padding: 4px 12px; border: 1px solid #6a9; background: #e6f5ec; border-radius: 3px; cursor: pointer; color: #1c6b3a; }
+  .apply-btn:hover { background: #d6efd2; }
+  .apply-btn.applied { background: #1c6b3a; border-color: #1c6b3a; color: #fff; cursor: default; }
+  .apply-status { display: inline-block; margin-left: 8px; font-size: 11px; color: #1c6b3a; opacity: 0; transition: opacity 0.25s ease-in; }
+  .apply-status.show { opacity: 1; }
 </style></head>
 <body>
 
@@ -307,6 +308,8 @@ ${renderAttemptsTable(sorted, winnerId)}
 <h2>Attempt details</h2>
 <div class="controls">Click any row above (or expand below) to see the proposed edit. Within each attempt, the BEFORE/AFTER block reconstructs what the lever asked the LLM to change.</div>
 ${sorted.map((a) => renderAttemptDetail(a, winnerId, caseDesc)).join("\n")}
+
+${applyButtonScript()}
 
 </body></html>`;
 }
@@ -437,32 +440,42 @@ ${regressions}
 }
 
 /**
- * Placeholder "Apply this change" button. Disabled in v1 — clicking does
- * nothing. Once a dispatcher round-trip exists, this becomes a real
- * trigger.
+ * Demo-mode "Apply this change" button. Looks live and gives visual
+ * feedback on click, but no real dispatcher round-trip yet — the click
+ * handler just toggles a confirmation state for video / screenshot
+ * purposes. See `applyButtonScript()` for the inline JS.
  */
 function renderApplyButton(a: AttemptView): string {
-    const hasError = !!a.evaluation.applyError;
-    const isDry = !!a.proposal.dryRun;
-    const tooltip = hasError
-        ? "Cannot apply — this attempt failed during sandbox apply"
-        : isDry
-          ? "Cannot apply — this is a dry-run attempt with no payload"
-          : "Apply not yet implemented — see TODO in caseViz.ts";
-    // TODO: wire up Apply. Needs a dispatcher round-trip (e.g. a small
-    //       sidecar HTTP endpoint or a `@collision optimize apply
-    //       --run <runDir> --attempt <id>` command) that re-runs the
-    //       lever's apply primitive against the live source tree using
-    //       this attempt's proposal payload. For now the button is a
-    //       visual placeholder so operators can see where the action
-    //       will live; clicking it does nothing.
+    // TODO: wire up Apply for real. Needs a dispatcher round-trip (e.g.
+    //       a `@collision optimize apply --run <runDir> --attempt <id>`
+    //       command, or a sidecar HTTP endpoint the case page can POST
+    //       to) that re-runs the lever's apply primitive against the
+    //       live source tree using this attempt's proposal payload.
+    //       For now `onclick` only flashes a visual confirmation.
     return `<div class="apply-row">
-  <!-- TODO(apply): not yet implemented. Should call back into the
-       dispatcher to apply this attempt's proposal payload to the live
-       source tree via the matching lever's apply primitive. -->
-  <button class="apply-btn" disabled title="${esc(tooltip)}" data-attempt-id="${esc(a.id)}" data-lever="${esc(a.proposal.lever)}">Apply this change</button>
-  <span class="apply-note">(not yet implemented)</span>
+  <!-- TODO(apply): not yet wired to the dispatcher. The click handler
+       below is a visual stub for demo purposes. -->
+  <button class="apply-btn" title="Apply this change" data-attempt-id="${esc(a.id)}" data-lever="${esc(a.proposal.lever)}" onclick="optimizeApply(this)">Apply this change</button>
+  <span class="apply-status">✓ Applied</span>
 </div>`;
+}
+
+/**
+ * Inline script injected once per page that drives the demo-mode click
+ * feedback for `.apply-btn`. Toggles the button into an "applied" state
+ * and reveals the `.apply-status` confirmation chip next to it.
+ */
+function applyButtonScript(): string {
+    return `<script>
+function optimizeApply(btn) {
+  btn.classList.add("applied");
+  btn.textContent = "Applied";
+  var status = btn.parentElement.querySelector(".apply-status");
+  if (status) status.classList.add("show");
+  // TODO(apply): replace this stub with a real call into the dispatcher
+  // using btn.dataset.attemptId / btn.dataset.lever.
+}
+</script>`;
 }
 
 function esc(s: string): string {

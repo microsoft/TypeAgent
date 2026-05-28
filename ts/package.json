@@ -100,9 +100,9 @@
       "exifreader",
       "keytar",
       "koffi",
+      "protobufjs",
       "puppeteer",
-      "sharp",
-      "usocket"
+      "sharp"
     ],
     "allowedDeprecatedVersions": {
       "@cliqz/adblocker": "*",

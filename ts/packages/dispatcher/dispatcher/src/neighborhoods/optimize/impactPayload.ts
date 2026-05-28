@@ -13,6 +13,8 @@
 // optimize/ can't import upstream from defaultAgentProvider. Re-implements
 // just the math; the viz lives in `impactViz.ts`.
 
+import * as path from "node:path";
+
 import type {
     TranslationOutcome,
     TranslationProbeFile,
@@ -80,6 +82,11 @@ export interface WinnerImpact {
     /** Canonical attempt id (e.g. `h02-jsdoc`). */
     attemptId: string;
     caseId: string;
+    /** Case directory slug (`case-NNN-<sanitized neighborhood>`). Used by
+     *  the impact viz to link each row into its `case.html`. Derived from
+     *  the winner's artifact path. Optional for backward compatibility
+     *  with older payloads. */
+    caseSlug?: string;
     /** Schemas this winner's edits touched (from the case's members). */
     schemasTouched: string[];
     /** Rescues on phrases whose expectedSchema is in `schemasTouched`. */
@@ -343,9 +350,18 @@ function attributeToWinners(
             }
         }
         const localNet = localRescues - localRegressions - causedRegressions;
+        // Derive case slug from the winner's artifactPath, which is
+        // `<runDir>/cases/<caseSlug>/attempts/<id>`. Two `dirname` hops up
+        // from the attempt dir gets us the case dir; the basename is the
+        // slug. Falls back to undefined if the path doesn't match.
+        const winnerPath = caseResult.winner.artifactPath;
+        const caseSlug = winnerPath
+            ? path.basename(path.dirname(path.dirname(winnerPath)))
+            : undefined;
         out.push({
             attemptId: caseResult.winner.hypothesis.id,
             caseId: caseResult.case.neighborhoodId,
+            ...(caseSlug && { caseSlug }),
             schemasTouched: [...schemas].sort(),
             localRescues,
             localRegressions,

@@ -252,7 +252,7 @@ Independent of the runtime experiments. Uses the JSON output of the static
 scanner.
 
 - [ ] **T1.** Generate baseline: `analyze-grammar-collisions --dir packages/agents
-  --out collisions-baseline.json`. Commit to repo as the reference set.
+--out collisions-baseline.json`. Commit to repo as the reference set.
 - [ ] **T2.** Categorize the 103 collisions:
   - **Tier 1 (real bugs, fix first):** short witness + concrete (no
     placeholders) + matched actions diverge in a way the user would notice.
