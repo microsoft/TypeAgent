@@ -1,0 +1,9 @@
+# C# build outputs
+bin/
+obj/
+*.user
+
+# WebView2 bundled content (generated from
+# ../../ts/packages/agents/visualStudio/host/webview/dist)
+webview-content/*
+!webview-content/.gitkeep

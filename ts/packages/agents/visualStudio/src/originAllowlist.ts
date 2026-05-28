@@ -7,7 +7,7 @@ import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
  * Origin allowlist for the visualStudio agent's WebSocket bridge.
  *
  * The only legitimate client is the in-process Visual Studio extension
- * (`host/csharp/Bridge/AgentBridgeClient.cs`), which uses
+ * (`dotnet/visualStudioTypeAgent/Bridge/AgentBridgeClient.cs`), which uses
  * `System.Net.WebSockets.ClientWebSocket`. That client does **not**
  * send an `Origin` header, so we rely on the shared no-Origin baseline
  * documented on {@link createAgentOriginAllowlist}.
