@@ -2437,6 +2437,28 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/ipconfig:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/list:
     dependencies:
       '@typeagent/agent-sdk':
@@ -4202,6 +4224,9 @@ importers:
       image-agent:
         specifier: workspace:*
         version: link:../agents/image
+      ipconfig-agent:
+        specifier: workspace:*
+        version: link:../agents/ipconfig
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
@@ -15191,9 +15216,6 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  shell-quote@1.8.1:
-    resolution: {integrity: sha512-6j1W9l1iAs/4xYBI1SYOVZyFcCis9b4KCLQ8fgAGG07QvzaRLVVRQvAy85yNmmZSjYjg4MWh4gNvlPujU/5LpA==}
-
   shell-quote@1.8.3:
     resolution: {integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==}
     engines: {node: '>= 0.4'}
@@ -23367,7 +23389,7 @@ snapshots:
       chalk: 4.1.2
       lodash: 4.18.1
       rxjs: 7.8.1
-      shell-quote: 1.8.1
+      shell-quote: 1.8.3
       supports-color: 8.1.1
       tree-kill: 1.2.2
       yargs: 17.7.2
@@ -24806,7 +24828,7 @@ snapshots:
 
   find-exec@1.0.3:
     dependencies:
-      shell-quote: 1.8.1
+      shell-quote: 1.8.3
 
   find-replace@3.0.0:
     dependencies:
@@ -29196,8 +29218,6 @@ snapshots:
   shebang-regex@1.0.0: {}
 
   shebang-regex@3.0.0: {}
-
-  shell-quote@1.8.1: {}
 
   shell-quote@1.8.3: {}
 

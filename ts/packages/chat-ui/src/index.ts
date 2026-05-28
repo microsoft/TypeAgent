@@ -33,3 +33,5 @@ export {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+
+export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";

@@ -63,6 +63,7 @@
     "glob": "^13.0.0",
     "greeting-agent": "workspace:*",
     "image-agent": "workspace:*",
+    "ipconfig-agent": "workspace:*",
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "markdown-agent": "workspace:*",
