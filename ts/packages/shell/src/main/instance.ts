@@ -562,16 +562,18 @@ async function initializeDispatcher(
                     "send-demo-event",
                     "CommandProcessed",
                 );
-                // Synthesize a properly-shaped QueuedRequest for the local
-                // short-circuit so callers that inspect `entry` see the same
-                // shape they would for a real submission. Field names must
-                // match QueuedRequest (text, submittedAt, state,
-                // originatorConnectionId).
+                // Synthesize a QueuedRequest for the local short-circuit.
+                // NOTE: this entry is NOT enqueued in context.requestQueue —
+                // queue snapshots, lifecycle events, and DisplayLog audit
+                // intentionally do not reflect it.
                 const submittedAt = Date.now();
                 const synthRequestId = requestId ?? randomUUID();
                 const synthEntry: QueuedRequest = {
                     requestId: synthRequestId,
-                    originatorConnectionId: dispatcher.connectionId ?? "",
+                    // Sentinel — searchable in logs; never collides with a
+                    // real connection id assigned by SharedDispatcher.
+                    originatorConnectionId:
+                        dispatcher.connectionId ?? "shell-local-shortcircuit",
                     text,
                     submittedAt,
                     startedAt: submittedAt,
@@ -581,14 +583,10 @@ async function initializeDispatcher(
                 };
                 if (id !== undefined) synthEntry.clientRequestId = id;
                 if (options !== undefined) synthEntry.options = options;
-                // The short-circuit bypasses commandHandlerContext, which is
-                // normally where `commandComplete` is emitted. Fire it
-                // explicitly so RPC clients' completion promises (synthesized
-                // by dispatcherClient.attachCompletion) resolve instead of
-                // hanging forever. The renderer's wrapClientIOForCompletion
-                // proxy intercepts this notify to wake the awaiter; an
-                // early-arrival lands in `settledEarly` and is consumed by
-                // the next attachCompletion call.
+                // Fire commandComplete explicitly: the short-circuit bypasses
+                // commandHandlerContext (which normally emits it), and renderer
+                // awaiters wake via wrapClientIOForCompletion intercepting this
+                // notify. Without it, RPC clients' completion promises hang.
                 const completeRid: RequestId = {
                     requestId: synthRequestId,
                     clientRequestId: id,

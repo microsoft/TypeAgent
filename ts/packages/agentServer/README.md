@@ -46,6 +46,8 @@ Each WebSocket connection multiplexes independent JSON-RPC channels:
 
 The dispatcher and clientIO channels are namespaced by `conversationId`, allowing a single WebSocket connection to participate in multiple conversations simultaneously.
 
+> **Breaking change (2026-05).** The legacy `processCommand` RPC method on the `dispatcher:<conversationId>` channel was removed. All callers must use `submitCommand` and await the synthesized `completion` promise returned by `createDispatcherRpcClient` (or use the `awaitCommand` helper). Clients and servers from before this change are not wire-compatible. See [`docs/architecture/messageQueueing.md`](../../docs/architecture/messageQueueing.md) §14.1.
+
 ---
 
 ## Starting and stopping the server
