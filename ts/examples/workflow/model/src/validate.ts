@@ -95,15 +95,6 @@ export function isNeverSchema(schema: JSONSchema | undefined): boolean {
  * Structural validation for an IR v1 document.
  *
  * Checks:
- * - Entry existence and node reference integrity.
- * - Task registration.
- * - Static schema compatibility: verifies that scope references point to
- *   producers whose outputSchema declares the referenced path.
- */
-/**
- * Structural validation for an IR v1 document.
- *
- * Checks:
  * - Top-level: workflows table, entry resolution.
  * - Per workflow body: entry existence and node reference integrity,
  *   task registration, static schema compatibility, CFG passes,
@@ -1500,15 +1491,13 @@ function validateForkMapNodeTemplates(
             "collectionSchema",
         );
     }
-    if (node.inputs) {
-        validateInputObjectTemplates(
-            node.inputs,
-            `${path}.inputs`,
-            node.body.inputSchema,
-            templateCtx,
-            errors,
-        );
-    }
+    validateInputObjectTemplates(
+        node.inputs ?? {},
+        `${path}.inputs`,
+        omitRequiredProperty(node.body.inputSchema, node.elementParam),
+        templateCtx,
+        errors,
+    );
 }
 
 function validateInputObjectTemplates(
@@ -1518,6 +1507,9 @@ function validateInputObjectTemplates(
     templateCtx: TemplateResolutionContext,
     errors: ValidationError[],
 ): void {
+    const resolvedProperties: Record<string, JSONSchema> = {};
+    const required: string[] = [];
+
     for (const [fieldName, tmpl] of Object.entries(inputs)) {
         const templatePath = `${inputsPath}.${fieldName}`;
         const computed = walkTemplateAndComputeType(
@@ -1527,6 +1519,9 @@ function validateInputObjectTemplates(
             errors,
         );
         if (computed === undefined) continue;
+
+        resolvedProperties[fieldName] = computed;
+        required.push(fieldName);
 
         const consumerPropDef = inputSchema.properties?.[fieldName];
         if (!consumerPropDef || typeof consumerPropDef === "boolean") {
@@ -1539,6 +1534,21 @@ function validateInputObjectTemplates(
             errors,
             "Resolved input",
             "expected",
+        );
+    }
+
+    if (required.length > 0) {
+        checkResolvedAssignability(
+            {
+                type: "object",
+                properties: resolvedProperties,
+                required,
+            },
+            inputSchema,
+            inputsPath,
+            errors,
+            "Resolved inputs",
+            "inputSchema",
         );
     }
 }
@@ -2026,7 +2036,17 @@ function isBindableNode(
     | BranchNode {
     // Branches now produce values when `bind` + `outputSchema` are
     // declared (ir-v0.2 branch-as-value-producing-node).
-    return true;
+    switch (node.kind) {
+        case "task":
+        case "loop":
+        case "fork":
+        case "forkMap":
+        case "workflowCall":
+        case "branch":
+            return true;
+        default:
+            assertNever(node);
+    }
 }
 
 /** Type guard: node kinds that carry `inputs` (task, loop, workflowCall). */
@@ -2304,6 +2324,19 @@ function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
         : { type: "array" };
 }
 
+function omitRequiredProperty(
+    schema: JSONSchema,
+    propertyName: string | undefined,
+): JSONSchema {
+    if (!propertyName || !schema.required?.includes(propertyName)) {
+        return schema;
+    }
+    const required = schema.required.filter((name) => name !== propertyName);
+    const rest = { ...schema };
+    delete rest.required;
+    return required.length > 0 ? { ...rest, required } : rest;
+}
+
 /**
  * Returns true when a schema is `{}` (empty object: no constraints).
  *
@@ -2317,11 +2350,7 @@ function isEmptySchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
 }
 
-/**
- * Validate a resolved template schema against a consumer slot.
- * Unknown producer schemas get the stricter Decision 0011 check before
- * falling back to the general structural subtype comparison.
- */
+/** Validate a resolved template schema against a consumer slot. */
 function checkResolvedAssignability(
     producer: JSONSchema,
     consumer: JSONSchema,
@@ -2330,18 +2359,6 @@ function checkResolvedAssignability(
     producerLabel: string,
     consumerLabel: string,
 ): void {
-    if (
-        checkUnknownAssignability(
-            producer,
-            consumer,
-            path,
-            errors,
-            producerLabel,
-            consumerLabel,
-        )
-    ) {
-        return;
-    }
     checkStructuralSubtype(
         producer,
         consumer,
@@ -2349,41 +2366,8 @@ function checkResolvedAssignability(
         errors,
         producerLabel,
         consumerLabel,
+        { rejectUnknownProducer: true },
     );
-}
-
-/**
- * Decision 0011 enforcement at template-resolution sites: if a template
- * reference resolves to a `{}` (unknown) producer schema and the consumer
- * slot has a concrete schema, push an error. This is the consumer-side
- * counterpart to allowing `{}` on bound producers — the unknown value is
- * opaque, so reading it as a typed value is unsound.
- *
- * Only call this at sites where the producer schema came from resolving
- * a `$from` template reference (not from task/node definition compat,
- * where a `{}` task schema legitimately means "anything goes").
- *
- * Returns true if an error was pushed.
- */
-function checkUnknownAssignability(
-    producer: JSONSchema,
-    consumer: JSONSchema,
-    path: string,
-    errors: ValidationError[],
-    producerLabel: string,
-    consumerLabel: string,
-): boolean {
-    if (!isEmptySchema(producer)) return false;
-    if (isEmptySchema(consumer)) return false;
-    errors.push({
-        path,
-        message:
-            `${producerLabel} resolves to {} (unknown); not assignable to ` +
-            `${consumerLabel} ${formatSchemaType(consumer)}. ` +
-            `Only consumers that accept unknown (schema {}) may read ` +
-            `from an unknown producer.`,
-    });
-    return true;
 }
 
 /**
@@ -2734,6 +2718,133 @@ function walkTemplateAndComputeType(
     };
 }
 
+interface StructuralSubtypeOptions {
+    /** Reject `{}` producer schemas as opaque unknown values. */
+    rejectUnknownProducer?: boolean;
+}
+
+function isStructuralSubtypeOfSomeVariant(
+    producer: JSONSchema,
+    variants: readonly (JSONSchema | boolean)[],
+    options: StructuralSubtypeOptions,
+): boolean {
+    return variants.some(
+        (variant) =>
+            typeof variant !== "boolean" &&
+            isStructuralSubtype(producer, variant, options),
+    );
+}
+
+function isSomeVariantStructuralSubtype(
+    variants: readonly (JSONSchema | boolean)[],
+    consumer: JSONSchema,
+    options: StructuralSubtypeOptions,
+): boolean {
+    return variants.some(
+        (variant) =>
+            typeof variant !== "boolean" &&
+            isStructuralSubtype(variant, consumer, options),
+    );
+}
+
+function checkPropertyStructuralSubtype(
+    producerProp: JSONSchema | boolean | undefined,
+    consumerProp: JSONSchema | boolean | undefined,
+    path: string,
+    errors: ValidationError[],
+    producerLabel: string,
+    consumerLabel: string,
+    options: StructuralSubtypeOptions,
+): void {
+    if (
+        !producerProp ||
+        !consumerProp ||
+        typeof producerProp === "boolean" ||
+        typeof consumerProp === "boolean"
+    ) {
+        return;
+    }
+
+    checkStructuralSubtype(
+        producerProp,
+        consumerProp,
+        path,
+        errors,
+        producerLabel,
+        consumerLabel,
+        options,
+    );
+}
+
+function checkConstEnumStructuralSubtype(
+    producer: JSONSchema,
+    consumer: JSONSchema,
+    path: string,
+    errors: ValidationError[],
+    producerLabel: string,
+    consumerLabel: string,
+): boolean {
+    if (consumer.const !== undefined) {
+        if (producer.const !== undefined) {
+            if (producer.const !== consumer.const) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `does not equal ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return true;
+        }
+        if (producer.enum) {
+            const bad = producer.enum.filter((v) => v !== consumer.const);
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `do not match ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (consumer.enum) {
+        const allowed = new Set(consumer.enum);
+        if (producer.const !== undefined) {
+            if (!allowed.has(producer.const)) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `is not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return true;
+        }
+        if (producer.enum) {
+            const bad = producer.enum.filter((v) => !allowed.has(v));
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `are not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /**
  * Diagnostic structural subtype check per section 4.2.
  * Pushes path-qualified errors explaining why producer P is not compatible
@@ -2746,16 +2857,23 @@ export function checkStructuralSubtype(
     errors: ValidationError[],
     producerLabel: string = "Producer",
     consumerLabel: string = "consumer",
+    options: StructuralSubtypeOptions = {},
 ): void {
     if (isEmptySchema(consumer)) return;
     if (isEmptySchema(producer) && !isEmptySchema(consumer)) {
+        if (options.rejectUnknownProducer) {
+            errors.push({
+                path,
+                message:
+                    `${producerLabel} resolves to {} (unknown); not assignable to ` +
+                    `${consumerLabel} ${formatSchemaType(consumer)}. ` +
+                    `Only consumers that accept unknown (schema {}) may read ` +
+                    `from an unknown producer.`,
+            });
+            return;
+        }
         // Producer is unconstrained; can't prove it's a subtype of
         // a constrained consumer. Be lenient: skip.
-        // (Decision 0011: the stricter "unknown is not assignable to T"
-        // rule is enforced narrowly at template-resolution sites \u2014 see
-        // checkUnknownAssignability \u2014 rather than here, because this
-        // helper is also used for task-vs-node schema compatibility where
-        // a `{}` task schema legitimately means "task accepts anything".)
         return;
     }
 
@@ -2775,9 +2893,10 @@ export function checkStructuralSubtype(
                 continue;
             }
             if (consumerVariants) {
-                const compatible = consumerVariants.some(
-                    (cv) =>
-                        typeof cv !== "boolean" && isStructuralSubtype(v, cv),
+                const compatible = isStructuralSubtypeOfSomeVariant(
+                    v,
+                    consumerVariants,
+                    options,
                 );
                 if (!compatible) {
                     errors.push({
@@ -2796,6 +2915,7 @@ export function checkStructuralSubtype(
                     errors,
                     `${producerLabel} variant [${i}]`,
                     consumerLabel,
+                    options,
                 );
             }
         }
@@ -2803,8 +2923,10 @@ export function checkStructuralSubtype(
     }
 
     if (consumerVariants) {
-        const compatible = consumerVariants.some(
-            (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
+        const compatible = isStructuralSubtypeOfSomeVariant(
+            producer,
+            consumerVariants,
+            options,
         );
         if (!compatible) {
             errors.push({
@@ -2818,65 +2940,25 @@ export function checkStructuralSubtype(
     }
 
     // Const / enum narrowing checks.
-    if (consumer.const !== undefined) {
-        if (producer.const !== undefined) {
-            if (producer.const !== consumer.const) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
-                        `does not equal ${consumerLabel} const ` +
-                        `${JSON.stringify(consumer.const)}.`,
-                });
-            }
-            return;
-        }
-        if (producer.enum) {
-            const bad = producer.enum.filter((v) => v !== consumer.const);
-            if (bad.length > 0) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
-                        `do not match ${consumerLabel} const ` +
-                        `${JSON.stringify(consumer.const)}.`,
-                });
-            }
-            return;
-        }
-    } else if (consumer.enum) {
-        const allowed = new Set(consumer.enum);
-        if (producer.const !== undefined) {
-            if (!allowed.has(producer.const)) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
-                        `is not in ${consumerLabel} enum ` +
-                        `${JSON.stringify(consumer.enum)}.`,
-                });
-            }
-            return;
-        }
-        if (producer.enum) {
-            const bad = producer.enum.filter((v) => !allowed.has(v));
-            if (bad.length > 0) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
-                        `are not in ${consumerLabel} enum ` +
-                        `${JSON.stringify(consumer.enum)}.`,
-                });
-            }
-            return;
-        }
+    if (
+        checkConstEnumStructuralSubtype(
+            producer,
+            consumer,
+            path,
+            errors,
+            producerLabel,
+            consumerLabel,
+        )
+    ) {
+        return;
     }
 
     // Handle allOf: intersection semantics.
     if (producer.allOf) {
-        const compatible = producer.allOf.some(
-            (v) => typeof v !== "boolean" && isStructuralSubtype(v, consumer),
+        const compatible = isSomeVariantStructuralSubtype(
+            producer.allOf,
+            consumer,
+            options,
         );
         if (!compatible) {
             errors.push({
@@ -2900,6 +2982,7 @@ export function checkStructuralSubtype(
                 errors,
                 producerLabel,
                 `${consumerLabel} allOf[${i}]`,
+                options,
             );
         }
         return;
@@ -2945,42 +3028,30 @@ export function checkStructuralSubtype(
         }
         const pProp = pProps[req];
         const cProp = cProps[req];
-        if (
-            pProp &&
-            cProp &&
-            typeof pProp !== "boolean" &&
-            typeof cProp !== "boolean"
-        ) {
-            checkStructuralSubtype(
-                pProp,
-                cProp,
-                `${path}.${req}`,
-                errors,
-                `${producerLabel} property "${req}"`,
-                `${consumerLabel} property "${req}"`,
-            );
-        }
+        checkPropertyStructuralSubtype(
+            pProp,
+            cProp,
+            `${path}.${req}`,
+            errors,
+            `${producerLabel} property "${req}"`,
+            `${consumerLabel} property "${req}"`,
+            options,
+        );
     }
 
     // Check optional consumer props present in producer
     for (const [key, cPropDef] of Object.entries(cProps)) {
         if (cRequired.includes(key)) continue;
         const pPropDef = pProps[key];
-        if (
-            pPropDef &&
-            cPropDef &&
-            typeof pPropDef !== "boolean" &&
-            typeof cPropDef !== "boolean"
-        ) {
-            checkStructuralSubtype(
-                pPropDef,
-                cPropDef,
-                `${path}.${key}`,
-                errors,
-                `${producerLabel} property "${key}"`,
-                `${consumerLabel} property "${key}"`,
-            );
-        }
+        checkPropertyStructuralSubtype(
+            pPropDef,
+            cPropDef,
+            `${path}.${key}`,
+            errors,
+            `${producerLabel} property "${key}"`,
+            `${consumerLabel} property "${key}"`,
+            options,
+        );
     }
 
     // Array: element type compatibility
@@ -2998,6 +3069,7 @@ export function checkStructuralSubtype(
                 errors,
                 `${producerLabel} items`,
                 `${consumerLabel} items`,
+                options,
             );
         }
     }
@@ -3009,9 +3081,18 @@ export function checkStructuralSubtype(
 export function isStructuralSubtype(
     producer: JSONSchema,
     consumer: JSONSchema,
+    options: StructuralSubtypeOptions = {},
 ): boolean {
     const errors: ValidationError[] = [];
-    checkStructuralSubtype(producer, consumer, "", errors);
+    checkStructuralSubtype(
+        producer,
+        consumer,
+        "",
+        errors,
+        "Producer",
+        "consumer",
+        options,
+    );
     return errors.length === 0;
 }
 
@@ -3106,7 +3187,7 @@ function checkPhiMergeTypes(
                         : binderSchema;
                 if (!projected) continue;
 
-                checkStructuralSubtype(
+                checkResolvedAssignability(
                     projected,
                     consumerPropDef,
                     `${prefix}.${id}.inputs.${fieldName}`,
