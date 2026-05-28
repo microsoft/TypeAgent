@@ -19,7 +19,5 @@
  * The message appears as a transient info entry in the CLI timeline.
  */
 export function emitProgress(message: string): void {
-    process.stdout.write(
-        JSON.stringify({ type: "progress", message }) + "\n",
-    );
+    process.stdout.write(JSON.stringify({ type: "progress", message }) + "\n");
 }

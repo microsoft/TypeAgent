@@ -58,8 +58,6 @@ function getSpecialPrefixGuidance(prompt: string): string | undefined {
 }
 
 export function handleMcpRedirect(input: HookInput): HookOutput {
-   
-
     const psGuidance = getPowerShellSessionGuidance() ?? "";
     const prefixGuidance = getSpecialPrefixGuidance(input.prompt) ?? "";
 
