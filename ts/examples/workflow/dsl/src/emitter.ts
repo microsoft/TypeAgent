@@ -21,6 +21,7 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     BranchNode,
@@ -28,9 +29,11 @@ import {
     LoopNode,
     ForkNode,
     ForkMapNode,
+    WorkflowCallNode,
     LoopStateVar,
     Template,
     JSONSchema,
+    SchemaTemplate,
     WorkflowScope,
 } from "workflow-model";
 import {
@@ -49,13 +52,50 @@ import {
     ParallelNode,
     ParallelMapNode,
     DEFAULT_FALLBACK_PARAM,
+    ConstStatement,
+    DestructuringConst,
+    IfStatement,
+    SwitchStatement,
+    ThrowStatement,
+    WorkflowCallExpr,
+    TaskArg,
+    BinaryOp,
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
+import {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
+import { TypeInfo, typeInfoToSchema } from "./typeChecker.js";
 
-export interface TaskSchemaInfo {
+export interface TaskSchemaTypeParam {
+    name: string;
+    default?: JSONSchema;
+}
+
+/** A non-generic task schema: fixed JSON Schema for input/output. */
+export interface ConcreteTaskSchemaInfo {
     name: string;
     inputSchema: JSONSchema;
     outputSchema: JSONSchema;
+}
+
+/** A generic task schema with type parameters and schema templates. */
+export interface GenericTaskSchemaInfo {
+    name: string;
+    inputSchema: SchemaTemplate;
+    outputSchema: SchemaTemplate;
+    typeParameters: TaskSchemaTypeParam[];
+}
+
+export type TaskSchemaInfo = ConcreteTaskSchemaInfo | GenericTaskSchemaInfo;
+
+/** Type guard: narrows a TaskSchemaInfo to its generic variant. */
+export function isGenericSchema(
+    schema: TaskSchemaInfo,
+): schema is GenericTaskSchemaInfo {
+    return "typeParameters" in schema;
 }
 
 export interface EmitError {
@@ -67,7 +107,13 @@ export interface EmitError {
 
 // ---- Binding: how a name resolves in scope ----
 
-type BindingKind = "node" | "param" | "constant" | "loopInput" | "literal";
+type BindingKind =
+    | "node"
+    | "param"
+    | "constant"
+    | "loopInput"
+    | "recoveryInput"
+    | "literal";
 
 interface Binding {
     kind: BindingKind;
@@ -118,27 +164,137 @@ function inferCommonType(
 export class Emitter {
     private errors: EmitError[] = [];
     private taskSchemas: Map<string, TaskSchemaInfo>;
+    private resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>;
+    private symbolTypes: ReadonlyMap<number, TypeInfo>;
     private nodeCounter = 0;
     private constants: Record<string, { schema: JSONSchema; value: unknown }> =
         {};
     /** Set of node IDs that are referenced by expressions */
     private referencedNodes = new Set<string>();
+    /**
+     * Map of workflow name -> declaration, populated by `emitAll` so
+     * `emitWorkflowCall` can look up callee parameters / schemas for
+     * argument lowering. Empty when a single-workflow `emit(ast)` is
+     * called directly (legacy path; workflow calls are not allowed in
+     * that mode because the callee is unreachable).
+     */
+    private workflowMap: Map<string, WorkflowDecl> = new Map();
+    /** Cached (input,output) schemas per workflow, used by WorkflowCallNode. */
+    private workflowSchemas: Map<
+        string,
+        { input: JSONSchema; output: JSONSchema }
+    > = new Map();
 
-    constructor(taskSchemas: TaskSchemaInfo[]) {
+    constructor(
+        taskSchemas: TaskSchemaInfo[],
+        resolvedSchemas: ReadonlyMap<number, ResolvedTaskSchemas>,
+        symbolTypes?: ReadonlyMap<number, TypeInfo>,
+    ) {
         this.taskSchemas = new Map(taskSchemas.map((t) => [t.name, t]));
+        this.resolvedSchemas = resolvedSchemas;
+        this.symbolTypes = symbolTypes ?? new Map();
     }
 
-    emit(ast: WorkflowDecl): {
-        ir: WorkflowIR | undefined;
-        errors: EmitError[];
-    } {
+    /**
+     * Look up pre-resolved schemas by source offset. Emits an error and
+     * returns undefined if the entry is missing (indicates a type checker
+     * bug or a missing resolution pass).
+     */
+    private getResolvedSchemas(
+        offset: number,
+        loc: { line: number; col: number },
+        desc: string,
+    ): ResolvedTaskSchemas | undefined {
+        const cached = this.resolvedSchemas.get(offset);
+        if (!cached) {
+            this.emitError(
+                `Missing resolved schemas for ${desc}`,
+                loc.line,
+                loc.col,
+            );
+            return undefined;
+        }
+        return cached;
+    }
+
+    /**
+     * Emit a multi-workflow IR. The `entryName` selects which workflow's
+     * inputs/outputs become the artifact's top-level surface; every
+     * workflow in the input list is emitted into the IR's `workflows`
+     * table so it can be invoked as a sub-workflow.
+     */
+    emitAll(
+        workflows: WorkflowDecl[],
+        entryName: string,
+    ): { ir: WorkflowIR | undefined; errors: EmitError[] } {
         this.errors = [];
         this.nodeCounter = 0;
         this.constants = {};
         this.referencedNodes = new Set();
 
+        if (workflows.length === 0) {
+            this.emitError("No workflows to emit", 0, 0);
+            return { ir: undefined, errors: this.errors };
+        }
+        const entryDecl = workflows.find((w) => w.name === entryName);
+        if (!entryDecl) {
+            this.emitError(
+                `Entry workflow '${entryName}' not found in input`,
+                workflows[0].loc.line,
+                workflows[0].loc.col,
+            );
+            return { ir: undefined, errors: this.errors };
+        }
+
+        this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
+        this.workflowSchemas = new Map();
+        for (const w of workflows) {
+            this.workflowSchemas.set(w.name, {
+                input: this.paramsToSchema(w.params),
+                output: typeExprToSchema(w.returnType),
+            });
+        }
+
+        const bodies: Record<string, WorkflowBody> = {};
+        for (const w of workflows) {
+            const body = this.emitWorkflowBody(w);
+            if (!body) continue;
+            bodies[w.name] = body;
+        }
+        if (this.errors.length > 0) {
+            return { ir: undefined, errors: this.errors };
+        }
+
+        // Decision 0011 / captureOuterRefs gap: propagate captured-ref
+        // schemas into sub-scope `inputSchema.properties` so the validator's
+        // consumer-side `{}`-is-unknown check doesn't reject reads of
+        // outer-captured values whose source schema is actually known.
+        for (const body of Object.values(bodies)) {
+            this.propagateBodySchemas(body);
+        }
+
+        const ir: WorkflowIR = {
+            kind: "workflow",
+            version: "1",
+            ...(entryDecl.description
+                ? { description: entryDecl.description }
+                : {}),
+            ...(Object.keys(this.constants).length > 0
+                ? { constants: this.constants }
+                : {}),
+            entry: entryName,
+            workflows: bodies,
+        };
+        return { ir, errors: this.errors };
+    }
+
+    /**
+     * Emit a single workflow into a WorkflowBody (the value stored in
+     * `WorkflowIR.workflows[name]`). Called per workflow by emitAll.
+     */
+    private emitWorkflowBody(ast: WorkflowDecl): WorkflowBody | undefined {
         const inputSchema = this.paramsToSchema(ast.params);
-        const outputSchema = this.typeToSchema(ast.returnType);
+        const outputSchema = typeExprToSchema(ast.returnType);
 
         const rootScope: ScopeContext = {
             nodes: {},
@@ -173,7 +329,7 @@ export class Emitter {
                     required: ["value"],
                     properties: { value: {} },
                 },
-                outputSchema: {},
+                outputSchema: outputSchema,
                 inputs: { value: outputTemplate },
                 bind: wrapId,
             };
@@ -188,26 +344,14 @@ export class Emitter {
 
         this.stripUnreferencedBinds(rootScope);
 
-        const ir: WorkflowIR = {
-            kind: "workflow",
-            name: ast.name,
-            ...(ast.description ? { description: ast.description } : {}),
-            version: "1",
+        return {
             inputSchema,
             outputSchema,
-            ...(Object.keys(this.constants).length > 0
-                ? { constants: this.constants }
-                : {}),
             nodes: rootScope.nodes,
             entry: rootScope.nodeOrder.length > 0 ? rootScope.nodeOrder[0] : "",
             output:
                 outputTemplate ??
                 ({ $from: "input", name: "" } as unknown as Template),
-        };
-
-        return {
-            ir: this.errors.length === 0 ? ir : undefined,
-            errors: this.errors,
         };
     }
 
@@ -250,17 +394,14 @@ export class Emitter {
 
     // ---- Const binding ----
 
-    private emitConst(
-        stmt: import("./ast.js").ConstStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitConst(stmt: ConstStatement, scope: ScopeContext): void {
         const expr = stmt.value;
 
         // Check if the RHS is a pure literal (no task calls, no refs)
         if (this.isPureLiteral(expr)) {
             const value = this.constExprToValue(expr);
             const schema = stmt.typeAnnotation
-                ? this.typeToSchema(stmt.typeAnnotation)
+                ? typeExprToSchema(stmt.typeAnnotation)
                 : this.inferLiteralSchema(expr);
             this.constants[stmt.name] = { schema, value };
             scope.bindings.set(stmt.name, { kind: "constant" });
@@ -310,7 +451,7 @@ export class Emitter {
     }
 
     private emitDestructuring(
-        stmt: import("./ast.js").DestructuringConst,
+        stmt: DestructuringConst,
         scope: ScopeContext,
     ): void {
         // The RHS should produce a node whose output is a tuple/array.
@@ -321,10 +462,31 @@ export class Emitter {
             if (node) {
                 scope.nodes[nodeId] = node;
                 scope.nodeOrder.push(nodeId);
+            }
+            // emitExprAsNode may return undefined for complex expressions
+            // (parallel, map, etc.) but still rebind the last emitted node
+            // to nodeId within scope. Check that we have a result to
+            // destructure from.
+            const hasResult =
+                node !== undefined ||
+                Object.values(scope.nodes).some(
+                    (n) => "bind" in n && (n as TaskNode).bind === nodeId,
+                );
+            if (hasResult) {
                 // Each destructured name gets a binding that projects into the output
                 for (let i = 0; i < stmt.names.length; i++) {
                     // Create a pick node for each element
                     const pickId = this.freshId(`pick_${stmt.names[i]}`);
+                    // Resolve element type from the type checker's symbol map
+                    const nameLoc = stmt.nameLocs[i];
+                    const elemType =
+                        nameLoc !== undefined
+                            ? this.symbolTypes.get(nameLoc.offset)
+                            : undefined;
+                    const elemSchema =
+                        elemType !== undefined
+                            ? typeInfoToSchema(elemType)
+                            : {};
                     const pickNode: TaskNode = {
                         kind: "task",
                         task: "list.elementAt",
@@ -336,7 +498,7 @@ export class Emitter {
                                 index: { type: "integer" },
                             },
                         },
-                        outputSchema: {},
+                        outputSchema: elemSchema,
                         inputs: {
                             list: {
                                 $from: "scope",
@@ -377,11 +539,15 @@ export class Emitter {
     // ---- If statement ----
 
     private emitIf(
-        stmt: import("./ast.js").IfStatement,
+        stmt: IfStatement,
         scope: ScopeContext,
     ): { output?: Template } | undefined {
         // Emit condition - may produce a node
         const condTemplate = this.emitExpr(stmt.condition, scope);
+
+        // G29 Q3: read result type stored by type checker.
+        const ifResolved = this.resolvedSchemas.get(stmt.loc.offset);
+        const resultSchema: JSONSchema = ifResolved?.outputSchema ?? {};
 
         const branchId = this.freshId("branch");
         const mergeId = this.freshId("merge");
@@ -406,12 +572,17 @@ export class Emitter {
             }
         }
 
-        // When ANY branch returns a value, publish through branch.bind so
-        // consumers in the parent scope can read it (arm-scope names are
-        // not visible to the parent). When only one branch returns, the
-        // other arm's output is `null` (declared null-typed scope output).
+        // When ALL branches return a same-typed value AND we have a concrete
+        // resultSchema, publish through branch.bind so consumers in the parent
+        // scope can read it. When the schema is unknown ({}) it means not all
+        // arms return (Q2 relaxation) and we must not bind to avoid a bound
+        // {} producer (Decision 0011).
+        const isConcreteSchema = Object.keys(resultSchema).length > 0;
         let resultBind: string | undefined;
-        if (thenOutput !== undefined || elseOutput !== undefined) {
+        if (
+            (thenOutput !== undefined || elseOutput !== undefined) &&
+            isConcreteSchema
+        ) {
             resultBind = this.freshId("if_result");
             this.referencedNodes.add(resultBind);
         }
@@ -425,10 +596,10 @@ export class Emitter {
                       resultBind !== undefined
                           ? (thenOutput ?? null)
                           : undefined,
-                      resultBind !== undefined ? {} : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
                   )
                 : resultBind !== undefined && thenOutput !== undefined
-                  ? this.buildOutputOnlyArm(thenScope, thenOutput)
+                  ? this.buildOutputOnlyArm(thenScope, thenOutput, resultSchema)
                   : this.makeNoopArm();
 
         const falseArm =
@@ -438,12 +609,12 @@ export class Emitter {
                       resultBind !== undefined
                           ? (elseOutput ?? null)
                           : undefined,
-                      resultBind !== undefined ? {} : undefined,
+                      resultBind !== undefined ? resultSchema : undefined,
                   )
                 : resultBind !== undefined &&
                     elseOutput !== undefined &&
                     elseScope
-                  ? this.buildOutputOnlyArm(elseScope, elseOutput)
+                  ? this.buildOutputOnlyArm(elseScope, elseOutput, resultSchema)
                   : this.makeNoopArm();
 
         // Boolean if-else is always exhaustive: { type: "boolean" } is
@@ -455,7 +626,9 @@ export class Emitter {
             selectorSchema: { type: "boolean" },
             cases: { true: thenArm, false: falseArm },
             next: mergeId,
-            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
+            ...(resultBind
+                ? { bind: resultBind, outputSchema: resultSchema }
+                : {}),
         };
 
         // Merge is a noop task that serves as the continuation point
@@ -487,12 +660,16 @@ export class Emitter {
     // ---- Switch statement ----
 
     private emitSwitch(
-        stmt: import("./ast.js").SwitchStatement,
+        stmt: SwitchStatement,
         scope: ScopeContext,
     ): { output?: Template } | undefined {
         const discTemplate = this.emitExpr(stmt.discriminant, scope);
         const branchId = this.freshId("switch");
         const mergeId = this.freshId("merge");
+
+        // G29 Q3: read result type stored by type checker.
+        const switchResolved = this.resolvedSchemas.get(stmt.loc.offset);
+        const resultSchema: JSONSchema = switchResolved?.outputSchema ?? {};
 
         // Cases map to BranchArm sub-scopes; per-arm outputs are exposed to
         // the parent via branch.bind. The arm's `output` is set on its
@@ -531,14 +708,17 @@ export class Emitter {
             }
         }
 
-        // If any arm produced an output, we must publish through branch.bind
-        // so consumers in the parent scope can read it. (Arm-scope names are
-        // not visible to the parent.)
+        // If all arms produced an output AND we have a concrete resultSchema,
+        // publish through branch.bind so consumers in the parent scope can
+        // read it. When resultSchema is {} (not all arms return, Q2 relaxation)
+        // we must not bind to avoid a bound {} producer (Decision 0011).
         const anyOutput =
             armOutputs.some((o) => o !== undefined) || defOutput !== undefined;
-        const resultBind = anyOutput
-            ? this.freshId("switch_result")
-            : undefined;
+        const switchHasConcreteSchema = Object.keys(resultSchema).length > 0;
+        const resultBind =
+            anyOutput && switchHasConcreteSchema
+                ? this.freshId("switch_result")
+                : undefined;
         if (resultBind) this.referencedNodes.add(resultBind);
 
         for (let i = 0; i < armScopes.length; i++) {
@@ -549,7 +729,7 @@ export class Emitter {
                     ? this.buildArmScope(
                           armScope,
                           resultBind !== undefined ? armOutput : undefined,
-                          resultBind !== undefined ? {} : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
                       )
                     : this.makeNoopArm();
         }
@@ -559,7 +739,7 @@ export class Emitter {
                     ? this.buildArmScope(
                           defScope!,
                           resultBind !== undefined ? defOutput : undefined,
-                          resultBind !== undefined ? {} : undefined,
+                          resultBind !== undefined ? resultSchema : undefined,
                       )
                     : this.makeNoopArm();
         }
@@ -581,7 +761,9 @@ export class Emitter {
             cases,
             ...(defaultArm !== undefined ? { default: defaultArm } : {}),
             next: mergeId,
-            ...(resultBind ? { bind: resultBind, outputSchema: {} } : {}),
+            ...(resultBind
+                ? { bind: resultBind, outputSchema: resultSchema }
+                : {}),
         };
 
         const mergeNode: TaskNode = {
@@ -610,10 +792,7 @@ export class Emitter {
 
     // ---- Throw statement ----
 
-    private emitThrow(
-        stmt: import("./ast.js").ThrowStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitThrow(stmt: ThrowStatement, scope: ScopeContext): void {
         const valueTemplate = this.emitExpr(stmt.value, scope);
         const nodeId = this.freshId("throw");
         const node: TaskNode = {
@@ -782,34 +961,153 @@ export class Emitter {
 
         const inputs = this.resolveTaskArgs(expr.args, schema, scope);
 
+        // Resolve effective input/output schemas.
+        let outputSchema: JSONSchema;
+        let inputSchema: JSONSchema;
+        if (isGenericSchema(schema)) {
+            const cached = this.getResolvedSchemas(
+                expr.loc.offset,
+                expr.loc,
+                `generic task '${expr.task}'`,
+            );
+            if (!cached) return undefined;
+            ({ inputSchema, outputSchema } = cached);
+        } else {
+            outputSchema = schema.outputSchema;
+            inputSchema = schema.inputSchema;
+        }
+
         return {
             kind: "task",
             task: expr.task,
-            inputSchema: schema.inputSchema,
-            outputSchema: schema.outputSchema,
+            inputSchema,
+            outputSchema,
             inputs,
             bind: bindName,
         };
     }
 
     private emitWorkflowCall(
-        expr: import("./ast.js").WorkflowCallExpr,
+        expr: WorkflowCallExpr,
         scope: ScopeContext,
         bindName: string,
-    ): TaskNode | undefined {
-        // Emit as a task call with name "workflow.<name>"
-        // The engine or a future pass handles workflow resolution
-        const taskName = `workflow.${expr.name}`;
-        const inputs = this.resolveTaskArgs(expr.args, undefined, scope);
-
+    ): WorkflowCallNode | undefined {
+        const callee = this.workflowMap.get(expr.name);
+        if (!callee) {
+            this.emitError(
+                `Unknown workflow '${expr.name}'`,
+                expr.loc.line,
+                expr.loc.col,
+            );
+            return undefined;
+        }
+        const schemas = this.workflowSchemas.get(expr.name);
+        if (!schemas) {
+            this.emitError(
+                `Missing schema cache for workflow '${expr.name}'`,
+                expr.loc.line,
+                expr.loc.col,
+            );
+            return undefined;
+        }
+        const inputs = this.resolveWorkflowCallInputs(callee, expr.args, scope);
         return {
-            kind: "task",
-            task: taskName,
-            inputSchema: {},
-            outputSchema: {},
+            kind: "workflowCall",
+            workflowRef: { name: expr.name },
+            inputSchema: schemas.input,
+            outputSchema: schemas.output,
             inputs,
             bind: bindName,
         };
+    }
+
+    /**
+     * Resolve workflow-call arguments into the inputs map keyed by the
+     * callee's parameter names, applying defaults for any omitted param.
+     *
+     * Default-expression inlining: defaults are emitted in a synthetic
+     * sub-scope where earlier callee param names are bound to the
+     * caller-resolved templates (kind "literal"). This means a default
+     * like `b = a` becomes `inputs[b] = <whatever the caller passed for a>`,
+     * with all literal substitution performed at compile time (§4.3).
+     *
+     * The same default expression is re-expanded at every call site
+     * (duplication intentional in P4; see
+     * `ir/future/workflow-default-arguments.md`).
+     */
+    private resolveWorkflowCallInputs(
+        callee: WorkflowDecl,
+        args: TaskArg[],
+        scope: ScopeContext,
+    ): Record<string, Template> {
+        const recordForm =
+            args.length === 1 &&
+            args[0].kind === "PositionalArg" &&
+            args[0].value.kind === "ObjectLiteralExpr";
+
+        const inputs: Record<string, Template> = {};
+
+        if (recordForm) {
+            const obj = args[0].value as Extract<
+                Expr,
+                { kind: "ObjectLiteralExpr" }
+            >;
+            for (const entry of obj.entries) {
+                inputs[entry.key] = this.emitExpr(entry.value, scope);
+            }
+        } else {
+            let posIdx = 0;
+            for (const arg of args) {
+                if (arg.kind === "NamedArg") {
+                    inputs[arg.name] = this.emitExpr(arg.value, scope);
+                } else {
+                    if (posIdx < callee.params.length) {
+                        const paramName = callee.params[posIdx].name;
+                        inputs[paramName] = this.emitExpr(arg.value, scope);
+                        posIdx++;
+                    } else {
+                        // Type checker already reports too-many-args; skip
+                        // silently here to avoid duplicate errors.
+                    }
+                }
+            }
+        }
+
+        // Apply defaults in declaration order so a default referencing
+        // an earlier param sees the already-resolved template.
+        const defaultScope: ScopeContext = {
+            nodes: {},
+            nodeOrder: [],
+            bindings: new Map(),
+        };
+        for (const p of callee.params) {
+            if (inputs[p.name] !== undefined) {
+                defaultScope.bindings.set(p.name, {
+                    kind: "literal",
+                    value: inputs[p.name],
+                });
+                continue;
+            }
+            if (!p.default) continue;
+            // Emit the default expression in the synthetic scope. Any
+            // node-producing expression in a default is emitted into
+            // the calling scope; the default's result template is what
+            // we record for the input.
+            const inheritedScope: ScopeContext = {
+                ...defaultScope,
+                nodes: scope.nodes,
+                nodeOrder: scope.nodeOrder,
+                parent: scope,
+            };
+            const template = this.emitExpr(p.default, inheritedScope);
+            inputs[p.name] = template;
+            defaultScope.bindings.set(p.name, {
+                kind: "literal",
+                value: template,
+            });
+        }
+
+        return inputs;
     }
 
     private emitTemplateLiteral(
@@ -818,7 +1116,7 @@ export class Emitter {
         bindName: string,
     ): TaskNode | undefined {
         const schema = this.taskSchemas.get("text.template");
-        if (!schema) {
+        if (!schema || isGenericSchema(schema)) {
             this.emitError(
                 "Task schema for text.template not found",
                 expr.loc.line,
@@ -863,16 +1161,31 @@ export class Emitter {
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
         const schema = this.taskSchemas.get(taskName);
+        const concreteSchema =
+            schema && !isGenericSchema(schema) ? schema : undefined;
+        // For generic arithmetic tasks (e.g. math.add<N>), use the cached
+        // resolved schemas from the type checker when it narrowed N (e.g.
+        // integer+integer). Fall back to the schema's declared defaults so
+        // the emitted inputSchema and outputSchema always resolve N to the
+        // same concrete type (required for checkTypeParamConsistency).
+        const genericResolved: ResolvedTaskSchemas | undefined =
+            schema && isGenericSchema(schema)
+                ? (this.resolvedSchemas.get(expr.loc.offset) ??
+                  resolveGenericSchemas(schema, []))
+                : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: schema?.inputSchema ?? {
-                type: "object",
-                required: ["left", "right"],
-                properties: { left: {}, right: {} },
-            },
+            inputSchema: concreteSchema?.inputSchema ??
+                genericResolved?.inputSchema ?? {
+                    type: "object",
+                    required: ["left", "right"],
+                    properties: { left: {}, right: {} },
+                },
             outputSchema:
-                schema?.outputSchema ?? this.binaryOpOutputSchema(expr.op),
+                concreteSchema?.outputSchema ??
+                genericResolved?.outputSchema ??
+                this.binaryOpOutputSchema(expr.op),
             inputs: { left, right },
             bind: nodeId,
         };
@@ -882,7 +1195,7 @@ export class Emitter {
         return this.scopeRef(nodeId, scope);
     }
 
-    private binaryOpToTask(op: import("./ast.js").BinaryOp): string {
+    private binaryOpToTask(op: BinaryOp): string {
         switch (op) {
             case "===":
                 return "compare.equals";
@@ -912,7 +1225,7 @@ export class Emitter {
         }
     }
 
-    private binaryOpOutputSchema(op: import("./ast.js").BinaryOp): JSONSchema {
+    private binaryOpOutputSchema(op: BinaryOp): JSONSchema {
         switch (op) {
             case "===":
             case "!==":
@@ -939,16 +1252,29 @@ export class Emitter {
         const nodeId = this.freshId(taskName.replace(/\./g, "_"));
 
         const schema = this.taskSchemas.get(taskName);
+        const concreteSchema =
+            schema && !isGenericSchema(schema) ? schema : undefined;
+        // For generic unary tasks (math.negate<N>), prefer the cached
+        // resolved schemas from the type checker (set when N was narrowed
+        // to integer). Fall back to the schema's declared defaults so
+        // input/output always resolve N to the same concrete type.
+        const genericResolved: ResolvedTaskSchemas | undefined =
+            schema && isGenericSchema(schema)
+                ? (this.resolvedSchemas.get(expr.loc.offset) ??
+                  resolveGenericSchemas(schema, []))
+                : undefined;
         const node: TaskNode = {
             kind: "task",
             task: taskName,
-            inputSchema: schema?.inputSchema ?? {
-                type: "object",
-                required: ["value"],
-                properties: { value: {} },
-            },
+            inputSchema: concreteSchema?.inputSchema ??
+                genericResolved?.inputSchema ?? {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: {} },
+                },
             outputSchema:
-                schema?.outputSchema ??
+                concreteSchema?.outputSchema ??
+                genericResolved?.outputSchema ??
                 (expr.op === "!" ? { type: "boolean" } : { type: "number" }),
             inputs: { value: operand },
             bind: nodeId,
@@ -1071,6 +1397,14 @@ export class Emitter {
     private emitTernaryExpr(expr: TernaryExpr, scope: ScopeContext): Template {
         const condTemplate = this.emitExpr(expr.condition, scope);
 
+        // G29 Q3: read result type stored by type checker.
+        const ternaryResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `ternary result type`,
+        );
+        const resultSchema: JSONSchema = ternaryResolved?.outputSchema ?? {};
+
         const branchId = this.freshId("ternary");
         const mergeId = this.freshId("merge");
         const resultBind = this.freshId("ternary_result");
@@ -1081,7 +1415,7 @@ export class Emitter {
         const thenResult = this.emitExpr(expr.consequent, thenScope);
         let thenArm: BranchArm;
         if (thenScope.nodeOrder.length > 0) {
-            thenArm = this.buildArmScope(thenScope, thenResult, {});
+            thenArm = this.buildArmScope(thenScope, thenResult, resultSchema);
         } else {
             // Literal consequent: wrap in a single identity node.
             const passId = this.freshId("ternary_then");
@@ -1092,9 +1426,9 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["value"],
-                    properties: { value: {} },
+                    properties: { value: resultSchema },
                 },
-                outputSchema: {},
+                outputSchema: resultSchema,
                 inputs: { value: thenResult },
                 bind: passId,
             } as TaskNode;
@@ -1105,7 +1439,7 @@ export class Emitter {
                     $from: "scope",
                     name: passId,
                 } as unknown as Template,
-                {},
+                resultSchema,
             );
         }
 
@@ -1113,7 +1447,7 @@ export class Emitter {
         const elseResult = this.emitExpr(expr.alternate, elseScope);
         let elseArm: BranchArm;
         if (elseScope.nodeOrder.length > 0) {
-            elseArm = this.buildArmScope(elseScope, elseResult, {});
+            elseArm = this.buildArmScope(elseScope, elseResult, resultSchema);
         } else {
             const passId = this.freshId("ternary_else");
             const passScope = this.childScope(scope);
@@ -1123,9 +1457,9 @@ export class Emitter {
                 inputSchema: {
                     type: "object",
                     required: ["value"],
-                    properties: { value: {} },
+                    properties: { value: resultSchema },
                 },
-                outputSchema: {},
+                outputSchema: resultSchema,
                 inputs: { value: elseResult },
                 bind: passId,
             } as TaskNode;
@@ -1136,7 +1470,7 @@ export class Emitter {
                     $from: "scope",
                     name: passId,
                 } as unknown as Template,
-                {},
+                resultSchema,
             );
         }
 
@@ -1147,7 +1481,7 @@ export class Emitter {
             cases: { true: thenArm },
             default: elseArm,
             bind: resultBind,
-            outputSchema: {},
+            outputSchema: resultSchema,
             next: mergeId,
         };
 
@@ -1186,9 +1520,9 @@ export class Emitter {
             }
         }
 
-        // State: attempt counter
+        // State: attempt counter (always a non-negative integer).
         const state: Record<string, LoopStateVar> = {
-            attempt: { schema: { type: "number" }, initial: 0 },
+            attempt: { schema: { type: "integer" }, initial: 0 },
         };
 
         // --- Success path: set _should_retry = false so the loop exits.
@@ -1229,15 +1563,13 @@ export class Emitter {
             task: "math.add",
             inputSchema: {
                 type: "object",
-                required: ["left", "right", "error", "trigger"],
+                required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
-                    error: { type: "object" },
-                    trigger: { type: "object" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: {
                     $from: "state",
@@ -1279,11 +1611,11 @@ export class Emitter {
             task: "error.fail",
             inputSchema: {
                 type: "object",
-                required: ["value"],
-                properties: { value: {} },
+                required: ["message"],
+                properties: { message: {} },
             },
             outputSchema: { not: {} },
-            inputs: { value: "Attempts exhausted" },
+            inputs: { message: "Attempts exhausted" },
         } as TaskNode;
         exhaustScope.nodeOrder.push(exhaustNodeId);
         const exhaustedArm = this.buildArmScope(
@@ -1292,7 +1624,9 @@ export class Emitter {
             { type: "boolean" },
         );
 
-        // Retry arm: noop, output true → loop continues.
+        // Retry arm: noop placeholder so the arm has an entry node.
+        // Output is the literal `true` (wired via buildArmScope below),
+        // so no bind needed on the noop itself.
         const retryScope = this.childScope(bodyScope);
         const retryNoopId = this.freshId("attempts_retry");
         retryScope.nodes[retryNoopId] = {
@@ -1301,7 +1635,6 @@ export class Emitter {
             inputSchema: {},
             outputSchema: {},
             inputs: {},
-            bind: retryNoopId,
         } as TaskNode;
         retryScope.nodeOrder.push(retryNoopId);
         const retryArm = this.buildArmScope(
@@ -1344,7 +1677,7 @@ export class Emitter {
             fbScope.bindings.set(
                 expr.fallback.param ?? DEFAULT_FALLBACK_PARAM,
                 {
-                    kind: "loopInput",
+                    kind: "recoveryInput",
                     nodeId: "error",
                 },
             );
@@ -1363,24 +1696,6 @@ export class Emitter {
             }
             if (fbScope.nodeOrder.length > 0) {
                 onError = `${fbPrefix}${fbScope.nodeOrder[0]}`;
-
-                // The first fallback node is a recovery task reached via
-                // onError. The validator requires "error" and "trigger" in
-                // its inputSchema (section 3.8).
-                const entryNode = scope.nodes[onError];
-                if (entryNode && entryNode.kind === "task") {
-                    const schema = entryNode.inputSchema;
-                    if (!schema.required) schema.required = [];
-                    for (const f of ["error", "trigger"] as const) {
-                        if (!schema.required.includes(f)) {
-                            schema.required.push(f);
-                        }
-                        if (!schema.properties?.[f]) {
-                            schema.properties = schema.properties ?? {};
-                            schema.properties[f] = { type: "object" };
-                        }
-                    }
-                }
             }
         }
 
@@ -1388,6 +1703,14 @@ export class Emitter {
         const outer = this.captureOuterRefs(bodyScope, new Set<string>(), {
             hasState: true,
         });
+
+        // Resolve the body return type stored by the type checker (Gap 8).
+        const attemptsResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `attempts body type`,
+        );
+        const attemptsBodyOutputSchema = attemptsResolved?.outputSchema ?? {};
 
         // The body output references a name bound only on the success path
         // (the user task's bind). On the error path the branch arms throw or
@@ -1407,7 +1730,7 @@ export class Emitter {
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: bodyOutput,
-                outputSchema: {},
+                outputSchema: attemptsBodyOutputSchema,
             },
             state,
             continueWhen: {
@@ -1432,6 +1755,13 @@ export class Emitter {
     private emitMap(expr: MapNode, scope: ScopeContext): Template {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const loopId = this.freshId("map");
+
+        const resolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `map element type`,
+        );
+        const elementSchema = resolved?.outputSchema ?? {};
 
         // Body scope: only loop-control nodes live here.
         // The per-iteration work lives in the checkBranch's true arm scope.
@@ -1492,11 +1822,11 @@ export class Emitter {
                 type: "object",
                 required: ["list", "index"],
                 properties: {
-                    list: { type: "array" },
+                    list: { type: "array", items: elementSchema },
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: elementSchema,
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1543,11 +1873,11 @@ export class Emitter {
                 type: "object",
                 required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
@@ -1668,6 +1998,13 @@ export class Emitter {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const loopId = this.freshId("filter");
 
+        const filterResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `filter element type`,
+        );
+        const filterElemSchema = filterResolved?.outputSchema ?? {};
+
         const bodyScope = this.childScope(scope);
 
         // --- Loop condition check ---
@@ -1722,11 +2059,11 @@ export class Emitter {
                 type: "object",
                 required: ["list", "index"],
                 properties: {
-                    list: { type: "array" },
+                    list: { type: "array", items: filterElemSchema },
                     index: { type: "integer" },
                 },
             },
-            outputSchema: {},
+            outputSchema: filterElemSchema,
             inputs: {
                 list: { $from: "input", name: "items" } as unknown as Template,
                 index: { $from: "state", name: "i" } as unknown as Template,
@@ -1824,11 +2161,11 @@ export class Emitter {
                 type: "object",
                 required: ["left", "right"],
                 properties: {
-                    left: { type: "number" },
-                    right: { type: "number" },
+                    left: { type: "integer" },
+                    right: { type: "integer" },
                 },
             },
-            outputSchema: { type: "number" },
+            outputSchema: { type: "integer" },
             inputs: {
                 left: { $from: "state", name: "i" } as unknown as Template,
                 right: 1,
@@ -1942,6 +2279,12 @@ export class Emitter {
     private emitParallel(expr: ParallelNode, scope: ScopeContext): Template {
         const forkId = this.freshId("parallel");
 
+        const parallelResolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `parallel branch types`,
+        );
+
         const branches: ForkNode["branches"] = {};
 
         for (let i = 0; i < expr.bodies.length; i++) {
@@ -1971,7 +2314,9 @@ export class Emitter {
                     (lastNode.kind === "task" ||
                         lastNode.kind === "loop" ||
                         lastNode.kind === "fork" ||
-                        lastNode.kind === "forkMap") &&
+                        lastNode.kind === "forkMap" ||
+                        lastNode.kind === "branch" ||
+                        lastNode.kind === "workflowCall") &&
                     lastNode.bind
                         ? lastNode.bind
                         : undefined;
@@ -1983,14 +2328,27 @@ export class Emitter {
                     : null;
             }
 
+            const outer = this.captureOuterRefs(branchScope, new Set(), {
+                extraVisit: branchOutput !== null ? [branchOutput] : [],
+            });
+
             branches[`branch_${i}`] = {
-                inputs: {},
+                inputs: outer.inputs,
                 scope: {
-                    inputSchema: {},
+                    inputSchema: {
+                        type: "object",
+                        ...(outer.required.length > 0
+                            ? {
+                                  required: outer.required,
+                                  properties: outer.properties,
+                              }
+                            : {}),
+                    },
                     entry: branchScope.nodeOrder[0] ?? "",
                     nodes: branchScope.nodes,
                     output: branchOutput,
-                    outputSchema: {},
+                    outputSchema:
+                        parallelResolved?.branchOutputSchemas?.[i] ?? {},
                 },
             };
         }
@@ -2022,6 +2380,14 @@ export class Emitter {
     ): Template {
         const collectionTemplate = this.emitExpr(expr.collection, scope);
         const forkMapId = this.freshId("parallelMap");
+
+        // Resolve element type from type checker (stored at the expr offset).
+        const resolved = this.getResolvedSchemas(
+            expr.loc.offset,
+            expr.loc,
+            `parallelMap element type`,
+        );
+        const elementSchema: JSONSchema = resolved?.outputSchema ?? {};
 
         const bodyScope = this.childScope(scope);
         bodyScope.bindings.set(expr.param, {
@@ -2067,7 +2433,9 @@ export class Emitter {
                 (lastNode.kind === "task" ||
                     lastNode.kind === "loop" ||
                     lastNode.kind === "fork" ||
-                    lastNode.kind === "forkMap") &&
+                    lastNode.kind === "forkMap" ||
+                    lastNode.kind === "branch" ||
+                    lastNode.kind === "workflowCall") &&
                 lastNode.bind
                     ? lastNode.bind
                     : undefined;
@@ -2082,17 +2450,24 @@ export class Emitter {
         const forkMapNode: ForkMapNode = {
             kind: "forkMap",
             collection: collectionTemplate,
-            collectionSchema: { type: "array" },
+            collectionSchema: { type: "array", items: elementSchema },
             elementParam: expr.param,
             ...(Object.keys(outer.inputs).length > 0
                 ? { inputs: outer.inputs }
                 : {}),
             body: {
-                inputSchema: {},
+                inputSchema: {
+                    type: "object",
+                    required: [expr.param, ...outer.required],
+                    properties: {
+                        [expr.param]: elementSchema,
+                        ...outer.properties,
+                    },
+                },
                 entry: bodyScope.nodeOrder[0] ?? "",
                 nodes: bodyScope.nodes,
                 output: bodyOutput,
-                outputSchema: {},
+                outputSchema: resolved?.bodyOutputSchema ?? {},
             },
             outputSchema: { type: "array" },
             ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
@@ -2107,7 +2482,7 @@ export class Emitter {
     // ---- Task argument resolution ----
 
     private resolveTaskArgs(
-        args: import("./ast.js").TaskArg[],
+        args: TaskArg[],
         schema: TaskSchemaInfo | undefined,
         scope: ScopeContext,
     ): Record<string, Template> {
@@ -2201,14 +2576,30 @@ export class Emitter {
                             path: rest.length > 0 ? rest : undefined,
                         } as unknown as Template;
                     }
+                    case "recoveryInput": {
+                        const recoveryName = binding.nodeId ?? first;
+                        return {
+                            $from: "recovery",
+                            name: recoveryName,
+                            path: rest.length > 0 ? rest : undefined,
+                        } as unknown as Template;
+                    }
                     case "literal":
                         if (rest.length > 0) {
-                            this.emitError(
-                                `Cannot access path on literal value '${first}'`,
-                                expr.loc.line,
-                                expr.loc.col,
-                            );
-                            return null;
+                            // Forward the path onto the resolved template so
+                            // that default expressions like `b = a.foo` work
+                            // when `a` was inlined as a caller-resolved ref.
+                            const base = binding.value as Record<
+                                string,
+                                unknown
+                            >;
+                            const existingPath = Array.isArray(base.path)
+                                ? (base.path as string[])
+                                : [];
+                            return {
+                                ...base,
+                                path: [...existingPath, ...rest],
+                            } as unknown as Template;
                         }
                         return binding.value!;
                 }
@@ -2442,6 +2833,7 @@ export class Emitter {
     private buildOutputOnlyArm(
         scope: ScopeContext,
         output: Template,
+        outputSchema: JSONSchema = {},
     ): BranchArm {
         const noopId = this.freshId("arm_noop");
         scope.nodes[noopId] = {
@@ -2452,7 +2844,7 @@ export class Emitter {
             inputs: {},
         } as TaskNode;
         scope.nodeOrder.push(noopId);
-        return this.buildArmScope(scope, output, {});
+        return this.buildArmScope(scope, output, outputSchema);
     }
 
     private childScope(parent: ScopeContext): ScopeContext {
@@ -2462,6 +2854,244 @@ export class Emitter {
             bindings: new Map(),
             parent,
         };
+    }
+
+    // ---- Post-emit: propagate captured-ref schemas into sub-scope inputSchemas ----
+    //
+    // `captureOuterRefs` rewrites outer references (`$from:"scope"` /
+    // `$from:"input"` / `$from:"state"` that resolve outside the body
+    // being emitted) into the body's `inputs` map and adds a
+    // corresponding entry to the body `inputSchema.properties`. At the
+    // time of capture the source's resolved schema is not yet available
+    // in all cases (the parent's input/bind schemas may still be under
+    // construction), so the captured property is conservatively set to
+    // `{}`. That conservative `{}` is what Decision 0011 calls
+    // "unknown" — and would cause the validator's consumer-side check
+    // to reject reads of the captured value into typed slots.
+    //
+    // This post-pass walks the finished IR top-down and, for every
+    // sub-scope's `inputSchema.properties[name]` that is currently
+    // `{}`, resolves the corresponding `inputs[name]` template against
+    // the *parent* scope's known schemas (input properties, bound node
+    // outputs, loop state, constants) and replaces `{}` with the
+    // resolved schema where possible. Anything that cannot be resolved
+    // remains `{}` and is correctly treated as unknown by the
+    // validator.
+
+    private propagateBodySchemas(body: WorkflowBody): void {
+        const inputs: Record<string, JSONSchema> = {};
+        const props = body.inputSchema?.properties;
+        if (props) {
+            for (const [k, v] of Object.entries(props)) {
+                if (typeof v !== "boolean") inputs[k] = v;
+            }
+        }
+        const constants: Record<string, JSONSchema> = {};
+        for (const [k, v] of Object.entries(this.constants)) {
+            constants[k] = v.schema;
+        }
+        this.propagateScopeNodes(body, {
+            inputs,
+            scope: {},
+            state: {},
+            constants,
+        });
+    }
+
+    private propagateScopeNodes(
+        scope: WorkflowScope,
+        ctx: {
+            inputs: Record<string, JSONSchema>;
+            scope: Record<string, JSONSchema>;
+            state: Record<string, JSONSchema>;
+            constants: Record<string, JSONSchema>;
+        },
+    ): void {
+        for (const nodeId of Object.keys(scope.nodes)) {
+            const node = scope.nodes[nodeId];
+            this.patchNodeSubScopes(node, ctx);
+            const anyNode = node as {
+                bind?: string;
+                outputSchema?: JSONSchema;
+            };
+            if (anyNode.bind && anyNode.outputSchema) {
+                ctx.scope[anyNode.bind] = anyNode.outputSchema;
+            }
+        }
+    }
+
+    private patchNodeSubScopes(
+        node: WorkflowNode,
+        parentCtx: {
+            inputs: Record<string, JSONSchema>;
+            scope: Record<string, JSONSchema>;
+            state: Record<string, JSONSchema>;
+            constants: Record<string, JSONSchema>;
+        },
+    ): void {
+        if (node.kind === "loop") {
+            this.patchAndRecurseScope(
+                node.body,
+                node.inputs ?? {},
+                parentCtx,
+                node.state,
+            );
+        } else if (node.kind === "forkMap") {
+            this.patchAndRecurseScope(node.body, node.inputs ?? {}, parentCtx);
+        } else if (node.kind === "fork") {
+            for (const branch of Object.values(node.branches)) {
+                this.patchAndRecurseScope(
+                    branch.scope,
+                    branch.inputs ?? {},
+                    parentCtx,
+                );
+            }
+        } else if (node.kind === "branch") {
+            for (const arm of Object.values(node.cases)) {
+                this.patchAndRecurseScope(
+                    arm.scope,
+                    arm.inputs ?? {},
+                    parentCtx,
+                );
+            }
+            if (node.default) {
+                this.patchAndRecurseScope(
+                    node.default.scope,
+                    node.default.inputs ?? {},
+                    parentCtx,
+                );
+            }
+        }
+    }
+
+    private patchAndRecurseScope(
+        scope: WorkflowScope,
+        inputs: Record<string, Template>,
+        parentCtx: {
+            inputs: Record<string, JSONSchema>;
+            scope: Record<string, JSONSchema>;
+            state: Record<string, JSONSchema>;
+            constants: Record<string, JSONSchema>;
+        },
+        state?: Record<string, LoopStateVar>,
+    ): void {
+        // Patch this sub-scope's inputSchema.properties from parent ctx.
+        const props = scope.inputSchema?.properties;
+        if (props) {
+            for (const [name, template] of Object.entries(inputs)) {
+                const existing = props[name];
+                if (
+                    existing &&
+                    typeof existing !== "boolean" &&
+                    Object.keys(existing).length > 0
+                ) {
+                    continue;
+                }
+                const resolved = this.resolveTemplateSchemaShallow(
+                    template,
+                    parentCtx,
+                );
+                if (resolved && Object.keys(resolved).length > 0) {
+                    props[name] = resolved;
+                }
+            }
+        }
+        // Recurse with this sub-scope's own context.
+        const innerCtx = {
+            inputs: {} as Record<string, JSONSchema>,
+            scope: {} as Record<string, JSONSchema>,
+            state: {} as Record<string, JSONSchema>,
+            constants: parentCtx.constants,
+        };
+        if (scope.inputSchema?.properties) {
+            for (const [k, v] of Object.entries(scope.inputSchema.properties)) {
+                if (typeof v !== "boolean") innerCtx.inputs[k] = v;
+            }
+        }
+        if (state) {
+            for (const [k, v] of Object.entries(state)) {
+                innerCtx.state[k] = v.schema;
+            }
+        }
+        this.propagateScopeNodes(scope, innerCtx);
+    }
+
+    private resolveTemplateSchemaShallow(
+        template: Template,
+        ctx: {
+            inputs: Record<string, JSONSchema>;
+            scope: Record<string, JSONSchema>;
+            state: Record<string, JSONSchema>;
+            constants: Record<string, JSONSchema>;
+        },
+    ): JSONSchema | undefined {
+        if (
+            template === null ||
+            typeof template !== "object" ||
+            Array.isArray(template)
+        ) {
+            return undefined;
+        }
+        const obj = template as {
+            $from?: string;
+            name?: string;
+            path?: (string | number)[];
+        };
+        if (typeof obj.$from !== "string" || typeof obj.name !== "string") {
+            return undefined;
+        }
+        let base: JSONSchema | undefined;
+        switch (obj.$from) {
+            case "input":
+                base = ctx.inputs[obj.name];
+                break;
+            case "scope":
+                base = ctx.scope[obj.name];
+                break;
+            case "state":
+                base = ctx.state[obj.name];
+                break;
+            case "constant":
+                base = ctx.constants[obj.name];
+                break;
+            default:
+                return undefined;
+        }
+        if (!base) return undefined;
+        return this.projectSchemaThroughPath(base, obj.path);
+    }
+
+    private projectSchemaThroughPath(
+        schema: JSONSchema,
+        path?: (string | number)[],
+    ): JSONSchema | undefined {
+        if (!path || path.length === 0) return schema;
+        // Walk the schema along the path. Use loose typing locally because
+        // `JSONSchema7Definition` (boolean | schema) doesn't compose cleanly
+        // through chained narrowings.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let cur: any = schema;
+        for (const seg of path) {
+            if (!cur || typeof cur !== "object") return undefined;
+            if (typeof seg === "string") {
+                const props = cur.properties;
+                if (!props) return undefined;
+                const next = props[seg];
+                if (!next || typeof next === "boolean") return undefined;
+                cur = next;
+            } else {
+                const items = cur.items;
+                if (
+                    !items ||
+                    Array.isArray(items) ||
+                    typeof items === "boolean"
+                ) {
+                    return undefined;
+                }
+                cur = items;
+            }
+        }
+        return cur as JSONSchema;
     }
 
     private scopeRef(nodeId: string, scope: ScopeContext): Template {
@@ -2640,43 +3270,10 @@ export class Emitter {
         const properties: Record<string, JSONSchema> = {};
         const required: string[] = [];
         for (const p of params) {
-            properties[p.name] = this.typeToSchema(p.type);
+            properties[p.name] = typeExprToSchema(p.type);
             required.push(p.name);
         }
         return { type: "object", required, properties };
-    }
-
-    private typeToSchema(t: TypeExpr): JSONSchema {
-        switch (t.kind) {
-            case "NamedType":
-                switch (t.name) {
-                    case "string":
-                        return { type: "string" };
-                    case "number":
-                        return { type: "number" };
-                    case "integer":
-                        return { type: "integer" };
-                    case "boolean":
-                        return { type: "boolean" };
-                    case "never":
-                        return { not: {} };
-                    case "unknown":
-                        return {};
-                    default:
-                        return { type: t.name as JSONSchema["type"] };
-                }
-            case "ArrayType":
-                return { type: "array", items: this.typeToSchema(t.element) };
-            case "ObjectType": {
-                const props: Record<string, JSONSchema> = {};
-                const req: string[] = [];
-                for (const f of t.fields) {
-                    props[f.name] = this.typeToSchema(f.type);
-                    if (!f.optional) req.push(f.name);
-                }
-                return { type: "object", required: req, properties: props };
-            }
-        }
     }
 
     private emitError(

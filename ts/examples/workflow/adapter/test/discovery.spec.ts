@@ -27,22 +27,27 @@ function taskMap(...names: string[]): Map<string, TaskDefinition> {
 function validWorkflowJson(name: string, taskName: string): string {
     return JSON.stringify({
         kind: "workflow",
-        name,
         version: "1",
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-        nodes: {
-            start: {
-                kind: "task",
-                task: taskName,
+        entry: name,
+        workflows: {
+            [name]: {
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 inputs: {},
-                bind: "out",
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: taskName,
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                entry: "start",
+                output: { $from: "scope", name: "out" },
             },
         },
-        entry: "start",
-        output: { $from: "scope", name: "out" },
     });
 }
 

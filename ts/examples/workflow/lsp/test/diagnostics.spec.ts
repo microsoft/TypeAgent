@@ -59,4 +59,24 @@ workflow w(): string {
         const diags = computeDiagnostics(src, schemas);
         expect(diags.length).toBeGreaterThan(1);
     });
+
+    it("surfaces typecheck errors from every workflow in a multi-workflow file", () => {
+        // Both workflows reference an unknown identifier; each must
+        // produce its own diagnostic so a silent-drop bug (only first
+        // workflow checked) is caught.
+        const src = `workflow a(): string {
+    return missingA;
+}
+workflow b(): string {
+    return missingB;
+}
+`;
+        const diags = computeDiagnostics(src, schemas);
+        const messages = diags.map((d) => d.message).join("\n");
+        expect(messages).toContain("missingA");
+        expect(messages).toContain("missingB");
+        // And the ranges must land on different lines (one per workflow).
+        const linesWithErrors = new Set(diags.map((d) => d.range.start.line));
+        expect(linesWithErrors.size).toBeGreaterThanOrEqual(2);
+    });
 });

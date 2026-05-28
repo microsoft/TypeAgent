@@ -19,9 +19,17 @@ import {
     Expr,
     TypeExpr,
     TaskArg,
+    SwitchArm,
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";
-import { TaskSchemaInfo } from "./emitter.js";
+import { TaskSchemaInfo, isGenericSchema } from "./emitter.js";
+import {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
+import type { JSONSchema } from "workflow-model";
+import { decodeStringLiteral } from "./literal.js";
 
 // ---- Type representation ----
 
@@ -30,6 +38,7 @@ export type TypeInfo =
     | ObjectTypeInfo
     | ArrayTypeInfo
     | TupleTypeInfo
+    | EnumType
     | NeverType
     | UnknownType
     | UnresolvedType;
@@ -52,6 +61,24 @@ export interface ArrayTypeInfo {
 export interface TupleTypeInfo {
     kind: "tuple";
     elements: TypeInfo[];
+}
+
+/**
+ * A string, numeric, or boolean type constrained to a finite set of
+ * literal values (corresponds to JSON Schema `{ type: "...", enum: [...] }`).
+ * Used by the switch exhaustiveness checker (Q4) to verify that a switch
+ * without `default` covers every possible discriminant value.
+ *
+ * Note: JSON Schema also permits `null` as an enum value, but representing
+ * a nullable type would require either a new TypeInfo kind or a sentinel
+ * value in `values` — neither pulls its weight today, so schemas whose
+ * enums contain `null` are classified as `mixed` and fall through to
+ * `UNKNOWN`. See `classifyEnumValues`.
+ */
+export interface EnumType {
+    kind: "enum";
+    base: "string" | "number" | "integer" | "boolean";
+    values: readonly (string | number | boolean)[];
 }
 
 export interface UnknownType {
@@ -90,6 +117,46 @@ const UNKNOWN: UnknownType = { kind: "unknown" };
 const NEVER: NeverType = { kind: "never" };
 const UNRESOLVED: UnresolvedType = { kind: "unresolved" };
 
+/** Convert a TypeInfo to its JSONSchema equivalent. */
+export function typeInfoToSchema(ti: TypeInfo): JSONSchema {
+    switch (ti.kind) {
+        case "primitive":
+            return { type: ti.name };
+        case "object": {
+            const props: Record<string, JSONSchema> = {};
+            const req: string[] = [];
+            for (const [name, { type, optional }] of ti.fields) {
+                props[name] = typeInfoToSchema(type);
+                if (!optional) req.push(name);
+            }
+            const schema: JSONSchema = { type: "object", properties: props };
+            if (req.length > 0) schema.required = req;
+            return schema;
+        }
+        case "array":
+            return { type: "array", items: typeInfoToSchema(ti.element) };
+        case "tuple": {
+            // Use JSON Schema 7 tuple validation (array form of `items`)
+            // so downstream validators see exact element types, arity,
+            // and a closed shape — not a permissive `array`.
+            const items = ti.elements.map(typeInfoToSchema);
+            return {
+                type: "array",
+                items,
+                minItems: ti.elements.length,
+                maxItems: ti.elements.length,
+            };
+        }
+        case "enum":
+            return { type: ti.base, enum: ti.values as JSONSchema["enum"] };
+        case "unknown":
+        case "unresolved":
+            return {};
+        case "never":
+            return { not: {} };
+    }
+}
+
 function isNumeric(t: TypeInfo): boolean {
     return (
         t.kind === "primitive" && (t.name === "number" || t.name === "integer")
@@ -104,7 +171,103 @@ function isUnresolved(t: TypeInfo): boolean {
     return t.kind === "unresolved";
 }
 
-function typeEq(a: TypeInfo, b: TypeInfo): boolean {
+/**
+ * Result of `isEnumExhaustive`.
+ *
+ * When `exhaustive` is false, `missingValues` and `nonLiteralArmIndex`
+ * may BOTH be populated:
+ *
+ *   - `missingValues` — enum values for which no literal arm was found.
+ *   - `nonLiteralArmIndex` — index (into `arms`) of the FIRST arm whose
+ *     `value` is not a string/number/boolean literal; coverage cannot be
+ *     proven statically when an arm references a variable or expression.
+ *
+ * Callers building diagnostics should prefer `nonLiteralArmIndex` when
+ * both are set (it tells the author what concrete edit unblocks the
+ * exhaustiveness proof).
+ */
+export type EnumExhaustivenessResult =
+    | { exhaustive: true }
+    | {
+          exhaustive: false;
+          missingValues: readonly (string | number | boolean)[];
+          nonLiteralArmIndex?: number;
+      };
+
+/**
+ * Returns whether `arms` exhaustively cover every value in `discType`.
+ * Used for Q4 exhaustiveness: a switch without `default` over an enum
+ * discriminant is value-producing when it covers all values.
+ *
+ * Returns a structured result so the caller can produce a specific
+ * diagnostic (missing values vs. non-literal arm punt) rather than a
+ * generic "not exhaustive" message.
+ */
+function isEnumExhaustive(
+    discType: EnumType,
+    arms: SwitchArm[],
+): EnumExhaustivenessResult {
+    const covered = new Set<string | number | boolean>();
+    let firstNonLiteral: number | undefined;
+    for (let i = 0; i < arms.length; i++) {
+        const e = arms[i]!.value;
+        if (e.kind === "StringLiteralExpr") {
+            covered.add(decodeStringLiteral(e.raw, e.quote).value);
+        } else if (e.kind === "NumberLiteralExpr") {
+            covered.add(e.value);
+        } else if (e.kind === "BooleanLiteralExpr") {
+            covered.add((e as { value: boolean }).value);
+        } else if (firstNonLiteral === undefined) {
+            firstNonLiteral = i;
+        }
+    }
+    const missing = discType.values.filter((v) => !covered.has(v));
+    if (missing.length === 0 && firstNonLiteral === undefined) {
+        return { exhaustive: true };
+    }
+    return firstNonLiteral !== undefined
+        ? {
+              exhaustive: false,
+              missingValues: missing,
+              nonLiteralArmIndex: firstNonLiteral,
+          }
+        : { exhaustive: false, missingValues: missing };
+}
+
+/**
+ * Loose kind-level compatibility check used only by the `===`/`!==`
+ * operator. Returns true if comparing `a` and `b` with strict equality is
+ * not obviously a type error.
+ *
+ * This is intentionally permissive for objects, arrays, and tuples (any
+ * two values of the same kind are considered comparable), since without
+ * union types in the DSL a stricter check would reject reasonable
+ * comparisons. See G18 for the eventual tightening.
+ *
+ * For structural assignability (return types, const annotations, ternary
+ * arms), use `isAssignableTo` instead.
+ */
+/**
+ * Symmetric base-compatibility check between a `PrimitiveType` and an
+ * `EnumType`. Returns true if the two could possibly hold overlapping
+ * runtime values without considering the enum's value set.
+ *
+ * Used by:
+ *   - `isEqualityComparable` for `===`/`!==` (truly symmetric)
+ *   - `isAssignableTo` for `primitive → enum` (see issue #2: we are
+ *     deliberately permissive there).
+ *
+ * The asymmetric `enum → primitive` direction (where number→integer is
+ * unsound) is handled inline in `isAssignableTo`.
+ */
+function primitiveMatchesEnumBase(prim: PrimitiveType, enm: EnumType): boolean {
+    if (prim.name === enm.base) return true;
+    if (enm.base === "integer" && prim.name === "number") return true;
+    if (enm.base === "number" && prim.name === "integer") return true;
+    return false;
+}
+
+function isEqualityComparable(a: TypeInfo, b: TypeInfo): boolean {
     // Unresolved (error recovery): compatible with everything.
     if (a.kind === "unresolved" || b.kind === "unresolved") return true;
     // never is the bottom type: source=never assignable to any target,
@@ -115,6 +278,17 @@ function typeEq(a: TypeInfo, b: TypeInfo): boolean {
     // source=unknown not assignable to concrete.
     if (a.kind === "unknown") return true;
     if (b.kind === "unknown") return false;
+    // EnumType is comparable to its base primitive and to other enum types
+    // with the same base (the values might overlap at runtime).
+    if (a.kind === "enum") {
+        if (b.kind === "primitive") return primitiveMatchesEnumBase(b, a);
+        if (b.kind === "enum") return a.base === b.base;
+        return false;
+    }
+    if (b.kind === "enum") {
+        if (a.kind === "primitive") return primitiveMatchesEnumBase(a, b);
+        return false;
+    }
     if (a.kind !== b.kind) return false;
     if (a.kind === "primitive" && b.kind === "primitive") {
         // integer is compatible with number
@@ -128,6 +302,105 @@ function typeEq(a: TypeInfo, b: TypeInfo): boolean {
     return true; // structural comparison not needed for operator checks
 }
 
+/**
+ * Returns true if `source` is assignable to `target`.
+ * Performs recursive structural comparison for objects and arrays.
+ */
+function isAssignableTo(target: TypeInfo, source: TypeInfo): boolean {
+    if (target.kind === "unresolved" || source.kind === "unresolved")
+        return true;
+    if (source.kind === "never") return true;
+    if (target.kind === "never") return false;
+    if (target.kind === "unknown") return true;
+    if (source.kind === "unknown") return false;
+    // EnumType: assignable to its base primitive; enum-to-enum requires same
+    // base and the source values must be a subset of the target values.
+    if (source.kind === "enum") {
+        if (target.kind === "primitive") {
+            // Every enum value must be a valid value of the target
+            // primitive. Integer widens to number, but number does NOT
+            // narrow to integer (a non-integer member would violate the
+            // target).
+            if (source.base === "integer")
+                return target.name === "integer" || target.name === "number";
+            return target.name === source.base;
+        }
+        if (target.kind === "enum") {
+            if (source.base !== target.base) return false;
+            return source.values.every((v) => target.values.includes(v));
+        }
+        return false;
+    }
+    if (target.kind === "enum") {
+        // Allow a base-compatible primitive to flow into an enum target.
+        //
+        // The DSL does not narrow string/number literal expressions to
+        // single-value EnumTypes (yet), so a literal like `"a"` is typed
+        // as `string`. Rejecting `string → "a" | "b"` would prevent the
+        // common call pattern `task<T>(arg: T)` from accepting any
+        // literal argument. We deliberately accept it as a "may fail at
+        // runtime" widening — the JSON Schema validator on the wire is
+        // the final enforcer. See review issue #2.
+        if (source.kind === "primitive")
+            return primitiveMatchesEnumBase(source, target);
+        return false;
+    }
+    if (target.kind !== source.kind) return false;
+    switch (target.kind) {
+        case "primitive": {
+            // Safe: the `target.kind !== source.kind` guard above proves
+            // source is also a PrimitiveType. Cast matches the pattern
+            // used by the object/array/tuple cases below.
+            const s = source as PrimitiveType;
+            // JSON Schema treats `integer` as a subtype of `number`:
+            // every integer satisfies a number schema, but a number may
+            // be fractional and so does NOT satisfy an integer schema.
+            // Assignability is therefore one-way: integer to number is
+            // allowed; number to integer is rejected.
+            if (target.name === "number" && s.name === "integer") return true;
+            return target.name === s.name;
+        }
+        case "object": {
+            const s = source as ObjectTypeInfo;
+            for (const [fieldName, fieldInfo] of target.fields) {
+                const sourceField = s.fields.get(fieldName);
+                if (fieldInfo.optional) {
+                    // Optional target field: absent in source is fine, but if
+                    // present it must still have a compatible type.
+                    if (!sourceField) continue;
+                    if (!isAssignableTo(fieldInfo.type, sourceField.type))
+                        return false;
+                    continue;
+                }
+                if (!sourceField) return false;
+                // A required target field cannot be satisfied by an optional
+                // source field: the source field might be absent at runtime.
+                if (sourceField.optional) return false;
+                if (!isAssignableTo(fieldInfo.type, sourceField.type))
+                    return false;
+            }
+            return true;
+        }
+        case "array": {
+            const s = source as ArrayTypeInfo;
+            return isAssignableTo(target.element, s.element);
+        }
+        case "tuple": {
+            const s = source as TupleTypeInfo;
+            if (target.elements.length !== s.elements.length) return false;
+            return target.elements.every((t, i) =>
+                isAssignableTo(t, s.elements[i]),
+            );
+        }
+        default: {
+            // Exhaustiveness check: if a new TypeInfo kind is added, this
+            // becomes a compile error rather than silently returning true.
+            const _exhaustive: never = target;
+            return _exhaustive;
+        }
+    }
+}
+
 function typeName(t: TypeInfo): string {
     switch (t.kind) {
         case "primitive":
@@ -138,6 +411,8 @@ function typeName(t: TypeInfo): string {
             return `${typeName(t.element)}[]`;
         case "tuple":
             return `[${t.elements.map(typeName).join(", ")}]`;
+        case "enum":
+            return t.values.map((v) => JSON.stringify(v)).join(" | ");
         case "unknown":
             return "unknown";
         case "never":
@@ -166,6 +441,8 @@ export function formatType(t: TypeInfo): string {
             return `${formatType(t.element)}[]`;
         case "tuple":
             return `[${t.elements.map(formatType).join(", ")}]`;
+        case "enum":
+            return t.values.map((v) => JSON.stringify(v)).join(" | ");
         case "unknown":
             return "unknown";
         case "never":
@@ -242,8 +519,71 @@ function typeExprToInfo(
 
 // ---- Converter: JSON Schema -> TypeInfo ----
 
+/**
+ * Classify a JSON Schema `enum` array. Used to keep `jsonSchemaToTypeInfo`
+ * focused on type construction and to centralise the "what counts as a
+ * well-formed enum" decision in one place.
+ *
+ * Cases:
+ *   - `{ kind: "string", values }`     — all strings (→ EnumType base "string")
+ *   - `{ kind: "number", base, values }` — all numbers; `base` is
+ *     `"integer"` iff every value passes `Number.isInteger`, else `"number"`
+ *   - `{ kind: "boolean", values }`    — all booleans (rare but valid)
+ *   - `{ kind: "empty" }`              — `enum: []` (no constraint; falls
+ *     through to the bare `type` keyword if any)
+ *   - `{ kind: "mixed" }`              — heterogeneous values (e.g.,
+ *     `["a", 1]`) OR enums containing `null` (no nullable TypeInfo today).
+ *     Malformed by JSON Schema convention; we deliberately do NOT
+ *     construct an `EnumType` here and fall through to `UNKNOWN`.
+ *     A future surface (warning channel) can use this signal to flag the
+ *     schema; today the silent fallback is the policy.
+ */
+type EnumClassification =
+    | { kind: "empty" }
+    | { kind: "mixed" }
+    | { kind: "string"; values: string[] }
+    | { kind: "number"; base: "integer" | "number"; values: number[] }
+    | { kind: "boolean"; values: boolean[] };
+
+function classifyEnumValues(values: unknown[]): EnumClassification {
+    if (values.length === 0) return { kind: "empty" };
+    if (values.every((v) => typeof v === "string")) {
+        return { kind: "string", values: values as string[] };
+    }
+    if (values.every((v) => typeof v === "number")) {
+        const allIntegers = values.every((v) => Number.isInteger(v as number));
+        return {
+            kind: "number",
+            base: allIntegers ? "integer" : "number",
+            values: values as number[],
+        };
+    }
+    if (values.every((v) => typeof v === "boolean")) {
+        return { kind: "boolean", values: values as boolean[] };
+    }
+    // Anything else (mixed primitives, `null`, objects, arrays) is mixed.
+    return { kind: "mixed" };
+}
+
 function jsonSchemaToTypeInfo(schema: Record<string, unknown>): TypeInfo {
     const type = schema["type"];
+    // Enum constraint takes priority over the bare primitive type.
+    // Malformed enums (empty or mixed-type) fall through to the bare
+    // type; see `classifyEnumValues` for the policy.
+    const enumVals = schema["enum"];
+    if (Array.isArray(enumVals)) {
+        const cls = classifyEnumValues(enumVals);
+        if (cls.kind === "string") {
+            return { kind: "enum", base: "string", values: cls.values };
+        }
+        if (cls.kind === "number") {
+            return { kind: "enum", base: cls.base, values: cls.values };
+        }
+        if (cls.kind === "boolean") {
+            return { kind: "enum", base: "boolean", values: cls.values };
+        }
+        // `empty` and `mixed` deliberately fall through.
+    }
     if (type === "string") return STRING;
     if (type === "number") return NUMBER;
     if (type === "integer") return { kind: "primitive", name: "integer" };
@@ -290,71 +630,369 @@ export class TypeChecker {
     private workflowMap: Map<string, WorkflowDecl>;
     private _propertyRefs: PropertyRef[] | null = null;
     private _symbolTypes: Map<number, TypeInfo> | null = null;
+    /**
+     * Resolved schemas for generic task calls, keyed by
+     * TaskCallExpr.loc.offset. The map is reset at the start of every
+     * {@link checkAll} run (which is the only caller of `checkOne`),
+     * so consumers can rely on it reflecting the most recent check.
+     */
+    private _resolvedSchemas = new Map<number, ResolvedTaskSchemas>();
 
     constructor(taskSchemas: TaskSchemaInfo[], workflows: WorkflowDecl[] = []) {
         this.taskSchemaMap = new Map(taskSchemas.map((s) => [s.name, s]));
         this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
     }
 
-    check(wf: WorkflowDecl): TypeError[] {
-        this.errors = [];
+    /**
+     * Diagnose malformed `enum` declarations in a set of task schemas.
+     *
+     * Returns one warning per offending field. Walks input + output
+     * schemas (and nested object properties / array items) and flags
+     * enums classified as `empty` (`enum: []`) or `mixed`
+     * (heterogeneous value types like `["a", 1]`).
+     *
+     * The type checker treats malformed enums as `UNKNOWN` and continues
+     * silently (see `classifyEnumValues`); callers that want to surface
+     * these to the schema author should invoke this and emit warnings
+     * out-of-band (the checker has no AST location for task-schema
+     * fields, so they cannot be raised through the normal error
+     * channel).
+     */
+    static diagnoseMalformedEnums(
+        taskSchemas: TaskSchemaInfo[],
+    ): { taskName: string; path: string; reason: "empty" | "mixed" }[] {
+        const out: {
+            taskName: string;
+            path: string;
+            reason: "empty" | "mixed";
+        }[] = [];
+        const walk = (
+            schema: unknown,
+            taskName: string,
+            path: string,
+        ): void => {
+            if (
+                schema === null ||
+                typeof schema !== "object" ||
+                Array.isArray(schema)
+            )
+                return;
+            const s = schema as Record<string, unknown>;
+            const enumVals = s["enum"];
+            if (Array.isArray(enumVals)) {
+                const cls = classifyEnumValues(enumVals);
+                if (cls.kind === "empty")
+                    out.push({ taskName, path, reason: "empty" });
+                if (cls.kind === "mixed")
+                    out.push({ taskName, path, reason: "mixed" });
+            }
+            // Recurse into every sub-schema-bearing keyword so malformed
+            // enums nested under oneOf/anyOf/allOf/if-then-else/etc. are
+            // also surfaced.  Mirrors `substituteMarkers` in
+            // typeParamUtils.ts.
+            const singleKeys = [
+                "additionalItems",
+                "contains",
+                "additionalProperties",
+                "propertyNames",
+                "if",
+                "then",
+                "else",
+                "not",
+            ];
+            for (const k of singleKeys) {
+                if (s[k]) walk(s[k], taskName, `${path}.${k}`);
+            }
+            const arrayKeys = ["allOf", "anyOf", "oneOf"];
+            for (const k of arrayKeys) {
+                const v = s[k];
+                if (Array.isArray(v)) {
+                    v.forEach((sub, i) =>
+                        walk(sub, taskName, `${path}.${k}[${i}]`),
+                    );
+                }
+            }
+            const recordKeys = [
+                "properties",
+                "patternProperties",
+                "definitions",
+            ];
+            for (const k of recordKeys) {
+                const v = s[k];
+                if (v && typeof v === "object" && !Array.isArray(v)) {
+                    for (const [pk, pv] of Object.entries(
+                        v as Record<string, unknown>,
+                    )) {
+                        // For `properties`, descend with just the key
+                        // (matches how authors think: `outputSchema.v`).
+                        // For other record-valued keywords, prefix the
+                        // keyword for disambiguation.
+                        const childPath =
+                            k === "properties"
+                                ? `${path}.${pk}`
+                                : `${path}.${k}.${pk}`;
+                        walk(pv, taskName, childPath);
+                    }
+                }
+            }
+            const items = s["items"];
+            if (Array.isArray(items)) {
+                items.forEach((sub, i) => walk(sub, taskName, `${path}[${i}]`));
+            } else if (items) {
+                walk(items, taskName, `${path}[]`);
+            }
+            // `dependencies` values are either sub-schemas or string[].
+            const deps = s["dependencies"];
+            if (deps && typeof deps === "object" && !Array.isArray(deps)) {
+                for (const [dk, dv] of Object.entries(
+                    deps as Record<string, unknown>,
+                )) {
+                    if (!Array.isArray(dv)) {
+                        walk(dv, taskName, `${path}.dependencies.${dk}`);
+                    }
+                }
+            }
+        };
+        for (const t of taskSchemas) {
+            walk(t.inputSchema, t.name, "inputSchema");
+            walk(t.outputSchema, t.name, "outputSchema");
+        }
+        return out;
+    }
+
+    /**
+     * Type-check a single workflow body. Internal: invoked per workflow
+     * by {@link checkAll}. Appends to {@link errors} rather than
+     * replacing it, so multi-workflow checks accumulate diagnostics
+     * across all bodies.
+     */
+    private checkOne(wf: WorkflowDecl): void {
         const scope = new Scope();
+        const seenParams = new Set<string>();
         for (const p of wf.params) {
-            scope.set(p.name, this.resolveTypeExpr(p.type));
+            if (seenParams.has(p.name)) {
+                this.addError(
+                    `Duplicate parameter '${p.name}' in workflow '${wf.name}'`,
+                    p.loc.line,
+                    p.loc.col,
+                );
+            }
+            seenParams.add(p.name);
+            const paramType = this.resolveTypeExpr(p.type);
+            if (p.default) {
+                // Defaults may reference earlier parameters of the same
+                // workflow (§4.3); type-check in the partial scope built
+                // so far, before binding this parameter.
+                const defaultType = this.inferExpr(p.default, scope);
+                if (
+                    !isUnresolved(defaultType) &&
+                    defaultType.kind !== "unknown" &&
+                    !isAssignableTo(paramType, defaultType)
+                ) {
+                    this.addError(
+                        `Default value of type '${typeName(defaultType)}' is not assignable to parameter '${p.name}' of type '${typeName(paramType)}'`,
+                        p.default.loc.line,
+                        p.default.loc.col,
+                    );
+                }
+            }
+            scope.set(p.name, paramType);
         }
         const returnType = this.checkStatements(wf.body, scope);
         // Validate return type matches declaration
         const declared = this.resolveTypeExpr(wf.returnType);
-        if (returnType.kind !== "unresolved" && !typeEq(declared, returnType)) {
+        if (
+            returnType.kind !== "unresolved" &&
+            !isAssignableTo(declared, returnType)
+        ) {
             this.addError(
                 `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
                 wf.loc.line,
                 wf.loc.col,
             );
         }
+    }
+
+    /**
+     * Type-check a whole module of workflows (Phase 3).
+     *
+     * Performs:
+     *  - Task/workflow name-shadow ambiguity detection (a name declared as
+     *    both a task and a workflow in the same file is an error).
+     *  - Per-workflow type checking with the full workflow map in scope.
+     *  - Static recursion detection across the workflow-call graph
+     *    (direct or mutual cycles are an error; §2.4 of the design).
+     */
+    checkAll(workflows: WorkflowDecl[]): TypeError[] {
+        this.errors = [];
+        this._resolvedSchemas = new Map();
+        this.workflowMap = new Map(workflows.map((w) => [w.name, w]));
+
+        // Ambiguous shadow: same name registered as both a task and a
+        // workflow in the same translation unit.
+        for (const w of workflows) {
+            if (this.taskSchemaMap.has(w.name)) {
+                this.addError(
+                    `Workflow '${w.name}' shadows a task of the same name; rename one of them`,
+                    w.loc.line,
+                    w.loc.col,
+                );
+            }
+        }
+
+        // Duplicate workflow names: the parser does not enforce
+        // uniqueness, so the type checker is the first place we catch
+        // them.
+        const seen = new Set<string>();
+        for (const w of workflows) {
+            if (seen.has(w.name)) {
+                this.addError(
+                    `Duplicate workflow declaration '${w.name}'`,
+                    w.loc.line,
+                    w.loc.col,
+                );
+            }
+            seen.add(w.name);
+        }
+
+        // Per-workflow type check. `checkOne` appends to `this.errors`,
+        // so diagnostics from every workflow accumulate naturally.
+        for (const w of workflows) {
+            this.checkOne(w);
+        }
+
+        // Static recursion check across the call graph.
+        this.checkRecursion(workflows);
+
         return this.errors;
     }
 
     /**
-     * Walk the workflow and return source locations of every successfully
-     * resolved property-access segment (segments[1..n] of a DottedNameExpr).
-     * Used by the LSP to emit `property` semantic tokens for `.stdout` etc.
+     * Resolved schemas for generic task calls computed during the last
+     * checkAll run. Keyed by TaskCallExpr.loc.offset. The emitter can
+     * use this to avoid recomputing type-arg resolution.
      */
-    collectPropertyRefs(wf: WorkflowDecl): PropertyRef[] {
-        this._propertyRefs = [];
-        const scope = new Scope();
-        for (const p of wf.params) {
-            scope.set(p.name, this.resolveTypeExpr(p.type));
-        }
-        this.checkStatements(wf.body, scope);
-        const refs = this._propertyRefs;
-        this._propertyRefs = null;
-        return refs;
+    get resolvedSchemas(): ReadonlyMap<number, ResolvedTaskSchemas> {
+        return this._resolvedSchemas;
     }
 
     /**
-     * Walk the workflow and return a map from declaration offset to inferred
-     * TypeInfo. Keys are `def.loc.offset` values from the symbol table, so
-     * hover can look up the type of any symbol without re-traversing the AST.
-     *
-     * Covers: workflow params, const bindings, destructuring bindings, and
-     * lambda parameters (map/filter/parallelMap/attempts-fallback).
+     * DFS the workflow call graph and report any cycle (direct or
+     * mutual recursion). Each WorkflowDecl is a node; its edges are
+     * the targets of every `WorkflowCallExpr` found anywhere in its
+     * body (including inside builtins / nested control flow). Each
+     * edge carries the source location of the offending call so the
+     * diagnostic is pinned at the user-visible call site (not the
+     * callee declaration).
      */
-    collectSymbolTypes(wf: WorkflowDecl): Map<number, TypeInfo> {
-        this._symbolTypes = new Map();
-        const scope = new Scope();
-        // Params have explicit type annotations - store them before walking body.
-        for (const p of wf.params) {
-            const t = this.resolveTypeExpr(p.type);
-            scope.set(p.name, t);
-            if (p.loc.offset !== undefined) {
-                this._symbolTypes.set(p.loc.offset, t);
-            }
+    private checkRecursion(workflows: WorkflowDecl[]): void {
+        interface Edge {
+            target: string;
+            line: number;
+            col: number;
         }
-        this.checkStatements(wf.body, scope);
-        const result = this._symbolTypes;
-        this._symbolTypes = null;
-        return result;
+        const edges = new Map<string, Edge[]>();
+        for (const w of workflows) {
+            const targets: Edge[] = [];
+            collectWorkflowCalls(w.body, targets);
+            edges.set(w.name, targets);
+        }
+        const WHITE = 0,
+            GRAY = 1,
+            BLACK = 2;
+        const color = new Map<string, number>();
+        for (const w of workflows) color.set(w.name, WHITE);
+        const reported = new Set<string>();
+
+        const visit = (name: string, stack: string[]): void => {
+            color.set(name, GRAY);
+            stack.push(name);
+            for (const edge of edges.get(name) ?? []) {
+                const tgt = edge.target;
+                if (!edges.has(tgt)) continue;
+                const c = color.get(tgt) ?? WHITE;
+                if (c === GRAY) {
+                    // Cycle closes at `edge` (call from `name` -> `tgt`).
+                    const idx = stack.indexOf(tgt);
+                    const cycle = stack.slice(idx).concat(tgt);
+                    // Dedup by the canonical rotation of the cycle:
+                    // two distinct cycles sharing members must not
+                    // collapse together (only true rotations of the
+                    // same cycle should).
+                    const key = canonicalRotation(cycle.slice(0, -1));
+                    if (!reported.has(key)) {
+                        reported.add(key);
+                        this.addError(
+                            `Recursive workflow call detected: ${cycle.join(" -> ")} (workflow recursion is not supported; see design §2.4)`,
+                            edge.line,
+                            edge.col,
+                        );
+                    }
+                } else if (c === WHITE) {
+                    visit(tgt, stack);
+                }
+            }
+            stack.pop();
+            color.set(name, BLACK);
+        };
+        for (const w of workflows) {
+            if ((color.get(w.name) ?? WHITE) === WHITE) visit(w.name, []);
+        }
+    }
+
+    /**
+     * Walk every workflow and return source locations of all
+     * successfully resolved property-access segments
+     * (segments[1..n] of a DottedNameExpr). Used by the LSP to emit
+     * `property` semantic tokens for `.stdout` etc. across an entire
+     * module.
+     */
+    collectPropertyRefs(workflows: WorkflowDecl[]): PropertyRef[] {
+        const all: PropertyRef[] = [];
+        for (const wf of workflows) {
+            this._propertyRefs = [];
+            const scope = new Scope();
+            for (const p of wf.params) {
+                scope.set(p.name, this.resolveTypeExpr(p.type));
+            }
+            this.checkStatements(wf.body, scope);
+            all.push(...this._propertyRefs);
+            this._propertyRefs = null;
+        }
+        return all;
+    }
+
+    /**
+     * Walk every workflow and return a single map from declaration
+     * offset to inferred TypeInfo. Keys are `def.loc.offset` values
+     * from the symbol table, so hover and inlay hints can look up the
+     * type of any symbol in any workflow without re-traversing the
+     * AST. Offsets are file-wide unique, so merging per-workflow maps
+     * is collision-free.
+     *
+     * Covers: workflow params, const bindings, destructuring bindings,
+     * and lambda parameters (map/filter/parallelMap/attempts-fallback).
+     */
+    collectSymbolTypes(workflows: WorkflowDecl[]): Map<number, TypeInfo> {
+        const merged = new Map<number, TypeInfo>();
+        for (const wf of workflows) {
+            this._symbolTypes = new Map();
+            const scope = new Scope();
+            // Params have explicit type annotations - store them before walking body.
+            for (const p of wf.params) {
+                const t = this.resolveTypeExpr(p.type);
+                scope.set(p.name, t);
+                if (p.loc.offset !== undefined) {
+                    this._symbolTypes.set(p.loc.offset, t);
+                }
+            }
+            this.checkStatements(wf.body, scope);
+            for (const [k, v] of this._symbolTypes) {
+                merged.set(k, v);
+            }
+            this._symbolTypes = null;
+        }
+        return merged;
     }
 
     private addError(
@@ -364,6 +1002,54 @@ export class TypeChecker {
         length: number = 1,
     ): void {
         this.errors.push({ message: msg, line, col, length });
+    }
+
+    /**
+     * G30: report asymmetric return across `if`/`else` arms.
+     *
+     * Centralised so all three cases (then-only, then-but-not-else,
+     * else-but-not-then) share a single phrasing template; the message
+     * always names the offending arm and the suggested fix.
+     *
+     * `hasElseBlock` is true when the source has an explicit `else { ... }`
+     * with at least one statement, false when the else is absent or empty.
+     */
+    private reportIfReturnAsymmetry(
+        thenType: TypeInfo,
+        elseType: TypeInfo,
+        thenReturns: boolean,
+        elseReturns: boolean,
+        hasElseBlock: boolean,
+        line: number,
+        col: number,
+    ): void {
+        if (!thenReturns && !elseReturns) return;
+        if (thenReturns && elseReturns) return;
+        if (thenReturns && !hasElseBlock) {
+            this.addError(
+                `Then-arm returns a value of type '${typeName(thenType)}' but there is no else-arm. ` +
+                    `Add an explicit else block or use a ternary expression.`,
+                line,
+                col,
+            );
+            return;
+        }
+        if (thenReturns) {
+            this.addError(
+                `Then-arm returns a value of type '${typeName(thenType)}' but the else-arm does not return. ` +
+                    `Both arms must return a value, or neither should.`,
+                line,
+                col,
+            );
+            return;
+        }
+        // elseReturns && !thenReturns
+        this.addError(
+            `Else-arm returns a value of type '${typeName(elseType)}' but the then-arm does not return. ` +
+                `Both arms must return a value, or neither should.`,
+            line,
+            col,
+        );
     }
 
     private resolveTypeExpr(te: TypeExpr): TypeInfo {
@@ -398,7 +1084,7 @@ export class TypeChecker {
                     const declared = this.resolveTypeExpr(s.typeAnnotation);
                     if (
                         !isUnresolved(valueType) &&
-                        !typeEq(declared, valueType)
+                        !isAssignableTo(declared, valueType)
                     ) {
                         this.addError(
                             `Type '${typeName(valueType)}' is not assignable to type '${typeName(declared)}'`,
@@ -483,23 +1169,167 @@ export class TypeChecker {
                     );
                 }
                 const thenType = this.checkStatements(s.then, scope.child());
-                if (s.else_) {
-                    this.checkStatements(s.else_, scope.child());
+                const elseType: TypeInfo = s.else_
+                    ? this.checkStatements(s.else_, scope.child())
+                    : UNRESOLVED;
+
+                // G30: error on any asymmetric value-return across arms.
+                // All arms must either all return a value (value-producing) or
+                // none return a value (statement form). Mixed arms silently
+                // drop the returning arm's value — a correctness bug.
+                const hasElse = !!(s.else_ && s.else_.length > 0);
+                // A `throw` (type `never`) diverges and does not produce a
+                // value the caller can observe — treat it like a non-returning
+                // arm so `if (x) throw ...; return v;` is well-formed without
+                // an explicit else.
+                const thenReturns =
+                    thenType.kind !== "unresolved" && thenType.kind !== "never";
+                const elseReturns =
+                    elseType.kind !== "unresolved" && elseType.kind !== "never";
+                this.reportIfReturnAsymmetry(
+                    thenType,
+                    elseType,
+                    thenReturns,
+                    elseReturns,
+                    hasElse,
+                    s.loc.line,
+                    s.loc.col,
+                );
+                // G29 Q1+Q3: store schema when both arms return same type.
+                if (thenReturns && elseReturns) {
+                    if (
+                        !isAssignableTo(thenType, elseType) ||
+                        !isAssignableTo(elseType, thenType)
+                    ) {
+                        this.addError(
+                            `if/else arms must return the same type: '${typeName(thenType)}' vs '${typeName(elseType)}'`,
+                            s.loc.line,
+                            s.loc.col,
+                        );
+                    }
+                    this._resolvedSchemas.set(s.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(thenType),
+                    });
                 }
                 return thenType;
             }
             case "SwitchStatement": {
-                this.inferExpr(s.discriminant, scope);
-                let retType: TypeInfo = UNRESOLVED;
+                const discType = this.inferExpr(s.discriminant, scope);
+                const armTypes: TypeInfo[] = [];
                 for (const arm of s.arms) {
                     this.inferExpr(arm.value, scope);
                     const t = this.checkStatements(arm.body, scope.child());
-                    if (retType.kind === "unresolved") retType = t;
+                    armTypes.push(t);
                 }
-                if (s.default_) {
-                    this.checkStatements(s.default_, scope.child());
+                const defType: TypeInfo = s.default_
+                    ? this.checkStatements(s.default_, scope.child())
+                    : UNRESOLVED;
+
+                // Q4: a switch without `default` is exhaustive when its
+                // discriminant is an EnumType and every enum value appears as
+                // a literal arm.  In that case the switch is value-producing
+                // without a `default` arm.
+                let exhaustiveByEnum = false;
+                if (!s.default_ && discType.kind === "enum") {
+                    const r = isEnumExhaustive(discType, s.arms);
+                    exhaustiveByEnum = r.exhaustive;
+                    // We intentionally do NOT raise an error for
+                    // non-exhaustive enum switches without `default` — the
+                    // switch simply isn't value-producing.  Authors that
+                    // intend exhaustiveness will discover the issue when
+                    // they try to bind the switch's result (the missing
+                    // schema produces a downstream error).  The structured
+                    // result is reserved for future tightening (e.g., a
+                    // warning surface or a stricter "expected exhaustive"
+                    // flag on the switch syntax).
                 }
-                return retType;
+
+                // G30 (symmetric with if): error when any arm returns a value
+                // but not all arms do.  Mixed arms silently drop the returning
+                // arms' values — a correctness bug.
+                const anyArmReturns =
+                    armTypes.some((t) => t.kind !== "unresolved") ||
+                    defType.kind !== "unresolved";
+                const allArmsReturn =
+                    armTypes.every((t) => t.kind !== "unresolved") &&
+                    (s.default_ ? defType.kind !== "unresolved" : true);
+                if (anyArmReturns && !allArmsReturn) {
+                    // Identify the first arm that doesn't return so the
+                    // diagnostic points at concrete work, not just the
+                    // whole switch.  Default arm is reported by name; case
+                    // arms are 1-indexed for author convenience.
+                    let firstSilent = "";
+                    for (let i = 0; i < armTypes.length; i++) {
+                        if (armTypes[i]!.kind === "unresolved") {
+                            firstSilent = `arm ${i + 1}`;
+                            break;
+                        }
+                    }
+                    if (
+                        !firstSilent &&
+                        s.default_ &&
+                        defType.kind === "unresolved"
+                    ) {
+                        firstSilent = "default arm";
+                    }
+                    this.addError(
+                        `Switch has arms that return a value but not all arms return ` +
+                            (firstSilent
+                                ? `(${firstSilent} does not return). `
+                                : "") +
+                            `All arms must return a value, or none should.`,
+                        s.loc.line,
+                        s.loc.col,
+                    );
+                }
+
+                // G29 Q1+Q3: store schema when every arm returns same type.
+                // Requires either an explicit `default` arm or an exhaustive
+                // enum discriminant (Q4).
+                let resultType: TypeInfo = UNRESOLVED;
+                const hasDefaultCoverage = s.default_ || exhaustiveByEnum;
+                if (
+                    allArmsReturn &&
+                    hasDefaultCoverage &&
+                    armTypes.length > 0
+                ) {
+                    const allTypes = s.default_
+                        ? [...armTypes, defType]
+                        : armTypes;
+                    resultType = allTypes[0]!;
+                    for (let i = 1; i < allTypes.length; i++) {
+                        if (
+                            !isAssignableTo(resultType, allTypes[i]!) ||
+                            !isAssignableTo(allTypes[i]!, resultType)
+                        ) {
+                            // #11: identify which arm disagrees with arm 0
+                            // (or the default).  Arms are 1-indexed in
+                            // diagnostics for author convenience.
+                            const otherLabel =
+                                s.default_ && i === allTypes.length - 1
+                                    ? "default arm"
+                                    : `arm ${i + 1}`;
+                            this.addError(
+                                `switch arms must return the same type: ${otherLabel} returns '${typeName(allTypes[i]!)}' but arm 1 returns '${typeName(resultType)}'`,
+                                s.loc.line,
+                                s.loc.col,
+                            );
+                            break;
+                        }
+                    }
+                    this._resolvedSchemas.set(s.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(resultType),
+                    });
+                }
+                // Preserve original return-type behavior (first non-unresolved
+                // arm type) so callers see something to chain on.
+                if (resultType.kind !== "unresolved") return resultType;
+                for (const t of armTypes) {
+                    if (t.kind !== "unresolved") return t;
+                }
+                return defType;
             }
             case "ThrowStatement":
                 this.inferExpr(s.value, scope);
@@ -634,6 +1464,58 @@ export class TypeChecker {
                     return UNRESOLVED;
                 }
                 this.checkArgs(e.args, scope);
+
+                if (isGenericSchema(schema)) {
+                    const params = schema.typeParameters;
+                    const numExplicit = e.typeArgs?.length ?? 0;
+
+                    if (numExplicit > params.length) {
+                        this.addError(
+                            `Task '${e.task}' expects ${params.length} type argument(s) but got ${numExplicit}`,
+                            e.loc.line,
+                            e.loc.col,
+                            e.task.length,
+                        );
+                        return UNRESOLVED;
+                    }
+
+                    // Build effective type arg list: explicit args
+                    // padded with defaults for remaining params.
+                    const argSchemas: JSONSchema[] = [];
+                    for (let i = 0; i < params.length; i++) {
+                        if (i < numExplicit) {
+                            argSchemas.push(typeExprToSchema(e.typeArgs![i]));
+                        } else if (params[i].default) {
+                            argSchemas.push(params[i].default!);
+                        } else {
+                            this.addError(
+                                `Task '${e.task}' requires a type argument <${params[i].name}>`,
+                                e.loc.line,
+                                e.loc.col,
+                                e.task.length,
+                            );
+                            return UNRESOLVED;
+                        }
+                    }
+
+                    const resolved = resolveGenericSchemas(schema, argSchemas);
+                    this._resolvedSchemas.set(e.loc.offset, resolved);
+                    return jsonSchemaToTypeInfo(
+                        resolved.outputSchema as Record<string, unknown>,
+                    );
+                }
+
+                // Concrete task: type args are invalid
+                if (e.typeArgs && e.typeArgs.length > 0) {
+                    this.addError(
+                        `Task '${e.task}' does not accept type arguments`,
+                        e.loc.line,
+                        e.loc.col,
+                        e.task.length,
+                    );
+                    return UNRESOLVED;
+                }
+
                 return jsonSchemaToTypeInfo(
                     schema.outputSchema as Record<string, unknown>,
                 );
@@ -649,7 +1531,7 @@ export class TypeChecker {
                     );
                     return UNRESOLVED;
                 }
-                this.checkArgs(e.args, scope);
+                this.checkWorkflowCallArgs(wf, e.args, scope, e.loc);
                 return this.resolveTypeExpr(wf.returnType);
             }
             case "BinaryExpr":
@@ -675,13 +1557,21 @@ export class TypeChecker {
                 // result is the other arm's type (matches TypeScript).
                 if (consType.kind === "never") return altType;
                 if (altType.kind === "never") return consType;
-                if (!typeEq(consType, altType)) {
+                if (
+                    !isAssignableTo(consType, altType) ||
+                    !isAssignableTo(altType, consType)
+                ) {
                     this.addError(
                         `Ternary arms must have the same type: '${typeName(consType)}' vs '${typeName(altType)}'`,
                         e.loc.line,
                         e.loc.col,
                     );
                 }
+                // G29 Q3: store result type for emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: {},
+                    outputSchema: typeInfoToSchema(consType),
+                });
                 return consType;
             }
             case "AttemptsNode": {
@@ -701,6 +1591,14 @@ export class TypeChecker {
                     e.body,
                     scope.child(),
                 );
+                // Store the body return type so the emitter can set an
+                // accurate body.outputSchema on the loop node (Gap 8).
+                if (e.loc.offset !== undefined) {
+                    this._resolvedSchemas.set(e.loc.offset, {
+                        inputSchema: {},
+                        outputSchema: typeInfoToSchema(bodyReturnType),
+                    });
+                }
                 if (e.fallback) {
                     const fbScope = scope.child();
                     const fbParam = e.fallback.param ?? DEFAULT_FALLBACK_PARAM;
@@ -738,15 +1636,20 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema so the emitter can emit a
+                // typed list.elementAt node.
+                const elemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const elemSchema = typeInfoToSchema(elemType);
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: elemSchema },
+                    outputSchema: elemSchema,
+                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, elemType);
                 }
                 const mapReturnType = this.checkStatements(e.body, bodyScope);
                 return { kind: "array", element: mapReturnType };
@@ -769,15 +1672,19 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema for the emitter.
+                const filterElemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const filterElemSchema = typeInfoToSchema(filterElemType);
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: filterElemSchema },
+                    outputSchema: filterElemSchema,
+                });
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, filterElemType);
                 }
                 this.checkStatements(e.body, bodyScope);
                 return colType;
@@ -806,6 +1713,12 @@ export class TypeChecker {
                         );
                     }
                 }
+                // Store per-branch output schemas for the emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: {},
+                    outputSchema: {},
+                    branchOutputSchemas: elemTypes.map(typeInfoToSchema),
+                });
                 return { kind: "tuple", elements: elemTypes };
             }
             case "ParallelMapNode": {
@@ -826,17 +1739,23 @@ export class TypeChecker {
                     );
                     bodyScope.set(e.param, UNKNOWN);
                 }
+                // Store the element schema for the emitter.
+                const pmElemType = bodyScope.get(e.param) ?? UNKNOWN;
+                const pmElemSchema = typeInfoToSchema(pmElemType);
                 if (
                     this._symbolTypes &&
                     e.paramLoc &&
                     e.paramLoc.offset !== undefined
                 ) {
-                    this._symbolTypes.set(
-                        e.paramLoc.offset,
-                        bodyScope.get(e.param) ?? UNKNOWN,
-                    );
+                    this._symbolTypes.set(e.paramLoc.offset, pmElemType);
                 }
                 const pmReturnType = this.checkStatements(e.body, bodyScope);
+                // Store element schema AND body return schema for the emitter.
+                this._resolvedSchemas.set(e.loc.offset, {
+                    inputSchema: { type: "array", items: pmElemSchema },
+                    outputSchema: pmElemSchema,
+                    bodyOutputSchema: typeInfoToSchema(pmReturnType),
+                });
                 if (e.maxConcurrency) {
                     const mcType = this.inferExpr(e.maxConcurrency, scope);
                     if (
@@ -883,6 +1802,36 @@ export class TypeChecker {
                         e.right.loc.col,
                     );
                 }
+                // Generic math ops (math.add/subtract/multiply/modulo)
+                // are generic in N; when both operands are integer,
+                // resolve the concrete schemas and cache for the emitter
+                // so the bound result type narrows to integer.
+                // Division is excluded: integer / integer can produce a
+                // non-integer value, so its output type is always number.
+                if (
+                    e.op !== "/" &&
+                    left.kind === "primitive" &&
+                    left.name === "integer" &&
+                    right.kind === "primitive" &&
+                    right.name === "integer"
+                ) {
+                    const taskName =
+                        e.op === "+"
+                            ? "math.add"
+                            : e.op === "-"
+                              ? "math.subtract"
+                              : e.op === "*"
+                                ? "math.multiply"
+                                : "math.modulo";
+                    const opSchema = this.taskSchemaMap.get(taskName);
+                    if (opSchema && isGenericSchema(opSchema)) {
+                        const resolved = resolveGenericSchemas(opSchema, [
+                            { type: "integer" },
+                        ]);
+                        this._resolvedSchemas.set(e.loc.offset, resolved);
+                        return { kind: "primitive", name: "integer" };
+                    }
+                }
                 return NUMBER;
 
             case "===":
@@ -892,7 +1841,7 @@ export class TypeChecker {
                     right.kind !== "never" &&
                     left.kind !== "unknown" &&
                     right.kind !== "unknown" &&
-                    !typeEq(left, right)
+                    !isEqualityComparable(left, right)
                 ) {
                     this.addError(
                         `Operator '${e.op}' requires same types on both sides: '${typeName(left)}' vs '${typeName(right)}'`,
@@ -973,6 +1922,22 @@ export class TypeChecker {
                         e.operand.loc.col,
                     );
                 }
+                // math.negate is generic in N; when the operand is an
+                // integer, resolve and cache the concrete schemas so the
+                // result type narrows to integer.
+                if (
+                    operand.kind === "primitive" &&
+                    operand.name === "integer"
+                ) {
+                    const negSchema = this.taskSchemaMap.get("math.negate");
+                    if (negSchema && isGenericSchema(negSchema)) {
+                        const resolved = resolveGenericSchemas(negSchema, [
+                            { type: "integer" },
+                        ]);
+                        this._resolvedSchemas.set(e.loc.offset, resolved);
+                        return { kind: "primitive", name: "integer" };
+                    }
+                }
                 return NUMBER;
         }
     }
@@ -982,4 +1947,263 @@ export class TypeChecker {
             this.inferExpr(arg.value, scope);
         }
     }
+
+    /**
+     * Check arguments for a workflow call against the callee's parameters.
+     *
+     * Accepts three surface forms (P3):
+     *   - Positional only: arguments map by index.
+     *   - Mixed positional + named: positional must come first; the
+     *     first named arg marks the end of positional binding.
+     *   - Single object-literal argument (named-record): destructures
+     *     against parameter names.
+     *
+     * Reports type errors for arity mismatch (after defaults), unknown
+     * named keys, duplicate bindings, and per-argument type mismatch.
+     */
+    private checkWorkflowCallArgs(
+        wf: WorkflowDecl,
+        args: TaskArg[],
+        scope: Scope,
+        loc: SourceLocationLike,
+    ): void {
+        // Detect named-record form: single positional argument that is
+        // an object literal expression.
+        const recordForm =
+            args.length === 1 &&
+            args[0].kind === "PositionalArg" &&
+            args[0].value.kind === "ObjectLiteralExpr";
+
+        type Binding = { value: Expr; from: "positional" | "named" | "record" };
+        const bound = new Map<string, Binding>();
+        if (recordForm) {
+            const obj = args[0].value as Extract<
+                Expr,
+                { kind: "ObjectLiteralExpr" }
+            >;
+            const paramNames = new Set(wf.params.map((p) => p.name));
+            for (const entry of obj.entries) {
+                if (!paramNames.has(entry.key)) {
+                    this.addError(
+                        `Unknown parameter '${entry.key}' in call to workflow '${wf.name}'`,
+                        entry.loc.line,
+                        entry.loc.col,
+                    );
+                    continue;
+                }
+                if (bound.has(entry.key)) {
+                    this.addError(
+                        `Parameter '${entry.key}' is bound more than once in call to '${wf.name}'`,
+                        entry.loc.line,
+                        entry.loc.col,
+                    );
+                    continue;
+                }
+                bound.set(entry.key, { value: entry.value, from: "record" });
+            }
+        } else {
+            // Positional and named mix; positional must come first.
+            let seenNamed = false;
+            let posIdx = 0;
+            for (const arg of args) {
+                if (arg.kind === "NamedArg") {
+                    seenNamed = true;
+                    const param = wf.params.find((p) => p.name === arg.name);
+                    if (!param) {
+                        this.addError(
+                            `Unknown parameter '${arg.name}' in call to workflow '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    if (bound.has(arg.name)) {
+                        this.addError(
+                            `Parameter '${arg.name}' is bound more than once in call to '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    bound.set(arg.name, { value: arg.value, from: "named" });
+                } else {
+                    if (seenNamed) {
+                        this.addError(
+                            `Positional argument follows named argument in call to '${wf.name}'`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    if (posIdx >= wf.params.length) {
+                        this.addError(
+                            `Too many arguments in call to workflow '${wf.name}' (expected at most ${wf.params.length})`,
+                            arg.value.loc.line,
+                            arg.value.loc.col,
+                        );
+                        continue;
+                    }
+                    const param = wf.params[posIdx++];
+                    bound.set(param.name, {
+                        value: arg.value,
+                        from: "positional",
+                    });
+                }
+            }
+        }
+
+        // Missing parameters: ones with no binding and no default.
+        for (const p of wf.params) {
+            if (!bound.has(p.name) && !p.default) {
+                this.addError(
+                    `Missing required parameter '${p.name}' in call to workflow '${wf.name}'`,
+                    loc.line,
+                    loc.col,
+                );
+            }
+        }
+
+        // Per-argument type check.
+        for (const p of wf.params) {
+            const b = bound.get(p.name);
+            if (!b) continue;
+            const declared = this.resolveTypeExpr(p.type);
+            const actual = this.inferExpr(b.value, scope);
+            if (
+                !isUnresolved(actual) &&
+                actual.kind !== "unknown" &&
+                !isAssignableTo(declared, actual)
+            ) {
+                this.addError(
+                    `Argument of type '${typeName(actual)}' is not assignable to parameter '${p.name}' of type '${typeName(declared)}'`,
+                    b.value.loc.line,
+                    b.value.loc.col,
+                );
+            }
+        }
+    }
+}
+
+interface SourceLocationLike {
+    line: number;
+    col: number;
+}
+
+/**
+ * Walk a statement list and collect every workflow call expression
+ * encountered (used for the static recursion check). Each entry
+ * carries the call's source location so the diagnostic can point at
+ * the call site rather than the callee declaration. The traversal
+ * descends into nested control flow and builtin nodes.
+ */
+interface CallEdge {
+    target: string;
+    line: number;
+    col: number;
+}
+
+function collectWorkflowCalls(stmts: Statement[], out: CallEdge[]): void {
+    for (const s of stmts) {
+        walkStmt(s, out);
+    }
+}
+
+function walkStmt(s: Statement, out: CallEdge[]): void {
+    switch (s.kind) {
+        case "ConstStatement":
+        case "DestructuringConst":
+            walkExpr(s.value, out);
+            return;
+        case "ReturnStatement":
+            if (s.value) walkExpr(s.value, out);
+            return;
+        case "ThrowStatement":
+            walkExpr(s.value, out);
+            return;
+        case "IfStatement":
+            walkExpr(s.condition, out);
+            collectWorkflowCalls(s.then, out);
+            if (s.else_) collectWorkflowCalls(s.else_, out);
+            return;
+        case "SwitchStatement":
+            walkExpr(s.discriminant, out);
+            for (const arm of s.arms) collectWorkflowCalls(arm.body, out);
+            if (s.default_) collectWorkflowCalls(s.default_, out);
+            return;
+        case "BreakStatement":
+            return;
+    }
+}
+
+function walkExpr(e: Expr, out: CallEdge[]): void {
+    switch (e.kind) {
+        case "WorkflowCallExpr":
+            out.push({ target: e.name, line: e.loc.line, col: e.loc.col });
+            for (const a of e.args) walkExpr(a.value, out);
+            return;
+        case "TaskCallExpr":
+            for (const a of e.args) walkExpr(a.value, out);
+            return;
+        case "BinaryExpr":
+            walkExpr(e.left, out);
+            walkExpr(e.right, out);
+            return;
+        case "UnaryExpr":
+            walkExpr(e.operand, out);
+            return;
+        case "TernaryExpr":
+            walkExpr(e.condition, out);
+            walkExpr(e.consequent, out);
+            walkExpr(e.alternate, out);
+            return;
+        case "DottedNameExpr":
+        case "StringLiteralExpr":
+        case "NumberLiteralExpr":
+        case "BooleanLiteralExpr":
+        case "NullLiteralExpr":
+            return;
+        case "TemplateLiteralExpr":
+            for (const part of e.expressions) walkExpr(part, out);
+            return;
+        case "ArrayLiteralExpr":
+            for (const el of e.elements) walkExpr(el, out);
+            return;
+        case "ObjectLiteralExpr":
+            for (const en of e.entries) walkExpr(en.value, out);
+            return;
+        case "AttemptsNode":
+            walkExpr(e.count, out);
+            collectWorkflowCalls(e.body, out);
+            if (e.fallback) collectWorkflowCalls(e.fallback.body, out);
+            return;
+        case "MapNode":
+        case "FilterNode":
+            walkExpr(e.collection, out);
+            collectWorkflowCalls(e.body, out);
+            return;
+        case "ParallelNode":
+            for (const br of e.bodies) collectWorkflowCalls(br.body, out);
+            if (e.maxConcurrency) walkExpr(e.maxConcurrency, out);
+            return;
+        case "ParallelMapNode":
+            walkExpr(e.collection, out);
+            collectWorkflowCalls(e.body, out);
+            if (e.maxConcurrency) walkExpr(e.maxConcurrency, out);
+            return;
+    }
+}
+
+/**
+ * Returns a stable key for a cycle that is invariant under rotation
+ * but distinguishes cycles that merely share members. Pick the
+ * lexicographically smallest rotation of the cycle's node sequence.
+ */
+function canonicalRotation(cycle: string[]): string {
+    if (cycle.length === 0) return "";
+    let best = cycle.join("|");
+    for (let i = 1; i < cycle.length; i++) {
+        const rot = cycle.slice(i).concat(cycle.slice(0, i)).join("|");
+        if (rot < best) best = rot;
+    }
+    return best;
 }

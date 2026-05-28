@@ -27,7 +27,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "debug": "^4.4.0",
     "websocket-utils": "workspace:*",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

@@ -11,8 +11,12 @@ tasks required by the DSL compile target.
 ## 1. Scope of changes
 
 v0.1 has 3 node kinds: `task`, `branch`, `loop`.
-v0.2 adds 2 node kinds: `fork`, `forkMap`.
+v0.2 adds 3 node kinds: `fork`, `forkMap`, `workflowCall`.
 v0.2 adds built-in task namespaces: `compare`, `bool`, `math`, `error`, `list`.
+v0.2 promotes the artifact to a multi-workflow shape: a top-level
+`workflows: { [name]: WorkflowBody }` table and an `entry: string` field
+naming the program entry. v0.1 single-workflow artifacts become
+multi-workflow artifacts with one body keyed under the workflow's name.
 No new `$from` namespaces (forkMap element is injected via `$from: "input"`).
 
 No v0.1 schema, validation rule, or execution semantic is modified.
@@ -271,6 +275,105 @@ length at runtime), not static (fixed branch names known at compile time).
 - `elementParam` must be a valid identifier.
 - `outputSchema` must have `type: "array"` with `items` compatible with the body's `outputSchema`.
 - Body sub-scope must not reference `$from: "state"` (there is no state; this is not a loop).
+
+---
+
+### 2.3 `workflowCall` — sub-workflow invocation
+
+Calls a workflow declared in the artifact's top-level `workflows` table.
+Each call executes in an isolated child frame; errors propagate to the
+calling node's `onError` target (if any) the same way task errors do.
+
+**Shape:**
+
+```json
+{
+    "kind": "workflowCall",
+    "workflowRef": { "name": "<workflowName>", "source": "<optional file>" },
+    "inputs": { "<paramName>": <ValueRef>, ... },
+    "inputSchema": { ... },
+    "outputSchema": { ... },
+    "bind": "<optional binding name>",
+    "next": "<optional node id>",
+    "onError": "<optional node id>",
+    "timeoutMs": <optional positive integer>
+}
+```
+
+**Semantics:**
+
+- `workflowRef.name` must reference an existing key in the artifact's
+  top-level `workflows` table. `workflowRef.source` is an optional
+  human-readable hint pointing to the source file the body came from;
+  it is **not** used for resolution at runtime.
+- A new frame is pushed for the call. The frame's input bindings are
+  exactly the `inputs` map. The frame's output is the called workflow's
+  return value, bound under `bind` in the caller's frame.
+- The called workflow body is a `WorkflowBody` (see §2.4). It does not
+  inherit visibility into the caller's locals; the only data crossing
+  the frame boundary is `inputs` (in) and the body's return value (out).
+- **Frame slots inherited from the caller:**
+  - `constants` — shared by reference. Top-level constants are
+    program-wide and identical in every workflow frame.
+  - `bindings` — fresh empty map. Sub-workflow node binds
+    (`const x = …`) never leak into the caller, and the caller's
+    binds are never visible inside the callee.
+  - `state` — not propagated. Loop state is loop-body-local and
+    does not cross workflow boundaries.
+- Errors thrown inside the body propagate to `onError` on the
+  `workflowCall` node itself. If no `onError` is set, the error
+  escapes to the caller's `onError`, and so on.
+- `timeoutMs`, when set, aborts the call if its wall-clock duration
+  exceeds the limit and triggers `onError` (or escapes if absent).
+
+**Validation rules:**
+
+- `workflowRef.name` must resolve in `workflows`.
+- `inputs` must satisfy `inputSchema`; `inputSchema` must equal the
+  target body's input schema.
+- `outputSchema` must equal the target body's output schema.
+- The call graph (workflows referencing workflows via `workflowCall`)
+  must be acyclic. Recursion is statically rejected in v1; bounded
+  recursion is captured in
+  [`future/workflow-recursion.md`](./future/workflow-recursion.md).
+
+### 2.4 `WorkflowBody` — artifact-level workflow definitions
+
+The artifact gains a top-level `workflows: { [name]: WorkflowBody }`
+table and an `entry: string` field naming the program-entry workflow.
+
+```json
+{
+    "version": "1",
+    "kind": "workflow",
+    "entry": "main",
+    "workflows": {
+        "main": {
+            "inputSchema": { ... },
+            "outputSchema": { ... },
+            "inputs": { ... },
+            "nodes": { "n1": { ... }, ... },
+            "entry": "n1",
+            "output": { "$from": "n1" }
+        },
+        "helper": { ... }
+    }
+}
+```
+
+A `WorkflowBody` is the v0.1 sub-scope contract (`inputs`,
+`inputSchema`, `entry`, `nodes`, `output`, `outputSchema`) — the same
+shape used by loop bodies, fork branches, etc. The artifact-level
+`entry` field names which workflow in the `workflows` table runs when
+the artifact is executed.
+
+**Validation rules:**
+
+- `entry` must resolve in `workflows`.
+- Every `workflowCall` node in every body must reference a key in
+  `workflows`.
+- Call graph must be acyclic (DFS over `workflowCall` nodes from
+  `entry`).
 
 ---
 

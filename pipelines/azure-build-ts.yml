@@ -91,7 +91,6 @@ jobs:
       - script: |
           echo $(ADO_REGISTRY)
           echo "registry=$(ADO_REGISTRY)" > .npmrc
-          echo "always-auth=true" >> .npmrc
           cat .npmrc
         displayName: "Create .npmrc file."
         workingDirectory: $(NpmRcDirectory)
@@ -104,7 +103,7 @@ jobs:
       - script: |
           for file in $(publishedPackageDirectory)/*.tgz; do
             echo "Publishing file: $file"
-            npm publish --registry=$(ADO_REGISTRY) "$file"
+            npm publish --registry=$(ADO_REGISTRY) --tag=latest "$file"
           done
         displayName: "Publish packages"
         workingDirectory: $(NpmRcDirectory)

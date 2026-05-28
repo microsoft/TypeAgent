@@ -29,7 +29,7 @@ import { createRequire } from "node:module";
 import {
     lex,
     Parser,
-    format,
+    formatModule,
     FormatOptions,
     LexError,
     ParseError,
@@ -231,15 +231,15 @@ function formatSource(
     for (const e of lexErrors) errors.push(toErr("lex", e));
     if (lexErrors.length > 0) return { errors };
 
-    const { ast, errors: parseErrors } = new Parser(
+    const { module, errors: parseErrors } = new Parser(
         tokens,
         comments,
-    ).parseSingle();
+    ).parseModule();
     for (const e of parseErrors) errors.push(toErr("parse", e));
-    if (!ast || parseErrors.length > 0) return { errors };
+    if (parseErrors.length > 0) return { errors };
 
     try {
-        return { output: format(ast, options), errors };
+        return { output: formatModule(module, options), errors };
     } catch (e) {
         errors.push({
             phase: "parse",

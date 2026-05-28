@@ -11,11 +11,17 @@ import {
 } from "./dfa.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
-import { normalizeToken } from "./nfaMatcher.js";
+import {
+    normalizeToken,
+    parseNumberToken,
+    tokenizeRequestWithOffsets,
+} from "./nfaMatcher.js";
+import type { GrammarCompletionResult } from "./grammarCompletion.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
 import type { Grammar, CompiledValueNode } from "./grammarTypes.js";
+import { evaluateExpression } from "./environment.js";
 
 // ─── DFA First-Token Index ──────────────────────────────────────────────────
 // O(1) pre-filter: reject tokens whose first word can't start any DFA path.
@@ -135,84 +141,19 @@ function setSlotValue(
 }
 
 /**
- * Evaluate a compiled value expression using the environment slots
- * This mirrors the NFA interpreter's evaluateActionValue function
+ * Evaluate a compiled value expression using the environment slots.
+ * Thin adapter over environment.evaluateExpression — that function understands
+ * every legacy ValueExpression shape and every new CompiledValueNode
+ * expression-node shape (binaryExpression, conditionalExpression, etc.).
  */
 function evaluateActionValue(env: DFAEnvironment, valueExpr: any): any {
     if (valueExpr === undefined || valueExpr === null) {
         return valueExpr;
     }
-
-    // Handle different value expression types
-    if (typeof valueExpr === "object") {
-        if (valueExpr.type === "literal") {
-            return valueExpr.value;
-        }
-
-        if (valueExpr.type === "variable") {
-            // Look up by slot index if available, otherwise by name in slotMap
-            if (valueExpr.slotIndex !== undefined) {
-                let value = env.slots[valueExpr.slotIndex];
-                // Convert to number if typeName indicates number type
-                if (
-                    valueExpr.typeName === "number" &&
-                    typeof value === "string"
-                ) {
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                        value = num;
-                    }
-                }
-                return value;
-            }
-            // Fallback: return undefined for unresolved variables
-            return undefined;
-        }
-
-        if (valueExpr.type === "object") {
-            const result: Record<string, any> = {};
-            // Handle both formats: environment.ts uses .properties (Map), grammar parser uses .value (object)
-            if (valueExpr.properties instanceof Map) {
-                for (const [key, val] of valueExpr.properties) {
-                    result[key] = evaluateActionValue(env, val);
-                }
-            } else if (valueExpr.value) {
-                for (const [key, val] of Object.entries(valueExpr.value)) {
-                    result[key] = evaluateActionValue(env, val);
-                }
-            }
-            return result;
-        }
-
-        if (valueExpr.type === "array") {
-            // Handle both formats: environment.ts uses .elements, grammar parser uses .value
-            const arr = valueExpr.elements || valueExpr.value;
-            return (arr as any[]).map((v) => evaluateActionValue(env, v));
-        }
-
-        if (valueExpr.type === "action") {
-            const params: Record<string, any> = {};
-            // Handle both formats: environment.ts uses .parameters (Map), grammar parser uses .value
-            if (valueExpr.parameters instanceof Map) {
-                for (const [key, val] of valueExpr.parameters) {
-                    params[key] = evaluateActionValue(env, val);
-                }
-            }
-            // Only include parameters if there are any (actions like pause/resume have none)
-            if (Object.keys(params).length > 0) {
-                return {
-                    actionName: valueExpr.actionName,
-                    parameters: params,
-                };
-            }
-            return {
-                actionName: valueExpr.actionName,
-            };
-        }
+    if (typeof valueExpr !== "object" || !("type" in valueExpr)) {
+        return valueExpr;
     }
-
-    // Primitive value - return as-is
-    return valueExpr;
+    return evaluateExpression(valueExpr, env as any);
 }
 
 /**
@@ -571,8 +512,8 @@ export function matchDFA(
                 if (!entryIsChecked) continue; // handle unchecked as fallback
 
                 if (capTypeName === "number") {
-                    const num = parseFloat(token);
-                    if (!isNaN(num)) {
+                    const num = parseNumberToken(token);
+                    if (num !== undefined) {
                         isChecked = true;
                         capturedValue = num;
                         break;
@@ -790,6 +731,16 @@ export function matchDFAWithSplitting(
     dfa: DFA,
     tokens: string[],
     debugMode: boolean = false,
+    /**
+     * Optional context that lets the matcher enforce spacing=none's
+     * leading/trailing whitespace rejection (which the canonical matcher
+     * does via leadingIsNone + finalizeState — see grammarMatcher.ts:632).
+     * The token stream itself has already been trimmed, so without the
+     * original request the matcher cannot distinguish "  helloworld" from
+     * "helloworld".  Callers that have the request and grammar should
+     * pass them; legacy callers can omit.
+     */
+    spacingContext?: { request: string; grammar: Grammar },
 ): DFAMatchResult {
     // O(1) first-token pre-filter
     if (dfaFirstTokenRejects(dfa, tokens)) {
@@ -804,18 +755,50 @@ export function matchDFAWithSplitting(
 
     const origResult = matchDFA(dfa, tokens, debugMode);
 
-    if (!dfa.splitCandidates?.length) return origResult;
+    let best: DFAMatchResult;
+    if (!dfa.splitCandidates?.length) {
+        best = origResult;
+    } else {
+        const splitTokens = applySplitToTokens(tokens, dfa.splitCandidates);
+        if (!splitTokens) {
+            best = origResult;
+        } else {
+            const splitResult = matchDFA(dfa, splitTokens, debugMode);
+            if (!splitResult.matched) {
+                best = origResult;
+            } else if (!origResult.matched) {
+                best = splitResult;
+            } else {
+                best =
+                    compareDFAMatchPriority(origResult, splitResult) <= 0
+                        ? origResult
+                        : splitResult;
+            }
+        }
+    }
 
-    const splitTokens = applySplitToTokens(tokens, dfa.splitCandidates);
-    if (!splitTokens) return origResult;
+    // spacing=none rejection of leading/trailing whitespace.  Mirrors the
+    // check in matchGrammarWithNFA (nfaMatcher.ts).
+    if (best.matched && spacingContext && best.ruleIndex !== undefined) {
+        const { request, grammar } = spacingContext;
+        const hasOuterWhitespace =
+            request.length !== request.trim().length &&
+            request.trim().length > 0;
+        if (hasOuterWhitespace) {
+            const matchedRule = grammar.alternatives[best.ruleIndex];
+            if (matchedRule?.spacingMode === "none") {
+                return {
+                    matched: false,
+                    fixedStringPartCount: 0,
+                    checkedWildcardCount: 0,
+                    uncheckedWildcardCount: 0,
+                    tokensConsumed: tokens.length,
+                };
+            }
+        }
+    }
 
-    const splitResult = matchDFA(dfa, splitTokens, debugMode);
-    if (!splitResult.matched) return origResult;
-    if (!origResult.matched) return splitResult;
-
-    return compareDFAMatchPriority(origResult, splitResult) <= 0
-        ? origResult
-        : splitResult;
+    return best;
 }
 
 /**
@@ -856,8 +839,8 @@ export interface DFACompletionGroup {
  * Property completion entry — mirrors GrammarCompletionProperty for parity with NFA
  */
 export interface DFAPropertyCompletion {
-    /** Action name (e.g., "play") */
-    actionName: string;
+    /** Action name (e.g., "play").  Absent for plain object values. */
+    actionName?: string | undefined;
     /** Property path in the action parameters (e.g., "parameters.artist") */
     propertyPath: string;
 }
@@ -877,6 +860,22 @@ export interface DFACompletionResult {
 
     /** Property completions from checked wildcards (parity with NFA computeNFACompletions) */
     properties?: DFAPropertyCompletion[];
+
+    /**
+     * Number of input tokens consumed before the walk stopped (either at
+     * end-of-input or at a dead state).  Used by the input-string entry
+     * point (`getDFACompletionsFromInput`) to compute `matchedPrefixLength`
+     * in original input characters.
+     */
+    consumedTokenCount?: number;
+
+    /**
+     * True iff at least one wildcard transition was followed while walking
+     * the prefix.  Drives the `afterWildcard` tri-state at the result level
+     * (single-rule walks produce "none"/"all"; "some" only arises from
+     * cross-rule merging which the DFA already encodes).
+     */
+    tookWildcard?: boolean;
 }
 
 /**
@@ -886,6 +885,27 @@ export interface DFACompletionResult {
  * @param tokens Prefix tokens already entered
  * @returns Grouped completions by rule and whether prefix is complete
  */
+/**
+ * Check whether `normalizedToken` is a non-empty prefix of any outgoing token
+ * transition from the given DFA state.  Used by `getDFACompletions` for the
+ * partial-prefix-within-token completion path (Layer 2).
+ */
+function isPrefixOfDFAOutgoing(
+    state: { transitions: { token: string }[] },
+    normalizedToken: string,
+): boolean {
+    if (normalizedToken.length === 0) return false;
+    for (const trans of state.transitions) {
+        if (
+            trans.token.length > normalizedToken.length &&
+            trans.token.startsWith(normalizedToken)
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 export function getDFACompletions(
     dfa: DFA,
     tokens: string[],
@@ -894,16 +914,25 @@ export function getDFACompletions(
 
     // Follow the prefix through the DFA
     let skipCount = 0;
+    let consumed = 0;
+    let tookWildcard = false;
     for (let pi = 0; pi < tokens.length; pi++) {
         if (skipCount > 0) {
             skipCount--;
+            consumed++;
             continue;
         }
         const token = tokens[pi];
         const normalizedToken = normalizeToken(token);
         const currentState = dfa.states[currentStateId];
         if (!currentState) {
-            return { groups: [], prefixMatches: false, completions: [] };
+            return {
+                groups: [],
+                prefixMatches: false,
+                completions: [],
+                consumedTokenCount: consumed,
+                tookWildcard,
+            };
         }
 
         // Find matching transition
@@ -919,6 +948,7 @@ export function getDFACompletions(
         // Try wildcard if no token match
         if (nextStateId === undefined && currentState.wildcardTransition) {
             nextStateId = currentState.wildcardTransition.to;
+            tookWildcard = true;
         }
 
         // Try phraseSet transitions
@@ -944,25 +974,60 @@ export function getDFACompletions(
         }
 
         if (nextStateId === undefined) {
-            return { groups: [], prefixMatches: false, completions: [] };
+            // Recoverable cases (Layer 2 + Category 3b): when the LAST input
+            // token fails to match, return completions from the pre-token
+            // state IF either (a) the token is a prefix of some outgoing
+            // transition (user still typing), OR (b) prior tokens were
+            // already consumed (canonical's "Category 3b" — surface valid
+            // continuations even when trailing input is garbage).  For
+            // intermediate failures we still bail entirely.
+            const isLastToken = pi === tokens.length - 1;
+            const isPrefix =
+                token.length > 0 &&
+                isPrefixOfDFAOutgoing(currentState, normalizedToken);
+            const recoverable = isLastToken && (isPrefix || consumed > 0);
+            if (recoverable) {
+                // Fall through: leave currentStateId as the pre-token state,
+                // break out of the prefix loop, materialize completions from
+                // currentState below.  consumed stays at its current value
+                // so matchedPrefixLength reflects only the fully-consumed
+                // tokens (the partial input is what the caller is filling in).
+                break;
+            }
+            return {
+                groups: [],
+                prefixMatches: false,
+                completions: [],
+                consumedTokenCount: consumed,
+                tookWildcard,
+            };
         }
 
         currentStateId = nextStateId;
+        consumed++;
     }
 
     // Get completions from current state
     const currentState = dfa.states[currentStateId];
     if (!currentState) {
-        return { groups: [], prefixMatches: false, completions: [] };
+        return {
+            groups: [],
+            prefixMatches: false,
+            completions: [],
+            consumedTokenCount: consumed,
+            tookWildcard,
+        };
     }
 
     // Track which rules are active at this state
     const activeRules = new Set<number>(currentState.activeRuleIndices ?? []);
 
-    // Collect token transitions - these apply to all active contexts
+    // Collect token transitions - these apply to all active contexts.  Use
+    // displayToken (original grammar form) when present so completions are
+    // surfaced as authored (e.g. "hello," not "hello").
     const allTokens = new Set<string>();
     for (const trans of currentState.transitions) {
-        allTokens.add(trans.token);
+        allTokens.add(trans.displayToken ?? trans.token);
     }
 
     // Collect first token of each phrase set phrase as literal completions
@@ -1046,25 +1111,30 @@ export function getDFACompletions(
     }
 
     // Build property completions from checked wildcard captureInfo entries
-    // (parity with NFA computeNFACompletions: checked wildcards with actionName/propertyPath)
+    // (parity with NFA computeNFACompletions: emit a property for ANY
+    // wildcard transition that carries action/propertyPath annotations —
+    // checked or not.  `checked` controls *matching* (whether input is
+    // validated against an entity type), not completion eligibility.
+    // The canonical matcher and the NFA both treat unchecked free-form
+    // wildcards as property completions when the enclosing rule's action
+    // references the variable.
     const properties: DFAPropertyCompletion[] = [];
     const seenPropertyKeys = new Set<string>();
     if (currentState.wildcardTransition) {
         for (const capture of currentState.wildcardTransition.captureInfo) {
-            if (
-                !capture.checked ||
-                !capture.actionName ||
-                !capture.propertyPath
-            ) {
+            if (!capture.propertyPath) {
                 continue;
             }
-            const key = `${capture.actionName}:${capture.propertyPath}`;
+            const key = `${capture.actionName ?? ""}:${capture.propertyPath}`;
             if (!seenPropertyKeys.has(key)) {
                 seenPropertyKeys.add(key);
-                properties.push({
-                    actionName: capture.actionName,
+                const entry: DFAPropertyCompletion = {
                     propertyPath: capture.propertyPath,
-                });
+                };
+                if (capture.actionName) {
+                    entry.actionName = capture.actionName;
+                }
+                properties.push(entry);
             }
         }
     }
@@ -1073,9 +1143,98 @@ export function getDFACompletions(
         groups,
         prefixMatches: currentState.accepting,
         completions: Array.from(allCompletions),
+        consumedTokenCount: consumed,
+        tookWildcard,
     };
     if (properties.length > 0) {
         result.properties = properties;
+    }
+    return result;
+}
+
+/**
+ * Compute completions for a raw input string using the DFA, recording how
+ * far through the input the grammar consumed (`matchedPrefixLength`).
+ * Mirrors `computeNFACompletionsFromInput` in nfaCompletion.ts.
+ *
+ * Layer 1 of the completion port — adds positional info; later layers add
+ * prefix-within-token matching (Layer 2), closedSet/afterWildcard (Layer 3),
+ * and backward direction (Layer 4, delegated to NFA).
+ */
+export function getDFACompletionsFromInput(
+    dfa: DFA,
+    input: string,
+    direction?: "forward" | "backward",
+): GrammarCompletionResult {
+    const { tokens, starts, ends } = tokenizeRequestWithOffsets(input);
+    const forwardRaw = getDFACompletions(dfa, tokens);
+
+    const forwardConsumed = forwardRaw.consumedTokenCount ?? 0;
+    const forwardMpl = forwardConsumed > 0 ? ends[forwardConsumed - 1] : 0;
+    const hasTrailingSeparator =
+        forwardConsumed > 0 && forwardMpl < input.length;
+
+    // Backward direction: rewind to one token earlier — the rewound
+    // frontier re-offers the part that absorbed the last consumed token.
+    // matchedPrefixLength backs up to the END of the previous token
+    // (or 0 when only one token was consumed) so the user "deletes the
+    // separator + retypes the last word".
+    // Forward direction also rewinds when the grammar is exactly matched
+    // and the frontier offers no continuations (canonical's "exact match
+    // backs up to last term" behavior).
+    let raw = forwardRaw;
+    let matchedPrefixLength = forwardMpl;
+    const canRewind = forwardConsumed > 0 && !hasTrailingSeparator;
+    const exhaustedAllInput = forwardConsumed === tokens.length;
+    const forwardFrontierEmpty =
+        (forwardRaw.completions ?? []).length === 0 &&
+        (forwardRaw.properties ?? []).length === 0;
+    const shouldRewind =
+        canRewind &&
+        (direction === "backward" ||
+            (exhaustedAllInput && forwardFrontierEmpty));
+    if (shouldRewind) {
+        const rewoundTokens = tokens.slice(0, forwardConsumed - 1);
+        raw = getDFACompletions(dfa, rewoundTokens);
+        matchedPrefixLength =
+            forwardConsumed > 1 ? ends[forwardConsumed - 2] : 0;
+    }
+    // Silence unused-variable warning when `starts` isn't otherwise used
+    // (it's destructured for symmetry with the NFA implementation).
+    void starts;
+
+    // Mirror the NFA computation: closedSet=true iff no property
+    // completions are present at the frontier.
+    const closedSet =
+        raw.properties === undefined || raw.properties.length === 0;
+    const directionSensitive = matchedPrefixLength > 0;
+    const afterWildcard: "none" | "some" | "all" = raw.tookWildcard
+        ? "all"
+        : "none";
+
+    const result: GrammarCompletionResult = {
+        groups:
+            (raw.completions ?? []).length > 0
+                ? [
+                      {
+                          completions: raw.completions ?? [],
+                          separatorMode: "autoSpacePunctuation",
+                      },
+                  ]
+                : [],
+        matchedPrefixLength,
+        closedSet,
+        directionSensitive,
+        afterWildcard,
+    };
+    if (raw.properties && raw.properties.length > 0) {
+        result.properties = raw.properties.map((p) => ({
+            match: p.actionName
+                ? { actionName: p.actionName, parameters: {} }
+                : {},
+            propertyNames: [p.propertyPath],
+            separatorMode: "autoSpacePunctuation",
+        }));
     }
     return result;
 }
@@ -1188,7 +1347,7 @@ function isRuntimeChecked(w: WildcardMatchNode): boolean {
         return false;
     const tokenStr = w.tokens.join(" ");
     if (typeName === "number") {
-        return !isNaN(parseFloat(tokenStr));
+        return parseNumberToken(tokenStr) !== undefined;
     }
     const validator = globalEntityRegistry.getValidator(typeName);
     return validator ? validator.validate(tokenStr) : false;
@@ -1890,8 +2049,8 @@ function buildBindings(parts: MatchNode[], grammar: Grammar): Map<string, any> {
                     part.typeName !== "wildcard"
                 ) {
                     if (part.typeName === "number") {
-                        const num = parseFloat(rawValue);
-                        if (!isNaN(num)) {
+                        const num = parseNumberToken(rawValue);
+                        if (num !== undefined) {
                             bindings.set(part.variable, num);
                             break;
                         }

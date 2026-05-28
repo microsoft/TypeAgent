@@ -62,6 +62,10 @@
     "weather": {
       "name": "weather-agent",
       "path": "../agents/weather"
+    },
+    "vampire": {
+      "name": "vampire-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

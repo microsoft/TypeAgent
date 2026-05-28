@@ -20,16 +20,17 @@
  * `options` is omitted entirely) are always valid.
  */
 
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { Parser } from "../src/parser.js";
 import { lex } from "../src/lexer.js";
 import type { WorkflowDecl } from "../src/ast.js";
 
 function parse(src: string): WorkflowDecl {
     const { tokens, comments } = lex(src);
-    const { ast, errors } = new Parser(tokens, comments).parseSingle();
-    if (errors.length || !ast) throw new Error(errors.join("\n"));
-    return ast;
+    const { module, errors } = new Parser(tokens, comments).parseModule();
+    if (errors.length || module.workflows.length === 0)
+        throw new Error(errors.join("\n"));
+    return module.workflows[0];
 }
 
 const SAMPLE = parse(`workflow w(a: number): number { return a; }`);

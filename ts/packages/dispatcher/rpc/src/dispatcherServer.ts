@@ -14,9 +14,6 @@ export function createDispatcherRpcServer(
     channel: RpcChannel,
 ) {
     const dispatcherCallHandler: DispatcherCallFunctions = {
-        cancelCommand(...args) {
-            dispatcher.cancelCommand(...args);
-        },
         cancelCommandByClientId(...args) {
             dispatcher.cancelCommandByClientId(...args);
         },
@@ -28,6 +25,18 @@ export function createDispatcherRpcServer(
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
         processCommand: async (...args) => {
             return dispatcher.processCommand(...args);
+        },
+        submitCommand: async (...args) => {
+            return dispatcher.submitCommand(...args);
+        },
+        interrupt: async (...args) => {
+            return dispatcher.interrupt(...args);
+        },
+        cancelCommand: async (...args) => {
+            return dispatcher.cancelCommand(...args);
+        },
+        getQueueSnapshot: async () => {
+            return dispatcher.getQueueSnapshot();
         },
         getDynamicDisplay: async (...args) => {
             return dispatcher.getDynamicDisplay(...args);

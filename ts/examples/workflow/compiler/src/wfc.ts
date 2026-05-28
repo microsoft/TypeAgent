@@ -20,8 +20,8 @@ import {
     isAbsolute,
 } from "node:path";
 import { createRequire } from "node:module";
-import { compile, CompileError, TaskSchemaInfo } from "workflow-dsl";
-import { allBuiltinTasks } from "workflow-engine";
+import { compileFile, CompileError } from "workflow-dsl";
+import { getBuiltinTaskSchemas } from "workflow-engine";
 
 const require = createRequire(import.meta.url);
 const pkgVersion: string = require("../package.json").version;
@@ -36,6 +36,12 @@ Options:
                        stdout). With multiple inputs, <path> is treated as
                        a directory; each input is written to
                        <path>/<basename>.json.
+  --entry <name>       Name of the workflow to use as the IR entry. Defaults
+                       to the unique exported workflow, or the only workflow
+                       if just one is defined.
+  --workspace-root <dir>
+                       If set, imports must resolve to files under <dir>.
+                       Off by default (matches tsc, esbuild, etc.).
   --no-validate        Skip IR validation after emit (validation is on by
                        default).
   --pretty             Pretty-print the JSON output with 2-space indent
@@ -64,14 +70,6 @@ function defaultOutPath(inputAbs: string): string {
     return join(dir, `${base}.json`);
 }
 
-function builtinTaskSchemas(): TaskSchemaInfo[] {
-    return allBuiltinTasks.map((t) => ({
-        name: t.name,
-        inputSchema: t.inputSchema,
-        outputSchema: t.outputSchema,
-    }));
-}
-
 function formatError(inputDisplay: string, e: CompileError): string {
     const loc = e.line > 0 || e.col > 0 ? `${e.line}:${e.col}` : "-";
     return `${inputDisplay}:${loc} [${e.phase}] ${e.message}`;
@@ -80,6 +78,8 @@ function formatError(inputDisplay: string, e: CompileError): string {
 interface ParsedArgs {
     inputs: string[];
     out?: string;
+    entry?: string;
+    workspaceRoot?: string;
     validate: boolean;
     pretty: boolean;
 }
@@ -87,6 +87,8 @@ interface ParsedArgs {
 function parseArgs(argv: string[]): ParsedArgs {
     const inputs: string[] = [];
     let out: string | undefined;
+    let entry: string | undefined;
+    let workspaceRoot: string | undefined;
     let validate = true;
     let pretty = true;
 
@@ -110,6 +112,20 @@ function parseArgs(argv: string[]): ParsedArgs {
                 out = v;
                 break;
             }
+            case "--entry": {
+                const v = argv[++i];
+                if (!v || v.startsWith("-"))
+                    fail("--entry requires a workflow name");
+                entry = v;
+                break;
+            }
+            case "--workspace-root": {
+                const v = argv[++i];
+                if (!v || v.startsWith("-"))
+                    fail("--workspace-root requires a directory path");
+                workspaceRoot = v;
+                break;
+            }
             case "--no-validate":
                 validate = false;
                 break;
@@ -129,6 +145,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (inputs.length === 0) fail(usage);
     const parsed: ParsedArgs = { inputs, validate, pretty };
     if (out !== undefined) parsed.out = out;
+    if (entry !== undefined) parsed.entry = entry;
+    if (workspaceRoot !== undefined) parsed.workspaceRoot = workspaceRoot;
     return parsed;
 }
 
@@ -186,9 +204,13 @@ function compileOne(
     args: ParsedArgs,
     outIsDir: boolean,
 ): boolean {
-    const { abs, source } = readSource(inputDisplay);
-    const result = compile(source, builtinTaskSchemas(), {
+    const { abs } = readSource(inputDisplay);
+    const result = compileFile(abs, getBuiltinTaskSchemas(), {
         validate: args.validate,
+        ...(args.entry !== undefined ? { entry: args.entry } : {}),
+        ...(args.workspaceRoot !== undefined
+            ? { workspaceRoot: args.workspaceRoot }
+            : {}),
     });
     if (result.errors.length > 0) {
         for (const e of result.errors) {

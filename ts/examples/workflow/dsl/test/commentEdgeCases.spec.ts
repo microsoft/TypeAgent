@@ -51,14 +51,15 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { WorkflowDecl } from "../src/ast.js";
 
 function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -522,7 +523,7 @@ describe("multi-line ObjectType in a param (`;` separator pinned non-support)", 
         const { tokens, errors: lexErrors, comments } = lex(src);
         expect(lexErrors).toEqual([]);
         const p = new Parser(tokens, comments);
-        const { errors } = p.parseSingle();
+        const { errors } = p.parseModule();
         // Spec doesn't support multi-line object types with `;` separators
         // in param position today. Pin: this MUST produce parse errors so
         // adding support is a deliberate change.

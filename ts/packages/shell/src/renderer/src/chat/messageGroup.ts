@@ -31,6 +31,9 @@ function stampRequestIdOn(div: HTMLElement, requestId: RequestId) {
     }
 }
 
+const CANCELLED_MESSAGE = "⚠  Cancelled";
+const CANCELLED_SOURCE = "shell";
+
 export class MessageGroup {
     public metricsDiv?: {
         mainMetricsDiv: HTMLDivElement;
@@ -47,6 +50,12 @@ export class MessageGroup {
     // the feedback widget is attached only after this is set.
     private _requestId: RequestId | undefined;
     private _currentFeedback: UserFeedbackEntry | null = null;
+    // LOAD-BEARING IDEMPOTENCE: `notifyCancelled` is invoked from two
+    // independent paths — `requestCompleted({cancelled:true})` for local-origin
+    // groups and `ChatView.onRequestCancelled` for remote-origin groups (and
+    // both fire for locally-originated requests). This flag prevents
+    // double-painting "⚠ Cancelled". Do not remove without rewiring both paths.
+    private cancelledRendered = false;
 
     public get requestId(): RequestId | undefined {
         return this._requestId;
@@ -210,16 +219,7 @@ export class MessageGroup {
     private requestCompleted(result: CommandResult | undefined) {
         this.updateMetrics(result?.metrics);
         if (result?.cancelled) {
-            const lastAgentMessage = this.getLastAgentMessage();
-            if (lastAgentMessage !== undefined) {
-                lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
-                this.chatView.updateScroll();
-            } else {
-                this.addStatusMessage(
-                    { message: "⚠  Cancelled", source: "shell" },
-                    false,
-                );
-            }
+            this.notifyCancelled();
         } else if (
             this.statusMessage === undefined &&
             this.agentMessages.length === 0
@@ -434,6 +434,43 @@ export class MessageGroup {
 
     public updateUserMessage(message: string) {
         this.userMessage.setMessage(message, this.chatView.userGivenName);
+    }
+
+    /**
+     * Reflect the server-side queue state onto the user bubble's chip.
+     * Pass `null` on cancellation/completion to clear it. `onCancel` is wired
+     * to the inline X button shown for queued entries.
+     */
+    public setQueueStatus(
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ) {
+        this.userMessage.setQueueStatus(status, onCancel);
+    }
+
+    /**
+     * Render the "⚠ Cancelled" affordance for this group. Idempotent: safe to
+     * call from both the local `requestCompleted({cancelled:true})` path and the
+     * remote `requestCancelled` broadcast (which is the only signal for groups
+     * that didn't originate locally, since they have no completion promise).
+     */
+    public notifyCancelled() {
+        if (this.cancelledRendered) return;
+        this.cancelledRendered = true;
+        const lastAgentMessage = this.getLastAgentMessage();
+        if (lastAgentMessage !== undefined) {
+            lastAgentMessage.setMessage(
+                CANCELLED_MESSAGE,
+                CANCELLED_SOURCE,
+                "block",
+            );
+            this.chatView.updateScroll();
+        } else {
+            this.addStatusMessage(
+                { message: CANCELLED_MESSAGE, source: CANCELLED_SOURCE },
+                false,
+            );
+        }
     }
 
     public notifyExplained(data: NotifyExplainedData) {
