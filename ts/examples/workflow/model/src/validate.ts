@@ -1177,8 +1177,10 @@ function validateBranchArm(
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     ambientCtx: ScopeAmbientContext,
     workflowCallCtx: WorkflowCallContext,
+    validInputTemplatePaths: Set<string>,
     errors: ValidationError[],
 ): void {
+    const inputsPath = `${armPath}.inputs`;
     if (arm === null || typeof arm !== "object") {
         errors.push({
             path: armPath,
@@ -1189,13 +1191,10 @@ function validateBranchArm(
         return;
     }
     const armObj = arm as Partial<BranchArm>;
-    if (
-        armObj.inputs === undefined ||
-        typeof armObj.inputs !== "object" ||
-        armObj.inputs === null
-    ) {
+    const inputsAreValid = isTemplateRecord(armObj.inputs);
+    if (!inputsAreValid) {
         errors.push({
-            path: `${armPath}.inputs`,
+            path: inputsPath,
             message: `Branch arm "inputs" must be an object template.`,
         });
     }
@@ -1206,6 +1205,16 @@ function validateBranchArm(
             message: `Branch arm "scope" must be a WorkflowScope object.`,
         });
         return;
+    }
+    const inputSchemaIsValid = scope.inputSchema !== undefined;
+    if (!inputSchemaIsValid) {
+        errors.push({
+            path: `${armPath}.scope.inputSchema`,
+            message: `Branch arm scope must declare an "inputSchema".`,
+        });
+    }
+    if (inputsAreValid && inputSchemaIsValid) {
+        validInputTemplatePaths.add(inputsPath);
     }
     if (typeof scope.entry !== "string") {
         errors.push({
@@ -1329,6 +1338,7 @@ function validateBranchNodeTemplates(
     node: BranchNode,
     path: string,
     templateCtx: TemplateResolutionContext,
+    validInputTemplatePaths: Set<string>,
     errors: ValidationError[],
 ): void {
     const selectorType = walkTemplateAndComputeType(
@@ -1435,16 +1445,24 @@ function validateBranchNodeTemplates(
     }
 
     // Walk arm.inputs with the outer template context so $from refs are validated.
-    const arms: Array<[string, BranchArm]> = [
-        ...Object.entries(node.cases),
-        ...(node.default
-            ? [["default", node.default] as [string, BranchArm]]
-            : []),
+    const defaultInputsPath = `${path}.default.inputs`;
+    const defaultArm =
+        node.default && validInputTemplatePaths.has(defaultInputsPath)
+            ? [{ arm: node.default, inputsPath: defaultInputsPath }]
+            : [];
+    const arms: Array<{ arm: BranchArm; inputsPath: string }> = [
+        ...Object.entries(node.cases).flatMap(([armKey, arm]) => {
+            const inputsPath = `${path}.cases.${armKey}.inputs`;
+            return validInputTemplatePaths.has(inputsPath)
+                ? [{ arm, inputsPath }]
+                : [];
+        }),
+        ...defaultArm,
     ];
-    for (const [armKey, arm] of arms) {
+    for (const { arm, inputsPath } of arms) {
         validateInputObjectTemplates(
             arm.inputs,
-            `${path}.cases.${armKey}.inputs`,
+            inputsPath,
             arm.scope.inputSchema,
             templateCtx,
             errors,
@@ -1491,13 +1509,29 @@ function validateForkMapNodeTemplates(
             "collectionSchema",
         );
     }
+    if (
+        node.inputs &&
+        Object.prototype.hasOwnProperty.call(node.inputs, node.elementParam)
+    ) {
+        errors.push({
+            path: `${path}.inputs.${node.elementParam}`,
+            message:
+                `forkMap inputs must not provide elementParam ` +
+                `"${node.elementParam}". The engine supplies this value ` +
+                `from the collection for each iteration.`,
+        });
+    }
     validateInputObjectTemplates(
         node.inputs ?? {},
         `${path}.inputs`,
-        omitRequiredProperty(node.body.inputSchema, node.elementParam),
+        omitProperty(node.body.inputSchema, node.elementParam),
         templateCtx,
         errors,
     );
+}
+
+function isTemplateRecord(value: unknown): value is Record<string, Template> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function validateInputObjectTemplates(
@@ -1537,20 +1571,18 @@ function validateInputObjectTemplates(
         );
     }
 
-    if (required.length > 0) {
-        checkResolvedAssignability(
-            {
-                type: "object",
-                properties: resolvedProperties,
-                required,
-            },
-            inputSchema,
-            inputsPath,
-            errors,
-            "Resolved inputs",
-            "inputSchema",
-        );
-    }
+    checkResolvedAssignability(
+        {
+            type: "object",
+            properties: resolvedProperties,
+            ...(required.length > 0 ? { required } : {}),
+        },
+        inputSchema,
+        inputsPath,
+        errors,
+        "Resolved inputs",
+        "inputSchema",
+    );
 }
 
 function validateWorkflowCallNode(
@@ -1649,6 +1681,7 @@ function validateBranchNode(
     state: ScopeValidationState,
 ): void {
     const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
+    const validInputTemplatePaths = new Set<string>();
     // Validate selectorSchema type: String() coercion at runtime only
     // produces useful results for primitive types.
     const selectorType = node.selectorSchema?.type;
@@ -1672,6 +1705,7 @@ function validateBranchNode(
             tasks,
             ambientCtx,
             state.workflowCallCtx,
+            validInputTemplatePaths,
             errors,
         );
     }
@@ -1682,10 +1716,17 @@ function validateBranchNode(
             tasks,
             ambientCtx,
             state.workflowCallCtx,
+            validInputTemplatePaths,
             errors,
         );
     }
-    validateBranchNodeTemplates(node, path, templateCtx, errors);
+    validateBranchNodeTemplates(
+        node,
+        path,
+        templateCtx,
+        validInputTemplatePaths,
+        errors,
+    );
     // Branch bind / outputSchema are mutually required.
     if (node.bind !== undefined && node.outputSchema === undefined) {
         errors.push({
@@ -2324,17 +2365,22 @@ function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
         : { type: "array" };
 }
 
-function omitRequiredProperty(
+function omitProperty(
     schema: JSONSchema,
     propertyName: string | undefined,
 ): JSONSchema {
-    if (!propertyName || !schema.required?.includes(propertyName)) {
+    if (!propertyName) {
         return schema;
     }
-    const required = schema.required.filter((name) => name !== propertyName);
+    const required = schema.required?.filter((name) => name !== propertyName);
+    const properties = schema.properties ? { ...schema.properties } : undefined;
     const rest = { ...schema };
+    if (properties) {
+        delete properties[propertyName];
+        rest.properties = properties;
+    }
     delete rest.required;
-    return required.length > 0 ? { ...rest, required } : rest;
+    return required && required.length > 0 ? { ...rest, required } : rest;
 }
 
 /**

@@ -101,6 +101,13 @@ function makeTaskNode(overrides?: Partial<TaskNode>): TaskNode {
     };
 }
 
+function makeRecoveryInputs(): Record<string, Template> {
+    return {
+        error: { $from: "recovery", name: "error" },
+        trigger: { $from: "recovery", name: "trigger" },
+    };
+}
+
 /**
  * Build a loop node with a single-counter state and a simple task body.
  * Override any field via `overrides`; override the body scope fields via
@@ -448,7 +455,7 @@ describe("validateWorkflowIR", () => {
                         },
                     },
                     outputSchema: { type: "object" },
-                    inputs: {},
+                    inputs: makeRecoveryInputs(),
                     bind: "out",
                 },
             },
@@ -2561,7 +2568,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         bind: "out",
                     },
                 },
@@ -3013,7 +3020,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         next: "consumer",
                     },
                     consumer: {
@@ -3092,7 +3099,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         bind: "out",
                     },
                 },
@@ -3168,7 +3175,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         next: "consumer",
                     },
                     consumer: {
@@ -3481,7 +3488,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         bind: "data",
                     },
                 },
@@ -3581,7 +3588,7 @@ describe("validateWorkflowIR", () => {
                             required: ["result"],
                             properties: { result: { type: "boolean" } },
                         },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         bind: "data",
                     },
                 },
@@ -4062,7 +4069,7 @@ describe("validateWorkflowIR", () => {
                             required: ["x"],
                             properties: { x: { type: "string" } },
                         },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         next: "consumer",
                         bind: "data",
                     },
@@ -4738,6 +4745,35 @@ describe("validateWorkflowIR", () => {
             expect(result.valid).toBe(true);
         });
 
+        it("rejects forkMap inputs that overwrite elementParam", () => {
+            const ir = makeForkMapIR({
+                elementParam: "item",
+                inputs: { item: "override" },
+                body: {
+                    inputSchema: {
+                        type: "object",
+                        required: ["item"],
+                        properties: { item: { type: "string" } },
+                    },
+                    entry: "body_step",
+                    nodes: {
+                        body_step: makeTaskNode({ bind: "stepOut" }),
+                    },
+                    output: { $from: "scope", name: "stepOut" },
+                    outputSchema: { type: "object" },
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("inputs.item") &&
+                        e.message.includes("elementParam"),
+                ),
+            ).toBe(true);
+        });
+
         it("rejects forkMap when element schema mismatches body elementParam type", () => {
             const ir = makeForkMapIR({
                 collectionSchema: {
@@ -5190,6 +5226,68 @@ describe("validateWorkflowIR", () => {
                     (e) =>
                         e.path.includes("inputs.count") &&
                         e.message.includes("not assignable"),
+                ),
+            ).toBe(true);
+        });
+
+        it("reports default branch arm input errors at default path", () => {
+            const defaultArm = makeSimpleArm("defStep");
+            defaultArm.inputs = { count: "not-a-number" };
+            defaultArm.scope.inputSchema = {
+                type: "object",
+                required: ["count"],
+                properties: { count: { type: "integer" } },
+            };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: false,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: makeSimpleArm("armStep") },
+                        default: defaultArm,
+                    } as BranchNode,
+                },
+            });
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("nodes.start.default.inputs.count") &&
+                        e.message.includes("not assignable"),
+                ),
+            ).toBe(true);
+            expect(
+                result.errors.some((e) =>
+                    e.path.includes("nodes.start.cases.default.inputs"),
+                ),
+            ).toBe(false);
+        });
+
+        it("reports malformed branch arm inputs without throwing", () => {
+            const invalidArm = {
+                scope: makeSimpleArm("armStep").scope,
+            };
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: {
+                        kind: "branch",
+                        selector: true,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: invalidArm },
+                        default: makeSimpleArm("defStep"),
+                    } as unknown as BranchNode,
+                },
+            });
+            expect(() => validateWorkflowIR(ir, taskMap("noop"))).not.toThrow();
+            const result = validateWorkflowIR(ir, taskMap("noop"));
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.path.includes("cases.true.inputs") &&
+                        e.message.includes("object template"),
                 ),
             ).toBe(true);
         });
@@ -5673,7 +5771,7 @@ describe("validateWorkflowIR", () => {
                             },
                         },
                         outputSchema: { type: "object" },
-                        inputs: {},
+                        inputs: makeRecoveryInputs(),
                         bind: "out",
                     },
                 },
@@ -7082,7 +7180,7 @@ describe("validateWorkflowIR", () => {
                             properties: { x: { type: "number" } },
                             required: ["x"],
                         },
-                        inputs: {},
+                        inputs: { a: "value" },
                         bind: "r",
                     },
                 },
@@ -8307,6 +8405,19 @@ describe("validateWorkflowIR", () => {
             required: ["count"],
             properties: { count: { type: "integer" } },
         };
+
+        it("rejects empty task inputs missing a required inputSchema field", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    start: makeTaskNode({
+                        inputSchema: countInputSchema,
+                        inputs: {},
+                        bind: "out",
+                    }),
+                },
+            });
+            expectMissingRequiredCount(validateWorkflowIR(ir, taskMap("noop")));
+        });
 
         it("rejects task inputs missing a required inputSchema field", () => {
             const ir = makeMinimalIR({
