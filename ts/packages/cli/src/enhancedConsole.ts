@@ -348,6 +348,37 @@ export function __testSetCurrentRequestId(id: string | undefined): void {
 export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
 }
+/**
+ * @internal Activate a TerminalLayout + stub PromptRenderer so tests can
+ * exercise inline-buffering / flush behavior without driving the readline UI.
+ * Returns a teardown function — call it in afterEach to restore module state.
+ */
+export function __testActivateTerminalLayout(promptRows: number = 1): {
+    teardown: () => void;
+    getInlineBuffer: () => string;
+    redrawCount: () => number;
+} {
+    const layout = new TerminalLayout();
+    layout.setup(promptRows);
+    terminalLayout = layout;
+    let redraws = 0;
+    const stub: PromptRenderer = {
+        redraw: () => {
+            redraws++;
+        },
+        rows: () => promptRows,
+    } as unknown as PromptRenderer;
+    activePromptRenderer = stub;
+    return {
+        teardown: () => {
+            layout.cleanup();
+            terminalLayout = null;
+            activePromptRenderer = null;
+        },
+        getInlineBuffer: () => (layout as any).inlineBuffer as string,
+        redrawCount: () => redraws,
+    };
+}
 
 /** Bootstrap CLI queue state from a snapshot, or pass `undefined` to clear. */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
@@ -1024,6 +1055,14 @@ export function createEnhancedClientIO(
                     }
                     if (completedId !== undefined) {
                         consumeSubmittedId(completedId);
+                    }
+                    // Commit any buffered inline output: actionIO.appendDisplay
+                    // defaults to "inline" mode and the non-blocking submit path
+                    // has no spinner, so one-shot commands (e.g. @config agent)
+                    // would otherwise leave their only message in inlineBuffer.
+                    if (terminalLayout?.isActive) {
+                        terminalLayout.flushInline();
+                        activePromptRenderer?.redraw();
                     }
                     break;
                 }
