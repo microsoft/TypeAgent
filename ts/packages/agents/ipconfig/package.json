@@ -3,6 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "description": "TypeAgent agent for ipconfig",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/ipconfig"
+  },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
@@ -11,11 +17,11 @@
     "./agent/handlers": "./dist/ipconfigActionHandler.js"
   },
   "scripts": {
-    "asc": "asc -i ./src/ipconfigSchema.ts -o ./dist/ipconfigSchema.pas.json -t IpconfigActions",
     "agc": "agc -i ./src/ipconfigSchema.agr -o ./dist/ipconfigSchema.ag.json",
-    "tsc": "tsc -b",
+    "asc": "asc -i ./src/ipconfigSchema.ts -o ./dist/ipconfigSchema.pas.json -t IpconfigActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "build": "concurrently npm:tsc npm:asc npm:agc"
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*"
