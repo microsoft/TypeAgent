@@ -6,6 +6,7 @@ import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, TypeAgentJsonValidator } from "typechat-utils";
 import { PromptSection } from "typechat";
 import { getLocationString } from "./geolocation.js";
+import type { UserContext } from "../translation/userContext.js";
 
 export type EntityPromptShape = "facets" | "flat" | "facets-with-schema";
 
@@ -73,6 +74,7 @@ export function createTypeAgentRequestPrompt(
     // the prompt is unchanged — we don't advertise a feature the resolver
     // won't honor.
     entityPathNavigationEnabled: boolean = false,
+    userContext: UserContext | undefined = undefined,
 ) {
     if (attachments !== undefined && attachments?.length > 0) {
         if (request.length == 0) {
@@ -96,6 +98,16 @@ export function createTypeAgentRequestPrompt(
     }
 
     if (context) {
+        if (userContext !== undefined) {
+            prompts.push("###");
+            prompts.push(
+                "User environment context:",
+                JSON.stringify(userContext, undefined, 2),
+            );
+            prompts.push(
+                "Prefer actions from the app named in `activeApp` when the request is ambiguous between agents that handle similar verbs. Only override this preference when the request explicitly names a different app or clearly refers to a different domain.",
+            );
+        }
         if (history !== undefined) {
             if (history.activityContext !== undefined) {
                 // REVIEW: this assume that the schema we are translating matches the activity context.

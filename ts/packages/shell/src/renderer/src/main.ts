@@ -36,6 +36,7 @@ import {
     ClientIO,
     Dispatcher,
     PendingInteractionResponse,
+    QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
 import { swapContent } from "./setContent";
@@ -145,6 +146,12 @@ async function initializeChatHistory(chatView: ChatView) {
 
             // TODO: wire up any other functionality (player agent?)
         }
+
+        // Reattach feedback widgets on restored agent bubbles. Each
+        // container that was saved with a data-feedback-request-id gets
+        // a fresh widget wired to a dispatcher-backed controller so the
+        // copy / 👍 / 👎 / ⋯ buttons work again.
+        chatView.rewireHistoricalFeedback();
     }
 }
 
@@ -493,6 +500,22 @@ function registerClient(
                 switch (action) {
                     case "show-camera": {
                         cameraView.show();
+                        break;
+                    }
+                    case "trash-restore": {
+                        chatView.dispatcher
+                            ?.restoreAllHidden()
+                            .catch((e: any) =>
+                                console.error("restoreAllHidden failed", e),
+                            );
+                        break;
+                    }
+                    case "trash-flush": {
+                        chatView.dispatcher
+                            ?.flushHidden()
+                            .catch((e: any) =>
+                                console.error("flushHidden failed", e),
+                            );
                         break;
                     }
                     case "set-alarm": {
@@ -920,12 +943,34 @@ function registerClient(
                 console.log(e);
             }
         },
+        onUserFeedback: (entry) => {
+            chatView.applyFeedback(entry);
+        },
+        onUserHide: (entry) => {
+            chatView.applyHide(entry);
+        },
+        // Server-side queue push events.
+        requestQueued: (entry, version) => {
+            chatView.onRequestQueued(entry, version);
+        },
+        requestStarted: (entry, version) => {
+            chatView.onRequestStarted(entry, version);
+        },
+        requestCancelled: (requestId, reason, version) => {
+            chatView.onRequestCancelled(requestId, reason, version);
+        },
+        queueStateChanged: (snapshot) => {
+            chatView.onQueueStateChanged(snapshot);
+        },
     };
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(d: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(d);
+        async dispatcherInitialized(
+            d: Dispatcher,
+            initialQueueSnapshot?: QueueSnapshot,
+        ): Promise<void> {
+            chatView.initializeDispatcher(d, initialQueueSnapshot);
             await chatHistoryReady;
 
             // Signal that the dispatcher is fully initialised.
@@ -1024,8 +1069,13 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
-        conversationChanged(_conversationId: string, _name: string): void {
-            // Conversation changed — no UI to update (dropdown removed)
+        conversationChanged(
+            _conversationId: string,
+            _name: string,
+            queueSnapshot?: QueueSnapshot,
+        ): void {
+            // Re-bootstrap the queue snapshot for the new conversation's version stream.
+            chatView.applyQueueSnapshot(queueSnapshot);
         },
         markHistoryEntries(): void {
             for (const child of chatView.getScrollContainer().children) {
@@ -1184,6 +1234,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
+    // Settings / Metrics / Help dialogs live in TabView; they overlay the
+    // chat (z-index 1000) when shown via @shell show settings. The tabs
+    // container itself was never appended to the wrapper, so `showTab`
+    // was a no-op visually.
+    wrapper.appendChild(tabs.getContainer());
 
     chatView.chatInput!.camButton.onclick = () => {
         cameraView.toggleVisibility();

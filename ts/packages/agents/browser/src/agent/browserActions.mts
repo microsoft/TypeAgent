@@ -23,8 +23,8 @@ export type BrowserActionContext = {
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
-    preferredClientType?: "extension" | "electron";
-    agentWebSocketServer?: AgentWebSocketServer;
+    preferredClientType?: "extension" | "electron" | undefined;
+    agentWebSocketServer?: AgentWebSocketServer | undefined;
     browserControl?: BrowserControl;
     currentClient?: BrowserClient;
     extractionClients?: Map<string, string>;
@@ -38,6 +38,10 @@ export type BrowserActionContext = {
     index: IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the views
+    // server (PDF viewer / per-session HTML views). Released on
+    // updateBrowserContext(false, ...) or closeAgentContext.
+    viewPortRegistration?: { release: () => void } | undefined;
     webFlowStore?: WebFlowStore | undefined;
     choiceManager?: ChoiceManager | undefined;
     lastInferredActions?: any[] | undefined;
@@ -52,6 +56,14 @@ export type BrowserActionContext = {
     };
     searchProviders: SearchProvider[];
     activeSearchProvider: SearchProvider;
+    // Handle returned by sessionContext.registerPort. Released on
+    // updateBrowserContext(false, ...) or closeAgentContext (the
+    // closeSessionContext backstop also releases it if both are skipped).
+    portRegistration?: { release: () => void } | undefined;
+    // Tracks whether the "browser" schema is currently enabled for this
+    // session — gates the shared-server refcount accounting so a redundant
+    // enable/disable doesn't double-count.
+    browserSchemaEnabled?: boolean | undefined;
 };
 
 export function getBrowserControl(agentContext: BrowserActionContext) {

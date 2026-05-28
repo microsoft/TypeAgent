@@ -42,6 +42,7 @@ import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { CompleteUsageStatsCallback } from "aiclient";
 import { PromptLogger } from "telemetry";
+import type { UserContext } from "./userContext.js";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
@@ -261,6 +262,7 @@ export type TypeAgentTranslator<T = TranslatedAction> = {
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
         signal?: AbortSignal,
+        userContext?: UserContext,
     ): Promise<Result<T>>;
     checkTranslate(request: string): Promise<Result<T>>;
     getSchemaName(actionName: string): string | undefined;
@@ -444,6 +446,7 @@ function createTypeAgentTranslator<
             cb?: IncrementalJsonValueCallBack,
             usageCallback?: CompleteUsageStatsCallback,
             signal?: AbortSignal,
+            userContext?: UserContext,
         ) => {
             // Expand the request prompt up front with the history and attachments
             const requestPrompt = createTypeAgentRequestPrompt(
@@ -454,6 +457,7 @@ function createTypeAgentTranslator<
                 true,
                 entityPromptShape,
                 entityPathNavigationEnabled,
+                userContext,
             );
 
             return streamingTranslator.translate(

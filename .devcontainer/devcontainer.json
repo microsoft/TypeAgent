@@ -1,17 +1,23 @@
 {
   "name": "TypeAgent Development",
-  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "build": { "dockerfile": "Dockerfile" },
 
+  // Multi-arch base image (linux/amd64 and linux/arm64) so this configuration
+  // works on Apple Silicon as well as x86_64 hosts.
+  //
   // This configuration works with:
-  // - VS Code + Docker Desktop (local)
+  // - VS Code + Docker Desktop (local, including macOS arm64)
   // - GitHub Codespaces (cloud)
   // - JetBrains IDEs with Dev Containers support
 
-  // Fix stale yarn GPG key in base image before features install
-  "initializeCommand": "docker run --rm mcr.microsoft.com/devcontainers/universal:2 echo 'Pulling base image...' || true",
-
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git-lfs:1": {
+      "autoPull": false
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "22",
       "nodeGypDependencies": true
@@ -24,12 +30,25 @@
       "version": "8.0"
     },
     "ghcr.io/devcontainers/features/azure-cli:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
-    // Note: common-utils removed - universal:2 already includes zsh, oh-my-zsh, and common utilities
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    // base:ubuntu-24.04 does not pre-install zsh / oh-my-zsh, so add common-utils
+    // and create the non-root `codespace` user expected by the rest of this config.
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "username": "codespace",
+      "userUid": "1001",
+      "userGid": "1001"
+    }
   },
 
-  // Fix yarn GPG key issue in base image
-  "onCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list || true",
+  // Publish SSH port on loopback only so host-side `ssh typeagent-devcontainer`
+  // works without exposing 2222 on the LAN. Plain `forwardPorts` is only
+  // honored by the VS Code / Codespaces port-forwarding UI and does NOT
+  // actually publish the port when the container is started via the
+  // devcontainer CLI, which leaves `localhost:2222` unreachable.
+  "appPort": ["127.0.0.1:2222:2222"],
 
   "forwardPorts": [8999, 8081, 8082, 3000, 3443],
   "portsAttributes": {
@@ -46,19 +65,25 @@
     // Per-container node_modules (symlinks to global store)
     "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
     // Claude Code config persistence
-    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume"
+    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume",
+    // Copilot CLI chat log persistence
+    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume",
+    // VS Code server data (extensions, settings cache, workspace storage, history)
+    // so editor state survives container recreate.
+    "source=vscode-server-${devcontainerId},target=/home/codespace/.vscode-server,type=volume"
   ],
 
   "containerEnv": {
-    "PNPM_HOME": "/home/codespace/.local/share/pnpm"
+    "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
+    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
     // For Codespaces, set these as repository secrets:
     // - AZURE_OPENAI_API_KEY
     // - AZURE_OPENAI_ENDPOINT
     // - ANTHROPIC_API_KEY (for Claude Code)
   },
 
-  "postCreateCommand": "cat .devcontainer/scripts/post-create.sh | tr -d '\\r' | bash",
-  "postStartCommand": "cat .devcontainer/scripts/post-start.sh | tr -d '\\r' | bash",
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
 
   "customizations": {
     "vscode": {

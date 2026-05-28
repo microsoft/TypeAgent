@@ -36,6 +36,8 @@ import {
     ClientIO,
     createDispatcher,
     Dispatcher,
+    PortRegistrar,
+    QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -47,12 +49,17 @@ import {
     ensureAgentServer,
     connectAgentServer,
     stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
     saveUserSettings,
 } from "agent-dispatcher/helpers/userSettings";
+import {
+    startStandaloneDiscoveryServer,
+    type StandaloneDiscoveryServer,
+} from "./discoveryServer.js";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -69,6 +76,7 @@ type InitResult = {
     connection?: AgentServerConnection;
     initialConversationId?: string;
     initialConversationName?: string;
+    initialQueueSnapshot?: QueueSnapshot;
     rebindDispatcher?: (freshDispatcher: Dispatcher) => void;
 };
 
@@ -85,6 +93,12 @@ async function initializeDispatcher(
         // Make sure the previous cleanup is done.
         await cleanupP;
     }
+    // Hoisted above the try{} so the catch can clean up an already-bound
+    // discovery WS if a later step (createDispatcher, etc.) throws —
+    // otherwise the listening socket on AGENT_SERVER_DEFAULT_PORT would
+    // leak across re-init attempts and block the next launch with
+    // EADDRINUSE.
+    let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
     try {
         const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
@@ -187,6 +201,8 @@ async function initializeDispatcher(
         let connection: AgentServerConnection | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
+        // Bootstrap snapshot from joinConversation (remote mode only).
+        let initialQueueSnapshot: QueueSnapshot | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-session support.
@@ -427,6 +443,7 @@ async function initializeDispatcher(
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
+            initialQueueSnapshot = conversation.queueSnapshot;
             // Persist the conversation we ended up on so the next launch
             // restores it. Wrapped in try/catch because user-settings I/O
             // shouldn't block startup if the disk write fails.
@@ -461,6 +478,37 @@ async function initializeDispatcher(
                 configName,
             );
 
+            // Standalone shell hosts its own dispatcher in-process. Pre-build
+            // a PortRegistrar so we can hand the same instance to both the
+            // dispatcher (where agents register their dynamically assigned
+            // ports) and the discovery WS server below (which reads from it
+            // to answer external lookups). Without this shared instance, the
+            // dispatcher would silently make its own private registrar and
+            // the Chrome extension's discoverPort lookup would never find
+            // the browser agent's port.
+            const portRegistrar = new PortRegistrar();
+
+            // Stand up the discovery WS so the Chrome extension (and any
+            // other external client speaking the agent-server discovery
+            // protocol) can find in-process agents at parity with what
+            // they get when connecting to a real agent-server. Bind is
+            // exact on AGENT_SERVER_DEFAULT_PORT (8999): an EADDRINUSE
+            // here usually means a real agent-server is already running,
+            // and silently picking a random port would only confuse the
+            // user (their default-configured extension would still fail).
+            try {
+                standaloneDiscovery = await startStandaloneDiscoveryServer(
+                    AGENT_SERVER_DEFAULT_PORT,
+                    portRegistrar,
+                );
+            } catch (e) {
+                debugShellError(
+                    "Failed to start standalone discovery server on port %d: %s. External clients (e.g. Chrome extension) will not be able to discover in-process agent ports.",
+                    AGENT_SERVER_DEFAULT_PORT,
+                    (e as Error).message,
+                );
+            }
+
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
@@ -469,6 +517,7 @@ async function initializeDispatcher(
                 agentInitOptions: {
                     browser: browserControl.control,
                 },
+                portRegistrar,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 persistSession: true,
                 persistDir: instanceDir,
@@ -548,6 +597,10 @@ async function initializeDispatcher(
             if (connection !== undefined) {
                 await connection.close();
             }
+            if (standaloneDiscovery !== undefined) {
+                standaloneDiscovery.close();
+                standaloneDiscovery = undefined;
+            }
             clientIOChannel.notifyDisconnected();
             ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);
             browserControl.close();
@@ -611,9 +664,16 @@ async function initializeDispatcher(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         };
     } catch (e: any) {
+        // Tear down the discovery WS if it was already bound before the
+        // failure — otherwise port AGENT_SERVER_DEFAULT_PORT stays held
+        // by this process and the next shell launch hits EADDRINUSE.
+        if (standaloneDiscovery !== undefined) {
+            standaloneDiscovery.close();
+        }
         if (isTest) {
             // In test mode, avoid blocking dialogs so the process can exit cleanly
             console.error("Exception initializing dispatcher:", e.stack);
@@ -748,6 +808,7 @@ export function initializeInstance(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         } = result;
 
@@ -767,8 +828,12 @@ export function initializeInstance(
                 clientIO,
                 initialConversationId,
                 initialConversationName,
-                (conversationId, name) => {
-                    shellWindow.sendConversationChanged(conversationId, name);
+                (conversationId, name, queueSnapshot) => {
+                    shellWindow.sendConversationChanged(
+                        conversationId,
+                        name,
+                        queueSnapshot,
+                    );
                 },
                 rebindDispatcher,
                 () => shellWindow.sendMarkHistory(),
@@ -794,7 +859,10 @@ export function initializeInstance(
             });
 
             // Notify the renderer process that the dispatcher is initialized
-            chatView.webContents.send("dispatcher-initialized");
+            chatView.webContents.send(
+                "dispatcher-initialized",
+                initialQueueSnapshot,
+            );
 
             // Give focus to the chat view once initialization is done.
             chatView.webContents.focus();
@@ -846,7 +914,8 @@ export function initializeInstance(
         });
 
         // Notify the renderer process that the dispatcher is initialized
-        chatView.webContents.send("dispatcher-initialized");
+        // (standalone path: no queue snapshot).
+        chatView.webContents.send("dispatcher-initialized", undefined);
 
         // Give focus to the chat view once initialization is done.
         chatView.webContents.focus();

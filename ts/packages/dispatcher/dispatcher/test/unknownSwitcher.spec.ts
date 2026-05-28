@@ -114,14 +114,15 @@ describe("selectFromPartitions", () => {
 
     test("all partitions run in parallel", async () => {
         const startTimes: number[] = [];
+        const delayMs = 100;
         const makeTimedTranslator = (
             result: Result<AssistantSelection>,
-            delayMs: number,
+            delay: number,
         ) => ({
             translate: (_request: string) => {
                 startTimes.push(Date.now());
                 return new Promise<Result<AssistantSelection>>((resolve) =>
-                    setTimeout(() => resolve(result), delayMs),
+                    setTimeout(() => resolve(result), delay),
                 );
             },
         });
@@ -129,15 +130,15 @@ describe("selectFromPartitions", () => {
         const partitions = [
             {
                 names: ["a"],
-                translator: makeTimedTranslator(unknownResult, 20),
+                translator: makeTimedTranslator(unknownResult, delayMs),
             },
             {
                 names: ["b"],
-                translator: makeTimedTranslator(unknownResult, 20),
+                translator: makeTimedTranslator(unknownResult, delayMs),
             },
             {
                 names: ["c"],
-                translator: makeTimedTranslator(unknownResult, 20),
+                translator: makeTimedTranslator(unknownResult, delayMs),
             },
         ];
 
@@ -150,8 +151,11 @@ describe("selectFromPartitions", () => {
         const spread = Math.max(...startTimes) - Math.min(...startTimes);
         expect(spread).toBeLessThan(10);
 
-        // Parallel: total time should be close to one delay (not 3×)
-        expect(elapsed).toBeLessThan(120);
+        // Parallel: total time should be well under sequential (3 × delayMs).
+        // The 2.5× threshold gives ~150ms of headroom for CI timer jitter
+        // while still catching any accidental sequential execution (which
+        // would take ~300ms and clearly exceed the limit).
+        expect(elapsed).toBeLessThan(delayMs * 2.5);
     });
 
     test("error from a partition is propagated in order", async () => {

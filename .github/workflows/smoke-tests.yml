@@ -159,5 +159,6 @@ jobs:
       - name: Clean up Keys
         run: |
           node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
+          node -e "try{require('fs').unlinkSync('./config.local.yaml');}catch(e){}"
         working-directory: ts
         if: always()

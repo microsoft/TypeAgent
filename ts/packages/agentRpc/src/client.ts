@@ -381,6 +381,18 @@ export async function createAgentRpcClient(
             const context = contextMap.get(param.contextId);
             return context.reloadAgentSchema();
         },
+        notifyReadinessChanged: async (param: { contextId: number }) => {
+            const context = contextMap.get(param.contextId);
+            return context.notifyReadinessChanged();
+        },
+        notifyClientCountChanged: async (param: {
+            contextId: number;
+            role: string;
+            count: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.notifyClientCountChanged(param.role, param.count);
+        },
         storageRead: async (param: {
             contextId: number;
             session: boolean;

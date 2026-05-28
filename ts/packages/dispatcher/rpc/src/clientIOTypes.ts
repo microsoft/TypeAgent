@@ -5,9 +5,14 @@ import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type {
     IAgentMessage,
     NotifyOptions,
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
     RequestId,
     TemplateEditConfig,
     PendingInteractionRequest,
+    UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
@@ -78,4 +83,16 @@ export type ClientIOCallFunctions = {
     interactionCancelled(interactionId: string): void;
 
     takeAction(requestId: RequestId, action: string, data: unknown): void;
+
+    onUserFeedback(entry: UserFeedbackEntry): void;
+    onUserHide(entry: UserMessageHiddenEntry): void;
+
+    requestQueued(entry: QueuedRequest, version: number): void;
+    requestStarted(entry: QueuedRequest, version: number): void;
+    requestCancelled(
+        requestId: string,
+        reason: QueueCancelReason,
+        version: number,
+    ): void;
+    queueStateChanged(snapshot: QueueSnapshot): void;
 };

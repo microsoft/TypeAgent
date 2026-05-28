@@ -21,6 +21,12 @@ import {
 import type {
     DisplayLogEntry,
     PendingInteractionResponse,
+    QueuedRequest,
+    CancelResult,
+} from "@typeagent/dispatcher-types";
+import {
+    QueueFullError,
+    ServerStoppingError,
 } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
@@ -215,27 +221,199 @@ async function getAgentSchemas(
     return result;
 }
 
+/**
+ * Resolve the surrounding context for a feedback report by replaying
+ * the displayLog. Returns the user prompt, agent response messages,
+ * and any action JSON that was recorded for the rated request — the
+ * same data the user saw on screen at the time. Used to attach
+ * actionable context to telemetry when the user opts in.
+ */
+function gatherFeedbackContext(
+    context: CommandHandlerContext,
+    requestId: RequestId,
+):
+    | {
+          prompt?: string;
+          responses: unknown[];
+          actions: unknown[];
+      }
+    | undefined {
+    const match = requestId.requestId;
+    if (!match) return undefined;
+    let prompt: string | undefined;
+    const responses: unknown[] = [];
+    const actions: unknown[] = [];
+    for (const e of context.displayLog.getEntries()) {
+        switch (e.type) {
+            case "user-request":
+                if (e.requestId.requestId === match) {
+                    prompt = e.command;
+                }
+                break;
+            case "set-display":
+            case "append-display":
+                if (e.message.requestId.requestId === match) {
+                    responses.push(e.message.message);
+                }
+                break;
+            case "set-display-info":
+                if (e.requestId.requestId === match && e.action !== undefined) {
+                    actions.push(e.action);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    if (
+        prompt === undefined &&
+        responses.length === 0 &&
+        actions.length === 0
+    ) {
+        return undefined;
+    }
+    const result: ReturnType<typeof gatherFeedbackContext> = {
+        responses,
+        actions,
+    };
+    if (prompt !== undefined) {
+        result!.prompt = prompt;
+    }
+    return result;
+}
+
 export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
     closeFn?: () => Promise<void>,
 ): Dispatcher {
+    const submitInput = (
+        command: string,
+        clientRequestId: unknown,
+        attachments: string[] | undefined,
+        options: any,
+        requestId?: string,
+    ) => {
+        const input: any = {
+            text: command,
+            originatorConnectionId: connectionId ?? "",
+        };
+        if (clientRequestId !== undefined)
+            input.clientRequestId = clientRequestId;
+        if (attachments != null) input.attachments = attachments;
+        if (options != null) input.options = options;
+        if (requestId !== undefined) input.requestId = requestId;
+        return input;
+    };
+
+    const wireCopy = (entry: any): QueuedRequest => {
+        const out: QueuedRequest = {
+            requestId: entry.requestId,
+            originatorConnectionId: entry.originatorConnectionId,
+            text: entry.text,
+            submittedAt: entry.submittedAt,
+            state: entry.state,
+        };
+        if (entry.clientRequestId !== undefined)
+            out.clientRequestId = entry.clientRequestId;
+        out.attachmentCount = entry.attachmentCount ?? 0;
+        if (entry.options !== undefined) out.options = entry.options;
+        if (entry.startedAt !== undefined) out.startedAt = entry.startedAt;
+        if (entry.finishedAt !== undefined) out.finishedAt = entry.finishedAt;
+        if (entry.error !== undefined) out.error = entry.error;
+        return out;
+    };
+
     const dispatcher: Dispatcher = {
         get connectionId() {
             return connectionId;
         },
-        processCommand(command, clientRequestId, attachments, options) {
-            return processCommand(
-                command,
-                context,
-                {
-                    connectionId,
-                    requestId: randomUUID(),
+        processCommand(
+            command,
+            clientRequestId,
+            attachments,
+            options,
+            requestId,
+        ) {
+            const entry = context.requestQueue.submit(
+                submitInput(
+                    command,
                     clientRequestId,
-                },
-                attachments,
-                options,
+                    attachments,
+                    options,
+                    requestId,
+                ),
             );
+            return entry.completion;
+        },
+        async submitCommand(command, attachments, options, clientRequestId) {
+            let entry;
+            try {
+                entry = context.requestQueue.submit(
+                    submitInput(command, clientRequestId, attachments, options),
+                );
+            } catch (e) {
+                if (e instanceof QueueFullError) {
+                    return {
+                        ok: false,
+                        error: "queue_full",
+                        maxDepth: e.maxDepth,
+                    };
+                }
+                if (e instanceof ServerStoppingError) {
+                    return { ok: false, error: "server_stopping" };
+                }
+                throw e;
+            }
+            void entry.completion.catch(() => {
+                // Ack-only callers don't await; swallow rejections so the
+                // drain loop's rejection (or shutdown abandon) doesn't surface
+                // as unhandledRejection. Other awaiters keep their own catch.
+            });
+            return { ok: true, entry: wireCopy(entry) };
+        },
+        async getQueueSnapshot() {
+            return context.requestQueue.getSnapshot();
+        },
+        async interrupt(command, attachments, options, clientRequestId) {
+            let entry;
+            try {
+                entry = context.requestQueue.interrupt(
+                    submitInput(command, clientRequestId, attachments, options),
+                );
+            } catch (e) {
+                if (e instanceof QueueFullError) {
+                    return {
+                        ok: false,
+                        error: "queue_full",
+                        maxDepth: e.maxDepth,
+                    };
+                }
+                if (e instanceof ServerStoppingError) {
+                    return { ok: false, error: "server_stopping" };
+                }
+                throw e;
+            }
+            void entry.completion.catch(() => {
+                // ack-only; see submitCommand
+            });
+            // Cancel any previously-running entry, using the snapshot taken
+            // *after* the unshift so we don't cancel the interrupting entry.
+            const snap = context.requestQueue.getSnapshot();
+            if (
+                snap.running !== null &&
+                snap.running.requestId !== entry.requestId
+            ) {
+                context.requestQueue.cancelRunning(
+                    snap.running.requestId,
+                    "user",
+                );
+                const controller = context.activeRequests.get(
+                    snap.running.requestId,
+                );
+                controller?.abort();
+            }
+            return { ok: true, entry: wireCopy(entry) };
         },
         getCommandCompletion(prefix, direction) {
             return getCommandCompletion(prefix, direction, context);
@@ -293,17 +471,150 @@ export function createDispatcherFromContext(
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
         },
-        cancelCommand(requestId: string) {
-            const controller = context.activeRequests.get(requestId);
-            if (controller) {
-                controller.abort();
+        async cancelCommand(requestId: string): Promise<CancelResult> {
+            const kind = context.requestQueue.classifyCancel(requestId, "user");
+            if (kind === "queued") {
+                return { kind: "cancelled_queued", requestId };
             }
+            if (kind === "running") {
+                context.requestQueue.cancelRunning(requestId, "user");
+                const controller = context.activeRequests.get(requestId);
+                controller?.abort();
+                return { kind: "cancelled_running", requestId };
+            }
+            return { kind: "not_found", requestId };
         },
         cancelCommandByClientId(clientRequestId: unknown) {
             const controller =
                 context.activeRequestsByClientId.get(clientRequestId);
             if (controller) {
                 controller.abort();
+                return;
+            }
+            // Entry may still be sitting in the queue (no AbortController yet).
+            // Walk the snapshot to find a matching clientRequestId and cancel
+            // it via the queue. Check the running head too — it's normally
+            // already in activeRequestsByClientId, but cover the race anyway.
+            const snap = context.requestQueue.getSnapshot();
+            const running = snap.running;
+            if (running && running.clientRequestId === clientRequestId) {
+                context.requestQueue.cancelRunning(running.requestId, "user");
+                return;
+            }
+            for (const entry of snap.queued) {
+                if (entry.clientRequestId === clientRequestId) {
+                    context.requestQueue.cancelQueued(entry.requestId, "user");
+                    return;
+                }
+            }
+        },
+        async recordUserHide(
+            requestId: RequestId,
+            hidden: boolean,
+            target?: "user" | "agent",
+            permanent?: boolean,
+        ): Promise<void> {
+            const entry = context.displayLog.logUserHide(
+                requestId,
+                hidden,
+                target,
+                permanent,
+            );
+            context.displayLog.saveQueued();
+            try {
+                context.clientIO.onUserHide?.(entry);
+            } catch {
+                // best-effort
+            }
+        },
+        async restoreAllHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    false,
+                    h.target,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
+        async flushHidden(): Promise<number> {
+            const hides = context.displayLog.getCurrentHides();
+            let count = 0;
+            for (const h of hides) {
+                if (h.permanent === true) continue;
+                if (h.hidden !== true) continue;
+                const entry = context.displayLog.logUserHide(
+                    h.requestId,
+                    true,
+                    h.target,
+                    true,
+                );
+                try {
+                    context.clientIO.onUserHide?.(entry);
+                } catch {
+                    // best-effort
+                }
+                count++;
+            }
+            context.displayLog.saveQueued();
+            return count;
+        },
+        async recordUserFeedback(
+            requestId: RequestId,
+            rating,
+            category,
+            comment,
+            includeContext,
+        ): Promise<void> {
+            const entry = context.displayLog.logUserFeedback(
+                requestId,
+                rating,
+                category,
+                comment,
+            );
+            context.displayLog.saveQueued();
+
+            // Telemetry. The includeContext flag is the user's opt-in to
+            // ship the surrounding prompt/response/action JSON with the
+            // event; resolve those from the displayLog (so we capture
+            // the state as the user saw it, not the live state).
+            try {
+                const payload: Record<string, unknown> = {
+                    requestId: requestId.requestId,
+                    rating,
+                    category,
+                    comment,
+                    includeContext: includeContext === true,
+                };
+                if (includeContext === true) {
+                    const ctx = gatherFeedbackContext(context, requestId);
+                    if (ctx) {
+                        payload.context = ctx;
+                    }
+                }
+                context.logger?.logEvent("userFeedback", payload);
+            } catch {
+                // best-effort
+            }
+
+            // Fan out to all connected clients (including the originator)
+            // so multi-window setups stay in sync. Optional on ClientIO —
+            // CLI/test sinks may not implement it.
+            try {
+                context.clientIO.onUserFeedback?.(entry);
+            } catch {
+                // best-effort
             }
         },
         async respondToChoice(choiceId: string, response: boolean | number[]) {

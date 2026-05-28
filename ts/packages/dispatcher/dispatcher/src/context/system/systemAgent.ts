@@ -36,10 +36,13 @@ import { UserSettingsAction } from "./schema/settingsActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
+import { getFeedbackCommandHandlers } from "./handlers/feedbackCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
+import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
+import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -58,6 +61,7 @@ import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
 import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
+import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -65,10 +69,13 @@ export const systemHandlers: CommandHandlerTable = {
         action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
+        collision: getCollisionCommandHandlers(),
+        grammar: getGrammarCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
+        feedback: getFeedbackCommandHandlers(),
         display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
         help: new HelpCommandHandler(),
@@ -104,6 +111,7 @@ export const systemHandlers: CommandHandlerTable = {
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),
+        ports: new PortsCommandHandler(),
     },
 };
 

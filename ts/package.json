@@ -15,6 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
+    "build:ext:vscode": "pnpm -C packages/coda run package && pnpm -C packages/vscode-shell run package",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
     "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
@@ -25,10 +26,15 @@
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
+    "docs:generate": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write",
+    "docs:generate:dry": "node tools/docsAutogen/bin/docs-autogen.cjs --render --dry-run",
+    "docs:generate:llm": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write --llm",
+    "docs:verify-links": "node tools/docsAutogen/bin/docs-autogen.cjs --verify-links --all",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
     "postinstall": "pnpm run postinstall:better-sqlite3-node-copy && pnpm run postinstall:better-sqlite3-node-restore",
+    "install:ext:vscode": "pnpm -C packages/coda run deploy:local && pnpm -C packages/vscode-shell run deploy:local",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -54,16 +60,18 @@
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
-    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=1 run test:local"
+    "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=3 run test:local",
+    "test:ui": "pnpm -r --no-bail --no-sort --stream --if-present run test:ui"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^22.0.0",
     "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
-    "shx": "^0.4.0"
+    "shx": "^0.4.0",
+    "tsx": "^4.21.0"
   },
-  "packageManager": "pnpm@10.33.3+sha512.a19744364a7e248b92657a4ca5973f9354d21caf982579674b1c539f32c7420c47138ad8b1254df07aba9bc782d9b3029e3db34d5dbff974326eb74dac8ff489",
+  "packageManager": "pnpm@10.33.4+sha512.1c67b3b359b2d408119ba1ed289f34b8fc3c6873412bec6fd264fbdc82489e510fcbecb9ce9d22dae7f3b76269d8441046014bdca53b9979cd7a561ad631b800",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"
@@ -92,10 +100,9 @@
       "exifreader",
       "keytar",
       "koffi",
-      "node-pty",
-      "protobufjs",
       "puppeteer",
-      "sharp"
+      "sharp",
+      "usocket"
     ],
     "allowedDeprecatedVersions": {
       "@cliqz/adblocker": "*",

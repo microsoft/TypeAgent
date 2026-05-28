@@ -7,22 +7,16 @@
  *
  * Usage:
  *   npx tsx test/run-content-discovery.mts [--verbose]
- *
- * Requires .env with Azure OpenAI API keys in the ts/ root.
  */
 
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env
-const envPath = path.resolve(__dirname, "..", "..", "..", "..", ".env");
-if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
-}
+loadConfigSync();
 
 import { openai as ai } from "aiclient";
 import { createJsonTranslator } from "typechat";

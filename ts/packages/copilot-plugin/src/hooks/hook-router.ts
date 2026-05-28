@@ -21,6 +21,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { handleDirect } from "./hook-direct.js";
 import { handleMcpRedirect } from "./hook-mcp-redirect.js";
+import { makeTurnId, writeDemoState } from "./demo-state.js";
 import type { HookInput, HookOutput } from "./types.js";
 
 type Mode = "direct" | "mcp";
@@ -221,6 +222,7 @@ async function main(): Promise<void> {
     const slashResult = await handleSlashCommand(input.prompt);
     if (slashResult) {
         console.log(JSON.stringify(slashResult));
+        emitDemoStateForOutput(input, slashResult, "direct");
         return;
     }
 
@@ -235,6 +237,30 @@ async function main(): Promise<void> {
     }
 
     console.log(JSON.stringify(output));
+    emitDemoStateForOutput(input, output, mode);
+}
+
+/**
+ * If the router fully handled the request (returned handled: true), write
+ * the demo state file with the response text. In MCP-redirect mode the LLM
+ * still runs after we return — the actual end-of-turn is signaled by
+ * hook-agent-stop, so we don't write state here for that case.
+ */
+function emitDemoStateForOutput(
+    input: HookInput,
+    output: HookOutput,
+    mode: Mode,
+): void {
+    if (!output.handled) return;
+    writeDemoState({
+        event: "turnComplete",
+        turnId: makeTurnId(input.sessionId),
+        ts: Date.now(),
+        mode: mode === "mcp" ? "mcp" : "direct",
+        handledBy: output.handledBy === "typeagent" ? "typeagent" : "copilot",
+        lastResponse: output.responseContent ?? "",
+        sessionId: input.sessionId,
+    });
 }
 
 main().catch((error) => {

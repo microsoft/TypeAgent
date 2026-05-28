@@ -49,30 +49,35 @@ If you want to use a local whisper service for voice input in the [TypeAgent She
 
 ### Service Keys
 
-Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory). For more information standing up your own Azure OpenAI service endpoint, [continue here](https://azure.microsoft.com/en-us/products/ai-services/openai-service?msockid=03598722967c6ae20c3f93af97c66bd7).
+Multiple services are required to run the scenarios. Configuration is stored in a YAML file at this directory (TypeAgent repo's `./ts` directory). Copy `config.sample.yaml` to `config.local.yaml` and fill in the necessary keys. Legacy `.env` files are still supported but deprecated and will stop working after September 2026.
 
-Here is an example of the minimal `.env` file targeting Azure:
+Here is an example of the minimal `config.local.yaml` targeting Azure:
 
+```yaml
+azureOpenAI:
+  defaultAuth: <service key or "identity" for keyless>
+  deployments:
+    default:
+      endpoint: <endpoint URL for LLM model, e.g. GPT-4o>
+  responseFormat: true
+  endpoints:
+    embedding:
+      endpoint: <endpoint URL for text-embedding-ada-002 or equivalent>
 ```
-AZURE_OPENAI_API_KEY=<service key>
-AZURE_OPENAI_ENDPOINT=<endpoint URL for LLM model, e.g. GPT-4o>
-AZURE_OPENAI_RESPONSE_FORMAT=1
 
-AZURE_OPENAI_API_KEY_EMBEDDING=<service key>
-AZURE_OPENAI_ENDPOINT_EMBEDDING=<endpoint URL for text-embedding-ada-002 or equivalent
-```
+Here is an example of the minimal `config.local.yaml` targeting OpenAI:
 
-Here is an example of the minimal `.env` file targeting OpenAI:
-
-```
-OPENAI_ORGANIZATION=<organization id>
-OPENAI_API_KEY=<service key>
-OPENAI_ENDPOINT=https://api.openai.com/v1/chat/completions
-OPENAI_MODEL=gpt-4o
-OPENAI_RESPONSE_FORMAT=1
-
-OPENAI_ENDPOINT_EMBEDDING=https://api.openai.com/v1/embeddings
-OPENAI_MODEL_EMBEDDING=text-embedding-ada-002
+```yaml
+openAI:
+  default:
+    organization: <organization id>
+    apiKey: <service key>
+    endpoint: https://api.openai.com/v1/chat/completions
+    model: gpt-4o
+    responseFormat: true
+  embedding:
+    endpoint: https://api.openai.com/v1/embeddings
+    model: text-embedding-ada-002
 ```
 
 The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs. See [Keyless API Access](#keyless-api-access) below.
@@ -117,12 +122,12 @@ To setup:
 
 To update keys on the key vault:
 
-- Add or change the values in the `.env` file
+- Add or change the values in `config.local.yaml` (or `.env` for legacy setups)
 - Add new keys name in `tools/scripts/getKeys.config.json`
 - Run `npm run getKeys -- push [--vault <name>]`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 - Check in the changes to `tools/scripts/getKeys.config.json`
 
-To get the required config and keys saved to the `.env` file under the `ts` folder:
+To get the required config and keys saved to `config.local.yaml` under the `ts` folder:
 
 - Run `npm run getKeys [--vault <name>]` at the root to pull secret from the key vault with `<name>`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 
@@ -134,7 +139,7 @@ For additional security, it is possible to run a subset of the TypeAgent endpoin
 
 In order to use keyless access you must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
 
-After configuring your service, modify the .env file and specify `identity` as the key value instead of using keys in the examples provided. To authenticate at runtime, make sure you have installed [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) and logged in with the account that has access to the models using `az login`. Make sure choose the subscription where your services are as the default.
+After configuring your service, modify `config.local.yaml` and specify `identity` as the `defaultAuth` value instead of using keys in the examples provided. To authenticate at runtime, make sure you have installed [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) and logged in with the account that has access to the models using `az login`. Make sure choose the subscription where your services are as the default.
 
 Alternatively, TypeAgent make use of the Azure SDK's [DefaultAzureCredential](https://learn.microsoft.com/en-us/javascript/api/%40azure/identity/defaultazurecredential?view=azure-node-latest) which provide other methods to authenticate at runtime. Follow those instructions to provide keyless access to the services.
 
@@ -215,7 +220,7 @@ All commands run from the `ts/` directory using `pnpm`.
 
 ```bash
 pnpm run test:local   # Unit tests (*.spec.ts) — no API keys required
-pnpm run test:live    # Integration tests (*.test.ts) — requires API keys in ts/.env
+pnpm run test:live    # Integration tests (*.test.ts) — requires API keys in ts/config.local.yaml
 pnpm run test         # Both local + live + shell tests
 ```
 
@@ -313,7 +318,7 @@ Search the code base with '"typeagent:' will give all the traces available.
 
 ### Logging
 
-TypeAgent does not collect telemetry by default. Developer can enable logging to a mongodb for internal debugging purpose by providing a mongodb connection string with the `MONGODB_CONNECTION_STRING` variable in the `.env` file.
+TypeAgent does not collect telemetry by default. Developer can enable logging to a mongodb for internal debugging purpose by providing a mongodb connection string with the `MONGODB_CONNECTION_STRING` variable in `config.local.yaml` (under `storage.mongo.connectionString`) or the legacy `.env` file.
 
 ### Experiment with Local LLM via Ollama
 

@@ -4,7 +4,7 @@ Status: **Adopted (v1).** Branch selectors must resolve to strings.
 `selectorSchema` must be string-typed (plain `{ "type": "string" }`
 or `{ "enum": ["a", "b", ...] }` with string members). Non-string
 values require an explicit conversion task. Folded into
-[../ir-v1.md](../ir-v1.md) §3.6 and §5.3. This document is the
+[../ir-v0.1.md](../ir-v0.1.md) §3.6 and §5.3. This document is the
 rationale.
 
 ## Purpose
@@ -20,7 +20,7 @@ A future reviewer should read this document when:
 
 Cross-references:
 
-- [../ir-v1.md](../ir-v1.md) §3.6 (branch node), §8.3 (branch model
+- [../ir-v0.1.md](../ir-v0.1.md) §3.6 (branch node), §8.3 (branch model
   alternatives).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P3 (structural correspondence), P5 (predictability).
@@ -126,7 +126,7 @@ Rationale:
 
 ## 5. Spec changes
 
-Two edits to ir-v1.md:
+Two edits to ir-v0.1.md:
 
 1. **§3.6:** Add after the `selectorSchema` description: "The
    selector must resolve to a string. `selectorSchema` must be
@@ -166,3 +166,16 @@ only computation surface" (P1 boundary). If that commitment is relaxed
 for expressions (0006 flips), string-only discriminants (0008) lose
 their rationale and should flip together. Revisit trigger row 11
 covers both.
+
+---
+
+## Related: decision 0010 (branch as `WorkflowScope`)
+
+[Decision 0010](0010-finish-workflow-scope-unification.md) reshapes
+branch arms into [`WorkflowScope`](../workflow-scope-proposal.md)s but
+leaves the discriminant-key contract from this decision unchanged:
+`selectorSchema` is still string-typed or enum-of-strings, `cases`
+keys are still string-encoded discriminant values, and non-string
+discriminants still require an explicit `bool.toLabel` (or similar)
+conversion. The arm-as-scope change is about what an arm targets, not
+about how the discriminant is encoded.

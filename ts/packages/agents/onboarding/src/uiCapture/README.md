@@ -285,7 +285,7 @@ The shipping smoke tests under `test/` exercise each phase:
 
 Run any of them with `node packages/agents/onboarding/dist/uiCapture/test/<name>.js` after `pnpm --filter onboarding-agent run build`.
 
-For a real crawl, env vars `AZURE_OPENAI_API_KEY_GPT_5` + `AZURE_OPENAI_ENDPOINT_GPT_5` must be set in `ts/.env`. Note that aiclient's env reading short-circuits on its empty-string default and doesn't fall back from `_GPT_5`-suffixed vars to base vars, so for non-default settings (timeouts etc.) the suffixed variant must also be set explicitly. The smoke tests handle this in their preamble.
+For a real crawl, env vars `AZURE_OPENAI_API_KEY_GPT_5` + `AZURE_OPENAI_ENDPOINT_GPT_5` must be set in `ts/config.local.yaml` (under `azureOpenAI.deployments` / `azureOpenAI.endpoints`) or the legacy `ts/.env`. Note that aiclient's env reading short-circuits on its empty-string default and doesn't fall back from `_GPT_5`-suffixed vars to base vars, so for non-default settings (timeouts etc.) the suffixed variant must also be set explicitly. The smoke tests handle this in their preamble.
 
 ## Quality observations from the Clock crawl
 

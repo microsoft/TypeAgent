@@ -19,17 +19,34 @@ import {
     NotifyExplainedData,
     PendingInteractionRequest,
     PendingInteractionResponse,
+    QueueCancelReason,
+    QueuedRequest,
+    QueueSnapshot,
     RequestId,
     TemplateEditConfig,
+    UserFeedbackEntry,
+    UserMessageHiddenEntry,
 } from "agent-dispatcher";
+// QueueStateMirror is a value import; route through the pure types pkg so vite
+// doesn't bundle agent-dispatcher's server-only deps (telemetry, node:fs, ...).
+import { QueueStateMirror } from "@typeagent/dispatcher-types";
 
 import { PartialCompletion } from "../partial";
 import { ChoicePanel, InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
+import {
+    FeedbackController,
+    FeedbackUIVariant,
+    FeedbackWidget,
+} from "../feedbackWidget";
+import { iconTrash } from "../icon";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
+
+/** Window for the double-Escape "clear entire queue" gesture (mirrors the CLI). */
+const DOUBLE_ESCAPE_WINDOW_MS = 1000;
 
 // The canonical MessageGroup key is requestId.requestId — a UUID assigned by
 // the dispatcher (via randomUUID()). This value is guaranteed to be unique
@@ -70,6 +87,13 @@ export class ChatView {
 
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
+
+    /** Mirror of the server's per-conversation queue. UI side effects live in handlers below. */
+    private queueMirror = new QueueStateMirror();
+    /** Queue status chips deferred until their MessageGroup is created. */
+    private pendingQueueStatus = new Map<string, "queued" | "running">();
+    /** Timestamp of the last Escape press; powers the double-Escape gesture. */
+    private lastEscapeTime = 0;
 
     public userGivenName: string = "";
     /**
@@ -168,7 +192,178 @@ export class ChatView {
         return this._dispatcher;
     }
 
-    public initializeDispatcher(dispatcher: Dispatcher) {
+    public get dispatcher(): Dispatcher | undefined {
+        return this._dispatcher;
+    }
+
+    public get feedbackUIVariant(): FeedbackUIVariant {
+        return "footer-always";
+    }
+
+    /**
+     * Restore feedback widgets on agent bubbles that were loaded from the
+     * saved chat-history HTML. Those messages don't have backing JS state
+     * — only DOM — so the buttons saved in the HTML have no click
+     * handlers. For each container that carries a `data-feedback-request-id`
+     * (stamped on by MessageGroup when the widget was first attached),
+     * strip the stale action-row DOM and rebuild a fresh widget wired to
+     * a dispatcher-backed controller. Containers without that attribute
+     * (predating this feature) are left alone.
+     */
+    public rewireHistoricalFeedback() {
+        // Only target .history-class containers — that class is added to
+        // every node restored from saved chat-history HTML by
+        // initializeChatHistory in main.ts. Live JS-managed bubbles
+        // don't have it, so they're left alone.
+
+        // Agent bubbles get the full feedback widget rebuilt AND the
+        // trash button re-wired.
+        const agentContainers = this.messageDiv.querySelectorAll<HTMLElement>(
+            ".chat-message-container-agent.history",
+        );
+        for (const container of Array.from(agentContainers)) {
+            const reqId = container.dataset.feedbackRequestId;
+            const clientReqId = container.dataset.feedbackClientRequestId;
+            if (!reqId && !clientReqId) continue;
+
+            // Remove the saved (handler-less) action row / corner — the
+            // new widget will build fresh DOM with click handlers wired.
+            container
+                .querySelectorAll(
+                    ".chat-message-actions, .chat-message-actions-corner",
+                )
+                .forEach((el) => el.remove());
+
+            const requestId: RequestId = {
+                requestId: reqId ?? "",
+                clientRequestId: clientReqId,
+            };
+            const controller = this.buildHistoricalController(requestId);
+            const bodyDiv = container.querySelector<HTMLElement>(
+                ".chat-message-body, .chat-message-body-hide-metrics, .chat-message-agent",
+            );
+            const headerDiv = container.querySelector<HTMLElement>(
+                ".chat-timestamp-agent",
+            );
+            const messageDiv = container.querySelector<HTMLElement>(
+                ".chat-message-content",
+            );
+            if (!bodyDiv || !headerDiv || !messageDiv) continue;
+
+            new FeedbackWidget(
+                { container, bodyDiv, headerDiv, messageDiv },
+                controller,
+                "footer-always",
+            );
+            // Rebuild the trash button (saved HTML has it without
+            // any click handler attached).
+            this.wireHistoricalTrash(container, requestId, "agent");
+        }
+
+        // User bubbles only get the trash button — no feedback widget.
+        const userContainers = this.messageDiv.querySelectorAll<HTMLElement>(
+            ".chat-message-container-user.history",
+        );
+        for (const container of Array.from(userContainers)) {
+            const reqId = container.dataset.feedbackRequestId;
+            const clientReqId = container.dataset.feedbackClientRequestId;
+            if (!reqId && !clientReqId) continue;
+            const requestId: RequestId = {
+                requestId: reqId ?? "",
+                clientRequestId: clientReqId,
+            };
+            this.wireHistoricalTrash(container, requestId, "user");
+        }
+    }
+
+    /**
+     * Replace any (saved, handler-less) trash button inside the
+     * container with a fresh one that calls dispatcher.recordUserHide.
+     * Also applies the optimistic-hide / undo-on-error semantics used
+     * by live trash clicks.
+     */
+    private wireHistoricalTrash(
+        container: HTMLElement,
+        requestId: RequestId,
+        target: "user" | "agent",
+    ) {
+        container
+            .querySelectorAll(".chat-message-trash")
+            .forEach((el) => el.remove());
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-button chat-message-trash";
+        btn.title = "Move to trash";
+        btn.setAttribute("aria-label", "Move to trash");
+        btn.dataset.action = "trash";
+        btn.appendChild(iconTrash());
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            container.classList.add("chat-message-trashed");
+            const dispatcher = this._dispatcher;
+            if (!dispatcher) return;
+            try {
+                await dispatcher.recordUserHide(requestId, true, target);
+            } catch (e) {
+                container.classList.remove("chat-message-trashed");
+                console.error("recordUserHide failed", e);
+            }
+        });
+
+        // Anchor in the body element (.chat-message-agent or
+        // .chat-message-user) which matches how live bubbles are
+        // built. Without the body element we can't position the
+        // trash; skip.
+        const body = container.querySelector<HTMLElement>(
+            target === "agent" ? ".chat-message-agent" : ".chat-message-user",
+        );
+        if (body) {
+            body.appendChild(btn);
+        }
+    }
+
+    /**
+     * Build a minimal FeedbackController for a historical message —
+     * submits go straight through the dispatcher. We don't try to
+     * recover the saved rating state here; the widget starts unrated.
+     */
+    private buildHistoricalController(
+        requestId: RequestId,
+    ): FeedbackController {
+        return {
+            getCurrentFeedback: () => null,
+            submit: async (rating, category, comment, includeContext) => {
+                const dispatcher = this._dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserFeedback(
+                        requestId,
+                        rating,
+                        category,
+                        comment,
+                        includeContext,
+                    );
+                } catch (e) {
+                    console.error("recordUserFeedback failed", e);
+                }
+            },
+            setHidden: async (hidden: boolean, target?: "user" | "agent") => {
+                const dispatcher = this._dispatcher;
+                if (dispatcher === undefined) return;
+                try {
+                    await dispatcher.recordUserHide(requestId, hidden, target);
+                } catch (e) {
+                    console.error("recordUserHide failed", e);
+                }
+            },
+        };
+    }
+
+    public initializeDispatcher(
+        dispatcher: Dispatcher,
+        initialQueueSnapshot?: QueueSnapshot,
+    ) {
         if (this._dispatcher !== undefined) {
             throw new Error("Dispatcher already initialized");
         }
@@ -178,6 +373,16 @@ export class ChatView {
         }
 
         this._dispatcher = dispatcher;
+
+        // Bootstrap from the join snapshot when provided; otherwise fall back to RPC.
+        if (initialQueueSnapshot !== undefined) {
+            this.applyQueueSnapshot(initialQueueSnapshot);
+        } else if (typeof dispatcher.getQueueSnapshot === "function") {
+            dispatcher
+                .getQueueSnapshot()
+                .then((snap) => this.applyQueueSnapshot(snap))
+                .catch(() => {});
+        }
 
         this.chatInput.textarea.enable(true);
         this.chatInput.focus();
@@ -196,11 +401,23 @@ export class ChatView {
             this.showStopButton(false);
         };
 
-        // Escape key cancels during processing
+        // Escape cancels the running request; a second Escape within
+        // DOUBLE_ESCAPE_WINDOW_MS clears the entire queue (mirrors the CLI).
         document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && this.activeRequestId) {
+            if (e.key !== "Escape") return;
+            const now = Date.now();
+            const isDouble =
+                now - this.lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+            this.lastEscapeTime = now;
+            if (this.activeRequestId) {
                 e.preventDefault();
                 this.cancelCommand();
+            }
+            if (isDouble) {
+                // Reset so a third Escape doesn't immediately re-trigger.
+                this.lastEscapeTime = 0;
+                e.preventDefault();
+                void this.cancelAllQueuedAndRunning();
             }
         });
 
@@ -238,6 +455,25 @@ export class ChatView {
             this.activeRequestId = undefined;
             this.showStopButton(false);
         }
+    }
+
+    // Best-effort: per-id RPC errors are swallowed so one dead call doesn't
+    // strand the rest. Server `requestCancelled` broadcasts drive the UI.
+    private async cancelAllQueuedAndRunning(): Promise<void> {
+        const snap = this.queueMirror.snapshot;
+        const dispatcher = this._dispatcher;
+        if (!dispatcher || !snap) return;
+        const ids: string[] = [];
+        if (snap.running) ids.push(snap.running.requestId);
+        for (const e of snap.queued) ids.push(e.requestId);
+        if (ids.length === 0) return;
+        await Promise.all(
+            ids.map(async (id) => {
+                try {
+                    await Promise.resolve(dispatcher.cancelCommand(id));
+                } catch {}
+            }),
+        );
     }
 
     private showStopButton(processing: boolean) {
@@ -438,6 +674,11 @@ export class ChatView {
                 if (pending) {
                     this.pendingLocalGroups.delete(clientId);
                     this.idToMessageGroup.set(id, pending);
+                    // Stamp the canonical requestId on the group now that
+                    // it's known — drives the feedback widget.
+                    pending.setRequestId(requestId);
+                    // Apply any queue chip deferred while the MG was pending.
+                    this.applyPendingQueueStatus(id, pending);
                     return pending;
                 }
             }
@@ -457,6 +698,13 @@ export class ChatView {
                     this.agents,
                     this.hideMetrics,
                 );
+                // Stamp the requestId so the feedback widget attaches to
+                // these bubbles too — feedback for system messages is
+                // keyed by the synthetic id since there's no server UUID.
+                mg.setRequestId({
+                    requestId: id,
+                    clientRequestId: mgId,
+                });
                 this.clientMessageGroups.set(mgId, mg);
                 mg.hideUserMessage();
                 return mg;
@@ -492,6 +740,13 @@ export class ChatView {
                 this.agents,
                 this.hideMetrics,
             );
+            // Stamp the requestId so the feedback widget attaches —
+            // notifications use the clientRequestId as the key (no
+            // server-side UUID exists for these).
+            mg.setRequestId({
+                requestId: "",
+                clientRequestId: clientId,
+            });
             this.clientMessageGroups.set(clientId, mg);
             mg.hideUserMessage();
             return mg;
@@ -511,6 +766,7 @@ export class ChatView {
         this.idToMessageGroup.clear();
         this.pendingLocalGroups.clear();
         this.clientMessageGroups.clear();
+        this.pendingQueueStatus.clear();
         this.commandBackStackIndex = -1;
         this.commandBackStack = [];
     }
@@ -690,6 +946,10 @@ export class ChatView {
 
     addRemoteUserMessage(requestId: RequestId, command: string) {
         const id = requestId.requestId;
+        // LOAD-BEARING IDEMPOTENCE: callers in `getOrMaterializeRemoteMessageGroup`
+        // (queue events) and `main.ts/setUserRequest` (processing start) both fire
+        // for the same remote requestId; the `idToMessageGroup.has(id)` guard is
+        // what prevents duplicate bubbles. Do not remove without replacing.
         if (!id || this.idToMessageGroup.has(id)) {
             return;
         }
@@ -710,8 +970,11 @@ export class ChatView {
             this.agents,
             this.hideMetrics,
         );
+        mg.setRequestId(requestId);
 
         this.idToMessageGroup.set(id, mg);
+        // Apply any queue status deferred until the MG materialized.
+        this.applyPendingQueueStatus(id, mg);
         this.updateScroll();
     }
 
@@ -778,6 +1041,216 @@ export class ChatView {
 
     appendDiagnosticData(requestId: RequestId, data: any) {
         this.getMessageGroup(requestId)?.appendDiagnosticData(requestId, data);
+    }
+
+    /**
+     * Apply a user-feedback rating to the matching agent message bubble.
+     * Invoked both for live rating updates (via ClientIO.onUserFeedback
+     * broadcast) and replay during conversation rejoin.
+     */
+    applyFeedback(entry: UserFeedbackEntry) {
+        this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
+    }
+
+    // Server-side queue: drives per-bubble "queued"/"running" chips.
+
+    public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+        const prev = this.queueMirror.snapshot;
+        this.queueMirror.reset(snapshot);
+        this.reconcileChipsToSnapshot(prev, snapshot);
+    }
+
+    public onRequestQueued(entry: QueuedRequest, version: number): void {
+        if (!this.queueMirror.applyQueued(entry, version).admitted) return;
+        this.tryApplyQueueStatusToGroup(entry, "queued");
+    }
+
+    public onRequestStarted(entry: QueuedRequest, version: number): void {
+        const result = this.queueMirror.applyStarted(entry, version);
+        if (!result.admitted) return;
+        if (result.previousRunning) {
+            const prevId = result.previousRunning.requestId;
+            this.pendingQueueStatus.delete(prevId);
+            this.idToMessageGroup.get(prevId)?.setQueueStatus(null);
+        }
+        this.tryApplyQueueStatusToGroup(entry, "running");
+    }
+
+    public onRequestCancelled(
+        requestId: string,
+        _reason: QueueCancelReason,
+        version: number,
+    ): void {
+        if (!this.queueMirror.applyCancelled(requestId, version).admitted)
+            return;
+        this.pendingQueueStatus.delete(requestId);
+        const mg = this.idToMessageGroup.get(requestId);
+        if (mg) {
+            mg.setQueueStatus(null);
+            // Remote-origin bubbles have no commandResult promise, so this is
+            // the only signal that renders the "⚠ Cancelled" affordance.
+            // notifyCancelled is idempotent — local-origin bubbles unaffected.
+            mg.notifyCancelled();
+        }
+    }
+
+    public onQueueStateChanged(snapshot: QueueSnapshot): void {
+        const result = this.queueMirror.applyQueueStateChanged(snapshot);
+        if (!result.admitted) return;
+        this.reconcileChipsToSnapshot(result.previous, snapshot);
+    }
+
+    /** Stamp/clear chips to match an authoritative snapshot; sweep stale pending entries. */
+    private reconcileChipsToSnapshot(
+        prev: QueueSnapshot | undefined,
+        next: QueueSnapshot | undefined,
+    ): void {
+        const liveIds = new Set<string>();
+        if (next?.running) {
+            liveIds.add(next.running.requestId);
+            this.tryApplyQueueStatusToGroup(next.running, "running");
+        }
+        for (const entry of next?.queued ?? []) {
+            liveIds.add(entry.requestId);
+            this.tryApplyQueueStatusToGroup(entry, "queued");
+        }
+        // Clear chips on entries the new snapshot dropped.
+        const prevIds = new Set<string>();
+        if (prev?.running) prevIds.add(prev.running.requestId);
+        for (const e of prev?.queued ?? []) prevIds.add(e.requestId);
+        for (const id of prevIds) {
+            if (liveIds.has(id)) continue;
+            this.pendingQueueStatus.delete(id);
+            this.idToMessageGroup.get(id)?.setQueueStatus(null);
+        }
+        // Sweep pending statuses whose entry is no longer live.
+        for (const id of Array.from(this.pendingQueueStatus.keys())) {
+            if (!liveIds.has(id)) {
+                this.pendingQueueStatus.delete(id);
+            }
+        }
+    }
+
+    /**
+     * Apply a chip to the matching MessageGroup, or stash the status in
+     * `pendingQueueStatus` so it's applied when the MG materializes.
+     */
+    private tryApplyQueueStatusToGroup(
+        entry: QueuedRequest,
+        status: "queued" | "running" | null,
+    ): void {
+        const mg = this.getOrMaterializeRemoteMessageGroup(entry);
+        const onCancel =
+            status === "queued"
+                ? () => this.cancelQueuedById(entry.requestId)
+                : undefined;
+        if (mg) {
+            mg.setQueueStatus(status, onCancel);
+            this.pendingQueueStatus.delete(entry.requestId);
+            return;
+        }
+        if (status === null) {
+            this.pendingQueueStatus.delete(entry.requestId);
+        } else {
+            this.pendingQueueStatus.set(entry.requestId, status);
+        }
+    }
+
+    /**
+     * Resolve the MessageGroup for a queue entry, materializing a remote-origin
+     * user bubble eagerly from the entry text if needed. Remote entries' bubbles
+     * would otherwise only appear on `setUserRequest` (which doesn't fire until
+     * processing begins), so peer clients would never see queued/running chips.
+     */
+    private getOrMaterializeRemoteMessageGroup(
+        entry: QueuedRequest,
+    ): MessageGroup | undefined {
+        const existing = this.idToMessageGroup.get(entry.requestId);
+        if (existing) return existing;
+        const requestId: RequestId = {
+            requestId: entry.requestId,
+            clientRequestId: entry.clientRequestId,
+        };
+        if (entry.text && !this.isLocalRequest(requestId)) {
+            this.addRemoteUserMessage(requestId, entry.text);
+            const created = this.idToMessageGroup.get(entry.requestId);
+            if (created) return created;
+        }
+        // Falls through for local entries (lazy-promoted in getMessageGroup)
+        // and remote entries without text (rare, but possible during replay).
+        return this.getMessageGroup(requestId);
+    }
+
+    /** Apply any deferred queue status for `requestId` to the now-live MG. */
+    private applyPendingQueueStatus(requestId: string, mg: MessageGroup): void {
+        const status = this.pendingQueueStatus.get(requestId);
+        if (status !== undefined) {
+            const onCancel =
+                status === "queued"
+                    ? () => this.cancelQueuedById(requestId)
+                    : undefined;
+            mg.setQueueStatus(status, onCancel);
+            this.pendingQueueStatus.delete(requestId);
+        }
+    }
+
+    /**
+     * Cancel a single queued entry from the per-bubble X button. The
+     * authoritative UI update arrives via the server's `requestCancelled`
+     * broadcast; rejection here means the cancel never reached the server.
+     */
+    private cancelQueuedById(requestId: string): void {
+        const dispatcher = this._dispatcher;
+        if (!dispatcher) return;
+        try {
+            // cancelCommand returns Promise<CancelResult>; warn on rejection
+            // so a wedged dispatcher doesn't silently drop the user's click.
+            dispatcher.cancelCommand(requestId).catch((err) => {
+                console.warn(`cancelQueuedById(${requestId}) rejected:`, err);
+            });
+        } catch (err) {
+            // Sync throw — disconnected channel stub.
+            console.warn(`cancelQueuedById(${requestId}) threw:`, err);
+        }
+    }
+
+    /**
+     * Apply a hide / restore to the matching agent message bubble.
+     * Routes to the live MessageGroup if one exists; otherwise (e.g.
+     * the bubble was restored from saved chat-history HTML) toggles
+     * the CSS class directly on the matching container by data
+     * attribute.
+     */
+    applyHide(entry: UserMessageHiddenEntry) {
+        const mg = this.getMessageGroup(entry.requestId);
+        if (mg) {
+            mg.applyHide(entry);
+            return;
+        }
+        // Fallback: locate historical containers by data attribute. We
+        // walk both user and agent containers since hide is per-side.
+        const key =
+            entry.requestId.requestId ||
+            (entry.requestId.clientRequestId as string | undefined);
+        if (!key) return;
+        const selectors: string[] = [];
+        if (entry.target === undefined || entry.target === "user") {
+            selectors.push(".chat-message-container-user");
+        }
+        if (entry.target === undefined || entry.target === "agent") {
+            selectors.push(".chat-message-container-agent");
+        }
+        const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+            selectors.join(", "),
+        );
+        containers.forEach((c) => {
+            if (
+                c.dataset.feedbackRequestId === key ||
+                c.dataset.feedbackClientRequestId === key
+            ) {
+                c.classList.toggle("chat-message-trashed", entry.hidden);
+            }
+        });
     }
 
     private getNotificationMessageGroupId(
@@ -1379,9 +1852,12 @@ export class ChatView {
                         this.commandBackStack[this.commandBackStackIndex] !==
                             currentContent
                     ) {
+                        // Include previous-session entries (.history) — the
+                        // up-arrow should walk every user bubble currently
+                        // in the window, not just the ones from this run.
                         const messages: NodeListOf<Element> =
                             this.messageDiv.querySelectorAll(
-                                ".chat-message-container-user:not(.history):not(.chat-message-hidden) .chat-message-content",
+                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
                             );
                         this.commandBackStack = Array.from(messages).map(
                             (m: Element) =>

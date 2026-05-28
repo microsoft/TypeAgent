@@ -47,6 +47,14 @@ export function createClientIORpcServer(
         interactionCancelled: (...args) =>
             clientIO.interactionCancelled(...args),
         takeAction: (...args) => clientIO.takeAction(...args),
+        onUserFeedback: (...args) => clientIO.onUserFeedback?.(...args),
+        onUserHide: (...args) => clientIO.onUserHide?.(...args),
+        // Queue lifecycle events are OPTIONAL on the ClientIO contract;
+        // optional chaining tolerates clients that omit them.
+        requestQueued: (...args) => clientIO.requestQueued?.(...args),
+        requestStarted: (...args) => clientIO.requestStarted?.(...args),
+        requestCancelled: (...args) => clientIO.requestCancelled?.(...args),
+        queueStateChanged: (...args) => clientIO.queueStateChanged?.(...args),
     };
     createRpc(
         "clientio",

@@ -10,8 +10,17 @@ import {
     createExecutableAction,
     ExecutableAction,
     HistoryContext,
+    ParamObjectType,
     RequestAction,
 } from "agent-cache";
+import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
+import { AgentMatchCandidate } from "../context/dispatcher/schema/clarifyActionSchema.js";
+import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
+import {
+    CollisionStrategy,
+    emitCollisionEvent,
+} from "../context/collisionTelemetry.js";
+import { getAgentPriority } from "./matchCollision.js";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
@@ -23,6 +32,7 @@ import {
 } from "./multipleActionSchema.js";
 import {
     createTypeAgentTranslatorForSelectedActions,
+    getAppAgentName,
     isAdditionalActionLookupAction,
     loadAgentJsonTranslator,
     TranslatedAction,
@@ -46,6 +56,7 @@ import {
 } from "./pendingRequest.js";
 import registerDebug from "debug";
 import { ActionConfig } from "./actionConfig.js";
+import type { UserContext } from "./userContext.js";
 import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
@@ -109,14 +120,18 @@ export function getTranslatorForSchema(
     context: CommandHandlerContext,
     schemaName: string,
     activeSchemas: Set<string>,
+    provider: ActionConfigProvider = context.agents,
 ) {
     const switchEnabled = isSwitchEnabled(context.session.getConfig());
     const translatorName = switchEnabled ? schemaName : ""; // Use empty string to represent the one and only translator that combines all schemas.
     const activityContext = context.activityContext;
-    // Can't use cached translator if we have activity
-    const translator = activityContext
-        ? undefined
-        : context.translatorCache.get(schemaName);
+    // Can't use cached translator if we have activity or if a non-default
+    // provider is in use (caller supplied a sandbox provider whose schemas
+    // may diverge from the cached translator's).
+    const useCache = !activityContext && provider === context.agents;
+    const translator = useCache
+        ? context.translatorCache.get(schemaName)
+        : undefined;
     if (translator !== undefined) {
         debugTranslate(`Using cached translator for '${translatorName}'`);
         return translator;
@@ -124,7 +139,7 @@ export function getTranslatorForSchema(
     const sessionConfig = context.session.getConfig();
     const config = sessionConfig.translation;
     const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
-        context.agents,
+        provider,
         activeSchemas,
         switchEnabled,
         config.switch.inline,
@@ -150,7 +165,7 @@ export function getTranslatorForSchema(
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
-        context.agents,
+        provider,
         {
             activity: context.agents.isSchemaEnabled(DispatcherActivityName),
             multiple: config.multiple,
@@ -161,7 +176,7 @@ export function getTranslatorForSchema(
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
     );
-    if (!activityContext) {
+    if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);
         debugTranslate(`Cached translator for '${translatorName}'`);
     }
@@ -174,6 +189,7 @@ async function getTranslatorForSelectedActions(
     activeSchemas: Set<string>,
     request: string,
     numActions: number,
+    provider: ActionConfigProvider = context.agents,
 ): Promise<TypeAgentTranslator | undefined> {
     if (!isSwitchEnabled(context.session.getConfig())) {
         return undefined;
@@ -197,17 +213,17 @@ async function getTranslatorForSelectedActions(
     const sessionConfig = context.session.getConfig();
     const config = sessionConfig.translation;
     const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
-        context.agents,
+        provider,
         activeSchemas,
         true,
         config.switch.inline,
     );
     return createTypeAgentTranslatorForSelectedActions(
         nearestNeighbors.map((e) => e.item.definition),
-        context.agents.getActionConfig(schemaName),
+        provider.getActionConfig(schemaName),
         actionConfigs,
         switchActionConfigs,
-        context.agents,
+        provider,
         {
             activity: context.agents.isSchemaEnabled(DispatcherActivityName),
             multiple: config.multiple,
@@ -219,18 +235,29 @@ async function getTranslatorForSelectedActions(
     );
 }
 
+/**
+ * Result type for pickInitialSchema. Returns a chosen schemaName, or a
+ * pre-built ExecutableAction representing a clarify request when LLM-select
+ * collision detection determined the embedding result was ambiguous and the
+ * configured strategy is "user-clarify".
+ */
+type PickInitialSchemaResult =
+    | { kind: "schema"; schemaName: string }
+    | { kind: "clarify"; clarify: ExecutableAction };
+
 async function pickInitialSchema(
     request: string,
     activeSchemas: Set<string>,
     systemContext: CommandHandlerContext,
-) {
+): Promise<PickInitialSchemaResult> {
     const switchConfig = systemContext.session.getConfig().translation.switch;
+    const collisionCfg = systemContext.session.getConfig().collision.llmSelect;
     if (switchConfig.fixed !== "") {
         if (!activeSchemas.has(switchConfig.fixed)) {
             throw new Error("Fixed initial schema not active");
         }
-
-        return switchConfig.fixed;
+        // Fixed pin overrides any ambiguity detection by definition.
+        return { kind: "schema", schemaName: switchConfig.fixed };
     }
 
     // Start with the last translator used
@@ -241,10 +268,17 @@ async function pickInitialSchema(
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
+        // When LLM-select collision detection is on, ask for top-N so we can
+        // compare scores and decide whether the choice is ambiguous.
+        const maxMatches = collisionCfg.detect
+            ? Math.max(2, collisionCfg.topN)
+            : debugSemanticSearch.enabled
+              ? 5
+              : 1;
         try {
             const result = await agents.semanticSearchActionSchema(
                 request,
-                debugSemanticSearch.enabled ? 5 : 1,
+                maxMatches,
                 (schemaName: string) => activeSchemas.has(schemaName),
             );
             if (result) {
@@ -258,8 +292,42 @@ async function pickInitialSchema(
                 );
                 if (result.length > 0) {
                     const found = result[0].item.actionSchemaFile.schemaName;
-                    // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
-                    if (found !== DispatcherName) {
+
+                    // Ambiguity check: top-2 score delta within threshold.
+                    // Skip when the top result is already the dispatcher (unknown/clarify)
+                    // since that path falls back to lastActionSchemaName anyway.
+                    if (
+                        collisionCfg.detect &&
+                        found !== DispatcherName &&
+                        result.length >= 2
+                    ) {
+                        const delta = result[0].score - result[1].score;
+                        if (delta < collisionCfg.scoreDeltaThreshold) {
+                            const cluster = result.filter(
+                                (r) =>
+                                    result[0].score - r.score <
+                                    collisionCfg.scoreDeltaThreshold,
+                            );
+                            const decision = applyLlmSelectStrategy(
+                                cluster.map((r) => ({
+                                    schemaName:
+                                        r.item.actionSchemaFile.schemaName,
+                                    actionName: r.item.definition.name,
+                                    score: r.score,
+                                })),
+                                collisionCfg.strategy,
+                                request,
+                                systemContext,
+                            );
+                            if (decision.kind === "clarify") {
+                                return decision;
+                            }
+                            schemaName = decision.schemaName;
+                        } else if (found !== DispatcherName) {
+                            schemaName = found;
+                        }
+                    } else if (found !== DispatcherName) {
+                        // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
                         schemaName = found;
                     }
                 }
@@ -283,7 +351,81 @@ async function pickInitialSchema(
             `Translating request using current translator: ${schemaName}`,
         );
     }
-    return schemaName;
+    return { kind: "schema", schemaName };
+}
+
+/**
+ * Apply the configured LLM-select collision strategy to an ambiguous cluster
+ * of embedding matches. Returns either the chosen schema name (string) or a
+ * synthesized clarify ExecutableAction when strategy is "user-clarify".
+ */
+function applyLlmSelectStrategy(
+    cluster: AgentMatchCandidate[],
+    strategy: CollisionStrategy,
+    request: string,
+    systemContext: CommandHandlerContext,
+): PickInitialSchemaResult {
+    const startedAt = performance.now();
+    let chosen: AgentMatchCandidate;
+    switch (strategy) {
+        case "first-match":
+        case "score-rank":
+            chosen = cluster[0];
+            break;
+        case "priority": {
+            const sorted = [...cluster].sort(
+                (a, b) =>
+                    getAgentPriority(
+                        getAppAgentName(a.schemaName),
+                        systemContext,
+                    ) -
+                    getAgentPriority(
+                        getAppAgentName(b.schemaName),
+                        systemContext,
+                    ),
+            );
+            chosen = sorted[0];
+            break;
+        }
+        case "user-clarify": {
+            const clarify = buildClarifyMultipleAgentMatches(request, cluster);
+            const action = createExecutableAction(
+                DispatcherClarifyName,
+                clarify.actionName,
+                clarify.parameters as unknown as ParamObjectType,
+            );
+            emitCollisionEvent(
+                {
+                    kind: "llmSelect",
+                    request,
+                    candidates: cluster,
+                    // first-match would have picked cluster[0] (cluster is
+                    // pre-sorted by embedding score); record it for
+                    // divergence analysis.
+                    firstMatchCandidate: cluster[0],
+                    strategy,
+                    elapsedMs: performance.now() - startedAt,
+                },
+                systemContext,
+            );
+            return { kind: "clarify", clarify: action };
+        }
+        default:
+            chosen = cluster[0];
+    }
+    emitCollisionEvent(
+        {
+            kind: "llmSelect",
+            request,
+            candidates: cluster,
+            chosen,
+            firstMatchCandidate: cluster[0],
+            strategy,
+            elapsedMs: performance.now() - startedAt,
+        },
+        systemContext,
+    );
+    return { kind: "schema", schemaName: chosen.schemaName };
 }
 
 function needAllAction(translatedAction: TranslatedAction, schemaName: string) {
@@ -310,8 +452,10 @@ async function translateRequestWithSchema(
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     usageCallback: (usage: ai.CompletionUsageStats) => void,
+    provider: ActionConfigProvider,
     streamingActionIndex?: number,
     disableOptimize: boolean = false,
+    userContext?: UserContext,
 ): Promise<TranslateStepResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -330,6 +474,7 @@ async function translateRequestWithSchema(
             activeSchemas,
             request,
             optimize.numInitialActions,
+            provider,
         );
         if (selectedActionTranslator) {
             const translatedAction = await translateWithTranslator(
@@ -340,6 +485,7 @@ async function translateRequestWithSchema(
                 context,
                 usageCallback,
                 streamingActionIndex,
+                userContext,
             );
 
             if (!needAllAction(translatedAction, schemaName)) {
@@ -354,6 +500,7 @@ async function translateRequestWithSchema(
         systemContext,
         schemaName,
         activeSchemas,
+        provider,
     );
     const translatedAction = await translateWithTranslator(
         translator,
@@ -363,6 +510,7 @@ async function translateRequestWithSchema(
         context,
         usageCallback,
         streamingActionIndex,
+        userContext,
     );
 
     return {
@@ -380,6 +528,7 @@ async function translateWithTranslator(
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
     streamingActionIndex?: number,
+    userContext?: UserContext,
 ) {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -450,6 +599,7 @@ async function translateWithTranslator(
             onProperty,
             usageCallback,
             systemContext.currentAbortSignal,
+            userContext,
         );
 
         if (!response.success) {
@@ -472,6 +622,7 @@ async function findAssistantForRequest(
     schemaName: string, // The schema that we already tried
     activeSchemas: Set<string>,
     context: ActionContext<CommandHandlerContext>,
+    provider: ActionConfigProvider,
 ): Promise<NextTranslation | undefined> {
     displayStatus(
         `[↔️ (switcher)] Looking for another assistant to handle request '${request}'`,
@@ -488,7 +639,7 @@ async function findAssistantForRequest(
 
     const selectTranslator = loadAssistantSelectionJsonTranslator(
         schemaNames,
-        systemContext.agents,
+        provider,
         systemContext.promptLogger,
     );
 
@@ -518,6 +669,7 @@ async function getNextTranslation(
     activeSchemas: Set<string>,
     context: ActionContext<CommandHandlerContext>,
     forceSearch: boolean,
+    provider: ActionConfigProvider,
 ): Promise<NextTranslation | undefined> {
     context.sessionContext.agentContext.currentAbortSignal?.throwIfAborted();
     let request: string;
@@ -538,7 +690,13 @@ async function getNextTranslation(
 
     const config = context.sessionContext.agentContext.session.getConfig();
     return config.translation.switch.search
-        ? findAssistantForRequest(request, schemaName, activeSchemas, context)
+        ? findAssistantForRequest(
+              request,
+              schemaName,
+              activeSchemas,
+              context,
+              provider,
+          )
         : undefined;
 }
 
@@ -551,8 +709,10 @@ async function finalizeAction(
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     usageCallback: (usage: ai.CompletionUsageStats) => void,
+    provider: ActionConfigProvider,
     resultEntityId?: string,
     streamingActionIndex?: number,
+    userContext?: UserContext,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     let currentAction = action;
     let currentTranslator = translator;
@@ -566,6 +726,7 @@ async function finalizeAction(
             activeSchemas,
             context,
             forceSearch,
+            provider,
         );
         if (nextTranslation === undefined) {
             break;
@@ -587,8 +748,10 @@ async function finalizeAction(
             attachments,
             context,
             usageCallback,
+            provider,
             streamingActionIndex,
             nextSchemaName === currentSchemaName, // If we are retrying the same schema, then disable optimize
+            userContext,
         );
 
         currentAction = result.translatedAction;
@@ -610,6 +773,8 @@ async function finalizeAction(
             attachments,
             context,
             usageCallback,
+            provider,
+            userContext,
         );
     }
 
@@ -651,11 +816,15 @@ async function finalizeMultipleActions(
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
+    provider: ActionConfigProvider,
+    userContext?: UserContext,
 ): Promise<ExecutableAction[]> {
-    if (attachments !== undefined && attachments.length !== 0) {
-        // TODO: What to do with attachments with multiple actions?
-        throw new Error("Attachments with multiple actions not supported");
-    }
+    // When the translator decomposes a request with attachments (e.g.
+    // "edit this image so X and Y") into a MultipleAction, route the
+    // same attachment list to every sub-action. The attachments are
+    // already persisted in session storage by the request handler, so
+    // passing them along here only affects any sub-action re-translation
+    // — sub-handlers read bytes back via session storage by filename.
     const requests = action.parameters.requests;
     const actions: ExecutableAction[] = [];
     for (const request of requests) {
@@ -671,10 +840,13 @@ async function finalizeMultipleActions(
             schemaName,
             activeSchemas,
             history,
-            undefined, // TODO: What to do with attachments with multiple actions?
+            attachments,
             context,
             usageCallback,
+            provider,
             request.resultEntityId,
+            undefined,
+            userContext,
         );
         if (Array.isArray(finalizedActions)) {
             actions.push(...finalizedActions);
@@ -693,13 +865,23 @@ async function translateRequestWithActiveSchemas(
     streamingActionIndex: number | undefined,
     activeSchemas: Set<string>,
     usageCallback: (usage: ai.CompletionUsageStats) => void,
+    userContext: UserContext | undefined,
+    provider: ActionConfigProvider,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     const systemContext = context.sessionContext.agentContext;
-    const schemaName = await pickInitialSchema(
+    const picked = await pickInitialSchema(
         request,
         activeSchemas,
         systemContext,
     );
+
+    if (picked.kind === "clarify") {
+        // LLM-select detected ambiguity and the user-clarify strategy is on.
+        // Short-circuit translation; downstream execution dispatches the
+        // synthesized ClarifyMultipleAgentMatches action.
+        return picked.clarify;
+    }
+    const schemaName = picked.schemaName;
 
     const result = await translateRequestWithSchema(
         schemaName,
@@ -709,7 +891,10 @@ async function translateRequestWithActiveSchemas(
         attachments,
         context,
         usageCallback,
+        provider,
         streamingActionIndex,
+        false,
+        userContext,
     );
 
     const { translatedAction, translator } = result;
@@ -724,6 +909,8 @@ async function translateRequestWithActiveSchemas(
               attachments,
               context,
               usageCallback,
+              provider,
+              userContext,
           )
         : await finalizeAction(
               translatedAction,
@@ -734,6 +921,10 @@ async function translateRequestWithActiveSchemas(
               attachments,
               context,
               usageCallback,
+              provider,
+              undefined,
+              undefined,
+              userContext,
           );
 }
 
@@ -755,6 +946,8 @@ export async function translateRequest(
     streamingActionIndex?: number,
     activeSchemas?: string[],
     usageCallback: (usage: ai.CompletionUsageStats) => void = () => {},
+    userContext?: UserContext,
+    actionConfigProvider?: ActionConfigProvider,
 ): Promise<TranslationResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
@@ -773,6 +966,9 @@ export async function translateRequest(
         activeSchemas ?? systemContext.agents.getActiveSchemas();
     debugTranslate(`Active schemas: ${activeSchemaNames.join(",")}`);
 
+    const provider: ActionConfigProvider =
+        actionConfigProvider ?? systemContext.agents;
+
     const executableAction = await translateRequestWithActiveSchemas(
         request,
         context,
@@ -781,6 +977,8 @@ export async function translateRequest(
         streamingActionIndex,
         new Set(activeSchemaNames),
         usageCallback,
+        userContext,
+        provider,
     );
 
     const requestAction = RequestAction.create(

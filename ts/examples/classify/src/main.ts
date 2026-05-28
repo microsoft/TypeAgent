@@ -1,13 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { createLanguageModel } from "typechat";
 import { createTextClassifier, TextClassifier } from "typeagent"; // Adjust the import path accordingly
 import { strict as assert } from "assert";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 const model = createLanguageModel(process.env);
 

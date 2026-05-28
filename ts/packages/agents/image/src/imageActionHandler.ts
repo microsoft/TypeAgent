@@ -8,14 +8,18 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { downloadImage } from "typechat-utils";
+import { downloadImage, getMimeType } from "typechat-utils";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
 import { GeneratedImage, openai } from "aiclient";
 import { randomBytes, randomUUID } from "crypto";
-import { CreateImageAction, ImageAction } from "./imageActionSchema.js";
+import {
+    CreateImageAction,
+    EditImageAction,
+    ImageAction,
+} from "./imageActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -131,8 +135,145 @@ async function handlePhotoAction(
                 }
             }
             break;
+        case "editImageAction": {
+            const editAction = action as EditImageAction;
+            result = await handleEditImage(editAction, photoContext);
+            break;
+        }
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
+    }
+    return result;
+}
+
+async function handleEditImage(
+    editAction: EditImageAction,
+    photoContext: ActionContext<ImageActionContext>,
+): Promise<ActionResult> {
+    const { editPrompt, sourceImage } = editAction.parameters;
+    if (!sourceImage) {
+        return createActionResult(
+            "No source image was provided. Please attach the image you'd like to edit.",
+        );
+    }
+    if (!editPrompt) {
+        return createActionResult(
+            "No edit instruction was provided. Tell me how to transform the image (e.g. 'cartoonize this').",
+        );
+    }
+
+    photoContext.actionIO.setDisplay({
+        type: "html",
+        content: `
+        <div style="loading-container">
+        <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
+        <div class="generating">Editing</div>
+        </div>`,
+    });
+
+    // Resolve the source image bytes from session storage. Attachments
+    // the user uploaded this turn live under `user_files/`; outputs from
+    // prior createImageAction/editImageAction calls live under
+    // `generated_images/`. Try both, plus the raw path as supplied.
+    const fileName = sourceImage.substring(
+        Math.max(sourceImage.lastIndexOf("\\"), sourceImage.lastIndexOf("/")) +
+            1,
+    );
+    const candidates: string[] = [];
+    // If the LLM gave us an explicit relative path, honor it first.
+    if (sourceImage.includes("/") || sourceImage.includes("\\")) {
+        candidates.push(`\\..\\${sourceImage.replace(/\//g, "\\")}`);
+    }
+    candidates.push(`\\..\\user_files\\${fileName}`);
+    candidates.push(`\\..\\generated_images\\${fileName}`);
+
+    let b64: string | undefined;
+    let resolvedPath: string | undefined;
+    for (const candidate of candidates) {
+        try {
+            const data = await photoContext.sessionContext.sessionStorage?.read(
+                candidate,
+                "base64",
+            );
+            if (data) {
+                b64 = data;
+                resolvedPath = candidate;
+                break;
+            }
+        } catch {
+            // try next candidate
+        }
+    }
+    if (!b64) {
+        photoContext.actionIO.setDisplay({ type: "html", content: "" });
+        return createActionResult(
+            `Could not find source image '${sourceImage}' in session storage. Tried: ${candidates.join(", ")}`,
+        );
+    }
+    const buffer = Buffer.from(b64, "base64");
+    // Derive extension from whatever path actually resolved.
+    const resolvedName = resolvedPath ?? fileName;
+    const dotIdx = resolvedName.lastIndexOf(".");
+    const ext = dotIdx >= 0 ? resolvedName.substring(dotIdx) : "";
+    const mime = ext ? getMimeType(ext) : "image/png";
+
+    const imageModel = openai.createImageModel();
+    if (!imageModel.editImage) {
+        photoContext.actionIO.setDisplay({ type: "html", content: "" });
+        return createActionResult(
+            "Image editing is not supported by the configured image model.",
+        );
+    }
+
+    const r = await imageModel.editImage(
+        buffer,
+        mime,
+        fileName,
+        editPrompt,
+        1,
+        1024,
+        1024,
+    );
+
+    photoContext.actionIO.setDisplay({ type: "html", content: "" });
+
+    if (!r.success) {
+        return createActionResult(`Failed to edit the image. ${r.message}`);
+    }
+
+    const urls: string[] = [];
+    const captions: string[] = [];
+    r.data.images.map((i) => {
+        urls.push(i.image_url);
+        captions.push(i.revised_prompt);
+    });
+
+    const result = createCarouselForImages(urls, captions);
+
+    // Persist the edited image in the session store, mirroring createImageAction.
+    const id = randomUUID();
+    const savedFileName = `../generated_images/${id.toString()}.png`;
+    let saved = false;
+    if (urls[0].startsWith("data:")) {
+        const base64Data = urls[0].substring(urls[0].indexOf(",") + 1);
+        const editedBuffer = Buffer.from(base64Data, "base64");
+        photoContext.sessionContext.sessionStorage?.write(
+            savedFileName,
+            editedBuffer,
+        );
+        saved = true;
+    } else {
+        saved = await downloadImage(
+            urls[0],
+            savedFileName,
+            photoContext.sessionContext.sessionStorage!,
+        );
+    }
+    if (saved) {
+        result.entities.push({
+            name: savedFileName.substring(3),
+            type: ["file", "image", "ai_generated"],
+        });
     }
     return result;
 }

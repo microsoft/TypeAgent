@@ -44,7 +44,7 @@ All artifacts are persisted at `~/.typeagent/onboarding/<integration-name>/`. Th
 
 ## LLM usage
 
-Each phase that requires LLM calls uses `aiclient`'s `createChatModelDefault(tag)`. Tags are namespaced as `onboarding:<phase>` (e.g. `onboarding:schemagen`). This follows the standard TypeAgent pattern — credentials come from `ts/.env`.
+Each phase that requires LLM calls uses `aiclient`'s `createChatModelDefault(tag)`. Tags are namespaced as `onboarding:<phase>` (e.g. `onboarding:schemagen`). This follows the standard TypeAgent pattern — credentials come from `ts/config.local.yaml` (or the legacy `ts/.env`).
 
 ## Phase approval model
 

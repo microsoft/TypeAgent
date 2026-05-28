@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { runCodeChat } from "./codeChat/codeChat.js";
 import { runKnowledgeProcessorCommands } from "./knowledgeProc/knowledgeProcessorMemory.js";
 import { runCodeMemoryCommands } from "./codeChat/codeMemory.js";
 import { runKnowproMemory } from "./memory/knowproMemory.js";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+loadConfigSync();
 
 let areaName = process.argv[2];
 if (areaName) {

@@ -16,6 +16,8 @@ import {
 import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
+    QueueCancelReason,
+    QueueSnapshot,
 } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
@@ -55,17 +57,28 @@ export async function createSharedDispatcher(
         proposeAction: 10 * 60 * 1000,
     };
 
+    // Grace period before the queue cancels its contents after the last client
+    // disconnects. Tunable per-test via `__testSetNoClientsGraceMs`.
+    let noClientsGraceMs = 30 * 1000;
+
     // Returns the number of clients the message was sent to.
     const broadcast = (
         name: string,
         requestId: RequestId | undefined,
         fn: (clientIO: ClientIO) => void,
+        options?: { skipOriginator?: boolean },
     ): number => {
         let count = 0;
         for (const [connectionId, clientRecord] of clients) {
             if (
                 clientRecord.filter &&
                 requestId?.connectionId !== connectionId
+            ) {
+                continue;
+            }
+            if (
+                options?.skipOriginator === true &&
+                requestId?.connectionId === connectionId
             ) {
                 continue;
             }
@@ -148,9 +161,8 @@ export async function createSharedDispatcher(
         },
 
         // ===== Async deferred pattern for blocking interactions =====
-        // Instead of blocking via callback(), we create a deferred promise
-        // and broadcast the request to all clients. The first client to
-        // respond via respondToInteraction resolves the promise.
+        // Create a deferred promise and broadcast to all clients; the first
+        // client to respondToInteraction resolves it.
 
         question: async (requestId, message, choices, defaultId?, source?) => {
             const interactionId = randomUUID();
@@ -177,10 +189,19 @@ export async function createSharedDispatcher(
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
-            return pendingInteractions.create<number>(
-                request,
-                INTERACTION_TIMEOUT_MS.question,
-            );
+            // Mark the running entry blocked so the queue snapshot and
+            // no-clients grace timer can react.
+            const rid = requestId?.requestId;
+            if (rid !== undefined)
+                context.requestQueue.markBlocked(rid, "interaction");
+            try {
+                return await pendingInteractions.create<number>(
+                    request,
+                    INTERACTION_TIMEOUT_MS.question,
+                );
+            } finally {
+                if (rid !== undefined) context.requestQueue.markUnblocked(rid);
+            }
         },
 
         proposeAction: async (requestId, actionTemplates, source) => {
@@ -198,9 +219,8 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
-            // Log and queue unconditionally so the interaction survives in
-            // the DisplayLog and is included in JoinSessionResult.pendingInteractions
-            // on the next join.
+            // Log + queue unconditionally so the interaction survives in
+            // DisplayLog and is included in JoinSessionResult on next join.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
@@ -208,17 +228,49 @@ export async function createSharedDispatcher(
                 cio.requestInteraction(request),
             );
 
-            return pendingInteractions.create<unknown>(
-                request,
-                INTERACTION_TIMEOUT_MS.proposeAction,
-            );
+            const rid = requestId?.requestId;
+            if (rid !== undefined)
+                context.requestQueue.markBlocked(rid, "interaction");
+            try {
+                return await pendingInteractions.create<unknown>(
+                    request,
+                    INTERACTION_TIMEOUT_MS.proposeAction,
+                );
+            } finally {
+                if (rid !== undefined) context.requestQueue.markUnblocked(rid);
+            }
         },
 
         notify: (notificationId, ...args) => {
+            const event = args[0] as unknown;
             broadcast(
                 "notify",
                 typeof notificationId === "string" ? undefined : notificationId,
                 (clientIO) => clientIO.notify(notificationId, ...args),
+                // Originator gets commandComplete via processCommand RPC return;
+                // sending it again causes double-completion in some clients
+                // (e.g. vscode-shell).
+                { skipOriginator: event === "commandComplete" },
+            );
+        },
+        requestQueued: (entry, version) => {
+            broadcast("requestQueued", undefined, (cio) =>
+                cio.requestQueued?.(entry, version),
+            );
+        },
+        requestStarted: (entry, version) => {
+            broadcast("requestStarted", undefined, (cio) =>
+                cio.requestStarted?.(entry, version),
+            );
+        },
+        requestCancelled: (requestId, reason, version) => {
+            broadcast("requestCancelled", undefined, (cio) =>
+                cio.requestCancelled?.(requestId, reason, version),
+            );
+        },
+        queueStateChanged: (snapshot) => {
+            broadcast("queueStateChanged", undefined, (cio) =>
+                cio.queueStateChanged?.(snapshot),
             );
         },
         openLocalView: async (requestId, ...args) =>
@@ -253,17 +305,28 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.takeAction(requestId, ...args),
             ),
+        onUserFeedback: (entry) => {
+            // Fan out to every connected client (including the originator —
+            // dispatcher relies on the broadcast for its own local UI update).
+            broadcast("onUserFeedback", entry.requestId, (cio) =>
+                cio.onUserFeedback?.(entry),
+            );
+        },
+        onUserHide: (entry) => {
+            broadcast("onUserHide", entry.requestId, (cio) =>
+                cio.onUserHide?.(entry),
+            );
+        },
     };
     const context = await initializeCommandHandlerContext(hostName, {
         ...options,
         clientIO,
     });
 
-    // Intercept the three display methods on the shared clientIO so that all
-    // display traffic is mirrored into the DisplayLog for later replay.
-    // We patch context.clientIO (which IS the broadcast `clientIO` object above)
-    // rather than the local variable so any future reference through context also
-    // sees the patched version.
+    // Intercept display methods on the shared clientIO to mirror display
+    // traffic into the DisplayLog for later replay. Patches context.clientIO
+    // (which IS the broadcast `clientIO` above) so future references through
+    // context also see the patched version.
     {
         const log = context.displayLog;
         const orig = context.clientIO;
@@ -278,10 +341,7 @@ export async function createSharedDispatcher(
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
-            // Toast and inline kinds are ephemeral (visual notifications, not
-            // chat history). Skip logging so they don't replay on reconnect —
-            // matches notify's default-not-persisted behavior. Bubble (or
-            // absent kind = a normal request response) always logs.
+            // Skip ephemeral toast/inline kinds so they don't replay on reconnect.
             if (message.kind !== "toast" && message.kind !== "inline") {
                 log.logSetDisplay(message);
                 log.saveQueued();
@@ -291,13 +351,9 @@ export async function createSharedDispatcher(
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            // Skip ephemeral output:
-            //   - toast/inline kinds (visual-only notifications)
-            //   - mode === "temporary" (transient status indicators like
-            //     "Executing action ...", reasoning's "Thinking..." stream).
-            // Persisting either causes replayed bubbles on reconnect,
-            // DisplayLog growth proportional to streaming tokens, and
-            // apparent "duplicate" bubbles next to the real reply.
+            // Skip ephemeral output: toast/inline kinds and mode === "temporary"
+            // (transient status like "Thinking..."). Persisting causes replayed
+            // duplicate bubbles and DisplayLog bloat proportional to stream tokens.
             if (
                 message.kind !== "toast" &&
                 message.kind !== "inline" &&
@@ -322,9 +378,7 @@ export async function createSharedDispatcher(
         };
 
         // Notifications are ephemeral by default — only log when the producer
-        // explicitly opts in via options.persist. Agents (e.g. OS-notification
-        // forwarding) that should never enter durable history MUST leave the
-        // flag unset.
+        // explicitly opts in via options.persist.
         const origNotify = orig.notify.bind(orig) as (
             ...args: Parameters<ClientIO["notify"]>
         ) => void;
@@ -345,6 +399,18 @@ export async function createSharedDispatcher(
     }
 
     const dispatchers = new Map<string, Dispatcher>();
+
+    // No-clients grace timer: when the last client disconnects, give a brief
+    // window for reconnect before cancelling in-flight/queued entries that
+    // would otherwise stall forever (e.g. blocked on a clientIO interaction).
+    let noClientsGraceTimer: NodeJS.Timeout | undefined;
+    const cancelNoClientsGraceTimer = () => {
+        if (noClientsGraceTimer !== undefined) {
+            clearTimeout(noClientsGraceTimer);
+            noClientsGraceTimer = undefined;
+        }
+    };
+
     const shared: SharedDispatcher = {
         get clientCount() {
             return clients.size;
@@ -357,19 +423,20 @@ export async function createSharedDispatcher(
             closeFn: () => void,
             options?: DispatcherConnectOptions,
         ): Dispatcher {
-            // TODO: Support a stable clientId in DispatcherConnectOptions so that a
-            // reconnecting client can reclaim its old connectionId (or have pending
-            // interactions retargeted to its new one).  Currently connectionId is
-            // ephemeral: each join() mints a fresh value, so askYesNo/proposeAction
-            // interactions created before a disconnect are permanently unroutable to
-            // the reconnected client because requestId.connectionId no longer matches
-            // and getPendingInteractions() filters them out.  See
-            // docs/async-clientio-design.md §Open Questions for the full design note.
+            // TODO: Support a stable clientId so a reconnecting client can
+            // reclaim its old connectionId. Currently connectionId is ephemeral,
+            // so interactions created before disconnect are unroutable after
+            // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
                 filter: options?.filter ?? false,
             });
+            // First (re)joining client — clear any pending grace timer.
+            if (wasEmpty) {
+                cancelNoClientsGraceTimer();
+            }
             // Register client type for per-request routing
             if (options?.clientType) {
                 registerClientType(connectionId, options.clientType);
@@ -381,6 +448,59 @@ export async function createSharedDispatcher(
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
+                    // Last client gone — start grace timer. On expiry cancel
+                    // queued entries and any running entry blocked on a
+                    // clientIO interaction (which would otherwise stall
+                    // forever waiting for a non-existent client).
+                    if (clients.size === 0) {
+                        cancelNoClientsGraceTimer();
+                        noClientsGraceTimer = setTimeout(() => {
+                            noClientsGraceTimer = undefined;
+                            const snap = context.requestQueue.getSnapshot();
+                            for (const queued of snap.queued) {
+                                context.requestQueue.cancelQueued(
+                                    queued.requestId,
+                                    "no_clients",
+                                );
+                            }
+                            const head = snap.running;
+                            if (head && head.blockedOn === "interaction") {
+                                const rid = head.requestId;
+                                // Cancel pending interactions for this rid so
+                                // the awaiting deferred rejects with AbortError
+                                // (which command.ts classifies as cancelled).
+                                const abortErr = new Error(
+                                    "Cancelled by server: no clients connected",
+                                );
+                                abortErr.name = "AbortError";
+                                try {
+                                    for (const pend of pendingInteractions
+                                        .getPending()
+                                        .filter(
+                                            (r) =>
+                                                r.requestId?.requestId === rid,
+                                        )) {
+                                        pendingInteractions.cancel(
+                                            pend.interactionId,
+                                            abortErr,
+                                        );
+                                    }
+                                } catch (e) {
+                                    debugCommand(
+                                        `no_clients: failed to cancel pending interactions: ${e}`,
+                                    );
+                                }
+                                context.requestQueue.cancelRunning(
+                                    rid,
+                                    "no_clients",
+                                );
+                                const controller =
+                                    context.activeRequests.get(rid);
+                                controller?.abort();
+                            }
+                        }, noClientsGraceMs);
+                        noClientsGraceTimer.unref?.();
+                    }
 
                     closeFn();
                     debugConnect(
@@ -405,88 +525,6 @@ export async function createSharedDispatcher(
                 interactionId: string,
             ): void => {
                 shared.cancelInteraction(interactionId);
-            };
-
-            // Wrap processCommand so each completed request logs a
-            // command-result entry into the DisplayLog (carrying its
-            // metrics). This lets history replay re-render timing data
-            // exactly the way live commandComplete does.
-            const origProcessCommand =
-                dispatcher.processCommand.bind(dispatcher);
-            dispatcher.processCommand = async (
-                command: any,
-                clientRequestId?: any,
-                attachments?: any,
-                processOptions?: any,
-            ) => {
-                const result = await origProcessCommand(
-                    command,
-                    clientRequestId,
-                    attachments,
-                    processOptions,
-                );
-                try {
-                    context.displayLog.logCommandResult(
-                        {
-                            connectionId,
-                            // The actual server-side requestId UUID is
-                            // generated inside processCommand and not
-                            // exposed to the wrapper, so leave it empty;
-                            // consumers correlate via clientRequestId.
-                            requestId: "",
-                            clientRequestId,
-                        },
-                        result?.metrics,
-                        result?.tokenUsage,
-                    );
-                    context.displayLog.saveQueued();
-                } catch {
-                    // best effort
-                }
-                try {
-                    // Notify peer panels (other clients sharing this
-                    // session) that the command finished so they can
-                    // clear lingering temporary status messages and
-                    // apply timing metrics. We deliberately skip the
-                    // originator: it already gets the result back via
-                    // the resolved processCommand RPC promise, and a
-                    // duplicate notify would run completion twice (in
-                    // the VS Code webview that produces a stray
-                    // "⚠ Cancelled" bubble after the first pass cleared
-                    // the request mapping).
-                    let sent = 0;
-                    for (const [peerId, peerRecord] of clients) {
-                        if (peerId === connectionId) continue;
-                        if (peerRecord.filter && peerId !== connectionId) {
-                            // Filtered clients only receive their own
-                            // events; don't leak peer completions.
-                            continue;
-                        }
-                        try {
-                            peerRecord.clientIO.notify(
-                                {
-                                    connectionId,
-                                    requestId: "",
-                                    clientRequestId,
-                                },
-                                "commandComplete",
-                                { result: result ?? null },
-                                "system",
-                            );
-                            sent++;
-                        } catch (e) {
-                            debugClientIOError(
-                                `commandComplete notify failed for ${peerId}: ${e}`,
-                            );
-                        }
-                    }
-                    debugCommand(
-                        `commandComplete broadcast: connectionId=${connectionId} clientRequestId=${clientRequestId} sent=${sent} clients=${clients.size}`,
-                    );
-                } catch (e) {
-                    debugCommand(`commandComplete broadcast failed: ${e}`);
-                }
-                return result;
             };
 
             return dispatcher;
@@ -560,11 +598,9 @@ export async function createSharedDispatcher(
             message: string,
             excludeConnectionId?: string,
         ): void {
-            // "system" is a reserved requestId sentinel used to identify
-            // server-broadcast messages (e.g. client join/leave notifications).
-            // It can never collide with a real UUID from randomUUID().
-            // The renderer (chatView.ts) checks for this sentinel to auto-create
-            // a notification MessageGroup — keep these two values in sync.
+            // "system" is a reserved requestId sentinel for server-broadcast
+            // messages. The renderer (chatView.ts) checks for it to auto-create
+            // a notification MessageGroup — keep these in sync.
             const agentMessage = {
                 message: {
                     type: "text" as const,
@@ -590,10 +626,9 @@ export async function createSharedDispatcher(
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
             if (dispatcher) {
-                // Remove from clients synchronously so clientCount reflects the
-                // post-leave state before any async close work completes.
-                // The close callback also calls clients.delete, but that is
-                // idempotent so the double-delete is harmless.
+                // Remove synchronously so clientCount reflects post-leave state
+                // before any async close work completes. The close callback
+                // also calls clients.delete; the double-delete is idempotent.
                 clients.delete(connectionId);
                 await dispatcher.close();
             }
@@ -606,12 +641,25 @@ export async function createSharedDispatcher(
             await Promise.all(promises);
         },
         async close() {
-            // Cancel all pending interactions
+            cancelNoClientsGraceTimer();
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
             await this.closeAllClients();
+            // closeCommandHandlerContext drains the queue before tearing down.
             await closeCommandHandlerContext(context);
+        },
+        getQueueSnapshot(): QueueSnapshot {
+            return context.requestQueue.getSnapshot();
+        },
+        isQueueIdle(): boolean {
+            return context.requestQueue.isIdle();
+        },
+        cancelQueued(requestId: string, reason: QueueCancelReason): boolean {
+            return context.requestQueue.cancelQueued(requestId, reason);
+        },
+        __testSetNoClientsGraceMs(ms: number): void {
+            noClientsGraceMs = ms;
         },
     };
     return shared;
@@ -635,4 +683,12 @@ export type SharedDispatcher = {
     broadcastSystemMessage(message: string, excludeConnectionId?: string): void;
     closeAllClients(): Promise<void>;
     close(): Promise<void>;
+    /** Snapshot of the per-conversation message queue. */
+    getQueueSnapshot(): QueueSnapshot;
+    /** True iff the queue has nothing running and nothing queued. */
+    isQueueIdle(): boolean;
+    /** Cancel a queued (not running) entry by requestId. */
+    cancelQueued(requestId: string, reason: QueueCancelReason): boolean;
+    /** @internal Test-only: tighten the no-clients grace window. */
+    __testSetNoClientsGraceMs(ms: number): void;
 };

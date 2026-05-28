@@ -169,6 +169,8 @@ export async function resolveURLWithHistory(
             sessionContextId: "websiteMemory-mock",
             indexes: async () => [],
             reloadAgentSchema: async () => {},
+            notifyReadinessChanged: async () => {},
+            notifyClientCountChanged: async () => {},
         };
 
         // Use searchWebMemories with URL resolution optimized parameters

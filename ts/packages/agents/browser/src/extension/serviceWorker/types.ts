@@ -18,7 +18,7 @@ export interface BoundingBox {
 
 export interface Settings {
     [key: string]: any;
-    websocketHost?: string;
+    agentServerHost?: string;
 }
 
 export interface HTMLFragment {

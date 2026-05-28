@@ -21,8 +21,8 @@
  * are treated as failures so they show up in the Jest summary.
  */
 
-import dotenv from "dotenv";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
+import { loadConfigSync } from "@typeagent/config";
+loadConfigSync();
 
 import * as path from "path";
 import * as fs from "fs";

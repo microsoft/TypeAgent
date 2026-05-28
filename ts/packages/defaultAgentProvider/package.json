@@ -36,11 +36,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@modelcontextprotocol/server-filesystem": "2025.8.21",
+    "@modelcontextprotocol/server-filesystem": "2026.1.14",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -83,12 +84,13 @@
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
     "utility-typeagent": "workspace:*",
+    "vampire-agent": "workspace:*",
     "video-agent": "workspace:*",
     "visualstudio-agent": "workspace:*",
     "weather-agent": "workspace:*",
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
-    "ws": "^8.17.1",
+    "ws": "^8.21.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {

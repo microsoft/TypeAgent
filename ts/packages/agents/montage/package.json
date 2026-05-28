@@ -44,6 +44,7 @@
     "sharp": "^0.33.5",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "websocket-utils": "workspace:*",
     "winreg": "^1.2.5"
   },
   "devDependencies": {
@@ -60,6 +61,6 @@
     "typescript": "~5.4.5",
     "webpack": "^5.104.1",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.2.0"
+    "webpack-dev-server": "^5.2.4"
   }
 }

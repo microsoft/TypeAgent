@@ -35,7 +35,7 @@ import {
     debugShellError,
     debugShellInit,
 } from "./debug.js";
-import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
+import { loadKeys, loadKeysFromEnvFile, tryLoadYamlConfig } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     setUpdateConfigPath,
@@ -140,8 +140,7 @@ const time = performance.now();
 debugShellInit("Starting...");
 
 async function initializeKeys(appPath: string) {
-    // TODO: connected mode only needs the speech key.
-    // Implement better way to provide and manage keys.
+    // Prefer YAML config, fall back to legacy .env / DPAPI key cache.
     const envFile = parsedArgs.env
         ? path.resolve(appPath, parsedArgs.env)
         : undefined;
@@ -150,13 +149,16 @@ async function initializeKeys(appPath: string) {
             throw new Error("Test mode requires --env argument");
         }
         await loadKeysFromEnvFile(envFile);
-    } else {
-        await loadKeys(
-            instanceDir,
-            parsedArgs.reset || parsedArgs.clean,
-            envFile,
-        );
+        return;
     }
+
+    // Try YAML config (handles workspace root discovery internally).
+    if (tryLoadYamlConfig(envFile)) {
+        return;
+    }
+
+    // Legacy fallback: .env file + DPAPI-encrypted key cache.
+    await loadKeys(instanceDir, parsedArgs.reset || parsedArgs.clean, envFile);
 }
 
 // This method will be called when Electron has finished

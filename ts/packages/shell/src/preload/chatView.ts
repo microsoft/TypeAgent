@@ -8,7 +8,7 @@ import {
     ShellUserSettings,
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
-import { Dispatcher } from "agent-dispatcher";
+import { Dispatcher, QueueSnapshot } from "agent-dispatcher";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
@@ -87,23 +87,26 @@ function registerClient(client: Client) {
         },
     );
 
-    ipcRenderer.on("dispatcher-initialized", () => {
-        // Resolve the dispatcher promise when the dispatcher is initialized)
-        // set up dispatch RPC client
-        const dispatcherChannel = createChannelAdapter((message: any) =>
-            ipcRenderer.send("dispatcher-rpc-call", message),
-        );
+    ipcRenderer.on(
+        "dispatcher-initialized",
+        (_event, initialQueueSnapshot?: QueueSnapshot) => {
+            // Resolve the dispatcher promise when the dispatcher is initialized)
+            // set up dispatch RPC client
+            const dispatcherChannel = createChannelAdapter((message: any) =>
+                ipcRenderer.send("dispatcher-rpc-call", message),
+            );
 
-        ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
-            dispatcherChannel.notifyMessage(message);
-        });
+            ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+                dispatcherChannel.notifyMessage(message);
+            });
 
-        const dispatcher: Dispatcher = createDispatcherRpcClient(
-            dispatcherChannel.channel,
-        );
+            const dispatcher: Dispatcher = createDispatcherRpcClient(
+                dispatcherChannel.channel,
+            );
 
-        client.dispatcherInitialized(dispatcher);
-    });
+            client.dispatcherInitialized(dispatcher, initialQueueSnapshot);
+        },
+    );
 
     ipcRenderer.on("tab-restore-status", (_, count: number) => {
         client.tabRestoreStatus(count);
@@ -118,8 +121,13 @@ function registerClient(client: Client) {
 
     ipcRenderer.on(
         "conversation-changed",
-        (_, conversationId: string, name: string) => {
-            client.conversationChanged?.(conversationId, name);
+        (
+            _,
+            conversationId: string,
+            name: string,
+            queueSnapshot?: QueueSnapshot,
+        ) => {
+            client.conversationChanged?.(conversationId, name, queueSnapshot);
         },
     );
 

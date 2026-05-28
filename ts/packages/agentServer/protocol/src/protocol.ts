@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -25,6 +26,9 @@ export type JoinConversationResult = {
      * Sent on join so reconnecting clients can resume showing prompts.
      */
     pendingInteractions?: PendingInteractionRequest[];
+    /** Server-side queue snapshot at join time. Omitted when idle/empty;
+     *  older clients ignore the field. */
+    queueSnapshot?: QueueSnapshot;
 };
 
 /**
@@ -125,6 +129,30 @@ export type DiscoveryInvokeFunctions = {
         role?: string;
     }) => Promise<{ port: number | null }>;
 };
+
+/**
+ * Build the read-only discovery RPC handler set from a lookup callback.
+ *
+ * Both the agent-server and the standalone Electron shell host this
+ * channel — the agent-server multiplexes it onto its main WS, the
+ * standalone shell stands up a dedicated WS for it. They share this
+ * factory so the wire-level behavior (including null-for-not-found
+ * normalization) stays in lockstep.
+ *
+ * The callback shape — rather than passing the `IPortRegistrar`
+ * directly — keeps this package free of an `agent-dispatcher` dep,
+ * which would otherwise create a downward dependency from the
+ * protocol-only package onto the dispatcher core.
+ */
+export function createDiscoveryHandlers(
+    lookup: (agentName: string, role?: string) => number | undefined,
+): DiscoveryInvokeFunctions {
+    return {
+        lookupPort: async ({ agentName, role }) => ({
+            port: lookup(agentName, role) ?? null,
+        }),
+    };
+}
 
 /** Build the dispatcher channel name for a given conversation. */
 export function getDispatcherChannelName(conversationId: string): string {

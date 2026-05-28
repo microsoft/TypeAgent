@@ -32,6 +32,7 @@
     "@azure/storage-blob": "^12.26.0",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -45,7 +46,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat-utils": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

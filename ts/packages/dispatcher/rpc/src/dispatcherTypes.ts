@@ -8,12 +8,18 @@ import type {
 } from "@typeagent/agent-sdk";
 import type {
     AgentSchemaInfo,
+    CancelResult,
     CommandCompletionResult,
     CommandResult,
     DisplayLogEntry,
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
+    QueueSnapshot,
+    RequestId,
+    SubmitResult,
+    UserFeedbackCategory,
+    UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 
@@ -23,7 +29,26 @@ export type DispatcherInvokeFunctions = {
         clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
+        requestId?: string,
     ): Promise<CommandResult | undefined>;
+
+    submitCommand(
+        command: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
+    cancelCommand(requestId: string): Promise<CancelResult>;
+
+    getQueueSnapshot(): Promise<QueueSnapshot>;
 
     getDynamicDisplay(
         appAgentName: string,
@@ -64,10 +89,27 @@ export type DispatcherInvokeFunctions = {
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 
     respondToInteraction(response: PendingInteractionResponse): Promise<void>;
+
+    recordUserFeedback(
+        requestId: RequestId,
+        rating: UserFeedbackRating,
+        category?: UserFeedbackCategory,
+        comment?: string,
+        includeContext?: boolean,
+    ): Promise<void>;
+
+    recordUserHide(
+        requestId: RequestId,
+        hidden: boolean,
+        target?: "user" | "agent",
+        permanent?: boolean,
+    ): Promise<void>;
+
+    restoreAllHidden(): Promise<number>;
+    flushHidden(): Promise<number>;
 };
 
 export type DispatcherCallFunctions = {
-    cancelCommand(requestId: string): void;
     cancelCommandByClientId(clientRequestId: unknown): void;
     cancelInteraction(interactionId: string): void;
 };

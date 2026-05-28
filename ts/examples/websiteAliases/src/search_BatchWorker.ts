@@ -3,7 +3,7 @@
 
 import { parentPort, workerData } from "worker_threads";
 import chalk from "chalk";
-import dotenv from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import { bingWithGrounding, openPhraseGeneratorAgent } from "azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -67,9 +67,7 @@ async function processDomain(
 
 // This script expects workerData to contain { domains, modulePath }
 (async () => {
-    // Load environment variables from .env file
-    const envPath = new URL("../../../.env", import.meta.url);
-    dotenv.config({ path: envPath });
+    loadConfigSync();
 
     const groundingConfig: bingWithGrounding.ApiSettings =
         bingWithGrounding.apiSettingsFromEnv();

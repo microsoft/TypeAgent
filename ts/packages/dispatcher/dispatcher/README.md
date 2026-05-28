@@ -174,6 +174,29 @@ Use the `@const <args>` command at the prompt to control the construction store.
 | `@const wildcard on\|off` | Toggle whether to use wildcards in matches                                                                                                                                                                                                                                                                                                                                                         |
 | `@const delete <id>`      | Delete a construction by ID as shown in `@const list`                                                                                                                                                                                                                                                                                                                                              |
 
+### Grammar
+
+Grammar commands let you inspect runtime-learned rules and scan loaded `.agr` files for cross-agent collisions.
+
+| Command                                     | Description                                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@grammar` _(or)_ `@grammar list [<agent>]` | List grammar rules learned at runtime by the dispatcher. Optionally filter by agent name. Default subcommand. Shows risk icons (munch / completion).                                                                                                                              |
+| `@grammar show <id>`                        | Show a single learned rule's pattern, anchor words, and risk analysis.                                                                                                                                                                                                            |
+| `@grammar delete <id>`                      | Delete a learned rule by ID. Rebuilds the in-memory NFA for the affected schema.                                                                                                                                                                                                  |
+| `@grammar clear [<agent>]`                  | Clear all learned rules. Optionally scope to one agent.                                                                                                                                                                                                                           |
+| `@grammar collisions [--json <path>]`       | NFA-product-construction collision detector across all loaded agent grammars. Reports concrete witness inputs that both grammars accept, plus the action interpretation each grammar produces. With `--json <path>`, also writes a structured report for offline post-processing. |
+
+**About the collision scanner:**
+
+- Compiles every loaded schema's grammar to an NFA, then for each cross-agent pair builds the joint product NFA (`findGrammarOverlap` in [`action-grammar`](../../actionGrammar/src/nfaIntersection.ts)) and BFSes from start-pair to any accept-pair. The path's accumulated tokens are a concrete **witness** — proof of overlap, not just a heuristic guess.
+- For each detected overlap, also runs the witness through each grammar's AST matcher (`matchGrammar`) and shows what the runtime dispatcher would interpret it as. This makes the report actionable when the rule pattern is opaque (e.g. a top-level rule that's just a single dispatching `<rules>` reference).
+- Witnesses on **typed wildcards with no concrete sample** (custom entity validators whose accepted language we can't enumerate) come back with synthetic `<TypeName>` placeholders and are flagged for manual review.
+- Grammars optimized with `tailFactoring` (RulesPart `tailCall: true`) are auto-stripped before NFA compile — language acceptance is preserved; only the optimizer's bindings-flow shortcut is lost (the AST matcher is used for the action-value preview, which understands `tailCall` natively, so previews stay accurate).
+- Skip reasons (no grammar / wrong format / parse error / compile error) are surfaced in a collapsible breakdown with per-reason counts and sample schema names, so the question "why was X skipped?" is self-answering.
+- `--json <path>` writes a `CollisionScanResult` keyed by canonical `"schemaA|schemaB"` (alphabetical) — same engine and JSON shape as the standalone [`analyze-grammar-collisions` CLI](../../actionGrammar/README.md#cli-analyze-grammar-collisions). Use it to gate CI on grammar collisions, diff across changes, or post-process for tuning.
+
+For testing, enable the [vampire agent](../../agents/vampire) — its actions and grammar rules are engineered to collide deliberately, so `@grammar collisions` will produce a non-empty report once it's loaded.
+
 ### Debugging
 
 #### Traces
@@ -190,7 +213,192 @@ By default agents runs out of proc in their own process. This is to ensure that 
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | `@config bot on\|off`         | Toggle the LLM translation (Turn off to rely on constructions only if enabled) |
 | `@config explanation on\|off` | Toggle LLM explanation (Turn off to stop updating construction store)          |
-| `@config log db on\|off`      | Toggle sending logging information to a remote database                        |
+| `@config log db on\|off`      | Toggle sending logging information to a remote database (default: on)          |
+
+### Diagnostics
+
+| Command         | Description                                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@system ports` | List every TCP port registered with the dispatcher's `PortRegistrar`, grouped by `(agent, role, port)`. Includes the agent-server's own listen port and the connected-client count for any agent that publishes one via `SessionContext.notifyClientCountChanged` (currently the browser and code agents). Rows from agents that don't publish a count render `N/A`. |
+
+### User feedback
+
+When the user rates an agent message via the chat UI's thumbs-up/down buttons or moves a bubble to the trash, the dispatcher persists each event to the per-session `displayLog.json` (as `user-feedback` and `user-message-hidden` entries) and emits a `userFeedback` telemetry event through `Logger.logEvent`. The `@feedback` command group lets you inspect and export those entries.
+
+| Command                        | Description                                                                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@feedback` / `@feedback list` | Recent feedback, newest first. `--limit N` (default 20), `--all` to include re-rates.                                                                                                  |
+| `@feedback top`                | Totals by rating + top thumbs-down categories. `--limit N` controls category depth.                                                                                                    |
+| `@feedback filter`             | Filtered list. Flags: `--rating up\|down\|cleared`, `--category wrong-agent\|didnt-understand\|bad-response\|other`, `--since YYYY-MM-DD`, `--until YYYY-MM-DD`, `--limit N`, `--all`. |
+| `@feedback export <file>`      | Dump entries to disk. `--format json\|jsonl` (default: inferred from extension). `--all` to include re-rates. Uses `~` expansion and prompts before overwriting an existing file.      |
+| `@feedback count`              | One-line summary: total entries and unique-request count.                                                                                                                              |
+
+By default each command reduces to the latest rating per request (so a user who flipped 👍 → 👎 shows once with 👎). Pass `--all` to see the full append-only history.
+
+#### Trash bin
+
+The trash icon on a message bubble routes through a separate persistence path. The user can hide either a user-message or an agent-response independently; restoration is bulk via two shell commands:
+
+| Command                | Description                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `@shell trash restore` | Un-hide every bubble that's currently in the trash (skips entries previously flushed).        |
+| `@shell trash flush`   | Permanently delete every bubble currently in the trash — the user can no longer restore them. |
+
+## Action Collision Detection
+
+When two or more agents can plausibly handle the same user input, the dispatcher needs a policy for picking a winner. The default ("first-match") preserves legacy behavior — silently take the first validated match — but the dispatcher also supports detecting collisions across four points and applying one of four configurable resolution strategies. This subsystem is **off by default**; opt in per detection point via session config.
+
+> **Soft-rollout plan:** see [`collision-rollout.md`](../../../docs/architecture/collision-rollout.md) for the staged experiment plan (observability first, then strategy A/B), tester opt-in protocol, telemetry pipeline, and Cosmos query reference. That document is the canonical record for any experiment touching this subsystem — update it as experiments run.
+>
+> **Analysis tooling:** see [`collision-analysis.md`](../../../docs/architecture/collision-analysis.md) for the user guide to the data + analysis surface — `@collision similar` / `@collision probe` / `@collision corpus *` / `@collision neighborhoods preview`, the three interactive HTML visualizations, and the operational scripts that exercise them.
+
+### Detection points
+
+| Point              | When it fires                                                                                                                      | Source                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`static`**       | At agent registration time — duplicate `actionName` declared by more than one schema (e.g. both `player.play` and `vampire.play`). | [`appAgentManager.scanActionNameCollisions`](src/context/appAgentManager.ts), invoked from [`runStaticCollisionDetection`](src/context/commandHandlerContext.ts). |
+| **`grammarMatch`** | At runtime, in the cache/grammar match path — multiple agents return validated matches for the same input.                         | [`getValidatedMatches`](src/translation/matchRequest.ts) + [`resolveGrammarCollision`](src/translation/matchCollision.ts).                                        |
+| **`llmSelect`**    | At runtime, during embedding-based schema selection — top-N embedding scores are within `scoreDeltaThreshold`.                     | [`pickInitialSchema`](src/translation/translateRequest.ts).                                                                                                       |
+| **`fuzzy`**        | Static and/or runtime — actions whose **meaning** overlaps even when names/grammars differ (e.g. `delete` vs `remove`).            | [`fuzzyCollision.ts`](src/translation/fuzzyCollision.ts) — **scaffolded only; default scorer returns 0**.                                                         |
+
+### Resolution strategies
+
+All runtime detection points share the same four-way strategy enum. Each detection point selects one independently.
+
+| Strategy       | Behavior                                                                                                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `first-match`  | Pick the heuristically-first validated candidate. Byte-identical to legacy behavior.                                                                                                                |
+| `score-rank`   | Sort by `(matchedCount desc, nonOptionalCount desc, -wildcardCharCount)`; ties fall through to `priority`.                                                                                          |
+| `priority`     | Pick the candidate from the highest-priority agent. Priority comes from `priorityOrder` (comma-separated list) if set, otherwise agent registration order.                                          |
+| `user-clarify` | Synthesize a [`ClarifyMultipleAgentMatches`](src/context/dispatcher/schema/clarifyActionSchema.ts) action listing all candidates so the user can pick. The user's reply re-enters the request loop. |
+
+The `static` point uses a separate two-way enum: `warn` (log and continue) or `error` (throw). The async `onSchemaReady` path always degrades `error` → `warn` so a slow agent can never crash a live session.
+
+### Config schema
+
+Defined as `CollisionConfig` in [`session.ts`](src/context/session.ts). All defaults preserve current behavior — `detect: false` everywhere, `strategy: "first-match"`.
+
+```ts
+collision: {
+    static: {
+        detect: boolean;                    // scan duplicate actionNames at registration
+        strategy: "warn" | "error";
+    };
+    grammarMatch: {
+        detect: boolean;
+        classifier: "distinctActions" | "tiedHeuristics";
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    llmSelect: {
+        detect: boolean;
+        topN: number;                       // default 3
+        scoreDeltaThreshold: number;        // default 0.05 — within = ambiguous
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    fuzzy: {
+        detect: boolean;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;            // (TODO: runtime hook not yet wired into matchCollision.ts)
+        similarityThreshold: number;        // default 0.85 — placeholder until calibrated
+        scorer: "placeholder" | "actionEmbedding";
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    priorityOrder: string;                  // comma-separated agent names; "" = registration order
+    multipleActionBehavior:
+        | "downgrade-to-priority"           // safest default
+        | "pause-and-prompt"                // (TODO: requires batch-executor changes; currently degrades to priority)
+        | "abort";
+    telemetry: {
+        emit: boolean;                      // append to ring buffer (size 50) on CommandHandlerContext
+        debugLog: boolean;                  // also log via debug("typeagent:dispatcher:collision")
+    };
+};
+```
+
+### Telemetry & evaluation surface
+
+When `telemetry.emit` is true, every detected collision lands in **three places**:
+
+1. **In-memory ring buffer** on `CommandHandlerContext.collisionEvents` (cap 50). Surfaced via `@collision events`.
+2. **Per-session JSONL** at `<sessionDir>/collision-events.jsonl` — one line per event, survives shell exit. Always written when emit is on; no DB credentials needed.
+3. **Existing logger pipeline** (Cosmos `telemetrydb / dispatcherlogs`, `eventName: "collision"`) — gated separately by `@config log db on`. The DB sink self-disables on auth errors so a stale credential won't spam retries.
+
+Each event carries `kind` (detection point), `strategy`, `candidates[]` (with per-candidate `matchedCount` / `nonOptionalCount` / `wildcardCharCount` / `priorityRank`), `chosen`, `firstMatchCandidate` (counterfactual — what `first-match` would have picked, lets every Cosmos query measure strategy divergence in one row), `classifier` (for grammarMatch), `requestId`, `experimentId` (set via `@config collision telemetry experimentId`), `sessionId`, `elapsedMs`, `note`.
+
+`DEBUG=typeagent:dispatcher:collision` enables a one-line log per event when `telemetry.debugLog` is true (on by default).
+
+### Shell-level config (M1 / M5)
+
+Runtime opt-in via `@config collision …` and ring-buffer inspection via `@collision events`:
+
+| Command                                           | Effect                                                                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@config collision`                               | Render the current collision config as an HTML status table.                                                                                                  |
+| `@config collision <point> detect [on\|off]`      | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                       |
+| `@config collision <point> strategy <name>`       | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                       |
+| `@config collision priority [<list>]`             | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                               |
+| `@config collision telemetry emit [on\|off]`      | Toggle the ring-buffer + JSONL capture.                                                                                                                       |
+| `@config collision telemetry debugLog [on\|off]`  | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                        |
+| `@config collision telemetry experimentId [<id>]` | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                          |
+| `@collision events [-n <N>] [-k <kind>]`          | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`. |
+| `@config log db [on\|off]`                        | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                  |
+
+Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `similarityThreshold`) are intentionally not exposed via `@config collision` — they're long-tail tuning, not opt-in toggles, and the same `data.json` accepts hand edits when needed.
+
+### Usage example
+
+For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships rules engineered to collide with the **list** agent on these inputs:
+
+| Test phrase                        | Collides on                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `add eggs to my grocery list`      | `list.addItems` vs `vampire.addItems`       |
+| `remove eggs from my grocery list` | `list.removeItems` vs `vampire.removeItems` |
+| `what is on my grocery list`       | `list.getList` vs `vampire.getList`         |
+
+(The `<Play>` rule in `vampireSchema.agr` claims it collides with `player.play` but the current player grammar requires `play <track> by <artist>`, so a bare `play X` only matches vampire today — kept for reference but not a working collision target until player grows back a bare `play <song>` rule.)
+
+A typical Phase 1 observability experiment looks like:
+
+```
+@config agent vampire                              # enable the test agent
+@config log db on                                  # remote upload (Cosmos)
+@config collision telemetry emit on                # capture events
+@config collision telemetry experimentId E1.2-2026-05-12
+@config collision grammarMatch detect on           # opt in to detection
+add eggs to my grocery list                        # known colliding phrase
+@collision events -k grammarMatch -n 25            # inspect what fired
+@config collision grammarMatch detect off          # rollback (one step)
+```
+
+Programmatic equivalent (used by tests and tools):
+
+```ts
+session.updateSettings({
+  collision: {
+    grammarMatch: { detect: true, strategy: "first-match" },
+    telemetry: { emit: true, debugLog: true, experimentId: "E1.2-2026-05-12" },
+  },
+});
+```
+
+### MultipleAction interaction
+
+`multipleActionBehavior` controls what happens when `user-clarify` would fire on a sub-action inside a `MultipleAction` batch:
+
+- `downgrade-to-priority` (default, safest): silently fall back to `priority`. Telemetry still records the original collision so the choice is auditable.
+- `pause-and-prompt`: **TODO** — requires non-trivial batch-executor changes. Today this value falls back to `downgrade-to-priority`.
+- `abort`: surface the clarify and fail the batch; the user re-issues the request.
+
+### TODOs / open work
+
+- **Real `ActionEmbeddingScorer` implementation** — the fuzzy detection point is fully wired but the only shipped scorer (`PlaceholderScorer`) returns 0 for all pairs. Selecting `scorer: "actionEmbedding"` today logs a "not implemented; falling back to placeholder" warning. Reusing the embedding model already loaded by `semanticSearchActionSchema` is the natural follow-up.
+- **Runtime fuzzy detection hook** — `fuzzy.runtimeEnabled` is in the config but the call site in `matchCollision.ts` (post-resolver fuzzy candidate scan) is not yet wired up. Static fuzzy scanning is wired.
+- **`pause-and-prompt` for `MultipleAction`** — requires batch-executor pause/resume support. Today this strategy auto-degrades to `downgrade-to-priority`.
+- ~~**Runtime collision-events command** — `@grammar collisions` covers the static-scan side (cross-agent grammar overlap, with concrete witnesses via NFA product construction). The runtime side — `lastStaticCollisions` (post-load) and the `collisionEvents` ring buffer (per-request) — is still programmatic-only and needs a command surface.~~ Done (M5): `@collision events` surfaces the per-event ring buffer; events also persist to `<sessionDir>/collision-events.jsonl` and (when `dblogging` is on) to Cosmos. The `lastStaticCollisions` post-load snapshot is still programmatic-only.
+- **Threshold calibration** — `fuzzy.similarityThreshold: 0.85` is a placeholder. Once a real scorer lands, calibrate against a labeled set of agent-action pairs.
+- **On-disk fuzzy matrix cache** — once fuzzy scoring is non-trivial, cache the static pairwise matrix in the agent cache directory so it doesn't re-run on every dispatcher boot.
+- **Clarify-loop bias** — when the user picks an agent in response to a `ClarifyMultipleAgentMatches`, the same collision can repeat on the next round-trip. Mitigation: temporarily set `lastActionSchemaName` to the user's pick to bias re-translation. Deferred until/unless it bites in evaluation.
+- **`@config collision …` shell command** — programmatic-only setting today; a CLI surface would make A/B evaluation easier.
 
 ## Developer
 

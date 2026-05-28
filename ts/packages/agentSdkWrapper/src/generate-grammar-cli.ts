@@ -2,16 +2,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { config } from "dotenv";
+import { loadConfigSync } from "@typeagent/config";
 import * as path from "path";
-import { fileURLToPath } from "url";
 import * as fs from "fs";
 
-// Load .env file
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, "../../..");
-config({ path: path.join(repoRoot, ".env") });
+loadConfigSync();
 
 import { SchemaToGrammarGenerator } from "./schemaToGrammarGenerator.js";
 import { loadSchemaInfo } from "./schemaReader.js";

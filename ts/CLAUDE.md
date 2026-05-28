@@ -86,6 +86,14 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 
 ## Conventions
 
+### Engineering tradeoffs
+
+- **API / embedding / LLM cost is not a constraint.** Don't gate features
+  on token budget, don't apologize for "5× embedding cost," don't add
+  cost-saving caveats unless the user asks for them. If the right
+  experiment runs every embedding twice or every LLM call three times,
+  that's fine.
+
 ### Code style
 
 - **4-space indentation** for TypeScript/JavaScript, **2-space** for JSON
@@ -120,6 +128,6 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 ### Environment
 
 - Requires **Node ≥22**, **pnpm ≥10**
-- API keys go in `ts/.env` (Azure OpenAI or OpenAI endpoints)
+- API keys go in `ts/config.local.yaml` (see `config.sample.yaml` for reference). Legacy `.env` is still supported but deprecated.
 - User data stored in `~/.typeagent/`
 - Tracing via the `debug` package — enable with `DEBUG=typeagent:*` env var

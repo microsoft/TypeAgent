@@ -12,14 +12,16 @@ import {
     PhaseTiming,
     NotifyExplainedData,
     Dispatcher,
+    UserFeedbackEntry,
 } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chat/chatView";
-import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
+import { iconCheckMarkCircle, iconRoadrunner, iconTrash, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";
+import { FeedbackController, FeedbackWidget } from "./feedbackWidget";
 
 function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
@@ -108,6 +110,10 @@ export class MessageContainer {
     private pendingSpeakText: string = "";
     private defaultSource?: string;
     private action?: TypeAgentAction | string[];
+    private feedbackWidget?: FeedbackWidget;
+    private trashButton?: HTMLButtonElement;
+    /** Lazily-created "queued"/"running" chip; user bubbles only. */
+    private queueStatusChip?: HTMLDivElement;
 
     public setDisplayInfo(source: string, action?: TypeAgentAction | string[]) {
         this.defaultSource = source;
@@ -327,6 +333,166 @@ export class MessageContainer {
 
     public getMessageDiv() {
         return this.messageDiv;
+    }
+
+    /**
+     * Render a "queued"/"running" chip above the message body. No-op on non-user
+     * bubbles. Pass `null` to remove the chip. When `status === "queued"` and
+     * `onCancel` is provided, a small X button is rendered inside the chip and
+     * invokes `onCancel()` on click.
+     */
+    public setQueueStatus(
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ): void {
+        if (this.classNameSuffix !== "user") return;
+        if (status === null) {
+            if (this.queueStatusChip) {
+                this.queueStatusChip.remove();
+                this.queueStatusChip = undefined;
+            }
+            return;
+        }
+        if (!this.queueStatusChip) {
+            const chip = document.createElement("div");
+            chip.className = "chat-queue-status-chip";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            chip.style.gap = "4px";
+            chip.style.padding = "1px 6px";
+            chip.style.marginLeft = "4px";
+            chip.style.marginTop = "4px";
+            chip.style.marginBottom = "2px";
+            chip.style.fontSize = "11px";
+            chip.style.lineHeight = "1";
+            chip.style.borderRadius = "8px";
+            chip.style.opacity = "0.85";
+            this.messageBodyDiv.insertBefore(
+                chip,
+                this.messageBodyDiv.firstChild,
+            );
+            this.queueStatusChip = chip;
+        }
+        const chip = this.queueStatusChip;
+        chip.replaceChildren();
+        const label = document.createElement("span");
+        label.textContent = status;
+        chip.appendChild(label);
+        if (status === "queued") {
+            chip.style.background = "rgba(255, 200, 0, 0.18)";
+            chip.style.color = "rgba(120, 80, 0, 0.95)";
+            if (onCancel) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chat-queue-cancel-button";
+                btn.title = "Cancel this queued request";
+                btn.setAttribute("aria-label", "Cancel queued request");
+                // A bare "×" glyph sized by `font-size: 0.7em` scales with the
+                // chip's own font, avoids loading an SVG icon for a single
+                // character, and keeps the button height roughly 2/3 of the
+                // chip text. Using inline-flex for vertical centering.
+                btn.textContent = "×";
+                btn.style.display = "inline-flex";
+                btn.style.alignItems = "center";
+                btn.style.justifyContent = "center";
+                btn.style.padding = "0";
+                btn.style.border = "none";
+                btn.style.background = "transparent";
+                btn.style.color = "inherit";
+                btn.style.cursor = "pointer";
+                btn.style.fontSize = "0.7em";
+                btn.style.lineHeight = "1";
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                });
+                chip.appendChild(btn);
+            }
+        } else {
+            chip.style.background = "rgba(0, 150, 255, 0.18)";
+            chip.style.color = "rgba(0, 80, 140, 0.95)";
+        }
+    }
+
+    /**
+     * Build the feedback affordance for this bubble. Idempotent: if a
+     * widget already exists, leaves it alone (subsequent calls during
+     * RequestId promotion are no-ops).
+     */
+    public attachFeedbackController(controller: FeedbackController) {
+        if (this.classNameSuffix !== "agent") return;
+        if (this.feedbackWidget !== undefined) return;
+        this.feedbackWidget = new FeedbackWidget(
+            {
+                container: this.div,
+                bodyDiv: this.messageBodyDiv,
+                headerDiv: this.timestampDiv,
+                messageDiv: this.messageDiv,
+            },
+            controller,
+            this.chatView.feedbackUIVariant,
+        );
+        this.attachTrashButton(controller);
+    }
+
+    /**
+     * Attach a trash button to this bubble that moves the entire
+     * message group to the trash bin via `controller.setHidden(true)`.
+     *
+     *   - Agent bubbles get the trash anchored absolute top-right
+     *     inside the bubble body (hidden until hover).
+     *   - User bubbles get the trash as an inline child of the message
+     *     content, inserted *before* the roadrunner so the roadrunner
+     *     stays at the trailing edge.
+     *
+     * Wired both from `attachFeedbackController` (agent path) and from
+     * MessageGroup directly (user path).
+     */
+    public attachTrashButton(controller: FeedbackController) {
+        if (this.trashButton !== undefined) return;
+        if (controller.setHidden === undefined) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-button chat-message-trash";
+        btn.title = "Move to trash";
+        btn.setAttribute("aria-label", "Move to trash");
+        btn.dataset.action = "trash";
+        btn.appendChild(iconTrash());
+        // Trash on a user bubble hides only the user bubble; trash on
+        // an agent bubble hides only that agent response. The user can
+        // delete one side without affecting the other.
+        //
+        // We optimistically toggle the .chat-message-trashed class on
+        // the container right away — the dispatcher roundtrip would
+        // otherwise insert a noticeable delay before the placeholder
+        // appears. The class is also re-applied via the broadcast on
+        // success (idempotent toggle) and removed if the call fails.
+        const target: "user" | "agent" = this.classNameSuffix;
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            this.div.classList.add("chat-message-trashed");
+            try {
+                await controller.setHidden!(true, target);
+            } catch (e) {
+                this.div.classList.remove("chat-message-trashed");
+                console.error("recordUserHide failed", e);
+            }
+        });
+        this.trashButton = btn;
+
+        // Anchored top-right of the bubble body (works for both user
+        // and agent). Placing it as a sibling of the message content
+        // keeps it outside the text flow — earlier attempts to put it
+        // inline in the user bubble had it wrap to a new line because
+        // the user-text span renders trailing newlines literally
+        // (`white-space: break-spaces`). The roadrunner stays inline
+        // in the content and lives "below/left" of the trash visually.
+        this.messageBodyDiv.appendChild(btn);
+    }
+
+    public setFeedbackState(entry: UserFeedbackEntry | null) {
+        this.feedbackWidget?.setFeedbackState(entry);
     }
 
     public setMessage(
