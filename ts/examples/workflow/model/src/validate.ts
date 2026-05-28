@@ -108,7 +108,8 @@ export function isNeverSchema(schema: JSONSchema | undefined): boolean {
  * - Per workflow body: entry existence and node reference integrity,
  *   task registration, static schema compatibility, CFG passes,
  *   template passes, type compatibility.
- * - WorkflowCallNode: ref resolution, schema match, acyclic call graph.
+ * - WorkflowCallNode: ref resolution and schema match.
+ * - Workflow call graph: acyclic call graph.
  */
 export function validateWorkflowIR(
     ir: WorkflowIR,
@@ -171,13 +172,16 @@ export function validateWorkflowIR(
         }
     }
 
-    // Validate each workflow body.
+    const callGraph = new Map<string, Set<string>>();
+
+    // Validate each workflow body and collect workflow call graph edges.
     for (const [wfName, body] of Object.entries(ir.workflows)) {
-        validateWorkflowBody(ir, wfName, body, tasks, errors);
+        const callees = validateWorkflowBody(ir, wfName, body, tasks, errors);
+        callGraph.set(wfName, callees);
     }
 
-    // Validate WorkflowCallNode references and acyclic call graph.
-    validateWorkflowCalls(ir, errors);
+    // Validate the workflow call graph after all bodies have recorded callees.
+    validateWorkflowCallGraph(callGraph, errors);
 
     return { valid: errors.length === 0, errors };
 }
@@ -186,8 +190,8 @@ export function validateWorkflowIR(
  * Validate a single workflow body within an IR artifact.
  *
  * Each body is validated as a self-contained scope (entry, nodes, output,
- * schemas). Cross-workflow concerns (call resolution, acyclic call graph)
- * are validated at the IR level by `validateWorkflowCalls`.
+ * schemas). WorkflowCallNode validation records callee edges in the returned
+ * set so the caller can perform graph-level checks without walking again.
  */
 function validateWorkflowBody(
     ir: WorkflowIR,
@@ -195,8 +199,9 @@ function validateWorkflowBody(
     body: WorkflowBody,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     errors: ValidationError[],
-): void {
+): Set<string> {
     const basePath = `workflows.${wfName}`;
+    const workflowCallees = new Set<string>();
 
     if (!(body.entry in body.nodes)) {
         errors.push({
@@ -206,15 +211,19 @@ function validateWorkflowBody(
     }
 
     const ambientCtx: ScopeAmbientContext = {
-        workflows: ir.workflows,
         constants: ir.constants,
         stateVars: undefined,
     };
-    validateScope(body, basePath, tasks, ambientCtx, errors);
+    const workflowCallCtx: WorkflowCallContext = {
+        workflows: ir.workflows,
+        callees: workflowCallees,
+    };
+    validateScope(body, basePath, tasks, ambientCtx, workflowCallCtx, errors);
+    return workflowCallees;
 }
 
 /**
- * Validate all WorkflowCallNodes across the IR.
+ * Validate the workflow call graph across the IR.
  *
  * Checks:
  * - The call graph (workflow A calls workflow B) is acyclic.
@@ -231,100 +240,16 @@ function assertNever(x: never): never {
     );
 }
 
-function validateWorkflowCalls(
-    ir: WorkflowIR,
+function validateWorkflowCallGraph(
+    callGraph: Map<string, Set<string>>,
     errors: ValidationError[],
 ): void {
-    // Build the workflow call graph (workflow -> referenced workflows).
-    const callGraph = new Map<string, Set<string>>();
-    for (const [wfName, body] of Object.entries(ir.workflows)) {
-        const callees = new Set<string>();
-        for (const node of Object.values(body.nodes)) {
-            collectCalleesInNode(node, callees);
-        }
-        callGraph.set(wfName, callees);
-    }
     const cycle = findCallGraphCycle(callGraph);
     if (cycle) {
         errors.push({
             path: "workflows",
             message: `Workflow call graph contains a cycle: ${cycle.join(" -> ")}. Recursion is not supported in IR v1.`,
         });
-    }
-}
-
-function collectCalleesInNode(node: WorkflowNode, callees: Set<string>): void {
-    switch (node.kind) {
-        case "task":
-            break;
-        case "workflowCall":
-            if (node.workflowRef?.name) {
-                callees.add(node.workflowRef.name);
-            }
-            break;
-        case "loop":
-        case "forkMap":
-        case "fork":
-        case "branch":
-            visitChildNodes(node, "", (childNode) => {
-                collectCalleesInNode(childNode, callees);
-            });
-            break;
-        default:
-            assertNever(node);
-    }
-}
-
-function visitChildNodes(
-    node: WorkflowNode,
-    path: string,
-    visitor: (node: WorkflowNode, path: string) => void,
-): void {
-    switch (node.kind) {
-        case "task":
-        case "workflowCall":
-            break;
-        case "loop":
-        case "forkMap":
-            for (const [innerId, innerNode] of Object.entries(
-                node.body.nodes,
-            )) {
-                visitor(innerNode, `${path}.body.nodes.${innerId}`);
-            }
-            break;
-        case "fork":
-            for (const [branchName, branch] of Object.entries(node.branches)) {
-                for (const [innerId, innerNode] of Object.entries(
-                    branch.scope.nodes,
-                )) {
-                    visitor(
-                        innerNode,
-                        `${path}.branches.${branchName}.scope.nodes.${innerId}`,
-                    );
-                }
-            }
-            break;
-        case "branch": {
-            const arms: Array<[string, BranchArm]> = [
-                ...Object.entries(node.cases),
-                ...(node.default
-                    ? [["default", node.default] as [string, BranchArm]]
-                    : []),
-            ];
-            for (const [armKey, arm] of arms) {
-                for (const [innerId, innerNode] of Object.entries(
-                    arm.scope.nodes,
-                )) {
-                    visitor(
-                        innerNode,
-                        `${path}.cases.${armKey}.scope.nodes.${innerId}`,
-                    );
-                }
-            }
-            break;
-        }
-        default:
-            assertNever(node);
     }
 }
 
@@ -1260,6 +1185,7 @@ function validateBranchArm(
     armPath: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     ambientCtx: ScopeAmbientContext,
+    workflowCallCtx: WorkflowCallContext,
     errors: ValidationError[],
 ): void {
     if (arm === null || typeof arm !== "object") {
@@ -1315,15 +1241,14 @@ function validateBranchArm(
         scope,
         `${armPath}.scope`,
         tasks,
-        {
-            workflows: ambientCtx.workflows,
-            constants: ambientCtx.constants,
+        withAmbientContext(ambientCtx, {
             stateVars: undefined,
             stateNamespaceUnavailableMessage: (name) =>
                 `$from "state", name "${name}": branch arm nodes ` +
                 `have no state namespace. Thread state values through ` +
                 `arm.inputs instead.`,
-        },
+        }),
+        workflowCallCtx,
         errors,
     );
 }
@@ -1340,7 +1265,7 @@ function validateBranchArm(
 function validateScopeNodes(
     nodes: Record<string, WorkflowNode>,
     prefix: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     // NOTE: Binding name uniqueness is intentionally NOT validated.
     // Duplicate bindings are a deliberate design pattern used for:
@@ -1621,9 +1546,9 @@ function validateInputObjectTemplates(
 function validateWorkflowCallNode(
     node: WorkflowCallNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
-    const { nodeIds, ambientCtx, templateCtx, errors } = state;
+    const { nodeIds, workflowCallCtx, templateCtx, errors } = state;
     const refName = node.workflowRef?.name;
     if (typeof refName !== "string" || refName.length === 0) {
         errors.push({
@@ -1631,6 +1556,7 @@ function validateWorkflowCallNode(
             message: `Missing or invalid workflow reference name.`,
         });
     } else {
+        workflowCallCtx.callees.add(refName);
         const source = node.workflowRef.source ?? "bundle";
         if (source !== "bundle") {
             errors.push({
@@ -1638,7 +1564,7 @@ function validateWorkflowCallNode(
                 message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
             });
         } else {
-            const target = ambientCtx.workflows[refName];
+            const target = workflowCallCtx.workflows[refName];
             if (!target) {
                 errors.push({
                     path: `${path}.workflowRef.name`,
@@ -1682,7 +1608,7 @@ function validateWorkflowCallNode(
 function validateTaskNode(
     node: TaskNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     const { nodeIds, tasks, templateCtx, errors } = state;
     if (tasks && !tasks.has(node.task)) {
@@ -1710,7 +1636,7 @@ function validateTaskNode(
 function validateBranchNode(
     node: BranchNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
     // Validate selectorSchema type: String() coercion at runtime only
@@ -1735,6 +1661,7 @@ function validateBranchNode(
             `${path}.cases.${label}`,
             tasks,
             ambientCtx,
+            state.workflowCallCtx,
             errors,
         );
     }
@@ -1744,6 +1671,7 @@ function validateBranchNode(
             `${path}.default`,
             tasks,
             ambientCtx,
+            state.workflowCallCtx,
             errors,
         );
     }
@@ -1795,7 +1723,7 @@ function validateBranchNode(
 function validateLoopNode(
     node: LoopNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     const { nodeIds, outerNodes, tasks, ambientCtx, templateCtx, errors } =
         state;
@@ -1817,11 +1745,10 @@ function validateLoopNode(
         node.body,
         `${path}.body`,
         tasks,
-        {
-            workflows: ambientCtx.workflows,
-            constants: ambientCtx.constants,
+        withAmbientContext(ambientCtx, {
             stateVars: node.state,
-        },
+        }),
+        state.workflowCallCtx,
         errors,
     );
 
@@ -1831,11 +1758,9 @@ function validateLoopNode(
     const bodyTemplateCtx = createTemplateResolutionContext(
         node.body,
         bodyBindings,
-        {
-            workflows: ambientCtx.workflows,
-            constants: ambientCtx.constants,
+        withAmbientContext(ambientCtx, {
             stateVars: node.state,
-        },
+        }),
     );
 
     // continueWhen is required; loop body natural completion triggers evaluation.
@@ -1883,7 +1808,7 @@ function validateLoopNode(
 function validateForkNode(
     node: ForkNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
     const branchNames = Object.keys(node.branches);
@@ -1904,11 +1829,10 @@ function validateForkNode(
             branch.scope,
             `${path}.branches.${bName}.scope`,
             tasks,
-            {
-                workflows: ambientCtx.workflows,
-                constants: ambientCtx.constants,
+            withAmbientContext(ambientCtx, {
                 stateVars: undefined,
-            },
+            }),
+            state.workflowCallCtx,
             errors,
         );
     }
@@ -1925,7 +1849,7 @@ function validateForkNode(
 function validateForkMapNode(
     node: ForkMapNode,
     path: string,
-    state: ScopeNodeValidationState,
+    state: ScopeValidationState,
 ): void {
     const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
     if (!normalizeTypeSet(node.collectionSchema?.type).includes("array")) {
@@ -1965,15 +1889,14 @@ function validateForkMapNode(
         node.body,
         `${path}.body`,
         tasks,
-        {
-            workflows: ambientCtx.workflows,
-            constants: ambientCtx.constants,
+        withAmbientContext(ambientCtx, {
             stateVars: undefined,
             stateNamespaceUnavailableMessage: (name) =>
                 `$from "state", name "${name}": forkMap body nodes ` +
                 `have no state namespace. Pass state values through ` +
                 `forkMap inputs or body input instead.`,
-        },
+        }),
+        state.workflowCallCtx,
         errors,
     );
     validateForkMapNodeTemplates(node, path, templateCtx, errors);
@@ -2243,6 +2166,7 @@ function validateScope(
     basePath: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     ambientCtx: ScopeAmbientContext,
+    workflowCallCtx: WorkflowCallContext,
     errors: ValidationError[],
 ): Map<string, JSONSchema> {
     const prefix = `${basePath}.nodes`;
@@ -2270,6 +2194,7 @@ function validateScope(
         outerNodes: scope.nodes,
         tasks,
         ambientCtx,
+        workflowCallCtx,
         templateCtx,
         recoveryTriggerSchemas,
         errors,
@@ -2324,6 +2249,24 @@ function createTemplateResolutionContext(
             ambientCtx.stateNamespaceUnavailableMessage;
     }
     return templateCtx;
+}
+
+function withAmbientContext(
+    ambientCtx: ScopeAmbientContext,
+    overrides: Pick<
+        ScopeAmbientContext,
+        "stateVars" | "stateNamespaceUnavailableMessage"
+    >,
+): ScopeAmbientContext {
+    const childCtx: ScopeAmbientContext = {
+        constants: ambientCtx.constants,
+        stateVars: overrides.stateVars,
+    };
+    if (overrides.stateNamespaceUnavailableMessage) {
+        childCtx.stateNamespaceUnavailableMessage =
+            overrides.stateNamespaceUnavailableMessage;
+    }
+    return childCtx;
 }
 
 /**
@@ -2497,14 +2440,19 @@ function canonicalStringify(value: unknown): string {
 
 /** Ambient data carried when validateScope recurses into child scopes. */
 interface ScopeAmbientContext {
-    /** Bundle-local workflows, for workflowCall ref checks. */
-    workflows: Record<string, WorkflowBody>;
     /** IR-level constant definitions, for $from:"constant" ref checks. */
     constants: Record<string, ConstantDef> | undefined;
     /** Loop state variable declarations (only set when validating a loop body). */
     stateVars: Record<string, LoopStateVar> | undefined;
     /** Custom diagnostic for scopes that structurally disallow $from:"state". */
     stateNamespaceUnavailableMessage?: (name: string) => string;
+}
+
+interface WorkflowCallContext {
+    /** Bundle-local workflows, for workflowCall ref checks. */
+    workflows: Record<string, WorkflowBody>;
+    /** Callees recorded while validating the current workflow body. */
+    callees: Set<string>;
 }
 
 /** Derived context used by the template walker to resolve `$from` refs. */
@@ -2519,11 +2467,12 @@ interface TemplateResolutionContext {
     stateNamespaceUnavailableMessage?: (name: string) => string;
 }
 
-interface ScopeNodeValidationState {
+interface ScopeValidationState {
     nodeIds: Set<string>;
     outerNodes: Record<string, WorkflowNode>;
     tasks: ReadonlyMap<string, TaskDefinition> | undefined;
     ambientCtx: ScopeAmbientContext;
+    workflowCallCtx: WorkflowCallContext;
     templateCtx: TemplateResolutionContext;
     recoveryTriggerSchemas: Map<string, JSONSchema>;
     errors: ValidationError[];
