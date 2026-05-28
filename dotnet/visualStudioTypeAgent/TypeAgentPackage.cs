@@ -9,37 +9,36 @@ using Microsoft.TypeAgent.VisualStudio.Bridge;
 using Microsoft.VisualStudio.Shell;
 using Task = System.Threading.Tasks.Task;
 
-namespace Microsoft.TypeAgent.VisualStudio
+namespace Microsoft.TypeAgent.VisualStudio;
+
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[InstalledProductRegistration("TypeAgent Chat", "Chat-driven Visual Studio assistant", "0.1.0")]
+[ProvideMenuResource("Menus.ctmenu", 1)]
+[ProvideToolWindow(typeof(ChatToolWindow), Style = VsDockStyle.Tabbed)]
+[Guid(PackageGuidString)]
+public sealed class TypeAgentPackage : AsyncPackage
 {
-    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-    [InstalledProductRegistration("TypeAgent Chat", "Chat-driven Visual Studio assistant", "0.1.0")]
-    [ProvideMenuResource("Menus.ctmenu", 1)]
-    [ProvideToolWindow(typeof(ChatToolWindow), Style = VsDockStyle.Tabbed)]
-    [Guid(PackageGuidString)]
-    public sealed class TypeAgentPackage : AsyncPackage
+    public const string PackageGuidString = "b1a20f8c-7c53-4e2f-9c19-9f1e2a3d5f01";
+
+    private AgentBridgeClient? _bridge;
+
+    protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
-        public const string PackageGuidString = "b1a20f8c-7c53-4e2f-9c19-9f1e2a3d5f01";
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        await ChatToolWindowCommand.InitializeAsync(this);
 
-        private AgentBridgeClient? _bridge;
+        // Start the action bridge on the main thread so DTE calls don't marshal across.
+        _bridge = new AgentBridgeClient(this);
+        _ = _bridge.StartAsync(cancellationToken);
+    }
 
-        protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-            await ChatToolWindowCommand.InitializeAsync(this);
-
-            // Start the action bridge on the main thread so DTE calls don't marshal across.
-            _bridge = new AgentBridgeClient(this);
-            _ = _bridge.StartAsync(cancellationToken);
+            _bridge?.Dispose();
+            _bridge = null;
         }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _bridge?.Dispose();
-                _bridge = null;
-            }
-            base.Dispose(disposing);
-        }
+        base.Dispose(disposing);
     }
 }
