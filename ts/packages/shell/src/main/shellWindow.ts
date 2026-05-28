@@ -25,6 +25,7 @@ import {
     BrowserViewManager,
     BrowserViewContext,
 } from "./browserViewManager.js";
+import { attachEditContextMenu } from "./contextMenu.js";
 
 import registerDebug from "debug";
 import { ChatServer } from "./chatServer.js";
@@ -178,6 +179,9 @@ export class ShellWindow {
         chatView.webContents.on("focus", () => {
             this.setOverlayVisibility(true);
         });
+
+        attachEditContextMenu(chatView.webContents);
+        attachEditContextMenu(mainWindow.webContents);
 
         mainWindow.contentView.addChildView(chatView);
 

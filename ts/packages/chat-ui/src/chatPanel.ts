@@ -27,6 +27,7 @@ import {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+import { ChatContextMenu } from "./contextMenu.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -680,6 +681,15 @@ export class ChatPanel {
         rootElement.appendChild(wrapper);
 
         this.setupInputHandlers();
+        this.setupContextMenu();
+    }
+
+    private setupContextMenu() {
+        const menu = new ChatContextMenu();
+        // Editable input: Cut / Copy / Paste / Select All.
+        menu.attach(this.textInput, { editable: true });
+        // Read-only message stream: Copy / Select All.
+        menu.attach(this.messageDiv, { editable: false });
     }
 
     private setupInputHandlers() {
