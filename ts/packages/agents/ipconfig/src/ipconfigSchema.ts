@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 export type IpconfigActions =
-  | DisplayHelpMessageAction
-  | DisplayFullConfigurationInformationAction
-  | ReleaseIPv4AddressAction
-  | ReleaseIPv6AddressAction
-  | RenewIPv4AddressAction
-  | RenewIPv6AddressAction
-  | PurgeDNSResolverCacheAction
-  | RefreshDHCPLeasesAndReRegisterDNSNamesAction
-  | DisplayDNSResolverCacheContentsAction
-  | DisplayDHCPClassIDsAction
-  | ModifyDHCPClassIDAction
-  | DisplayIPv6DHCPClassIDsAction
-  | ModifyIPv6DHCPClassIDAction;
+    | DisplayHelpMessageAction
+    | DisplayFullConfigurationInformationAction
+    | ReleaseIPv4AddressAction
+    | ReleaseIPv6AddressAction
+    | RenewIPv4AddressAction
+    | RenewIPv6AddressAction
+    | PurgeDNSResolverCacheAction
+    | RefreshDHCPLeasesAndReRegisterDNSNamesAction
+    | DisplayDNSResolverCacheContentsAction
+    | DisplayDHCPClassIDsAction
+    | ModifyDHCPClassIDAction
+    | DisplayIPv6DHCPClassIDsAction
+    | ModifyIPv6DHCPClassIDAction;
 
 // User: "Can you show me the help message for ipconfig?"
 // Agent: "Displaying the help message for ipconfig."
@@ -24,8 +24,8 @@ export type IpconfigActions =
 // Agent: "Displaying the help message for ipconfig."
 // Displays the help message for ipconfig.
 export type DisplayHelpMessageAction = {
-  actionName: "displayHelpMessage";
-  parameters: {};
+    actionName: "displayHelpMessage";
+    parameters: {};
 };
 
 // User: "Show me the full network configuration details."
@@ -36,8 +36,8 @@ export type DisplayHelpMessageAction = {
 // Agent: "Displaying full network configuration details."
 // Displays full configuration information.
 export type DisplayFullConfigurationInformationAction = {
-  actionName: "displayFullConfigurationInformation";
-  parameters: {};
+    actionName: "displayFullConfigurationInformation";
+    parameters: {};
 };
 
 // User: "Please release the IPv4 address for the Ethernet adapter."
@@ -48,11 +48,11 @@ export type DisplayFullConfigurationInformationAction = {
 // Agent: "Releasing the IPv4 address for the 'Local Area Connection' adapter."
 // Releases the IPv4 address for the specified adapter.
 export type ReleaseIPv4AddressAction = {
-  actionName: "releaseIPv4Address";
-  parameters: {
-    // The name of the network adapter.
-    adapter?: string;
-  };
+    actionName: "releaseIPv4Address";
+    parameters: {
+        // The name of the network adapter.
+        adapter?: string;
+    };
 };
 
 // User: "Please release the IPv6 address for the adapter named 'Ethernet'."
@@ -63,11 +63,11 @@ export type ReleaseIPv4AddressAction = {
 // Agent: "Releasing the IPv6 address for the 'Local Area Connection' adapter."
 // Releases the IPv6 address for the specified adapter.
 export type ReleaseIPv6AddressAction = {
-  actionName: "releaseIPv6Address";
-  parameters: {
-    // The name of the network adapter.
-    adapter?: string;
-  };
+    actionName: "releaseIPv6Address";
+    parameters: {
+        // The name of the network adapter.
+        adapter?: string;
+    };
 };
 
 // User: "Can you renew the IPv4 address for the Ethernet adapter?"
@@ -78,11 +78,11 @@ export type ReleaseIPv6AddressAction = {
 // Agent: "Renewing the IPv4 address for the 'Local Area Connection' adapter."
 // Renews the IPv4 address for the specified adapter.
 export type RenewIPv4AddressAction = {
-  actionName: "renewIPv4Address";
-  parameters: {
-    // The name of the network adapter.
-    adapter?: string;
-  };
+    actionName: "renewIPv4Address";
+    parameters: {
+        // The name of the network adapter.
+        adapter?: string;
+    };
 };
 
 // User: "Can you renew the IPv6 address for the adapter named 'Ethernet'?"
@@ -93,11 +93,11 @@ export type RenewIPv4AddressAction = {
 // Agent: "Renewing the IPv6 address for the 'Local Area Connection' adapter."
 // Renews the IPv6 address for the specified adapter.
 export type RenewIPv6AddressAction = {
-  actionName: "renewIPv6Address";
-  parameters: {
-    // The name of the network adapter.
-    adapter?: string;
-  };
+    actionName: "renewIPv6Address";
+    parameters: {
+        // The name of the network adapter.
+        adapter?: string;
+    };
 };
 
 // User: "Clear the DNS cache, please."
@@ -108,8 +108,8 @@ export type RenewIPv6AddressAction = {
 // Agent: "Purging the DNS resolver cache."
 // Purges the DNS Resolver cache.
 export type PurgeDNSResolverCacheAction = {
-  actionName: "purgeDNSResolverCache";
-  parameters: {};
+    actionName: "purgeDNSResolverCache";
+    parameters: {};
 };
 
 // User: "Can you refresh the DHCP leases and re-register the DNS names for me?"
@@ -120,8 +120,8 @@ export type PurgeDNSResolverCacheAction = {
 // Agent: "Refreshing all DHCP leases and re-registering DNS names."
 // Refreshes all DHCP leases and re-registers DNS names.
 export type RefreshDHCPLeasesAndReRegisterDNSNamesAction = {
-  actionName: "refreshDHCPLeasesAndReRegisterDNSNames";
-  parameters: {};
+    actionName: "refreshDHCPLeasesAndReRegisterDNSNames";
+    parameters: {};
 };
 
 // User: "Show me the DNS cache contents."
@@ -132,8 +132,8 @@ export type RefreshDHCPLeasesAndReRegisterDNSNamesAction = {
 // Agent: "Displaying the contents of the DNS resolver cache."
 // Displays the contents of the DNS Resolver Cache.
 export type DisplayDNSResolverCacheContentsAction = {
-  actionName: "displayDNSResolverCacheContents";
-  parameters: {};
+    actionName: "displayDNSResolverCacheContents";
+    parameters: {};
 };
 
 // User: "Can you show me the DHCP class IDs for the adapter?"
@@ -144,8 +144,8 @@ export type DisplayDNSResolverCacheContentsAction = {
 // Agent: "Displaying the DHCP class IDs for the adapter."
 // Displays all the DHCP class IDs allowed for the adapter.
 export type DisplayDHCPClassIDsAction = {
-  actionName: "displayDHCPClassIDs";
-  parameters: {};
+    actionName: "displayDHCPClassIDs";
+    parameters: {};
 };
 
 // User: "Can you change the DHCP class ID for the Ethernet adapter to 'newClassID'?"
@@ -156,13 +156,13 @@ export type DisplayDHCPClassIDsAction = {
 // Agent: "Modifying the DHCP class ID for the 'Local Area Connection' adapter to 'newClassID'."
 // Modifies the DHCP class ID.
 export type ModifyDHCPClassIDAction = {
-  actionName: "modifyDHCPClassID";
-  parameters: {
-    // The name of the network adapter.
-    adapter: string;
-    // The new DHCP class ID.
-    classID?: string;
-  };
+    actionName: "modifyDHCPClassID";
+    parameters: {
+        // The name of the network adapter.
+        adapter: string;
+        // The new DHCP class ID.
+        classID?: string;
+    };
 };
 
 // User: "Can you show me the IPv6 DHCP class IDs for the adapter?"
@@ -173,8 +173,8 @@ export type ModifyDHCPClassIDAction = {
 // Agent: "Displaying the IPv6 DHCP class IDs for the adapter."
 // Displays all the IPv6 DHCP class IDs allowed for the adapter.
 export type DisplayIPv6DHCPClassIDsAction = {
-  actionName: "displayIPv6DHCPClassIDs";
-  parameters: {};
+    actionName: "displayIPv6DHCPClassIDs";
+    parameters: {};
 };
 
 // User: "Can you change the IPv6 DHCP class ID for the adapter named 'Ethernet' to 'newClassID'?"
@@ -185,11 +185,11 @@ export type DisplayIPv6DHCPClassIDsAction = {
 // Agent: "Modifying the IPv6 DHCP class ID for the 'Local Area Connection' adapter to 'classID456'."
 // Modifies the IPv6 DHCP class ID.
 export type ModifyIPv6DHCPClassIDAction = {
-  actionName: "modifyIPv6DHCPClassID";
-  parameters: {
-    // The name of the network adapter.
-    adapter: string;
-    // The new IPv6 DHCP class ID.
-    classID?: string;
-  };
+    actionName: "modifyIPv6DHCPClassID";
+    parameters: {
+        // The name of the network adapter.
+        adapter: string;
+        // The new IPv6 DHCP class ID.
+        classID?: string;
+    };
 };

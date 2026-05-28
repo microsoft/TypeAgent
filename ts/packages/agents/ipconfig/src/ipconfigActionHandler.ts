@@ -5,11 +5,7 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-} from "@typeagent/agent-sdk";
+import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
@@ -30,51 +26,68 @@ function buildArgs(action: TypeAgentAction<IpconfigActions>): string[] {
     const params = action.parameters as Record<string, unknown>;
     switch (action.actionName) {
         case "displayHelpMessage":
-            args.push("/?"); break;
+            args.push("/?");
+            break;
         case "displayFullConfigurationInformation":
-            args.push("/all"); break;
+            args.push("/all");
+            break;
         case "releaseIPv4Address":
             args.push("/release");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "releaseIPv6Address":
             args.push("/release6");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "renewIPv4Address":
             args.push("/renew");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "renewIPv6Address":
             args.push("/renew6");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "purgeDNSResolverCache":
-            args.push("/flushdns"); break;
+            args.push("/flushdns");
+            break;
         case "refreshDHCPLeasesAndReRegisterDNSNames":
-            args.push("/registerdns"); break;
+            args.push("/registerdns");
+            break;
         case "displayDNSResolverCacheContents":
-            args.push("/displaydns"); break;
+            args.push("/displaydns");
+            break;
         case "displayDHCPClassIDs":
             args.push("/showclassid");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "modifyDHCPClassID":
             args.push("/setclassid");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
-            if (params.classID !== undefined && params.classID !== null) args.push(String(params.classID));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
+            if (params.classID !== undefined && params.classID !== null)
+                args.push(String(params.classID));
             break;
         case "displayIPv6DHCPClassIDs":
             args.push("/showclassid6");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
             break;
         case "modifyIPv6DHCPClassID":
             args.push("/setclassid6");
-            if (params.adapter !== undefined && params.adapter !== null) args.push(String(params.adapter));
-            if (params.classID !== undefined && params.classID !== null) args.push(String(params.classID));
+            if (params.adapter !== undefined && params.adapter !== null)
+                args.push(String(params.adapter));
+            if (params.classID !== undefined && params.classID !== null)
+                args.push(String(params.classID));
             break;
         default:
-            throw new Error(`Unknown action: ${(action as { actionName: string }).actionName}`);
+            throw new Error(
+                `Unknown action: ${(action as { actionName: string }).actionName}`,
+            );
     }
     return args;
 }
