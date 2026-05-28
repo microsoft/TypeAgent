@@ -46,8 +46,58 @@ export type {
     GrammarEntry,
 } from "./grammar/grammarBuilder.js";
 
+export {
+    computeTriggerPhrase,
+    generateDefaultGrammarPatterns,
+} from "./grammar/triggerPhrase.js";
+export type {
+    DefaultGrammarPattern,
+    GrammarParameterInput,
+    GenerateDefaultGrammarPatternsOptions,
+} from "./grammar/triggerPhrase.js";
+
 // Schema
 export {
     generateFlowActionTypes,
     buildUnionType,
 } from "./schema/schemaBuilder.js";
+
+// Markdown helpers (for ActionResult display formatting)
+export {
+    INDENT,
+    SECTION_BREAK,
+    escapeMarkdown,
+    escapeCodeSpan,
+    formatTimestamp,
+} from "./markdown.js";
+
+// JSON helpers (strict + permissive array parsing)
+export { tryParseJsonArray, parseOptionalJsonArray } from "./jsonHelpers.js";
+export type { ParseResult } from "./jsonHelpers.js";
+
+// Naming (free-form name → safe identifier + disambiguation)
+export {
+    tokenizeForTriggerPhrase,
+    slugifyFlowName,
+    resolveUniqueActionName,
+} from "./naming.js";
+
+// Tolerant LLM-response parser
+export { parseFlowLLMResponse } from "./llmResponse.js";
+export type { FlowLLMResponse, FlowLLMResponseOptions } from "./llmResponse.js";
+
+// Action catalog + registry
+export { parseActionCatalog, makeRegistry } from "./actionCatalog.js";
+export type { ActionRegistry, ActionCatalogOptions } from "./actionCatalog.js";
+
+// Static script analysis: unknown action detection
+export {
+    findUnknownActionCalls,
+    formatUnknownActionError,
+    closestActions,
+    levenshtein,
+} from "./unknownActions.js";
+export type {
+    UnknownActionCall,
+    FindUnknownActionsOptions,
+} from "./unknownActions.js";
