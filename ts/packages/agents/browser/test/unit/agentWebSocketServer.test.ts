@@ -63,6 +63,7 @@ jest.mock("debug", () => {
 
 import { AgentWebSocketServer } from "../../src/agent/agentWebSocketServer.mjs";
 import { isAllowedAgentOrigin } from "../../src/agent/originAllowlist.mjs";
+import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
 
 function makeMockSocket() {
     const handlers: Record<string, Function> = {};
@@ -423,5 +424,71 @@ describe("isAllowedAgentOrigin", () => {
     });
     it("rejects malformed Origin strings", () => {
         expect(isAllowedAgentOrigin("not a url")).toBe(false);
+    });
+});
+
+// Direct tests of the shared factory cover the policy knobs we expose
+// (`allowNullOrigin`, the `string[]` header normalization). The
+// agent-side wrapper above tests the default `allowNullOrigin: true`
+// branch as a side effect; these tests add explicit coverage for the
+// view-server posture where `"null"` must be rejected.
+describe("createAgentOriginAllowlist", () => {
+    describe("allowNullOrigin option", () => {
+        it('rejects Origin: "null" when allowNullOrigin is false', () => {
+            const allow = createAgentOriginAllowlist({
+                allowNullOrigin: false,
+            });
+            expect(allow("null")).toBe(false);
+        });
+        it("still allows missing/empty Origin when allowNullOrigin is false", () => {
+            const allow = createAgentOriginAllowlist({
+                allowNullOrigin: false,
+            });
+            expect(allow(undefined)).toBe(true);
+            expect(allow("")).toBe(true);
+        });
+        it("still allows loopback origins when allowNullOrigin is false", () => {
+            const allow = createAgentOriginAllowlist({
+                allowNullOrigin: false,
+            });
+            expect(allow("http://localhost:1234")).toBe(true);
+            expect(allow("http://127.0.0.1")).toBe(true);
+            expect(allow("http://[::1]:5173")).toBe(true);
+        });
+        it('accepts Origin: "null" by default (backwards-compat)', () => {
+            const allow = createAgentOriginAllowlist();
+            expect(allow("null")).toBe(true);
+        });
+        it('accepts Origin: "null" when allowNullOrigin is explicitly true', () => {
+            const allow = createAgentOriginAllowlist({
+                allowNullOrigin: true,
+            });
+            expect(allow("null")).toBe(true);
+        });
+    });
+    describe("string[] header normalization", () => {
+        // Node's TS header types claim repeated headers may surface as
+        // `string[]`. At runtime the parser joins repeated Origin
+        // headers into a single comma-separated string, so the array
+        // form is not expected — but if it ever does arrive, anything
+        // other than a single entry is inherently ambiguous and must be
+        // rejected.
+        it("rejects an empty array", () => {
+            const allow = createAgentOriginAllowlist();
+            expect(allow([])).toBe(false);
+        });
+        it("rejects an array with more than one entry", () => {
+            const allow = createAgentOriginAllowlist();
+            expect(
+                allow(["http://localhost", "https://evil.example.com"]),
+            ).toBe(false);
+            // Even two loopback entries are ambiguous and rejected.
+            expect(allow(["http://localhost", "http://127.0.0.1"])).toBe(false);
+        });
+        it("normalizes a single-element array to that entry", () => {
+            const allow = createAgentOriginAllowlist();
+            expect(allow(["http://localhost:1234"])).toBe(true);
+            expect(allow(["https://evil.example.com"])).toBe(false);
+        });
     });
 });

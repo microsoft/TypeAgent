@@ -2672,6 +2672,9 @@ importers:
       unist-util-visit:
         specifier: ^4.1.2
         version: 4.1.2
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -2784,6 +2787,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       winreg:
         specifier: ^1.2.5
         version: 1.2.5
