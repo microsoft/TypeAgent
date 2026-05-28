@@ -12,7 +12,7 @@
  */
 
 import { TextEdit, Range } from "vscode-languageserver/node.js";
-import { lex, Parser, format, type FormatOptions } from "workflow-dsl";
+import { lex, Parser, formatModule, type FormatOptions } from "workflow-dsl";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 
 export function formatDocument(
@@ -25,12 +25,12 @@ export function formatDocument(
     if (lexErrors.length > 0) return [];
 
     const parser = new Parser(tokens, comments);
-    const { ast, errors: parseErrors } = parser.parseSingle();
-    if (!ast || parseErrors.length > 0) return [];
+    const { module, errors: parseErrors } = parser.parseModule();
+    if (module.workflows.length === 0 || parseErrors.length > 0) return [];
 
     let formatted: string;
     try {
-        formatted = format(ast, options);
+        formatted = formatModule(module, options);
     } catch {
         return [];
     }

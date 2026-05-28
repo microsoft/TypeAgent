@@ -15,7 +15,8 @@ import { lex, Parser, extractGraph } from "workflow-dsl";
 
 function parseAndExtract(src: string) {
     const { tokens, comments } = lex(src);
-    const { ast } = new Parser(tokens, comments).parseSingle();
+    const { module } = new Parser(tokens, comments).parseModule();
+    const ast = module.workflows[0];
     if (!ast) throw new Error("parse failed");
     return extractGraph(ast);
 }

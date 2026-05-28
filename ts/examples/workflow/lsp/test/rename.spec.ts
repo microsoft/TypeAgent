@@ -136,6 +136,49 @@ describe("rename", () => {
             computeRename(doc(text), { line: 1, character: 10 }, "y"),
         ).toThrow();
     });
+
+    it("scopes rename to the owner workflow in a multi-workflow file", () => {
+        // Two workflows both bind 'x'; renaming the one in workflow A
+        // must not touch workflow B's 'x'.
+        const text =
+            `workflow a(): string {\n` + // line 0
+            `    const x = "from a";\n` + // line 1 — rename target
+            `    return x;\n` + // line 2
+            `}\n` + // line 3
+            `workflow b(): string {\n` + // line 4
+            `    const x = "from b";\n` + // line 5 — must NOT be touched
+            `    return x;\n` + // line 6
+            `}\n`; // line 7
+        // 'x' decl in workflow a is at line 1, col 10.
+        const edit = computeRename(doc(text), { line: 1, character: 10 }, "y");
+        expect(edit).not.toBeNull();
+        const edits = edit!.changes!["file:///t.wf"]!;
+        // 1 decl + 1 reference in workflow a; workflow b's two
+        // occurrences (decl + ref) must NOT appear.
+        expect(edits.length).toBe(2);
+        for (const e of edits) {
+            expect(e.range.start.line).toBeGreaterThanOrEqual(1);
+            expect(e.range.start.line).toBeLessThanOrEqual(2);
+            expect(e.newText).toBe("y");
+        }
+    });
+
+    it("does not flag conflict against same-named symbol in a sibling workflow", () => {
+        // Renaming 'x' in workflow a to 'y' is legal even though
+        // workflow b also has a binding named 'y' — they are in
+        // different scopes.
+        const text =
+            `workflow a(): string {\n` +
+            `    const x = "a";\n` + // rename target
+            `    return x;\n` +
+            `}\n` +
+            `workflow b(): string {\n` +
+            `    const y = "b";\n` + // would-be conflict (different scope)
+            `    return y;\n` +
+            `}\n`;
+        const edit = computeRename(doc(text), { line: 1, character: 10 }, "y");
+        expect(edit).not.toBeNull();
+    });
 });
 
 // Phase 4c: prepare-rename on a keyword should return null.

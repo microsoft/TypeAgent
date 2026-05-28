@@ -53,4 +53,24 @@ workflow w(): string {
         );
         expect(destructure).toBeDefined();
     });
+
+    it("returns every workflow in a multi-workflow file in source order", () => {
+        const src = `workflow alpha(a: string): string {
+    const x = a;
+    return x;
+}
+workflow beta(b: number): string {
+    const y = b;
+    return "ok";
+}
+`;
+        const symbols = computeDocumentSymbols(doc(src));
+        expect(symbols.map((s) => s.name)).toEqual(["alpha", "beta"]);
+        // Each workflow carries its own params/locals; they are not
+        // pooled into the first workflow.
+        const alphaChildren = symbols[0]!.children!.map((c) => c.name).sort();
+        const betaChildren = symbols[1]!.children!.map((c) => c.name).sort();
+        expect(alphaChildren).toEqual(["a", "x"]);
+        expect(betaChildren).toEqual(["b", "y"]);
+    });
 });

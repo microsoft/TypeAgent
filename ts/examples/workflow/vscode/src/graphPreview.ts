@@ -62,8 +62,16 @@ export interface GraphModel {
     groups: GraphGroup[];
 }
 
+export interface NamedGraph {
+    name: string;
+    graph: GraphModel;
+}
+
 export interface PreviewGraphResult {
+    /** First workflow's graph; preserved for backwards compatibility. */
     graph?: GraphModel;
+    /** Per-workflow graphs in source order. */
+    graphs?: NamedGraph[];
     errors: {
         phase: string;
         message: string;
@@ -113,9 +121,12 @@ function buildHtml(
 <style nonce="${nonce}">
     body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 12px; }
     h1 { font-size: 1em; margin: 0 0 8px 0; font-weight: 600; }
+    h2 { font-size: 0.95em; margin: 14px 0 6px 0; font-weight: 600; opacity: 0.85; }
     .errors { color: var(--vscode-errorForeground); white-space: pre-wrap; font-family: var(--vscode-editor-font-family); font-size: 12px; }
     .errors div { margin-bottom: 4px; }
     .legend { font-size: 11px; opacity: 0.7; margin-bottom: 8px; }
+    .workflow-section { border-top: 1px solid var(--vscode-panel-border); padding-top: 8px; margin-top: 12px; }
+    .workflow-section:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
     svg { width: 100%; height: auto; display: block; }
     .node-task    { fill: var(--vscode-charts-blue);   stroke: var(--vscode-foreground); }
     .node-call    { fill: var(--vscode-charts-purple); stroke: var(--vscode-foreground); }
@@ -181,7 +192,28 @@ const RENDER_SCRIPT = String.raw`
             errBox.appendChild(d);
         }
     }
-    const g = result.graph;
+    // Multi-workflow files surface every workflow via result.graphs;
+    // fall back to the legacy single-graph field if a server hasn't
+    // been updated yet.
+    const named = (result.graphs && result.graphs.length)
+        ? result.graphs
+        : (result.graph ? [{ name: "", graph: result.graph }] : []);
+    const host = document.getElementById("graph");
+    for (let i = 0; i < named.length; i++) {
+        const section = document.createElement("div");
+        section.className = "workflow-section";
+        if (named[i].name) {
+            const h = document.createElement("h2");
+            h.textContent = "workflow " + named[i].name;
+            section.appendChild(h);
+        }
+        const container = document.createElement("div");
+        section.appendChild(container);
+        host.appendChild(section);
+        renderOne(named[i].graph, container);
+    }
+
+    function renderOne(g, mount) {
     if (!g) return;
 
     // Layered layout. Params at depth 0; otherwise depth = 1 + max(depth(producer)).
@@ -405,6 +437,7 @@ const RENDER_SCRIPT = String.raw`
         }
     }
 
-    document.getElementById("graph").appendChild(svg);
+    mount.appendChild(svg);
+    }
 })();
 `;

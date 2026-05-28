@@ -3,7 +3,7 @@
 
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { InlayHint, InlayHintKind, Range } from "vscode-languageserver/node.js";
-import type { Expr, Statement, WorkflowDecl } from "workflow-dsl";
+import type { Expr, Statement } from "workflow-dsl";
 import { TypeChecker, formatType } from "workflow-dsl";
 import { getParsed } from "../parsedDocument.js";
 import type { TaskSchema } from "../taskSchemas.js";
@@ -96,60 +96,63 @@ export function computeInlayHints(
     range?: Range,
 ): InlayHint[] {
     const parsed = getParsed(doc);
-    if (!parsed.ast) return [];
-    const ast: WorkflowDecl = parsed.ast;
+    if (parsed.workflows.length === 0) return [];
     const text = doc.getText();
     const hints: InlayHint[] = [];
     const rangeStartOffset = range ? doc.offsetAt(range.start) : 0;
     const rangeEndOffset = range ? doc.offsetAt(range.end) : text.length;
 
-    // Compute all symbol types once.
-    const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(ast);
+    // Single multi-workflow pass: one merged Map<offset, TypeInfo>
+    // keyed by file-wide unique source offset.
+    const decls = parsed.workflows.map((w) => w.decl);
+    const symbolTypes = new TypeChecker(schemas).collectSymbolTypes(decls);
 
-    // ---- const bindings ----
-    for (const stmt of iterStatements(ast.body)) {
-        if (stmt.kind !== "ConstStatement" || stmt.isSynthetic) continue;
-        if (stmt.loc.offset < rangeStartOffset) continue;
-        if (stmt.loc.offset >= rangeEndOffset) continue;
+    for (const ast of decls) {
+        // ---- const bindings ----
+        for (const stmt of iterStatements(ast.body)) {
+            if (stmt.kind !== "ConstStatement" || stmt.isSynthetic) continue;
+            if (stmt.loc.offset < rangeStartOffset) continue;
+            if (stmt.loc.offset >= rangeEndOffset) continue;
 
-        const typeInfo = symbolTypes.get(stmt.nameLoc.offset);
-        if (!typeInfo || typeInfo.kind === "unresolved") continue;
+            const typeInfo = symbolTypes.get(stmt.nameLoc.offset);
+            if (!typeInfo || typeInfo.kind === "unresolved") continue;
 
-        // Find the binding name end offset: `const <name> [: T] [= ...]`.
-        let nameStart = stmt.loc.offset;
-        if (text.startsWith("const", nameStart)) nameStart += 5;
-        while (nameStart < text.length && /\s/.test(text[nameStart]!))
-            nameStart++;
-        if (!text.startsWith(stmt.name, nameStart)) continue;
-        const nameEnd = nameStart + stmt.name.length;
-        // Skip if the source already has a `:` after the name (typed const).
-        let probe = nameEnd;
-        while (probe < text.length && /\s/.test(text[probe]!)) probe++;
-        if (text[probe] === ":") continue;
+            // Find the binding name end offset: `const <name> [: T] [= ...]`.
+            let nameStart = stmt.loc.offset;
+            if (text.startsWith("const", nameStart)) nameStart += 5;
+            while (nameStart < text.length && /\s/.test(text[nameStart]!))
+                nameStart++;
+            if (!text.startsWith(stmt.name, nameStart)) continue;
+            const nameEnd = nameStart + stmt.name.length;
+            // Skip if the source already has a `:` after the name (typed const).
+            let probe = nameEnd;
+            while (probe < text.length && /\s/.test(text[probe]!)) probe++;
+            if (text[probe] === ":") continue;
 
-        hints.push({
-            position: doc.positionAt(nameEnd),
-            label: `: ${formatType(typeInfo)}`,
-            kind: InlayHintKind.Type,
-            paddingLeft: false,
-            paddingRight: true,
-        });
-    }
+            hints.push({
+                position: doc.positionAt(nameEnd),
+                label: `: ${formatType(typeInfo)}`,
+                kind: InlayHintKind.Type,
+                paddingLeft: false,
+                paddingRight: true,
+            });
+        }
 
-    // ---- lambda parameters ----
-    for (const lp of iterLambdaParams(ast.body)) {
-        if (lp.offset < rangeStartOffset || lp.offset >= rangeEndOffset)
-            continue;
-        const typeInfo = symbolTypes.get(lp.defOffset);
-        if (!typeInfo || typeInfo.kind === "unresolved") continue;
+        // ---- lambda parameters ----
+        for (const lp of iterLambdaParams(ast.body)) {
+            if (lp.offset < rangeStartOffset || lp.offset >= rangeEndOffset)
+                continue;
+            const typeInfo = symbolTypes.get(lp.defOffset);
+            if (!typeInfo || typeInfo.kind === "unresolved") continue;
 
-        hints.push({
-            position: doc.positionAt(lp.offset + lp.name.length),
-            label: `: ${formatType(typeInfo)}`,
-            kind: InlayHintKind.Type,
-            paddingLeft: false,
-            paddingRight: false,
-        });
+            hints.push({
+                position: doc.positionAt(lp.offset + lp.name.length),
+                label: `: ${formatType(typeInfo)}`,
+                kind: InlayHintKind.Type,
+                paddingLeft: false,
+                paddingRight: false,
+            });
+        }
     }
 
     return hints;

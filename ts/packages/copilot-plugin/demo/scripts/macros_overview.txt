@@ -1,0 +1,171 @@
+# ============================================================
+# User-defined macros — cross-flow-type tour
+#
+# Updated demo (~7 minutes). One runtime, four flow types:
+# WebFlow, TaskFlow, PowerShell, Excel. Closes on the library
+# showing all of them side by side and the reliability benchmark.
+#
+# Builds on the Option B narrative from
+# codeDocs\teamDemos\2026-05-26_demo-brainstorm.md.
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\macros-setup.ps1
+
+# ------------------------------------------------------------
+# Pre-roll
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+# ------------------------------------------------------------
+# Intro
+# ------------------------------------------------------------
+
+@say-block "OK so today I want to show you how TypeAgent grows new skills at runtime. The user shows it something once, or describes a task, or the agent infers from page structure. The agent saves a macro it can run again later. Four flow types, one shared runtime underneath."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 1 — Auto-discovery on a fresh page (WebFlow)
+# ------------------------------------------------------------
+
+@say "First, a site the agent has never seen."
+
+@cue "Open the browser and navigate to a site that isn't in our library yet."
+
+@say "Notice the chat panel already shows candidate actions. The agent ran discovery when I landed, without me asking. It matched what it could against the existing library, and for the rest, it inferred actions from the page structure."
+
+@sleep 5s
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — Recorded WebFlow on Starbucks
+# ------------------------------------------------------------
+
+@say "Let me show recording. I'll navigate to Starbucks and teach the agent how I usually order."
+
+@cue "Switch to the browser, navigate to starbucks.com."
+
+discover actions on this page
+@wait-completion timeout=30s on-timeout=warn
+
+@cue "Click Record New Action, place a custom drink order in the form, click Save."
+
+@say "When I clicked save, the page HTML and what I just did got sent to the model. The model generalized that demonstration into a parameterized macro."
+
+@pause
+
+order a flat white with extra milk
+@wait-completion timeout=30s on-timeout=warn
+
+@say "Same form as before, ran from the macro this time."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 3 — Described TaskFlow
+# ------------------------------------------------------------
+
+@say "I don't always want to record. Sometimes I just want to describe."
+
+@typeagent run create a task flow that triages new issues in a repo by label and severity
+@wait-completion timeout=60s on-timeout=warn
+
+@say "I described it once. The agent drafted the TaskFlow with the steps it would need, validated the script against the TypeScript compiler, and registered it as a callable workflow. No recording, no manual coding."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 4 — PowerShell flow on demand
+# ------------------------------------------------------------
+
+@say "System actions go through the same runtime."
+
+list the largest files in my video folder
+@wait-completion timeout=20s on-timeout=warn
+
+@say "That ran a saved PowerShell script. If I ask something the agent hasn't seen, it writes one."
+
+learn show network adapters with their IP addresses
+@wait-completion timeout=60s on-timeout=warn
+
+@say "The agent picked PowerShell, wrote a script, tested it, and saved it. Now I can invoke it by name."
+
+show network adapters
+@wait-completion timeout=15s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 5 — Excel flow
+# ------------------------------------------------------------
+
+@say "The newest flow type is for Excel."
+
+@cue "Open the team's expense workbook in Excel."
+
+categorize the expenses on this sheet by month and project
+@wait-completion timeout=45s on-timeout=warn
+
+@say-block "Same runtime as the browser and PowerShell flows. The agent figured out which columns matter, wrote the operations, and ran them. The Excel scenario was the easiest new flow type we've added so far, because almost everything was reusable from the shared runtime."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 6 — Library across all flow types
+# ------------------------------------------------------------
+
+@say "Now the management view."
+
+open the macros library
+@wait-completion timeout=15s on-timeout=warn
+
+@say-block "Every macro we just touched is here, plus everything from earlier sessions. The Starbucks order, the issue triage task flow, the network adapter script, the Excel categorization. Click into any one of them to see the parameters, the description, and the script that runs. Edit, rename, or delete from this view."
+
+@sleep 6s
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 7 — Reliability benchmark
+# ------------------------------------------------------------
+
+@say "One more thing. We run a reliability benchmark on the macros runtime every day."
+
+show me the reliability benchmark dashboard
+@wait-completion timeout=20s on-timeout=warn
+
+@say "This is how we know the macros work. We replay a set of saved workflows against the live model and target sites every night, and we track the pass rate. So reliability is something we measure, not something we hope for."
+
+@sleep 5s
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 8 — Cross-surface invocation from Copilot CLI
+# ------------------------------------------------------------
+
+@say "Last piece. The macros are portable. The same saved workflow runs from the Copilot CLI plugin too."
+
+@cue "Switch to the Copilot CLI window."
+
+show network adapters
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Same macro, different surface. The runtime is shared across the Shell, the CLI, and the Copilot CLI plugin."
+
+@pause
+
+# ------------------------------------------------------------
+# Recap
+# ------------------------------------------------------------
+
+@say-block "Quick recap. Four flow types, WebFlow, TaskFlow, PowerShell, Excel, all on one shared runtime. Users author macros by recording, by describing, or by letting the agent infer. We measure reliability with a benchmark that runs every night. And the saved macros work everywhere the agent runs, not just in the surface where they were authored."
+
+@sleep 1s
+@record-stop
+@teardown teardown\macros-teardown.ps1

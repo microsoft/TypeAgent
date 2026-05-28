@@ -729,9 +729,39 @@ workflow dispatch(category: string, data: Data): Result {
 Sub-workflow calls are visually rendered as collapsed nodes that can be
 drilled into to see the internal structure.
 
-Sub-workflows are inlined at compile time: the compiler expands the
-sub-workflow body into the calling workflow's IR. The visual editor
-still shows them as collapsed nodes (drill-in) based on the AST.
+Each sub-workflow compiles to its own `WorkflowBody` in the IR's
+top-level `workflows` table, and each call site becomes a
+`WorkflowCallNode` (kind `"workflowCall"`) that references the body by
+name. Calls execute in an isolated child frame; the call graph must be
+acyclic (recursion is statically rejected in v1). The visual editor
+still shows sub-workflows as collapsed nodes (drill-in) based on the
+AST.
+
+`export workflow foo(...) { ... }` marks a workflow as exportable so
+other `.wf` files can import it:
+
+```
+// helpers.wf
+export workflow summarize(text: string): string { ... }
+
+// main.wf
+import { summarize } from "./helpers.wf"
+import { summarize as fancySummarize } from "./other.wf"
+
+workflow main(text: string): string {
+    return summarize(text)
+}
+```
+
+`as` is a **contextual keyword**: it is only special inside an import
+specifier and remains a valid identifier name elsewhere in `.wf` source.
+
+A workflow is the program entry when (a) it is the only workflow in the
+entry file, (b) it is the only `export workflow` in the entry file, or
+(c) it is named explicitly via `wfc --entry <name>`. Imports never
+become the program entry — only workflows declared in the entry file
+are eligible. See [`workflow-composition.md`](./workflow-composition.md)
+for the full semantics.
 
 ---
 

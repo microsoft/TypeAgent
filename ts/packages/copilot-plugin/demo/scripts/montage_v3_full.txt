@@ -1,0 +1,210 @@
+# ============================================================
+# Montage v3 — Memory-forward personal agent
+#
+# Full demo (~7 minutes). Opens on memory, builds the developer
+# day on top, closes on the graph showing what got added. Designed
+# for the AHK driver in manual mode (default).
+#
+# Pre-flight: rig the index with the months-old conversation and
+# entities the opening query relies on. See montage-setup.ps1 for
+# the rest of the pre-roll setup.
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\montage-setup.ps1
+
+# ------------------------------------------------------------
+# Pre-roll
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+# ------------------------------------------------------------
+# Phase 1 — Open on memory
+# ------------------------------------------------------------
+
+@say-block "OK, so the thing that makes our agent different from a chat assistant is memory. It remembers across sessions, applications, and the whole day. Let me show you what I mean."
+
+@pause
+
+what was the restaurant Adrian and I talked about going to in March?
+@expect "Osteria" timeout=45s on-timeout=warn
+
+@say "That came from a conversation weeks ago. Nothing in the current prompt told the agent which restaurant or which Adrian. Let me show you what that memory actually looks like."
+
+@pause
+
+show me the entity graph for that conversation
+@wait-completion timeout=20s on-timeout=continue
+
+@say "We can zoom from a global overview down to one neighborhood. The dots are entities, the edges are how they connect. The agent built this from the user's history, not from anything I just typed."
+
+@sleep 6s
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — Music + Code morning
+# ------------------------------------------------------------
+
+@say "Now let me set up a normal workday on top of that memory."
+
+please launch spotify
+@expect "Spotify" timeout=15s on-timeout=warn
+
+set playback device to kibo
+@expect "kibo" timeout=10s on-timeout=continue
+
+play Nocturne by Chopin
+@wait-completion timeout=15s on-timeout=warn
+
+@pause
+
+@say "VS Code is next."
+
+switch to vscode window
+@expect "Code" timeout=10s on-timeout=exit
+
+split window into two columns
+@wait-completion timeout=10s on-timeout=continue
+
+change my vscode color theme to monokai
+@expect "Monokai" timeout=15s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 3 — Pluggable reasoning
+# ------------------------------------------------------------
+
+@say-block "Quick aside. The reasoning engine here is pluggable. Same agent, same actions, but we can switch which model handles the planning. Watch what happens when I flip to Copilot."
+
+@pause
+
+@typeagent mode mcp
+@wait-completion timeout=10s on-timeout=warn
+
+@say "Now any action I run gets routed through Copilot's runtime instead of our default reasoning path."
+
+split the editor to the right
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Same outcome. Different engine. We did this work with the GitHub Copilot team and they shipped the runtime changes that made it possible."
+
+@pause
+
+@typeagent mode direct
+@wait-completion timeout=10s on-timeout=continue
+
+# ------------------------------------------------------------
+# Phase 4 — Site-specific schema on PBDB
+# ------------------------------------------------------------
+
+@say "Back to the workday. I'm going to open a site I've used before."
+
+Show PBDB site I saw yesterday
+@expect "PBDB" timeout=20s on-timeout=warn
+
+@say-block "This is PaleoBioDB. The site team registered their own action schema for the agent. So when I use natural language, it maps to actions specific to this site."
+
+@pause
+
+@say "Watch what happens with zoom."
+
+Set location to Denver
+@wait-completion timeout=15s on-timeout=warn
+
+Zoom in
+@wait-completion timeout=10s on-timeout=continue
+
+@say "On the home page earlier, zoom in zoomed the browser. Here, zoom in is the map zoom. Same words, different meaning, because the site agent owns the verb when the user is on the site."
+
+Show T-Rex fossils from 100 million years ago
+@wait-completion timeout=20s on-timeout=warn
+
+@say "The agent mapped T-Rex to Tyrannosaurus Rex, and 100 million years ago to Cretaceous. That's what the site actually wants. The model does the translation."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 5 — Memory chained to action
+# ------------------------------------------------------------
+
+@say-block "Talking about translation reminds me. There was a podcast I went through with the agent a while back. Let me pull it up."
+
+in that Kevin Scott podcast we listened to in March, what were the books Adrian and Kevin mentioned?
+@expect "Children of Time" timeout=30s on-timeout=warn
+
+@say "Children of Time and Empire of Black and Gold. Let me do something with that, not just look at it."
+
+add the first one to my reading list
+@wait-completion timeout=20s on-timeout=warn
+
+@say "The agent looked up the list, picked up the book name from the previous turn, and added it. That's the point. Memory is useful when I can act on it."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 6 — PDF + annotations
+# ------------------------------------------------------------
+
+@say "Let me show you a different kind of memory. Documents I read."
+
+open the design spec PDF we were reviewing yesterday
+@wait-completion timeout=15s on-timeout=warn
+
+@say "The agent opens it in our viewer. I can highlight, add notes, and use the snipping tool, all from inside the agent."
+
+@pause
+
+@say-block "Anything I annotate here goes into the same memory store. So next week I can ask: which paragraph in that spec did I mark up about session resume? And the agent will find it."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 7 — PowerShell via the Copilot CLI plugin
+# ------------------------------------------------------------
+
+@say "The agent runs system actions too. Let me grab some files."
+
+list the largest files in my video folder
+@wait-completion timeout=20s on-timeout=warn
+
+@say "That's a PowerShell flow under the hood. The agent picked it from a library of saved scripts. If I'd asked something new, it would have written one and saved it for next time."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 8 — Wrap-up: meeting, email, and back to the graph
+# ------------------------------------------------------------
+
+@say "Quick housekeeping to close out the morning."
+
+set up a code review meeting with Isaiah for tomorrow at 10
+@wait-completion timeout=20s on-timeout=warn
+
+reply to Megan's email saying I'm happy to meet for coffee
+@wait-completion timeout=20s on-timeout=warn
+
+@pause
+
+@say "Last thing. Let me go back to the graph I showed at the start."
+
+show me the entity graph again
+@wait-completion timeout=15s on-timeout=warn
+
+@say-block "Notice it's bigger. The PDF I just annotated is in there. The reading list update is in there. The meeting and the email are in there. The agent's memory grew across the morning, and tomorrow when I come back, all of this is what it has to work with."
+
+@pause
+
+# ------------------------------------------------------------
+# Recap
+# ------------------------------------------------------------
+
+@say-block "To recap. One agent, multiple domains. Site agents, system actions, calendar, email, documents. And memory threading through all of it, so what I did today is what the agent knows tomorrow."
+
+@sleep 1s
+@record-stop
+@teardown teardown\montage-teardown.ps1

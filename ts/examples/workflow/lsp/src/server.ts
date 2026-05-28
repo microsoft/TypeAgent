@@ -283,6 +283,27 @@ export function createServer(
         dispose: () => {
             for (const t of pendingDiagnostics.values()) clearTimeout(t);
             pendingDiagnostics.clear();
+            // Neutralize the connection's logger before disposing. The
+            // jsonrpc layer calls `logger.error(...)` from the `.catch`
+            // of pending `messageWriter.write` promises when the
+            // underlying stream is torn down (common in tests). That
+            // logger is `connection.console`, whose `send()` invokes
+            // `connection.sendNotification`, which throws synchronously
+            // once the connection is disposed. The throw escapes the
+            // internal `.catch` and surfaces as an uncaught exception.
+            // Replacing the log methods with no-ops avoids that race.
+            const noop = () => {};
+            try {
+                Object.assign(connection.console, {
+                    error: noop,
+                    warn: noop,
+                    info: noop,
+                    log: noop,
+                    debug: noop,
+                });
+            } catch {
+                // Ignore: console may already be inaccessible.
+            }
             connection.dispose();
         },
     };

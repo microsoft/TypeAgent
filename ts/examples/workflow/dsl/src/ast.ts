@@ -30,6 +30,44 @@ export const DEFAULT_FALLBACK_PARAM = "err";
 
 // ---- Top-level ----
 
+/**
+ * Top-level module: a sequence of imports followed by workflow
+ * declarations. A `.wf` source file parses to one Module.
+ *
+ * Phase 2 introduced this as a top-level container so import
+ * declarations have a place to live; `Parser.parseModule()` is the
+ * canonical top-level parse entry point.
+ */
+export interface Module {
+    kind: "Module";
+    imports: ImportDecl[];
+    workflows: WorkflowDecl[];
+    loc: SourceLocation;
+}
+
+/**
+ * An `import { name1, name2 as alias } from "./path.wf"` declaration.
+ *
+ * The parser only handles the syntax; semantic resolution (path resolution,
+ * symbol binding, visibility) is handled by the type checker and fileLoader.
+ */
+export interface ImportDecl {
+    kind: "ImportDecl";
+    names: ImportSpecifier[];
+    source: string;
+    loc: SourceLocation;
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+}
+
+export interface ImportSpecifier {
+    /** Name as exported by the source file. */
+    name: string;
+    /** Local alias, or `undefined` if imported under its original name. */
+    alias?: string;
+    loc: SourceLocation;
+}
+
 export interface WorkflowDecl {
     kind: "WorkflowDecl";
     name: string;
@@ -37,6 +75,12 @@ export interface WorkflowDecl {
     params: ParamDecl[];
     returnType: TypeExpr;
     body: Statement[];
+    /**
+     * True when the workflow declaration was preceded by the `export`
+     * keyword. Phase 2 parses this; Phase 3 enforces visibility; Phase 6
+     * makes only exported workflows eligible as the entry workflow.
+     */
+    exported?: boolean;
     loc: SourceLocation;
     leadingComments?: Comment[];
     /**
@@ -73,6 +117,14 @@ export interface WorkflowDecl {
 export interface ParamDecl {
     name: string;
     type: TypeExpr;
+    /**
+     * Optional default-expression. Evaluated at call-site lowering when
+     * the corresponding argument is omitted. May reference earlier
+     * parameters of the same workflow (see design §4.3). Phase 2 parses
+     * this; Phase 3 type-checks it; Phase 4 inlines defaults at call
+     * sites.
+     */
+    default?: Expr;
     loc: SourceLocation;
     leadingComments?: Comment[];
     trailingComments?: Comment[];
@@ -144,6 +196,11 @@ export interface ConstStatement {
     loc: SourceLocation;
     leadingComments?: Comment[];
     trailingComments?: Comment[];
+    /** True when there was at least one blank line before this statement
+     *  (or its leading comments) in the original source. The formatter
+     *  emits one blank line before the statement when `keepBlankLines`
+     *  is enabled in `FormatOptions`. */
+    blankLineBefore?: boolean;
     /** Line of the last token of this statement (used by the formatter
      * to decide whether a trailing comment is inline or block-style). */
     endLine?: number;
@@ -170,6 +227,7 @@ export interface DestructuringConst {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface IfStatement {
@@ -181,6 +239,7 @@ export interface IfStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
     /** Comments inside an empty `then` block. */
     thenInnerComments?: Comment[];
     /** Comments inside an empty `else` block. */
@@ -215,6 +274,7 @@ export interface SwitchStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
     /** Comments inside an empty `default:` arm body. */
     defaultInnerComments?: Comment[];
     /** Comments that appear inside the switch body before any case/default
@@ -243,6 +303,7 @@ export interface ThrowStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface ReturnStatement {
@@ -252,6 +313,7 @@ export interface ReturnStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 export interface BreakStatement {
@@ -260,6 +322,7 @@ export interface BreakStatement {
     leadingComments?: Comment[];
     trailingComments?: Comment[];
     endLine?: number;
+    blankLineBefore?: boolean;
 }
 
 // ---- Expressions ----
@@ -288,6 +351,7 @@ export interface TaskCallExpr {
     kind: "TaskCallExpr";
     task: string; // e.g. "text.template", "shell.exec"
     args: TaskArg[];
+    typeArgs?: TypeExpr[];
     loc: SourceLocation;
 }
 

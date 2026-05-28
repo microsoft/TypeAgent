@@ -124,4 +124,23 @@ describe("previewGraph", () => {
         const kinds = r.graph!.groups.map((g) => g.kind);
         expect(kinds).toEqual(expect.arrayContaining(["if-then", "if-else"]));
     });
+
+    it("returns one entry in graphs[] per workflow in a multi-workflow file", () => {
+        const docs = new FakeDocuments();
+        docs.add(
+            "file:///g.wf",
+            `workflow a(): string {\n    return "A";\n}\nworkflow b(name: string): string {\n    return name;\n}\n`,
+        );
+        const r = previewGraph(docs as unknown as TextDocuments<TextDocument>, {
+            uri: "file:///g.wf",
+        });
+        expect(r.errors).toEqual([]);
+        expect(r.graphs).toBeDefined();
+        expect(r.graphs!.map((g) => g.name)).toEqual(["a", "b"]);
+        expect(r.graphs![0]!.graph.workflowName).toBe("a");
+        expect(r.graphs![1]!.graph.workflowName).toBe("b");
+        expect(r.graphs![1]!.graph.params.map((p) => p.name)).toEqual(["name"]);
+        // Legacy single-graph field mirrors the first workflow.
+        expect(r.graph!.workflowName).toBe("a");
+    });
 });

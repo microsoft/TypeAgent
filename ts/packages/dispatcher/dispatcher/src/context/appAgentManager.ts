@@ -50,6 +50,12 @@ import {
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
 import {
+    findFuzzyCollisions,
+    selectFuzzyScorer,
+    type ActionDescriptor,
+    type FuzzyCollision,
+} from "../translation/fuzzyCollision.js";
+import {
     IPortRegistrar,
     DEFAULT_ROLE,
     RegistrationId,
@@ -71,6 +77,14 @@ const LOCAL_VIEW_ROLE = "view";
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
 const debugLoad = registerDebug("typeagent:dispatcher:agents:load");
+const debugCollisionStatic = registerDebug(
+    "typeagent:dispatcher:collision:static",
+);
+
+export type StaticCollision = {
+    actionName: string;
+    occurrences: { schemaName: string; agentName: string }[];
+};
 
 type AppAgentRecord = {
     name: string;
@@ -156,6 +170,11 @@ export class AppAgentManager implements ActionConfigProvider {
     private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
+
+    // Static collision diagnostics. Populated by scanActionNameCollisions on
+    // every addProvider / onSchemaReady; readable for `@dispatcher debug collisions`-style commands.
+    public lastStaticCollisions: StaticCollision[] = [];
+    public lastFuzzyCollisions: FuzzyCollision[] = [];
     // Cached per-agent readiness state. Populated by checkReadiness() right
     // after the agent's session context is created. Agents that don't
     // implement checkReadiness have no entry, and getReadiness() returns
@@ -216,6 +235,23 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
+    }
+
+    /**
+     * Return the registration-order rank for an agent. Lower = registered earlier.
+     * Used by collision resolution's "priority" strategy as the implicit default
+     * when no explicit collision.priorityOrder is set. Unknown agent names get
+     * MAX_SAFE_INTEGER so they sort to the end.
+     */
+    public getAgentRank(agentName: string): number {
+        let i = 0;
+        for (const name of this.agents.keys()) {
+            if (name === agentName) {
+                return i;
+            }
+            i++;
+        }
+        return Number.MAX_SAFE_INTEGER;
     }
 
     public isSchemaLoading(schemaName: string): boolean {
@@ -586,6 +622,92 @@ export class AppAgentManager implements ActionConfigProvider {
                 ? record.commands
                 : null
             : undefined;
+    }
+
+    /**
+     * Walk the loaded actionConfigs and find action names that appear in more
+     * than one schema. Caller decides whether to warn or throw.
+     */
+    public scanActionNameCollisions(): StaticCollision[] {
+        const seen = new Map<
+            string,
+            { schemaName: string; agentName: string }[]
+        >();
+        for (const [schemaName, config] of this.actionConfigs) {
+            const agentName = getAppAgentName(schemaName);
+            let actionNames: string[];
+            try {
+                const file =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                actionNames = Array.from(
+                    file.parsedActionSchema.actionSchemas.keys(),
+                );
+            } catch (e) {
+                // Schema not loadable yet (e.g., agent failed to start). Skip.
+                debugCollisionStatic(
+                    `skip ${schemaName} (could not load schema): ${e}`,
+                );
+                continue;
+            }
+            for (const actionName of actionNames) {
+                const list = seen.get(actionName) ?? [];
+                list.push({ schemaName, agentName });
+                seen.set(actionName, list);
+            }
+        }
+        const collisions: StaticCollision[] = [];
+        for (const [actionName, occurrences] of seen) {
+            if (occurrences.length > 1) {
+                collisions.push({ actionName, occurrences });
+            }
+        }
+        this.lastStaticCollisions = collisions;
+        return collisions;
+    }
+
+    /**
+     * Build the descriptor list used by fuzzy scanning. Pulls action name +
+     * (eventually) schema documentation. Returns [] if no schemas loaded.
+     */
+    public collectActionDescriptors(): ActionDescriptor[] {
+        const out: ActionDescriptor[] = [];
+        for (const [schemaName, config] of this.actionConfigs) {
+            try {
+                const file =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                for (const [actionName, def] of file.parsedActionSchema
+                    .actionSchemas) {
+                    out.push({
+                        schemaName,
+                        actionName,
+                        // ActionSchemaTypeDefinition.comments is the schema doc;
+                        // safe-fall back to no description if absent.
+                        description:
+                            (
+                                def as unknown as { comments?: string[] }
+                            ).comments?.join(" ") ?? undefined,
+                    });
+                }
+            } catch {
+                // Skip unloadable schema; descriptors only feed fuzzy scoring.
+            }
+        }
+        return out;
+    }
+
+    public async runStaticFuzzyScan(
+        scorerKind: "placeholder" | "actionEmbedding",
+        threshold: number,
+    ): Promise<FuzzyCollision[]> {
+        const scorer = selectFuzzyScorer(scorerKind);
+        const descriptors = this.collectActionDescriptors();
+        const collisions = await findFuzzyCollisions(
+            descriptors,
+            scorer,
+            threshold,
+        );
+        this.lastFuzzyCollisions = collisions;
+        return collisions;
     }
 
     public async semanticSearchActionSchema(

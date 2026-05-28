@@ -16,6 +16,7 @@ import type {
     UserFeedbackRating,
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
+import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -175,7 +176,46 @@ export interface Dispatcher {
         clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
+        requestId?: string,
     ): Promise<CommandResult | undefined>;
+
+    /**
+     * Submit a request for queued execution. Resolves once the request is
+     * accepted onto the server-side queue. Completion is observed via
+     * ClientIO push events (`requestStarted`, `queueStateChanged`, etc.) and
+     * the existing `commandComplete` notify.
+     *
+     * Failure modes (`queue_full`, `server_stopping`) are returned as data,
+     * not thrown — see `SubmitResult`.
+     */
+    submitCommand(
+        command: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
+
+    /**
+     * Snapshot of the server-side queue. Cheap, in-memory.
+     */
+    getQueueSnapshot(): Promise<QueueSnapshot>;
+
+    /**
+     * Cancel the currently-running request (if any) and enqueue `text` at the
+     * head of the queue so it runs next. The cancel-then-prepend pair is
+     * atomic within the server's critical section so a racing `submitCommand`
+     * cannot steal the head slot — this is why `interrupt` exists as a server
+     * RPC rather than client-side composition.
+     *
+     * Pre-existing queued entries are preserved (just shifted back). Side
+     * effects from the cancelled running request are NOT rolled back.
+     */
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
 
     /**
      * Close the dispatcher and release all resources.
@@ -262,16 +302,19 @@ export interface Dispatcher {
     cancelInteraction(interactionId: string): void;
 
     /**
-     * Cancel an in-flight command. If the command identified by requestId is
-     * currently executing, its AbortController is triggered, causing the
-     * command pipeline to stop at the next cancellation checkpoint.
+     * Cancel an in-flight or queued command.
      *
-     * This is a fire-and-forget operation — the in-flight processCommand()
-     * call will resolve with `{ cancelled: true }`.
+     * The returned `CancelResult` indicates whether the entry was cancelled
+     * while queued (no work ran), while running (the AbortController was
+     * triggered; `processCommand` resolves with `{ cancelled: true }` at the
+     * next checkpoint), or whether the requestId was unknown.
+     *
+     * Never rejects under normal operation.
      *
      * @param requestId the requestId string of the command to cancel
+     * @returns a `CancelResult` describing what the server did
      */
-    cancelCommand(requestId: string): void;
+    cancelCommand(requestId: string): Promise<CancelResult>;
 
     /**
      * Cancel an in-flight command using the client-assigned id that was passed
