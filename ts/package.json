@@ -15,7 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
-    "build:ext:vscode": "pnpm -C packages/coda run package && pnpm -C packages/vscode-shell run package",
+    "build:ext:vscode": "fluid-build . -t build:ext:vscode",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
     "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
@@ -34,7 +34,7 @@
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
     "postinstall": "pnpm run postinstall:better-sqlite3-node-copy && pnpm run postinstall:better-sqlite3-node-restore",
-    "install:ext:vscode": "pnpm -C packages/coda run deploy:local && pnpm -C packages/vscode-shell run deploy:local",
+    "install:ext:vscode": "fluid-build . -t install:ext:vscode",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
