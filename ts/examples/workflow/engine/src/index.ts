@@ -7,6 +7,7 @@ export { WorkflowEvent, WorkflowEventListener } from "./events.js";
 export {
     getBuiltinTaskSchemas,
     BuiltinTaskSchema,
+    TypeParameterDef,
 } from "./builtinTaskSchemas.js";
 export {
     listLength,

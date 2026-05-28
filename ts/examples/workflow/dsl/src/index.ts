@@ -23,7 +23,21 @@ export {
     PropertyRef,
     formatType,
 } from "./typeChecker.js";
-export { Emitter, TaskSchemaInfo, EmitError } from "./emitter.js";
+export {
+    Emitter,
+    TaskSchemaInfo,
+    ConcreteTaskSchemaInfo,
+    GenericTaskSchemaInfo,
+    isGenericSchema,
+    TaskSchemaTypeParam,
+    EmitError,
+} from "./emitter.js";
+export {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    resolveTypeParams,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
 export { formatModule, FormatOptions } from "./formatter.js";
 export {
     decodeStringLiteral,

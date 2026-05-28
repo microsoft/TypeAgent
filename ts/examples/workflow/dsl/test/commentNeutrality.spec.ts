@@ -212,8 +212,11 @@ describe("comments don't leak into emitter IR", () => {
         }`;
         const bareAst = parseNoComments(bare);
         const commentedAst = parseWithComments(commented);
-        const irBare = new Emitter([]).emitAll([bareAst], bareAst.name).ir;
-        const irCommented = new Emitter([]).emitAll(
+        const irBare = new Emitter([], new Map()).emitAll(
+            [bareAst],
+            bareAst.name,
+        ).ir;
+        const irCommented = new Emitter([], new Map()).emitAll(
             [commentedAst],
             commentedAst.name,
         ).ir;
@@ -231,7 +234,7 @@ describe("comments don't leak into emitter IR", () => {
             return x;
         }`;
         const ast = parseWithComments(src);
-        const ir = new Emitter([]).emitAll([ast], ast.name).ir!;
+        const ir = new Emitter([], new Map()).emitAll([ast], ast.name).ir!;
         const json = JSON.stringify(ir);
         expect(json).not.toContain("leadingComments");
         expect(json).not.toContain("// h");

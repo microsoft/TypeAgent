@@ -42,6 +42,8 @@ interface ScopeContext {
     bindings: Map<string, unknown>;
     /** The state namespace ($from: "state") - only set inside loop bodies. */
     state?: Record<string, unknown>;
+    /** The recovery namespace ($from: "recovery") - only set for onError targets. */
+    recovery?: Record<string, unknown>;
 }
 
 /**
@@ -134,6 +136,9 @@ function resolveFromRef(
             break;
         case "state":
             value = scope.state?.[name];
+            break;
+        case "recovery":
+            value = scope.recovery?.[name];
             break;
         default:
             // Unreachable after static validation (namespace check).
@@ -612,12 +617,11 @@ export class WorkflowEngine {
             }
 
             // If we have a pending error (dispatching to onError target),
-            // augment the input namespace for this node only.
+            // inject into the recovery namespace for this node only.
             const activeScope: ScopeContext = pendingError
                 ? {
                       ...scope,
-                      input: {
-                          ...scope.input,
+                      recovery: {
                           error: pendingError.error,
                           trigger: pendingError.trigger,
                       },

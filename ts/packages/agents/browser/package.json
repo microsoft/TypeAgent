@@ -106,7 +106,7 @@
     "typescript": "~5.4.5",
     "website-memory": "workspace:*",
     "websocket-utils": "workspace:*",
-    "ws": "^8.20.1",
+    "ws": "^8.21.0",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
     "zod": "^4.1.13"

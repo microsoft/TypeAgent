@@ -65,6 +65,9 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    TaskCallExpr,
+    ObjectType,
+    ObjectTypeField,
     Comment,
 } from "./ast.js";
 
@@ -589,6 +592,22 @@ export class Parser {
 
     // ---- Types ----
 
+    /**
+     * Parse `<TypeExpr, TypeExpr, ...>` type arguments on a task call.
+     * The caller has already verified the next token is `<`.
+     */
+    private parseTypeArgs(): TypeExpr[] {
+        this.advance(); // <
+        const args: TypeExpr[] = [];
+        args.push(this.parseTypeExpr());
+        while (this.peek().kind === TokenKind.Comma) {
+            this.advance(); // ,
+            args.push(this.parseTypeExpr());
+        }
+        this.expect(TokenKind.GreaterThan);
+        return args;
+    }
+
     private parseTypeExpr(): TypeExpr {
         let t = this.parseBaseType();
         while (this.peek().kind === TokenKind.LBracket) {
@@ -613,7 +632,7 @@ export class Parser {
         const l = this.loc();
         const lbrace = this.expect(TokenKind.LBrace);
         const { items: fields, innerComments } =
-            this.parseCommaListWithComments<import("./ast.js").ObjectTypeField>(
+            this.parseCommaListWithComments<ObjectTypeField>(
                 TokenKind.RBrace,
                 (leading) => {
                     const fl = this.loc();
@@ -625,7 +644,7 @@ export class Parser {
                     }
                     this.expect(TokenKind.Colon);
                     const ftype = this.parseTypeExpr();
-                    const field: import("./ast.js").ObjectTypeField = {
+                    const field: ObjectTypeField = {
                         name: fname,
                         type: ftype,
                         optional,
@@ -643,7 +662,7 @@ export class Parser {
                 (f, i) => i > 0 && f.loc.line !== fields[i - 1].loc.line,
             ) ||
             (fields.length === 0 && rbrace.line !== lbrace.line);
-        const t: import("./ast.js").ObjectType = {
+        const t: ObjectType = {
             kind: "ObjectType",
             fields,
             loc: l,
@@ -1476,6 +1495,12 @@ export class Parser {
             }
         }
 
+        // If followed by < and this is a multi-segment (task) name, parse type args
+        let typeArgs: TypeExpr[] | undefined;
+        if (segments.length > 1 && this.peek().kind === TokenKind.LessThan) {
+            typeArgs = this.parseTypeArgs();
+        }
+
         // If followed by (, this is a task call or workflow call
         if (this.peek().kind === TokenKind.LParen) {
             const name = segments.join(".");
@@ -1487,7 +1512,14 @@ export class Parser {
             if (segments.length === 1) {
                 return { kind: "WorkflowCallExpr", name, args, loc: l };
             }
-            return { kind: "TaskCallExpr", task: name, args, loc: l };
+            const node: TaskCallExpr = {
+                kind: "TaskCallExpr",
+                task: name,
+                args,
+                loc: l,
+            };
+            if (typeArgs) node.typeArgs = typeArgs;
+            return node;
         }
 
         // Otherwise it's a dotted name reference

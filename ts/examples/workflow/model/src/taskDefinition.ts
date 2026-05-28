@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { JSONSchema } from "./ir.js";
+import { JSONSchema, SchemaTemplate } from "./ir.js";
 
 /**
  * The result of executing a task.
@@ -74,17 +74,19 @@ export interface TaskConstraints {
 }
 
 /**
- * A registered task implementation.
+ * Declares a generic type parameter on a task definition.
  */
-export interface TaskDefinition<I = unknown, O = unknown> {
+export interface TaskTypeParameter {
+    /** Parameter name (e.g. "T"). */
+    name: string;
+    /** Default schema used when the caller omits the type argument. */
+    default?: JSONSchema;
+}
+
+/** Fields common to both concrete and generic task definitions. */
+interface TaskDefinitionBase<I, O> {
     /** Unique task name, e.g. "email.fetchUnread". */
     name: string;
-
-    /** JSON Schema for the task's input. */
-    inputSchema: JSONSchema;
-
-    /** JSON Schema for the task's output. */
-    outputSchema: JSONSchema;
 
     /**
      * Whether this task has side effects (network, filesystem, shell, etc.).
@@ -102,6 +104,44 @@ export interface TaskDefinition<I = unknown, O = unknown> {
 
     /** Execute the task with validated input. */
     execute(input: I, ctx: TaskContext): Promise<TaskResult<O>>;
+}
+
+/** A task with fixed (non-generic) input and output schemas. */
+export interface ConcreteTaskDefinition<I = unknown, O = unknown>
+    extends TaskDefinitionBase<I, O> {
+    /** JSON Schema for the task's input. */
+    inputSchema: JSONSchema;
+
+    /** JSON Schema for the task's output. */
+    outputSchema: JSONSchema;
+}
+
+/** A task with generic type parameters and schema templates. */
+export interface GenericTaskDefinition<I = unknown, O = unknown>
+    extends TaskDefinitionBase<I, O> {
+    /** Type parameters this task accepts. */
+    typeParameters: TaskTypeParameter[];
+
+    /** Schema template for the task's input (may contain $typeParam markers). */
+    inputSchemaTemplate: SchemaTemplate;
+
+    /** Schema template for the task's output (may contain $typeParam markers). */
+    outputSchemaTemplate: SchemaTemplate;
+}
+
+/**
+ * A registered task implementation: either a concrete task with fixed
+ * schemas, or a generic task with type parameters and schema templates.
+ */
+export type TaskDefinition<I = unknown, O = unknown> =
+    | ConcreteTaskDefinition<I, O>
+    | GenericTaskDefinition<I, O>;
+
+/** Type guard: narrows a TaskDefinition to its generic variant. */
+export function isGenericTask(
+    task: TaskDefinition,
+): task is GenericTaskDefinition {
+    return "typeParameters" in task;
 }
 
 /**

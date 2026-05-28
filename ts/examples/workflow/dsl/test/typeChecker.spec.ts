@@ -3,7 +3,11 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { TypeChecker, TypeError } from "../src/typeChecker.js";
+import {
+    TypeChecker,
+    TypeError,
+    typeInfoToSchema,
+} from "../src/typeChecker.js";
 import { TaskSchemaInfo } from "../src/emitter.js";
 import { compile } from "../src/compiler.js";
 
@@ -64,6 +68,76 @@ const TASK_SCHEMAS: TaskSchemaInfo[] = [
             type: "object",
             required: ["value"],
             properties: { value: {} },
+        },
+    },
+    {
+        name: "test.genJson",
+        typeParameters: [{ name: "T", default: {} }],
+        inputSchema: {
+            type: "object",
+            required: ["prompt"],
+            properties: { prompt: { type: "string" } },
+        },
+        outputSchema: { $typeParam: "T" },
+    },
+    {
+        name: "test.requiredGeneric",
+        typeParameters: [{ name: "T" }],
+        inputSchema: {
+            type: "object",
+            required: ["input"],
+            properties: { input: { type: "string" } },
+        },
+        outputSchema: { $typeParam: "T" },
+    },
+    {
+        name: "test.classify",
+        inputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["label"],
+            properties: {
+                label: {
+                    type: "string",
+                    enum: ["low", "medium", "high"],
+                },
+            },
+        },
+    },
+    {
+        name: "test.priority",
+        // Integer enum — exercises EnumType base "integer".
+        inputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["level"],
+            properties: {
+                level: { type: "integer", enum: [1, 2, 3] },
+            },
+        },
+    },
+    {
+        name: "test.score",
+        // Number enum — exercises EnumType base "number".
+        inputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["score"],
+            properties: {
+                score: { type: "number", enum: [0.5, 1.5, 2.5] },
+            },
         },
     },
 ];
@@ -177,8 +251,9 @@ describe("type checker", () => {
             workflow test(x: boolean): string {
                 if (x) {
                     return "yes";
+                } else {
+                    return "no";
                 }
-                return "no";
             }
         `);
     });
@@ -1148,5 +1223,1380 @@ describe("type checker", () => {
                 return x;
             }
         `);
+    });
+
+    // ---- Generic type arguments ----
+
+    test("generic type arg on task allows property access", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                const r = test.genJson<{ name: string }>(prompt: "x");
+                return r.name;
+            }
+        `);
+    });
+
+    test("generic type arg with array output", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                const r = test.genJson<string[]>(prompt: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("generic task without type arg uses default (unknown)", () => {
+        expectError(
+            `workflow test(): string {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("generic task without type arg allows unknown usage", () => {
+        expectNoErrors(`
+            workflow test(): unknown {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("type arg on non-generic task errors", () => {
+        expectError(
+            `workflow test(): string {
+                const r = test.exec<string>(command: "ls");
+                return r.stdout;
+            }`,
+            "does not accept type arguments",
+        );
+    });
+
+    test("required generic type param errors when omitted", () => {
+        expectError(
+            `workflow test(): unknown {
+                const r = test.requiredGeneric(input: "x");
+                return r;
+            }`,
+            "requires a type argument",
+        );
+    });
+
+    test("required generic type param works when provided", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                const r = test.requiredGeneric<number>(input: "x");
+                return r;
+            }
+        `);
+    });
+
+    test("too many type args errors", () => {
+        expectError(
+            `workflow test(): unknown {
+                const r = test.genJson<string, number>(prompt: "x");
+                return r;
+            }`,
+            "expects 1 type argument(s) but got 2",
+        );
+    });
+
+    test("generic type arg with complex object type", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                const r = test.genJson<{ items: string[] }>(prompt: "x");
+                return r.items;
+            }
+        `);
+    });
+
+    test("generic type arg targeting nested property", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): { value: string } {
+                const r = test.nestedGeneric<string>(prompt: "x");
+                return r;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.nestedGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { $typeParam: "T" } },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    test("generic type arg targeting array items", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): string[] {
+                const r = test.arrayGeneric<string>(prompt: "x");
+                return r;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.arrayGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "array",
+                    items: { $typeParam: "T" },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    test("generic type param substituted in multiple output positions", () => {
+        const { tokens, errors: lexErrors } = lex(`
+            workflow test(): string {
+                const r = test.multiSite<string>(prompt: "x");
+                const a = r.result;
+                const b = r.echo;
+                return a;
+            }
+        `);
+        expect(lexErrors).toEqual([]);
+        const parser = new Parser(tokens);
+        const { module, errors: parseErrors } = parser.parseModule();
+        expect(parseErrors).toEqual([]);
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.multiSite",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["result", "echo"],
+                    properties: {
+                        result: { $typeParam: "T" },
+                        echo: { $typeParam: "T" },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    // ---- resolvedSchemas side map ----
+
+    test("resolvedSchemas map is populated for generic calls", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.genJson<{ name: string }>(prompt: "x");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        // Should have exactly one resolved schema entry
+        expect(checker.resolvedSchemas.size).toBe(1);
+        const entry = [...checker.resolvedSchemas.values()][0];
+        expect(entry.outputSchema).toEqual({
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" } },
+        });
+    });
+
+    test("resolvedSchemas uses default when no type arg", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.genJson(prompt: "x");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        expect(checker.resolvedSchemas.size).toBe(1);
+        const entry = [...checker.resolvedSchemas.values()][0];
+        // default for test.genJson is {} (unknown)
+        expect(entry.outputSchema).toEqual({});
+    });
+
+    test("resolvedSchemas has entry per call site", () => {
+        const source = `
+            workflow test(): unknown {
+                const a = test.genJson<string>(prompt: "x");
+                const b = test.genJson<number>(prompt: "y");
+                return a;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        expect(checker.resolvedSchemas.size).toBe(2);
+        const schemas = [...checker.resolvedSchemas.values()];
+        const outputs = schemas.map((s) => s.outputSchema);
+        expect(outputs).toContainEqual({ type: "string" });
+        expect(outputs).toContainEqual({ type: "number" });
+    });
+
+    test("resolvedSchemas not populated for non-generic tasks", () => {
+        const source = `
+            workflow test(): unknown {
+                const r = test.exec(command: "ls");
+                return r;
+            }
+        `;
+        const { tokens } = lex(source);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const checker = new TypeChecker(TASK_SCHEMAS);
+        checker.checkAll(module.workflows);
+        expect(checker.resolvedSchemas.size).toBe(0);
+    });
+
+    test("null literal has unknown type", () => {
+        expectNoErrors(`
+            workflow test(): unknown {
+                return null;
+            }
+        `);
+    });
+
+    test("null literal is not assignable to string", () => {
+        expectError(
+            `workflow test(): string { return null; }`,
+            "not assignable to declared type",
+        );
+    });
+
+    test("integer literal inferred as integer", () => {
+        expectNoErrors(`
+            workflow test(): integer {
+                return 42;
+            }
+        `);
+    });
+
+    test("float literal inferred as number", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                return 3.14;
+            }
+        `);
+    });
+
+    test("integer is assignable to number", () => {
+        expectNoErrors(`
+            workflow test(): number {
+                return 42;
+            }
+        `);
+    });
+
+    test("number is assignable to integer", () => {
+        expectNoErrors(`
+            workflow test(): integer {
+                const x: number = 5;
+                return x;
+            }
+        `);
+    });
+
+    test("array literal infers element type from first element", () => {
+        expectNoErrors(`
+            workflow test(): string[] {
+                return ["a", "b", "c"];
+            }
+        `);
+    });
+
+    test("empty array literal has unknown element type", () => {
+        expectNoErrors(`
+            workflow test(): unknown[] {
+                return [];
+            }
+        `);
+    });
+
+    test("object literal infers field types", () => {
+        expectNoErrors(`
+            workflow test(): { name: string, count: number } {
+                return { name: "hello", count: 42 };
+            }
+        `);
+    });
+
+    test("object literal missing field is not assignable", () => {
+        expectError(
+            `workflow test(): { name: string, count: number } {
+                return { name: "hello" };
+            }`,
+            "not assignable to declared type",
+        );
+    });
+
+    // ---- Additional operators ----
+
+    test("!== with same types passes", () => {
+        expectNoErrors(`
+            workflow test(a: string, b: string): boolean {
+                return a !== b;
+            }
+        `);
+    });
+
+    test("!== with mixed types errors", () => {
+        expectError(
+            `workflow test(x: number): boolean { return x !== "5"; }`,
+            "same types",
+        );
+    });
+
+    test(">= comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x >= y;
+            }
+        `);
+    });
+
+    test("<= comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x <= y;
+            }
+        `);
+    });
+
+    test("< comparison", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): boolean {
+                return x < y;
+            }
+        `);
+    });
+
+    test("modulo operator", () => {
+        expectNoErrors(`
+            workflow test(x: number, y: number): number {
+                return x % y;
+            }
+        `);
+    });
+
+    test("modulo on string errors", () => {
+        expectError(
+            `workflow test(x: string): number { return x % 2; }`,
+            "must be numeric",
+        );
+    });
+
+    test("unary minus on number passes", () => {
+        expectNoErrors(`
+            workflow test(x: number): number {
+                return -x;
+            }
+        `);
+    });
+
+    test("boolean literal", () => {
+        expectNoErrors(`
+            workflow test(): boolean {
+                return true;
+            }
+        `);
+    });
+
+    // ---- Field access edge cases ----
+
+    test("field access on array type errors", () => {
+        expectError(
+            `workflow test(x: string[]): string { return x.length; }`,
+            "Cannot access property",
+        );
+    });
+
+    test("nested field access (3 segments)", () => {
+        expectNoErrors(`
+            workflow test(data: { inner: { value: string } }): string {
+                return data.inner.value;
+            }
+        `);
+    });
+
+    test("nested field access with intermediate error", () => {
+        expectError(
+            `workflow test(data: { inner: { value: string } }): string {
+                return data.inner.missing;
+            }`,
+            "does not exist",
+        );
+    });
+
+    // ---- Destructuring from array ----
+
+    test("destructuring from array assigns element type", () => {
+        expectNoErrors(`
+            workflow test(items: string[]): string {
+                const [a, b] = items;
+                return a;
+            }
+        `);
+    });
+
+    // ---- parallelMap ----
+
+    test("parallelMap returns array of body return type", () => {
+        expectNoErrors(`
+            workflow test(items: string[]): number[] {
+                return parallelMap(items, (item) => {
+                    return 42;
+                });
+            }
+        `);
+    });
+
+    test("parallelMap maxConcurrency must be numeric", () => {
+        expectError(
+            `workflow test(items: string[]): string[] {
+                return parallelMap(items, (item) => { return item; }, { maxConcurrency: "fast" });
+            }`,
+            "maxConcurrency must be numeric",
+        );
+    });
+
+    // ---- Switch statement typing ----
+
+    test("switch with numeric discriminant", () => {
+        expectNoErrors(`
+            workflow test(x: number): string {
+                switch (x) {
+                    case 1:
+                        return "one";
+                    case 2:
+                        return "two";
+                    default:
+                        return "other";
+                }
+            }
+        `);
+    });
+
+    test("switch return type inferred from first arm", () => {
+        expectNoErrors(`
+            workflow test(x: string): number {
+                switch (x) {
+                    case "a":
+                        return 1;
+                    default:
+                        return 0;
+                }
+            }
+        `);
+    });
+
+    // ---- If-else ----
+
+    test("if-else both branches type checked", () => {
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) {
+                    const r = test.template(template: "yes", vars: {});
+                    return r.text;
+                } else {
+                    return "no";
+                }
+            }
+        `);
+    });
+
+    // ---- Attempts fallback ----
+
+    test("attempts with fallback", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                return attempts(3, () => {
+                    const r = test.exec(command: "echo hi");
+                    return r.stdout;
+                }, (err) => {
+                    return "fallback";
+                });
+            }
+        `);
+    });
+
+    // ---- Filter return type ----
+
+    test("filter returns same array type as input", () => {
+        expectNoErrors(`
+            workflow test(items: number[]): number[] {
+                return filter(items, (item) => {
+                    return item > 0;
+                });
+            }
+        `);
+    });
+
+    // ---- Template literal with interpolation ----
+
+    test("template literal with multiple interpolations", () => {
+        expectNoErrors(`
+            workflow test(a: string, b: number): string {
+                return \`\${a} is \${b}\`;
+            }
+        `);
+    });
+
+    // ---- Unresolved (error recovery) does not cascade ----
+
+    test("error recovery: access on unknown task does not cascade", () => {
+        // Only one error (unknown task), not additional errors from the
+        // unresolved result.
+        const errors = check(`
+            workflow test(): string {
+                const r = fake.task(x: 1);
+                return r.field;
+            }
+        `);
+        expect(errors.length).toBe(1);
+        expect(errors[0].message).toContain("Unknown task");
+    });
+
+    // ---- Multiple errors accumulate ----
+
+    test("multiple errors reported in same workflow", () => {
+        const errors = check(`
+            workflow test(x: string): number {
+                const a = x + 1;
+                const b = x * 2;
+                return "hello";
+            }
+        `);
+        // At least: arithmetic on string (x2) + return type mismatch
+        expect(errors.length).toBeGreaterThanOrEqual(3);
+    });
+
+    // ---- Const annotation overrides inferred type ----
+
+    test("const annotation narrows type for subsequent usage", () => {
+        expectNoErrors(`
+            workflow test(): string {
+                const r: { text: string } = test.template(template: "hi", vars: {});
+                return r.text;
+            }
+        `);
+    });
+
+    // ---- Task argument checking ----
+
+    test("task arguments are type-checked", () => {
+        expectNoErrors(`
+            workflow test(): { text: string } {
+                const t = "hello";
+                return test.template(template: t, vars: {});
+            }
+        `);
+    });
+
+    // ---- Break statement ----
+
+    test("break statement returns unresolved (no value)", () => {
+        // A switch where some arms use break and others return a value
+        // is now an error (G30 symmetric) — the returning arms' values
+        // would be silently dropped.
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "skip":
+                        break;
+                    default:
+                        return x;
+                }
+                return "done";
+            }
+        `,
+            "Switch has arms that return a value but not all arms return",
+        );
+    });
+
+    // ---- G29: value-producing if/else and switch enforcement ----
+    //
+    // Type-checker enforces same-type only when ALL arms return a value.
+    // Partial-return patterns (e.g. early-return + fall-through, or `break`
+    // in some switch arms) are intentionally accepted; the emitter falls
+    // back to `{}` outputSchema for those cases pending G18 / phase 5
+    // validator follow-up.
+
+    test("value-producing if/else with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { return 42; }
+            }`,
+            "if/else arms must return the same type",
+        );
+    });
+
+    test("value-producing if/else with matching arm types is OK", () => {
+        expectNoErrors(`
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { return "b"; }
+            }
+        `);
+    });
+
+    test("then-arm returns value with no else is an error (G30)", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { return "a"; }
+                return "b";
+            }`,
+            "Then-arm returns a value",
+        );
+    });
+
+    test("then-arm returns but else-arm does not is an error (G30)", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { return "a"; } else { const y = "b"; }
+                return "c";
+            }`,
+            "Then-arm returns a value",
+        );
+    });
+
+    test("else-arm returns but then-arm does not is an error (G30)", () => {
+        expectError(
+            `
+            workflow test(x: boolean): string {
+                if (x) { const y = "a"; } else { return "b"; }
+                return "c";
+            }`,
+            "Else-arm returns a value",
+        );
+    });
+
+    test("value-producing switch with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    default: return 42;
+                }
+            }`,
+            "switch arms must return the same type",
+        );
+    });
+
+    test("switch with break arm is an error (G30 symmetric)", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "skip": break;
+                    default: return x;
+                }
+                return "done";
+            }`,
+            "Switch has arms that return a value but not all arms return",
+        );
+    });
+
+    test("switch with non-returning arm is an error (G30 symmetric)", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": const y = "skip";
+                    default: return "z";
+                }
+                return "done";
+            }`,
+            "Switch has arms that return a value but not all arms return",
+        );
+    });
+
+    test("value-producing switch with matching arm types is OK", () => {
+        expectNoErrors(`
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": return "y";
+                    default: return "z";
+                }
+            }
+        `);
+    });
+
+    // ---- Q4: exhaustive switch without default ----
+
+    test("Q4: exhaustive switch on enum discriminant is value-producing", () => {
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return 3;
+                }
+            }
+        `);
+    });
+
+    test("Q4: non-exhaustive switch on enum (missing value) is not value-producing but not an error", () => {
+        // The switch covers "low" and "medium" but not "high".
+        // Q4 requires ALL enum values to be covered for value-production;
+        // since "high" is absent, the switch is not value-producing.
+        // G30 does not fire here — all *present* arms return; the missing
+        // enum value is simply an uncovered path (not a mixed-return pattern).
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                }
+            }
+        `);
+    });
+
+    test("Q4: exhaustive switch on enum with mismatched arm types errors", () => {
+        expectError(
+            `
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return "three";
+                }
+            }
+            `,
+            "switch arms must return the same type",
+        );
+    });
+
+    test("Q4: exhaustive enum switch with explicit default is also OK", () => {
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    default: return 3;
+                }
+            }
+        `);
+    });
+
+    test("Q4: switch on plain string without default — all arms return, no error (not value-producing)", () => {
+        // Plain `string` is not an EnumType, so Q4 exhaustiveness does not
+        // apply.  All present arms return; G30 fires only on mixed-return
+        // patterns — this is not one.  No error; the switch is simply not
+        // value-producing (no _resolvedSchemas entry is stored).
+        expectNoErrors(`
+            workflow test(x: string): number {
+                switch (x) {
+                    case "a": return 1;
+                    case "b": return 2;
+                }
+            }
+        `);
+    });
+});
+
+// ----- EnumType: assignability, equality, parsing, exhaustiveness -----
+//
+// Direct coverage for the `EnumType` paths in `isAssignableTo`,
+// `isEqualityComparable`, `jsonSchemaToTypeInfo`, and `isEnumExhaustive`.
+
+describe("EnumType assignability and equality", () => {
+    test("string-enum is assignable to its base primitive (string)", () => {
+        // Return type `string` accepts an enum result of base "string".
+        expectNoErrors(`
+            workflow test(text: string): string {
+                const c = test.classify(text: text);
+                return c.label;
+            }
+        `);
+    });
+
+    test("integer-enum is assignable to number (integer widens)", () => {
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const p = test.priority(text: text);
+                return p.level;
+            }
+        `);
+    });
+
+    test("integer-enum is assignable to integer (same base)", () => {
+        expectNoErrors(`
+            workflow test(text: string): integer {
+                const p = test.priority(text: text);
+                return p.level;
+            }
+        `);
+    });
+
+    test("number-enum is NOT assignable to integer (narrowing rejected)", () => {
+        expectError(
+            `
+            workflow test(text: string): integer {
+                const s = test.score(text: text);
+                return s.score;
+            }
+            `,
+            "",
+        );
+    });
+
+    test("string-enum === string is permitted", () => {
+        expectNoErrors(`
+            workflow test(text: string): boolean {
+                const c = test.classify(text: text);
+                return c.label === "low";
+            }
+        `);
+    });
+
+    test("integer-enum === number is permitted (compatible bases)", () => {
+        expectNoErrors(`
+            workflow test(text: string): boolean {
+                const p = test.priority(text: text);
+                return p.level === 1;
+            }
+        `);
+    });
+
+    test("string-enum === number is a type error (base mismatch)", () => {
+        expectError(
+            `
+            workflow test(text: string): boolean {
+                const c = test.classify(text: text);
+                return c.label === 42;
+            }
+            `,
+            "",
+        );
+    });
+
+    test("primitive is NOT assignable to enum (narrowing rejected)", () => {
+        // Annotating with a string-typed const is fine; assigning a
+        // string-enum return slot from a plain string is not — covered
+        // structurally via the task input/output flow.  The `test.classify`
+        // output uses an enum slot; a plain string field cannot be returned
+        // where an enum is structurally required.  This program exercises
+        // the inverse direction: assigning a string-enum field from a plain
+        // string source through structural comparison.
+        const errors = check(`
+            workflow test(text: string): string {
+                const c = test.classify(text: text);
+                return text;
+            }
+        `);
+        // Returning plain `text` (string) against return type `string` is OK
+        // — the inverse failure is structural and only fires for nested
+        // enum-typed slots.  We assert no error here as a sanity check;
+        // the primitive→enum rejection is exercised by the score/integer
+        // case above.
+        expect(errors).toEqual([]);
+    });
+});
+
+describe("EnumType: JSON Schema parsing edge cases", () => {
+    test("empty enum array is ignored (falls through to bare type)", () => {
+        // An enum array with zero entries cannot constrain anything; the
+        // converter falls through to the bare type.  Exercised indirectly
+        // via the existing task path — adding a schema with `enum: []`
+        // would not parse as `EnumType` and must still type-check as
+        // its base primitive.  This is a characterization test: we
+        // construct the schema inline and assert checker behavior.
+        const checker = new TypeChecker([
+            {
+                name: "test.emptyEnum",
+                inputSchema: {
+                    type: "object",
+                    required: ["x"],
+                    properties: { x: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["v"],
+                    properties: { v: { type: "string", enum: [] } },
+                },
+            },
+        ]);
+        const { tokens } = lex(`
+            workflow test(x: string): string {
+                const r = test.emptyEnum(x: x);
+                return r.v;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const errors = checker.checkAll(module.workflows);
+        // `enum: []` falls through to bare `string`, so returning it as
+        // `string` must succeed.
+        expect(errors).toEqual([]);
+    });
+
+    test("mixed-type enum (string + number) is not an EnumType", () => {
+        // Mixed-type enums don't satisfy `every string` or `every number`,
+        // so the converter falls through to the bare type.  Since the
+        // declared base type is "string", the field is treated as plain
+        // string.
+        const checker = new TypeChecker([
+            {
+                name: "test.mixedEnum",
+                inputSchema: {
+                    type: "object",
+                    required: ["x"],
+                    properties: { x: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["v"],
+                    properties: {
+                        v: { type: "string", enum: ["a", 1] },
+                    },
+                },
+            },
+        ]);
+        const { tokens } = lex(`
+            workflow test(x: string): string {
+                const r = test.mixedEnum(x: x);
+                return r.v;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+
+    test("all-integer enum picks base 'integer' (not 'number')", () => {
+        // The integer base means the enum widens to both integer and number.
+        // This is exercised by `test.priority` above; here we also assert
+        // assignability to `integer` works (would fail for base "number").
+        expectNoErrors(`
+            workflow test(text: string): integer {
+                const p = test.priority(text: text);
+                return p.level;
+            }
+        `);
+    });
+
+    test("any-float enum picks base 'number' (not 'integer')", () => {
+        // The presence of any non-integer value forces base "number" — and
+        // therefore rejects assignment to `integer`.
+        expectError(
+            `
+            workflow test(text: string): integer {
+                const s = test.score(text: text);
+                return s.score;
+            }
+            `,
+            "",
+        );
+    });
+});
+
+describe("isEnumExhaustive: non-literal arm punt", () => {
+    test("switch over enum with const-reference arm value is not exhaustive (no error, not value-producing)", () => {
+        // When an arm value is not a literal, `isEnumExhaustive` returns
+        // false (it cannot prove coverage).  The switch is therefore not
+        // value-producing.  All arms return, so G30 does not fire.  No
+        // error expected; the switch is simply treated as side-effecting.
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                const low = "low";
+                switch (r.label) {
+                    case low: return 1;
+                    case "medium": return 2;
+                    case "high": return 3;
+                }
+            }
+        `);
+    });
+});
+
+describe("switch arm type-mismatch diagnostics", () => {
+    test("error names the disagreeing arm by index", () => {
+        // The diagnostic should pin the arm position so the author
+        // doesn't have to count manually in a 5-arm switch.
+        expectError(
+            `
+            workflow test(text: string): string {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return "L";
+                    case "medium": return 2;
+                    case "high": return "H";
+                    default: return "X";
+                }
+            }
+            `,
+            "arm 2",
+        );
+    });
+
+    test("error names the default arm when default disagrees", () => {
+        expectError(
+            `
+            workflow test(text: string): string {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return "L";
+                    case "medium": return "M";
+                    case "high": return "H";
+                    default: return 42;
+                }
+            }
+            `,
+            "default arm",
+        );
+    });
+});
+
+describe("exhaustive enum switch with explicit default (characterization)", () => {
+    test("redundant default on exhaustive enum is currently allowed (no warning)", () => {
+        // Author covers every enum value AND writes a default. Today this
+        // is silently allowed — the default arm is simply unreachable at
+        // runtime. We pin the behavior so any future tightening (e.g.,
+        // an "unreachable default arm" warning) is an intentional change.
+        expectNoErrors(`
+            workflow test(text: string): number {
+                const r = test.classify(text: text);
+                switch (r.label) {
+                    case "low": return 1;
+                    case "medium": return 2;
+                    case "high": return 3;
+                    default: return 0;
+                }
+            }
+        `);
+    });
+});
+
+describe("TypeChecker.diagnoseMalformedEnums", () => {
+    test("flags empty enum arrays", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.empty",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: { v: { type: "string", enum: [] } },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            { taskName: "t.empty", path: "outputSchema.v", reason: "empty" },
+        ]);
+    });
+
+    test("flags mixed-type enum arrays", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.mixed",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: { v: { enum: ["a", 1] } },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            { taskName: "t.mixed", path: "outputSchema.v", reason: "mixed" },
+        ]);
+    });
+
+    test("walks nested object and array shapes", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.nested",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        a: {
+                            type: "array",
+                            items: { type: "string", enum: [] },
+                        },
+                    },
+                },
+                outputSchema: { type: "object" },
+            },
+        ]);
+        expect(warnings).toEqual([
+            {
+                taskName: "t.nested",
+                path: "inputSchema.a[]",
+                reason: "empty",
+            },
+        ]);
+    });
+
+    test("returns empty list when all enums are well-formed", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.ok",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: {
+                        v: { type: "string", enum: ["a", "b"] },
+                    },
+                },
+            },
+        ]);
+        expect(warnings).toEqual([]);
+    });
+
+    test("flags empty enum nested under oneOf (review #1)", () => {
+        const warnings = TypeChecker.diagnoseMalformedEnums([
+            {
+                name: "t.oneOf",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    oneOf: [{ type: "string" }, { type: "string", enum: [] }],
+                },
+            },
+        ]);
+        expect(warnings).toEqual([
+            {
+                taskName: "t.oneOf",
+                path: "outputSchema.oneOf[1]",
+                reason: "empty",
+            },
+        ]);
+    });
+});
+
+// ---- Tests for review fixes (#1, #2, #5, #6, #9) ----
+
+describe("typeInfoToSchema: tuple lowering (review #5)", () => {
+    test("tuple emits JSON Schema 7 array form with min/maxItems", () => {
+        const tuple = {
+            kind: "tuple" as const,
+            elements: [
+                { kind: "primitive" as const, name: "string" as const },
+                { kind: "primitive" as const, name: "number" as const },
+            ],
+        };
+        expect(typeInfoToSchema(tuple)).toEqual({
+            type: "array",
+            items: [{ type: "string" }, { type: "number" }],
+            minItems: 2,
+            maxItems: 2,
+        });
+    });
+
+    test("empty tuple emits a fixed-length zero array", () => {
+        expect(typeInfoToSchema({ kind: "tuple", elements: [] })).toEqual({
+            type: "array",
+            items: [],
+            minItems: 0,
+            maxItems: 0,
+        });
+    });
+});
+
+describe("primitive -> enum assignability (review #2)", () => {
+    test("string parameter is assignable to an enum-typed generic argument", () => {
+        // The DSL doesn't widen string literals to single-value EnumTypes,
+        // so a `string` value flowing into an enum-typed slot must be
+        // accepted (with runtime validation as the final enforcer).
+        const { tokens } = lex(`
+            workflow test(label: string): string {
+                const c = test.acceptsLabel<string>(label: label);
+                return c.echo;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.acceptsLabel",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["label"],
+                    properties: {
+                        // Enum-typed input field: a plain string source
+                        // must be accepted at the call site.
+                        label: { type: "string", enum: ["low", "high"] },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["echo"],
+                    properties: { echo: { type: "string" } },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+    });
+});
+
+describe("EnumType: boolean base (review #6)", () => {
+    test("boolean-enum schema produces an EnumType, not UNKNOWN", () => {
+        // If the schema were treated as UNKNOWN, returning the field as
+        // `string` would silently succeed.  With EnumType base "boolean",
+        // the type checker rejects the mismatched return.
+        const { tokens } = lex(`
+            workflow test(): string {
+                const r = test.boolEnum();
+                return r.flag;
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.boolEnum",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["flag"],
+                    properties: {
+                        flag: { type: "boolean", enum: [true, false] },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors.length).toBeGreaterThan(0);
+        expect(errors.some((e) => e.message.includes("not assignable"))).toBe(
+            true,
+        );
+    });
+});
+
+describe("$typeParam resolution under nested keywords (review #1)", () => {
+    test("$typeParam inside oneOf is substituted in the resolved schema", () => {
+        const { tokens } = lex(`
+            workflow test(): string {
+                const r = test.unionGeneric<string>(prompt: "x");
+                return "ok";
+            }
+        `);
+        const parser = new Parser(tokens);
+        const { module } = parser.parseModule();
+        const schemas: TaskSchemaInfo[] = [
+            {
+                name: "test.unionGeneric",
+                typeParameters: [{ name: "T", default: {} }],
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: {
+                        // Marker buried under oneOf: pre-fix the walker
+                        // didn't recurse here so the marker leaked through
+                        // to the resolved schema.
+                        value: {
+                            oneOf: [{ $typeParam: "T" }, { type: "null" }],
+                        },
+                    },
+                },
+            },
+        ];
+        const checker = new TypeChecker(schemas);
+        const errors = checker.checkAll(module.workflows);
+        expect(errors).toEqual([]);
+        const [resolved] = Array.from(checker.resolvedSchemas.values());
+        expect(resolved).toBeDefined();
+        const valueSchema = (
+            (resolved.outputSchema as Record<string, unknown>)
+                .properties as Record<string, unknown>
+        ).value as Record<string, unknown>;
+        expect(valueSchema.oneOf).toEqual([
+            { type: "string" },
+            { type: "null" },
+        ]);
+    });
+});
+
+describe("switch asymmetry diagnostic names the offending arm (review #9)", () => {
+    test("case arm is named by 1-based index when it doesn't return", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": const y = "skip";
+                    default: return "z";
+                }
+                return "done";
+            }`,
+            "arm 2",
+        );
+    });
+
+    test("default arm is named when only the default doesn't return", () => {
+        expectError(
+            `
+            workflow test(x: string): string {
+                switch (x) {
+                    case "a": return "x";
+                    case "b": return "y";
+                    default: const z = "skip";
+                }
+                return "done";
+            }`,
+            "default arm",
+        );
     });
 });

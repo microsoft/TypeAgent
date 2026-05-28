@@ -12,6 +12,9 @@ import {
     ApprovalFn,
     ApprovalResult,
     validateWorkflowIR,
+    isGenericTask,
+    isTypeParamRef,
+    SchemaTemplateDefinition,
 } from "workflow-model";
 import {
     TaskRegistry,
@@ -209,30 +212,85 @@ function cmdListTasks(): void {
     }
     for (const task of allBuiltinTasks) {
         console.log(`${task.name}`);
-        if (task.inputSchema) {
-            const props = (task.inputSchema as any).properties ?? {};
-            const required = (task.inputSchema as any).required ?? [];
-            const fields = Object.keys(props)
-                .map((k) => {
-                    const req = required.includes(k) ? "" : "?";
-                    const type = props[k].type ?? "any";
-                    return `${k}${req}: ${type}`;
-                })
-                .join(", ");
-            if (fields) {
-                console.log(`  input:  { ${fields} }`);
+        if (isGenericTask(task)) {
+            const params = task.typeParameters.map((p) => p.name).join(", ");
+            console.log(`  <${params}> (generic)`);
+            const inputTmpl = task.inputSchemaTemplate;
+            if (
+                typeof inputTmpl === "object" &&
+                inputTmpl !== null &&
+                typeof inputTmpl !== "boolean"
+            ) {
+                const tmpl = inputTmpl as SchemaTemplateDefinition;
+                const props = tmpl.properties ?? {};
+                const required = tmpl.required ?? [];
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const p = props[k] as Record<string, unknown>;
+                        const req = required.includes(k) ? "" : "?";
+                        const type = p?.$typeParam ?? p?.type ?? "any";
+                        return `${k}${req}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  input:  { ${fields} }`);
+                }
             }
-        }
-        if (task.outputSchema) {
-            const props = (task.outputSchema as any).properties ?? {};
-            const fields = Object.keys(props)
-                .map((k) => {
-                    const type = props[k].type ?? "any";
-                    return `${k}: ${type}`;
-                })
-                .join(", ");
-            if (fields) {
-                console.log(`  output: { ${fields} }`);
+            const outputTmpl = task.outputSchemaTemplate;
+            if (
+                typeof outputTmpl === "object" &&
+                outputTmpl !== null &&
+                typeof outputTmpl !== "boolean"
+            ) {
+                if (isTypeParamRef(outputTmpl)) {
+                    console.log(`  output: ${outputTmpl.$typeParam}`);
+                } else {
+                    const tmpl = outputTmpl as SchemaTemplateDefinition;
+                    if (tmpl.properties) {
+                        const fields = Object.keys(tmpl.properties)
+                            .map((k) => {
+                                const p = tmpl.properties![k] as Record<
+                                    string,
+                                    unknown
+                                >;
+                                const type = p?.$typeParam ?? p?.type ?? "any";
+                                return `${k}: ${type}`;
+                            })
+                            .join(", ");
+                        if (fields) {
+                            console.log(`  output: { ${fields} }`);
+                        }
+                    }
+                }
+            }
+        } else {
+            if (task.inputSchema) {
+                const props = task.inputSchema.properties ?? {};
+                const required = task.inputSchema.required ?? [];
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const req = required.includes(k) ? "" : "?";
+                        const p = props[k] as Record<string, unknown>;
+                        const type = p?.type ?? "any";
+                        return `${k}${req}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  input:  { ${fields} }`);
+                }
+            }
+            if (task.outputSchema) {
+                const props = task.outputSchema.properties ?? {};
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const p = props[k] as Record<string, unknown>;
+                        const type = p?.type ?? "any";
+                        return `${k}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  output: { ${fields} }`);
+                }
             }
         }
         console.log();

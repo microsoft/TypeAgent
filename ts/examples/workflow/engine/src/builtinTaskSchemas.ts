@@ -15,12 +15,49 @@
  * there is exactly one place where schemas are declared.
  */
 
-import { JSONSchema } from "workflow-model";
+import { JSONSchema, SchemaTemplate } from "workflow-model";
 
-export interface BuiltinTaskSchema {
+/**
+ * Declares a generic type parameter on a task.
+ * When `default` is present the type arg is optional at call sites;
+ * when absent, the caller MUST supply `<T>`.
+ *
+ * Substitution sites are marked inline in the schema with
+ * `{ "$typeParam": "<name>" }`. A single parameter may appear in
+ * multiple positions (both input and output schemas).
+ */
+export interface TypeParameterDef {
+    /** Parameter name (e.g. "T"). */
+    name: string;
+    /** Schema used when the caller omits the type argument. If absent
+     *  the type argument is required. */
+    default?: JSONSchema;
+}
+
+/** A non-generic builtin task schema declaration. */
+export interface ConcreteBuiltinTaskSchema {
     name: string;
     inputSchema: JSONSchema;
     outputSchema: JSONSchema;
+}
+
+/** A generic builtin task schema declaration with type parameters. */
+export interface GenericBuiltinTaskSchema {
+    name: string;
+    inputSchema: SchemaTemplate;
+    outputSchema: SchemaTemplate;
+    typeParameters: TypeParameterDef[];
+}
+
+export type BuiltinTaskSchema =
+    | ConcreteBuiltinTaskSchema
+    | GenericBuiltinTaskSchema;
+
+/** Type guard: narrows a BuiltinTaskSchema to its generic variant. */
+export function isGenericBuiltinSchema(
+    schema: BuiltinTaskSchema,
+): schema is GenericBuiltinTaskSchema {
+    return "typeParameters" in schema;
 }
 
 // Names referenced from the DSL appear as `namespace.member`; keep
@@ -40,15 +77,16 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "list.elementAt",
+        typeParameters: [{ name: "T", default: {} }],
         inputSchema: {
             type: "object",
             required: ["list", "index"],
             properties: {
-                list: { type: "array" },
+                list: { type: "array", items: { $typeParam: "T" } },
                 index: { type: "integer" },
             },
         },
-        outputSchema: {},
+        outputSchema: { $typeParam: "T" },
     },
     {
         name: "list.append",
@@ -124,32 +162,47 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "math.add",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.subtract",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.multiply",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
+        // Division is intentionally NOT generic: integer / integer
+        // can produce a non-integer (e.g. 1 / 2 = 0.5), so the
+        // output cannot be narrowed to integer from integer operands.
         name: "math.divide",
         inputSchema: {
             type: "object",
@@ -160,21 +213,26 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "math.modulo",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
+            properties: {
+                left: { $typeParam: "N" },
+                right: { $typeParam: "N" },
+            },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.negate",
+        typeParameters: [{ name: "N", default: { type: "number" } }],
         inputSchema: {
             type: "object",
             required: ["value"],
-            properties: { value: { type: "number" } },
+            properties: { value: { $typeParam: "N" } },
         },
-        outputSchema: { type: "number" },
+        outputSchema: { $typeParam: "N" },
     },
     {
         name: "math.floor",
@@ -279,6 +337,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
     },
     {
         name: "llm.generateJson",
+        typeParameters: [{ name: "T", default: {} }],
         inputSchema: {
             type: "object",
             required: ["prompt"],
@@ -287,7 +346,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
                 endpoint: { type: "string" },
             },
         },
-        outputSchema: {},
+        outputSchema: { $typeParam: "T" },
     },
     {
         name: "http.get",
@@ -389,9 +448,5 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
  * in the engine's runtime dependencies.
  */
 export function getBuiltinTaskSchemas(): BuiltinTaskSchema[] {
-    return BUILTIN_TASK_SCHEMAS.map((s) => ({
-        name: s.name,
-        inputSchema: s.inputSchema,
-        outputSchema: s.outputSchema,
-    }));
+    return [...BUILTIN_TASK_SCHEMAS];
 }

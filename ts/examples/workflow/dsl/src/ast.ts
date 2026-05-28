@@ -351,6 +351,7 @@ export interface TaskCallExpr {
     kind: "TaskCallExpr";
     task: string; // e.g. "text.template", "shell.exec"
     args: TaskArg[];
+    typeArgs?: TypeExpr[];
     loc: SourceLocation;
 }
 
