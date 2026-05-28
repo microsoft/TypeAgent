@@ -288,6 +288,11 @@ function renderHTML(
   .filter-row { margin: 8px 0; }
   .filter-row label { margin-right: 12px; font-size: 11px; }
   .controls { margin: 8px 0; font-size: 11px; color: #555; }
+  .apply-row { margin: 8px 0; }
+  .apply-btn { font-family: inherit; font-size: 12px; padding: 4px 12px; border: 1px solid #bbb; background: #f4f4f4; border-radius: 3px; cursor: not-allowed; color: #555; }
+  .apply-btn:not(:disabled) { background: #e6f5ec; border-color: #6a9; color: #1c6b3a; cursor: pointer; }
+  .apply-btn:not(:disabled):hover { background: #d6efd2; }
+  .apply-note { font-size: 10px; color: #888; margin-left: 8px; }
 </style></head>
 <body>
 
@@ -409,11 +414,14 @@ function renderAttemptDetail(
                   .map((p) => `<li>"${esc(p)}"</li>`)
                   .join("")}</ul>`
             : "";
+    const applyBlock = renderApplyButton(a);
     return `<details${isWinner ? " open" : ""} id="${esc(a.id)}">
 <summary>${esc(a.id)} · ${esc(a.proposal.lever)}/${esc(a.proposal.mechanism)} · score=${a.evaluation.score} · rescues=${a.evaluation.rescues} regressions=${a.evaluation.regressions}${isWinner ? " · WINNER" : ""}${a.evaluation.applyError ? " · APPLY ERROR" : ""}</summary>
 
 <h3>Rationale</h3>
 <div>${esc(a.proposal.rationale?.free ?? "(none)")}</div>
+
+${applyBlock}
 
 ${diffBlock}
 
@@ -426,6 +434,35 @@ ${regressions}
 </details>
 
 </details>`;
+}
+
+/**
+ * Placeholder "Apply this change" button. Disabled in v1 — clicking does
+ * nothing. Once a dispatcher round-trip exists, this becomes a real
+ * trigger.
+ */
+function renderApplyButton(a: AttemptView): string {
+    const hasError = !!a.evaluation.applyError;
+    const isDry = !!a.proposal.dryRun;
+    const tooltip = hasError
+        ? "Cannot apply — this attempt failed during sandbox apply"
+        : isDry
+          ? "Cannot apply — this is a dry-run attempt with no payload"
+          : "Apply not yet implemented — see TODO in caseViz.ts";
+    // TODO: wire up Apply. Needs a dispatcher round-trip (e.g. a small
+    //       sidecar HTTP endpoint or a `@collision optimize apply
+    //       --run <runDir> --attempt <id>` command) that re-runs the
+    //       lever's apply primitive against the live source tree using
+    //       this attempt's proposal payload. For now the button is a
+    //       visual placeholder so operators can see where the action
+    //       will live; clicking it does nothing.
+    return `<div class="apply-row">
+  <!-- TODO(apply): not yet implemented. Should call back into the
+       dispatcher to apply this attempt's proposal payload to the live
+       source tree via the matching lever's apply primitive. -->
+  <button class="apply-btn" disabled title="${esc(tooltip)}" data-attempt-id="${esc(a.id)}" data-lever="${esc(a.proposal.lever)}">Apply this change</button>
+  <span class="apply-note">(not yet implemented)</span>
+</div>`;
 }
 
 function esc(s: string): string {
