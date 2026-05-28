@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows.Controls;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 
@@ -16,7 +18,19 @@ public partial class ChatToolWindowControl : UserControl
     public ChatToolWindowControl()
     {
         InitializeComponent();
-        Loaded += async (_, _) => await InitializeWebViewAsync();
+        Loaded += OnControlLoaded;
+    }
+
+    private void OnControlLoaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        // Hand the async work to the JTF and observe the JoinableTask via
+        // FileAndForget so VSTHRD101/VSTHRD110 don't fire.
+#pragma warning disable VSSDK007 // FileAndForget is the documented fire-and-forget observation for JoinableTask.
+        ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+        {
+            await InitializeWebViewAsync();
+        }).FileAndForget("typeagent/vsix/webview-init");
+#pragma warning restore VSSDK007
     }
 
     private async System.Threading.Tasks.Task InitializeWebViewAsync()

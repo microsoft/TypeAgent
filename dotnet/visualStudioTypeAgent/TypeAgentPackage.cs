@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#nullable enable
+
 using System;
-using System.ComponentModel.Design;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.TypeAgent.VisualStudio.Bridge;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using Task = System.Threading.Tasks.Task;
 
 namespace Microsoft.TypeAgent.VisualStudio;
@@ -30,6 +32,25 @@ public sealed class TypeAgentPackage : AsyncPackage
         // Start the action bridge on the main thread so DTE calls don't marshal across.
         _bridge = new AgentBridgeClient(this);
         _ = _bridge.StartAsync(cancellationToken);
+    }
+
+    // Declare async tool window support so VSSDK003 is satisfied and VS can
+    // construct ChatToolWindow off the UI thread.
+    public override IVsAsyncToolWindowFactory? GetAsyncToolWindowFactory(Guid toolWindowType)
+    {
+        return toolWindowType == typeof(ChatToolWindow).GUID ? this : null;
+    }
+
+    protected override string GetToolWindowTitle(Type toolWindowType, int id)
+    {
+        return toolWindowType == typeof(ChatToolWindow)
+            ? "TypeAgent Chat"
+            : base.GetToolWindowTitle(toolWindowType, id);
+    }
+
+    protected override System.Threading.Tasks.Task<object?> InitializeToolWindowAsync(Type toolWindowType, int id, CancellationToken cancellationToken)
+    {
+        return System.Threading.Tasks.Task.FromResult<object?>(null);
     }
 
     protected override void Dispose(bool disposing)

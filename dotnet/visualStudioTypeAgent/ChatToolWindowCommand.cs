@@ -5,6 +5,7 @@ using System;
 using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Threading;
 using Task = System.Threading.Tasks.Task;
 
 namespace Microsoft.TypeAgent.VisualStudio;
@@ -41,11 +42,14 @@ internal sealed class ChatToolWindowCommand
     {
         _package.JoinableTaskFactory.RunAsync(async () =>
         {
+            // Marshal to the UI thread explicitly so the VSTHRD010 analyzer
+            // can see the IVsWindowFrame access is main-thread-safe.
+            await _package.JoinableTaskFactory.SwitchToMainThreadAsync(_package.DisposalToken);
             var window = await _package.ShowToolWindowAsync(typeof(ChatToolWindow), 0, create: true, cancellationToken: _package.DisposalToken);
             if (window?.Frame is IVsWindowFrame frame)
             {
                 Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(frame.Show());
             }
-        });
+        }).FileAndForget("typeagent/vsix/show-tool-window");
     }
 }

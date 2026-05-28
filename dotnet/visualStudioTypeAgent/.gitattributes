@@ -1,0 +1,19 @@
+# VSIX / .NET Framework project — keep CRLF on all source files so VS
+# analyzers (and developers checking out on Windows) don't see mixed
+# line endings.
+*.cs            text eol=crlf
+*.xaml          text eol=crlf
+*.csproj        text eol=crlf
+*.sln           text eol=crlf
+*.vsct          text eol=crlf
+*.vsixmanifest  text eol=crlf
+*.json          text eol=crlf
+*.config        text eol=crlf
+*.resx          text eol=crlf
+*.props         text eol=crlf
+*.targets       text eol=crlf
+
+# Binary
+*.png binary
+*.ico binary
+*.dll binary
