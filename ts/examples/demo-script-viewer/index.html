@@ -1,961 +1,1183 @@
 <!doctype html>
 <html lang="en">
-<!--
+  <!--
     Copyright (c) Microsoft Corporation.
     Licensed under the MIT License.
 
     Single-file HTML. Open directly in a browser; no server needed.
 -->
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>demo-script-viewer</title>
     <style>
-        :root, body.dark {
-            --bg: #14171c;
-            --bg-elev: #1c2027;
-            --bg-elev-2: #242932;
-            --fg: #e8eaed;
-            --fg-dim: #9aa0a6;
-            --fg-mute: #6b7177;
-            --accent: #5b9aff;
-            --border: #2c313a;
-            --border-soft: #232830;
-            --modal-overlay: rgba(0, 0, 0, 0.55);
-            --shadow-modal: 0 10px 40px rgba(0,0,0,0.4);
+      :root,
+      body.dark {
+        --bg: #14171c;
+        --bg-elev: #1c2027;
+        --bg-elev-2: #242932;
+        --fg: #e8eaed;
+        --fg-dim: #9aa0a6;
+        --fg-mute: #6b7177;
+        --accent: #5b9aff;
+        --border: #2c313a;
+        --border-soft: #232830;
+        --modal-overlay: rgba(0, 0, 0, 0.55);
+        --shadow-modal: 0 10px 40px rgba(0, 0, 0, 0.4);
 
-            --c-narration: #5b9aff;
-            --c-narration-bg: rgba(91, 154, 255, 0.06);
-            --c-cue: #d94545;
-            --c-cue-bg: #4d1c1c;
-            --c-cue-text: #ffffff;
-            --c-command: #6bc66b;
-            --c-command-bg: rgba(107, 198, 107, 0.05);
-            --c-config: #888;
-            --c-config-bg: rgba(140, 140, 140, 0.05);
-            --c-lifecycle: #d9a040;
-            --c-lifecycle-bg: rgba(217, 160, 64, 0.06);
-            --c-recording: #d94545;
-            --c-recording-bg: rgba(217, 69, 69, 0.05);
-            --c-timing: #8a8a8a;
-            --c-timing-bg: rgba(138, 138, 138, 0.04);
-            --c-comment: #5e6571;
-            --c-unknown: #c47fff;
-            --c-unknown-bg: rgba(196, 127, 255, 0.05);
-        }
+        --c-narration: #5b9aff;
+        --c-narration-bg: rgba(91, 154, 255, 0.06);
+        --c-cue: #d94545;
+        --c-cue-bg: #4d1c1c;
+        --c-cue-text: #ffffff;
+        --c-command: #6bc66b;
+        --c-command-bg: rgba(107, 198, 107, 0.05);
+        --c-config: #888;
+        --c-config-bg: rgba(140, 140, 140, 0.05);
+        --c-lifecycle: #d9a040;
+        --c-lifecycle-bg: rgba(217, 160, 64, 0.06);
+        --c-recording: #d94545;
+        --c-recording-bg: rgba(217, 69, 69, 0.05);
+        --c-timing: #8a8a8a;
+        --c-timing-bg: rgba(138, 138, 138, 0.04);
+        --c-comment: #5e6571;
+        --c-unknown: #c47fff;
+        --c-unknown-bg: rgba(196, 127, 255, 0.05);
+      }
 
-        body.light {
-            --bg: #f7f8fa;
-            --bg-elev: #ffffff;
-            --bg-elev-2: #eef0f4;
-            --fg: #1f2328;
-            --fg-dim: #4d5564;
-            --fg-mute: #8a929e;
-            --accent: #2563eb;
-            --border: #dadee6;
-            --border-soft: #e8ebf0;
-            --modal-overlay: rgba(15, 23, 42, 0.35);
-            --shadow-modal: 0 12px 36px rgba(15, 23, 42, 0.18);
+      body.light {
+        --bg: #f7f8fa;
+        --bg-elev: #ffffff;
+        --bg-elev-2: #eef0f4;
+        --fg: #1f2328;
+        --fg-dim: #4d5564;
+        --fg-mute: #8a929e;
+        --accent: #2563eb;
+        --border: #dadee6;
+        --border-soft: #e8ebf0;
+        --modal-overlay: rgba(15, 23, 42, 0.35);
+        --shadow-modal: 0 12px 36px rgba(15, 23, 42, 0.18);
 
-            --c-narration: #2563eb;
-            --c-narration-bg: rgba(37, 99, 235, 0.06);
-            --c-cue: #c11d1d;
-            --c-cue-bg: #fde7e7;
-            --c-cue-text: #7a1010;
-            --c-command: #15803d;
-            --c-command-bg: rgba(21, 128, 61, 0.05);
-            --c-config: #6b7280;
-            --c-config-bg: rgba(107, 114, 128, 0.04);
-            --c-lifecycle: #b45309;
-            --c-lifecycle-bg: rgba(180, 83, 9, 0.05);
-            --c-recording: #c11d1d;
-            --c-recording-bg: rgba(193, 29, 29, 0.04);
-            --c-timing: #6b7280;
-            --c-timing-bg: rgba(107, 114, 128, 0.04);
-            --c-comment: #94a3b8;
-            --c-unknown: #7c3aed;
-            --c-unknown-bg: rgba(124, 58, 237, 0.05);
-        }
+        --c-narration: #2563eb;
+        --c-narration-bg: rgba(37, 99, 235, 0.06);
+        --c-cue: #c11d1d;
+        --c-cue-bg: #fde7e7;
+        --c-cue-text: #7a1010;
+        --c-command: #15803d;
+        --c-command-bg: rgba(21, 128, 61, 0.05);
+        --c-config: #6b7280;
+        --c-config-bg: rgba(107, 114, 128, 0.04);
+        --c-lifecycle: #b45309;
+        --c-lifecycle-bg: rgba(180, 83, 9, 0.05);
+        --c-recording: #c11d1d;
+        --c-recording-bg: rgba(193, 29, 29, 0.04);
+        --c-timing: #6b7280;
+        --c-timing-bg: rgba(107, 114, 128, 0.04);
+        --c-comment: #94a3b8;
+        --c-unknown: #7c3aed;
+        --c-unknown-bg: rgba(124, 58, 237, 0.05);
+      }
 
-        * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
-        html, body { margin: 0; padding: 0; height: 100%; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
 
-        body {
-            background: var(--bg);
-            color: var(--fg);
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 14px;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
 
-        /* ---------- top bar ---------- */
-        header {
-            background: var(--bg-elev);
-            border-bottom: 1px solid var(--border);
-            padding: 10px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-        }
-        header .doc-title {
-            display: flex;
-            align-items: baseline;
-            gap: 12px;
-            min-width: 0;
-            flex: 1;
-        }
-        header .doc-title .filename {
-            font-weight: 600;
-            letter-spacing: 0.02em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        header .doc-title .block-count {
-            font-size: 12px;
-            color: var(--fg-mute);
-            white-space: nowrap;
-        }
-        header .doc-title .unsaved {
-            color: #d9a040;
-            font-size: 12px;
-        }
+      /* ---------- top bar ---------- */
+      header {
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      header .doc-title {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        min-width: 0;
+        flex: 1;
+      }
+      header .doc-title .filename {
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      header .doc-title .block-count {
+        font-size: 12px;
+        color: var(--fg-mute);
+        white-space: nowrap;
+      }
+      header .doc-title .unsaved {
+        color: #d9a040;
+        font-size: 12px;
+      }
 
-        /* ---------- toolbar ---------- */
-        .toolbar {
-            background: var(--bg-elev);
-            border-bottom: 1px solid var(--border);
-            padding: 8px 16px;
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .toolbar-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: var(--bg-elev-2);
-            border-radius: 6px;
-        }
-        .toolbar-group .label {
-            font-size: 11px;
-            color: var(--fg-mute);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin-right: 4px;
-        }
-        .btn {
-            background: transparent;
-            color: var(--fg);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 5px 12px;
-            cursor: pointer;
-            font-size: 13px;
-            font-family: inherit;
-        }
-        .btn:hover { background: var(--bg-elev-2); border-color: var(--fg-mute); }
-        .btn.primary {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
-        }
-        .btn.primary:hover { background: #4e8bee; }
-        .btn.danger { color: #ff7a7a; border-color: #5c2424; }
-        .btn.danger:hover { background: #2a1212; }
-        .btn-icon {
-            padding: 4px 8px;
-            font-size: 12px;
-        }
-        .btn-square {
-            padding: 5px 9px;
-            font-size: 14px;
-            line-height: 1;
-            min-width: 30px;
-        }
-        .header-controls {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .icon-btn {
-            background: transparent;
-            color: var(--fg-dim);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 5px 8px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
-            font-family: inherit;
-        }
-        .icon-btn:hover {
-            background: var(--bg-elev-2);
-            color: var(--fg);
-            border-color: var(--fg-mute);
-        }
-        .icon-btn.primary {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
-        }
-        .icon-btn.primary:hover {
-            background: var(--accent);
-            filter: brightness(1.1);
-        }
-        .icon-btn svg { display: block; }
-        .icon-btn-group {
-            display: inline-flex;
-            gap: 4px;
-        }
+      /* ---------- toolbar ---------- */
+      .toolbar {
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        padding: 8px 16px;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .toolbar-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: var(--bg-elev-2);
+        border-radius: 6px;
+      }
+      .toolbar-group .label {
+        font-size: 11px;
+        color: var(--fg-mute);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-right: 4px;
+      }
+      .btn {
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 5px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      .btn:hover {
+        background: var(--bg-elev-2);
+        border-color: var(--fg-mute);
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      .btn.primary:hover {
+        background: #4e8bee;
+      }
+      .btn.danger {
+        color: #ff7a7a;
+        border-color: #5c2424;
+      }
+      .btn.danger:hover {
+        background: #2a1212;
+      }
+      .btn-icon {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      .btn-square {
+        padding: 5px 9px;
+        font-size: 14px;
+        line-height: 1;
+        min-width: 30px;
+      }
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .icon-btn {
+        background: transparent;
+        color: var(--fg-dim);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 5px 8px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        font-family: inherit;
+      }
+      .icon-btn:hover {
+        background: var(--bg-elev-2);
+        color: var(--fg);
+        border-color: var(--fg-mute);
+      }
+      .icon-btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      .icon-btn.primary:hover {
+        background: var(--accent);
+        filter: brightness(1.1);
+      }
+      .icon-btn svg {
+        display: block;
+      }
+      .icon-btn-group {
+        display: inline-flex;
+        gap: 4px;
+      }
 
-        /* Run-modal layout */
-        .run-options { margin: 8px 0 16px; }
-        .run-option-row {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 7px 0;
-        }
-        .run-option-label {
-            min-width: 56px;
-            color: var(--fg-dim);
-            font-size: 13px;
-        }
-        .run-option-hint {
-            color: var(--fg-mute);
-            font-size: 11px;
-            margin-left: auto;
-            font-style: italic;
-        }
-        .run-actions {
-            display: flex;
-            gap: 8px;
-            margin: 16px 0;
-            padding: 14px 0;
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-        }
-        .run-actions .btn { flex: 1; padding: 9px 12px; }
+      /* Run-modal layout */
+      .run-options {
+        margin: 8px 0 16px;
+      }
+      .run-option-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 7px 0;
+      }
+      .run-option-label {
+        min-width: 56px;
+        color: var(--fg-dim);
+        font-size: 13px;
+      }
+      .run-option-hint {
+        color: var(--fg-mute);
+        font-size: 11px;
+        margin-left: auto;
+        font-style: italic;
+      }
+      .run-actions {
+        display: flex;
+        gap: 8px;
+        margin: 16px 0;
+        padding: 14px 0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+      .run-actions .btn {
+        flex: 1;
+        padding: 9px 12px;
+      }
 
-        .toggle {
-            display: inline-flex;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .toggle button {
-            background: transparent;
-            color: var(--fg-dim);
-            border: 0;
-            padding: 4px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .toggle button.on {
-            background: var(--accent);
-            color: white;
-        }
+      .toggle {
+        display: inline-flex;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .toggle button {
+        background: transparent;
+        color: var(--fg-dim);
+        border: 0;
+        padding: 4px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .toggle button.on {
+        background: var(--accent);
+        color: white;
+      }
 
-        /* ---------- main ---------- */
-        main {
-            flex: 1;
-            display: flex;
-            min-height: 0;
-        }
-        .editor {
-            flex: 1;
-            padding: 24px 32px;
-            overflow-y: auto;
-        }
+      /* ---------- main ---------- */
+      main {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+      .editor {
+        flex: 1;
+        padding: 24px 32px;
+        overflow-y: auto;
+      }
 
-        /* ---------- blocks ---------- */
-        .block {
-            position: relative;
-            margin: 8px 0;
-            padding: 10px 14px;
-            background: var(--block-bg);
-            border-left: 3px solid var(--block-color);
-            border-radius: 6px;
-            transition: background 0.12s;
-        }
-        .block:hover { background: color-mix(in srgb, var(--block-bg) 60%, var(--bg-elev-2)); }
-        .block.selected {
-            background: color-mix(in srgb, var(--block-bg) 40%, var(--bg-elev-2));
-            box-shadow: 0 0 0 1px var(--block-color);
-        }
+      /* ---------- blocks ---------- */
+      .block {
+        position: relative;
+        margin: 8px 0;
+        padding: 10px 14px;
+        background: var(--block-bg);
+        border-left: 3px solid var(--block-color);
+        border-radius: 6px;
+        transition: background 0.12s;
+      }
+      .block:hover {
+        background: color-mix(in srgb, var(--block-bg) 60%, var(--bg-elev-2));
+      }
+      .block.selected {
+        background: color-mix(in srgb, var(--block-bg) 40%, var(--bg-elev-2));
+        box-shadow: 0 0 0 1px var(--block-color);
+      }
 
-        .block-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            user-select: none;
-            cursor: grab;
-        }
-        .block-header:active { cursor: grabbing; }
-        .block.dragging { opacity: 0.4; }
-        .block-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--block-color);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-        .block-tag .subkind {
-            font-weight: 400;
-            color: var(--fg-mute);
-            text-transform: none;
-            letter-spacing: 0;
-            margin-left: 4px;
-        }
-        .block-controls {
-            display: inline-flex;
-            gap: 4px;
-            /* visibility (not display) so the header reserves space even when hidden — */
-            /* prevents block height from jumping when hover reveals the controls. */
-            visibility: hidden;
-        }
-        .block:hover .block-controls,
-        .block.selected .block-controls {
-            visibility: visible;
-        }
-        .block-content {
-            font-size: 14px;
-            line-height: 1.55;
-            color: var(--fg);
-            white-space: pre-wrap;
-            outline: none;
-        }
-        .block-content[contenteditable="true"] {
-            background: var(--bg);
-            border: 1px solid var(--accent);
-            border-radius: 4px;
-            padding: 6px 8px;
-            margin: 2px -8px;
-        }
-        .block-attrs {
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--fg-dim);
-        }
-        .attr-pill {
-            display: inline-block;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            padding: 2px 8px;
-            margin-right: 4px;
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 11px;
-        }
-        .attr-pill .k { color: var(--fg-mute); }
-        .attr-pill .v { color: var(--fg); }
+      .block-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+        user-select: none;
+        cursor: grab;
+      }
+      .block-header:active {
+        cursor: grabbing;
+      }
+      .block.dragging {
+        opacity: 0.4;
+      }
+      .block-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--block-color);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .block-tag .subkind {
+        font-weight: 400;
+        color: var(--fg-mute);
+        text-transform: none;
+        letter-spacing: 0;
+        margin-left: 4px;
+      }
+      .block-controls {
+        display: inline-flex;
+        gap: 4px;
+        /* visibility (not display) so the header reserves space even when hidden — */
+        /* prevents block height from jumping when hover reveals the controls. */
+        visibility: hidden;
+      }
+      .block:hover .block-controls,
+      .block.selected .block-controls {
+        visibility: visible;
+      }
+      .block-content {
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--fg);
+        white-space: pre-wrap;
+        outline: none;
+      }
+      .block-content[contenteditable="true"] {
+        background: var(--bg);
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        padding: 6px 8px;
+        margin: 2px -8px;
+      }
+      .block-attrs {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--fg-dim);
+      }
+      .attr-pill {
+        display: inline-block;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 2px 8px;
+        margin-right: 4px;
+        font-family: "JetBrains Mono", "Consolas", monospace;
+        font-size: 11px;
+      }
+      .attr-pill .k {
+        color: var(--fg-mute);
+      }
+      .attr-pill .v {
+        color: var(--fg);
+      }
 
-        /* Per-kind block colors */
-        .block.narration { --block-color: var(--c-narration); --block-bg: var(--c-narration-bg); }
-        .block.narration .block-content { font-style: italic; }
-        .block.cue { --block-color: var(--c-cue); --block-bg: var(--c-cue-bg); }
-        .block.cue .block-content { font-weight: 500; color: var(--c-cue-text); }
-        .block.cue .block-tag { color: var(--c-cue-text); }
-        .block.command { --block-color: var(--c-command); --block-bg: var(--c-command-bg); }
-        .block.command .block-content {
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 13px;
-        }
-        .block.config { --block-color: var(--c-config); --block-bg: var(--c-config-bg); }
-        .block.config .block-content {
-            color: var(--fg-dim);
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 12px;
-        }
-        .block.comment { --block-color: transparent; --block-bg: transparent; padding-left: 22px; }
-        .block.comment .block-content { color: var(--c-comment); font-style: italic; font-size: 13px; }
-        .block.comment::before {
-            content: '#';
-            position: absolute;
-            left: 6px;
-            top: 12px;
-            color: var(--c-comment);
-            font-family: monospace;
-        }
-        .block.lifecycle { --block-color: var(--c-lifecycle); --block-bg: var(--c-lifecycle-bg); }
-        .block.recording { --block-color: var(--c-recording); --block-bg: var(--c-recording-bg); }
-        .block.recording .block-tag::before {
-            content: '●';
-            color: var(--c-recording);
-            margin-right: 4px;
-        }
-        .block.timing { --block-color: var(--c-timing); --block-bg: var(--c-timing-bg); }
-        .block.timing .block-content { color: var(--fg-dim); font-size: 13px; }
-        .block.unknown { --block-color: var(--c-unknown); --block-bg: var(--c-unknown-bg); }
+      /* Per-kind block colors */
+      .block.narration {
+        --block-color: var(--c-narration);
+        --block-bg: var(--c-narration-bg);
+      }
+      .block.narration .block-content {
+        font-style: italic;
+      }
+      .block.cue {
+        --block-color: var(--c-cue);
+        --block-bg: var(--c-cue-bg);
+      }
+      .block.cue .block-content {
+        font-weight: 500;
+        color: var(--c-cue-text);
+      }
+      .block.cue .block-tag {
+        color: var(--c-cue-text);
+      }
+      .block.command {
+        --block-color: var(--c-command);
+        --block-bg: var(--c-command-bg);
+      }
+      .block.command .block-content {
+        font-family: "JetBrains Mono", "Consolas", monospace;
+        font-size: 13px;
+      }
+      .block.config {
+        --block-color: var(--c-config);
+        --block-bg: var(--c-config-bg);
+      }
+      .block.config .block-content {
+        color: var(--fg-dim);
+        font-family: "JetBrains Mono", "Consolas", monospace;
+        font-size: 12px;
+      }
+      .block.comment {
+        --block-color: transparent;
+        --block-bg: transparent;
+        padding-left: 22px;
+      }
+      .block.comment .block-content {
+        color: var(--c-comment);
+        font-style: italic;
+        font-size: 13px;
+      }
+      .block.comment::before {
+        content: "#";
+        position: absolute;
+        left: 6px;
+        top: 12px;
+        color: var(--c-comment);
+        font-family: monospace;
+      }
+      .block.lifecycle {
+        --block-color: var(--c-lifecycle);
+        --block-bg: var(--c-lifecycle-bg);
+      }
+      .block.recording {
+        --block-color: var(--c-recording);
+        --block-bg: var(--c-recording-bg);
+      }
+      .block.recording .block-tag::before {
+        content: "●";
+        color: var(--c-recording);
+        margin-right: 4px;
+      }
+      .block.timing {
+        --block-color: var(--c-timing);
+        --block-bg: var(--c-timing-bg);
+      }
+      .block.timing .block-content {
+        color: var(--fg-dim);
+        font-size: 13px;
+      }
+      .block.unknown {
+        --block-color: var(--c-unknown);
+        --block-bg: var(--c-unknown-bg);
+      }
 
-        /* divider + insert button */
-        .divider {
-            position: relative;
-            height: 12px;
-            transition: height 0.12s ease, background 0.12s ease;
-            border-radius: 4px;
-        }
-        .divider .insert-btn {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--bg-elev-2);
-            color: var(--fg-dim);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            width: 22px;
-            height: 22px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            line-height: 1;
-        }
-        .divider:hover .insert-btn { display: inline-flex; }
-        .insert-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+      /* divider + insert button */
+      .divider {
+        position: relative;
+        height: 12px;
+        transition:
+          height 0.12s ease,
+          background 0.12s ease;
+        border-radius: 4px;
+      }
+      .divider .insert-btn {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: var(--bg-elev-2);
+        color: var(--fg-dim);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        width: 22px;
+        height: 22px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        line-height: 1;
+      }
+      .divider:hover .insert-btn {
+        display: inline-flex;
+      }
+      .insert-btn:hover {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
 
-        /* Drop zones — visible only while a drag is in progress so the
+      /* Drop zones — visible only while a drag is in progress so the
            recorder doesn't see flickering dividers during normal use. */
-        body.dragging .divider { height: 20px; }
-        body.dragging .divider.drop-target {
-            background: var(--accent);
-            opacity: 0.7;
-            height: 24px;
-        }
-        body.dragging .insert-btn { display: none !important; }
+      body.dragging .divider {
+        height: 20px;
+      }
+      body.dragging .divider.drop-target {
+        background: var(--accent);
+        opacity: 0.7;
+        height: 24px;
+      }
+      body.dragging .insert-btn {
+        display: none !important;
+      }
 
-        /* modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: var(--modal-overlay);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
-        .modal-overlay.shown { display: flex; }
-        .modal {
-            background: var(--bg-elev);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 20px 22px;
-            min-width: 520px;
-            max-width: 80vw;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: var(--shadow-modal);
-        }
-        .modal h2 {
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        .modal pre {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 12px;
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 12px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            color: var(--c-command);
-            margin: 0 0 12px 0;
-        }
-        .modal .actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-        .modal .picker-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin: 12px 0;
-        }
-        .modal .picker-grid button {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--fg);
-            padding: 10px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            text-align: left;
-            font-family: inherit;
-            font-size: 13px;
-        }
-        .modal .picker-grid button:hover { border-color: var(--accent); }
-        .modal .picker-grid button .tag {
-            display: block;
-            font-size: 10px;
-            color: var(--fg-mute);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin-bottom: 4px;
-        }
+      /* modal */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: var(--modal-overlay);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+      }
+      .modal-overlay.shown {
+        display: flex;
+      }
+      .modal {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px 22px;
+        min-width: 520px;
+        max-width: 80vw;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: var(--shadow-modal);
+      }
+      .modal h2 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .modal pre {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px;
+        font-family: "JetBrains Mono", "Consolas", monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-break: break-all;
+        color: var(--c-command);
+        margin: 0 0 12px 0;
+      }
+      .modal .actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .modal .picker-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .modal .picker-grid button {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        padding: 10px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        text-align: left;
+        font-family: inherit;
+        font-size: 13px;
+      }
+      .modal .picker-grid button:hover {
+        border-color: var(--accent);
+      }
+      .modal .picker-grid button .tag {
+        display: block;
+        font-size: 10px;
+        color: var(--fg-mute);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+      }
 
-        /* attributes editor inside command/config blocks */
-        .attrs-editor {
-            margin-top: 10px;
-            padding: 8px;
-            background: var(--bg);
-            border-radius: 4px;
-            border: 1px solid var(--border);
-        }
-        .attrs-editor table { width: 100%; border-collapse: collapse; }
-        .attrs-editor td { padding: 3px 6px; font-size: 12px; }
-        .attrs-editor td:first-child { width: 30%; color: var(--fg-dim); font-family: monospace; }
-        .attrs-editor input {
-            background: var(--bg-elev);
-            border: 1px solid var(--border);
-            color: var(--fg);
-            padding: 3px 6px;
-            border-radius: 3px;
-            width: 100%;
-            font-family: monospace;
-            font-size: 12px;
-        }
-        .attrs-editor .attr-actions { display: flex; gap: 4px; margin-top: 8px; }
-        .empty {
-            text-align: center;
-            padding: 80px 20px;
-            color: var(--fg-mute);
-        }
-        .empty p { margin: 0 0 12px 0; }
+      /* attributes editor inside command/config blocks */
+      .attrs-editor {
+        margin-top: 10px;
+        padding: 8px;
+        background: var(--bg);
+        border-radius: 4px;
+        border: 1px solid var(--border);
+      }
+      .attrs-editor table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .attrs-editor td {
+        padding: 3px 6px;
+        font-size: 12px;
+      }
+      .attrs-editor td:first-child {
+        width: 30%;
+        color: var(--fg-dim);
+        font-family: monospace;
+      }
+      .attrs-editor input {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        padding: 3px 6px;
+        border-radius: 3px;
+        width: 100%;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .attrs-editor .attr-actions {
+        display: flex;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .empty {
+        text-align: center;
+        padding: 80px 20px;
+        color: var(--fg-mute);
+      }
+      .empty p {
+        margin: 0 0 12px 0;
+      }
     </style>
-</head>
-<body>
-
-<header>
-    <div class="doc-title">
+  </head>
+  <body>
+    <header>
+      <div class="doc-title">
         <span class="filename" id="status-name">no script loaded</span>
         <span class="block-count" id="status-blocks"></span>
-        <span class="unsaved" id="status-dirty" style="display:none;">● unsaved</span>
-    </div>
-    <div class="header-controls">
+        <span class="unsaved" id="status-dirty" style="display: none"
+          >● unsaved</span
+        >
+      </div>
+      <div class="header-controls">
         <span class="icon-btn-group">
-            <button class="icon-btn" id="btn-new" title="New script (Ctrl+N)">
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 1.5 H9 L13 5.5 V14.5 H3 Z"/>
-                    <path d="M9 1.5 V5.5 H13"/>
-                    <line x1="8" y1="9" x2="8" y2="12"/>
-                    <line x1="6.5" y1="10.5" x2="9.5" y2="10.5"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="btn-open" title="Open script (Ctrl+O)">
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1.5 4.5 H6.5 L8 6 H14.5 V13 H1.5 Z"/>
-                </svg>
-            </button>
-            <button class="icon-btn" id="btn-save" title="Save script (Ctrl+S)">
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="8" y1="2" x2="8" y2="10"/>
-                    <polyline points="4.5,7 8,10.5 11.5,7"/>
-                    <line x1="2.5" y1="14" x2="13.5" y2="14"/>
-                </svg>
-            </button>
-            <button class="icon-btn primary" id="btn-run" title="Run demo">
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-                    <path d="M4 3 L13 8 L4 13 Z"/>
-                </svg>
-            </button>
+          <button class="icon-btn" id="btn-new" title="New script (Ctrl+N)">
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 1.5 H9 L13 5.5 V14.5 H3 Z" />
+              <path d="M9 1.5 V5.5 H13" />
+              <line x1="8" y1="9" x2="8" y2="12" />
+              <line x1="6.5" y1="10.5" x2="9.5" y2="10.5" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="btn-open" title="Open script (Ctrl+O)">
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M1.5 4.5 H6.5 L8 6 H14.5 V13 H1.5 Z" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="btn-save" title="Save script (Ctrl+S)">
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="8" y1="2" x2="8" y2="10" />
+              <polyline points="4.5,7 8,10.5 11.5,7" />
+              <line x1="2.5" y1="14" x2="13.5" y2="14" />
+            </svg>
+          </button>
+          <button class="icon-btn primary" id="btn-run" title="Run demo">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path d="M4 3 L13 8 L4 13 Z" />
+            </svg>
+          </button>
         </span>
         <button class="icon-btn" id="btn-theme" title="Toggle theme">☾</button>
-    </div>
-</header>
+      </div>
+    </header>
 
-<main>
-    <section class="editor" id="editor">
+    <main>
+      <section class="editor" id="editor">
         <div class="empty" id="empty-state">
-            <p>No script loaded.</p>
-            <p>
-                <button class="btn primary" id="btn-empty-open">Open file</button>
-                <button class="btn" id="btn-empty-new">New script</button>
-            </p>
+          <p>No script loaded.</p>
+          <p>
+            <button class="btn primary" id="btn-empty-open">Open file</button>
+            <button class="btn" id="btn-empty-new">New script</button>
+          </p>
         </div>
         <div id="blocks"></div>
-    </section>
-</main>
+      </section>
+    </main>
 
-<div class="modal-overlay" id="modal-overlay">
-    <div class="modal" id="modal-content"></div>
-</div>
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal" id="modal-content"></div>
+    </div>
 
-<input type="file" id="hidden-file-input" accept=".txt" style="display: none;">
+    <input
+      type="file"
+      id="hidden-file-input"
+      accept=".txt"
+      style="display: none"
+    />
 
-<script>
-'use strict';
+    <script>
+      "use strict";
 
-// ============================================================
-// Parser — matches demo-driver.ahk behavior
-// ============================================================
+      // ============================================================
+      // Parser — matches demo-driver.ahk behavior
+      // ============================================================
 
-function tokenize(s) {
-    const tokens = [];
-    let buf = '';
-    let inQuotes = false;
-    let pushed = false;
-    for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (inQuotes) {
-            if (c === '\\' && i + 1 < s.length) {
-                const next = s[i + 1];
-                if (next === '"' || next === '\\') { buf += next; i++; continue; }
+      function tokenize(s) {
+        const tokens = [];
+        let buf = "";
+        let inQuotes = false;
+        let pushed = false;
+        for (let i = 0; i < s.length; i++) {
+          const c = s[i];
+          if (inQuotes) {
+            if (c === "\\" && i + 1 < s.length) {
+              const next = s[i + 1];
+              if (next === '"' || next === "\\") {
+                buf += next;
+                i++;
+                continue;
+              }
             }
-            if (c === '"') { inQuotes = false; continue; }
-            buf += c; pushed = true;
+            if (c === '"') {
+              inQuotes = false;
+              continue;
+            }
+            buf += c;
+            pushed = true;
             continue;
-        }
-        if (c === ' ' || c === '\t') {
-            if (pushed) { tokens.push(buf); buf = ''; pushed = false; }
+          }
+          if (c === " " || c === "\t") {
+            if (pushed) {
+              tokens.push(buf);
+              buf = "";
+              pushed = false;
+            }
             continue;
+          }
+          if (c === '"') {
+            inQuotes = true;
+            pushed = true;
+            continue;
+          }
+          buf += c;
+          pushed = true;
         }
-        if (c === '"') { inQuotes = true; pushed = true; continue; }
-        buf += c; pushed = true;
-    }
-    if (pushed) tokens.push(buf);
-    return tokens;
-}
+        if (pushed) tokens.push(buf);
+        return tokens;
+      }
 
-function parseDirective(line) {
-    const body = line.slice(1);
-    const tokens = tokenize(body);
-    if (tokens.length === 0) throw new Error('Empty directive');
-    const name = tokens[0];
-    let positional = '';
-    const attrs = {};
-    for (let i = 1; i < tokens.length; i++) {
-        const t = tokens[i];
-        if (t.includes('=')) {
-            const eq = t.indexOf('=');
+      function parseDirective(line) {
+        const body = line.slice(1);
+        const tokens = tokenize(body);
+        if (tokens.length === 0) throw new Error("Empty directive");
+        const name = tokens[0];
+        let positional = "";
+        const attrs = {};
+        for (let i = 1; i < tokens.length; i++) {
+          const t = tokens[i];
+          if (t.includes("=")) {
+            const eq = t.indexOf("=");
             attrs[t.slice(0, eq)] = t.slice(eq + 1);
-        } else if (positional === '') {
+          } else if (positional === "") {
             positional = t;
+          }
         }
-    }
-    return { name, positional, attrs };
-}
+        return { name, positional, attrs };
+      }
 
-const CONFIG_DIRECTIVES = new Set(['defaults', 'voice', 'type-speed', 'type-jitter', 'mode', 'focus']);
-const LIFECYCLE_DIRECTIVES = new Set(['setup', 'teardown']);
-const RECORDING_DIRECTIVES = new Set(['record-start', 'record-stop']);
-const NARRATION_DIRECTIVES = new Set(['say', 'say-block']);
-const TIMING_DIRECTIVES = new Set(['sleep', 'pause']);
+      const CONFIG_DIRECTIVES = new Set([
+        "defaults",
+        "voice",
+        "type-speed",
+        "type-jitter",
+        "mode",
+        "focus",
+      ]);
+      const LIFECYCLE_DIRECTIVES = new Set(["setup", "teardown"]);
+      const RECORDING_DIRECTIVES = new Set(["record-start", "record-stop"]);
+      const NARRATION_DIRECTIVES = new Set(["say", "say-block"]);
+      const TIMING_DIRECTIVES = new Set(["sleep", "pause"]);
 
-function classifyDirective(name) {
-    if (CONFIG_DIRECTIVES.has(name)) return 'config';
-    if (LIFECYCLE_DIRECTIVES.has(name)) return 'lifecycle';
-    if (RECORDING_DIRECTIVES.has(name)) return 'recording';
-    if (NARRATION_DIRECTIVES.has(name)) return 'narration';
-    if (TIMING_DIRECTIVES.has(name)) return 'timing';
-    if (name === 'cue') return 'cue';
-    return 'unknown';
-}
+      function classifyDirective(name) {
+        if (CONFIG_DIRECTIVES.has(name)) return "config";
+        if (LIFECYCLE_DIRECTIVES.has(name)) return "lifecycle";
+        if (RECORDING_DIRECTIVES.has(name)) return "recording";
+        if (NARRATION_DIRECTIVES.has(name)) return "narration";
+        if (TIMING_DIRECTIVES.has(name)) return "timing";
+        if (name === "cue") return "cue";
+        return "unknown";
+      }
 
-function parseScript(text) {
-    const lines = text.split(/\r?\n/);
-    const blocks = [];
-    let lastCommandIdx = -1;
-    let lastCommentIdx = -1;     // append target for grouped comments
-    let commentGroupActive = false;
+      function parseScript(text) {
+        const lines = text.split(/\r?\n/);
+        const blocks = [];
+        let lastCommandIdx = -1;
+        let lastCommentIdx = -1; // append target for grouped comments
+        let commentGroupActive = false;
 
-    for (const rawLine of lines) {
-        const trimmed = rawLine.trim();
-        if (trimmed === '') {
+        for (const rawLine of lines) {
+          const trimmed = rawLine.trim();
+          if (trimmed === "") {
             commentGroupActive = false;
             continue;
-        }
-        if (trimmed.startsWith('#')) {
-            const commentLine = trimmed.replace(/^#\s?/, '');
+          }
+          if (trimmed.startsWith("#")) {
+            const commentLine = trimmed.replace(/^#\s?/, "");
             if (commentGroupActive && lastCommentIdx >= 0) {
-                blocks[lastCommentIdx].text += '\n' + commentLine;
-                blocks[lastCommentIdx].raw.push(rawLine);
+              blocks[lastCommentIdx].text += "\n" + commentLine;
+              blocks[lastCommentIdx].raw.push(rawLine);
             } else {
-                blocks.push({ kind: 'comment', text: commentLine, attrs: {}, raw: [rawLine] });
-                lastCommentIdx = blocks.length - 1;
+              blocks.push({
+                kind: "comment",
+                text: commentLine,
+                attrs: {},
+                raw: [rawLine],
+              });
+              lastCommentIdx = blocks.length - 1;
             }
             commentGroupActive = true;
             continue;
-        }
-        // Any non-comment line breaks comment grouping
-        commentGroupActive = false;
-        if (!trimmed.startsWith('@')) {
-            blocks.push({ kind: 'command', text: trimmed, attrs: {}, raw: [rawLine] });
+          }
+          // Any non-comment line breaks comment grouping
+          commentGroupActive = false;
+          if (!trimmed.startsWith("@")) {
+            blocks.push({
+              kind: "command",
+              text: trimmed,
+              attrs: {},
+              raw: [rawLine],
+            });
             lastCommandIdx = blocks.length - 1;
             continue;
-        }
-        const parsed = parseDirective(trimmed);
-        const name = parsed.name;
+          }
+          const parsed = parseDirective(trimmed);
+          const name = parsed.name;
 
-        if (name === 'with' || name === 'expect' || name === 'wait-completion') {
+          if (
+            name === "with" ||
+            name === "expect" ||
+            name === "wait-completion"
+          ) {
             if (lastCommandIdx < 0) {
-                blocks.push({ kind: 'unknown', directive: name, text: '(@' + name + ' with no preceding command)', attrs: parsed.attrs, raw: [rawLine] });
-                continue;
+              blocks.push({
+                kind: "unknown",
+                directive: name,
+                text: "(@" + name + " with no preceding command)",
+                attrs: parsed.attrs,
+                raw: [rawLine],
+              });
+              continue;
             }
             const target = blocks[lastCommandIdx];
-            if (name === 'expect') target.attrs.expect = parsed.positional;
-            if (name === 'wait-completion') target.attrs['wait-completion'] = true;
+            if (name === "expect") target.attrs.expect = parsed.positional;
+            if (name === "wait-completion")
+              target.attrs["wait-completion"] = true;
             Object.assign(target.attrs, parsed.attrs);
             target.raw.push(rawLine);
             continue;
-        }
+          }
 
-        if (name === 'type') {
-            blocks.push({ kind: 'command', text: parsed.positional, attrs: { ...parsed.attrs }, raw: [rawLine] });
+          if (name === "type") {
+            blocks.push({
+              kind: "command",
+              text: parsed.positional,
+              attrs: { ...parsed.attrs },
+              raw: [rawLine],
+            });
             lastCommandIdx = blocks.length - 1;
             continue;
+          }
+
+          const kind = classifyDirective(name);
+          blocks.push({
+            kind,
+            directive: name,
+            text: parsed.positional,
+            attrs: parsed.attrs,
+            raw: [rawLine],
+          });
         }
+        return blocks;
+      }
 
-        const kind = classifyDirective(name);
-        blocks.push({ kind, directive: name, text: parsed.positional, attrs: parsed.attrs, raw: [rawLine] });
-    }
-    return blocks;
-}
+      // ============================================================
+      // Serializer — back to .txt
+      // ============================================================
 
-// ============================================================
-// Serializer — back to .txt
-// ============================================================
+      function quoteIfNeeded(s) {
+        if (s === null || s === undefined) return "";
+        if (typeof s !== "string") s = String(s);
+        if (s === "") return '""';
+        if (/[\s"]/.test(s))
+          return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+        return s;
+      }
 
-function quoteIfNeeded(s) {
-    if (s === null || s === undefined) return '';
-    if (typeof s !== 'string') s = String(s);
-    if (s === '') return '""';
-    if (/[\s"]/.test(s)) return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-    return s;
-}
+      function attrsToString(attrs, exclude = []) {
+        return Object.entries(attrs)
+          .filter(([k]) => !exclude.includes(k))
+          .map(([k, v]) => (v === true ? k : `${k}=${quoteIfNeeded(v)}`))
+          .join(" ");
+      }
 
-function attrsToString(attrs, exclude = []) {
-    return Object.entries(attrs)
-        .filter(([k]) => !exclude.includes(k))
-        .map(([k, v]) => v === true ? k : `${k}=${quoteIfNeeded(v)}`)
-        .join(' ');
-}
-
-function serializeBlock(b) {
-    switch (b.kind) {
-        case 'comment':
+      function serializeBlock(b) {
+        switch (b.kind) {
+          case "comment":
             // Comments may be multi-line; each line gets its own `# ` prefix.
-            return b.text.split('\n').map(line => '# ' + line).join('\n');
-        case 'command': {
+            return b.text
+              .split("\n")
+              .map((line) => "# " + line)
+              .join("\n");
+          case "command": {
             const lines = [b.text];
             if (b.attrs.expect !== undefined) {
-                const rest = attrsToString(b.attrs, ['expect']);
-                lines.push(`@expect ${quoteIfNeeded(b.attrs.expect)}${rest ? ' ' + rest : ''}`);
-            } else if (b.attrs['wait-completion']) {
-                const rest = attrsToString(b.attrs, ['wait-completion']);
-                lines.push(`@wait-completion${rest ? ' ' + rest : ''}`);
+              const rest = attrsToString(b.attrs, ["expect"]);
+              lines.push(
+                `@expect ${quoteIfNeeded(b.attrs.expect)}${rest ? " " + rest : ""}`,
+              );
+            } else if (b.attrs["wait-completion"]) {
+              const rest = attrsToString(b.attrs, ["wait-completion"]);
+              lines.push(`@wait-completion${rest ? " " + rest : ""}`);
             } else if (Object.keys(b.attrs).length > 0) {
-                lines.push(`@with ${attrsToString(b.attrs)}`);
+              lines.push(`@with ${attrsToString(b.attrs)}`);
             }
-            return lines.join('\n');
-        }
-        case 'cue':
-        case 'narration':
-        case 'lifecycle':
-        case 'config':
-        case 'recording':
-        case 'timing':
-        case 'unknown': {
+            return lines.join("\n");
+          }
+          case "cue":
+          case "narration":
+          case "lifecycle":
+          case "config":
+          case "recording":
+          case "timing":
+          case "unknown": {
             const parts = [`@${b.directive}`];
-            if (b.text !== '' && b.text !== undefined && b.text !== null) parts.push(quoteIfNeeded(b.text));
+            if (b.text !== "" && b.text !== undefined && b.text !== null)
+              parts.push(quoteIfNeeded(b.text));
             const attrStr = attrsToString(b.attrs);
             if (attrStr) parts.push(attrStr);
-            return parts.join(' ');
+            return parts.join(" ");
+          }
+          default:
+            return b.raw ? b.raw.join("\n") : "";
         }
-        default:
-            return b.raw ? b.raw.join('\n') : '';
-    }
-}
+      }
 
-function serializeScript(blocks) {
-    return blocks.map(serializeBlock).join('\n\n') + '\n';
-}
+      function serializeScript(blocks) {
+        return blocks.map(serializeBlock).join("\n\n") + "\n";
+      }
 
-// ============================================================
-// State + render
-// ============================================================
+      // ============================================================
+      // State + render
+      // ============================================================
 
-const STATE = {
-    filename: null,
-    blocks: [],
-    dirty: false,
-    mode: 'manual',          // 'manual' | 'auto'
-    hud: 'on',               // 'on' | 'off'
-    cues: 'on',              // 'on' | 'off'
-    selectedIdx: -1,
-};
+      const STATE = {
+        filename: null,
+        blocks: [],
+        dirty: false,
+        mode: "manual", // 'manual' | 'auto'
+        hud: "on", // 'on' | 'off'
+        cues: "on", // 'on' | 'off'
+        selectedIdx: -1,
+      };
 
-// ============================================================
-// Undo / redo — snapshot-based, reset on script load
-// ============================================================
+      // ============================================================
+      // Undo / redo — snapshot-based, reset on script load
+      // ============================================================
 
-const UNDO_LIMIT = 100;
-const undoStack = [];
-const redoStack = [];
+      const UNDO_LIMIT = 100;
+      const undoStack = [];
+      const redoStack = [];
 
-function snapshot() { return JSON.stringify(STATE.blocks); }
+      function snapshot() {
+        return JSON.stringify(STATE.blocks);
+      }
 
-// Capture current state BEFORE a mutation. Coalesces no-op snapshots.
-function pushUndo() {
-    const snap = snapshot();
-    if (undoStack.length && undoStack[undoStack.length - 1] === snap) return;
-    undoStack.push(snap);
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-    redoStack.length = 0;
-}
+      // Capture current state BEFORE a mutation. Coalesces no-op snapshots.
+      function pushUndo() {
+        const snap = snapshot();
+        if (undoStack.length && undoStack[undoStack.length - 1] === snap)
+          return;
+        undoStack.push(snap);
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+        redoStack.length = 0;
+      }
 
-function undo() {
-    if (!undoStack.length) return;
-    redoStack.push(snapshot());
-    STATE.blocks = JSON.parse(undoStack.pop());
-    markDirty();
-    renderBlocks();
-}
+      function undo() {
+        if (!undoStack.length) return;
+        redoStack.push(snapshot());
+        STATE.blocks = JSON.parse(undoStack.pop());
+        markDirty();
+        renderBlocks();
+      }
 
-function redo() {
-    if (!redoStack.length) return;
-    undoStack.push(snapshot());
-    STATE.blocks = JSON.parse(redoStack.pop());
-    markDirty();
-    renderBlocks();
-}
+      function redo() {
+        if (!redoStack.length) return;
+        undoStack.push(snapshot());
+        STATE.blocks = JSON.parse(redoStack.pop());
+        markDirty();
+        renderBlocks();
+      }
 
-function resetUndo() {
-    undoStack.length = 0;
-    redoStack.length = 0;
-}
+      function resetUndo() {
+        undoStack.length = 0;
+        redoStack.length = 0;
+      }
 
-// Drag-to-reorder state. Tracks the source block index across the
-// dragstart → dragover → drop sequence; null when no drag in progress.
-let DRAG_SOURCE_IDX = null;
+      // Drag-to-reorder state. Tracks the source block index across the
+      // dragstart → dragover → drop sequence; null when no drag in progress.
+      let DRAG_SOURCE_IDX = null;
 
-const $ = sel => document.querySelector(sel);
-const $$ = sel => Array.from(document.querySelectorAll(sel));
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-function markDirty(yes = true) {
-    STATE.dirty = yes;
-    $('#status-dirty').style.display = yes ? '' : 'none';
-}
+      function markDirty(yes = true) {
+        STATE.dirty = yes;
+        $("#status-dirty").style.display = yes ? "" : "none";
+      }
 
-function renderStatus() {
-    $('#status-name').textContent = STATE.filename || 'no script loaded';
-    const n = STATE.blocks.length;
-    $('#status-blocks').textContent = n ? `${n} ${n === 1 ? 'block' : 'blocks'}` : '';
-}
+      function renderStatus() {
+        $("#status-name").textContent = STATE.filename || "no script loaded";
+        const n = STATE.blocks.length;
+        $("#status-blocks").textContent = n
+          ? `${n} ${n === 1 ? "block" : "blocks"}`
+          : "";
+      }
 
-const KIND_LABELS = {
-    comment: 'Comment',
-    config: 'Config',
-    lifecycle: 'Lifecycle',
-    recording: 'Recording',
-    narration: 'Narration',
-    cue: 'Cue',
-    timing: 'Timing',
-    command: 'Command',
-    unknown: 'Unknown',
-};
+      const KIND_LABELS = {
+        comment: "Comment",
+        config: "Config",
+        lifecycle: "Lifecycle",
+        recording: "Recording",
+        narration: "Narration",
+        cue: "Cue",
+        timing: "Timing",
+        command: "Command",
+        unknown: "Unknown",
+      };
 
-function blockSubkind(b) {
-    if (b.kind === 'command') {
-        if (b.attrs.expect) return `expect "${b.attrs.expect}"`;
-        if (b.attrs['wait-completion']) return 'wait-completion';
-        return '';
-    }
-    return b.directive || '';
-}
+      function blockSubkind(b) {
+        if (b.kind === "command") {
+          if (b.attrs.expect) return `expect "${b.attrs.expect}"`;
+          if (b.attrs["wait-completion"]) return "wait-completion";
+          return "";
+        }
+        return b.directive || "";
+      }
 
-function blockMainContent(b) {
-    if (b.kind === 'comment') return b.text;
-    if (b.kind === 'command') return b.text;
-    if (b.kind === 'narration') return '"' + b.text + '"';
-    if (b.kind === 'cue') return b.text;
-    if (b.kind === 'recording') return ''; // no payload
-    if (b.kind === 'timing' && b.directive === 'pause') return '(wait for Ctrl+Right)';
-    if (b.kind === 'timing' && b.directive === 'sleep') return b.text;
-    if (b.kind === 'config' && b.directive === 'defaults') {
-        return Object.entries(b.attrs).map(([k,v]) => `${k}=${v}`).join('  ');
-    }
-    let s = b.text || '';
-    if (Object.keys(b.attrs).length) s += '   ' + attrsToString(b.attrs);
-    return s.trim();
-}
+      function blockMainContent(b) {
+        if (b.kind === "comment") return b.text;
+        if (b.kind === "command") return b.text;
+        if (b.kind === "narration") return '"' + b.text + '"';
+        if (b.kind === "cue") return b.text;
+        if (b.kind === "recording") return ""; // no payload
+        if (b.kind === "timing" && b.directive === "pause")
+          return "(wait for Ctrl+Right)";
+        if (b.kind === "timing" && b.directive === "sleep") return b.text;
+        if (b.kind === "config" && b.directive === "defaults") {
+          return Object.entries(b.attrs)
+            .map(([k, v]) => `${k}=${v}`)
+            .join("  ");
+        }
+        let s = b.text || "";
+        if (Object.keys(b.attrs).length) s += "   " + attrsToString(b.attrs);
+        return s.trim();
+      }
 
-function renderBlocks() {
-    const root = $('#blocks');
-    root.innerHTML = '';
-    if (!STATE.blocks.length) {
-        $('#empty-state').style.display = '';
+      function renderBlocks() {
+        const root = $("#blocks");
+        root.innerHTML = "";
+        if (!STATE.blocks.length) {
+          $("#empty-state").style.display = "";
+          renderStatus();
+          return;
+        }
+        $("#empty-state").style.display = "none";
+
+        // Top divider (insert at 0)
+        root.appendChild(makeDivider(0));
+
+        STATE.blocks.forEach((b, idx) => {
+          root.appendChild(makeBlock(b, idx));
+          root.appendChild(makeDivider(idx + 1));
+        });
+
         renderStatus();
-        return;
-    }
-    $('#empty-state').style.display = 'none';
+      }
 
-    // Top divider (insert at 0)
-    root.appendChild(makeDivider(0));
+      function makeDivider(insertAt) {
+        const d = document.createElement("div");
+        d.className = "divider";
+        d.dataset.insertAt = insertAt;
+        d.innerHTML = `<button class="insert-btn" title="Insert block here">+</button>`;
+        d.querySelector(".insert-btn").addEventListener("click", () =>
+          openInsertPicker(insertAt),
+        );
+        // Drop target for drag-to-reorder
+        d.addEventListener("dragover", (e) => {
+          if (DRAG_SOURCE_IDX === null) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          d.classList.add("drop-target");
+        });
+        d.addEventListener("dragleave", () => {
+          d.classList.remove("drop-target");
+        });
+        d.addEventListener("drop", (e) => {
+          d.classList.remove("drop-target");
+          if (DRAG_SOURCE_IDX === null) return;
+          e.preventDefault();
+          moveBlockTo(DRAG_SOURCE_IDX, insertAt);
+          DRAG_SOURCE_IDX = null;
+          document.body.classList.remove("dragging");
+        });
+        return d;
+      }
 
-    STATE.blocks.forEach((b, idx) => {
-        root.appendChild(makeBlock(b, idx));
-        root.appendChild(makeDivider(idx + 1));
-    });
+      function makeBlock(b, idx) {
+        const div = document.createElement("div");
+        div.className =
+          `block ${b.kind}` + (STATE.selectedIdx === idx ? " selected" : "");
+        div.dataset.idx = idx;
 
-    renderStatus();
-}
-
-function makeDivider(insertAt) {
-    const d = document.createElement('div');
-    d.className = 'divider';
-    d.dataset.insertAt = insertAt;
-    d.innerHTML = `<button class="insert-btn" title="Insert block here">+</button>`;
-    d.querySelector('.insert-btn').addEventListener('click', () => openInsertPicker(insertAt));
-    // Drop target for drag-to-reorder
-    d.addEventListener('dragover', (e) => {
-        if (DRAG_SOURCE_IDX === null) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        d.classList.add('drop-target');
-    });
-    d.addEventListener('dragleave', () => { d.classList.remove('drop-target'); });
-    d.addEventListener('drop', (e) => {
-        d.classList.remove('drop-target');
-        if (DRAG_SOURCE_IDX === null) return;
-        e.preventDefault();
-        moveBlockTo(DRAG_SOURCE_IDX, insertAt);
-        DRAG_SOURCE_IDX = null;
-        document.body.classList.remove('dragging');
-    });
-    return d;
-}
-
-function makeBlock(b, idx) {
-    const div = document.createElement('div');
-    div.className = `block ${b.kind}` + (STATE.selectedIdx === idx ? ' selected' : '');
-    div.dataset.idx = idx;
-
-    const subkind = blockSubkind(b);
-    div.innerHTML = `
+        const subkind = blockSubkind(b);
+        div.innerHTML = `
         <div class="block-header" draggable="true" title="Drag to reorder">
             <span class="block-tag">${KIND_LABELS[b.kind] || b.kind}
-                ${subkind ? `<span class="subkind">${escapeHtml(subkind)}</span>` : ''}
+                ${subkind ? `<span class="subkind">${escapeHtml(subkind)}</span>` : ""}
             </span>
             <span class="block-controls">
                 <button class="btn btn-icon" data-act="up">↑</button>
@@ -967,189 +1189,326 @@ function makeBlock(b, idx) {
         <div class="block-content" data-content="true">${escapeHtml(blockMainContent(b))}</div>
     `;
 
-    // Drag source — the header carries the draggable attribute so
-    // selecting / editing block content stays clickable without triggering a drag.
-    const header = div.querySelector('.block-header');
-    header.addEventListener('dragstart', (e) => {
-        DRAG_SOURCE_IDX = idx;
-        try { e.dataTransfer.setData('text/plain', String(idx)); } catch {}
-        e.dataTransfer.effectAllowed = 'move';
-        div.classList.add('dragging');
-        document.body.classList.add('dragging');
-    });
-    header.addEventListener('dragend', () => {
-        DRAG_SOURCE_IDX = null;
-        div.classList.remove('dragging');
-        document.body.classList.remove('dragging');
-        // Clear any stuck drop-target highlights
-        document.querySelectorAll('.divider.drop-target').forEach(d => d.classList.remove('drop-target'));
-    });
+        // Drag source — the header carries the draggable attribute so
+        // selecting / editing block content stays clickable without triggering a drag.
+        const header = div.querySelector(".block-header");
+        header.addEventListener("dragstart", (e) => {
+          DRAG_SOURCE_IDX = idx;
+          try {
+            e.dataTransfer.setData("text/plain", String(idx));
+          } catch {}
+          e.dataTransfer.effectAllowed = "move";
+          div.classList.add("dragging");
+          document.body.classList.add("dragging");
+        });
+        header.addEventListener("dragend", () => {
+          DRAG_SOURCE_IDX = null;
+          div.classList.remove("dragging");
+          document.body.classList.remove("dragging");
+          // Clear any stuck drop-target highlights
+          document
+            .querySelectorAll(".divider.drop-target")
+            .forEach((d) => d.classList.remove("drop-target"));
+        });
 
-    // Wait pill for commands
-    if (b.kind === 'command' && (b.attrs.expect || b.attrs['wait-completion'] || Object.keys(b.attrs).length)) {
-        const attrEl = document.createElement('div');
-        attrEl.className = 'block-attrs';
-        attrEl.innerHTML = 'wait: ' + renderAttrPills(b.attrs);
-        div.appendChild(attrEl);
-    } else if (Object.keys(b.attrs).length && b.kind !== 'config') {
-        const attrEl = document.createElement('div');
-        attrEl.className = 'block-attrs';
-        attrEl.innerHTML = renderAttrPills(b.attrs);
-        div.appendChild(attrEl);
-    }
-
-    // Wire up controls
-    div.querySelector('[data-act="up"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(idx, -1); });
-    div.querySelector('[data-act="down"]').addEventListener('click', (e) => { e.stopPropagation(); moveBlock(idx, 1); });
-    div.querySelector('[data-act="del"]').addEventListener('click', (e) => { e.stopPropagation(); deleteBlock(idx); });
-    div.querySelector('[data-act="edit-attrs"]').addEventListener('click', (e) => { e.stopPropagation(); openAttrsEditor(idx); });
-
-    const content = div.querySelector('[data-content]');
-    content.addEventListener('click', () => startEdit(idx, content));
-    div.addEventListener('click', () => { STATE.selectedIdx = idx; });
-
-    return div;
-}
-
-function renderAttrPills(attrs) {
-    return Object.entries(attrs).map(([k, v]) => {
-        const val = v === true ? '✓' : escapeHtml(String(v));
-        return `<span class="attr-pill"><span class="k">${escapeHtml(k)}</span>=<span class="v">${val}</span></span>`;
-    }).join('');
-}
-
-function escapeHtml(s) {
-    if (s === undefined || s === null) return '';
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// ============================================================
-// Block edit
-// ============================================================
-
-function startEdit(idx, contentEl) {
-    contentEl.setAttribute('contenteditable', 'true');
-    contentEl.focus();
-    // Place cursor at end
-    const range = document.createRange();
-    range.selectNodeContents(contentEl);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-
-    const finish = (commit) => {
-        contentEl.setAttribute('contenteditable', 'false');
-        contentEl.removeEventListener('keydown', onKey);
-        contentEl.removeEventListener('blur', onBlur);
-        if (commit) {
-            saveEdit(idx, contentEl.textContent);
-        } else {
-            contentEl.textContent = blockMainContent(STATE.blocks[idx]);
+        // Wait pill for commands
+        if (
+          b.kind === "command" &&
+          (b.attrs.expect ||
+            b.attrs["wait-completion"] ||
+            Object.keys(b.attrs).length)
+        ) {
+          const attrEl = document.createElement("div");
+          attrEl.className = "block-attrs";
+          attrEl.innerHTML = "wait: " + renderAttrPills(b.attrs);
+          div.appendChild(attrEl);
+        } else if (Object.keys(b.attrs).length && b.kind !== "config") {
+          const attrEl = document.createElement("div");
+          attrEl.className = "block-attrs";
+          attrEl.innerHTML = renderAttrPills(b.attrs);
+          div.appendChild(attrEl);
         }
-    };
-    const onKey = (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
-    };
-    const onBlur = () => finish(true);
-    contentEl.addEventListener('keydown', onKey);
-    contentEl.addEventListener('blur', onBlur);
-}
 
-function saveEdit(idx, newText) {
-    const trimmed = newText.trim();
-    if (STATE.blocks[idx].text === trimmed) return;  // no-op
-    pushUndo();
-    STATE.blocks[idx].text = trimmed;
-    markDirty();
-    renderBlocks();
-}
+        // Wire up controls
+        div.querySelector('[data-act="up"]').addEventListener("click", (e) => {
+          e.stopPropagation();
+          moveBlock(idx, -1);
+        });
+        div
+          .querySelector('[data-act="down"]')
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            moveBlock(idx, 1);
+          });
+        div.querySelector('[data-act="del"]').addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteBlock(idx);
+        });
+        div
+          .querySelector('[data-act="edit-attrs"]')
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            openAttrsEditor(idx);
+          });
 
-// ============================================================
-// Add / move / delete / change kind
-// ============================================================
+        const content = div.querySelector("[data-content]");
+        content.addEventListener("click", () => startEdit(idx, content));
+        div.addEventListener("click", () => {
+          STATE.selectedIdx = idx;
+        });
 
-const BLOCK_TEMPLATES = [
-    { kind: 'command',   label: 'Command',           desc: 'Type into the focused window', template: () => ({ kind: 'command', text: 'new command', attrs: {} }) },
-    { kind: 'narration', label: 'Narration (say-block)', desc: 'Spoken, blocks until done', template: () => ({ kind: 'narration', directive: 'say-block', text: 'narration text', attrs: {} }) },
-    { kind: 'narration', label: 'Narration (say)',   desc: 'Spoken, non-blocking',         template: () => ({ kind: 'narration', directive: 'say', text: 'narration text', attrs: {} }) },
-    { kind: 'cue',       label: 'Recorder cue',      desc: 'Red window, no TTS, pauses',   template: () => ({ kind: 'cue', directive: 'cue', text: 'Switch to ...', attrs: {} }) },
-    { kind: 'timing',    label: 'Pause',             desc: 'Wait for Ctrl+Right',          template: () => ({ kind: 'timing', directive: 'pause', text: '', attrs: {} }) },
-    { kind: 'timing',    label: 'Sleep',             desc: 'Fixed wait',                   template: () => ({ kind: 'timing', directive: 'sleep', text: '2s', attrs: {} }) },
-    { kind: 'recording', label: 'Record start',      desc: 'Send recording start hotkey',  template: () => ({ kind: 'recording', directive: 'record-start', text: '', attrs: {} }) },
-    { kind: 'recording', label: 'Record stop',       desc: 'Send recording stop hotkey',   template: () => ({ kind: 'recording', directive: 'record-stop', text: '', attrs: {} }) },
-    { kind: 'comment',   label: 'Comment',           desc: 'Note in the script',           template: () => ({ kind: 'comment', text: 'comment text', attrs: {} }) },
-];
+        return div;
+      }
 
-function openInsertPicker(insertAt) {
-    const grid = BLOCK_TEMPLATES.map((t, i) => `
+      function renderAttrPills(attrs) {
+        return Object.entries(attrs)
+          .map(([k, v]) => {
+            const val = v === true ? "✓" : escapeHtml(String(v));
+            return `<span class="attr-pill"><span class="k">${escapeHtml(k)}</span>=<span class="v">${val}</span></span>`;
+          })
+          .join("");
+      }
+
+      function escapeHtml(s) {
+        if (s === undefined || s === null) return "";
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+
+      // ============================================================
+      // Block edit
+      // ============================================================
+
+      function startEdit(idx, contentEl) {
+        contentEl.setAttribute("contenteditable", "true");
+        contentEl.focus();
+        // Place cursor at end
+        const range = document.createRange();
+        range.selectNodeContents(contentEl);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        const finish = (commit) => {
+          contentEl.setAttribute("contenteditable", "false");
+          contentEl.removeEventListener("keydown", onKey);
+          contentEl.removeEventListener("blur", onBlur);
+          if (commit) {
+            saveEdit(idx, contentEl.textContent);
+          } else {
+            contentEl.textContent = blockMainContent(STATE.blocks[idx]);
+          }
+        };
+        const onKey = (e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            finish(false);
+          }
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            finish(true);
+          }
+        };
+        const onBlur = () => finish(true);
+        contentEl.addEventListener("keydown", onKey);
+        contentEl.addEventListener("blur", onBlur);
+      }
+
+      function saveEdit(idx, newText) {
+        const trimmed = newText.trim();
+        if (STATE.blocks[idx].text === trimmed) return; // no-op
+        pushUndo();
+        STATE.blocks[idx].text = trimmed;
+        markDirty();
+        renderBlocks();
+      }
+
+      // ============================================================
+      // Add / move / delete / change kind
+      // ============================================================
+
+      const BLOCK_TEMPLATES = [
+        {
+          kind: "command",
+          label: "Command",
+          desc: "Type into the focused window",
+          template: () => ({ kind: "command", text: "new command", attrs: {} }),
+        },
+        {
+          kind: "narration",
+          label: "Narration (say-block)",
+          desc: "Spoken, blocks until done",
+          template: () => ({
+            kind: "narration",
+            directive: "say-block",
+            text: "narration text",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "narration",
+          label: "Narration (say)",
+          desc: "Spoken, non-blocking",
+          template: () => ({
+            kind: "narration",
+            directive: "say",
+            text: "narration text",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "cue",
+          label: "Recorder cue",
+          desc: "Red window, no TTS, pauses",
+          template: () => ({
+            kind: "cue",
+            directive: "cue",
+            text: "Switch to ...",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "timing",
+          label: "Pause",
+          desc: "Wait for Ctrl+Right",
+          template: () => ({
+            kind: "timing",
+            directive: "pause",
+            text: "",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "timing",
+          label: "Sleep",
+          desc: "Fixed wait",
+          template: () => ({
+            kind: "timing",
+            directive: "sleep",
+            text: "2s",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "recording",
+          label: "Record start",
+          desc: "Send recording start hotkey",
+          template: () => ({
+            kind: "recording",
+            directive: "record-start",
+            text: "",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "recording",
+          label: "Record stop",
+          desc: "Send recording stop hotkey",
+          template: () => ({
+            kind: "recording",
+            directive: "record-stop",
+            text: "",
+            attrs: {},
+          }),
+        },
+        {
+          kind: "comment",
+          label: "Comment",
+          desc: "Note in the script",
+          template: () => ({
+            kind: "comment",
+            text: "comment text",
+            attrs: {},
+          }),
+        },
+      ];
+
+      function openInsertPicker(insertAt) {
+        const grid = BLOCK_TEMPLATES.map(
+          (t, i) => `
         <button data-idx="${i}">
             <span class="tag">${t.label}</span>
             ${escapeHtml(t.desc)}
         </button>
-    `).join('');
-    showModal(`
+    `,
+        ).join("");
+        showModal(`
         <h2>Insert block</h2>
         <div class="picker-grid">${grid}</div>
         <div class="actions"><button class="btn" data-close>Cancel</button></div>
     `);
-    $('#modal-content').querySelectorAll('.picker-grid button').forEach(b => {
-        b.addEventListener('click', () => {
-            const t = BLOCK_TEMPLATES[+b.dataset.idx];
-            pushUndo();
-            STATE.blocks.splice(insertAt, 0, t.template());
-            markDirty();
-            hideModal();
-            renderBlocks();
-        });
-    });
-}
+        $("#modal-content")
+          .querySelectorAll(".picker-grid button")
+          .forEach((b) => {
+            b.addEventListener("click", () => {
+              const t = BLOCK_TEMPLATES[+b.dataset.idx];
+              pushUndo();
+              STATE.blocks.splice(insertAt, 0, t.template());
+              markDirty();
+              hideModal();
+              renderBlocks();
+            });
+          });
+      }
 
-function moveBlock(idx, delta) {
-    const target = idx + delta;
-    if (target < 0 || target >= STATE.blocks.length) return;
-    pushUndo();
-    const [b] = STATE.blocks.splice(idx, 1);
-    STATE.blocks.splice(target, 0, b);
-    markDirty();
-    renderBlocks();
-}
+      function moveBlock(idx, delta) {
+        const target = idx + delta;
+        if (target < 0 || target >= STATE.blocks.length) return;
+        pushUndo();
+        const [b] = STATE.blocks.splice(idx, 1);
+        STATE.blocks.splice(target, 0, b);
+        markDirty();
+        renderBlocks();
+      }
 
-// Move a block to a position expressed as a divider index (0 = before first
-// block, N = after Nth block). Used by drag-and-drop.
-function moveBlockTo(fromIdx, dividerIdx) {
-    if (dividerIdx === fromIdx || dividerIdx === fromIdx + 1) return;  // no-op
-    pushUndo();
-    const [b] = STATE.blocks.splice(fromIdx, 1);
-    const adjusted = dividerIdx > fromIdx ? dividerIdx - 1 : dividerIdx;
-    STATE.blocks.splice(adjusted, 0, b);
-    markDirty();
-    renderBlocks();
-}
+      // Move a block to a position expressed as a divider index (0 = before first
+      // block, N = after Nth block). Used by drag-and-drop.
+      function moveBlockTo(fromIdx, dividerIdx) {
+        if (dividerIdx === fromIdx || dividerIdx === fromIdx + 1) return; // no-op
+        pushUndo();
+        const [b] = STATE.blocks.splice(fromIdx, 1);
+        const adjusted = dividerIdx > fromIdx ? dividerIdx - 1 : dividerIdx;
+        STATE.blocks.splice(adjusted, 0, b);
+        markDirty();
+        renderBlocks();
+      }
 
-function deleteBlock(idx) {
-    pushUndo();
-    STATE.blocks.splice(idx, 1);
-    markDirty();
-    renderBlocks();
-}
+      function deleteBlock(idx) {
+        pushUndo();
+        STATE.blocks.splice(idx, 1);
+        markDirty();
+        renderBlocks();
+      }
 
-// ============================================================
-// Attributes editor
-// ============================================================
+      // ============================================================
+      // Attributes editor
+      // ============================================================
 
-function openAttrsEditor(idx) {
-    const b = STATE.blocks[idx];
-    const rows = Object.entries(b.attrs).map(([k, v]) => `
+      function openAttrsEditor(idx) {
+        const b = STATE.blocks[idx];
+        const rows = Object.entries(b.attrs)
+          .map(
+            ([k, v]) => `
         <tr>
             <td>${escapeHtml(k)}</td>
-            <td><input data-attr-key="${escapeHtml(k)}" value="${escapeHtml(v === true ? '' : String(v))}"></td>
+            <td><input data-attr-key="${escapeHtml(k)}" value="${escapeHtml(v === true ? "" : String(v))}"></td>
             <td><button class="btn btn-icon" data-attr-del="${escapeHtml(k)}">×</button></td>
         </tr>
-    `).join('');
-    showModal(`
-        <h2>Edit attributes — ${KIND_LABELS[b.kind]}${b.directive ? ' / ' + b.directive : ''}</h2>
+    `,
+          )
+          .join("");
+        showModal(`
+        <h2>Edit attributes — ${KIND_LABELS[b.kind]}${b.directive ? " / " + b.directive : ""}</h2>
         <table class="attrs-editor">
             ${rows || '<tr><td colspan="3" style="color: var(--fg-mute);">(no attributes)</td></tr>'}
         </table>
@@ -1163,153 +1522,184 @@ function openAttrsEditor(idx) {
             <button class="btn primary" id="save-attrs">Save</button>
         </div>
     `);
-    $('#add-attr-btn').addEventListener('click', () => {
-        const k = $('#new-attr-key').value.trim();
-        const v = $('#new-attr-val').value.trim();
-        if (!k) return;
-        b.attrs[k] = v || true;
-        openAttrsEditor(idx);  // re-render
-    });
-    $('#save-attrs').addEventListener('click', () => {
-        pushUndo();
-        $$('#modal-content input[data-attr-key]').forEach(inp => {
+        $("#add-attr-btn").addEventListener("click", () => {
+          const k = $("#new-attr-key").value.trim();
+          const v = $("#new-attr-val").value.trim();
+          if (!k) return;
+          b.attrs[k] = v || true;
+          openAttrsEditor(idx); // re-render
+        });
+        $("#save-attrs").addEventListener("click", () => {
+          pushUndo();
+          $$("#modal-content input[data-attr-key]").forEach((inp) => {
             const k = inp.dataset.attrKey;
             b.attrs[k] = inp.value;
+          });
+          markDirty();
+          hideModal();
+          renderBlocks();
         });
-        markDirty();
-        hideModal();
-        renderBlocks();
-    });
-    $$('#modal-content [data-attr-del]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        $$("#modal-content [data-attr-del]").forEach((btn) => {
+          btn.addEventListener("click", () => {
             delete b.attrs[btn.dataset.attrDel];
             openAttrsEditor(idx);
+          });
         });
-    });
-}
+      }
 
-// ============================================================
-// Modal
-// ============================================================
+      // ============================================================
+      // Modal
+      // ============================================================
 
-function showModal(html) {
-    $('#modal-content').innerHTML = html;
-    $('#modal-overlay').classList.add('shown');
-    $('#modal-content').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', hideModal));
-}
-function hideModal() {
-    $('#modal-overlay').classList.remove('shown');
-}
-$('#modal-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'modal-overlay') hideModal();
-});
+      function showModal(html) {
+        $("#modal-content").innerHTML = html;
+        $("#modal-overlay").classList.add("shown");
+        $("#modal-content")
+          .querySelectorAll("[data-close]")
+          .forEach((b) => b.addEventListener("click", hideModal));
+      }
+      function hideModal() {
+        $("#modal-overlay").classList.remove("shown");
+      }
+      $("#modal-overlay").addEventListener("click", (e) => {
+        if (e.target.id === "modal-overlay") hideModal();
+      });
 
-// ============================================================
-// File operations
-// ============================================================
+      // ============================================================
+      // File operations
+      // ============================================================
 
-async function openFile() {
-    if (window.showOpenFilePicker) {
-        try {
+      async function openFile() {
+        if (window.showOpenFilePicker) {
+          try {
             const [handle] = await window.showOpenFilePicker({
-                types: [{ description: 'Demo script', accept: { 'text/plain': ['.txt'] } }],
-                multiple: false,
+              types: [
+                {
+                  description: "Demo script",
+                  accept: { "text/plain": [".txt"] },
+                },
+              ],
+              multiple: false,
             });
             const file = await handle.getFile();
             const text = await file.text();
             loadScript(file.name, text);
             STATE._handle = handle;
-        } catch { /* user cancelled */ }
-    } else {
-        $('#hidden-file-input').click();
-    }
-}
+          } catch {
+            /* user cancelled */
+          }
+        } else {
+          $("#hidden-file-input").click();
+        }
+      }
 
-$('#hidden-file-input').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const text = await file.text();
-    loadScript(file.name, text);
-});
+      $("#hidden-file-input").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        loadScript(file.name, text);
+      });
 
-async function saveFile() {
-    const text = serializeScript(STATE.blocks);
-    if (STATE._handle && STATE._handle.createWritable) {
-        try {
+      async function saveFile() {
+        const text = serializeScript(STATE.blocks);
+        if (STATE._handle && STATE._handle.createWritable) {
+          try {
             const writable = await STATE._handle.createWritable();
             await writable.write(text);
             await writable.close();
             markDirty(false);
             return;
-        } catch { /* fall through to download */ }
-    }
-    // Fallback: download
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = STATE.filename || 'demo-script.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-    markDirty(false);
-}
+          } catch {
+            /* fall through to download */
+          }
+        }
+        // Fallback: download
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = STATE.filename || "demo-script.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+        markDirty(false);
+      }
 
-function loadScript(name, text) {
-    STATE.filename = name;
-    STATE.blocks = parseScript(text);
-    STATE._handle = null;
-    resetUndo();
-    markDirty(false);
-    STATE.selectedIdx = -1;
-    renderBlocks();
-}
+      function loadScript(name, text) {
+        STATE.filename = name;
+        STATE.blocks = parseScript(text);
+        STATE._handle = null;
+        resetUndo();
+        markDirty(false);
+        STATE.selectedIdx = -1;
+        renderBlocks();
+      }
 
-function newScript() {
-    if (STATE.dirty && !confirm('Discard unsaved changes?')) return;
-    STATE.filename = 'untitled.txt';
-    STATE.blocks = [
-        { kind: 'config', directive: 'defaults', text: '', attrs: { timeout: '30s', 'on-timeout': 'warn', 'type-speed': '30', voice: 'Microsoft Aria Natural' } },
-        { kind: 'config', directive: 'focus', text: 'Windows Terminal', attrs: {} },
-    ];
-    STATE._handle = null;
-    resetUndo();
-    markDirty(false);
-    renderBlocks();
-}
+      function newScript() {
+        if (STATE.dirty && !confirm("Discard unsaved changes?")) return;
+        STATE.filename = "untitled.txt";
+        STATE.blocks = [
+          {
+            kind: "config",
+            directive: "defaults",
+            text: "",
+            attrs: {
+              timeout: "30s",
+              "on-timeout": "warn",
+              "type-speed": "30",
+              voice: "Microsoft Aria Natural",
+            },
+          },
+          {
+            kind: "config",
+            directive: "focus",
+            text: "Windows Terminal",
+            attrs: {},
+          },
+        ];
+        STATE._handle = null;
+        resetUndo();
+        markDirty(false);
+        renderBlocks();
+      }
 
-// ============================================================
-// Run-command builder
-// ============================================================
+      // ============================================================
+      // Run-command builder
+      // ============================================================
 
-const AHK_PATH = 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey64.exe';
-const DRIVER_PATH = 'D:\\repos\\TypeAgent\\ts\\packages\\copilot-plugin\\demo\\driver\\demo-driver.ahk';
+      const AHK_PATH = "C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey64.exe";
+      const DRIVER_PATH =
+        "D:\\repos\\TypeAgent\\ts\\packages\\copilot-plugin\\demo\\driver\\demo-driver.ahk";
 
-function buildRunCommand() {
-    const scriptPath = STATE.filename || '<script.txt>';
-    const args = [`"${DRIVER_PATH}"`, `"${scriptPath}"`];
-    args.push(`--mode ${STATE.mode}`);
-    if (STATE.hud === 'off') args.push('--no-hud');
-    return `& "${AHK_PATH}" ${args.join(' ')}`;
-}
+      function buildRunCommand() {
+        const scriptPath = STATE.filename || "<script.txt>";
+        const args = [`"${DRIVER_PATH}"`, `"${scriptPath}"`];
+        args.push(`--mode ${STATE.mode}`);
+        if (STATE.hud === "off") args.push("--no-hud");
+        return `& "${AHK_PATH}" ${args.join(" ")}`;
+      }
 
-function findLifecycleScript(directive) {
-    const b = STATE.blocks.find(b => b.kind === 'lifecycle' && b.directive === directive);
-    return b ? b.text : null;
-}
+      function findLifecycleScript(directive) {
+        const b = STATE.blocks.find(
+          (b) => b.kind === "lifecycle" && b.directive === directive,
+        );
+        return b ? b.text : null;
+      }
 
-function buildLifecycleCommand(directive) {
-    const path = findLifecycleScript(directive);
-    if (!path) return null;
-    const demoName = (STATE.filename || 'demo').replace(/\.txt$/, '');
-    return `pwsh -NoProfile -ExecutionPolicy Bypass -File "${path}" -DemoName "${demoName}"`;
-}
+      function buildLifecycleCommand(directive) {
+        const path = findLifecycleScript(directive);
+        if (!path) return null;
+        const demoName = (STATE.filename || "demo").replace(/\.txt$/, "");
+        return `pwsh -NoProfile -ExecutionPolicy Bypass -File "${path}" -DemoName "${demoName}"`;
+      }
 
-function showCommandModal(title, cmd, fallback) {
-    if (!cmd) {
-        showModal(`<h2>${title}</h2><p style="color: var(--fg-dim);">${fallback}</p><div class="actions"><button class="btn" data-close>Close</button></div>`);
-        return;
-    }
-    showModal(`
+      function showCommandModal(title, cmd, fallback) {
+        if (!cmd) {
+          showModal(
+            `<h2>${title}</h2><p style="color: var(--fg-dim);">${fallback}</p><div class="actions"><button class="btn" data-close>Close</button></div>`,
+          );
+          return;
+        }
+        showModal(`
         <h2>${title}</h2>
         <p style="color: var(--fg-dim); font-size: 12px;">Run this in a PowerShell window:</p>
         <pre id="cmd-pre">${escapeHtml(cmd)}</pre>
@@ -1318,55 +1708,57 @@ function showCommandModal(title, cmd, fallback) {
             <button class="btn primary" id="copy-cmd">Copy command</button>
         </div>
     `);
-    $('#copy-cmd').addEventListener('click', async () => {
-        try {
+        $("#copy-cmd").addEventListener("click", async () => {
+          try {
             await navigator.clipboard.writeText(cmd);
-            $('#copy-cmd').textContent = 'Copied ✓';
-            setTimeout(() => { $('#copy-cmd').textContent = 'Copy command'; }, 1500);
-        } catch {
-            $('#copy-cmd').textContent = 'Copy failed';
-        }
-    });
-}
+            $("#copy-cmd").textContent = "Copied ✓";
+            setTimeout(() => {
+              $("#copy-cmd").textContent = "Copy command";
+            }, 1500);
+          } catch {
+            $("#copy-cmd").textContent = "Copy failed";
+          }
+        });
+      }
 
-// ============================================================
-// Header wiring
-// ============================================================
+      // ============================================================
+      // Header wiring
+      // ============================================================
 
-$('#btn-new').addEventListener('click', newScript);
-$('#btn-open').addEventListener('click', openFile);
-$('#btn-save').addEventListener('click', saveFile);
-$('#btn-run').addEventListener('click', openRunModal);
+      $("#btn-new").addEventListener("click", newScript);
+      $("#btn-open").addEventListener("click", openFile);
+      $("#btn-save").addEventListener("click", saveFile);
+      $("#btn-run").addEventListener("click", openRunModal);
 
-// ============================================================
-// Run modal — consolidates mode/HUD/cues toggles plus setup/run/teardown
-// ============================================================
+      // ============================================================
+      // Run modal — consolidates mode/HUD/cues toggles plus setup/run/teardown
+      // ============================================================
 
-function openRunModal() {
-    const html = `
+      function openRunModal() {
+        const html = `
         <h2>Run demo</h2>
         <div class="run-options">
             <div class="run-option-row">
                 <span class="run-option-label">Mode</span>
                 <span class="toggle" data-pref="mode">
-                    <button data-value="manual" class="${STATE.mode === 'manual' ? 'on' : ''}">Manual</button>
-                    <button data-value="auto" class="${STATE.mode === 'auto' ? 'on' : ''}">Auto</button>
+                    <button data-value="manual" class="${STATE.mode === "manual" ? "on" : ""}">Manual</button>
+                    <button data-value="auto" class="${STATE.mode === "auto" ? "on" : ""}">Auto</button>
                 </span>
                 <span class="run-option-hint">Auto advances on turn-complete</span>
             </div>
             <div class="run-option-row">
                 <span class="run-option-label">HUD</span>
                 <span class="toggle" data-pref="hud">
-                    <button data-value="on" class="${STATE.hud === 'on' ? 'on' : ''}">On</button>
-                    <button data-value="off" class="${STATE.hud === 'off' ? 'on' : ''}">Off</button>
+                    <button data-value="on" class="${STATE.hud === "on" ? "on" : ""}">On</button>
+                    <button data-value="off" class="${STATE.hud === "off" ? "on" : ""}">Off</button>
                 </span>
                 <span class="run-option-hint">Off for final recordings</span>
             </div>
             <div class="run-option-row">
                 <span class="run-option-label">Cues</span>
                 <span class="toggle" data-pref="cues">
-                    <button data-value="on" class="${STATE.cues === 'on' ? 'on' : ''}">On</button>
-                    <button data-value="off" class="${STATE.cues === 'off' ? 'on' : ''}">Off</button>
+                    <button data-value="on" class="${STATE.cues === "on" ? "on" : ""}">On</button>
+                    <button data-value="off" class="${STATE.cues === "off" ? "on" : ""}">Off</button>
                 </span>
                 <span class="run-option-hint">Recorder beats during the demo</span>
             </div>
@@ -1380,136 +1772,172 @@ function openRunModal() {
             <button class="btn" data-close>Close</button>
         </div>
     `;
-    showModal(html);
-    const modal = $('#modal-content');
+        showModal(html);
+        const modal = $("#modal-content");
 
-    // Wire the in-modal toggles to STATE
-    modal.querySelectorAll('.toggle[data-pref]').forEach(t => {
-        const pref = t.dataset.pref;
-        t.querySelectorAll('button').forEach(b => {
-            b.addEventListener('click', () => {
-                t.querySelectorAll('button').forEach(o => o.classList.remove('on'));
-                b.classList.add('on');
-                STATE[pref] = b.dataset.value;
+        // Wire the in-modal toggles to STATE
+        modal.querySelectorAll(".toggle[data-pref]").forEach((t) => {
+          const pref = t.dataset.pref;
+          t.querySelectorAll("button").forEach((b) => {
+            b.addEventListener("click", () => {
+              t.querySelectorAll("button").forEach((o) =>
+                o.classList.remove("on"),
+              );
+              b.classList.add("on");
+              STATE[pref] = b.dataset.value;
             });
+          });
         });
-    });
 
-    // Action buttons: close this modal, then show the corresponding command
-    modal.querySelector('[data-action="setup"]').addEventListener('click', () => {
-        hideModal();
-        showCommandModal('Setup', buildLifecycleCommand('setup'), 'No @setup directive in this script.');
-    });
-    modal.querySelector('[data-action="teardown"]').addEventListener('click', () => {
-        hideModal();
-        showCommandModal('Teardown', buildLifecycleCommand('teardown'), 'No @teardown directive in this script.');
-    });
-    modal.querySelector('[data-action="run"]').addEventListener('click', () => {
-        hideModal();
-        showCommandModal('Run demo', buildRunCommand(), '');
-    });
-}
+        // Action buttons: close this modal, then show the corresponding command
+        modal
+          .querySelector('[data-action="setup"]')
+          .addEventListener("click", () => {
+            hideModal();
+            showCommandModal(
+              "Setup",
+              buildLifecycleCommand("setup"),
+              "No @setup directive in this script.",
+            );
+          });
+        modal
+          .querySelector('[data-action="teardown"]')
+          .addEventListener("click", () => {
+            hideModal();
+            showCommandModal(
+              "Teardown",
+              buildLifecycleCommand("teardown"),
+              "No @teardown directive in this script.",
+            );
+          });
+        modal
+          .querySelector('[data-action="run"]')
+          .addEventListener("click", () => {
+            hideModal();
+            showCommandModal("Run demo", buildRunCommand(), "");
+          });
+      }
 
-// ============================================================
-// Theme preference
-// ============================================================
+      // ============================================================
+      // Theme preference
+      // ============================================================
 
-const PREFS_KEY = 'demo-script-viewer.prefs';
+      const PREFS_KEY = "demo-script-viewer.prefs";
 
-function loadPrefs() {
-    try {
-        return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-    } catch { return {}; }
-}
-function savePrefs(p) {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
-}
-
-function applyTheme(theme) {
-    document.body.classList.remove('dark', 'light');
-    document.body.classList.add(theme);
-    $('#btn-theme').textContent = theme === 'dark' ? '☾' : '☀';
-    $('#btn-theme').title = `Theme: ${theme} — click to switch`;
-}
-
-(function initPrefs() {
-    const prefs = loadPrefs();
-    const theme = prefs.theme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-    applyTheme(theme);
-})();
-
-$('#btn-theme').addEventListener('click', () => {
-    const next = document.body.classList.contains('dark') ? 'light' : 'dark';
-    applyTheme(next);
-    const prefs = loadPrefs();
-    prefs.theme = next;
-    savePrefs(prefs);
-});
-
-function isEditingTextField(el) {
-    if (!el) return false;
-    const tag = (el.tagName || '').toLowerCase();
-    return el.isContentEditable || tag === 'input' || tag === 'textarea';
-}
-
-document.addEventListener('keydown', (e) => {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    const key = e.key.toLowerCase();
-    const editing = isEditingTextField(e.target);
-
-    // Ctrl+S — save. Always honored: commit any in-progress edit first by
-    // blurring the active element so saveEdit fires before serialize.
-    if (key === 's' && !e.shiftKey) {
-        e.preventDefault();
-        if (editing && document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
+      function loadPrefs() {
+        try {
+          return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+        } catch {
+          return {};
         }
-        saveFile();
-        return;
-    }
-
-    // Ctrl+O — open file picker.
-    if (key === 'o' && !e.shiftKey) {
-        e.preventDefault();
-        if (editing && document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
+      }
+      function savePrefs(p) {
+        try {
+          localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+        } catch {
+          /* ignore */
         }
-        openFile();
-        return;
-    }
+      }
 
-    // Ctrl+Z — undo. Skip when editing text so the browser's own text-undo
-    // handles in-place edits; block-level undo applies when not focused on
-    // contenteditable.
-    if (key === 'z' && !e.shiftKey) {
-        if (editing) return;
-        e.preventDefault();
-        undo();
-        return;
-    }
+      function applyTheme(theme) {
+        document.body.classList.remove("dark", "light");
+        document.body.classList.add(theme);
+        $("#btn-theme").textContent = theme === "dark" ? "☾" : "☀";
+        $("#btn-theme").title = `Theme: ${theme} — click to switch`;
+      }
 
-    // Ctrl+Y or Ctrl+Shift+Z — redo.
-    if (key === 'y' || (key === 'z' && e.shiftKey)) {
-        if (editing) return;
-        e.preventDefault();
-        redo();
-        return;
-    }
-});
+      (function initPrefs() {
+        const prefs = loadPrefs();
+        const theme =
+          prefs.theme ||
+          (window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark");
+        applyTheme(theme);
+      })();
 
-// ============================================================
-// Empty-state buttons
-// ============================================================
+      $("#btn-theme").addEventListener("click", () => {
+        const next = document.body.classList.contains("dark")
+          ? "light"
+          : "dark";
+        applyTheme(next);
+        const prefs = loadPrefs();
+        prefs.theme = next;
+        savePrefs(prefs);
+      });
 
-$('#btn-empty-open').addEventListener('click', openFile);
-$('#btn-empty-new').addEventListener('click', newScript);
+      function isEditingTextField(el) {
+        if (!el) return false;
+        const tag = (el.tagName || "").toLowerCase();
+        return el.isContentEditable || tag === "input" || tag === "textarea";
+      }
 
-// ============================================================
-// Init — show empty state until the user opens or creates a script.
-// ============================================================
+      document.addEventListener("keydown", (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const key = e.key.toLowerCase();
+        const editing = isEditingTextField(e.target);
 
-renderBlocks();
-</script>
+        // Ctrl+S — save. Always honored: commit any in-progress edit first by
+        // blurring the active element so saveEdit fires before serialize.
+        if (key === "s" && !e.shiftKey) {
+          e.preventDefault();
+          if (
+            editing &&
+            document.activeElement &&
+            document.activeElement.blur
+          ) {
+            document.activeElement.blur();
+          }
+          saveFile();
+          return;
+        }
 
-</body>
+        // Ctrl+O — open file picker.
+        if (key === "o" && !e.shiftKey) {
+          e.preventDefault();
+          if (
+            editing &&
+            document.activeElement &&
+            document.activeElement.blur
+          ) {
+            document.activeElement.blur();
+          }
+          openFile();
+          return;
+        }
+
+        // Ctrl+Z — undo. Skip when editing text so the browser's own text-undo
+        // handles in-place edits; block-level undo applies when not focused on
+        // contenteditable.
+        if (key === "z" && !e.shiftKey) {
+          if (editing) return;
+          e.preventDefault();
+          undo();
+          return;
+        }
+
+        // Ctrl+Y or Ctrl+Shift+Z — redo.
+        if (key === "y" || (key === "z" && e.shiftKey)) {
+          if (editing) return;
+          e.preventDefault();
+          redo();
+          return;
+        }
+      });
+
+      // ============================================================
+      // Empty-state buttons
+      // ============================================================
+
+      $("#btn-empty-open").addEventListener("click", openFile);
+      $("#btn-empty-new").addEventListener("click", newScript);
+
+      // ============================================================
+      // Init — show empty state until the user opens or creates a script.
+      // ============================================================
+
+      renderBlocks();
+    </script>
+  </body>
 </html>

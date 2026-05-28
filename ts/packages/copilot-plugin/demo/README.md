@@ -80,26 +80,26 @@ what was the restaurant we talked about in March?
 
 ### Directive reference
 
-| Directive | Positional | Attributes | Behavior |
-|---|---|---|---|
-| `@defaults` | — | `timeout`, `on-timeout`, `type-speed`, `type-jitter`, `voice`, `mode` | File-level defaults |
-| `@voice` | voice-name | — | Select TTS voice |
-| `@type-speed` | ms | `jitter=<ms>` | Set typing speed and optional jitter |
-| `@mode` | `manual` \| `auto` | — | Switch advance mode mid-run |
-| `@type` | text | `expect`, `wait-completion`, `timeout`, `on-timeout` | Explicit typed line. Same behavior as a plain text line, with inline attributes. |
-| `@say` | text | — | Speak (non-blocking) |
-| `@say-block` | text | — | Speak and wait for completion |
-| `@cue` | text | — | Display a recorder cue in a separate window. **No TTS**. Pauses for **Ctrl+Right**. Visible even with `--no-hud` and during recording. Use for manual "switch to the browser and click X" instructions. |
-| `@sleep` | duration | — | Wait fixed duration |
-| `@pause` | — | — | Wait for **Ctrl+Right** |
-| `@focus` | window-title | — | Refuse to type unless this window is focused |
-| `@with` | — | `expect`, `wait-completion`, `timeout`, `on-timeout` | Attach attributes to the previous typed line |
-| `@expect` | text | `timeout`, `on-timeout` | Shorthand: type completed AND response contains *text* |
-| `@wait-completion` | — | `timeout`, `on-timeout` | Shorthand: type completed (no text check) |
-| `@setup` | path | — | Run a PowerShell setup script (early in file) |
-| `@teardown` | path | — | Register a teardown script (runs at end or on Esc abort) |
-| `@record-start` | — | — | Send recording start hotkey |
-| `@record-stop` | — | — | Send recording stop hotkey |
+| Directive          | Positional         | Attributes                                                            | Behavior                                                                                                                                                                                                |
+| ------------------ | ------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@defaults`        | —                  | `timeout`, `on-timeout`, `type-speed`, `type-jitter`, `voice`, `mode` | File-level defaults                                                                                                                                                                                     |
+| `@voice`           | voice-name         | —                                                                     | Select TTS voice                                                                                                                                                                                        |
+| `@type-speed`      | ms                 | `jitter=<ms>`                                                         | Set typing speed and optional jitter                                                                                                                                                                    |
+| `@mode`            | `manual` \| `auto` | —                                                                     | Switch advance mode mid-run                                                                                                                                                                             |
+| `@type`            | text               | `expect`, `wait-completion`, `timeout`, `on-timeout`                  | Explicit typed line. Same behavior as a plain text line, with inline attributes.                                                                                                                        |
+| `@say`             | text               | —                                                                     | Speak (non-blocking)                                                                                                                                                                                    |
+| `@say-block`       | text               | —                                                                     | Speak and wait for completion                                                                                                                                                                           |
+| `@cue`             | text               | —                                                                     | Display a recorder cue in a separate window. **No TTS**. Pauses for **Ctrl+Right**. Visible even with `--no-hud` and during recording. Use for manual "switch to the browser and click X" instructions. |
+| `@sleep`           | duration           | —                                                                     | Wait fixed duration                                                                                                                                                                                     |
+| `@pause`           | —                  | —                                                                     | Wait for **Ctrl+Right**                                                                                                                                                                                 |
+| `@focus`           | window-title       | —                                                                     | Refuse to type unless this window is focused                                                                                                                                                            |
+| `@with`            | —                  | `expect`, `wait-completion`, `timeout`, `on-timeout`                  | Attach attributes to the previous typed line                                                                                                                                                            |
+| `@expect`          | text               | `timeout`, `on-timeout`                                               | Shorthand: type completed AND response contains _text_                                                                                                                                                  |
+| `@wait-completion` | —                  | `timeout`, `on-timeout`                                               | Shorthand: type completed (no text check)                                                                                                                                                               |
+| `@setup`           | path               | —                                                                     | Run a PowerShell setup script (early in file)                                                                                                                                                           |
+| `@teardown`        | path               | —                                                                     | Register a teardown script (runs at end or on Esc abort)                                                                                                                                                |
+| `@record-start`    | —                  | —                                                                     | Send recording start hotkey                                                                                                                                                                             |
+| `@record-stop`     | —                  | —                                                                     | Send recording stop hotkey                                                                                                                                                                              |
 
 ### Durations
 
@@ -111,7 +111,7 @@ Every wait directive accepts `timeout=<duration>` and `on-timeout=<continue|exit
 
 - `continue` — log a warning and proceed. Use for nice-to-have expectations.
 - `exit` — log, run teardown, stop recording, exit. Use for "this must work or stop."
-- `warn` *(default)* — pause and wait for **Ctrl+Right** to push through or **Esc** to abort. Recorder makes the live call.
+- `warn` _(default)_ — pause and wait for **Ctrl+Right** to push through or **Esc** to abort. Recorder makes the live call.
 
 ---
 
@@ -121,26 +121,26 @@ Every wait directive accepts `timeout=<duration>` and `on-timeout=<continue|exit
 demo-driver.ahk <demo-file> [options]
 ```
 
-| Option | Default | Description |
-|---|---|---|
-| `--mode manual\|auto` | `manual` | Manual = every typed line waits for **Ctrl+Right**. Auto = advance on `turnComplete` event (with timeout fallback). |
-| `--no-hud` | (HUD on) | Suppress HUD entirely. **Use for final recordings.** |
-| `--hud-during-record` | (auto-hides on record) | Keep HUD visible while recording. |
-| `--record-tool obs\|game-bar\|none` | `obs` | Which screen-recorder hotkey to send. |
-| `--record-start-hotkey "<keys>"` | `^!{F9}` | OBS start hotkey (AHK send syntax). |
-| `--record-stop-hotkey "<keys>"` | `^!{F10}` | OBS stop hotkey. |
-| `--voice "<name>"` | from script | Override TTS voice. |
-| `--no-tts` | (TTS on) | Suppress all `@say` / `@say-block` lines. |
-| `--state-path "<path>"` | `%TEMP%\copilot-demo-state.json` | Override demo-state file path. |
+| Option                              | Default                          | Description                                                                                                         |
+| ----------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `--mode manual\|auto`               | `manual`                         | Manual = every typed line waits for **Ctrl+Right**. Auto = advance on `turnComplete` event (with timeout fallback). |
+| `--no-hud`                          | (HUD on)                         | Suppress HUD entirely. **Use for final recordings.**                                                                |
+| `--hud-during-record`               | (auto-hides on record)           | Keep HUD visible while recording.                                                                                   |
+| `--record-tool obs\|game-bar\|none` | `obs`                            | Which screen-recorder hotkey to send.                                                                               |
+| `--record-start-hotkey "<keys>"`    | `^!{F9}`                         | OBS start hotkey (AHK send syntax).                                                                                 |
+| `--record-stop-hotkey "<keys>"`     | `^!{F10}`                        | OBS stop hotkey.                                                                                                    |
+| `--voice "<name>"`                  | from script                      | Override TTS voice.                                                                                                 |
+| `--no-tts`                          | (TTS on)                         | Suppress all `@say` / `@say-block` lines.                                                                           |
+| `--state-path "<path>"`             | `%TEMP%\copilot-demo-state.json` | Override demo-state file path.                                                                                      |
 
 ### Hotkeys while running
 
-| Key | Action |
-|---|---|
-| **Ctrl+Right** | Advance to the next step (when paused) |
-| **Esc** | Abort. Runs teardown, stops recording, exits. |
+| Key                  | Action                                                    |
+| -------------------- | --------------------------------------------------------- |
+| **Ctrl+Right**       | Advance to the next step (when paused)                    |
+| **Esc**              | Abort. Runs teardown, stops recording, exits.             |
 | **Ctrl+Shift+Right** | Fast-forward: skip the current `@sleep` or `@expect` wait |
-| **Ctrl+Shift+P** | Hard pause / resume (suppresses auto-advance) |
+| **Ctrl+Shift+P**     | Hard pause / resume (suppresses auto-advance)             |
 
 ---
 
@@ -151,7 +151,7 @@ PowerShell scripts that run before and after the demo. Conventions:
 - Accept a `-DemoName` parameter (driver passes the demo file name without extension).
 - Emit `READY` on stdout when setup is finished.
 - Errors should be fatal (non-zero exit) so the driver can warn before recording starts.
-- Teardown runs *also* on `Esc` abort, so make it idempotent.
+- Teardown runs _also_ on `Esc` abort, so make it idempotent.
 
 See `setup/montage-setup.ps1` for a complete example covering: TypeAgent server start, focus-stealing apps closed, stale state file cleared, `gh` auth status check.
 
@@ -201,11 +201,11 @@ The driver sends `Win+Alt+R` for both start and stop. Game Bar must be enabled i
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Driver types into the wrong window | Window focus changed | Use `@focus "Windows Terminal"` (or substring) to gate typing |
-| `@expect` never matches in MCP mode | Router only sees the response in direct mode | Switch to direct mode (`@typeagent mode direct`) before the segment that uses `@expect`, or use `@wait-completion` |
-| Demo doesn't advance after a turn | State file not being written | Verify the plugin was rebuilt (`pnpm run build` in `packages/copilot-plugin`); check `%TEMP%\copilot-demo-state.json` exists after a Copilot turn |
-| TTS sounds robotic | Default SAPI 5 voice is selected | Install a Windows 11 Natural voice and reference it by exact name in `@voice` |
-| Recording didn't start | Hotkey conflict or OBS not running | Confirm OBS is running with the configured hotkeys; or pass `--record-tool none` to control recording manually |
-| Driver fails to find setup script | Relative path resolution | Paths in `@setup` / `@teardown` are resolved relative to the demo file's directory |
+| Symptom                             | Cause                                        | Fix                                                                                                                                               |
+| ----------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Driver types into the wrong window  | Window focus changed                         | Use `@focus "Windows Terminal"` (or substring) to gate typing                                                                                     |
+| `@expect` never matches in MCP mode | Router only sees the response in direct mode | Switch to direct mode (`@typeagent mode direct`) before the segment that uses `@expect`, or use `@wait-completion`                                |
+| Demo doesn't advance after a turn   | State file not being written                 | Verify the plugin was rebuilt (`pnpm run build` in `packages/copilot-plugin`); check `%TEMP%\copilot-demo-state.json` exists after a Copilot turn |
+| TTS sounds robotic                  | Default SAPI 5 voice is selected             | Install a Windows 11 Natural voice and reference it by exact name in `@voice`                                                                     |
+| Recording didn't start              | Hotkey conflict or OBS not running           | Confirm OBS is running with the configured hotkeys; or pass `--record-tool none` to control recording manually                                    |
+| Driver fails to find setup script   | Relative path resolution                     | Paths in `@setup` / `@teardown` are resolved relative to the demo file's directory                                                                |

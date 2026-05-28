@@ -18,8 +18,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 function getStatePath(): string {
-    return process.env.TYPEAGENT_DEMO_STATE_PATH
-        ?? join(tmpdir(), "copilot-demo-state.json");
+    return (
+        process.env.TYPEAGENT_DEMO_STATE_PATH ??
+        join(tmpdir(), "copilot-demo-state.json")
+    );
 }
 
 export type TurnMode = "direct" | "mcp" | "llm";

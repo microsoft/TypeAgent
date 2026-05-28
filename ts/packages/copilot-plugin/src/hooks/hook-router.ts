@@ -257,7 +257,7 @@ function emitDemoStateForOutput(
         turnId: makeTurnId(input.sessionId),
         ts: Date.now(),
         mode: mode === "mcp" ? "mcp" : "direct",
-        handledBy: (output.handledBy === "typeagent") ? "typeagent" : "copilot",
+        handledBy: output.handledBy === "typeagent" ? "typeagent" : "copilot",
         lastResponse: output.responseContent ?? "",
         sessionId: input.sessionId,
     });

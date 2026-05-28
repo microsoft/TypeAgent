@@ -73,17 +73,36 @@ function parseArgs(argv: string[]): Args {
             return v;
         };
         switch (a) {
-            case "--text": args.text = next(); textSeen = true; break;
-            case "--voice": args.voice = next(); break;
-            case "--style": args.style = next(); break;
-            case "--rate": args.rate = next(); break;
-            case "--region": args.region = next(); break;
-            case "--resource": args.resourceId = next(); break;
-            case "--out": args.out = next(); break;
-            case "--no-play": args.noPlay = true; break;
+            case "--text":
+                args.text = next();
+                textSeen = true;
+                break;
+            case "--voice":
+                args.voice = next();
+                break;
+            case "--style":
+                args.style = next();
+                break;
+            case "--rate":
+                args.rate = next();
+                break;
+            case "--region":
+                args.region = next();
+                break;
+            case "--resource":
+                args.resourceId = next();
+                break;
+            case "--out":
+                args.out = next();
+                break;
+            case "--no-play":
+                args.noPlay = true;
+                break;
             case "-h":
             case "--help":
-                console.log("Usage: node azure-tts.mjs --text \"...\" [--voice NAME] [--style NAME] [--rate +0%] [--region R] [--resource RID] [--out FILE] [--no-play]");
+                console.log(
+                    'Usage: node azure-tts.mjs --text "..." [--voice NAME] [--style NAME] [--rate +0%] [--region R] [--resource RID] [--out FILE] [--no-play]',
+                );
                 process.exit(0);
             // eslint-disable-next-line no-fallthrough
             default:
@@ -94,7 +113,10 @@ function parseArgs(argv: string[]): Args {
     return args;
 }
 
-function resolveConfig(regionArg: string | undefined, resourceIdArg: string | undefined): SpeechConfig {
+function resolveConfig(
+    regionArg: string | undefined,
+    resourceIdArg: string | undefined,
+): SpeechConfig {
     let region = regionArg ?? process.env["SPEECH_SDK_REGION"];
     let resourceId = resourceIdArg ?? process.env["SPEECH_SDK_ENDPOINT"];
     if (region && resourceId) return { region, resourceId };
@@ -104,10 +126,13 @@ function resolveConfig(regionArg: string | undefined, resourceIdArg: string | un
         const candidate = join(dir, ".env");
         if (existsSync(candidate)) {
             for (const line of readFileSync(candidate, "utf8").split(/\r?\n/)) {
-                const m = line.match(/^(SPEECH_SDK_REGION|SPEECH_SDK_ENDPOINT)=(.+)$/);
+                const m = line.match(
+                    /^(SPEECH_SDK_REGION|SPEECH_SDK_ENDPOINT)=(.+)$/,
+                );
                 if (!m) continue;
                 if (m[1] === "SPEECH_SDK_REGION" && !region) region = m[2];
-                if (m[1] === "SPEECH_SDK_ENDPOINT" && !resourceId) resourceId = m[2];
+                if (m[1] === "SPEECH_SDK_ENDPOINT" && !resourceId)
+                    resourceId = m[2];
             }
             break;
         }
@@ -116,7 +141,9 @@ function resolveConfig(regionArg: string | undefined, resourceIdArg: string | un
         dir = parent;
     }
     if (!region || !resourceId) {
-        throw new Error("Azure Speech config not found. Set SPEECH_SDK_REGION and SPEECH_SDK_ENDPOINT, or place them in a .env file.");
+        throw new Error(
+            "Azure Speech config not found. Set SPEECH_SDK_REGION and SPEECH_SDK_ENDPOINT, or place them in a .env file.",
+        );
     }
     return { region, resourceId };
 }
@@ -125,14 +152,24 @@ async function getAadToken(): Promise<string> {
     const cachePath = join(tmpdir(), "typeagent-azure-speech-token.json");
     if (existsSync(cachePath)) {
         try {
-            const cached: AzureToken = JSON.parse(readFileSync(cachePath, "utf8"));
+            const cached: AzureToken = JSON.parse(
+                readFileSync(cachePath, "utf8"),
+            );
             const expiresOn = new Date(cached.expiresOn);
-            if (expiresOn.getTime() > Date.now() + 5 * 60_000) return cached.accessToken;
+            if (expiresOn.getTime() > Date.now() + 5 * 60_000)
+                return cached.accessToken;
         } catch {
             // fall through to refresh
         }
     }
-    const args = ["account", "get-access-token", "--resource", "https://cognitiveservices.azure.com", "--output", "json"];
+    const args = [
+        "account",
+        "get-access-token",
+        "--resource",
+        "https://cognitiveservices.azure.com",
+        "--output",
+        "json",
+    ];
     const opts = { windowsHide: true, shell: process.platform === "win32" };
     const { stdout } = await execFileP("az", args, opts);
     const obj: AzureToken = JSON.parse(stdout);
@@ -144,12 +181,12 @@ const XML_ENTITIES: Record<string, string> = {
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
-    "\"": "&quot;",
+    '"': "&quot;",
     "'": "&apos;",
 };
 
 function escapeXml(s: string): string {
-    return s.replace(/[&<>"']/g, c => XML_ENTITIES[c] ?? c);
+    return s.replace(/[&<>"']/g, (c) => XML_ENTITIES[c] ?? c);
 }
 
 // Map common SAPI-style voice names ("Microsoft Aria Natural") to the Azure
@@ -166,12 +203,17 @@ function buildSsml(args: Args): string {
 </speak>`;
 }
 
-async function synthesize(cfg: SpeechConfig, token: string, ssml: string, outFile: string): Promise<void> {
+async function synthesize(
+    cfg: SpeechConfig,
+    token: string,
+    ssml: string,
+    outFile: string,
+): Promise<void> {
     const url = `https://${cfg.region}.tts.speech.microsoft.com/cognitiveservices/v1`;
     const res = await fetch(url, {
         method: "POST",
         headers: {
-            "Authorization": `Bearer aad#${cfg.resourceId}#${token}`,
+            Authorization: `Bearer aad#${cfg.resourceId}#${token}`,
             "Content-Type": "application/ssml+xml; charset=utf-8",
             "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm",
             "User-Agent": "typeagent-demo-driver",
@@ -180,7 +222,9 @@ async function synthesize(cfg: SpeechConfig, token: string, ssml: string, outFil
     });
     if (!res.ok) {
         const body = await res.text();
-        throw new Error(`TTS request failed: ${res.status} ${res.statusText}\n${body}`);
+        throw new Error(
+            `TTS request failed: ${res.status} ${res.statusText}\n${body}`,
+        );
     }
     const buf = Buffer.from(await res.arrayBuffer());
     mkdirSync(dirname(outFile), { recursive: true });
@@ -193,7 +237,11 @@ function playSync(file: string): Promise<void> {
     switch (process.platform) {
         case "win32":
             cmd = "powershell";
-            cmdArgs = ["-NoProfile", "-Command", `(New-Object System.Media.SoundPlayer '${file.replace(/'/g, "''")}').PlaySync()`];
+            cmdArgs = [
+                "-NoProfile",
+                "-Command",
+                `(New-Object System.Media.SoundPlayer '${file.replace(/'/g, "''")}').PlaySync()`,
+            ];
             break;
         case "darwin":
             cmd = "afplay";
@@ -204,11 +252,15 @@ function playSync(file: string): Promise<void> {
             cmdArgs = [file];
             break;
         default:
-            throw new Error(`Audio playback not implemented for ${process.platform}`);
+            throw new Error(
+                `Audio playback not implemented for ${process.platform}`,
+            );
     }
     return new Promise((resolve, reject) => {
         const child = spawn(cmd, cmdArgs, { stdio: "ignore" });
-        child.on("exit", code => code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)));
+        child.on("exit", (code) =>
+            code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
+        );
         child.on("error", reject);
     });
 }
@@ -218,7 +270,8 @@ async function main(): Promise<void> {
     const cfg = resolveConfig(args.region, args.resourceId);
     const token = await getAadToken();
     const ssml = buildSsml(args);
-    const outFile = args.out ?? join(tmpdir(), `typeagent-tts-${randomUUID()}.wav`);
+    const outFile =
+        args.out ?? join(tmpdir(), `typeagent-tts-${randomUUID()}.wav`);
     await synthesize(cfg, token, ssml, outFile);
 
     if (args.noPlay) {
@@ -229,7 +282,11 @@ async function main(): Promise<void> {
         await playSync(outFile);
     } finally {
         if (!args.out) {
-            try { await unlink(outFile); } catch { /* best-effort cleanup */ }
+            try {
+                await unlink(outFile);
+            } catch {
+                /* best-effort cleanup */
+            }
         }
     }
 }
