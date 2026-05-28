@@ -6,8 +6,12 @@ export type {
     Grammar,
     GrammarRule,
     GrammarPart,
+    RulesPart,
+    DispatchModeBucket,
     CompiledSpacingMode,
 } from "./grammarTypes.js";
+// Factory helpers for tests / programmatic grammar construction.
+export { createStringPart, createWildcardPart } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
@@ -125,6 +129,13 @@ export {
     type FirstTokenIndex,
 } from "./nfaInterpreter.js";
 export { compileGrammarToNFA, normalizeGrammar } from "./nfaCompiler.js";
+
+// Cross-agent grammar collision detection moved to `grammar-tools-core`
+// (packages/grammarTools/core). The exports below used to live here:
+//   - findGrammarOverlap, GrammarOverlap, FindOverlapOptions
+//   - scanGrammarCollisions, formatRulePartsText, collectTopLevelRules,
+//     stripTailCalls, and the *ScanResult / *Record types.
+// Import from `grammar-tools-core` going forward.
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
 // Environment-based slot system
