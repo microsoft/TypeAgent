@@ -1404,27 +1404,16 @@ function validateBranchArm(
         scope,
         `${armPath}.scope`,
         tasks,
-        { constants: ctx.constants, stateVars: undefined },
+        {
+            constants: ctx.constants,
+            stateVars: undefined,
+            stateNamespaceUnavailableMessage: (name) =>
+                `$from "state", name "${name}": branch arm nodes ` +
+                `have no state namespace. Thread state values through ` +
+                `arm.inputs instead.`,
+        },
         errors,
     );
-
-    for (const [id, node] of Object.entries(armNodes)) {
-        if (!hasInputs(node)) continue;
-        const stateRefs = collectTemplateRefs(
-            node.inputs,
-            `${armPath}.scope.nodes.${id}.inputs`,
-            "state",
-        );
-        for (const ref of stateRefs) {
-            errors.push({
-                path: ref.templatePath,
-                message:
-                    `$from "state", name "${ref.name}": branch arm nodes ` +
-                    `have no state namespace. Thread state values through ` +
-                    `arm.inputs instead.`,
-            });
-        }
-    }
 }
 
 /**
@@ -1679,9 +1668,11 @@ function validateNodeInputTemplates(
         ];
         for (const [armKey, arm] of arms) {
             for (const [fieldName, tmpl] of Object.entries(arm.inputs ?? {})) {
-                walkTemplateAndComputeType(
+                validateBoundaryInputTemplate(
                     tmpl,
                     `${path}.cases.${armKey}.inputs.${fieldName}`,
+                    arm.scope.inputSchema,
+                    fieldName,
                     typeCtx,
                     errors,
                 );
@@ -1693,9 +1684,11 @@ function validateNodeInputTemplates(
     if (node.kind === "fork") {
         for (const [bName, branch] of Object.entries(node.branches)) {
             for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
-                walkTemplateAndComputeType(
+                validateBoundaryInputTemplate(
                     tmpl,
                     `${path}.branches.${bName}.inputs.${fieldName}`,
+                    branch.scope.inputSchema,
+                    fieldName,
                     typeCtx,
                     errors,
                 );
@@ -1738,14 +1731,55 @@ function validateNodeInputTemplates(
         }
         if (node.inputs) {
             for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                walkTemplateAndComputeType(
+                validateBoundaryInputTemplate(
                     tmpl,
                     `${path}.inputs.${fieldName}`,
+                    node.body.inputSchema,
+                    fieldName,
                     typeCtx,
                     errors,
                 );
             }
         }
+    }
+}
+
+function validateBoundaryInputTemplate(
+    template: Template,
+    templatePath: string,
+    inputSchema: JSONSchema,
+    fieldName: string,
+    typeCtx: TypeResolutionContext,
+    errors: ValidationError[],
+): void {
+    const computed = walkTemplateAndComputeType(
+        template,
+        templatePath,
+        typeCtx,
+        errors,
+    );
+    if (computed === undefined) return;
+
+    const consumerPropDef = inputSchema.properties?.[fieldName];
+    if (!consumerPropDef || typeof consumerPropDef === "boolean") return;
+    if (
+        !checkUnknownAssignability(
+            computed,
+            consumerPropDef,
+            templatePath,
+            errors,
+            "Resolved input",
+            "expected",
+        )
+    ) {
+        checkStructuralSubtype(
+            computed,
+            consumerPropDef,
+            templatePath,
+            errors,
+            "Resolved input",
+            "expected",
+        );
     }
 }
 
@@ -2065,18 +2099,16 @@ function validateForkMapNode(
         node.body,
         `${path}.body`,
         tasks,
-        { constants: ctx.constants, stateVars: undefined },
+        {
+            constants: ctx.constants,
+            stateVars: undefined,
+            stateNamespaceUnavailableMessage: (name) =>
+                `$from "state", name "${name}": forkMap body nodes ` +
+                `have no state namespace. Pass state values through ` +
+                `forkMap inputs or body input instead.`,
+        },
         errors,
     );
-    // forkMap body must not use $from: "state"
-    for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
-        if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
-            errors.push({
-                path: `${path}.body.nodes.${bNodeId}.inputs`,
-                message: `forkMap body nodes must not use $from: "state".`,
-            });
-        }
-    }
     checkPositiveIntegerField(
         node.maxConcurrency,
         path,
@@ -2117,20 +2149,6 @@ function checkArmCovariance(
         `${armLabel} outputSchema`,
         "branch outputSchema",
     );
-}
-
-/**
- * Recursively check whether a template contains any $from: "state" reference.
- */
-function templateRefersToState(template: Template): boolean {
-    if (template === null || template === undefined) return false;
-    if (typeof template !== "object") return false;
-    if (Array.isArray(template)) {
-        return template.some((t) => templateRefersToState(t));
-    }
-    const obj = template as Record<string, unknown>;
-    if ("$from" in obj && obj["$from"] === "state") return true;
-    return Object.values(obj).some((v) => templateRefersToState(v as Template));
 }
 
 // ---- Static schema compatibility ----
@@ -2349,6 +2367,10 @@ function validateScope(
         constants: ctx.constants,
         recoveryTriggerInputSchema: undefined,
     };
+    if (ctx.stateNamespaceUnavailableMessage) {
+        typeCtx.stateNamespaceUnavailableMessage =
+            ctx.stateNamespaceUnavailableMessage;
+    }
 
     validateScopeNodes(
         scope.nodes,
@@ -2552,6 +2574,8 @@ interface ScopeValidationContext {
     constants: Record<string, ConstantDef> | undefined;
     /** Loop state variable declarations (only set when validating a loop body). */
     stateVars: Record<string, LoopStateVar> | undefined;
+    /** Custom diagnostic for scopes that structurally disallow $from:"state". */
+    stateNamespaceUnavailableMessage?: (name: string) => string;
 }
 
 /** Context for resolving template types within a scope. */
@@ -2562,6 +2586,8 @@ interface TypeResolutionContext {
     constants: Record<string, ConstantDef> | undefined;
     /** When resolving inside an onError target, the trigger's inputSchema. */
     recoveryTriggerInputSchema: JSONSchema | undefined;
+    /** Custom diagnostic for scopes that structurally disallow $from:"state". */
+    stateNamespaceUnavailableMessage?: (name: string) => string;
 }
 
 /** Derive a JSON Schema from a literal JSON value. */
@@ -2732,10 +2758,15 @@ function walkTemplateAndComputeType(
             }
             case "state": {
                 if (!typeCtx.stateVars) {
-                    // Not in a loop-body context; $from:"state" is structurally
-                    // invalid here. The caller (e.g. validateBranchArm) reports
-                    // the appropriate structural error; the walk returns undefined
-                    // to avoid a redundant generic message.
+                    errors.push({
+                        path: templatePath,
+                        message:
+                            typeCtx.stateNamespaceUnavailableMessage?.(name) ??
+                            `$from "state", name "${name}": no state ` +
+                                `namespace is available in this scope. ` +
+                                `State references are only available in ` +
+                                `loop body templates.`,
+                    });
                     return undefined;
                 }
                 if (!(name in typeCtx.stateVars)) {
