@@ -1,0 +1,35 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: command-handler — direct dispatch via a handlers map.
+// Suited for settings-style agents with a small number of well-known commands.
+
+import { AppAgent, ActionResult } from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+
+export function instantiate(): AppAgent {
+    return getCommandInterface(handlers);
+}
+
+// ---- Handlers ----------------------------------------------------------
+// Add one entry per action name defined in {{PASCAL_NAME}}Actions.
+
+const handlers: Record<string, (params: unknown) => Promise<ActionResult>> = {
+    // exampleAction: async (params) => {
+    //     return createActionResultFromTextDisplay("Done.");
+    // },
+};
+
+function getCommandInterface(
+    handlerMap: Record<string, (params: unknown) => Promise<ActionResult>>,
+): AppAgent {
+    return {
+        async executeAction(action: any): Promise<ActionResult> {
+            const handler = handlerMap[action.actionName];
+            if (!handler) {
+                return { error: `Unknown action: ${action.actionName}` };
+            }
+            return handler(action.parameters);
+        },
+    };
+}
