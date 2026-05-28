@@ -1,0 +1,30 @@
+{
+  "name": "ipconfig-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent agent for ipconfig",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/ipconfigManifest.json",
+    "./agent/handlers": "./dist/ipconfigActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/ipconfigSchema.ts -o ./dist/ipconfigSchema.pas.json -t IpconfigActions",
+    "agc": "agc -i ./src/ipconfigSchema.agr -o ./dist/ipconfigSchema.ag.json",
+    "tsc": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build": "concurrently npm:tsc npm:asc npm:agc"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
