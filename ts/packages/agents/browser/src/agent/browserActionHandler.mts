@@ -592,8 +592,31 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess =
-                await createViewServiceHost(context);
+            const viewProcess = await createViewServiceHost(context);
+            if (viewProcess) {
+                context.agentContext.viewProcess = viewProcess;
+                // Defensive cleanup if the child crashes mid-session.
+                // The dispatcher's PortRegistrar leaves stale entries
+                // bounded to "until respawn or session end", but a
+                // crashed child should release its registration eagerly
+                // so the entry doesn't shadow a fresh bind. The
+                // identity guard prevents a late-firing `exit` event on
+                // a previously-replaced process from clobbering a newer
+                // registration; the explicit disable path (which also
+                // releases) is naturally idempotent under `?.release()`.
+                viewProcess.once("exit", () => {
+                    if (context.agentContext.viewProcess !== viewProcess) {
+                        return;
+                    }
+                    context.agentContext.viewPortRegistration?.release();
+                    context.agentContext.viewPortRegistration = undefined;
+                    context.agentContext.viewProcess = undefined;
+                    // Reset cached port so respawn forks with arg "0"
+                    // (OS-assigned) instead of trying to re-bind the
+                    // stale port — mirrors the disable/close paths.
+                    context.agentContext.localHostPort = 0;
+                });
+            }
         }
 
         if (context.agentContext.browserSchemaEnabled) {
@@ -775,22 +798,7 @@ async function updateBrowserContext(
         }
     } else {
         // shut down service
-        if (context.agentContext.browserProcess) {
-            context.agentContext.browserProcess.kill();
-            context.agentContext.browserProcess = undefined;
-        }
-
-        if (context.agentContext.viewProcess) {
-            context.agentContext.viewProcess.kill();
-            context.agentContext.viewProcess = undefined;
-            // Reset to OS-assigned so a subsequent re-enable forks
-            // server.mjs with arg "0" instead of the stale port. The
-            // killed child may still hold the old port for a brief
-            // window (SIGTERM is async on Windows), so re-binding the
-            // same port races with EADDRINUSE.
-            context.agentContext.localHostPort = 0;
-        }
-
+        shutdownBrowserChildProcesses(context.agentContext);
         await cleanupBrowserSession(context.agentContext);
     }
 }
@@ -799,14 +807,26 @@ async function closeBrowserContext(
     context: SessionContext<BrowserActionContext>,
 ) {
     await cleanupBrowserSession(context.agentContext);
-    if (context.agentContext.browserProcess) {
-        context.agentContext.browserProcess.kill();
-        context.agentContext.browserProcess = undefined;
+    shutdownBrowserChildProcesses(context.agentContext);
+}
+
+// Tear down the browser + view child processes and release their
+// PortRegistrar entry. Safe to call multiple times; resets
+// `localHostPort` to 0 so a subsequent re-enable forks server.mjs
+// with arg "0" instead of the stale port. The killed view child may
+// still hold the old port briefly (SIGTERM is async on Windows), so
+// re-binding the same port would race with EADDRINUSE.
+function shutdownBrowserChildProcesses(agentContext: BrowserActionContext) {
+    if (agentContext.browserProcess) {
+        agentContext.browserProcess.kill();
+        agentContext.browserProcess = undefined;
     }
-    if (context.agentContext.viewProcess) {
-        context.agentContext.viewProcess.kill();
-        context.agentContext.viewProcess = undefined;
-        context.agentContext.localHostPort = 0;
+    if (agentContext.viewProcess) {
+        agentContext.viewProcess.kill();
+        agentContext.viewProcess = undefined;
+        agentContext.viewPortRegistration?.release();
+        agentContext.viewPortRegistration = undefined;
+        agentContext.localHostPort = 0;
     }
 }
 
@@ -2471,7 +2491,9 @@ async function createViewServiceHost(
                 childProcess.on("message", function (message: any) {
                     if (message?.type === "Success") {
                         context.agentContext.localHostPort = message.port;
-                        context.setLocalHostPort(message.port);
+                        context.agentContext.viewPortRegistration?.release();
+                        context.agentContext.viewPortRegistration =
+                            context.registerPort("view", message.port);
                         resolve(childProcess);
                     } else if (message === "Failure") {
                         resolve(undefined);

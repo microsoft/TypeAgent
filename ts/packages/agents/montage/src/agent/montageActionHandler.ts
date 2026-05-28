@@ -60,6 +60,10 @@ type MontageActionContext = {
     imageCollection?: im.ImageCollection | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the gallery
+    // view server. Released on updateMontageContext(false, ...) or
+    // closeMontageContext.
+    viewPortRegistration?: { release: () => void } | undefined;
     searchSettings: {
         minScore: number;
         exactMatch: boolean;
@@ -233,6 +237,8 @@ async function closeMontageContext(
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
         context.agentContext.viewProcess = undefined;
+        context.agentContext.viewPortRegistration?.release();
+        context.agentContext.viewPortRegistration = undefined;
     }
 }
 
@@ -297,8 +303,28 @@ async function updateMontageContext(
                 agentContext.localHostPort,
             );
             if (viewServiceResult) {
-                agentContext.viewProcess = viewServiceResult.process;
-                context.setLocalHostPort(viewServiceResult.port);
+                const viewProcess = viewServiceResult.process;
+                agentContext.viewProcess = viewProcess;
+                agentContext.localHostPort = viewServiceResult.port;
+                agentContext.viewPortRegistration?.release();
+                agentContext.viewPortRegistration = context.registerPort(
+                    "view",
+                    viewServiceResult.port,
+                );
+                // Defensive cleanup if the child crashes mid-session.
+                // The identity guard prevents a late-firing `exit`
+                // event on a previously-replaced process from
+                // clobbering a newer registration; the explicit
+                // disable path (which also releases) is naturally
+                // idempotent under `?.release()`.
+                viewProcess.once("exit", () => {
+                    if (agentContext.viewProcess !== viewProcess) {
+                        return;
+                    }
+                    agentContext.viewPortRegistration?.release();
+                    agentContext.viewPortRegistration = undefined;
+                    agentContext.viewProcess = undefined;
+                });
             }
 
             // send the folder info
@@ -333,6 +359,8 @@ async function updateMontageContext(
         if (agentContext.viewProcess) {
             agentContext.viewProcess.kill();
             agentContext.viewProcess = undefined;
+            agentContext.viewPortRegistration?.release();
+            agentContext.viewPortRegistration = undefined;
         }
     }
 }

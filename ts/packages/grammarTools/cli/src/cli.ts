@@ -8,6 +8,7 @@ import { format } from "grammar-tools-core";
 import { traceMatch, formatTrace } from "grammar-tools-core";
 import { computeCoverage } from "grammar-tools-core";
 import { diffGrammars } from "grammar-tools-core";
+import { runAnalyzeCollisions } from "./analyzeCollisions.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -28,6 +29,8 @@ function usage(): void {
             "  grammar-tools trace <file> <input>         Trace matcher execution on input",
             "  grammar-tools coverage <file> <corpus>     Run coverage against a corpus file",
             "  grammar-tools diff <a.agr> <b.agr>        Diff two grammar files",
+            "  grammar-tools collisions [-d dir] [-o out] [-q]",
+            "                                            Cross-agent NFA-intersection scan over compiled .ag.json grammars",
             "  grammar-tools help                         Show this help",
             "",
             "Options:",
@@ -338,6 +341,23 @@ async function main(): Promise<void> {
                     }
                 }
             }
+            break;
+        }
+        case "collisions": {
+            // analyzeCollisions has its own arg parser (--dir / --out /
+            // --quiet / --help) that mirrors the historical
+            // analyze-grammar-collisions CLI. Forward everything after
+            // "collisions" verbatim (--json isn't supported by that
+            // subcommand and is silently dropped).
+            const forwarded = process.argv.slice(2).filter((a, i, arr) => {
+                if (a === "collisions" && i === arr.indexOf("collisions")) {
+                    return false;
+                }
+                if (a === "--json") return false;
+                return true;
+            });
+            const code = await runAnalyzeCollisions(forwarded);
+            if (code !== 0) process.exit(code);
             break;
         }
         case "help":

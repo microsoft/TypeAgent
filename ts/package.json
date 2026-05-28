@@ -15,6 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
+    "build:ext:vscode": "pnpm -C packages/coda run package && pnpm -C packages/vscode-shell run package",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
     "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
@@ -33,6 +34,7 @@
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
     "postinstall": "pnpm run postinstall:better-sqlite3-node-copy && pnpm run postinstall:better-sqlite3-node-restore",
+    "install:ext:vscode": "pnpm -C packages/coda run deploy:local && pnpm -C packages/vscode-shell run deploy:local",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -69,7 +71,7 @@
     "shx": "^0.4.0",
     "tsx": "^4.21.0"
   },
-  "packageManager": "pnpm@10.33.4+sha512.1c67b3b359b2d408119ba1ed289f34b8fc3c6873412bec6fd264fbdc82489e510fcbecb9ce9d22dae7f3b76269d8441046014bdca53b9979cd7a561ad631b800",
+  "packageManager": "pnpm@10.34.0+sha512.8736169c56fdb6e26afb5d7e2bd5f4c99cc299620d8bdc288cb354e6dd0936bd4ea62276d1a6b2de4b6e971a00a530e0e08bbeeda63da5d820118d3d7e21ff69",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"

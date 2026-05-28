@@ -44,6 +44,10 @@ type MarkdownActionContext = {
     currentFileName?: string | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    // Handle returned by sessionContext.registerPort for the markdown
+    // preview / Yjs WebSocket server. Released on
+    // updateMarkdownContext(false, ...).
+    viewPortRegistration?: { release: () => void } | undefined;
 };
 
 async function handleUICommand(
@@ -302,9 +306,26 @@ async function updateMarkdownContext(
                     context.agentContext.localHostPort,
                 );
                 if (result) {
-                    context.agentContext.viewProcess = result.process;
+                    const viewProcess = result.process;
+                    context.agentContext.viewProcess = viewProcess;
                     context.agentContext.localHostPort = result.port;
-                    context.setLocalHostPort(result.port);
+                    context.agentContext.viewPortRegistration?.release();
+                    context.agentContext.viewPortRegistration =
+                        context.registerPort("view", result.port);
+                    // Defensive cleanup if the child crashes mid-session.
+                    // The identity guard prevents a late-firing `exit`
+                    // event on a previously-replaced process from
+                    // clobbering a newer registration; the explicit
+                    // disable path (which also releases) is naturally
+                    // idempotent under `?.release()`.
+                    viewProcess.once("exit", () => {
+                        if (context.agentContext.viewProcess !== viewProcess) {
+                            return;
+                        }
+                        context.agentContext.viewPortRegistration?.release();
+                        context.agentContext.viewPortRegistration = undefined;
+                        context.agentContext.viewProcess = undefined;
+                    });
                 }
             }
         }
@@ -314,6 +335,8 @@ async function updateMarkdownContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
             context.agentContext.viewProcess = undefined;
+            context.agentContext.viewPortRegistration?.release();
+            context.agentContext.viewPortRegistration = undefined;
         }
     }
 }

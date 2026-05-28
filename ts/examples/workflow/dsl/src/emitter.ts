@@ -52,6 +52,14 @@ import {
     ParallelNode,
     ParallelMapNode,
     DEFAULT_FALLBACK_PARAM,
+    ConstStatement,
+    DestructuringConst,
+    IfStatement,
+    SwitchStatement,
+    ThrowStatement,
+    WorkflowCallExpr,
+    TaskArg,
+    BinaryOp,
 } from "./ast.js";
 import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
 import {
@@ -386,10 +394,7 @@ export class Emitter {
 
     // ---- Const binding ----
 
-    private emitConst(
-        stmt: import("./ast.js").ConstStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitConst(stmt: ConstStatement, scope: ScopeContext): void {
         const expr = stmt.value;
 
         // Check if the RHS is a pure literal (no task calls, no refs)
@@ -446,7 +451,7 @@ export class Emitter {
     }
 
     private emitDestructuring(
-        stmt: import("./ast.js").DestructuringConst,
+        stmt: DestructuringConst,
         scope: ScopeContext,
     ): void {
         // The RHS should produce a node whose output is a tuple/array.
@@ -534,7 +539,7 @@ export class Emitter {
     // ---- If statement ----
 
     private emitIf(
-        stmt: import("./ast.js").IfStatement,
+        stmt: IfStatement,
         scope: ScopeContext,
     ): { output?: Template } | undefined {
         // Emit condition - may produce a node
@@ -655,7 +660,7 @@ export class Emitter {
     // ---- Switch statement ----
 
     private emitSwitch(
-        stmt: import("./ast.js").SwitchStatement,
+        stmt: SwitchStatement,
         scope: ScopeContext,
     ): { output?: Template } | undefined {
         const discTemplate = this.emitExpr(stmt.discriminant, scope);
@@ -787,10 +792,7 @@ export class Emitter {
 
     // ---- Throw statement ----
 
-    private emitThrow(
-        stmt: import("./ast.js").ThrowStatement,
-        scope: ScopeContext,
-    ): void {
+    private emitThrow(stmt: ThrowStatement, scope: ScopeContext): void {
         const valueTemplate = this.emitExpr(stmt.value, scope);
         const nodeId = this.freshId("throw");
         const node: TaskNode = {
@@ -986,7 +988,7 @@ export class Emitter {
     }
 
     private emitWorkflowCall(
-        expr: import("./ast.js").WorkflowCallExpr,
+        expr: WorkflowCallExpr,
         scope: ScopeContext,
         bindName: string,
     ): WorkflowCallNode | undefined {
@@ -1035,7 +1037,7 @@ export class Emitter {
      */
     private resolveWorkflowCallInputs(
         callee: WorkflowDecl,
-        args: import("./ast.js").TaskArg[],
+        args: TaskArg[],
         scope: ScopeContext,
     ): Record<string, Template> {
         const recordForm =
@@ -1193,7 +1195,7 @@ export class Emitter {
         return this.scopeRef(nodeId, scope);
     }
 
-    private binaryOpToTask(op: import("./ast.js").BinaryOp): string {
+    private binaryOpToTask(op: BinaryOp): string {
         switch (op) {
             case "===":
                 return "compare.equals";
@@ -1223,7 +1225,7 @@ export class Emitter {
         }
     }
 
-    private binaryOpOutputSchema(op: import("./ast.js").BinaryOp): JSONSchema {
+    private binaryOpOutputSchema(op: BinaryOp): JSONSchema {
         switch (op) {
             case "===":
             case "!==":
@@ -2480,7 +2482,7 @@ export class Emitter {
     // ---- Task argument resolution ----
 
     private resolveTaskArgs(
-        args: import("./ast.js").TaskArg[],
+        args: TaskArg[],
         schema: TaskSchemaInfo | undefined,
         scope: ScopeContext,
     ): Record<string, Template> {

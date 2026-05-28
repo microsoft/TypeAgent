@@ -14,6 +14,7 @@ import {
     WorkflowEngine,
     TaskRegistry,
     allBuiltinTasks,
+    RunOptions,
     RunResult,
     WorkflowEvent,
 } from "workflow-engine";
@@ -119,7 +120,7 @@ async function executeWorkflowAction(
     ctx.engine.on(listener);
 
     try {
-        const runOptions: import("workflow-engine").RunOptions = {
+        const runOptions: RunOptions = {
             input: action.parameters ?? {},
             policy: {}, // all side-effecting tasks default to "prompt"
             approve: async (taskName, _resolvedInputs) => {

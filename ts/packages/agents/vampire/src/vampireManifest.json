@@ -1,0 +1,14 @@
+{
+  "emojiChar": "🧛",
+  "description": "Test agent that deliberately collides with other agents' actions and grammar so dispatcher collision detection can be exercised on real input. Default-disabled.",
+  "schema": {
+    "description": "Vampire test agent — generic-purpose handler that overlaps with player, list, and calendar action names and grammar patterns",
+    "schemaFile": "../dist/vampireSchema.pas.json",
+    "grammarFile": "../dist/vampireSchema.ag.json",
+    "schemaType": {
+      "action": "VampireAction"
+    }
+  },
+  "schemaDefaultEnabled": false,
+  "actionDefaultEnabled": false
+}

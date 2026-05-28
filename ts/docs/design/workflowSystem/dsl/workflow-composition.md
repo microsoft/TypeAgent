@@ -5,21 +5,21 @@
 ## Context
 
 The DSL spec (`dsl/dsl-v0.1.md` §4) permits multiple workflows per file and
-sub-workflow calls, and the current implementation lowers those calls by
-emitting an unregistered `workflow.<name>` task node (see
-`dsl/dsl-v0.1-gap.md` G1). That lowering is a placeholder: the type
-checker only sees one workflow at a time, the emitter does not inline,
-and the engine has no resolution path for the synthetic task name.
+sub-workflow calls. Earlier the implementation lowered those calls by
+emitting an unregistered `workflow.<name>` task node as a placeholder: the
+type checker only saw one workflow at a time, the emitter did not inline,
+and the engine had no resolution path for the synthetic task name.
 
-The narrow gap (G1) can be closed in several ways, but the question
-underneath it is broader and worth answering on its own terms: **how
-should workflows compose, principally?** This document records that
-answer, ignoring migration and implementation cost. It is not (yet) the
-authoritative spec; it is the target the IR and DSL should evolve
-toward.
+That narrow gap has since been closed end-to-end (parser, type checker,
+emitter, engine, CLI; see commits landing the `WorkflowCallNode` and
+cross-file bundler). The question underneath it remains broader and worth
+answering on its own terms: **how should workflows compose, principally?**
+This document records that answer, ignoring migration and implementation
+cost. It is not (yet) the authoritative spec; it is the target the IR and
+DSL should evolve toward.
 
 This doc is **cross-cutting**: it lives under `dsl/` because the
-gap that motivates it is a DSL gap (G1) and §4 ("DSL ergonomics") is
+originating gap was a DSL gap and §4 ("DSL ergonomics") is
 the bulk of the content, but §2 specifies the supporting IR changes
 (new node kind, workflow table). The two co-evolve and are not split.
 
@@ -528,8 +528,10 @@ helps without changing what the IR (or the source) means.
   forbidding the language construct.
 
 Follow-up edits implied by adoption (not part of this doc's scope):
-the dsl-v0.1 spec §4 wording, the dsl-v0.1-gap G1 entry, and the
-IR spec's node-kind table all need updating when this lands.
+the dsl-v0.1 spec §4 wording and the IR spec's node-kind table need
+updating when this lands. (The original sub-workflow-call gap entry in
+`dsl-v0.1-gap.md` has already been removed now that the narrow fix
+shipped.)
 
 ## 8. Decisions
 
@@ -556,9 +558,9 @@ IR spec's node-kind table all need updating when this lands.
 
 - Replaces, in spirit, the §4 wording of `dsl/dsl-v0.1.md` (inlining as
   semantics).
-- Subsumes the framing question behind `dsl/dsl-v0.1-gap.md` G1; the
-  narrow G1 fix should be chosen with this target in mind even if full
-  adoption is later.
+- Subsumes the framing question behind the (now-resolved) sub-workflow-call
+  gap; that narrow fix was chosen with this target in mind, even though
+  full adoption of the principled position is later work.
 - Touches the same surface as `ir/workflow-scope-proposal.md` (sub-scope
   contracts); a workflow body is structurally another sub-scope.
 - Should be cross-referenced from `principles/principle-gaps.md`.

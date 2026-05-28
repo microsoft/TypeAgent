@@ -8,118 +8,46 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G16: Fix `throw` message propagation.** This is a direct user-visible
-   correctness issue in already-supported error semantics.
-2. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
-   into the full sub-scope contract before improving fork runtime behavior.
-3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
-   structurally valid, align fork execution with the spec's failure and cleanup
-   semantics.
-4. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
+1. **G17: Cancel in-flight fork/forkMap branches on failure.** Align fork
+   execution with the spec's failure and cleanup semantics.
+2. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
    surfaces real structural mismatches, switch error messages from the
    collapsed `'object'` rendering to the existing `formatType` output so
    users can see which fields differ.
-5. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
-   one-way before adding more type-system expressiveness.
-6. **G3: Add TypeScript-style named type aliases.** Once structural
+3. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-7. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
-   parsing and checking, and becomes more ergonomic once named aliases exist.
-8. **G18: Add union/literal types.** This is the broadest type-system expansion
+4. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-9. **G11: Decide/document bind stripping for explicit user names.** This is
+5. **G11: Decide/document bind stripping for explicit user names.** This is
    primarily debuggability and spec clarity.
-10. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
-    AST honesty and visual-editor clarity, but current behavior works.
-11. **G12: Decide `list.append` naming/semantics.** This is naming/API
-    consistency with coordinated emitter, engine, and snapshot churn.
-12. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
-    Decision 0010 removed `identity` / `noop` as load-bearing at branch
-    convergence, but the emitter still synthesizes them in several other
-    places. Classify each remaining usage as (a) reducible after 0010,
-    (b) forced by an IR shape that could be relaxed additively, or (c)
-    inherent to decision 0006 (no expressions). Pure audit; only
-    schedules follow-up work.
-13. **G7: Revisit composition patterns only when concrete workflow needs appear.**
-    These patterns push against the visual-node discipline and should stay out
-    of scope until justified.
-14. ~~**G29 + G30: `if`/`switch` as value producers.**~~ G30 (mixed-return errors) **DONE**; G29 (deprecate value-producing if/switch?) deferred pending `.wf` survey + G18.
+6. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+   AST honesty and visual-editor clarity, but current behavior works.
+7. **G12: Decide `list.append` naming/semantics.** This is naming/API
+   consistency with coordinated emitter, engine, and snapshot churn.
+8. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+   Decision 0010 removed `identity` / `noop` as load-bearing at branch
+   convergence, but the emitter still synthesizes them in several other
+   places. Classify each remaining usage as (a) reducible after 0010,
+   (b) forced by an IR shape that could be relaxed additively, or (c)
+   inherent to decision 0006 (no expressions). Pure audit; only
+   schedules follow-up work.
+9. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+   These patterns push against the visual-node discipline and should stay out
+   of scope until justified.
+10. **G29 (open part): Decide whether to deprecate value-producing
+    `if`/`switch` in favour of ternary.** The arm-type checking part of
+    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
+    as a type error) is resolved; see decision 0011 §6 and the
+    `G29 + G30` section below. The remaining open question - whether
+    value-producing `if`/`switch` should be deprecated entirely - is
+    deferred pending a `.wf` survey + G18 (union types).
 
-G1 (sub-workflow calls and cross-file composition) is now resolved; see its
-section below for the landed surface. G24-G28 capture follow-up design
-questions raised during the G1 implementation that have not yet been
-scheduled. G29 and G30 are treated as a unified gap (see §G29+G30 below):
-both arise from the same root cause — `if`/`switch` statements trying to
-act as value-producing expressions in an SSA compiler without a CFG pass.
-G30 (mixed-return errors) is resolved; G29's open question (whether to
-deprecate value-producing `if`/`switch` in favour of ternary) is deferred
-pending a `.wf` survey and G18 (union types).
+G24-G28 capture follow-up design questions raised during the workflow
+composition implementation that have not yet been scheduled.
 
 Dependency spine:
 
-- `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
-- `G10 -> G3 -> G4 -> G18` builds type-system features on sound
-  assignability (G13 resolved the structural-comparison prerequisite).
-
-## G1: Sub-workflow calls ✅ Resolved
-
-**Status:** Resolved as of the workflow-composition implementation plan
-(Phases 1–7). Multiple workflows in one file _and_ across multiple files
-now compose end-to-end through compiler, engine, and CLI. Cross-workflow
-calls emit `WorkflowCallNode` (not inlined) and the engine resolves the
-target via the IR's `workflows` table.
-
-**What landed:**
-
-- Parser: `export workflow`, `import { … } from "./other.wf"` (with
-  optional aliases), default-expression parameters, named-record args.
-- Type checker: takes the full flat workflow list; resolves single-
-  segment names to either workflow or task (workflow shadows task), and
-  rejects call-graph cycles (across files too).
-- Emitter: emits one `WorkflowBody` per workflow into
-  `WorkflowIR.workflows[name]` and emits `WorkflowCallNode` (kind
-  `"workflowCall"`) at each call site. Default arguments are inlined
-  at the call site per design §4.3.
-- Engine: `WorkflowCallNode` handler creates an isolated child frame,
-  propagates errors out to the caller's `onError`, and honors
-  `timeoutMs`. A concurrent-run guard rejects re-entrancy on the same
-  engine instance.
-- CLI (`wfc`): `--entry <name>` selects the program entry from the
-  entry file's workflows; `--workspace-root <dir>` opts into
-  containment for cross-file imports (otherwise `tsc`-style trust).
-- File loader: BFS-loads `.wf` files, detects duplicate workflow names
-  across files, rejects non-exported / missing imports, rewrites
-  aliased call sites to canonical names before type-check, and uses
-  `realpathSync` for symlink-safe containment.
-
-**References:**
-
-- Design: [`workflow-composition.md`](./workflow-composition.md)
-- IR additions folded into [`../ir/ir-v0.2.md`](../ir/ir-v0.2.md)
-  (no version bump).
-
-## G2: Parallel branches missing IR schema fields
-
-**Spec:** ir-v0.2.md specifies fork branches have the same sub-scope
-contract as loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`,
-`output`, `outputSchema`.
-
-**Current state:** The emitter only generates `{ entry, nodes }` per
-branch, omitting the schema and I/O fields. The IR validator may reject
-this if it enforces the full branch sub-scope contract.
-
-**What needs to happen:**
-
-1. Emit `inputSchema`, `outputSchema`, `inputs`, and `output` for each
-   fork branch.
-2. Validate that emitted fork IR passes the IR validator.
-
-**Related decision:** The emitter currently generates minimal branch
-scopes (`{ entry, nodes }`) and optionally `{ inputs, scope: { ... } }`
-for branches that need outer references. The full sub-scope contract
-(matching loop bodies) has not been enforced yet. This is a
-spec/implementation mismatch that needs the emitter to populate the
-missing fields.
+- `G3 -> G18` builds type-system features on sound assignability.
 
 ## G3: TypeScript-style type definitions
 
@@ -143,29 +71,6 @@ and inline object literals, but rejects any other identifier as
    name (already works via the "Unknown type" error, but the message
    should distinguish "did you mean to define a type?" from a typo).
 4. Consider whether types should be exportable across workflows.
-
-## G4: `llm.generateJson` needs generics for output typing
-
-**Spec:** `llm.generateJson` produces structured output, but its JSON
-schema is only known at the call site, not from the task's static
-signature.
-
-**Current state:** The builtin's output schema is `{}` (empty object),
-so the type checker infers `unknown` for its return value. Callers
-cannot access fields on the result without a type error ("Cannot access
-property on unknown type"). The only workaround is to assign the result
-to a variable and pass it opaquely to another task.
-
-**What needs to happen:**
-
-1. Add generic type parameter support so callers can write something like
-   `llm.generateJson<{ summary: string }>(prompt)` and the checker
-   infers the return type from the type argument.
-2. The emitter should use the type argument to populate the task node's
-   `outputSchema` in the IR, replacing the `{}` default.
-3. This requires parser support for `<Type>` syntax on call expressions,
-   type checker support for resolving generic instantiations, and emitter
-   support for threading the resolved type into the schema.
 
 ## G7: Composition patterns outside current scope
 
@@ -229,37 +134,6 @@ bindings with synthetic names? The current approach works but:
 3. If adding `ExpressionStatement`: update parser, ast.ts, emitter, and
    graph extractor.
 
-## G10: integer/number bidirectional compatibility
-
-**Context:** JSON Schema defines `integer` as a subtype of `number`
-(one-way: integer values satisfy a number schema, but not vice versa).
-The DSL type checker treats them as bidirectionally compatible.
-
-**Current state:**
-
-- The type checker's `isAssignable` function treats `integer` and
-  `number` as interchangeable in both directions
-  (typeChecker.ts ~line 99-104).
-- You can pass a `number` value where `integer` is expected without a
-  type error, which is a silent precision-loss bug.
-- Additionally, arithmetic on two `integer` operands always returns
-  `number` (typeChecker.ts ~line 713), even though the result could
-  safely remain `integer` for `+`, `-`, `*`.
-
-**What needs to happen:**
-
-1. Make assignability one-way: `integer` assignable to `number`, but
-   `number` NOT assignable to `integer` without an explicit conversion.
-2. Consider returning `integer` from integer-only arithmetic (`+`, `-`,
-   `*`) and `number` only when a `number` operand is involved or for
-   division.
-3. Add type error tests for cases like passing a `number` variable to
-   an input that expects `integer`.
-4. Audit existing task schemas: some tasks (e.g., `math.floor`,
-   `math.round`, `math.ceil`) correctly return `integer`; verify that
-   their results can still flow into `number`-typed inputs after the
-   one-way fix.
-
 ## G11: Bind stripping removes names from side-effect tasks
 
 **Context:** After emission, the emitter runs `stripUnreferencedBinds`
@@ -316,17 +190,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G16: `throw` produces empty error message
-
-**Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
-`error.fail` task node that produces a failure with the thrown value
-as the message.
-
-**Current state:** The error.fail task is emitted, but the error
-message that propagates to the RunResult is empty. The thrown string
-value is not correctly threaded into the error.fail task's input, or
-the error propagation loses the message field.
 
 ## G17: Fork/forkMap does not cancel in-flight branches on failure
 
@@ -705,7 +568,7 @@ therefore a non-standard extension with no TypeScript precedent.
 TypeScript (positional only, or explicit destructuring) or keep the
 named-record convenience syntax as a DSL-specific ergonomic feature?
 
-**Raised during:** G1 workflow composition implementation (designing workflow
+**Raised during:** the workflow composition implementation (designing workflow
 call syntax).
 
 ## G25: `export` conflates entry-point selection with cross-file importability; no library compile mode
@@ -749,7 +612,7 @@ concrete problems:
   stem) as the entry when no explicit `--entry` is given, making `export`
   purely a visibility qualifier.
 
-**Raised during:** G1 workflow composition implementation (designing
+**Raised during:** the workflow composition implementation (designing
 export / entry-point semantics).
 
 ## G26: No DSL syntax for `timeoutMs` on workflow calls
@@ -774,7 +637,7 @@ field is only reachable by tools that build IR directly.
   — declares max runtime on the callee declaration rather than each call
   site. Simpler but less flexible (no per-call override).
 
-**Raised during:** G1 workflow composition implementation (designing
+**Raised during:** the workflow composition implementation (designing
 sub-workflow call nodes in the IR).
 
 ## G27: No per-file namespacing for exported workflows in IR
@@ -798,7 +661,7 @@ schema for registry-style resolution) but it is not used by the bundler today.
 - **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
   expose a `workflowOrigins` side-table mapping mangled name → original path + name.
 
-**Raised during:** G1 workflow composition implementation (building the
+**Raised during:** the workflow composition implementation (building the
 cross-file bundler and name mangling strategy).
 
 ## G28: `maxConcurrency` only accepts literal integers

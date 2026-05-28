@@ -40,19 +40,14 @@ function toolResult(text: string): CallToolResult {
 
 /**
  * Format a large result for display. Strips markdown formatting and wraps
- * in a code fence so the LLM preserves newlines and doesn't summarize.
+ * in a code fence so the CLI preserves newlines and structured layout.
  */
 function formatLargeResult(response: string): CallToolResult {
     const lines = response.split("\n").length;
     if (lines > 5) {
         // Strip markdown bold (**text**) — doesn't render inside code fences
         const plain = response.replace(/\*\*([^*]+)\*\*/g, "$1");
-        return toolResult(
-            `[Display the following TypeAgent result verbatim to the user. Do not summarize.]\n\n` +
-                "```\n" +
-                plain +
-                "\n```",
-        );
+        return toolResult("```\n" + plain + "\n```");
     }
     return toolResult(response);
 }
@@ -115,6 +110,7 @@ class TypeAgentMcpServer {
                         "The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'",
                     ),
             },
+            { displayVerbatim: true } as Record<string, unknown>,
             async (params, extra) =>
                 this.processCommand(params.command, extra as ToolExtra),
         );

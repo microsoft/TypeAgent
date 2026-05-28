@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { FeatureConfig, ServerConfig, SSEManager } from "./types.js";
 import { SSEManagerImpl } from "./sseManager.js";
+import { isAllowedViewOrigin } from "./originAllowlist.js";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:views:server:core");
@@ -37,6 +38,22 @@ export class BaseServer {
      * Setup core middleware
      */
     private setupMiddleware(): void {
+        // Origin allowlist — runs before everything else so non-loopback
+        // requests get HTTP 403 without consuming rate-limit budget or
+        // touching feature routes. The bind is loopback-only, but a
+        // malicious local web page in any browser tab can still hit
+        // `http://localhost:<port>` via fetch/XHR/iframe; the gate stops
+        // that.
+        this.app.use((req, res, next) => {
+            const origin = req.headers.origin;
+            if (isAllowedViewOrigin(origin)) {
+                next();
+                return;
+            }
+            debug(`Rejecting request from origin ${origin}`);
+            res.status(403).send("Origin not allowed");
+        });
+
         // Rate limiting
         const limiter = rateLimit({
             windowMs: this.config.rateLimitWindow || 60000,
