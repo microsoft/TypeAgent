@@ -51,7 +51,10 @@ export function parseFlowLLMResponse<TParam>(
 
     // Try ```json blocks first, then plain ``` blocks containing a JSON
     // object (so we don't grab ```typescript or other code blocks here).
-    let jsonBlocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+    // The lazy `[\s\S]*?` already consumes any leading whitespace, so we
+    // drop the separate `\s*` (its overlap with `[\s\S]*?` triggers
+    // CodeQL js/polynomial-redos) — JSON.parse tolerates leading whitespace.
+    let jsonBlocks = [...text.matchAll(/```json([\s\S]*?)```/g)];
     if (jsonBlocks.length === 0) {
         jsonBlocks = [...text.matchAll(/```\s*(\{[\s\S]*?)```/g)];
     }
@@ -88,9 +91,13 @@ export function parseFlowLLMResponse<TParam>(
         } else {
             // Bare-script fallback: extract the last ts/js code block and
             // reuse the caller's parameter definitions unchanged.
+            // `\s*` is omitted here (same reason as the JSON regex above):
+            // the lazy `[\s\S]*?` already swallows leading whitespace, and
+            // the captured text is `.trim()`-ed before use, so dropping
+            // `\s*` avoids the overlap that CodeQL flags as polynomial.
             const codeBlocks = [
                 ...text.matchAll(
-                    /```(?:typescript|ts|javascript|js)?\s*([\s\S]*?)```/g,
+                    /```(?:typescript|ts|javascript|js)?([\s\S]*?)```/g,
                 ),
             ];
             const bareScript =

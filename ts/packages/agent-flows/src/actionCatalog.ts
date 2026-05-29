@@ -42,7 +42,11 @@ export interface ActionCatalogOptions {
 
 // Default: schema header is `//   "schema-name"` optionally followed by
 // `— actionA, actionB, ...`.
-const DEFAULT_SCHEMA_HEADER = /^\s*\/\/\s+"([^"]+)"(?:\s+—\s+(.+))?$/;
+// `(\S.*)` (rather than `(.+)`) anchors the inline-actions capture to a
+// non-whitespace lead char so the trailing-whitespace branch can't share
+// characters with the preceding `\s+`, avoiding polynomial backtracking on
+// pathological inputs (CodeQL js/polynomial-redos).
+const DEFAULT_SCHEMA_HEADER = /^\s*\/\/\s+"([^"]+)"(?:\s+—\s+(\S.*))?$/;
 
 // Default: action line is `//` + ≥4 spaces + identifier + `{`.
 const DEFAULT_ACTION_LINE = /^\s*\/\/\s{4,}([a-z][A-Za-z0-9]*)\s+\{/;
