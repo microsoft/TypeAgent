@@ -373,8 +373,10 @@ function stubWithSubmit(requestId: string, gate?: Promise<void>): Dispatcher {
             if (gate !== undefined) await gate;
             const result: SubmitResult = {
                 ok: true,
-                entry: makeQueuedRequest(requestId),
-                completion: Promise.resolve(undefined),
+                entry: {
+                    ...makeQueuedRequest(requestId),
+                    completion: Promise.resolve(undefined),
+                },
             };
             return result;
         }) as Dispatcher["submitCommand"],
@@ -396,7 +398,7 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
         const result: CommandResult = {};
         notifyCommandComplete("rid-1", result);
 
-        await expect(r.completion).resolves.toEqual(result);
+        await expect(r.entry.completion).resolves.toEqual(result);
     });
 
     it("resolves completion when commandComplete arrives before the ack (settledEarly)", async () => {
@@ -424,7 +426,7 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
         const r = await submitP;
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        await expect(r.completion).resolves.toEqual(result);
+        await expect(r.entry.completion).resolves.toEqual(result);
     });
 
     it("rejects completion with ServerStoppingError on requestCancelled(server_stopping)", async () => {
@@ -439,7 +441,9 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
 
         notifyRequestCancelled("rid-3", "server_stopping");
 
-        await expect(r.completion).rejects.toBeInstanceOf(ServerStoppingError);
+        await expect(r.entry.completion).rejects.toBeInstanceOf(
+            ServerStoppingError,
+        );
     });
 
     it("resolves completion with {cancelled:true} on non-server_stopping cancellation", async () => {
@@ -454,7 +458,7 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
 
         notifyRequestCancelled("rid-4", "user");
 
-        await expect(r.completion).resolves.toEqual({ cancelled: true });
+        await expect(r.entry.completion).resolves.toEqual({ cancelled: true });
     });
 
     it("close() drains pending awaiters so they reject instead of hanging", async () => {
@@ -463,8 +467,10 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
             submitCommand: (async () => {
                 return {
                     ok: true,
-                    entry: makeQueuedRequest("rid-5"),
-                    completion: Promise.resolve(undefined),
+                    entry: {
+                        ...makeQueuedRequest("rid-5"),
+                        completion: Promise.resolve(undefined),
+                    },
                 } as SubmitResult;
             }) as Dispatcher["submitCommand"],
             close: (async () => {}) as Dispatcher["close"],
@@ -479,6 +485,6 @@ describe("dispatcher RPC — submitCommand completion correlation", () => {
         // No commandComplete fired → completion is pending.
         await client.close();
 
-        await expect(r.completion).rejects.toThrow(/Dispatcher closed/);
+        await expect(r.entry.completion).rejects.toThrow(/Dispatcher closed/);
     });
 });

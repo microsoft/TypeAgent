@@ -50,5 +50,5 @@ export async function awaitCommand(
         }
         throw new ServerStoppingError();
     }
-    return r.completion;
+    return r.entry.completion;
 }

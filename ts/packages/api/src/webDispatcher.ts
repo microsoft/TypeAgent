@@ -127,11 +127,13 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         // command actually finishes (the submit ack returns immediately).
         return {
             ok: true,
-            entry: r.entry,
-            completion: r.completion.then(async (res) => {
-                await updateSettingSummary();
-                return res;
-            }),
+            entry: {
+                ...r.entry,
+                completion: r.entry.completion.then(async (res) => {
+                    await updateSettingSummary();
+                    return res;
+                }),
+            },
         };
     }
 

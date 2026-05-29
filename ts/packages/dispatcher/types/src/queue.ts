@@ -169,31 +169,38 @@ export class ServerStoppingError extends Error {
 }
 
 /**
+ * The queue entry handed back to the submitter. Extends the broadcast
+ * `QueuedRequest` shape with a `completion` promise — the submitter owns
+ * the completion handle, peers viewing the queue via snapshots/broadcasts
+ * only ever see the broadcast `QueuedRequest` (no promise crosses to peer
+ * clients).
+ *
+ * `completion` resolves with the eventual `CommandResult` (or
+ * `{cancelled: true}` for cancelled requests, or rejects with
+ * `ServerStoppingError` if the server abandoned the entry).
+ *
+ * For in-process dispatchers `completion` is the queue's internal entry
+ * promise directly. For RPC clients it is synthesized by the client
+ * wrapper from `commandComplete` and `requestCancelled` ClientIO push
+ * events — see `WireSubmitResult` for the RPC-layer transport type.
+ */
+export interface SubmittedRequest extends QueuedRequest {
+    completion: Promise<CommandResult | undefined>;
+}
+
+/**
  * Discriminated result returned by `Dispatcher.submitCommand`.
  *
  * Failure modes are data (not thrown) because the RPC layer flattens errors
  * to plain `Error` on the wire, dropping subclass identity and structured
  * fields.
  *
- * On success the result carries both an `entry` (server ack) and a
- * `completion` promise that resolves with the eventual `CommandResult`
- * (or `{cancelled: true}` for cancelled requests, or rejects with
- * `ServerStoppingError` if the server abandoned the entry). Callers who
- * only need ack-on-enqueue semantics can ignore `completion`; callers
- * that previously used `processCommand` await `completion` after the
- * `ok:true` check.
- *
- * For in-process dispatchers the `completion` promise is the queue's
- * internal entry promise directly. For RPC clients the `completion` is
- * synthesized by the client wrapper from `commandComplete` and
- * `requestCancelled` ClientIO push events — see `WireSubmitResult` for
- * the RPC-layer transport type.
+ * On success the result carries a `SubmittedRequest` — the queue ack with
+ * a `completion` promise attached. Callers who only need ack-on-enqueue
+ * semantics can ignore `entry.completion`; callers that previously used
+ * `processCommand` await `entry.completion` after the `ok:true` check.
  */
 export type SubmitResult =
-    | {
-          ok: true;
-          entry: QueuedRequest;
-          completion: Promise<CommandResult | undefined>;
-      }
+    | { ok: true; entry: SubmittedRequest }
     | { ok: false; error: "queue_full"; maxDepth: number }
     | { ok: false; error: "server_stopping" };

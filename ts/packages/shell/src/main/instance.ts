@@ -599,8 +599,10 @@ async function initializeDispatcher(
                 );
                 return {
                     ok: true,
-                    entry: synthEntry,
-                    completion: Promise.resolve(undefined),
+                    entry: {
+                        ...synthEntry,
+                        completion: Promise.resolve(undefined),
+                    },
                 };
             }
 
@@ -621,7 +623,7 @@ async function initializeDispatcher(
             if (!submit.ok) {
                 return submit;
             }
-            const completion = submit.completion.then(async (result) => {
+            const completion = submit.entry.completion.then(async (result) => {
                 shellWindow.chatView.webContents.send(
                     "send-demo-event",
                     "CommandProcessed",
@@ -632,7 +634,10 @@ async function initializeDispatcher(
                 await updateSummary(dispatcher);
                 return result;
             });
-            return { ok: true, entry: submit.entry, completion };
+            return {
+                ok: true,
+                entry: { ...submit.entry, completion },
+            };
         }
 
         // Shared close handler — tears down RPC channels and releases resources.

@@ -134,17 +134,17 @@ interface Dispatcher {
 ```
 
 `submitCommand` is the unified entry point for both ack-on-enqueue and
-await-completion callers. On success it returns `{ok:true, entry,
-completion}` where `entry` is the queued request descriptor and
-`completion` is a `Promise<CommandResult | undefined>` that resolves
-when execution finishes. Hosts that want to block on the result `await
-r.completion` after checking `r.ok`; hosts that just want a queue ack
-read `r.entry` and ignore `r.completion`. The
-`awaitCommand(dispatcher, …)` utility in `@typeagent/dispatcher-types`
-wraps this into a one-liner that returns `Promise<CommandResult |
-undefined>` and throws on submit failure for callers that want the
-classic shape. See [`messageQueueing.md`](./messageQueueing.md) §14.1
-for the unification history and the wire/in-process split.
+await-completion callers. On success it returns `{ok:true, entry}` where
+`entry` is the queued request descriptor (a `SubmittedRequest`) with a
+`completion: Promise<CommandResult | undefined>` attached. Hosts that
+want to block on the result `await r.entry.completion` after checking
+`r.ok`; hosts that just want a queue ack ignore `r.entry.completion`.
+The `awaitCommand(dispatcher, …)` utility in
+`@typeagent/dispatcher-types` wraps this into a one-liner that returns
+`Promise<CommandResult | undefined>` and throws on submit failure for
+callers that want the classic shape. See
+[`messageQueueing.md`](./messageQueueing.md) §14.1 for the unification
+history and the wire/in-process split.
 
 ### `CommandHandlerContext`
 

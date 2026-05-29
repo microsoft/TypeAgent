@@ -24,12 +24,12 @@ import type {
  * - `dispatcher` is the standard `Dispatcher` facade. Callers use it
  *   exactly as they would an in-process dispatcher; in particular,
  *   `submitCommand` / `interrupt` return a `SubmitResult` whose
- *   `completion` promise resolves with the eventual `CommandResult`.
+ *   `entry.completion` promise resolves with the eventual `CommandResult`.
  *
  * - `notifyCommandComplete` and `notifyRequestCancelled` are hooks
  *   that the host MUST wire into its `ClientIO` so the completion
  *   correlation map can fulfil outstanding `completion` promises.
- *   Without them, callers awaiting `r.completion` will block forever.
+ *   Without them, callers awaiting `r.entry.completion` will block forever.
  *   Use `wrapClientIOForCompletion` to do the wiring automatically.
  *
  * See `docs/architecture/messageQueueing.md` for the broader design.
@@ -117,7 +117,7 @@ export function createDispatcherRpcClient(
         // Defensive absorbing handler: keeps an ignored completion from
         // surfacing as unhandledRejection on server_stopping / close.
         void completion.catch(() => {});
-        return { ok: true, entry: wire.entry, completion };
+        return { ok: true, entry: { ...wire.entry, completion } };
     };
 
     const dispatcher: Dispatcher = {

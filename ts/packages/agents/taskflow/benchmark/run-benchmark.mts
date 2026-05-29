@@ -206,7 +206,7 @@ async function createLiveDispatcher(
                         : "Server stopping",
                 );
             }
-            const result = await submit.completion;
+            const result = await submit.entry.completion;
             return result ?? null;
         },
         getDisplayText(): string {

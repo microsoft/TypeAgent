@@ -17,7 +17,8 @@ import type {
  */
 function toWire(result: SubmitResult): WireSubmitResult {
     if (result.ok) {
-        return { ok: true, entry: result.entry };
+        const { completion: _c, ...entry } = result.entry;
+        return { ok: true, entry };
     }
     return result;
 }

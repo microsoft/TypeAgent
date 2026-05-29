@@ -203,7 +203,7 @@ async function createLiveDispatcher(
                         : "Server stopping",
                 );
             }
-            const result = await submit.completion;
+            const result = await submit.entry.completion;
 
             // Poll for display output. Script execution results arrive
             // asynchronously through the agent RPC layer — submitCommand's

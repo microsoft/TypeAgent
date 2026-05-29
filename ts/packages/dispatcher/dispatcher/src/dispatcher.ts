@@ -366,8 +366,7 @@ export function createDispatcherFromContext(
             void entry.completion.catch(() => {});
             return {
                 ok: true,
-                entry: wireCopy(entry),
-                completion: entry.completion,
+                entry: { ...wireCopy(entry), completion: entry.completion },
             };
         },
         async getQueueSnapshot() {
@@ -411,8 +410,7 @@ export function createDispatcherFromContext(
             }
             return {
                 ok: true,
-                entry: wireCopy(entry),
-                completion: entry.completion,
+                entry: { ...wireCopy(entry), completion: entry.completion },
             };
         },
         getCommandCompletion(prefix, direction) {

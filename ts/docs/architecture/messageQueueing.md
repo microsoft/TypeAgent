@@ -62,13 +62,14 @@ queue state — `Dispatcher` is the source of truth.
 
 The original `Dispatcher.processCommand` contract has been folded into
 `Dispatcher.submitCommand` (see §14.1, **Shipped**): the unified entry
-returns `Promise<SubmitResult>` where the `ok:true` variant carries
-both the queue ack (`entry`) and a `completion: Promise<CommandResult
-| undefined>`. Hosts that want to await completion `await r.completion`
-after checking `r.ok`; ack-on-enqueue callers use `r.entry` and ignore
-`r.completion`. Push events on `ClientIO` (`requestQueued`,
-`requestStarted`, `commandComplete`, `requestCancelled`) let every
-connected client follow the queue's lifecycle in real time.
+returns `Promise<SubmitResult>` where the `ok:true` variant carries a
+`SubmittedRequest` — the queue ack (`entry`) with a `completion:
+Promise<CommandResult | undefined>` attached. Hosts that want to await
+completion `await r.entry.completion` after checking `r.ok`;
+ack-on-enqueue callers use `r.entry` and ignore `r.entry.completion`.
+Push events on `ClientIO` (`requestQueued`, `requestStarted`,
+`commandComplete`, `requestCancelled`) let every connected client
+follow the queue's lifecycle in real time.
 
 ---
 
@@ -161,14 +162,14 @@ agent.executeAction                       emits requestStarted via ClientIO
 
 - **Await-completion callers** (Shell main + renderer, scripted CLI
   paths, MCP/VSCode/web bridges, benchmarks): check `r.ok`, then
-  `await r.completion`. The
+  `await r.entry.completion`. The
   [`awaitCommand(dispatcher, text, …)`](../../packages/dispatcher/types/src/awaitCommand.ts)
   utility from `@typeagent/dispatcher-types` packages this into a
   one-liner that throws on submit failure for code that just wants the
   old `Promise<CommandResult>` shape.
 
 - **Ack-on-enqueue callers** (the CLI interactive REPL): check `r.ok`,
-  track `r.entry`, ignore `r.completion`. The prompt becomes
+  track `r.entry`, ignore `r.entry.completion`. The prompt becomes
   responsive immediately; completion is observed via the
   `commandComplete` `ClientIO` push event.
 
@@ -587,9 +588,14 @@ shape to branch on.
 ```ts
 /** Outcome of `Dispatcher.submitCommand`. */
 export type SubmitResult =
-  | { ok: true; entry: QueuedRequest }
+  | { ok: true; entry: SubmittedRequest }
   | { ok: false; error: "queue_full"; maxDepth: number }
   | { ok: false; error: "server_stopping" };
+
+/** Queue ack with the completion promise the submitter owns. */
+export interface SubmittedRequest extends QueuedRequest {
+  completion: Promise<CommandResult | undefined>;
+}
 
 /** Outcome of `Dispatcher.cancelCommand`. */
 export type CancelResult =
@@ -1179,18 +1185,19 @@ event. See the deprecated docs for the earlier draft that had both.
 Originally this section tracked the unification as future work; it has
 since been implemented. `Dispatcher.processCommand` is removed; the
 unified entry point is `Dispatcher.submitCommand`, returning a
-discriminated result that carries **both** the ack and the completion
-promise:
+discriminated result whose `ok:true` variant carries a
+`SubmittedRequest` — the queue ack with the completion promise
+attached:
 
 ```ts
 type SubmitResult =
-    | {
-          ok: true;
-          entry: QueuedRequest;
-          completion: Promise<CommandResult | undefined>;
-      }
+    | { ok: true; entry: SubmittedRequest }
     | { ok: false; error: "queue_full"; maxDepth: number }
     | { ok: false; error: "server_stopping" };
+
+interface SubmittedRequest extends QueuedRequest {
+    completion: Promise<CommandResult | undefined>;
+}
 
 submitCommand(
     text: string,
@@ -1201,13 +1208,13 @@ submitCommand(
 ): Promise<SubmitResult>;
 ```
 
-- **In-process** (local dispatcher, tests): the dispatcher returns
-  `entry.completion` directly in the `ok:true` variant.
-- **Across RPC**: the server returns only `{ok, entry}` over the wire;
-  the RPC client wrapper attaches
-  `completion: waitForCommandComplete(entry.requestId)` — a promise
-  resolved by the `commandComplete` `ClientIO` push event via a
-  per-client one-shot correlation map, and rejected on
+- **In-process** (local dispatcher, tests): the dispatcher attaches
+  `entry.completion` from the queue's internal entry promise.
+- **Across RPC**: the server returns only `{ok, entry}` (a bare
+  `QueuedRequest`) over the wire; the RPC client wrapper attaches
+  `completion: waitForCommandComplete(entry.requestId)` onto the entry
+  — a promise resolved by the `commandComplete` `ClientIO` push event
+  via a per-client one-shot correlation map, and rejected on
   `requestCancelled` with `reason: "server_stopping"`. No new
   server-side wire RPC was required. `notifyCommandComplete` /
   `notifyRequestCancelled` hooks are exposed from the RPC client
@@ -1218,10 +1225,11 @@ submitCommand(
 - Await-completion callers (former `processCommand` users) use one of
   two equivalent shapes:
 
-  - Direct `submitCommand` + `r.completion` await — used by Shell main
-    (`processShellRequest`) and the renderer chatView, which both want
-    to wrap the completion promise with post-completion side effects
-    (focus + summary update, MessageGroup attach).
+  - Direct `submitCommand` + `r.entry.completion` await — used by
+    Shell main (`processShellRequest`) and the renderer chatView,
+    which both want to wrap the completion promise with
+    post-completion side effects (focus + summary update,
+    MessageGroup attach).
   - The `awaitCommand(dispatcher, text, attachments?, options?,
 clientRequestId?, requestId?)` utility in
     `@typeagent/dispatcher-types` — used by scripted CLI command paths
@@ -1248,7 +1256,7 @@ clientRequestId?, requestId?)` utility in
       ? new QueueFullError(r.maxDepth)
       : new ServerStoppingError();
   }
-  return r.completion.then(postProcess);
+  return r.entry.completion.then(postProcess);
 
   // Utility shape (scripted CLI / MCP / bridges):
   const result = await awaitCommand(dispatcher, text);
@@ -1256,7 +1264,7 @@ clientRequestId?, requestId?)` utility in
 
 - Ack-on-enqueue callers (the CLI interactive REPL): no behaviour
   change. Existing `if (!r.ok) ...; trackId(r.entry)` shape still
-  applies; `r.completion` is simply ignored.
+  applies; `r.entry.completion` is simply ignored.
 
 **Shipped changes:**
 
