@@ -29,22 +29,31 @@
 # is computed entirely from package.json + src/ + the workspace graph.
 #
 # Required repository configuration:
-#   variables:
-#     DOCS_BOT_APP_ID         GitHub App that opens the PR
 #   secrets (scoped to the `development-fork` environment):
-#     DOCS_BOT_APP_PRIVATE_KEY  Private key for the GitHub App
 #     AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD       \
 #     AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA       | Shared with
 #     AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 / smoke-tests / build-docker workflows.
 #
-# Auth model: GitHub Actions exchanges its OIDC token for an Azure AD bearer
-# token via `azure/login@v2`, then `tools/scripts/getKeys.mjs` uses
-# DefaultAzureCredential to pull the consolidated `typeagent-config` secret
-# from the `build-pipeline-kv` Key Vault and writes it to
-# `ts/config.local.yaml`. `aiclient` reads endpoint + key from that file via
-# `@typeagent/config`. No Azure OpenAI key is stored in this repo. The
-# Entra App registration referenced by the secrets above already has
-# Key Vault read access on `build-pipeline-kv`, so no new RBAC is required.
+# GitHub write identity: the workflow uses the auto-generated
+# `GITHUB_TOKEN` to push the branch and open the PR. Trade-off:
+# GitHub deliberately suppresses downstream workflow runs on PRs
+# opened by `GITHUB_TOKEN`, so the generated docs PR will NOT have
+# build / lint / smoke-test status checks attached. Reviewers should
+# rely on the diff and on a separate manual run of those checks if
+# needed. A future iteration can swap this for an installable
+# GitHub App identity (e.g. once `microsoft-typeagent-docs-bot` is
+# approved on the `microsoft` org) to re-enable downstream CI; see
+# `ts/docs/architecture/doc-autogen-setup.md` for that path.
+#
+# Auth model (Azure side): GitHub Actions exchanges its OIDC token
+# for an Azure AD bearer token via `azure/login@v2`, then
+# `tools/scripts/getKeys.mjs` uses DefaultAzureCredential to pull the
+# consolidated `typeagent-config` secret from the `build-pipeline-kv`
+# Key Vault and writes it to `ts/config.local.yaml`. `aiclient` reads
+# endpoint + key from that file via `@typeagent/config`. No Azure
+# OpenAI key is stored in this repo. The Entra App registration
+# referenced by the secrets above already has Key Vault read access on
+# `build-pipeline-kv`, so no new RBAC is required.
 
 name: docs-generate
 
@@ -112,13 +121,6 @@ jobs:
           node-version: 22
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.DOCS_BOT_APP_ID }}
-          private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
 
       - name: Install ts dependencies
         working-directory: ts
@@ -257,7 +259,14 @@ jobs:
       - name: Create pull request
         if: ${{ steps.detect.outputs.changes == 'true' && inputs.dry-run != true }}
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Use the auto-generated GITHUB_TOKEN as the write identity.
+          # The `permissions:` block at the top of the workflow grants
+          # this token `contents: write` (to push the branch) and
+          # `pull-requests: write` (to create and close PRs). NOTE:
+          # GitHub suppresses downstream workflow runs on PRs opened
+          # by GITHUB_TOKEN, so the generated docs PR will not have
+          # build / lint / smoke-test status checks attached.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="automated/docs-readmes-$(date +%Y%m%d)-${{ github.run_number }}"
 
