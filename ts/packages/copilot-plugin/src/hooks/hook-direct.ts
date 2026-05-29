@@ -41,12 +41,8 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
     try {
         emitProgress("Connecting to TypeAgent...");
         dispatcher = await connectToTypeAgent(clientIO);
-<<<<<<< HEAD
-        const result = await awaitCommand(dispatcher, input.prompt);
-=======
         emitProgress("Processing command...");
-        const result = await dispatcher.processCommand(input.prompt);
->>>>>>> main
+        const result = await awaitCommand(dispatcher, input.prompt);
 
         if (result?.cancelled) {
             return {};
