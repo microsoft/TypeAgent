@@ -5,6 +5,7 @@
 // Run from ts/ root: node --disable-warning=DEP0190 packages/agents/onboarding/dist/testing/runTests.js <integrationName>
 
 import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createNpmAppAgentProvider,
     getFsStorageProvider,
@@ -149,7 +150,7 @@ let passed = 0;
 for (let i = 0; i < testCases.length; i++) {
     const tc = testCases[i];
     try {
-        const result = await dispatcher.processCommand(tc.phrase);
+        const result = await awaitCommand(dispatcher, tc.phrase);
         const actual = result?.actions?.[0]?.actionName;
         const ok = actual === tc.expectedActionName;
         if (ok) passed++;

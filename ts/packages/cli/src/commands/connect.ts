@@ -3,6 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
     getEnhancedConsolePrompt,
@@ -397,11 +398,11 @@ export default class Connect extends Command {
             try {
                 let processed = false;
                 if (flags.request) {
-                    await activeDispatcher.processCommand(flags.request);
+                    await awaitCommand(activeDispatcher, flags.request);
                     processed = true;
                 }
                 if (args.input) {
-                    await activeDispatcher.processCommand(`@run ${args.input}`);
+                    await awaitCommand(activeDispatcher, `@run ${args.input}`);
                     processed = true;
                 }
                 if (processed && flags.exit) {
@@ -420,8 +421,11 @@ export default class Connect extends Command {
                         _dispatcher: Dispatcher,
                         clientRequestId: string,
                     ) => {
-                        return activeDispatcher.processCommand(
+                        return awaitCommand(
+                            activeDispatcher,
                             command,
+                            undefined,
+                            undefined,
                             clientRequestId,
                         );
                     },

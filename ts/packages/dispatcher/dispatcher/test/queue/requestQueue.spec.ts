@@ -3,7 +3,6 @@
 
 import type {
     CommandResult,
-    Dispatcher,
     QueueCancelReason,
     QueuedRequest,
     QueueSnapshot,
@@ -62,7 +61,7 @@ function makeRecorder(): {
  * Mock dispatcher that lets the test resolve / reject each
  * processCommand call on demand.
  */
-class ControllableDispatcher implements Pick<Dispatcher, "processCommand"> {
+class ControllableDispatcher {
     public calls: Array<{
         command: string;
         clientRequestId: unknown;

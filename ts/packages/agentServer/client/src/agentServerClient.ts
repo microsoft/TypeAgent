@@ -5,7 +5,10 @@ import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
@@ -164,19 +167,28 @@ export async function connectAgentServer(
 
                 const conversationId = result.conversationId;
 
-                // Create conversation-namespaced channels
-                createClientIORpcServer(
-                    clientIO,
-                    channel.createChannel(
-                        getClientIOChannelName(conversationId),
-                    ),
-                );
-
-                const dispatcher = createDispatcherRpcClient(
+                // Create the dispatcher RPC client first so we can wrap the
+                // host's clientIO with completion-correlation forwarding
+                // before the clientIO RPC server starts delivering events.
+                const {
+                    dispatcher,
+                    notifyCommandComplete,
+                    notifyRequestCancelled,
+                } = createDispatcherRpcClient(
                     channel.createChannel(
                         getDispatcherChannelName(conversationId),
                     ),
                     result.connectionId,
+                );
+
+                createClientIORpcServer(
+                    wrapClientIOForCompletion(clientIO, {
+                        notifyCommandComplete,
+                        notifyRequestCancelled,
+                    }),
+                    channel.createChannel(
+                        getClientIOChannelName(conversationId),
+                    ),
                 );
 
                 // Override close to leave the conversation rather than close the WebSocket

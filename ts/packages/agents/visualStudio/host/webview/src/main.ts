@@ -5,6 +5,7 @@ import { ChatPanel } from "chat-ui";
 import "chat-ui/styles";
 
 import { vsPlatformAdapter } from "./platformAdapter.js";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     connectDispatcher,
     type DispatcherHandle,
@@ -75,8 +76,13 @@ function handleUserMessage(
     chatPanel.setEnabled(false);
     chatPanel.showStatus("Processing...");
 
-    dispatcherHandle.dispatcher
-        .processCommand(text, requestId, attachments)
+    awaitCommand(
+        dispatcherHandle.dispatcher,
+        text,
+        attachments,
+        undefined,
+        requestId,
+    )
         .then(() => {
             chatPanel.setEnabled(true);
             chatPanel.focus();
