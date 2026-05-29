@@ -1,16 +1,27 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Daily regeneration of package-level README.AUTOGEN.md companion files
-# under ts/packages/**.
+# Optional, manually-dispatched regeneration of package-level
+# README.AUTOGEN.md companion files under ts/packages/**.
 #
-# Detects packages whose source has changed since the last successful
-# scheduled run (tracked by the `docs-bot/last-run` lightweight tag),
-# rebuilds each affected package's README.AUTOGEN.md (a parallel file
-# alongside the hand-written README.md, never touching the latter),
-# validates every link on disk, and opens a single batched PR. Prior
-# open bot PRs are closed with --delete-branch so only one is ever
-# live at a time.
+# This workflow is NOT scheduled. It runs only when an operator
+# explicitly clicks "Run workflow" from the Actions UI (or otherwise
+# triggers `workflow_dispatch`). To leverage the existing CI Azure
+# infrastructure + Key Vault secrets the job is deployed to the
+# `development-fork` GitHub environment — the same environment used by
+# the smoke-tests and build-docker-container workflows. That binding
+# is what scopes the Entra federated-credential subject claim to
+# `repo:<org>/<repo>:environment:development-fork`, matching the
+# subject the build-pipeline App registration is already configured
+# to trust.
+#
+# When dispatched, it detects packages whose source has changed since
+# the supplied diff baseline (`since` input, or the `docs-bot/last-run`
+# lightweight tag if present), rebuilds each affected package's
+# README.AUTOGEN.md (a parallel file alongside the hand-written
+# README.md, never touching the latter), validates every link on disk,
+# and opens a single batched PR. Prior open bot PRs are closed with
+# --delete-branch so only one is ever live at a time.
 #
 # AI authoring of the documentation body uses Azure OpenAI via
 # packages/aiclient. The deterministic Reference appendix (entry
@@ -20,10 +31,10 @@
 # Required repository configuration:
 #   variables:
 #     DOCS_BOT_APP_ID         GitHub App that opens the PR
-#   secrets:
+#   secrets (scoped to the `development-fork` environment):
 #     DOCS_BOT_APP_PRIVATE_KEY  Private key for the GitHub App
 #     AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD       \
-#     AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA       | Existing repo secrets shared with
+#     AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA       | Shared with
 #     AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 / smoke-tests / build-docker workflows.
 #
 # Auth model: GitHub Actions exchanges its OIDC token for an Azure AD bearer
@@ -34,17 +45,10 @@
 # `@typeagent/config`. No Azure OpenAI key is stored in this repo. The
 # Entra App registration referenced by the secrets above already has
 # Key Vault read access on `build-pipeline-kv`, so no new RBAC is required.
-#
-# The workflow is read-only and emits no PR until those are provisioned;
-# it simply prints what it would have done.
 
 name: docs-generate
 
 on:
-  schedule:
-    # Daily at 08:00 UTC = 01:00 PST. Low-traffic window so churn from
-    # this PR does not collide with other automated PRs.
-    - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       dry-run:
@@ -68,8 +72,8 @@ on:
         type: string
         default: "25"
 
-# Never cancel an in-flight docs-autogen run; let it finish and let the
-# next scheduled run supersede the resulting PR if necessary.
+# Never cancel an in-flight docs-autogen run; let it finish so any
+# already-opened PR is not left half-written.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -85,6 +89,12 @@ permissions:
 
 jobs:
   regenerate:
+    # Bind to the same environment used by smoke-tests and
+    # build-docker-container so federated-credential exchange against
+    # the existing build-pipeline Entra App registration succeeds, and
+    # so the workflow can read the `development-fork`-scoped Key Vault
+    # secrets.
+    environment: development-fork
     runs-on: ubuntu-latest
 
     steps:
@@ -272,9 +282,10 @@ jobs:
           git push origin "$BRANCH"
 
           # Close any previously-open bot PRs before opening the new
-          # one. Each daily run produces a unique branch, so without
-          # dedup the repo accumulates stacking duplicate PRs whenever
-          # yesterday's hasn't been merged. Always keep the freshest.
+          # one. Each dispatched run produces a unique branch, so
+          # without dedup the repo accumulates stacking duplicate PRs
+          # whenever a prior run's PR hasn't been merged. Always keep
+          # the freshest.
           PREV_PRS=$(gh pr list \
             --state open \
             --search 'head:automated/docs-readmes- in:branch' \
@@ -299,7 +310,7 @@ jobs:
           - **Files updated:** ${{ steps.detect.outputs.changed_files }} \`README.AUTOGEN.md\` file(s)
           - **LLM mode:** ${{ inputs.llm == false && 'placeholder-only' || 'aiclient (full documentation)' }}
           - **Per-run cap:** ${{ inputs.max-packages || '25' }} package(s)
-          - **Trigger:** ${{ github.event_name == 'schedule' && 'scheduled (daily)' || format('manual ({0})', github.actor) }}
+          - **Trigger:** manual (${{ github.actor }})
 
           ### Changed files
           \`\`\`
@@ -320,7 +331,7 @@ jobs:
           4. Validates every generated link resolves on disk; refuses to write
              when broken.
           5. Skips packages whose new file differs only in the staleness footer
-             (so daily PRs don't churn unchanged docs).
+             (so repeated dispatches don't churn unchanged docs).
 
           ### Review checklist
           - [ ] Sample one or two \`README.AUTOGEN.md\` files and confirm the
@@ -340,19 +351,6 @@ jobs:
             --title "docs: regenerate package README.AUTOGEN.md files ($(date +%Y-%m-%d))" \
             --body "$BODY" \
             --label "documentation"
-
-      # Advance the watermark only on a successful scheduled run with a
-      # PR. Manual dispatches and dry-runs intentionally do not move
-      # the tag, so they remain idempotent against the daily cron.
-      - name: Advance watermark tag
-        if: ${{ github.event_name == 'schedule' && steps.detect.outputs.changes == 'true' && inputs.dry-run != true }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          # Tag the commit we generated against (the original SHA before
-          # the PR branch was created), not the branch tip.
-          git tag -f docs-bot/last-run ${{ github.sha }}
-          git push origin docs-bot/last-run --force
 
       # ── Job summary ─────────────────────────────────────────────────
       - name: Job summary
