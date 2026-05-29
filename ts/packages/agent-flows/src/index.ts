@@ -69,26 +69,38 @@ export {
     escapeMarkdown,
     escapeCodeSpan,
     formatTimestamp,
-} from "./markdown.js";
+} from "./display/markdown.js";
 
 // JSON helpers (strict + permissive array parsing)
-export { tryParseJsonArray, parseOptionalJsonArray } from "./jsonHelpers.js";
-export type { ParseResult } from "./jsonHelpers.js";
+export {
+    tryParseJsonArray,
+    parseOptionalJsonArray,
+} from "./helpers/jsonHelpers.js";
+export type { ParseResult } from "./helpers/jsonHelpers.js";
 
 // Naming (free-form name → safe identifier + disambiguation)
 export {
     tokenizeForTriggerPhrase,
     slugifyFlowName,
     resolveUniqueActionName,
-} from "./naming.js";
+} from "./authoring/naming.js";
 
 // Tolerant LLM-response parser
-export { parseFlowLLMResponse } from "./llmResponse.js";
-export type { FlowLLMResponse, FlowLLMResponseOptions } from "./llmResponse.js";
+export { parseFlowLLMResponse } from "./authoring/llmResponse.js";
+export type {
+    FlowLLMResponse,
+    FlowLLMResponseOptions,
+} from "./authoring/llmResponse.js";
 
 // Action catalog + registry
-export { parseActionCatalog, makeRegistry } from "./actionCatalog.js";
-export type { ActionRegistry, ActionCatalogOptions } from "./actionCatalog.js";
+export {
+    parseActionCatalog,
+    makeRegistry,
+} from "./validation/actionCatalog.js";
+export type {
+    ActionRegistry,
+    ActionCatalogOptions,
+} from "./validation/actionCatalog.js";
 
 // Static script analysis: unknown action detection
 export {
@@ -96,8 +108,8 @@ export {
     formatUnknownActionError,
     closestActions,
     levenshtein,
-} from "./unknownActions.js";
+} from "./validation/unknownActions.js";
 export type {
     UnknownActionCall,
     FindUnknownActionsOptions,
-} from "./unknownActions.js";
+} from "./validation/unknownActions.js";

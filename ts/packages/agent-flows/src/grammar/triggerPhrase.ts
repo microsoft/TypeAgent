@@ -9,7 +9,7 @@
 // (`{ pattern, isAlias }`) so the result composes naturally with the
 // existing grammar builder.
 
-import { tokenizeForTriggerPhrase } from "../naming.js";
+import { tokenizeForTriggerPhrase } from "../authoring/naming.js";
 
 // Pattern shape compatible with grammarBuilder.GrammarPatternInput.
 export interface DefaultGrammarPattern {
