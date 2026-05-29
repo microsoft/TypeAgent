@@ -200,9 +200,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { $typeParam: "N" },
     },
     {
-        // Division is intentionally NOT generic: integer / integer
-        // can produce a non-integer (e.g. 1 / 2 = 0.5), so the
-        // output cannot be narrowed to integer from integer operands.
+        // Not generic: integer / integer can yield non-integer (1 / 2 = 0.5).
         name: "math.divide",
         inputSchema: {
             type: "object",
@@ -235,6 +233,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { $typeParam: "N" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.floor",
         inputSchema: {
             type: "object",
@@ -244,6 +243,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { type: "integer" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.round",
         inputSchema: {
             type: "object",
@@ -253,6 +253,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { type: "integer" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.ceil",
         inputSchema: {
             type: "object",

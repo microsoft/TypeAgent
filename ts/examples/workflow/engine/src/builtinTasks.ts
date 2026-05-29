@@ -812,6 +812,7 @@ export const mathMultiply: GenericTaskDefinition<
     },
 };
 
+// Not generic: integer / integer can yield non-integer (1 / 2 = 0.5).
 export const mathDivide: ConcreteTaskDefinition<
     { left: number; right: number },
     number
@@ -842,6 +843,7 @@ export const mathNegate: GenericTaskDefinition<{ value: number }, number> = {
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathFloor: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.floor"),
     sideEffects: false,
@@ -850,6 +852,7 @@ export const mathFloor: ConcreteTaskDefinition<{ value: number }, number> = {
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathRound: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.round"),
     sideEffects: false,
@@ -858,6 +861,7 @@ export const mathRound: ConcreteTaskDefinition<{ value: number }, number> = {
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathCeil: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.ceil"),
     sideEffects: false,
