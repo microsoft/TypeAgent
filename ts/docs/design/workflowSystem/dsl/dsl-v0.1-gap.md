@@ -34,9 +34,9 @@ new surface area:
    `if`/`switch` in favour of ternary.** The arm-type checking part of
    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
    as a type error) is resolved; see decision 0011 §6 and the
-    `G29 + G30` section below. The remaining open question - whether
-    value-producing `if`/`switch` should be deprecated entirely - is
-    deferred pending a `.wf` survey + G18 (union types).
+   `G29 + G30` section below. The remaining open question - whether
+   value-producing `if`/`switch` should be deprecated entirely - is
+   deferred pending a `.wf` survey + G18 (union types).
 
 G24-G28 capture follow-up design questions raised during the workflow
 composition implementation that have not yet been scheduled.
