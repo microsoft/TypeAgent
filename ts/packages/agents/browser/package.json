@@ -65,6 +65,7 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",

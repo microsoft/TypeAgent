@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createNpmAppAgentProvider } from "../src/agentProvider/npmAgentProvider.js";
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import type {
     Dispatcher,
     ClientIO,
@@ -79,7 +79,8 @@ describe("dispatcher", () => {
                 }
             });
             it("action command", async () => {
-                await dispatcher.processCommand(
+                await awaitCommand(
+                    dispatcher,
                     '@action test add --parameters \'{"a": 1, "b": 2}\'',
                 );
                 expect(output).toHaveLength(2);
@@ -87,7 +88,7 @@ describe("dispatcher", () => {
             });
 
             it("action command no parameters", async () => {
-                await dispatcher.processCommand("@action test random");
+                await awaitCommand(dispatcher, "@action test random");
 
                 expect(output).toHaveLength(2);
                 expect(output[1].message).toMatch(/Random number: [0-9.]+/);
@@ -120,7 +121,7 @@ describe("dispatcher", () => {
                 },
             ];
             it.each(errorCommands)("$name", async ({ command, match }) => {
-                await dispatcher.processCommand(command);
+                await awaitCommand(dispatcher, command);
                 expect(output).toHaveLength(1);
                 expect(typeof output[0].message).toBe("object");
                 const content = output[0].message as any;
@@ -135,8 +136,8 @@ describe("dispatcher", () => {
                 appAgentProviders: [testAppAgentProvider],
                 clientIO: createTestClientIO(output),
             });
-            await dispatcher.processCommand("@config request test");
-            await dispatcher.processCommand("test");
+            await awaitCommand(dispatcher, "@config request test");
+            await awaitCommand(dispatcher, "test");
             await dispatcher.close();
             expect(output).toHaveLength(2);
             expect(output[0].message).toBe(

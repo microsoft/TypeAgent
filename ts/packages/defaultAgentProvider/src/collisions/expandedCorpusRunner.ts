@@ -26,7 +26,7 @@ loadDotenv();
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -131,7 +131,7 @@ async function main() {
                 `--workdir "${args.workdir}"`;
             process.stderr.write(`[1/4] ${cmd}\n\n`);
             const t0 = Date.now();
-            await dispatcher.processCommand(cmd);
+            await awaitCommand(dispatcher, cmd);
             process.stderr.write(
                 `[1/4] generate complete in ${((Date.now() - t0) / 1000).toFixed(0)}s\n\n`,
             );
@@ -144,7 +144,7 @@ async function main() {
             const cmd = `@collision corpus probe --concurrency ${args.concurrency} --workdir "${args.workdir}"`;
             process.stderr.write(`[2/4] ${cmd}\n\n`);
             const t0 = Date.now();
-            await dispatcher.processCommand(cmd);
+            await awaitCommand(dispatcher, cmd);
             process.stderr.write(
                 `[2/4] probe complete in ${((Date.now() - t0) / 1000).toFixed(0)}s\n\n`,
             );
@@ -153,7 +153,7 @@ async function main() {
             const cmd2 = `@collision corpus reanalyze --workdir "${args.workdir}"`;
             process.stderr.write(`[3/4] ${cmd2}\n\n`);
             const t1 = Date.now();
-            await dispatcher.processCommand(cmd2);
+            await awaitCommand(dispatcher, cmd2);
             process.stderr.write(
                 `[3/4] reanalyze complete in ${((Date.now() - t1) / 1000).toFixed(0)}s\n\n`,
             );
@@ -171,7 +171,7 @@ async function main() {
                 `--workdir "${args.workdir}"`;
             process.stderr.write(`[4/4] ${cmd}\n\n`);
             const t0 = Date.now();
-            await dispatcher.processCommand(cmd);
+            await awaitCommand(dispatcher, cmd);
             process.stderr.write(
                 `[4/4] translate complete in ${((Date.now() - t0) / 1000).toFixed(0)}s\n\n`,
             );

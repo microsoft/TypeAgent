@@ -27,7 +27,7 @@
 import { config as loadDotenv } from "dotenv";
 loadDotenv();
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     process.stderr.write("Dispatcher ready. Running pipeline…\n\n");
 
     try {
-        await dispatcher.processCommand(command);
+        await awaitCommand(dispatcher, command);
         process.stderr.write("\noptimizationRunner: done.\n");
     } catch (err) {
         process.stderr.write(

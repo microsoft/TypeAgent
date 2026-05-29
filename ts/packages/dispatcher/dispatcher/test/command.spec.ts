@@ -11,6 +11,7 @@ import {
 import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
 import { resolveCommand } from "../src/command/command.js";
 import { createDispatcher } from "../src/dispatcher.js";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 
 // create an inlined test agent and provider to test command handler.
@@ -177,7 +178,8 @@ describe("Command", () => {
         });
 
         it("resolves a command with extra param error", async () => {
-            const result = await dispatcher.processCommand(
+            const result = await awaitCommand(
+                dispatcher,
                 "@test test param param",
             );
             expect(result).toBeDefined();
@@ -186,14 +188,15 @@ describe("Command", () => {
             );
         });
         it("resolves a default command with extra param error", async () => {
-            const result = await dispatcher.processCommand("@test param param");
+            const result = await awaitCommand(dispatcher, "@test param param");
             expect(result).toBeDefined();
             expect(result!.lastError).toContain(
                 "'param param' is not a subcommand for '@test'",
             );
         });
         it("resolves nested command with extra param error", async () => {
-            const result = await dispatcher.processCommand(
+            const result = await awaitCommand(
+                dispatcher,
                 "@test nested nested param param",
             );
             expect(result).toBeDefined();
@@ -202,7 +205,8 @@ describe("Command", () => {
             );
         });
         it("does not resolve command with extra param error", async () => {
-            const result = await dispatcher.processCommand(
+            const result = await awaitCommand(
+                dispatcher,
                 "@test nested param param",
             );
             expect(result).toBeDefined();
@@ -211,7 +215,8 @@ describe("Command", () => {
             );
         });
         it("default to system with in valid command error", async () => {
-            const result = await dispatcher.processCommand(
+            const result = await awaitCommand(
+                dispatcher,
                 "@agent nested param param",
             );
             expect(result).toBeDefined();
@@ -220,14 +225,14 @@ describe("Command", () => {
             );
         });
         it("missing subcommand error", async () => {
-            const result = await dispatcher.processCommand("@test nested");
+            const result = await awaitCommand(dispatcher, "@test nested");
             expect(result).toBeDefined();
             expect(result!.lastError).toContain(
                 "'@test nested' requires a subcommand.",
             );
         });
         it("missing agent error", async () => {
-            const result = await dispatcher.processCommand("@");
+            const result = await awaitCommand(dispatcher, "@");
             expect(result).toBeDefined();
             expect(result!.lastError).toContain(
                 "Command or agent name required.",

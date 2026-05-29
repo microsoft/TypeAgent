@@ -22,6 +22,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "chat-ui": "workspace:*"
   },
   "devDependencies": {

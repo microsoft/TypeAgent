@@ -242,15 +242,10 @@ export async function createSharedDispatcher(
         },
 
         notify: (notificationId, ...args) => {
-            const event = args[0] as unknown;
             broadcast(
                 "notify",
                 typeof notificationId === "string" ? undefined : notificationId,
                 (clientIO) => clientIO.notify(notificationId, ...args),
-                // Originator gets commandComplete via processCommand RPC return;
-                // sending it again causes double-completion in some clients
-                // (e.g. vscode-shell).
-                { skipOriginator: event === "commandComplete" },
             );
         },
         requestQueued: (entry, version) => {

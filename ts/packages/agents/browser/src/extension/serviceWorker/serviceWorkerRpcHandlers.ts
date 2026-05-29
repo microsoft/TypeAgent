@@ -43,6 +43,7 @@ import {
     indexPageContent,
     shouldIndexPage,
 } from "./messageHandlers";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { AllServiceWorkerInvokeFunctions } from "../../common/serviceTypes.mjs";
 
 /**
@@ -225,10 +226,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async chatPanelProcessCommand(params: any) {
             try {
                 const dispatcher = await connectToDispatcher();
-                const result = await dispatcher.processCommand(
+                const result = await awaitCommand(
+                    dispatcher,
                     params.command,
-                    params.clientRequestId,
                     params.attachments,
+                    undefined,
+                    params.clientRequestId,
                 );
                 return { success: true, result };
             } catch (error: any) {

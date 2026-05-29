@@ -12,6 +12,7 @@ import {
     isChatHistoryInput,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import * as crypto from "crypto";
 import fs from "node:fs";
 import type {
@@ -92,7 +93,8 @@ export default class ReplayCommand extends Command {
                 const entries = Array.isArray(history) ? history : [history];
                 const steps: TranslateTestStep[] = [];
                 for (const entry of entries) {
-                    const result = await session.dispatcher.processCommand(
+                    const result = await awaitCommand(
+                        session.dispatcher,
                         entry.user,
                     );
                     steps.push({
@@ -102,7 +104,8 @@ export default class ReplayCommand extends Command {
                     });
 
                     if (flags.translate) {
-                        await session.dispatcher.processCommand(
+                        await awaitCommand(
+                            session.dispatcher,
                             `@history insert ${JSON.stringify(entry)}`,
                         );
                     }

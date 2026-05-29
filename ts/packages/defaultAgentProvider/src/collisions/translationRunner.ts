@@ -32,7 +32,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -255,7 +255,7 @@ async function main() {
         const cmd = parts.join(" ");
         process.stderr.write(`Running: ${cmd}\n\n`);
         const t0 = Date.now();
-        await dispatcher.processCommand(cmd);
+        await awaitCommand(dispatcher, cmd);
         const elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);
         process.stderr.write(`\nDone in ${elapsedSec}s.\n`);
 

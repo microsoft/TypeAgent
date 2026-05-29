@@ -4,6 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { fromJsonActions, toFullActions } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     readExplanationTestData,
     getAllActionConfigProvider,
@@ -391,7 +392,7 @@ export default class TestTranslateCommand extends Command {
                     await getIndexingServiceRegistry(getInstanceDir()),
             });
             if (flags.cache) {
-                await dispatcher.processCommand("@const import -t");
+                await awaitCommand(dispatcher, "@const import -t");
             }
             while (requests.length > 0) {
                 const request = requests.shift()!;
@@ -413,8 +414,10 @@ export default class TestTranslateCommand extends Command {
 
                 for (let i = 0; i < repeat; i++) {
                     const time = performance.now();
-                    const commandResult =
-                        await dispatcher.processCommand(request);
+                    const commandResult = await awaitCommand(
+                        dispatcher,
+                        request,
+                    );
                     const execTime = performance.now() - time;
                     currentMaxExecTime = Math.max(currentMaxExecTime, execTime);
                     currentTotalExecTime += execTime;
