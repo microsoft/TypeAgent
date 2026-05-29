@@ -10,34 +10,30 @@ new surface area:
 
 1. **G17: Cancel in-flight fork/forkMap branches on failure.** Align fork
    execution with the spec's failure and cleanup semantics.
-2. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
-   surfaces real structural mismatches, switch error messages from the
-   collapsed `'object'` rendering to the existing `formatType` output so
-   users can see which fields differ.
-3. **G3: Add TypeScript-style named type aliases.** Once structural
+2. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-4. **G18: Add union/literal types.** This is the broadest type-system expansion
+3. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-5. **G11: Decide/document bind stripping for explicit user names.** This is
+4. **G11: Decide/document bind stripping for explicit user names.** This is
    primarily debuggability and spec clarity.
-6. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+5. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
    AST honesty and visual-editor clarity, but current behavior works.
-7. **G12: Decide `list.append` naming/semantics.** This is naming/API
+6. **G12: Decide `list.append` naming/semantics.** This is naming/API
    consistency with coordinated emitter, engine, and snapshot churn.
-8. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+7. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
    Decision 0010 removed `identity` / `noop` as load-bearing at branch
    convergence, but the emitter still synthesizes them in several other
    places. Classify each remaining usage as (a) reducible after 0010,
    (b) forced by an IR shape that could be relaxed additively, or (c)
    inherent to decision 0006 (no expressions). Pure audit; only
    schedules follow-up work.
-9. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+8. **G7: Revisit composition patterns only when concrete workflow needs appear.**
    These patterns push against the visual-node discipline and should stay out
    of scope until justified.
-10. **G29 (open part): Decide whether to deprecate value-producing
-    `if`/`switch` in favour of ternary.** The arm-type checking part of
-    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
-    as a type error) is resolved; see decision 0011 §6 and the
+9. **G29 (open part): Decide whether to deprecate value-producing
+   `if`/`switch` in favour of ternary.** The arm-type checking part of
+   G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
+   as a type error) is resolved; see decision 0011 §6 and the
     `G29 + G30` section below. The remaining open question - whether
     value-producing `if`/`switch` should be deprecated entirely - is
     deferred pending a `.wf` survey + G18 (union types).
@@ -471,32 +467,27 @@ name: "_infer" }`) and emit the inferred type in the emitter.
 
 ## G22: Type error messages collapse objects to `'object'`
 
-**Status:** UX gap surfaced by the G13 implementation. Pure diagnostic
-improvement; no semantic change to type checking.
+**Status:** resolved. Assignability and same-type diagnostics now use a shared
+`diagnosticTypeName` wrapper around `formatType`, so object, array, and tuple
+shapes render with their fields. `typeName` remains for short kind-oriented
+messages such as numeric/boolean operand checks.
 
-**Context:** When the type checker reports an assignability error, it
-formats both sides with `typeName(t)`. For object types this function
-returns the literal string `"object"`, discarding all field information.
-This makes object-vs-object mismatches indistinguishable to users.
+**Context:** When the type checker reported assignability and same-type errors,
+it formatted both sides with `typeName(t)`. For object types this function
+returns the literal string `"object"`, discarding all field information. This
+made object-vs-object mismatches indistinguishable to users.
 
 **Current state:**
 
-- `typeName` in `typeChecker.ts` returns `"object"` for any `ObjectTypeInfo`,
-  regardless of fields.
-- Arrays partially benefit from recursion (`string[]`) but their element
-  type collapses to `"object"` when it's an object.
-- Tuples also collapse to `"object"` for each object element.
-- A `formatType` function already exists in `typeChecker.ts` that produces
-  a full TypeScript-style rendering (e.g. `{ name: string, tag?: string }`,
-  `{ x: string }[]`), used today only for LSP hover text.
-- Affected diagnostics include (non-exhaustive):
-  - `Workflow return type 'object' is not assignable to declared type 'object'`
-  - `Type 'object' is not assignable to type 'object'` (const annotations)
-  - `Ternary arms must have the same type: 'object' vs 'object'`
-  - `Operator '===' requires same types on both sides: 'object' vs 'object'`
-- After G13 added structural object/array assignability checks, mismatches
-  between objects are now reported as errors, so the volume of
-  object-vs-object messages users see has grown.
+- Assignability diagnostics for workflow returns, const annotations, default
+  values, and workflow-call arguments use `diagnosticTypeName`.
+- Same-type diagnostics for ternary arms, value-producing `if`/`switch` arms,
+  and `===` / `!==` use `diagnosticTypeName`.
+- `diagnosticTypeName` currently delegates to `formatType`, producing
+  TypeScript-style object, array, and tuple renderings such as
+  `{ name: string; tag?: string }` and `{ x: string }[]`.
+- `typeName` remains available for terse kind-oriented diagnostics, e.g.
+  `Condition must be boolean, got 'string'`.
 
 **Reproduction:**
 
@@ -506,26 +497,8 @@ workflow test(x: { name: string, tag: number }): { name: string, tag?: string } 
 }
 ```
 
-Currently reports: `Workflow return type 'object' is not assignable to
-declared type 'object'`. Users cannot tell which field mismatches without
-manually walking both type expressions.
-
-**What needs to happen:**
-
-1. Switch the structural error messages (return-type, const-annotation,
-   ternary-arm, and `===`/`!==`) to use `formatType` instead of
-   `typeName`, or introduce a single shared diagnostic formatter.
-2. Decide whether `typeName` should be removed in favor of `formatType`,
-   or kept for short contexts (e.g. operator operand kind in
-   `must be numeric, got 'string'`). If kept, document the contract.
-3. Consider augmenting object-mismatch messages with the specific
-   offending field path (e.g. `field 'tag' has type 'number' but
-expected 'string'`), reusing the recursion already done inside
-   `isAssignableTo`. This may require threading an error-reason result
-   out of `isAssignableTo` instead of a bare boolean.
-4. Update existing type-checker tests whose substring assertions rely on
-   the collapsed `'object'` rendering, and add tests asserting the
-   richer field-level wording.
+Now reports: `Workflow return type '{ name: string; tag: number }' is not
+assignable to declared type '{ name: string; tag?: string }'`.
 
 ## G24: Named-record call syntax diverges from TypeScript
 
