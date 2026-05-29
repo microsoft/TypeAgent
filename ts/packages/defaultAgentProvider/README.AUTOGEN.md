@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4f22f53ce9bf06cf1274eead79a63842d7d2b4e80486f29bffbc3db0b814da09 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=840e26ef2b56e8cf94d2d130cdbc137adc38b9967ef5b3bb1d516d643725b221 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -25,6 +25,8 @@ This package provides default implementations for various agent-related function
 - `getDefaultConstructionProvider`: Provides the default construction provider.
 
 These functions are essential for initializing and configuring agents within the TypeAgent framework, ensuring that the necessary components are available for agent operations.
+
+Additionally, the package registers a small set of test agents whose purpose is to exercise dispatcher subsystems. These test agents are disabled by default in production sessions but can be enabled via session config when evaluating collision-resolution strategies. For example, the `vampire` agent deliberately collides with other agents to test the dispatcher's action collision detection subsystem.
 
 ## Setup
 
@@ -95,6 +97,7 @@ Workspace:
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -111,6 +114,7 @@ Workspace:
 - [github-cli-agent](../../packages/agents/github-cli/README.md)
 - [greeting-agent](../../packages/agents/greeting/README.md)
 - [image-agent](../../packages/agents/image/README.md)
+- ipconfig-agent
 - [knowledge-processor](../../packages/knowledgeProcessor/README.md)
 - [list-agent](../../packages/agents/list/README.md)
 - [markdown-agent](../../packages/agents/markdown/README.md)
@@ -129,6 +133,7 @@ Workspace:
 - [typeagent](../../packages/typeagent/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
 - utility-typeagent
+- [vampire-agent](../../packages/agents/vampire/README.md)
 - [video-agent](../../packages/agents/video/README.md)
 - [visualstudio-agent](../../packages/agents/visualStudio/README.md)
 - weather-agent
@@ -148,10 +153,10 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/defaultAgentProviders.ts`, `./src/defaultConstructionProvider.ts`, …and 5 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 16 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

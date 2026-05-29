@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d73e018186694c96a7059073a42c0d29bb8a0db1195b12db3596acfd8a1a6000 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2e6939e4afd8f137870d24526579728e764f41e9f2019ecaaffce78e51151539 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-agent — AI-generated documentation
@@ -83,7 +83,7 @@ External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
 ### Files of interest
 
-`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 25 more under `./src/`.
+`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 26 more under `./src/`.
 
 ### Agent surface
 
@@ -102,12 +102,12 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 6 additional actions are declared in the schema but not yet implemented; not shown._
 
-| User says                | Action                                |
-| ------------------------ | ------------------------------------- |
+| User says | Action |
+| --- | --- |
 | _Launch or Start VSCode_ | `launchVSCode` → `{ "mode": "last" }` |
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

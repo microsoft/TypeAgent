@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7ada2f9a71ae8e2dff79b65bc1f2f7c68b338e852735091314975317204636db -->
+<!-- AUTOGEN:DOCS:HASH:sha256=479d4dcdc4ea1d2f833e39097d641c553f85df86a0b3e21a5682c68c9502d63d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # visualstudio-agent — AI-generated documentation
@@ -32,6 +32,11 @@ These actions allow users to manage breakpoints, control the debugger, perform f
 
 To set up the `visualstudio-agent`, you need to have Visual Studio 2022 (or later) with the **Visual Studio extension development** workload installed. Additionally, ensure you have Node.js ≥ 20 and pnpm ≥ 10.
 
+The following environment variables need to be set:
+
+- `VISUALSTUDIO_BRIDGE_PORT`: This variable can be used to pin the agent's bridge to a specific port when debugging.
+- `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`: This variable sets the timeout for sending messages through the bridge.
+
 For detailed setup instructions, see the hand-written README.
 
 ## Key Files
@@ -39,7 +44,7 @@ For detailed setup instructions, see the hand-written README.
 The architecture of the `visualstudio-agent` involves two WebSocket channels:
 
 - **Chat channel** (port 8999): The WebView2 inside the VSIX communicates with the dispatcher.
-- **Action bridge** (port 5680): The agent owns a `WebSocketServer`, and the C# host connects as a client to dispatch incoming actions through EnvDTE.
+- **Action bridge** (OS-assigned ephemeral port): The agent owns a `WebSocketServer`, and the C# host connects as a client to dispatch incoming actions through EnvDTE.
 
 The project structure is as follows:
 
@@ -87,8 +92,9 @@ Workspace:
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
+- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
-External: `ws`
+External: `debug`, `ws`
 
 ### Used by
 
@@ -96,7 +102,7 @@ External: `ws`
 
 ### Files of interest
 
-`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, …and 2 more under `./src/`.
+`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -105,12 +111,19 @@ External: `ws`
 - Grammar: [./src/visualStudioSchema.agr](./src/visualStudioSchema.agr)
 - Handler: [./src/visualStudioActionHandler.ts](./src/visualStudioActionHandler.ts)
 
+### Environment variables
+
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `VISUALSTUDIO_BRIDGE_PORT`
+- `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`
+
 ### Actions
 
 _21 actions declared in the schema, none yet implemented in [`./src/visualStudioActionHandler.ts`]._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

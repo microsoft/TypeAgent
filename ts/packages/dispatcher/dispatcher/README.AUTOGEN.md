@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=856ee53d7457715ec98a6b8ac1b5aee8a019607f326ad4da734150e46b87ed50 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4cb94dbec07a302255b935545b6d03812aa5389c76db68ff6e000068fbaf128f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -106,6 +106,7 @@ Workspace:
 - [aiclient](../../../packages/aiclient/README.md)
 - [azure-ai-foundry](../../../packages/azure-ai-foundry/README.md)
 - [conversation-memory](../../../packages/memory/conversation/README.md)
+- grammar-tools-core
 - [image-memory](../../../packages/memory/image/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
@@ -143,7 +144,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/ai-agents`, `@azure/ai-proje
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
 - [./src/context/dispatcher/schema/reasoningActionSchema.ts](./src/context/dispatcher/schema/reasoningActionSchema.ts)
-- _…and 125 more under `./src/`._
+- _…and 178 more under `./src/`._
 
 ### Environment variables
 
@@ -161,6 +162,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

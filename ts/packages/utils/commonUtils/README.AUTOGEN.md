@@ -19,26 +19,21 @@ The `@typeagent/common-utils` package provides a collection of utility functions
 The `@typeagent/common-utils` package offers several utility functions and types that can be grouped into the following categories:
 
 1. **Object Property Utilities**:
-
    - `getObjectPropertyNames`: Retrieves the names of all properties in an object, including nested properties.
    - `getObjectProperty`: Safely gets the value of a property from an object using a dot-separated string.
    - `setObjectProperty`: Sets the value of a property in an object using a dot-separated string.
 
 2. **Base64 Encoding/Decoding**:
-
    - `uint8ArrayToBase64`: Converts a `Uint8Array` to a base64 string.
    - `base64ToUint8Array`: Converts a base64 string to a `Uint8Array`.
 
 3. **Promise Handling**:
-
    - `createPromiseWithResolvers`: Creates a promise along with its resolve and reject functions.
 
 4. **Rate Limiting**:
-
    - `createLimiter`: Creates a rate limiter that limits the number of concurrent executions of a callback function.
 
 5. **String Utilities**:
-
    - `simpleStarRegex`: Generates a simple regular expression for matching strings with wildcard characters.
 
 6. **Printing Utilities**:
@@ -58,7 +53,6 @@ pnpm install
 The `@typeagent/common-utils` package is structured as follows:
 
 - **Entry Points**:
-
   - [indexNode.ts](./src/indexNode.ts): Entry point for Node.js environments.
   - [indexBrowser.ts](./src/indexBrowser.ts): Entry point for browser environments.
 
@@ -76,23 +70,18 @@ The `@typeagent/common-utils` package is structured as follows:
 To extend the `@typeagent/common-utils` package, follow these steps:
 
 1. **Identify the Utility to Extend**:
-
    - Determine which existing utility function or type you need to extend or modify. For example, if you need to add a new method for object property manipulation, start with [objectProperty.ts](./src/objectProperty.ts).
 
 2. **Add New Functionality**:
-
    - Create a new file in the `src` directory if your functionality does not fit into any existing file. Otherwise, add your new function to the appropriate file.
 
 3. **Export the New Functionality**:
-
    - Ensure that your new function or type is exported from the appropriate entry point file ([indexNode.ts](./src/indexNode.ts) or [indexBrowser.ts](./src/indexBrowser.ts)).
 
 4. **Write Tests**:
-
    - Add tests for your new functionality to ensure it works as expected. Place your tests in the `tests` directory and follow the existing testing patterns.
 
 5. **Run Tests**:
-
    - Execute the test suite to verify that your changes do not break existing functionality. Use the following command to run the tests:
 
    ```sh
@@ -138,6 +127,6 @@ External: `chalk`, `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

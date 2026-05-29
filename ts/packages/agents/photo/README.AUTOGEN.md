@@ -83,12 +83,12 @@ External: _None at runtime._
 
 _1 action implemented by this agent, parsed deterministically from `./src/photoSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says                                              | Action                                     |
-| ------------------------------------------------------ | ------------------------------------------ |
+| User says | Action |
+| --- | --- |
 | _uses a camera attached to the system to take a photo_ | `takePhoto` → `{ "originalRequest": "…" }` |
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

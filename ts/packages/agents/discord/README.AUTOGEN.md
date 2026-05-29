@@ -131,18 +131,18 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _7 actions implemented by this agent, parsed deterministically from `./src/discordSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 43 additional actions are declared in the schema but not yet implemented; not shown._
 
-| User says                                                             | Action                                                    |
-| --------------------------------------------------------------------- | --------------------------------------------------------- |
-| "Send a message to the general channel saying 'Hello everyone!'"      | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
-| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }`            |
-| "Can you show me my account details?"                                 | `getCurrentUser`                                          |
-| _Create a new invite for a channel._                                  | `createChannelInvite` → `{ "channel_id": "…" }`           |
-| _Set the default Discord server (guild) for all operations._          | `setGuild` → `{ "guild_id": "…" }`                        |
-| _List all channels in the current Discord server._                    | `listChannels`                                            |
-| _Refresh the channel cache from the Discord server._                  | `refreshChannels`                                         |
+| User says | Action |
+| --- | --- |
+| "Send a message to the general channel saying 'Hello everyone!'" | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
+| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }` |
+| "Can you show me my account details?" | `getCurrentUser` |
+| _Create a new invite for a channel._ | `createChannelInvite` → `{ "channel_id": "…" }` |
+| _Set the default Discord server (guild) for all operations._ | `setGuild` → `{ "guild_id": "…" }` |
+| _List all channels in the current Discord server._ | `listChannels` |
+| _Refresh the channel cache from the Discord server._ | `refreshChannels` |
 
 ---
 
-_Auto-generated against commit `efea70b1cce9f181f91a37badbbda26f7a295a0b` on `2026-05-15T20:36:12.535Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

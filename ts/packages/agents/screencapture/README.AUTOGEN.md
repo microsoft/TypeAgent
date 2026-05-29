@@ -125,16 +125,16 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 _5 actions implemented by this agent, parsed deterministically from `./src/screencaptureSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says                                                                 | Action                                                  |
-| ------------------------------------------------------------------------- | ------------------------------------------------------- |
-| _Take a screenshot_                                                       | `takeScreenshot`                                        |
-| _Start a screen recording_                                                | `startRecording`                                        |
-| _Stop the currently active screen recording._                             | `stopRecording`                                         |
-| _List all currently visible windows so the user can target them by name._ | `listWindows`                                           |
-| _Activity type tracked while a recording is in progress._                 | `recording` → `{ "outputPath": "…", "startedAtMs": 0 }` |
+| User says | Action |
+| --- | --- |
+| _Take a screenshot_ | `takeScreenshot` |
+| _Start a screen recording_ | `startRecording` |
+| _Stop the currently active screen recording._ | `stopRecording` |
+| _List all currently visible windows so the user can target them by name._ | `listWindows` |
+| _Activity type tracked while a recording is in progress._ | `recording` → `{ "outputPath": "…", "startedAtMs": 0 }` |
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

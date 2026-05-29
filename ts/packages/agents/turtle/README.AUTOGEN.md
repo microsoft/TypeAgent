@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=78436c8e491d4411ef4d54080f83fe51104af178cc162305d039df17d36212e1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4eadac908536e0d5e6ddc9d555c56710fc3999dcfff01d4fc0effe00b44f53a2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # turtle — AI-generated documentation
@@ -16,7 +16,7 @@ The Turtle package is a TypeAgent application agent designed to provide a web-ba
 
 ## What it does
 
-The Turtle package allows users to control a turtle graphic through various actions. These actions include `forward`, `left`, `right`, `penUp`, and `penDown`. The turtle's movements and drawing actions are visualized on a canvas within a web page. The package communicates with the TypeAgent framework to receive and execute these actions, updating the canvas accordingly.
+The Turtle package allows users to control a turtle graphic through various actions. These actions include `forward`, `left`, `right`, `penUp`, and `penDown`. The turtle's movements and drawing actions are visualized on a canvas within a web page. The package communicates with the TypeAgent framework to receive and execute these actions, updating the canvas accordingly. This visualization helps users understand the sequence and effect of the turtle's movements and drawing commands.
 
 ## Setup
 
@@ -72,6 +72,6 @@ External: `chalk`, `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter turtle docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter turtle docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
