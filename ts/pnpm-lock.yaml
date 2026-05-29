@@ -971,6 +971,9 @@ importers:
 
   examples/workflow/cli:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../../packages/config
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
