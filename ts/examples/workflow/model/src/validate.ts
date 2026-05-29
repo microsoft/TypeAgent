@@ -3231,7 +3231,16 @@ function checkPhiMergeTypes(
                     refPath && refPath.length > 0
                         ? resolveSchemaPath(binderSchema, refPath)
                         : binderSchema;
-                if (!projected) continue;
+                if (!projected) {
+                    errors.push({
+                        path: `${prefix}.${id}.inputs.${fieldName}`,
+                        message:
+                            `Phi-merge binder "${binderId}" for scope name ` +
+                            `"${refName}" does not declare path ` +
+                            `${JSON.stringify(refPath)} in its outputSchema.`,
+                    });
+                    continue;
+                }
 
                 checkResolvedAssignability(
                     projected,

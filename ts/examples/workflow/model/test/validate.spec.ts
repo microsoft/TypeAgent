@@ -4028,6 +4028,85 @@ describe("validateWorkflowIR", () => {
             ).toBe(true);
         });
 
+        it("rejects phi-merge binder missing projected path", () => {
+            const ir = makeMinimalIR({
+                nodes: {
+                    trigger: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        next: "success",
+                        onError: "recovery",
+                    },
+                    success: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            required: ["other"],
+                            properties: { other: { type: "string" } },
+                        },
+                        inputs: {},
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    recovery: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["error", "trigger"],
+                            properties: {
+                                error: { type: "object" },
+                                trigger: { type: "object" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["x"],
+                            properties: { x: { type: "string" } },
+                        },
+                        inputs: makeRecoveryInputs(),
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "noop",
+                        inputSchema: {
+                            type: "object",
+                            required: ["val"],
+                            properties: { val: { type: "string" } },
+                        },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            val: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["x"],
+                            },
+                        },
+                        bind: "out",
+                    },
+                },
+                entry: "trigger",
+            });
+            const result = validateWorkflowIR(ir);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some(
+                    (e) =>
+                        e.message.includes("Phi-merge binder") &&
+                        e.message.includes("success") &&
+                        e.message.includes('["x"]') &&
+                        e.message.includes("outputSchema"),
+                ),
+            ).toBe(true);
+        });
+
         it("accepts phi-merge when all binders are compatible", () => {
             const ir = makeMinimalIR({
                 nodes: {
