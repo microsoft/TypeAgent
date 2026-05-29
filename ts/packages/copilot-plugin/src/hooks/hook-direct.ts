@@ -14,26 +14,39 @@ import {
     createClientIO,
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
+import { emitProgress } from "../shared/hook-progress.js";
 import type { HookInput, HookOutput } from "./types.js";
 
 export async function handleDirect(input: HookInput): Promise<HookOutput> {
-    // In direct mode every user submission goes to TypeAgent first.
-    // If the dispatcher doesn't recognize an action below, we fall through
-    // to the Copilot LLM by returning {}.
+    emitProgress("Routing to TypeAgent...");
+
     const responseCollector = { messages: [] as string[] };
     const clientIO = createClientIO({
         onSetDisplay: (message) => {
             collectMessage(message, undefined, responseCollector);
         },
         onAppendDisplay: (message, mode) => {
+            if (mode === "temporary") {
+                const text = message?.message;
+                if (typeof text === "string" && text.trim()) {
+                    emitProgress(text.trim());
+                }
+                return;
+            }
             collectMessage(message, mode, responseCollector);
         },
     });
 
     let dispatcher: Dispatcher | null = null;
     try {
+        emitProgress("Connecting to TypeAgent...");
         dispatcher = await connectToTypeAgent(clientIO);
+<<<<<<< HEAD
         const result = await awaitCommand(dispatcher, input.prompt);
+=======
+        emitProgress("Processing command...");
+        const result = await dispatcher.processCommand(input.prompt);
+>>>>>>> main
 
         if (result?.cancelled) {
             return {};

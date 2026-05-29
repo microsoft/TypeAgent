@@ -19,8 +19,10 @@
   "main": "./dist/extension.js",
   "scripts": {
     "build": "node esbuild.mjs && node scripts/check-server-bundle.mjs && npm run tsc",
+    "build:ext:vscode": "npm run package",
     "clean": "rimraf --glob dist dist-pub *.vsix *.tsbuildinfo",
     "compile": "node esbuild.mjs",
+    "install:ext:vscode": "code --install-extension dist-pub/workflow-vscode.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/workflow-vscode.vsix",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -133,6 +135,17 @@
       "build": {
         "dependsOn": [
           "workflow-lsp#build"
+        ]
+      },
+      "build:ext:vscode": {
+        "dependsOn": [
+          "^build",
+          "build"
+        ]
+      },
+      "install:ext:vscode": {
+        "dependsOn": [
+          "build:ext:vscode"
         ]
       }
     }

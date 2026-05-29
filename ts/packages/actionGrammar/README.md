@@ -58,6 +58,7 @@ Core grammar types, parsing, compilation, matching, serialization, entity system
 | **Serialization**       | `grammarToJson()`, `grammarFromJson()`                                                                                           |
 | **Recursive Matching**  | `matchGrammar()`, `matchGrammarCompletion()`                                                                                     |
 | **NFA/DFA**             | `NFA`, `compileGrammarToNFA()`, `matchNFA()`, `matchNFAWithIndex()`, `buildFirstTokenIndex()`, `compileNFAToDFA()`, `matchDFA()` |
+| **Collision Analysis**  | `findGrammarOverlap()`, `scanGrammarCollisions()`, `stripTailCalls()`, `formatRulePartsText()`, `collectTopLevelRules()`         |
 | **Writer**              | `writeGrammarRules()`                                                                                                            |
 | **Entity System**       | `EntityRegistry`, `globalEntityRegistry`, `createValidator()`, `createConverter()`                                               |
 | **Built-in Entities**   | `Ordinal`, `Cardinal`, `CalendarDate`, `CalendarTime`, `CalendarTimeRange`, `CalendarDayRange`                                   |
@@ -83,27 +84,29 @@ LLM-powered grammar generation from schemas and examples:
 
 ## Key Source Files
 
-| File                       | Purpose                                                                   |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `grammarRuleParser.ts`     | Recursive descent parser for `.agr` files                                 |
-| `grammarCompiler.ts`       | Compiles parsed rules into the in-memory `Grammar` representation         |
-| `grammarTypes.ts`          | Types for in-memory and serialized grammar representations                |
-| `grammarMatcher.ts`        | Recursive backtracking matcher                                            |
-| `grammarCompletion.ts`     | Completion system (partial-match completions from grammar rules)          |
-| `nfaCompiler.ts`           | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
-| `nfaInterpreter.ts`        | Parallel NFA execution with priority ranking                              |
-| `dfaCompiler.ts`           | NFA→DFA subset construction                                               |
-| `dfaMatcher.ts`            | DFA-based matching and completion                                         |
-| `entityRegistry.ts`        | Entity registry with validators and converters                            |
-| `builtInEntities.ts`       | Built-in entity converters (dates, times, ordinals, cardinals)            |
-| `builtInPhraseMatchers.ts` | Phrase set registry (Polite, Greeting, Acknowledgement, FillerWord)       |
-| `environment.ts`           | Slot-based environment system for NFA/DFA variable capture                |
-| `grammarStore.ts`          | Persists dynamically generated grammar rules with auto-save               |
-| `grammarMerger.ts`         | Utilities for merging and combining grammars                              |
-| `grammarMetadata.ts`       | Enriches grammars with checked-variable metadata from `.pas.json` schemas |
-| `dynamicGrammarLoader.ts`  | Runtime rule loading, entity validation, NFA compilation                  |
-| `agentGrammarRegistry.ts`  | Per-agent grammar management with dynamic rule addition                   |
-| `grammarRuleWriter.ts`     | Pretty-prints grammar parse results back to `.agr` format                 |
+| File                         | Purpose                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `grammarRuleParser.ts`       | Recursive descent parser for `.agr` files                                 |
+| `grammarCompiler.ts`         | Compiles parsed rules into the in-memory `Grammar` representation         |
+| `grammarTypes.ts`            | Types for in-memory and serialized grammar representations                |
+| `grammarMatcher.ts`          | Recursive backtracking matcher                                            |
+| `grammarCompletion.ts`       | Completion system (partial-match completions from grammar rules)          |
+| `nfaCompiler.ts`             | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
+| `nfaInterpreter.ts`          | Parallel NFA execution with priority ranking                              |
+| `nfaIntersection.ts`         | NFA product-construction overlap detector — `findGrammarOverlap()`        |
+| `grammarCollisionScanner.ts` | Pairwise cross-schema scanner with tail-call strip + JSON-friendly result |
+| `dfaCompiler.ts`             | NFA→DFA subset construction                                               |
+| `dfaMatcher.ts`              | DFA-based matching and completion                                         |
+| `entityRegistry.ts`          | Entity registry with validators and converters                            |
+| `builtInEntities.ts`         | Built-in entity converters (dates, times, ordinals, cardinals)            |
+| `builtInPhraseMatchers.ts`   | Phrase set registry (Polite, Greeting, Acknowledgement, FillerWord)       |
+| `environment.ts`             | Slot-based environment system for NFA/DFA variable capture                |
+| `grammarStore.ts`            | Persists dynamically generated grammar rules with auto-save               |
+| `grammarMerger.ts`           | Utilities for merging and combining grammars                              |
+| `grammarMetadata.ts`         | Enriches grammars with checked-variable metadata from `.pas.json` schemas |
+| `dynamicGrammarLoader.ts`    | Runtime rule loading, entity validation, NFA compilation                  |
+| `agentGrammarRegistry.ts`    | Per-agent grammar management with dynamic rule addition                   |
+| `grammarRuleWriter.ts`       | Pretty-prints grammar parse results back to `.agr` format                 |
 
 ## File Formats
 
@@ -142,6 +145,51 @@ Key test suites:
 - `dfa.spec.ts` — DFA compiler correctness
 - `dfaBenchmark.spec.ts` — Performance benchmarks
 - `grammarOptimizer*.spec.ts` — Compile-time AST optimizer (inline + factor passes)
+
+## CLI: `analyze-grammar-collisions`
+
+Standalone counterpart to the in-shell `@grammar collisions` command — discovers `*.ag.json` files under a directory, runs the same NFA-product-construction collision detector ([`grammarCollisionScanner.ts`](src/grammarCollisionScanner.ts)), and emits a JSON report keyed by canonical `"schemaA|schemaB"` (alphabetical) for offline post-processing or CI gates.
+
+```bash
+# After build, the bin is registered in package.json:
+node ./dist/generation/analyze-grammar-collisions-cli.js [options]
+
+# Or via pnpm-link / npm-link:
+analyze-grammar-collisions [options]
+```
+
+| Option             | Description                                                  |
+| ------------------ | ------------------------------------------------------------ |
+| `-d, --dir <path>` | Recurse this directory for `*.ag.json` files (default: cwd). |
+| `-o, --out <path>` | Write JSON report to this file (default: stdout).            |
+| `-q, --quiet`      | Suppress progress messages on stderr.                        |
+| `-h, --help`       | Show usage and exit.                                         |
+
+The report shape is `CollisionScanResult` (see [`grammarCollisionScanner.ts`](src/grammarCollisionScanner.ts)):
+
+```jsonc
+{
+  "scannedAt": "2026-05-05T18:04:51.234Z",
+  "schemas": { "<schemaName>": { "schemaName", "rulesCount", "compiledWithStripping" } },
+  "skipped": [ { "schemaName", "reason": "compile-error" | "parse-error" | "no-grammar" | "wrong-format", "error?" } ],
+  "totalRules": 520,
+  "collisions": {
+    "schemaA|schemaB": {
+      "schemaA", "schemaB",
+      "witness": ["token", "..."],          // token sequence both grammars accept
+      "witnessText": "token ...",
+      "hasPlaceholders": false,             // true → witness contains synthetic <TypeName>
+      "ruleIndexA": 8, "ruleIndexB": 6,
+      "rulePatternA": "<rules>",            // pretty-printed colliding rule
+      "rulePatternB": "<rules>",
+      "matchA": { "actionName": "expand", "parameters": { "archivePath": "x" } },
+      "matchB": { "actionName": "openWebPage", "parameters": { "site": "archive x" } }
+    }
+  }
+}
+```
+
+Duplicate schema names (e.g. multiple build outputs of the same agent) are deduped by name — first occurrence wins; warnings go to stderr. Grammars carrying optimizer `tailCall` markers are auto-stripped before NFA compile and counted in `schemas[].compiledWithStripping`.
 
 ## Optimizer benchmarks
 
