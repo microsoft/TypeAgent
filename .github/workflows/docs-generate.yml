@@ -241,6 +241,19 @@ jobs:
             | tee /tmp/docs-autogen.log
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
+      # Re-format any freshly-written README.AUTOGEN.md files with the
+      # workspace's prettier so the resulting PR passes the repo's
+      # `prettier --check .` gate. docs-autogen writes minimally
+      # spaced markdown tables, but prettier prefers column-aligned
+      # ones; without this step, every PR opened by this workflow
+      # would otherwise fail prettier CI. Skipped on dry runs because
+      # nothing has been written to disk.
+      - name: Format generated docs with prettier
+        if: ${{ inputs.dry-run != true }}
+        working-directory: ts
+        run: |
+          npx prettier --write 'packages/**/README.AUTOGEN.md'
+
       # Detect whether anything actually changed under
       # ts/packages/**/README.AUTOGEN.md. README.md is never touched by
       # the generator. When the CLI ran with --write, all edits are
