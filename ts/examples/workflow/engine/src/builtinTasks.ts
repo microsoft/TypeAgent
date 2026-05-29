@@ -127,7 +127,7 @@ function sealObjects(schema: JSONSchema): JSONSchema {
     return copy;
 }
 
-export const listLength: TaskDefinition<{ list: unknown[] }, number> = {
+export const listLength: ConcreteTaskDefinition<{ list: unknown[] }, number> = {
     ...taskSchema("list.length"),
     sideEffects: false,
     async execute(input) {
@@ -135,7 +135,7 @@ export const listLength: TaskDefinition<{ list: unknown[] }, number> = {
     },
 };
 
-export const listElementAt: TaskDefinition<
+export const listElementAt: GenericTaskDefinition<
     { list: unknown[]; index: number },
     unknown
 > = {
@@ -154,7 +154,7 @@ export const listElementAt: TaskDefinition<
     },
 };
 
-export const listAppend: TaskDefinition<
+export const listAppend: ConcreteTaskDefinition<
     { list: unknown[]; item: unknown },
     unknown[]
 > = {
@@ -165,7 +165,7 @@ export const listAppend: TaskDefinition<
     },
 };
 
-export const boolToLabel: TaskDefinition<
+export const boolToLabel: ConcreteTaskDefinition<
     { value: boolean; ifTrue: string; ifFalse: string },
     string
 > = {
@@ -181,7 +181,7 @@ export const boolToLabel: TaskDefinition<
 
 // ---- IO tasks ----
 
-export const shellExec: TaskDefinition<
+export const shellExec: ConcreteTaskDefinition<
     {
         command: string;
         args?: string[];
@@ -256,7 +256,7 @@ export const shellExec: TaskDefinition<
     },
 };
 
-export const llmGenerate: TaskDefinition<
+export const llmGenerate: ConcreteTaskDefinition<
     { prompt: string; endpoint?: string },
     string
 > = {
@@ -356,7 +356,7 @@ export const llmGenerateJson: GenericTaskDefinition<
  *     Requests to `allowedTools` are `approveAll` for v1. Capability-based
  *     security model is the longer-term follow-up (decision 0010 §7).
  */
-export const copilotInvoke: TaskDefinition<
+export const copilotInvoke: ConcreteTaskDefinition<
     {
         prompt: string;
         model?: string;
@@ -457,7 +457,7 @@ export const copilotInvoke: TaskDefinition<
 
 // ---- Utility tasks ----
 
-export const textTemplate: TaskDefinition<
+export const textTemplate: ConcreteTaskDefinition<
     { template: string; vars: Record<string, unknown> },
     string
 > = {
@@ -472,7 +472,7 @@ export const textTemplate: TaskDefinition<
     },
 };
 
-export const stringJoin: TaskDefinition<
+export const stringJoin: ConcreteTaskDefinition<
     { list: string[]; delimiter: string },
     string
 > = {
@@ -483,7 +483,7 @@ export const stringJoin: TaskDefinition<
     },
 };
 
-export const stringSplit: TaskDefinition<
+export const stringSplit: ConcreteTaskDefinition<
     { text: string; delimiter: string; keepEmpty?: boolean },
     string[]
 > = {
@@ -498,7 +498,7 @@ export const stringSplit: TaskDefinition<
     },
 };
 
-export const httpGet: TaskDefinition<
+export const httpGet: ConcreteTaskDefinition<
     {
         url: string;
         headers?: Record<string, string>;
@@ -645,7 +645,7 @@ function validateFilePath(filePath: string): string {
 
 const DEFAULT_MAX_FILE_READ_BYTES = 10 * 1024 * 1024; // 10 MB
 
-export const fileRead: TaskDefinition<
+export const fileRead: ConcreteTaskDefinition<
     { path: string; maxBytes?: number },
     string
 > = {
@@ -676,7 +676,7 @@ export const fileRead: TaskDefinition<
     },
 };
 
-export const fileWrite: TaskDefinition<
+export const fileWrite: ConcreteTaskDefinition<
     { path: string; content: string },
     string
 > = {
@@ -701,7 +701,7 @@ export const fileWrite: TaskDefinition<
 
 // ---- compare tasks ----
 
-export const compareEquals: TaskDefinition<
+export const compareEquals: ConcreteTaskDefinition<
     { left: unknown; right: unknown },
     boolean
 > = {
@@ -712,7 +712,7 @@ export const compareEquals: TaskDefinition<
     },
 };
 
-export const compareNotEquals: TaskDefinition<
+export const compareNotEquals: ConcreteTaskDefinition<
     { left: unknown; right: unknown },
     boolean
 > = {
@@ -723,7 +723,7 @@ export const compareNotEquals: TaskDefinition<
     },
 };
 
-export const compareGreaterThan: TaskDefinition<
+export const compareGreaterThan: ConcreteTaskDefinition<
     { left: number; right: number },
     boolean
 > = {
@@ -734,7 +734,7 @@ export const compareGreaterThan: TaskDefinition<
     },
 };
 
-export const compareLessThan: TaskDefinition<
+export const compareLessThan: ConcreteTaskDefinition<
     { left: number; right: number },
     boolean
 > = {
@@ -745,7 +745,7 @@ export const compareLessThan: TaskDefinition<
     },
 };
 
-export const compareGreaterOrEqual: TaskDefinition<
+export const compareGreaterOrEqual: ConcreteTaskDefinition<
     { left: number; right: number },
     boolean
 > = {
@@ -756,7 +756,7 @@ export const compareGreaterOrEqual: TaskDefinition<
     },
 };
 
-export const compareLessOrEqual: TaskDefinition<
+export const compareLessOrEqual: ConcreteTaskDefinition<
     { left: number; right: number },
     boolean
 > = {
@@ -769,7 +769,7 @@ export const compareLessOrEqual: TaskDefinition<
 
 // ---- bool tasks ----
 
-export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
+export const boolNot: ConcreteTaskDefinition<{ value: boolean }, boolean> = {
     ...taskSchema("bool.not"),
     sideEffects: false,
     async execute(input) {
@@ -790,7 +790,7 @@ export const mathAdd: GenericTaskDefinition<
     },
 };
 
-export const mathSubtract: TaskDefinition<
+export const mathSubtract: GenericTaskDefinition<
     { left: number; right: number },
     number
 > = {
@@ -801,7 +801,7 @@ export const mathSubtract: TaskDefinition<
     },
 };
 
-export const mathMultiply: TaskDefinition<
+export const mathMultiply: GenericTaskDefinition<
     { left: number; right: number },
     number
 > = {
@@ -812,7 +812,7 @@ export const mathMultiply: TaskDefinition<
     },
 };
 
-export const mathDivide: TaskDefinition<
+export const mathDivide: ConcreteTaskDefinition<
     { left: number; right: number },
     number
 > = {
@@ -823,7 +823,7 @@ export const mathDivide: TaskDefinition<
     },
 };
 
-export const mathModulo: TaskDefinition<
+export const mathModulo: GenericTaskDefinition<
     { left: number; right: number },
     number
 > = {
@@ -834,7 +834,7 @@ export const mathModulo: TaskDefinition<
     },
 };
 
-export const mathNegate: TaskDefinition<{ value: number }, number> = {
+export const mathNegate: GenericTaskDefinition<{ value: number }, number> = {
     ...genericTaskSchema("math.negate"),
     sideEffects: false,
     async execute(input) {
@@ -842,7 +842,7 @@ export const mathNegate: TaskDefinition<{ value: number }, number> = {
     },
 };
 
-export const mathFloor: TaskDefinition<{ value: number }, number> = {
+export const mathFloor: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.floor"),
     sideEffects: false,
     async execute(input) {
@@ -850,7 +850,7 @@ export const mathFloor: TaskDefinition<{ value: number }, number> = {
     },
 };
 
-export const mathRound: TaskDefinition<{ value: number }, number> = {
+export const mathRound: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.round"),
     sideEffects: false,
     async execute(input) {
@@ -858,7 +858,7 @@ export const mathRound: TaskDefinition<{ value: number }, number> = {
     },
 };
 
-export const mathCeil: TaskDefinition<{ value: number }, number> = {
+export const mathCeil: ConcreteTaskDefinition<{ value: number }, number> = {
     ...taskSchema("math.ceil"),
     sideEffects: false,
     async execute(input) {
@@ -868,7 +868,7 @@ export const mathCeil: TaskDefinition<{ value: number }, number> = {
 
 // ---- noop (merge/join point for branches) ----
 
-export const noop: TaskDefinition<
+export const noop: ConcreteTaskDefinition<
     Record<string, never>,
     Record<string, never>
 > = {
@@ -881,7 +881,7 @@ export const noop: TaskDefinition<
 
 // ---- identity (pass-through for literal values in branches) ----
 
-export const identity: TaskDefinition<{ value: unknown }, unknown> = {
+export const identity: ConcreteTaskDefinition<{ value: unknown }, unknown> = {
     ...taskSchema("identity"),
     sideEffects: false,
     async execute(input) {
@@ -891,7 +891,7 @@ export const identity: TaskDefinition<{ value: unknown }, unknown> = {
 
 // ---- error tasks ----
 
-export const errorFail: TaskDefinition<{ message: unknown }, never> = {
+export const errorFail: ConcreteTaskDefinition<{ message: unknown }, never> = {
     ...taskSchema("error.fail"),
     sideEffects: false,
     async execute(input) {
