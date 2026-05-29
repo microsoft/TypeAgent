@@ -319,7 +319,9 @@ async function processCommand(request: string, context: T): Promise<void> {
     context.onToolCall = (tool) => spinner.updateText(`Running ${tool}...`);
     context.onOutput = (text) => spinner.addOutput(text);
 
-    await dispatcher.processCommand(request);
+    const submit = await dispatcher.submitCommand(request);
+    if (!submit.ok) throw new Error(submit.error);
+    await submit.completion;
   } finally {
     spinner.stop();
   }

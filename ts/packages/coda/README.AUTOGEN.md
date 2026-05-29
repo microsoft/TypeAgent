@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5be03efe189bbce1f519b9b0b28e834a4694c09a7cf359a93ba8c24feb3ddc2c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=40720b9bf028eaea628486c191cc91972e13f71a059335b503303d8bb37c4492 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-coda — AI-generated documentation
@@ -28,11 +28,12 @@ Key actions include:
 
 ## Setup
 
-To set up the `agent-coda` package, you need to configure the following environment variable:
+To set up the `agent-coda` package, you need to configure the following environment variables:
 
+- `AGENT_SERVER_URL`: The URL of the agent server.
 - `CODE_WEBSOCKET_HOST`: The WebSocket host for connecting to the TypeAgent shell or CLI.
 
-Ensure that this environment variable is set in your shell or `.env` file. For detailed setup instructions, see the hand-written README.
+Ensure that these environment variables are set in your shell or `.env` file. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
 
@@ -73,7 +74,10 @@ By following these steps, you can extend the functionality of the `agent-coda` p
 
 ### Dependencies
 
-Workspace: _None._
+Workspace:
+
+- [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
+- [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 
 External: `body-parser`, `chalk`, `cors`, `debug`, `dotenv`, `ws`
 
@@ -83,12 +87,13 @@ External: `body-parser`, `chalk`, `cors`, `debug`, `dotenv`, `ws`
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `AGENT_SERVER_URL`
 - `CODE_WEBSOCKET_HOST`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

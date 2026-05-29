@@ -26,6 +26,7 @@ import {
 import { getTestingModel } from "../lib/llm.js";
 import { PhraseSet } from "../phraseGen/phraseGenHandler.js";
 import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createNpmAppAgentProvider,
     getFsStorageProvider,
@@ -621,7 +622,7 @@ async function runSingleTest(
 
     let result: CommandResult | undefined;
     try {
-        result = await dispatcher.processCommand(command);
+        result = await awaitCommand(dispatcher, command);
     } catch (err: any) {
         return {
             phrase: tc.phrase,

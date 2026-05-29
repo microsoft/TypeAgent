@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=391a851b92c23c56cf489f8f3ed1c0995284c1961bd8e10055f3d398e70e7e40 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=08cd91d5418642aa01884e6d3a69086197e41d7f07916820c29bcf5ad403a414 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -74,6 +74,7 @@ Workspace:
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
+- [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
@@ -96,6 +97,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

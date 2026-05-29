@@ -22,6 +22,7 @@ import {
     cancelAllInQueue,
     __testGetCurrentRequestId,
     __testSetCurrentRequestId,
+    __testActivateTerminalLayout,
 } from "../src/enhancedConsole.js";
 import {
     handleSlashCommand,
@@ -142,6 +143,42 @@ describe("CLI queue state — push events", () => {
 
         applyQueueSnapshot(undefined);
         expect(getCliQueueState()).toBeUndefined();
+    });
+});
+
+describe("CLI inline-buffer flush on commandComplete (regression: @config agent)", () => {
+    it("flushes terminalLayout inline buffer when commandComplete arrives", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const layout = __testActivateTerminalLayout(1);
+        try {
+            // Simulate showAgentStatus: one appendDisplay with implicit "inline"
+            // mode (actionContext default). Pre-fix this is buffered silently.
+            clientIO.appendDisplay(
+                {
+                    requestId: { requestId: "rid-1", clientRequestId: "c-1" },
+                    message: { type: "text", content: "AGENT_TABLE_OUTPUT" },
+                    source: "system",
+                } as any,
+                "inline",
+            );
+            expect(layout.getInlineBuffer()).toContain("AGENT_TABLE_OUTPUT");
+
+            // commandComplete must drain the buffer to stdout — without this
+            // flush, one-shot inline-only commands (e.g. @config agent) print
+            // nothing on the CLI's non-blocking submit path.
+            clientIO.notify(
+                { requestId: "rid-1", clientRequestId: "c-1" } as any,
+                "commandComplete",
+                { result: null },
+                "system",
+            );
+            expect(layout.getInlineBuffer()).toBe("");
+            expect(captured()).toContain("AGENT_TABLE_OUTPUT");
+        } finally {
+            layout.teardown();
+        }
     });
 });
 

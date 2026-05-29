@@ -8,6 +8,7 @@
  */
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createClientIO,
     connectToTypeAgent,
@@ -86,7 +87,7 @@ async function sendToolHistory(input: PostToolInput): Promise<void> {
         };
 
         const json = JSON.stringify(historyMessage);
-        await dispatcher.processCommand(`@history insert ${json}`);
+        await awaitCommand(dispatcher, `@history insert ${json}`);
 
         console.error("[postToolUse] History insert succeeded");
     } catch (error) {

@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandResult, createDispatcher } from "agent-dispatcher";
+import {
+    awaitCommand,
+    CommandResult,
+    createDispatcher,
+    ProcessCommandOptions,
+    SubmitResult,
+} from "agent-dispatcher";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getInstanceDir, getTraceId } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -86,36 +92,54 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
                 ? `--parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`
                 : "";
 
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@action ${action.schemaName} ${action.actionName} ${paramStr}`,
-            undefined,
-            undefined,
         );
     }
 
     async function processShellRequest(
         text: string,
-        id: string,
-        images: string[],
-    ) {
-        if (typeof text !== "string" || typeof id !== "string") {
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+        requestId?: string,
+    ): Promise<SubmitResult> {
+        if (typeof text !== "string") {
             throw new Error("Invalid request");
         }
 
-        // Update before processing the command in case there was change outside of command processing
+        // Update before submitting in case there was change outside of command processing
         const summary = await updateSettingSummary();
         console.log(getConsolePrompt(summary), text);
 
-        const result = await dispatcher.processCommand(text, id, images);
-
-        await updateSettingSummary();
-
-        return result;
+        const r = await dispatcher.submitCommand(
+            text,
+            attachments,
+            options,
+            clientRequestId,
+            requestId,
+        );
+        if (!r.ok) {
+            return r;
+        }
+        // Wrap the completion so we refresh the setting summary after the
+        // command actually finishes (the submit ack returns immediately).
+        return {
+            ok: true,
+            entry: {
+                ...r.entry,
+                completion: r.entry.completion.then(async (res) => {
+                    await updateSettingSummary();
+                    return res;
+                }),
+            },
+        };
     }
 
     const patchedDispatcher = {
         ...dispatcher,
-        processCommand: processShellRequest,
+        submitCommand: processShellRequest,
         handleAction: handleAction,
     };
 

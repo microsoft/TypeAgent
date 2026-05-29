@@ -16,6 +16,7 @@ import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
 import { createDispatcher } from "../src/dispatcher.js";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 import type { ClientIO, RequestId } from "@typeagent/dispatcher-types";
 
@@ -133,7 +134,7 @@ describe("Cancellation (AbortSignal smoke tests)", () => {
         const start = Date.now();
 
         // Start the slow command — it will block for 30 s unless cancelled.
-        const resultPromise = dispatcher.processCommand("@slow slow");
+        const resultPromise = awaitCommand(dispatcher, "@slow slow");
 
         // As soon as the dispatcher registers the request (setUserRequest fires),
         // immediately cancel it — simulating the user pressing Escape.
@@ -221,7 +222,7 @@ describe("Early cancellation via cancelCommandByClientId", () => {
         const clientRequestId = "test-client-id-early-cancel";
 
         // Start a slow command that will hold the command lock.
-        const firstResultPromise = dispatcher.processCommand("@slow slow");
+        const firstResultPromise = awaitCommand(dispatcher, "@slow slow");
 
         // Wait for the first command to be running (setUserRequest fired).
         const firstRequestId = await firstRequestIdPromise;
@@ -229,8 +230,11 @@ describe("Early cancellation via cancelCommandByClientId", () => {
         // Queue a second command with a client-assigned id while the first is still running.
         // It is now blocked behind the command lock — setUserRequest has not yet fired for it.
         const start = Date.now();
-        const secondResultPromise = dispatcher.processCommand(
+        const secondResultPromise = awaitCommand(
+            dispatcher,
             "@slow slow",
+            undefined,
+            undefined,
             clientRequestId,
         );
 

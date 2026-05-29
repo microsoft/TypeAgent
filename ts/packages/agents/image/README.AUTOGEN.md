@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=851a2cda230c04fed879aa2e4fd48b3c42e39e6e1f6af50654cca35a9c4d49b6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=03d2acfcaddd14ce570e0691f2287a20027fdc3ba4fc21499194debe925da1c2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-agent — AI-generated documentation
@@ -12,37 +12,36 @@
 
 ## Overview
 
-The `image-agent` package is an image dispatcher agent designed to create images based on user requests. It leverages Azure OpenAI's gpt-image-1 endpoints to generate images and display them to the user. This package is part of the TypeAgent monorepo and is located in the `ts/packages/agents/image/` directory.
+The `image-agent` package is an image dispatcher agent designed to create and edit images based on user requests. It leverages Azure OpenAI's gpt-image-1 endpoints to generate and transform images, displaying the results to the user. This package is part of the TypeAgent monorepo and is located in the `ts/packages/agents/image/` directory.
 
 ## What it does
 
-The `image-agent` package implements one primary action: `createImageAction`. This action allows users to generate images based on a supplied description, caption, and the number of images requested. The agent processes these requests and interacts with the Azure OpenAI API to create the images. The generated images are then displayed to the user.
+The `image-agent` package implements two primary actions: `createImageAction` and `editImageAction`.
 
-### Actions
-
-- `createImageAction`: Creates an image based on the supplied description, caption, and number of images.
+- `createImageAction`: This action allows users to generate images based on a supplied description, caption, and the number of images requested. The agent processes these requests and interacts with the Azure OpenAI API to create the images. The generated images are then displayed to the user.
+- `editImageAction`: This action enables users to edit or transform an existing image based on a supplied edit prompt. Typical use cases include requests like "cartoonize that image", "make a watercolor version of this photo", or "stylize this as a pencil sketch". The agent processes these requests and interacts with the Azure OpenAI API to apply the specified transformations to the image.
 
 ## Setup
 
-To use the `image-agent`, you need to configure API keys and endpoints in the root `.env` file. The required environment variables are:
+To use the `image-agent`, you need to configure API keys and endpoints in the root `config.local.yaml` file or the legacy `.env` file. The required environment variables are:
 
 - `BING_API_KEY`: Bing API key for deprecated Bing Image Search.
 - `AZURE_OPENAI_API_KEY_IMAGE`: API key for Azure OpenAI image generation.
 - `AZURE_OPENAI_ENDPOINT_IMAGE`: Endpoint for Azure OpenAI image generation.
 
-Ensure these variables are set correctly in your `.env` file. For detailed setup instructions, see the hand-written README.
+Ensure these variables are set correctly in your configuration files. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
 
 The `image-agent` package is structured into several key files:
 
 - [imageManifest.json](./src/imageManifest.json): Defines the agent's manifest, including its description and schema.
-- [imageActionSchema.ts](./src/imageActionSchema.ts): Specifies the schema for the `createImageAction`.
-- [imageActionHandler.ts](./src/imageActionHandler.ts): Contains the handler logic for executing the `createImageAction`.
+- [imageActionSchema.ts](./src/imageActionSchema.ts): Specifies the schema for the `createImageAction` and `editImageAction`.
+- [imageActionHandler.ts](./src/imageActionHandler.ts): Contains the handler logic for executing the `createImageAction` and `editImageAction`.
 - [imageSchema.agr](./src/imageSchema.agr): Defines the grammar rules for parsing user requests into actions.
 - [imageSchema.tests.json](./src/imageSchema.tests.json): Provides test cases for validating the grammar and action handling.
 
-The agent's main functionality is encapsulated in the [imageActionHandler.ts](./src/imageActionHandler.ts) file, where the `executePhotoAction` function processes the `createImageAction` and interacts with the Azure OpenAI API to generate images.
+The agent's main functionality is encapsulated in the [imageActionHandler.ts](./src/imageActionHandler.ts) file, where the `executePhotoAction` function processes the `createImageAction` and `editImageAction`, interacting with the Azure OpenAI API to generate and transform images.
 
 ## How to extend
 
@@ -93,14 +92,15 @@ External: _None at runtime._
 
 ### Actions
 
-_1 action implemented by this agent, parsed deterministically from `./src/imageActionSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
+_2 actions implemented by this agent, parsed deterministically from `./src/imageActionSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says                                            | Action                                                                             |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| _creates an image based on the supplied description_ | `createImageAction` → `{ "originalRequest": "…", "caption": "…", "numImages": 0 }` |
+| User says                                                                                          | Action                                                                                  |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| _creates an image based on the supplied description_                                               | `createImageAction` → `{ "originalRequest": "…", "caption": "…", "numImages": 0 }`      |
+| _Edits / transforms an image the user has already supplied (typically the most recent attachment)_ | `editImageAction` → `{ "originalRequest": "…", "editPrompt": "…", "sourceImage": "…" }` |
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

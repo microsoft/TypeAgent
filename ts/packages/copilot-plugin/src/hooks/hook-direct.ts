@@ -8,6 +8,7 @@
  */
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import { collectMessage } from "../shared/message-formatter.js";
 import {
     createClientIO,
@@ -41,7 +42,7 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
         emitProgress("Connecting to TypeAgent...");
         dispatcher = await connectToTypeAgent(clientIO);
         emitProgress("Processing command...");
-        const result = await dispatcher.processCommand(input.prompt);
+        const result = await awaitCommand(dispatcher, input.prompt);
 
         if (result?.cancelled) {
             return {};
