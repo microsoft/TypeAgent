@@ -130,9 +130,15 @@ jobs:
 
       - name: Build docs-autogen tool
         working-directory: ts
+        # The trailing `...` after the package name tells pnpm to
+        # build the named package AND all of its transitive workspace
+        # dependencies (e.g. aiclient → @typeagent/config), in
+        # topological order. Without it, `--filter @typeagent/docs-autogen`
+        # would only run the build script in docs-autogen itself and
+        # tsc would fail on missing workspace-dep type declarations.
+        # See build-dotnet.yml for the same pattern.
         run: |
-          pnpm --filter aiclient build
-          pnpm --filter @typeagent/docs-autogen build
+          pnpm --filter '@typeagent/docs-autogen...' build
 
       # Federated-credential login. Reuses the same Entra App
       # registration that smoke-tests.yml and build-docker-container.yml
