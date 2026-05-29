@@ -30,6 +30,7 @@ To set up the `browser-typeagent` package, you need to configure the following e
 Additionally, you need to enable developer mode in your browser and load the unpackaged extension. The steps are as follows:
 
 1. Enable developer mode in your browser (Chrome or Edge):
+
    - Launch the browser.
    - Click on the extensions icon next to the address bar and select "Manage extensions."
    - Enable the developer mode toggle on the extensions page.

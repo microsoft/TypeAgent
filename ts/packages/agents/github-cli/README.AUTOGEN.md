@@ -110,39 +110,39 @@ External: _None at runtime._
 
 _64 actions implemented by this agent, parsed deterministically from `./src/github-cliSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _(no sample)_ | `authLogin` |
-| _(no sample)_ | `authLogout` |
-| _(no sample)_ | `authStatus` |
-| _(no sample)_ | `browseRepo` |
-| _(no sample)_ | `browseIssue` |
-| _(no sample)_ | `browsePr` |
-| _(no sample)_ | `codespaceCreate` |
-| _(no sample)_ | `codespaceDelete` |
-| _(no sample)_ | `codespaceList` |
-| _(no sample)_ | `gistCreate` |
-| _(no sample)_ | `gistDelete` |
-| _(no sample)_ | `gistList` |
-| _(no sample)_ | `issueCreate` |
-| _(no sample)_ | `issueClose` |
+| User says                                                           | Action                            |
+| ------------------------------------------------------------------- | --------------------------------- |
+| _(no sample)_                                                       | `authLogin`                       |
+| _(no sample)_                                                       | `authLogout`                      |
+| _(no sample)_                                                       | `authStatus`                      |
+| _(no sample)_                                                       | `browseRepo`                      |
+| _(no sample)_                                                       | `browseIssue`                     |
+| _(no sample)_                                                       | `browsePr`                        |
+| _(no sample)_                                                       | `codespaceCreate`                 |
+| _(no sample)_                                                       | `codespaceDelete`                 |
+| _(no sample)_                                                       | `codespaceList`                   |
+| _(no sample)_                                                       | `gistCreate`                      |
+| _(no sample)_                                                       | `gistDelete`                      |
+| _(no sample)_                                                       | `gistList`                        |
+| _(no sample)_                                                       | `issueCreate`                     |
+| _(no sample)_                                                       | `issueClose`                      |
 | _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._ | `issueDelete` → `{ "number": 0 }` |
-| _(no sample)_ | `issueReopen` |
-| _(no sample)_ | `issueList` |
-| _View / open a specific GitHub issue by number_ | `issueView` |
-| _(no sample)_ | `orgList` |
-| _(no sample)_ | `orgView` |
-| _(no sample)_ | `prCreate` |
-| _(no sample)_ | `prClose` |
-| _(no sample)_ | `prMerge` |
-| _(no sample)_ | `prList` |
-| _View / open a specific GitHub pull request by number_ | `prView` |
-| _(no sample)_ | `prCheckout` |
-| _(no sample)_ | `prChecks` → `{ "number": 0 }` |
-| _(no sample)_ | `projectCreate` |
-| _(no sample)_ | `projectDelete` |
-| _(no sample)_ | `projectList` |
-| _…and 34 more actions not shown (cap: 30)._ | |
+| _(no sample)_                                                       | `issueReopen`                     |
+| _(no sample)_                                                       | `issueList`                       |
+| _View / open a specific GitHub issue by number_                     | `issueView`                       |
+| _(no sample)_                                                       | `orgList`                         |
+| _(no sample)_                                                       | `orgView`                         |
+| _(no sample)_                                                       | `prCreate`                        |
+| _(no sample)_                                                       | `prClose`                         |
+| _(no sample)_                                                       | `prMerge`                         |
+| _(no sample)_                                                       | `prList`                          |
+| _View / open a specific GitHub pull request by number_              | `prView`                          |
+| _(no sample)_                                                       | `prCheckout`                      |
+| _(no sample)_                                                       | `prChecks` → `{ "number": 0 }`    |
+| _(no sample)_                                                       | `projectCreate`                   |
+| _(no sample)_                                                       | `projectDelete`                   |
+| _(no sample)_                                                       | `projectList`                     |
+| _…and 34 more actions not shown (cap: 30)._                         |                                   |
 
 ---
 

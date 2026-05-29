@@ -119,12 +119,12 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _4 actions implemented by this agent, parsed deterministically from `./src/onboardingSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _(no sample)_ | `startOnboarding` → `{ "integrationName": "…" }` |
-| _(no sample)_ | `resumeOnboarding` → `{ "integrationName": "…" }` |
+| User says     | Action                                               |
+| ------------- | ---------------------------------------------------- |
+| _(no sample)_ | `startOnboarding` → `{ "integrationName": "…" }`     |
+| _(no sample)_ | `resumeOnboarding` → `{ "integrationName": "…" }`    |
 | _(no sample)_ | `getOnboardingStatus` → `{ "integrationName": "…" }` |
-| _(no sample)_ | `listIntegrations` |
+| _(no sample)_ | `listIntegrations`                                   |
 
 ---
 

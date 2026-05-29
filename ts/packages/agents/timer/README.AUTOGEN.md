@@ -114,12 +114,12 @@ External: _None at runtime._
 
 _4 actions implemented by this agent, parsed deterministically from `./src/timerSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _Set a reminder_ | `setReminder` → `{ "message": "…", "when": "…" }` |
-| _Set a repeating reminder_ | `repeatReminder` → `{ "message": "…", "every": "…" }` |
-| _List all pending reminders._ | `listReminders` |
-| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` → `{ "id": "…" }` |
+| User says                                            | Action                                                |
+| ---------------------------------------------------- | ----------------------------------------------------- |
+| _Set a reminder_                                     | `setReminder` → `{ "message": "…", "when": "…" }`     |
+| _Set a repeating reminder_                           | `repeatReminder` → `{ "message": "…", "every": "…" }` |
+| _List all pending reminders._                        | `listReminders`                                       |
+| _Cancel a pending reminder by id, or all reminders._ | `cancelReminder` → `{ "id": "…" }`                    |
 
 ---
 

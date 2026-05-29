@@ -98,12 +98,12 @@ External: `@anthropic-ai/claude-agent-sdk`, `chalk`, `debug`
 
 _4 actions implemented by this agent, parsed deterministically from `./src/emailActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _Type for sending a simple email_ | `sendEmail` → `{ "subject": "…", "to": ["…"] }` |
-| _Type for forwarding an email_ | `forwardEmail` → `{ "to": ["…"], "messageRef": "…" }` |
-| _Type for replying to an email_ | `replyEmail` → `{ "messageRef": "…" }` |
-| _Type for finding an email message (search for emails)_ | `findEmail` → `{ "messageRef": "…" }` |
+| User says                                               | Action                                                |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| _Type for sending a simple email_                       | `sendEmail` → `{ "subject": "…", "to": ["…"] }`       |
+| _Type for forwarding an email_                          | `forwardEmail` → `{ "to": ["…"], "messageRef": "…" }` |
+| _Type for replying to an email_                         | `replyEmail` → `{ "messageRef": "…" }`                |
+| _Type for finding an email message (search for emails)_ | `findEmail` → `{ "messageRef": "…" }`                 |
 
 ---
 

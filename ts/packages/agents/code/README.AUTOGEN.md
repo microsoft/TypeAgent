@@ -102,8 +102,8 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 6 additional actions are declared in the schema but not yet implemented; not shown._
 
-| User says | Action |
-| --- | --- |
+| User says                | Action                                |
+| ------------------------ | ------------------------------------- |
 | _Launch or Start VSCode_ | `launchVSCode` → `{ "mode": "last" }` |
 
 ---

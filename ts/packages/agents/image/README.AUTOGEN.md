@@ -94,9 +94,9 @@ External: _None at runtime._
 
 _2 actions implemented by this agent, parsed deterministically from `./src/imageActionSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _creates an image based on the supplied description_ | `createImageAction` → `{ "originalRequest": "…", "caption": "…", "numImages": 0 }` |
+| User says                                                                                          | Action                                                                                  |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| _creates an image based on the supplied description_                                               | `createImageAction` → `{ "originalRequest": "…", "caption": "…", "numImages": 0 }`      |
 | _Edits / transforms an image the user has already supplied (typically the most recent attachment)_ | `editImageAction` → `{ "originalRequest": "…", "editPrompt": "…", "sourceImage": "…" }` |
 
 ---

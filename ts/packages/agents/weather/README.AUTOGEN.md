@@ -89,11 +89,11 @@ External: _None at runtime._
 
 _3 actions implemented by this agent, parsed deterministically from `./src/weatherSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says     | Action                                         |
+| ------------- | ---------------------------------------------- |
 | _(no sample)_ | `getCurrentConditions` → `{ "location": "…" }` |
-| _(no sample)_ | `getForecast` → `{ "location": "…" }` |
-| _(no sample)_ | `getAlerts` → `{ "location": "…" }` |
+| _(no sample)_ | `getForecast` → `{ "location": "…" }`          |
+| _(no sample)_ | `getAlerts` → `{ "location": "…" }`            |
 
 ---
 

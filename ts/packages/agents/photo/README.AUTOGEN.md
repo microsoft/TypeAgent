@@ -83,8 +83,8 @@ External: _None at runtime._
 
 _1 action implemented by this agent, parsed deterministically from `./src/photoSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
+| User says                                              | Action                                     |
+| ------------------------------------------------------ | ------------------------------------------ |
 | _uses a camera attached to the system to take a photo_ | `takePhoto` → `{ "originalRequest": "…" }` |
 
 ---

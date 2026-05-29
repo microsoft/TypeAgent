@@ -119,13 +119,13 @@ External: _None at runtime._
 
 _5 actions implemented by this agent, parsed deterministically from `./src/androidMobileSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says | Action |
-| --- | --- |
-| _sends a SMS to the supplied phone number_ | `sendSMS` → `{ "originalRequest": "…", "phoneNumber": "…", "message": "…" }` |
-| _calls a user's phone number but only if we know the phone number_ | `callPhoneNumber` → `{ "originalRequest": "…", "phoneNumber": "…" }` |
-| _sets an alarm on the local mobile device_ | `setAlarm` → `{ "originalRequest": "…", "time": "…" }` |
-| _opens the maps application and performs a location search_ | `searchNearby` → `{ "originalRequest": "…", "searchTerm": "…" }` |
-| _Automation agent on the phone that can perform UI tasks on behalf of the user_ | `automateUI` → `{ "originalRequest": "…" }` |
+| User says                                                                       | Action                                                                       |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| _sends a SMS to the supplied phone number_                                      | `sendSMS` → `{ "originalRequest": "…", "phoneNumber": "…", "message": "…" }` |
+| _calls a user's phone number but only if we know the phone number_              | `callPhoneNumber` → `{ "originalRequest": "…", "phoneNumber": "…" }`         |
+| _sets an alarm on the local mobile device_                                      | `setAlarm` → `{ "originalRequest": "…", "time": "…" }`                       |
+| _opens the maps application and performs a location search_                     | `searchNearby` → `{ "originalRequest": "…", "searchTerm": "…" }`             |
+| _Automation agent on the phone that can perform UI tasks on behalf of the user_ | `automateUI` → `{ "originalRequest": "…" }`                                  |
 
 ---
 

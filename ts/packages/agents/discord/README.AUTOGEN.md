@@ -131,15 +131,15 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 _7 actions implemented by this agent, parsed deterministically from `./src/discordSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 43 additional actions are declared in the schema but not yet implemented; not shown._
 
-| User says | Action |
-| --- | --- |
-| "Send a message to the general channel saying 'Hello everyone!'" | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
-| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }` |
-| "Can you show me my account details?" | `getCurrentUser` |
-| _Create a new invite for a channel._ | `createChannelInvite` → `{ "channel_id": "…" }` |
-| _Set the default Discord server (guild) for all operations._ | `setGuild` → `{ "guild_id": "…" }` |
-| _List all channels in the current Discord server._ | `listChannels` |
-| _Refresh the channel cache from the Discord server._ | `refreshChannels` |
+| User says                                                             | Action                                                    |
+| --------------------------------------------------------------------- | --------------------------------------------------------- |
+| "Send a message to the general channel saying 'Hello everyone!'"      | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
+| "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }`            |
+| "Can you show me my account details?"                                 | `getCurrentUser`                                          |
+| _Create a new invite for a channel._                                  | `createChannelInvite` → `{ "channel_id": "…" }`           |
+| _Set the default Discord server (guild) for all operations._          | `setGuild` → `{ "guild_id": "…" }`                        |
+| _List all channels in the current Discord server._                    | `listChannels`                                            |
+| _Refresh the channel cache from the Discord server._                  | `refreshChannels`                                         |
 
 ---
 
