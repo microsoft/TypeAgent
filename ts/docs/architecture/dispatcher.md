@@ -679,7 +679,8 @@ A complete request lifecycle, from keystroke to result:
 ```
 1. User types "play Yesterday by the Beatles"
 2. Shell calls dispatcher.submitCommand("play Yesterday by the Beatles")
-3. submit returns {ok:true, entry, completion}; queue drain dispatches the entry,
+3. submit returns {ok:true, entry} where entry is a SubmittedRequest carrying
+   entry.completion; queue drain dispatches the entry,
    processCommand pipeline acquires commandLock, creates AbortController
 4. normalizeCommand() → "@dispatcher play Yesterday by the Beatles"
 5. resolveCommand() → no matching command → natural language request

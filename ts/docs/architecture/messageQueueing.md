@@ -137,7 +137,8 @@ BEFORE                                AFTER (§14.1 SHIPPED)
 
 processCommand                        submitCommand          (unified entry)
                                           │  returns Promise<SubmitResult>
-       │                                  │  • ok:true → {entry, completion}
+       │                                  │  • ok:true → {entry: SubmittedRequest}
+       │                                  │      └─ entry.completion (submitter only)
        ▼                                  │  • ok:false → typed failure
 SharedDispatcher                          ▼
        │                              RequestQueue.submit
@@ -1279,11 +1280,13 @@ clientRequestId?, requestId?)` utility in
   `@typeagent/dispatcher-types`. Signature:
   `(dispatcher, command, attachments?, options?, clientRequestId?,
 requestId?)`.
-- Added a wire-vs-call-site type split: `SubmitResult` (carries
-  `completion`) is the in-process / call-site type; the RPC wire
-  payload is the same `ok`/`error` shape with `completion` stripped.
-  The RPC client synthesizes a fresh `completion` from the correlation
-  map before returning.
+- Added a wire-vs-call-site type split: `SubmitResult` (whose
+  `entry: SubmittedRequest` carries `entry.completion`) is the
+  in-process / call-site type; the RPC wire payload (`WireSubmitResult`)
+  is the same `ok`/`error` shape but with the bare `QueuedRequest` as
+  `entry` (no `completion`). The RPC client synthesizes a fresh
+  `completion`, re-attaches it onto the entry, and returns the upgraded
+  `SubmittedRequest`-shaped result to the caller.
 - RPC client factory return type changed from `Dispatcher` to
   `{ dispatcher, notifyCommandComplete, notifyRequestCancelled }`; the
   5 RPC client construction sites (agent-server client, Shell
@@ -1305,17 +1308,17 @@ requestId?)`.
 **Pitfall: local short-circuits must explicitly fire `commandComplete`.**
 
 Any wrapper that intercepts `submitCommand` and returns a synthesized
-`{ok:true, entry, completion}` _without_ routing through the in-dispatcher
-command pipeline (which is where `commandComplete` is normally emitted by
-`commandHandlerContext`) must explicitly fire
+`{ok:true, entry}` (with `entry.completion`) _without_ routing through
+the in-dispatcher command pipeline (which is where `commandComplete` is
+normally emitted by `commandHandlerContext`) must explicitly fire
 `clientIO.notify(rid, "commandComplete", { result }, source)` for the
 synthesized `entry.requestId`. Otherwise an RPC client's
 completion promise — synthesized by `dispatcherClient.attachCompletion`
 from the `commandComplete` push event — will never resolve and any
 caller awaiting it (e.g. `awaitCommand`, `MessageGroup`'s pending bubble)
-will hang forever. The in-process `completion: Promise.resolve(...)`
-the wrapper returns is stripped by `dispatcherServer.toWire` and
-replaced on the client side, so it is not a substitute. The Shell's
+will hang forever. The in-process `entry.completion = Promise.resolve(...)`
+the wrapper returns is stripped from `entry` by `dispatcherServer.toWire`
+and re-attached on the client side, so it is not a substitute. The Shell's
 `@shell run` / `@shell run interactive` short-circuit in
 `packages/shell/src/main/instance.ts` is the canonical example: it
 synthesizes a `QueuedRequest` with `state: "succeeded"` and a

@@ -168,18 +168,19 @@ export interface Dispatcher {
      *
      * Resolves with a discriminated `SubmitResult`:
      *
-     * - On success, `{ok: true, entry, completion}`. `entry` is the
-     *   server-assigned `QueuedRequest` (use `entry.requestId` to key UI
-     *   state, cancellation, etc.); `completion` is a promise that resolves
-     *   with the eventual `CommandResult` (or `{cancelled: true}` when the
-     *   request is cancelled) and rejects with `ServerStoppingError` if the
-     *   server abandons the entry during shutdown.
+     * - On success, `{ok: true, entry}` where `entry` is a
+     *   `SubmittedRequest` — the server-assigned `QueuedRequest`
+     *   (use `entry.requestId` to key UI state, cancellation, etc.)
+     *   plus an `entry.completion` promise that resolves with the
+     *   eventual `CommandResult` (or `{cancelled: true}` when the
+     *   request is cancelled) and rejects with `ServerStoppingError`
+     *   if the server abandons the entry during shutdown.
      *
      * - On submit-time failure, `{ok: false, error: "queue_full" | "server_stopping"}`
      *   with a typed `error` discriminant. Callers that need to preserve
      *   the historical `processCommand` semantics convert these to thrown
      *   `QueueFullError` / `ServerStoppingError` instances before awaiting
-     *   `completion`.
+     *   `entry.completion`.
      *
      * The drain loop, fan-out, and cancellation semantics are described in
      * `docs/architecture/messageQueueing.md`.
