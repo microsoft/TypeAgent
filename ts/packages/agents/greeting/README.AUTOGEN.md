@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c1833fc7a143e126699af834ea4d0bc3a636617b2a6e8a20e4ec7a47c66ecfc3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d8fa9b11931a2fe49924d54a28c219bd8c2ad87b111b5114c0bc73fa3c8b4b51 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # greeting-agent — AI-generated documentation
@@ -16,7 +16,7 @@ The Greeting Agent is a sample TypeAgent application designed to generate person
 
 ## What it does
 
-The Greeting Agent accepts actions related to generating greeting messages. Specifically, it handles the `personalizedGreetingAction`, which involves creating varied and spontaneous greetings that convey different moods such as friendly, enthusiastic, excited, polite, cheerful, and more. The agent can generate multiple greeting options and select one at random, ensuring that the responses are diverse in tone, length, cadence, delivery, and style. Additionally, the agent can incorporate chat history into the greetings to make them more personalized.
+The Greeting Agent handles actions related to generating greeting messages. Specifically, it processes the `personalizedGreetingAction`, which involves creating varied and spontaneous greetings that convey different moods such as friendly, enthusiastic, excited, polite, cheerful, and more. The agent can generate multiple greeting options and select one at random, ensuring that the responses are diverse in tone, length, cadence, delivery, and style. Additionally, the agent can incorporate chat history into the greetings to make them more personalized.
 
 The agent uses a web search engine, such as Bing, to augment the generated responses with personalized information. If a Bing API key is provided, the agent can perform lookups to enhance the greetings. Otherwise, it will return a generic "No Information available" response.
 
@@ -28,7 +28,7 @@ To experiment with lookups using the Greeting Agent, you need to add your Bing A
 BING_API_KEY
 ```
 
-If a Bing API key is not available, the agent will still function but will return a generic response when personalized information is required. For detailed setup instructions, see the hand-written README.
+Alternatively, you can add the Bing API key to the `config.local.yaml` file under the `bing.apiKey` field. If a Bing API key is not available, the agent will still function but will return a generic response when personalized information is required. For detailed setup instructions, see the hand-written README.
 
 ## Key Files
 
@@ -97,6 +97,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

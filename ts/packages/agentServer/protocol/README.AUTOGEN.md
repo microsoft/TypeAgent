@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5d84b3f84b8fa8542823bd960ab4cc30c2e1e72fd79d42793af4fa83651aecc9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=15245dd7d46948aa1e1d6a70e59f81361d9b0949b907acb2026a0ff4c8387989 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-protocol — AI-generated documentation
@@ -22,6 +22,7 @@ This package primarily handles the protocol definitions for communication betwee
 - **Conversation Types**: Definitions for conversation metadata and results.
 - **RPC Methods**: Methods exposed on the `agent-server` channel for managing conversations.
 - **Client-type Registry**: Functions for registering and retrieving client types based on connection IDs.
+- **Discovery Channel**: Methods for external clients to look up the live port of any in-process app-agent.
 
 The package exports several key types and functions, such as `AgentServerChannelName`, `getDispatcherChannelName`, `getClientIOChannelName`, `ConversationInfo`, `JoinConversationResult`, `DispatcherConnectOptions`, and various RPC methods like `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`, and `shutdown`.
 
@@ -39,11 +40,13 @@ The package is structured as follows:
 
 - **[index.ts](./src/index.ts)**: This file exports all the necessary types and functions from `protocol.ts`.
 - **[protocol.ts](./src/protocol.ts)**: Contains the definitions for types, channel names, and RPC methods.
+- **[queue.ts](./src/queue.ts)**: Re-exports queue wire types and errors from `@typeagent/dispatcher-types`.
 - **[tsconfig.json](./src/tsconfig.json)**: TypeScript configuration file for the package.
 
 ### Channel Names
 
 - **AgentServerChannelName**: The fixed channel name for conversation lifecycle RPC.
+- **DiscoveryChannelName**: The fixed channel name for read-only port discovery RPC.
 - **getDispatcherChannelName(conversationId: string)**: Constructs session-namespaced channels for dispatcher communication.
 - **getClientIOChannelName(conversationId: string)**: Constructs session-namespaced channels for client IO communication.
 
@@ -69,6 +72,11 @@ The package is structured as follows:
 - **registerClientType(connectionId: string, clientType: string)**: Registers a client type based on connection ID.
 - **getClientType(connectionId: string)**: Retrieves the client type for a given connection ID.
 - **unregisterClient(connectionId: string)**: Unregisters a client based on connection ID.
+
+### Discovery Channel
+
+- **DiscoveryInvokeFunctions**: Methods exposed on the `discovery` channel, including:
+  - `lookupPort(param: { agentName: string; role?: string })`: Looks up the live port of any in-process app-agent.
 
 ## How to extend
 
@@ -101,17 +109,19 @@ External: _None at runtime._
 ### Used by
 
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
+- [agent-coda](../../../packages/coda/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
+- [agent-shell](../../../packages/shell/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
 - [vscode-shell](../../../packages/vscode-shell/README.md)
 
 ### Files of interest
 
-`./src/index.ts`, `./src/protocol.ts`, `./src/tsconfig.json`.
+`./src/index.ts`, `./src/protocol.ts`, `./src/queue.ts`, …and 1 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

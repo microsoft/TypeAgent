@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=41cc49bd439a6c7a06d6268417b81e44124a347e993b92f668effc5898de1d86 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6e175d8f5342d2cfd5e59f49fd19a445aa6dcb6b3b88c8775a9be11c5be57b71 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # markdown-agent — AI-generated documentation
@@ -39,7 +39,7 @@ Ensure these environment variables are set in your shell or in the `ts/.env` fil
 The Markdown Agent's architecture is organized into several key components:
 
 - **Manifest**: The [markdownManifest.json](./src/agent/markdownManifest.json) file defines the agent's schema, description, and supported actions.
-- **Handlers**: The [markdownActionHandler.ts](./src/agent/markdownActionHandler.ts) file contains the logic for executing actions and managing the agent's context.
+- **Handlers**: The markdownActionHandler.ts file contains the logic for executing actions and managing the agent's context.
 - **Schemas**: The [markdownActionSchema.ts](./src/agent/markdownActionSchema.ts) and [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts) files define the types and structures for actions and document operations.
 - **Translator**: The [translator.ts](./src/agent/translator.ts) file handles the integration with AI models and translates actions into operations.
 - **Collaboration Manager**: The [collaborationManager.ts](./src/view/route/collaborationManager.ts) file manages server-side collaboration for document synchronization using Yjs.
@@ -80,6 +80,7 @@ Workspace:
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
+- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
 External: `@milkdown/core`, `@milkdown/crepe`, `@milkdown/plugin-collab`, `@milkdown/plugin-history`, `@milkdown/preset-commonmark`, `@milkdown/preset-gfm`, `@milkdown/theme-nord`, `@milkdown/utils`, `debug`, `dompurify`, `express`, `express-rate-limit`, `katex`, `lib0`, `markdown-it`, `markdown-it-texmath`, `mermaid`, `prosemirror-inputrules`, `prosemirror-model`, `prosemirror-state`
 
@@ -91,7 +92,7 @@ _…and 8 more not shown._
 
 ### Files of interest
 
-`./src/agent/markdownManifest.json`, `./src/agent/markdownActionHandler.ts`, `./src/agent/markdownActionSchema.ts`, …and 27 more under `./src/`.
+`./src/agent/markdownManifest.json`, `./src/agent/markdownActionHandler.ts`, `./src/agent/markdownActionSchema.ts`, …and 28 more under `./src/`.
 
 ### Environment variables
 
@@ -102,6 +103,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

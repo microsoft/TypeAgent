@@ -2,7 +2,8 @@
 
 This guide walks an operator through provisioning the
 [`docs-generate`](../../../.github/workflows/docs-generate.yml) GitHub
-Action that regenerates `README.AUTOGEN.md` companion files daily.
+Action that regenerates `README.AUTOGEN.md` companion files on
+demand.
 
 For the _why_ — architecture, format spec, and design rationale — see
 [`doc-autogen.md`](./doc-autogen.md). For the local CLI and operations
@@ -31,13 +32,17 @@ once the prerequisites are in place.
 
 ## Pipeline overview (one-paragraph version)
 
-A scheduled workflow runs daily at 08:00 UTC, diffs `ts/packages/**`
-against a watermark git tag (`docs-bot/last-run`), regenerates
+An optional `workflow_dispatch`-only workflow (no schedule) that, when
+manually triggered, diffs `ts/packages/**` against a watermark git tag
+(`docs-bot/last-run`) or an operator-supplied `since` ref, regenerates
 `README.AUTOGEN.md` for every changed package, validates each link
 resolves on disk, opens a single batched PR via a dedicated GitHub
 App, and closes any previously-open bot PRs so only one is live at a
-time. The hand-written `README.md` is never modified — `docs-autogen`
-writes to a parallel `README.AUTOGEN.md` file only.
+time. The job runs inside the `development-fork` GitHub environment so
+it can reuse the same Entra federated credential the smoke-tests and
+build-docker workflows already trust. The hand-written `README.md` is
+never modified — `docs-autogen` writes to a parallel
+`README.AUTOGEN.md` file only.
 
 ## Step 1 — Create the docs-bot GitHub App
 
@@ -56,9 +61,10 @@ permissions can be scoped down to exactly what's needed).
      Actions, not via webhooks.
 3. **Repository permissions** (set the rest to "No access"):
    - **Contents:** **Read & write** — needed to push the PR branch
-     and force-update the `docs-bot/last-run` tag.
-   - **Pull requests:** **Read & write** — needed to open the daily
-     PR and close superseded ones.
+     and (optionally, when an operator advances the watermark by
+     hand) force-update the `docs-bot/last-run` tag.
+   - **Pull requests:** **Read & write** — needed to open the PR
+     and close superseded ones.
    - **Metadata:** **Read-only** (auto-required).
 4. **Where can this GitHub App be installed?** "Only on this account"
    is fine — there is no reason to expose it more broadly.
@@ -74,7 +80,7 @@ permissions can be scoped down to exactly what's needed).
 
 > **Why a GitHub App and not `GITHUB_TOKEN`?** Actions invoked by
 > `GITHUB_TOKEN` do not trigger downstream workflows on PRs they
-> open. That would prevent CI from running on the daily docs PR.
+> open. That would prevent CI from running on the generated docs PR.
 > Using a dedicated App identity sidesteps that limitation, gives
 > the PRs a clearly attributed author, and lets you revoke App
 > credentials independently of any human PAT.
@@ -175,12 +181,25 @@ variables → Actions** and add the following entries.
 | ----------------- | ------------------------------------------ |
 | `DOCS_BOT_APP_ID` | Numeric App ID from Step 1 (e.g. `123456`) |
 
-### Secrets (Repository **secrets** tab)
+### Secrets (Repository **secrets** tab or the `development-fork` **environment**)
+
+The `docs-generate` job is bound to the `development-fork` GitHub
+environment (the same environment used by `smoke-tests.yml` and
+`build-docker-container.yml`). The three `AZUREAPPSERVICE_*` secrets
+listed below are **environment-scoped** to `development-fork` —
+that's what scopes the Entra federated-credential subject claim to
+`repo:<org>/<repo>:environment:development-fork`, matching the
+subject the build-pipeline App registration is already configured to
+trust. If you provision new secrets, decide whether to put them at
+the repository level (visible to every workflow) or at the
+`development-fork` environment level (visible only to jobs that
+declare `environment: development-fork`); the App private key works
+equally well in either scope.
 
 | Name                                                              | Value                                                                                                                         |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `DOCS_BOT_APP_PRIVATE_KEY`                                        | Full contents of the `.pem` file from Step 1, including the `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----` lines |
-| `AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD`       | **Already present** — created when the build pipeline was wired                                                               |
+| `AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD`       | **Already present** in the `development-fork` environment — created when the build pipeline was wired                         |
 | `AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA`       | **Already present** — same source                                                                                             |
 | `AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30` | **Already present** — same source                                                                                             |
 
@@ -206,8 +225,8 @@ can still block them. Confirm:
      Actions to create and approve pull requests** explicitly
      enabled.
 2. **Settings → Actions → General → Fork pull request workflows.**
-   Leave at the default; the daily workflow only runs from the
-   default branch, never from forks.
+   Leave at the default; the workflow only runs from the default
+   branch via manual `workflow_dispatch`, never from forks.
 
 If the repo lives inside an organization, the same toggles must also
 be on at the **org level** (Org settings → Actions → General).
@@ -217,12 +236,12 @@ Otherwise the per-repo setting is ignored.
 
 `docs-autogen` diffs against a lightweight git tag
 (`docs-bot/last-run`) to decide which packages have changed since
-the last successful run. On the very first run no tag exists, and
-the tool falls back to "regenerate everything" — for a repo with
+the baseline commit. On the very first run no tag exists, and the
+tool falls back to "regenerate everything" — for a repo with
 ~100 packages that's a 100-package PR.
 
-To keep the first scheduled PR small, push the tag at the current
-HEAD before the first scheduled run:
+To keep the first PR small, push the tag at the current HEAD before
+the first dispatch:
 
 ```bash
 git fetch origin
@@ -230,14 +249,20 @@ git tag -f docs-bot/last-run origin/main
 git push origin docs-bot/last-run
 ```
 
-The first scheduled run will then see no changes and skip silently.
-Subsequent runs only touch packages whose source files changed after
-that tag. The workflow auto-advances the tag on every successful
-scheduled run with a non-empty PR.
+The first dispatch (with `since` left blank) will then see no changes
+and skip silently. Subsequent dispatches only touch packages whose
+source files changed after that tag. The workflow does **not**
+auto-advance the tag — operators move it forward by hand when they
+want the next diff window to start from a newer baseline:
+
+```bash
+git tag -f docs-bot/last-run <sha-of-most-recently-regenerated-commit>
+git push origin docs-bot/last-run --force
+```
 
 ## Step 6 — First manual run
 
-Validate end-to-end before relying on the daily schedule:
+Validate end-to-end before relying on the workflow:
 
 1. **Actions → docs-generate → Run workflow.**
 2. Pick a small input to bound the blast radius:
@@ -260,20 +285,24 @@ Once the dry-run is clean, repeat without the `dry-run` checkbox and
 with a single safe package to verify the PR open / supersede /
 close-previous flow.
 
-## Step 7 — Let the schedule take over
+## Step 7 — Operate on demand
 
-With Steps 1–6 complete, no further action is required. The daily
-cron at `0 8 * * *` UTC will:
+With Steps 1–6 complete, no further wiring is required. The pipeline
+is **opt-in** — there is no cron and nothing happens until an
+operator clicks **Run workflow**. When triggered, the workflow will:
 
-1. Diff `ts/packages/**` against the watermark tag.
+1. Diff `ts/packages/**` against the supplied `since` ref (or the
+   `docs-bot/last-run` watermark tag if `since` is left blank).
 2. Regenerate the changed packages' `README.AUTOGEN.md` files.
 3. Open a single PR titled
    `docs: regenerate package README.AUTOGEN.md files (YYYY-MM-DD)`
    on a branch like `automated/docs-readmes-YYYYMMDD-<run>`.
 4. Close any prior open bot PR on a similar branch, with a
    "superseded" comment, and delete the prior branch.
-5. Advance the `docs-bot/last-run` tag to the regenerated commit
-   only after the PR is opened successfully.
+
+Operators advance the `docs-bot/last-run` tag by hand when they want
+the next dispatch's default diff window to start later — the
+workflow itself never moves the tag.
 
 Review checklist for each PR is included in the auto-generated PR
 body; the most important assertion is that no hand-written
@@ -348,7 +377,7 @@ endpoint, auth failure, or `--llm` not set). Walk down the list:
   `AZURE_OPENAI_ENDPOINT` and that the workflow was edited as
   described in Step 2's "API-key fallback" section.
 
-### Daily PR contains hundreds of packages
+### Dispatched PR contains hundreds of packages
 
 The watermark tag was reset or deleted. Push it back to a recent
 commit:
@@ -370,20 +399,19 @@ the trust surface:
    (Key Vault Secrets User), and nothing more. Revoke any
    Contributor / Owner roles that crept in.
 2. **Don't add `pull_request_target`.** The workflow only fires on
-   `schedule` and `workflow_dispatch` today — keep it that way. A
+   `workflow_dispatch` today — keep it that way. A
    `pull_request_target` trigger lets fork PRs run with
    write-permission tokens, which would let an attacker impersonate
    the bot _and_ exfiltrate the Key Vault payload.
-3. **Optional — scope the FIC to a GitHub environment.** Create an
-   `azure-openai` environment under **Settings → Environments**,
-   optionally with required reviewers, and gate the `regenerate`
-   job on it via `environment: azure-openai`. Then add a second
-   FIC on the Entra App with subject
-   `repo:<org>/<repo>:environment:azure-openai` so even another
-   workflow file in the same repo can't mint tokens for the same
-   App without going through the environment gate. (Skip this if
-   you'd rather share the FIC config with the existing build
-   pipelines.)
+3. **Environment scoping is already in place.** The `regenerate` job
+   declares `environment: development-fork`, which means GitHub
+   restricts FIC token issuance to that subject claim and (if you
+   configure required reviewers on the environment) gates dispatches
+   on approval. To narrow further, fork a dedicated
+   `docs-autogen` environment from `development-fork`, register a
+   second FIC on the Entra App with subject
+   `repo:<org>/<repo>:environment:docs-autogen`, and switch the job
+   binding to that environment.
 4. **Rotate the GitHub App private key annually.** The
    `DOCS_BOT_APP_PRIVATE_KEY` secret is the one durable credential
    in this workflow; everything else is short-lived. GitHub's App

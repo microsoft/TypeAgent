@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a29f58c29d4535efa5ec09332082451db3e0db1e5254f5138625c36fd843059f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ac5837025b8a56a960b79349c25cdbaa2e487d26914e128a9109a27585e8775b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # aiclient — AI-generated documentation
@@ -90,9 +90,11 @@ By following these steps, you can effectively extend the functionality of the `a
 
 ### Dependencies
 
-Workspace: _None._
+Workspace:
 
-External: `@azure/identity`, `async`, `debug`, `typechat`
+- [@typeagent/config](../../packages/config/README.md)
+
+External: `@azure/identity`, `@github/copilot-sdk`, `async`, `debug`, `typechat`
 
 ### Used by
 
@@ -110,10 +112,10 @@ External: `@azure/identity`, `async`, `debug`, `typechat`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/auth.ts`, `./src/azureSettings.ts`, …and 12 more under `./src/`.
+`./src/index.ts`, `./src/apiSettingsFromConfig.ts`, `./src/auth.ts`, …and 18 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:27:49.365Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

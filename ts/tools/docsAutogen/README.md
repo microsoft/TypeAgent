@@ -1,12 +1,12 @@
 # docs-autogen
 
-Scheduled regeneration of `README.AUTOGEN.md` companion files for every
+On-demand regeneration of `README.AUTOGEN.md` companion files for every
 package under `ts/packages/**` in the TypeAgent monorepo.
 
 This package implements the workflow described in
 [`ts/docs/architecture/doc-autogen.md`](../../docs/architecture/doc-autogen.md).
-It is intended to be invoked from CI on a daily cron and exposes a CLI
-(`docs-autogen`) for local invocation.
+It is intended to be invoked manually from CI via `workflow_dispatch`
+(no schedule) and exposes a CLI (`docs-autogen`) for local invocation.
 
 > **Important:** `docs-autogen` writes to a parallel
 > `README.AUTOGEN.md` file alongside each package's hand-written
@@ -40,9 +40,10 @@ file at the package root with this structure:
 8. Staleness footer (commit SHA + ISO date + verify hint).
 9. `<!-- AUTOGEN:DOCS:END -->` marker.
 
-Daily regeneration is content-hash gated; packages whose inputs are
+Regeneration is content-hash gated; packages whose inputs are
 unchanged are skipped, and packages whose new file differs only in the
-staleness footer/hash are also skipped so the daily PR doesn't churn.
+staleness footer/hash are also skipped so repeated dispatches don't
+churn unchanged docs.
 
 ## Usage (local)
 
@@ -131,10 +132,15 @@ instead of starting from scratch.
 
 ### CI workflow
 
-The scheduled GitHub Action lives at
+The on-demand GitHub Action lives at
 [`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml).
-It runs daily at 08:00 UTC and can also be triggered manually via
-`workflow_dispatch` with the same flags as the CLI exposes.
+It is **not** scheduled — runs are triggered manually via
+`workflow_dispatch` with the same flags the CLI exposes. The job is
+bound to the `development-fork` GitHub environment (the same
+environment used by `smoke-tests.yml` and `build-docker-container.yml`)
+so federated-credential exchange against the existing build-pipeline
+Entra App registration succeeds and `getKeys.mjs` can read
+`build-pipeline-kv` for Azure OpenAI credentials.
 
 > **First-time pipeline setup** — installing the GitHub App,
 > provisioning secrets and variables, and validating the first run
@@ -169,13 +175,16 @@ dispatch form mirrors the CLI flags:
   documentation alongside the deterministic Reference).
 - `max-packages` — per-run cap (default 25).
 
-A manual dispatch never advances the `docs-bot/last-run` watermark,
-so it cannot accidentally hide changes from the next scheduled run.
+The workflow never advances the `docs-bot/last-run` watermark — there
+is no scheduled run to protect against — so any dispatch is safely
+idempotent against the operator's chosen `since` baseline.
 
 ### Resetting the watermark
 
 The watermark is a lightweight git tag pointing at the SHA of the
-most recent successful scheduled run:
+commit a prior run was generated against. The workflow no longer
+auto-advances it; operators advance, reset, or delete it by hand to
+control the default diff baseline used when `since` is left blank:
 
 ```bash
 # Inspect the current watermark.
@@ -186,17 +195,19 @@ git rev-parse refs/tags/docs-bot/last-run
 git tag -f docs-bot/last-run <sha>
 git push origin docs-bot/last-run --force
 
-# Delete the watermark entirely (next scheduled run will no-op until
-# you either re-tag it or run a manual dispatch with --since).
+# Delete the watermark entirely (subsequent dispatches that omit
+# `since` will fall back to "regenerate everything"; supply `since`
+# explicitly to avoid that).
 git tag -d docs-bot/last-run
 git push origin :refs/tags/docs-bot/last-run
 ```
 
 ### First-run bootstrap
 
-If the watermark tag does not exist, scheduled runs noop because
-there is no diff baseline. Either tag a known-good SHA on `main`
-manually, or use `workflow_dispatch` with `since: main` once to seed.
+If the watermark tag does not exist, dispatches that leave `since`
+blank have no diff baseline. Either tag a known-good SHA on `main`
+manually, or use `workflow_dispatch` with `since: main` (or any other
+ref) to seed.
 
 ### Cost expectations
 

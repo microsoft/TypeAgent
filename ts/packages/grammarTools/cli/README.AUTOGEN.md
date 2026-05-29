@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c40b567265c871d9a2bee790dde4f091ff29952277eebb1830792fb329da68ab -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4cf459231ac51b819a72178d78c56fd55c771852887c6937dd2d9cc9e61089d1 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-cli — AI-generated documentation
@@ -24,6 +24,7 @@ The `grammar-tools-cli` package offers several commands to interact with grammar
 - `trace`: Traces matcher execution on a given input.
 - `coverage`: Computes coverage against a corpus file.
 - `diff`: Diffs two grammar files to highlight differences.
+- `collisions`: Analyzes grammar collisions within a directory.
 
 These commands can output results in a human-readable format or as JSON for machine processing. The CLI is designed to facilitate various grammar-related tasks, making it easier to manage and analyze grammar files.
 
@@ -48,6 +49,7 @@ The `grammar-tools-cli` package is structured around a single entry point: [cli.
 Key files:
 
 - [cli.ts](./src/cli.ts): Main entry point for the CLI, defines command handling and usage instructions.
+- [analyzeCollisions.ts](./src/analyzeCollisions.ts): Implements the `collisions` command to analyze grammar collisions.
 - [tsconfig.json](./src/tsconfig.json): TypeScript configuration for the package.
 
 The [cli.ts](./src/cli.ts) file is responsible for parsing command-line arguments, invoking the appropriate functions from `grammar-tools-core`, and handling the output format (either human-readable or JSON).
@@ -81,16 +83,17 @@ _No public exports declared in `package.json`._
 
 Workspace:
 
+- [action-grammar](../../../packages/actionGrammar/README.md)
 - grammar-tools-core
 
 External: _None at runtime._
 
 ### Files of interest
 
-`./src/cli.ts`, `./src/tsconfig.json`.
+`./src/analyzeCollisions.ts`, `./src/cli.ts`, `./src/tsconfig.json`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

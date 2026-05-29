@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=301631bfe777ecde4eded16db871816caeca97c16c96cd31e6fb7377a33aa2a6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6c11ded1503108a817c017d2bc829cb576d4a789fd4928d298b794650681b015 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-sdk-wrapper — AI-generated documentation
@@ -81,6 +81,7 @@ By following these steps, you can extend the package to include additional featu
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [aiclient](../../packages/aiclient/README.md)
@@ -109,6 +110,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

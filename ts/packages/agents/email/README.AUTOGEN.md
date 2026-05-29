@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f28f4db0986fec3000531fa23ac9ed3c709cef5aeb4d718d72f803e4f56b87cd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=aa2e2450a1010ca810db07832f9aedf86d71298dc634ac207d0a8c4a056c1ae9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # email — AI-generated documentation
@@ -27,7 +27,7 @@ These actions allow the agent to manage email communications effectively, integr
 
 ## Setup
 
-To set up the Email agent, you need to configure access to the Microsoft Graph API. This involves creating a Graph Client application and updating the following environment variables in the `.env` file:
+To set up the Email agent, you need to configure access to the Microsoft Graph API. This involves creating a Graph Client application and updating the following environment variables in the `.env` file or `config.local.yaml`:
 
 - `MSGRAPH_APP_CLIENTID`
 - `MSGRAPH_APP_CLIENTSECRET`
@@ -107,6 +107,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
