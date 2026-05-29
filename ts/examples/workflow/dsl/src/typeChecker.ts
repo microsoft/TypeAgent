@@ -452,6 +452,10 @@ export function formatType(t: TypeInfo): string {
     }
 }
 
+function diagnosticTypeName(t: TypeInfo): string {
+    return formatType(t);
+}
+
 // ---- Scope ----
 
 class Scope {
@@ -790,7 +794,7 @@ export class TypeChecker {
                     !isAssignableTo(paramType, defaultType)
                 ) {
                     this.addError(
-                        `Default value of type '${typeName(defaultType)}' is not assignable to parameter '${p.name}' of type '${typeName(paramType)}'`,
+                        `Default value of type '${diagnosticTypeName(defaultType)}' is not assignable to parameter '${p.name}' of type '${diagnosticTypeName(paramType)}'`,
                         p.default.loc.line,
                         p.default.loc.col,
                     );
@@ -806,7 +810,7 @@ export class TypeChecker {
             !isAssignableTo(declared, returnType)
         ) {
             this.addError(
-                `Workflow return type '${typeName(returnType)}' is not assignable to declared type '${typeName(declared)}'`,
+                `Workflow return type '${diagnosticTypeName(returnType)}' is not assignable to declared type '${diagnosticTypeName(declared)}'`,
                 wf.loc.line,
                 wf.loc.col,
             );
@@ -1087,7 +1091,7 @@ export class TypeChecker {
                         !isAssignableTo(declared, valueType)
                     ) {
                         this.addError(
-                            `Type '${typeName(valueType)}' is not assignable to type '${typeName(declared)}'`,
+                            `Type '${diagnosticTypeName(valueType)}' is not assignable to type '${diagnosticTypeName(declared)}'`,
                             s.loc.line,
                             s.loc.col,
                         );
@@ -1202,7 +1206,7 @@ export class TypeChecker {
                         !isAssignableTo(elseType, thenType)
                     ) {
                         this.addError(
-                            `if/else arms must return the same type: '${typeName(thenType)}' vs '${typeName(elseType)}'`,
+                            `if/else arms must return the same type: '${diagnosticTypeName(thenType)}' vs '${diagnosticTypeName(elseType)}'`,
                             s.loc.line,
                             s.loc.col,
                         );
@@ -1311,7 +1315,7 @@ export class TypeChecker {
                                     ? "default arm"
                                     : `arm ${i + 1}`;
                             this.addError(
-                                `switch arms must return the same type: ${otherLabel} returns '${typeName(allTypes[i]!)}' but arm 1 returns '${typeName(resultType)}'`,
+                                `switch arms must return the same type: ${otherLabel} returns '${diagnosticTypeName(allTypes[i]!)}' but arm 1 returns '${diagnosticTypeName(resultType)}'`,
                                 s.loc.line,
                                 s.loc.col,
                             );
@@ -1562,7 +1566,7 @@ export class TypeChecker {
                     !isAssignableTo(altType, consType)
                 ) {
                     this.addError(
-                        `Ternary arms must have the same type: '${typeName(consType)}' vs '${typeName(altType)}'`,
+                        `Ternary arms must have the same type: '${diagnosticTypeName(consType)}' vs '${diagnosticTypeName(altType)}'`,
                         e.loc.line,
                         e.loc.col,
                     );
@@ -1844,7 +1848,7 @@ export class TypeChecker {
                     !isEqualityComparable(left, right)
                 ) {
                     this.addError(
-                        `Operator '${e.op}' requires same types on both sides: '${typeName(left)}' vs '${typeName(right)}'`,
+                        `Operator '${e.op}' requires same types on both sides: '${diagnosticTypeName(left)}' vs '${diagnosticTypeName(right)}'`,
                         e.loc.line,
                         e.loc.col,
                     );
@@ -2075,7 +2079,7 @@ export class TypeChecker {
                 !isAssignableTo(declared, actual)
             ) {
                 this.addError(
-                    `Argument of type '${typeName(actual)}' is not assignable to parameter '${p.name}' of type '${typeName(declared)}'`,
+                    `Argument of type '${diagnosticTypeName(actual)}' is not assignable to parameter '${p.name}' of type '${diagnosticTypeName(declared)}'`,
                     b.value.loc.line,
                     b.value.loc.col,
                 );
