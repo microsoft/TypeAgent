@@ -363,8 +363,8 @@ switch (command) {
             : args.includes("--allow-all")
               ? "allow-all"
               : undefined;
-                const taskTimeoutMs = parseTaskTimeoutMs(args);
-                await cmdRun(file, inputJson, mode, taskTimeoutMs);
+        const taskTimeoutMs = parseTaskTimeoutMs(args);
+        await cmdRun(file, inputJson, mode, taskTimeoutMs);
         break;
     }
     case "validate": {
