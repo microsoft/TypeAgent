@@ -199,9 +199,10 @@ jobs:
         run: |
           # Build the argv as a bash array so each value is passed as a
           # single token. Never expand user input through GitHub's
-          # `${{ }}` template into the shell command line — that would
-          # allow workflow_dispatch actors to inject arbitrary shell
-          # metacharacters (`;`, `$()`, backticks, etc.).
+          # template-expression syntax into the shell command line —
+          # that would allow workflow_dispatch actors to inject
+          # arbitrary shell metacharacters (`;`, `$()`, backticks,
+          # etc.).
           set -o pipefail
           ARGS=("--render")
           if [ "$INPUT_DRY_RUN" = "true" ]; then
