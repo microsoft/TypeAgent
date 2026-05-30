@@ -8,29 +8,27 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G17: Cancel in-flight fork/forkMap branches on failure.** Align fork
-   execution with the spec's failure and cleanup semantics.
-2. **G3: Add TypeScript-style named type aliases.** Once structural
+1. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-3. **G18: Add union/literal types.** This is the broadest type-system expansion
+2. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-4. **G11: Decide/document bind stripping for explicit user names.** This is
+3. **G11: Decide/document bind stripping for explicit user names.** This is
    primarily debuggability and spec clarity.
-5. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+4. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
    AST honesty and visual-editor clarity, but current behavior works.
-6. **G12: Decide `list.append` naming/semantics.** This is naming/API
+5. **G12: Decide `list.append` naming/semantics.** This is naming/API
    consistency with coordinated emitter, engine, and snapshot churn.
-7. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+6. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
    Decision 0010 removed `identity` / `noop` as load-bearing at branch
    convergence, but the emitter still synthesizes them in several other
    places. Classify each remaining usage as (a) reducible after 0010,
    (b) forced by an IR shape that could be relaxed additively, or (c)
    inherent to decision 0006 (no expressions). Pure audit; only
    schedules follow-up work.
-8. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+7. **G7: Revisit composition patterns only when concrete workflow needs appear.**
    These patterns push against the visual-node discipline and should stay out
    of scope until justified.
-9. **G29 (open part): Decide whether to deprecate value-producing
+8. **G29 (open part): Decide whether to deprecate value-producing
    `if`/`switch` in favour of ternary.** The arm-type checking part of
    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
    as a type error) is resolved; see decision 0011 §6 and the
@@ -186,28 +184,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G17: Fork/forkMap does not cancel in-flight branches on failure
-
-**Spec:** ir-v0.2.md §2.1 rule 5 and §2.2 rule 5. "If any branch fails,
-remaining in-flight branches are cancelled and the error propagates
-immediately."
-
-**Current state:** The engine's `executeFork` and `executeForkMap` use
-`Promise.race` for concurrency limiting but do not cancel in-flight
-branches/iterations when one fails. Errors from `Promise.race` propagate,
-but other running branches continue executing in the background. This
-wastes resources and may cause side effects from branches that should have
-been cancelled.
-
-**What needs to happen:**
-
-1. When any branch/iteration rejects, signal cancellation to all other
-   in-flight branches via `AbortController`.
-2. `await` all in-flight promises before propagating the error (to avoid
-   unhandled rejection warnings and ensure cleanup).
-3. Add tests verifying that in-flight branches are cancelled on first
-   failure.
 
 ## G18: No union types in the DSL type system
 
