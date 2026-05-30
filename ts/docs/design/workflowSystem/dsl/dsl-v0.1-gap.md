@@ -8,31 +8,27 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
-   surfaces real structural mismatches, switch error messages from the
-   collapsed `'object'` rendering to the existing `formatType` output so
-   users can see which fields differ.
-2. **G3: Add TypeScript-style named type aliases.** Once structural
+1. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-3. **G18: Add union/literal types.** This is the broadest type-system expansion
+2. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-4. **G11: Decide/document bind stripping for explicit user names.** This is
+3. **G11: Decide/document bind stripping for explicit user names.** This is
    primarily debuggability and spec clarity.
-5. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+4. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
    AST honesty and visual-editor clarity, but current behavior works.
-6. **G12: Decide `list.append` naming/semantics.** This is naming/API
+5. **G12: Decide `list.append` naming/semantics.** This is naming/API
    consistency with coordinated emitter, engine, and snapshot churn.
-7. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+6. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
    Decision 0010 removed `identity` / `noop` as load-bearing at branch
    convergence, but the emitter still synthesizes them in several other
    places. Classify each remaining usage as (a) reducible after 0010,
    (b) forced by an IR shape that could be relaxed additively, or (c)
    inherent to decision 0006 (no expressions). Pure audit; only
    schedules follow-up work.
-8. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+7. **G7: Revisit composition patterns only when concrete workflow needs appear.**
    These patterns push against the visual-node discipline and should stay out
    of scope until justified.
-9. **G29 (open part): Decide whether to deprecate value-producing
+8. **G29 (open part): Decide whether to deprecate value-producing
    `if`/`switch` in favour of ternary.** The arm-type checking part of
    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
    as a type error) is resolved; see decision 0011 §6 and the
