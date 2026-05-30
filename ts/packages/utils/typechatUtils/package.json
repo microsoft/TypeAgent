@@ -37,7 +37,7 @@
     "chalk": "^5.4.1",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
-    "exifreader": "^4.30.1",
+    "exifreader": "^4.40.0",
     "telemetry": "workspace:*",
     "typechat": "^0.1.1"
   },

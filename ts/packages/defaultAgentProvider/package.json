@@ -57,7 +57,7 @@
     "discord-agent": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "email": "workspace:*",
-    "exifreader": "^4.30.1",
+    "exifreader": "^4.40.0",
     "file-size": "^1.0.0",
     "github-cli-agent": "workspace:*",
     "glob": "^13.0.0",
