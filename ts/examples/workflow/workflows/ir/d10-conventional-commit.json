@@ -39,9 +39,7 @@
     "d10-conventional-commit": {
       "inputSchema": {
         "type": "object",
-        "required": [
-          "repoPath"
-        ],
+        "required": ["repoPath"],
         "properties": {
           "repoPath": {
             "type": "string",
@@ -88,9 +86,7 @@
           "task": "shell.exec",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "command"
-            ],
+            "required": ["command"],
             "properties": {
               "command": {
                 "type": "string"
@@ -108,11 +104,7 @@
           },
           "outputSchema": {
             "type": "object",
-            "required": [
-              "stdout",
-              "stderr",
-              "exitCode"
-            ],
+            "required": ["stdout", "stderr", "exitCode"],
             "properties": {
               "stdout": {
                 "type": "string"
@@ -127,11 +119,7 @@
           },
           "inputs": {
             "command": "git",
-            "args": [
-              "diff",
-              "--staged",
-              "--name-only"
-            ],
+            "args": ["diff", "--staged", "--name-only"],
             "cwd": {
               "$from": "input",
               "name": "repoPath"
@@ -145,10 +133,7 @@
           "task": "string.split",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "text",
-              "delimiter"
-            ],
+            "required": ["text", "delimiter"],
             "properties": {
               "text": {
                 "type": "string"
@@ -168,9 +153,7 @@
             "text": {
               "$from": "scope",
               "name": "fileListResult",
-              "path": [
-                "stdout"
-              ]
+              "path": ["stdout"]
             },
             "delimiter": "\n"
           },
@@ -218,10 +201,7 @@
                 "task": "list.elementAt",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list",
-                    "index"
-                  ],
+                  "required": ["list", "index"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -252,9 +232,7 @@
                 "task": "shell.exec",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "command"
-                  ],
+                  "required": ["command"],
                   "properties": {
                     "command": {
                       "type": "string"
@@ -272,11 +250,7 @@
                 },
                 "outputSchema": {
                   "type": "object",
-                  "required": [
-                    "stdout",
-                    "stderr",
-                    "exitCode"
-                  ],
+                  "required": ["stdout", "stderr", "exitCode"],
                   "properties": {
                     "stdout": {
                       "type": "string"
@@ -313,10 +287,7 @@
                 "task": "text.template",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "template",
-                    "vars"
-                  ],
+                  "required": ["template", "vars"],
                   "properties": {
                     "template": {
                       "type": "string"
@@ -342,9 +313,7 @@
                     "diff": {
                       "$from": "scope",
                       "name": "fileDiff",
-                      "path": [
-                        "stdout"
-                      ]
+                      "path": ["stdout"]
                     }
                   }
                 },
@@ -356,9 +325,7 @@
                 "task": "copilot.invoke",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "prompt"
-                  ],
+                  "required": ["prompt"],
                   "properties": {
                     "prompt": {
                       "type": "string"
@@ -376,11 +343,7 @@
                 },
                 "outputSchema": {
                   "type": "object",
-                  "required": [
-                    "type",
-                    "scope",
-                    "summary"
-                  ],
+                  "required": ["type", "scope", "summary"],
                   "properties": {
                     "type": {
                       "type": "string",
@@ -424,10 +387,7 @@
                 "task": "text.template",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "template",
-                    "vars"
-                  ],
+                  "required": ["template", "vars"],
                   "properties": {
                     "template": {
                       "type": "string"
@@ -446,16 +406,12 @@
                     "type": {
                       "$from": "scope",
                       "name": "categorization",
-                      "path": [
-                        "type"
-                      ]
+                      "path": ["type"]
                     },
                     "scope": {
                       "$from": "scope",
                       "name": "categorization",
-                      "path": [
-                        "scope"
-                      ]
+                      "path": ["scope"]
                     },
                     "file": {
                       "$from": "scope",
@@ -464,9 +420,7 @@
                     "summary": {
                       "$from": "scope",
                       "name": "categorization",
-                      "path": [
-                        "summary"
-                      ]
+                      "path": ["summary"]
                     }
                   }
                 },
@@ -478,10 +432,7 @@
                 "task": "list.append",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list",
-                    "item"
-                  ],
+                  "required": ["list", "item"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -513,10 +464,7 @@
                 "task": "math.add",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "left",
-                    "right"
-                  ],
+                  "required": ["left", "right"],
                   "properties": {
                     "left": {
                       "type": "number"
@@ -544,9 +492,7 @@
                 "task": "list.length",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "list"
-                  ],
+                  "required": ["list"],
                   "properties": {
                     "list": {
                       "type": "array"
@@ -570,10 +516,7 @@
                 "task": "compare.lessThan",
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "left",
-                    "right"
-                  ],
+                  "required": ["left", "right"],
                   "properties": {
                     "left": {
                       "type": "number"
@@ -601,11 +544,7 @@
             },
             "inputSchema": {
               "type": "object",
-              "required": [
-                "files",
-                "repoPath",
-                "categorizePromptTemplate"
-              ],
+              "required": ["files", "repoPath", "categorizePromptTemplate"],
               "properties": {
                 "files": {
                   "type": "array",
@@ -655,10 +594,7 @@
           "task": "string.join",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "list",
-              "delimiter"
-            ],
+            "required": ["list", "delimiter"],
             "properties": {
               "list": {
                 "type": "array",
@@ -689,10 +625,7 @@
           "task": "text.template",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "template",
-              "vars"
-            ],
+            "required": ["template", "vars"],
             "properties": {
               "template": {
                 "type": "string"
@@ -725,9 +658,7 @@
           "task": "copilot.invoke",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "prompt"
-            ],
+            "required": ["prompt"],
             "properties": {
               "prompt": {
                 "type": "string"
@@ -745,12 +676,7 @@
           },
           "outputSchema": {
             "type": "object",
-            "required": [
-              "type",
-              "scope",
-              "subject",
-              "body"
-            ],
+            "required": ["type", "scope", "subject", "body"],
             "properties": {
               "type": {
                 "type": "string",
@@ -798,9 +724,7 @@
           "selector": {
             "$from": "scope",
             "name": "synthesis",
-            "path": [
-              "scope"
-            ]
+            "path": ["scope"]
           },
           "selectorSchema": {
             "type": "string"
@@ -811,16 +735,12 @@
                 "type": {
                   "$from": "scope",
                   "name": "synthesis",
-                  "path": [
-                    "type"
-                  ]
+                  "path": ["type"]
                 },
                 "subject": {
                   "$from": "scope",
                   "name": "synthesis",
-                  "path": [
-                    "subject"
-                  ]
+                  "path": ["subject"]
                 },
                 "tmpl": {
                   "$from": "constant",
@@ -830,11 +750,7 @@
               "scope": {
                 "inputSchema": {
                   "type": "object",
-                  "required": [
-                    "type",
-                    "subject",
-                    "tmpl"
-                  ],
+                  "required": ["type", "subject", "tmpl"],
                   "properties": {
                     "tmpl": {
                       "type": "string"
@@ -854,10 +770,7 @@
                     "task": "text.template",
                     "inputSchema": {
                       "type": "object",
-                      "required": [
-                        "template",
-                        "vars"
-                      ],
+                      "required": ["template", "vars"],
                       "properties": {
                         "template": {
                           "type": "string"
@@ -904,16 +817,12 @@
               "type": {
                 "$from": "scope",
                 "name": "synthesis",
-                "path": [
-                  "type"
-                ]
+                "path": ["type"]
               },
               "subject": {
                 "$from": "scope",
                 "name": "synthesis",
-                "path": [
-                  "subject"
-                ]
+                "path": ["subject"]
               },
               "tmpl": {
                 "$from": "constant",
@@ -922,20 +831,13 @@
               "scope": {
                 "$from": "scope",
                 "name": "synthesis",
-                "path": [
-                  "scope"
-                ]
+                "path": ["scope"]
               }
             },
             "scope": {
               "inputSchema": {
                 "type": "object",
-                "required": [
-                  "type",
-                  "scope",
-                  "subject",
-                  "tmpl"
-                ],
+                "required": ["type", "scope", "subject", "tmpl"],
                 "properties": {
                   "tmpl": {
                     "type": "string"
@@ -958,10 +860,7 @@
                   "task": "text.template",
                   "inputSchema": {
                     "type": "object",
-                    "required": [
-                      "template",
-                      "vars"
-                    ],
+                    "required": ["template", "vars"],
                     "properties": {
                       "template": {
                         "type": "string"
@@ -1017,10 +916,7 @@
           "task": "text.template",
           "inputSchema": {
             "type": "object",
-            "required": [
-              "template",
-              "vars"
-            ],
+            "required": ["template", "vars"],
             "properties": {
               "template": {
                 "type": "string"
@@ -1046,9 +942,7 @@
               "body": {
                 "$from": "scope",
                 "name": "synthesis",
-                "path": [
-                  "body"
-                ]
+                "path": ["body"]
               },
               "bullets": {
                 "$from": "scope",
@@ -1067,30 +961,22 @@
         "type": {
           "$from": "scope",
           "name": "synthesis",
-          "path": [
-            "type"
-          ]
+          "path": ["type"]
         },
         "scope": {
           "$from": "scope",
           "name": "synthesis",
-          "path": [
-            "scope"
-          ]
+          "path": ["scope"]
         },
         "subject": {
           "$from": "scope",
           "name": "synthesis",
-          "path": [
-            "subject"
-          ]
+          "path": ["subject"]
         },
         "body": {
           "$from": "scope",
           "name": "synthesis",
-          "path": [
-            "body"
-          ]
+          "path": ["body"]
         },
         "fileBullets": {
           "$from": "scope",
