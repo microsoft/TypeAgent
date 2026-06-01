@@ -4,7 +4,7 @@
 import { fixture, html, expect } from "@open-wc/testing";
 import type { GtCoverageHeatmap } from "../../src/gt-coverage-heatmap.js";
 import type { CoverageReport } from "grammar-tools-core";
-import { FixtureBackend } from "../../src/fixture/fixtureBackend.js";
+import { FixtureBackend } from "../fixture/fixtureBackend.js";
 
 // Import to register element
 import "../../src/gt-coverage-heatmap.js";

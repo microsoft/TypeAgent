@@ -3,7 +3,7 @@
 
 import { fixture, html, expect, waitUntil } from "@open-wc/testing";
 import type { GtCompletionPanel } from "../../src/gt-completion-panel.js";
-import { FixtureBackend } from "../../src/fixture/fixtureBackend.js";
+import { FixtureBackend } from "../fixture/fixtureBackend.js";
 
 // Import to register element
 import "../../src/gt-completion-panel.js";
