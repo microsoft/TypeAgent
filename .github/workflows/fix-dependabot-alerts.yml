@@ -421,10 +421,10 @@ jobs:
           # verification matches the clean-checkout CI build_ts job.
           # fluid-build's incremental cache and tsc's .tsbuildinfo are
           # keyed off the package's own sources + declared dep specs in
-          # package.json; an in-range transitive dep upgrade (e.g.
-          # exifreader 4.30.1 → 4.40.3 under "^4.30.1") doesn't bust the
-          # cache, so a breaking .d.ts change in a dep can pass the
-          # incremental build here while still failing CI's fresh build.
+          # package.json; an in-range transitive dep upgrade doesn't
+          # bust the cache, so a breaking .d.ts change in a dep can
+          # pass the incremental build here while still failing CI's
+          # fresh build.
           pnpm run rebuild
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
         env:
