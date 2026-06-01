@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -199,8 +199,8 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       image-memory:
         specifier: workspace:*
         version: link:../../packages/memory/image
@@ -306,8 +306,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       image-memory:
         specifier: workspace:*
         version: link:../../packages/memory/image
@@ -1391,7 +1391,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -2032,8 +2032,8 @@ importers:
         specifier: ^9.5.1
         version: 9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.27.7))
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agents/calendar:
     dependencies:
@@ -2641,8 +2641,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agents/montage:
     dependencies:
@@ -4225,8 +4225,8 @@ importers:
         specifier: workspace:*
         version: link:../agents/email
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -4430,8 +4430,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -4818,8 +4818,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
@@ -5473,7 +5473,7 @@ importers:
         version: 26.8.1(dmg-builder@26.8.1)
       electron-vite:
         specifier: ^4.0.1
-        version: 4.0.1(vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.0.1(vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3))
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
@@ -5493,8 +5493,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/telemetry:
     dependencies:
@@ -5721,8 +5721,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
-        version: 4.30.1
+        specifier: ^4.40.3
+        version: 4.40.3
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
@@ -11799,8 +11799,8 @@ packages:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
 
-  exifreader@4.30.1:
-    resolution: {integrity: sha512-XoEKKQ0FmJwCKHnuErceFAM+MSfZ+px7Nci5BhBP1cgEHi/fHSBvQySsdfd0MaFHzNh8ITsRNwpnvkMuIPicrg==}
+  exifreader@4.40.3:
+    resolution: {integrity: sha512-58NvuV/lmrUoxR6Y3s5U3rwxn8ITB8xod2WgOkwew0oR5ziQj2bcJSXMbOTQPytnZi3grztHQhgZnHBSe3/P4A==}
 
   exit@0.1.2:
     resolution: {integrity: sha512-Zk/eNKV2zbjpKzrsQ+n1G6poVbErQxJ0LBOJXaKZ1EViLzH+hrLu9cdXI4zw9dBQJslwBEpbQ2P1oS7nDxs6jQ==}
@@ -16182,8 +16182,8 @@ packages:
       terser:
         optional: true
 
-  vite@6.4.2:
-    resolution: {integrity: sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==}
+  vite@6.4.3:
+    resolution: {integrity: sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -16707,7 +16707,7 @@ snapshots:
 
   '@anthropic-ai/claude-agent-sdk@0.2.105':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -20061,7 +20061,7 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod-to-json-schema: 3.25.1(zod@4.1.13)
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 
@@ -24201,7 +24201,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@4.0.1(vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)):
+  electron-vite@4.0.1(vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.28.4)
@@ -24209,7 +24209,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -24589,7 +24589,7 @@ snapshots:
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
 
-  exifreader@4.30.1:
+  exifreader@4.40.3:
     optionalDependencies:
       '@xmldom/xmldom': 0.9.10
 
@@ -30298,7 +30298,7 @@ snapshots:
       less: 4.3.0
       terser: 5.39.2
 
-  vite@6.4.2(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
+  vite@6.4.3(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.25.11
       fdir: 6.5.0(picomatch@4.0.4)
@@ -30315,7 +30315,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.3
 
-  vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
+  vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.25.11
       fdir: 6.5.0(picomatch@4.0.4)
