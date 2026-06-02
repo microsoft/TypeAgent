@@ -9,7 +9,10 @@
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
-import { collectMessage } from "../shared/message-formatter.js";
+import {
+    collectMessage,
+    extractMessageText,
+} from "../shared/message-formatter.js";
 import {
     createClientIO,
     connectToTypeAgent,
@@ -26,6 +29,7 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             collectMessage(message, undefined, responseCollector);
         },
         onAppendDisplay: (message, mode) => {
+            // Emit progress for temporary messages (status updates)
             if (mode === "temporary") {
                 const text = message?.message;
                 if (typeof text === "string" && text.trim()) {
@@ -33,6 +37,20 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
                 }
                 return;
             }
+
+            // Emit progress for info/status messages (tool calls, results during reasoning)
+            // These are skipped by collectMessage but contain useful progress info
+            const msg = message?.message;
+            if (typeof msg === "object" && msg && "kind" in msg) {
+                const kind = (msg as { kind: unknown }).kind;
+                if (kind === "info" || kind === "status") {
+                    const text = extractMessageText(message);
+                    if (text?.trim()) {
+                        emitProgress(text.trim());
+                    }
+                }
+            }
+
             collectMessage(message, mode, responseCollector);
         },
     });

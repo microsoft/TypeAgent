@@ -225,6 +225,25 @@ class TypeAgentMcpServer {
                         return;
                     }
 
+                    // Emit progress for info/status messages (tool calls, results during reasoning)
+                    const msg = message?.message;
+                    if (typeof msg === "object" && msg && "kind" in msg) {
+                        const kind = (msg as { kind: unknown }).kind;
+                        if (kind === "info" || kind === "status") {
+                            messageCount++;
+                            if (extra) {
+                                void this.sendProgress(
+                                    extra,
+                                    cleaned,
+                                    messageCount,
+                                    0,
+                                );
+                            }
+                            // Don't add to responseCollector — these are progress, not final content
+                            return;
+                        }
+                    }
+
                     responseCollector.messages.push(cleaned);
                 },
             });
