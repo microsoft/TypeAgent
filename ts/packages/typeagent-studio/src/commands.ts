@@ -4,6 +4,7 @@
 import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
+import { formatOnboardingSummary } from "./onboardingPresentation.js";
 
 export function registerStudioCommands(
     context: vscode.ExtensionContext,
@@ -277,53 +278,3 @@ async function confirmBatchRerun(phases: string[]): Promise<boolean> {
     return choice === runAnyway;
 }
 
-function formatOnboardingSummary(state: {
-    sessionId: string;
-    agentName: string;
-    description: string;
-    currentPhase: string;
-    phases: Partial<
-        Record<
-            string,
-            {
-                status: string;
-                startedAt?: number;
-                completedAt?: number;
-            }
-        >
-    >;
-    installedSandboxIds?: string[];
-}): string {
-    const lines: string[] = [];
-    lines.push("# TypeAgent Studio Onboarding Summary");
-    lines.push("");
-    lines.push(`- Session: ${state.sessionId}`);
-    lines.push(`- Agent: ${state.agentName}`);
-    lines.push(`- Current phase: ${state.currentPhase}`);
-    lines.push(
-        `- Installed sandboxes: ${state.installedSandboxIds?.length ? state.installedSandboxIds.join(", ") : "none"}`,
-    );
-    lines.push("");
-    lines.push("## Description");
-    lines.push("");
-    lines.push(state.description);
-    lines.push("");
-    lines.push("## Phase status");
-    lines.push("");
-    lines.push("| Phase | Status | Started | Completed |");
-    lines.push("| --- | --- | --- | --- |");
-
-    for (const [phase, snapshot] of Object.entries(state.phases)) {
-        const started = snapshot?.startedAt
-            ? new Date(snapshot.startedAt).toISOString()
-            : "-";
-        const completed = snapshot?.completedAt
-            ? new Date(snapshot.completedAt).toISOString()
-            : "-";
-        lines.push(
-            `| ${phase} | ${snapshot?.status ?? "pending"} | ${started} | ${completed} |`,
-        );
-    }
-
-    return lines.join("\n");
-}

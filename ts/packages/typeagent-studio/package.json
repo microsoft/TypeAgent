@@ -23,6 +23,7 @@
     "compile": "node esbuild.mjs",
     "deploy:local": "npm run package && code --install-extension dist-pub/typeagent-studio.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/typeagent-studio.vsix",
+    "test:local": "tsx --test src/test/*.spec.ts",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
   },
@@ -97,6 +98,7 @@
     "esbuild": "^0.25.0",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1"
+    ,"tsx": "^4.21.0"
   },
   "engines": {
     "vscode": "^1.90.0"

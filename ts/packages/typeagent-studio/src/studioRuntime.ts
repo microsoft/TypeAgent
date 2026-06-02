@@ -13,6 +13,7 @@ import {
 } from "@typeagent/core/onboardingBridge";
 import { InProcessEventStream } from "@typeagent/core/events";
 import { InMemorySandboxManager } from "@typeagent/core/sandbox";
+import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
@@ -148,49 +149,6 @@ export function createStudioRuntime(
             };
         },
     };
-}
-
-function getDefaultPhaseInputs(
-    state: OnboardingState,
-    phase: OnboardingPhaseName,
-): unknown {
-    switch (phase) {
-        case "Discovery":
-            return {
-                description: state.description,
-                agentName: state.agentName,
-            };
-        case "PhraseGen":
-            return {
-                seed: "Generate representative utterances for the target workflow.",
-                sourcePhase: "Discovery",
-            };
-        case "SchemaGen":
-            return {
-                seed: "Draft schema/action types from discovery and phrase coverage.",
-                sourcePhase: "PhraseGen",
-            };
-        case "GrammarGen":
-            return {
-                seed: "Draft grammar variants from schema and phrase outputs.",
-                sourcePhase: "SchemaGen",
-            };
-        case "Scaffolder":
-            return {
-                seed: "Create initial manifest/schema/handler scaffolding.",
-                sourcePhase: "GrammarGen",
-            };
-        case "Testing":
-            return {
-                seed: "Run local validation and summarize failures.",
-                sourcePhase: "Scaffolder",
-            };
-        case "Packaging":
-            return {
-                seed: "Prepare package artifacts and release checklist.",
-                sourcePhase: "Testing",
-            };
-    }
 }
 
 function getRequiredSessionId(context: vscode.ExtensionContext): string {
