@@ -229,9 +229,23 @@ function buildAgentStatusHtml(
     showAction: boolean,
     showCommand: boolean,
 ): string {
-    const thStyle = `text-align:center;padding:4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0`;
+    // Color tokens use `var(--vscode-*, <fallback>)` so the VS Code chat
+    // webview picks up the user's theme (light / dark / high-contrast),
+    // while other clients (Electron shell, browser UI) — where the
+    // --vscode-* CSS variables are undefined — render the original
+    // hardcoded slate palette unchanged via the comma-fallback.
+    const C_HEADER = "var(--vscode-descriptionForeground,#64748b)";
+    const C_HEADER_BORDER = "var(--vscode-panel-border,#e2e8f0)";
+    const C_ROW_BORDER = "var(--vscode-panel-border,#f1f5f9)";
+    const C_AGENT = "var(--vscode-foreground,#1e293b)";
+    const C_SUB = "var(--vscode-descriptionForeground,#475569)";
+    const C_ERR = "var(--vscode-errorForeground,#dc2626)";
+    const C_UNKNOWN = "var(--vscode-descriptionForeground,#64748b)";
+    const C_WARN = "var(--vscode-editorWarning-foreground,#b45309)";
+
+    const thStyle = `text-align:center;padding:4px 8px;font-weight:600;font-size:13px;color:${C_HEADER};border-bottom:2px solid ${C_HEADER_BORDER}`;
     const headerCols = [
-        `<th style="text-align:left;padding:4px 12px 4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0">Agent</th>`,
+        `<th style="text-align:left;padding:4px 12px 4px 8px;font-weight:600;font-size:13px;color:${C_HEADER};border-bottom:2px solid ${C_HEADER_BORDER}">Agent</th>`,
     ];
     if (showSchema) headerCols.push(`<th style="${thStyle}">Schemas</th>`);
     if (showAction) headerCols.push(`<th style="${thStyle}">Actions</th>`);
@@ -244,8 +258,8 @@ function buildAgentStatusHtml(
         const displayName = isAppAgent ? name : name.replace(/^[^.]+\./, "");
         const indent = isAppAgent ? "0" : "20px";
         const fontWeight = isAppAgent ? "600" : "400";
-        const color = isAppAgent ? "#1e293b" : "#475569";
-        const bb = isAppAgent ? "1px solid #f1f5f9" : "none";
+        const color = isAppAgent ? C_AGENT : C_SUB;
+        const bb = isAppAgent ? `1px solid ${C_ROW_BORDER}` : "none";
         const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
 
         // Per-agent badges (app-agent rows only): load failure first, then
@@ -257,7 +271,7 @@ function buildAgentStatusHtml(
             const loadError = agents.getLoadError(name);
             if (loadError !== undefined) {
                 const tip = `Failed to load: ${loadError.message ?? String(loadError)}`;
-                warning += ` <span title="${escapeAttr(tip)}" style="color:#dc2626;cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:${C_ERR};cursor:help" aria-label="${escapeAttr(tip)}">⛔</span>`;
             }
             if (agents.hasUnknownReadiness(name)) {
                 // Agent is known to implement checkReadiness but hasn't
@@ -267,14 +281,14 @@ function buildAgentStatusHtml(
                 // of implicitly claiming it's ready.
                 const tip =
                     "Readiness state unknown — agent is not currently loaded. Enable it (or run `@config agent refresh <name>` after enabling) to re-probe its setup state.";
-                warning += ` <span title="${escapeAttr(tip)}" style="color:#64748b;cursor:help" aria-label="${escapeAttr(tip)}">❓</span>`;
+                warning += ` <span title="${escapeAttr(tip)}" style="color:${C_UNKNOWN};cursor:help" aria-label="${escapeAttr(tip)}">❓</span>`;
             } else {
                 const report = agents.getReadiness(name);
                 if (report.state !== "ready") {
                     const tip = report.message
                         ? `${report.state}: ${report.message}`
                         : report.state;
-                    warning += ` <span title="${escapeAttr(tip)}" style="color:#b45309;cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
+                    warning += ` <span title="${escapeAttr(tip)}" style="color:${C_WARN};cursor:help" aria-label="${escapeAttr(tip)}">⚠</span>`;
                 }
             }
         }
