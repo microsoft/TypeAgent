@@ -32,11 +32,29 @@
         "command": "typeagent-studio.hello",
         "title": "Hello (skeleton)",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.startOnboardingSession",
+        "title": "Start onboarding session",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.ask",
+        "title": "Ask TypeAgent about this...",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.installToSandbox",
+        "title": "Install latest onboarding session to sandbox",
+        "category": "TypeAgent Studio"
       }
     ]
   },
   "activationEvents": [
-    "onCommand:typeagent-studio.hello"
+    "onCommand:typeagent-studio.hello",
+    "onCommand:typeagent-studio.startOnboardingSession",
+    "onCommand:typeagent-studio.ask",
+    "onCommand:typeagent-studio.installToSandbox"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",
