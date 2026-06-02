@@ -200,7 +200,9 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { $typeParam: "N" },
     },
     {
-        // Not generic: integer / integer can yield non-integer (1 / 2 = 0.5).
+        // Division is intentionally NOT generic: integer / integer
+        // can produce a non-integer (e.g. 1 / 2 = 0.5), so the
+        // output cannot be narrowed to integer from integer operands.
         name: "math.divide",
         inputSchema: {
             type: "object",
