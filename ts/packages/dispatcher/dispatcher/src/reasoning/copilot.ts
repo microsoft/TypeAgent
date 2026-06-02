@@ -336,14 +336,14 @@ function buildPromptWithContext(
  * Format thinking block display with collapsible details
  * (Matches Claude implementation styling exactly)
  */
-function formatThinkingDisplay(thinking: string, isStreaming: boolean): string {
+function formatThinkingDisplay(thinking: string): string {
     const escaped = thinking
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
     return [
-        `<details class="reasoning-thinking"${isStreaming ? "" : " open"}>`,
+        `<details class="reasoning-thinking" open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
@@ -651,7 +651,7 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning, true),
+                        content: formatThinkingDisplay(currentReasoning),
                     },
                     "temporary",
                 );
@@ -669,7 +669,6 @@ async function executeReasoningWithoutPlanning(
                         type: "markdown",
                         content: formatThinkingDisplay(
                             event.data.content,
-                            false,
                         ),
                     },
                     displayMode,
@@ -901,7 +900,6 @@ async function executeReasoningWithTracing(
                             type: "markdown",
                             content: formatThinkingDisplay(
                                 currentReasoning,
-                                true,
                             ),
                         },
                         "temporary",
@@ -926,7 +924,6 @@ async function executeReasoningWithTracing(
                             type: "markdown",
                             content: formatThinkingDisplay(
                                 event.data.content,
-                                false,
                             ),
                         },
                         displayMode,

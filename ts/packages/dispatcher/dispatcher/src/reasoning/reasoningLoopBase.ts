@@ -169,7 +169,7 @@ export function formatThinkingDisplay(thinkingText: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
     return [
-        `<details class="reasoning-thinking">`,
+        `<details class="reasoning-thinking" open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
