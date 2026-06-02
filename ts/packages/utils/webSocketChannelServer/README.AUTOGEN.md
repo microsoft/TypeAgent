@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c9a098c99233519b86740970aeabcae8b9753d80d06ba4f7cb7bd8ae7410634c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c0c7da38e2e6efe425e5b909f4c301bc1bd7e6634b60b8397026c241bdaf50ab -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # websocket-channel-server — AI-generated documentation
@@ -12,17 +12,18 @@
 
 ## Overview
 
-The `websocket-channel-server` package provides a WebSocket server implementation for RpcChannel communication. It is part of the TypeAgent monorepo and serves as a utility for establishing WebSocket connections and handling RPC (Remote Procedure Call) channels. This package is essential for enabling real-time communication between different parts of the system using WebSockets.
+The `websocket-channel-server` package provides a WebSocket server implementation for RpcChannel communication within the TypeAgent monorepo. It is designed to facilitate real-time communication between different parts of the system using WebSockets, enabling efficient and reliable RPC (Remote Procedure Call) channels.
 
 ## What it does
 
-The `websocket-channel-server` package enables the creation of a WebSocket server that can handle RPC channels. It provides functionalities to manage WebSocket connections, enforce origin policies, and facilitate communication between different parts of the system using RPC. The main actions supported by this package include:
+The `websocket-channel-server` package enables the creation and management of a WebSocket server that handles RPC channels. It provides functionalities to:
 
-- Setting up the WebSocket server.
-- Managing WebSocket connections.
-- Handling RPC messages.
+- Set up the WebSocket server.
+- Manage WebSocket connections.
+- Enforce origin policies.
+- Handle RPC messages.
 
-The package integrates with other TypeAgent packages such as `@typeagent/agent-rpc` and `@typeagent/common-utils` to provide a comprehensive solution for RPC communication over WebSockets.
+This package integrates with other TypeAgent packages such as `@typeagent/agent-rpc` and `@typeagent/common-utils` to provide a comprehensive solution for RPC communication over WebSockets. It is used by several other packages within the TypeAgent monorepo, including `@typeagent/agent-server-client`, `agent-server`, and `agent-shell`.
 
 ## Setup
 
@@ -91,6 +92,7 @@ External: `debug`, `ws`
 
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
+- [agent-shell](../../../packages/shell/README.md)
 
 ### Files of interest
 
@@ -98,6 +100,6 @@ External: `debug`, `ws`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

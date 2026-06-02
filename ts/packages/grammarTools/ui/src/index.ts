@@ -12,6 +12,3 @@ export { GtTraceTimeline } from "./gt-trace-timeline.js";
 export { GtCoverageHeatmap } from "./gt-coverage-heatmap.js";
 export { GtDiffView } from "./gt-diff-view.js";
 export { GtDebugPanel } from "./gt-debug-panel.js";
-
-// Fixture backend (for dev/test)
-export { FixtureBackend } from "./fixture/index.js";

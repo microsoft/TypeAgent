@@ -17,7 +17,7 @@ loadDotenv();
 
 import * as path from "node:path";
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -94,20 +94,20 @@ async function main() {
             `@collision neighborhoods preview ` +
             `--workdir "${args.workdir}" --threshold ${args.threshold}`;
         process.stderr.write(`\nRunning: ${previewCmd}\n\n`);
-        await dispatcher.processCommand(previewCmd);
+        await awaitCommand(dispatcher, previewCmd);
         process.stderr.write("\nneighborhoods preview done.\n");
 
         // Also regenerate the collision-hotspots viz so both HTMLs in the
         // workdir get the same per-style chip wiring on one run.
         const vizCmd = `@collision corpus visualize --workdir "${args.workdir}"`;
         process.stderr.write(`\nRunning: ${vizCmd}\n\n`);
-        await dispatcher.processCommand(vizCmd);
+        await awaitCommand(dispatcher, vizCmd);
         process.stderr.write("\ncorpus visualize done.\n");
 
         // And the recovery viz (visualize-recovery).
         const recCmd = `@collision corpus visualize-recovery --workdir "${args.workdir}"`;
         process.stderr.write(`\nRunning: ${recCmd}\n\n`);
-        await dispatcher.processCommand(recCmd);
+        await awaitCommand(dispatcher, recCmd);
         process.stderr.write("\ncorpus visualize-recovery done.\n");
 
         process.stderr.write("\nAll done.\n");

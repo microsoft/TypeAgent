@@ -16,6 +16,8 @@ import {
     JSONSchema,
     ConstantDef,
     TaskDefinition,
+    TaskContext,
+    TaskResult,
     TaskPolicy,
     Template,
     validateWorkflowIR,
@@ -367,6 +369,8 @@ function makeA4IR(): WorkflowIR {
                         name: "error",
                         path: ["message"],
                     },
+                    error: { $from: "recovery", name: "error" },
+                    trigger: { $from: "recovery", name: "trigger" },
                 },
                 next: "fetchEmail",
                 bind: "calendarSection",
@@ -446,6 +450,8 @@ function makeA4IR(): WorkflowIR {
                         name: "error",
                         path: ["message"],
                     },
+                    error: { $from: "recovery", name: "error" },
+                    trigger: { $from: "recovery", name: "trigger" },
                 },
                 next: "repoLoop",
                 bind: "emailSection",
@@ -590,6 +596,11 @@ function makeA4IR(): WorkflowIR {
                                     $from: "recovery",
                                     name: "error",
                                     path: ["message"],
+                                },
+                                error: { $from: "recovery", name: "error" },
+                                trigger: {
+                                    $from: "recovery",
+                                    name: "trigger",
                                 },
                             },
                             next: "appendSection",
@@ -7068,6 +7079,282 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("branch blew up");
         });
+
+        it("fork cancels in-flight branches when a sibling fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            let slowStarted = false;
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.slowUntilAbort",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: unknown, ctx: TaskContext) {
+                    slowStarted = true;
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow branch aborted"));
+                        };
+                        const timer = setTimeout(
+                            () =>
+                                resolve({
+                                    kind: "ok",
+                                    output: { late: true },
+                                }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+            reg.register({
+                name: "mock.failTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch blew up" },
+                    };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "fork-cancel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        maxConcurrency: 2,
+                        branches: {
+                            slow: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "slow",
+                                    nodes: {
+                                        slow: {
+                                            kind: "task",
+                                            task: "mock.slowUntilAbort",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
+                    },
+                },
+                output: { $from: "scope", name: "forkOut" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch blew up");
+            expect(slowStarted).toBe(true);
+            expect(slowAborted).toBe(true);
+            expect(elapsed).toBeLessThan(500);
+        });
+
+        it("fork stops queued branches when a sibling fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            const started: string[] = [];
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.slowBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: unknown, ctx: TaskContext) {
+                    started.push("slow");
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow branch aborted"));
+                        };
+                        const timer = setTimeout(
+                            () => resolve({ kind: "ok", output: {} }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+            reg.register({
+                name: "mock.failBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    started.push("bad");
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch blew up" },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.queuedBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    started.push("queued");
+                    return { kind: "ok" as const, output: {} };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "fork-queued-cancel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        maxConcurrency: 2,
+                        branches: {
+                            slow: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "slow",
+                                    nodes: {
+                                        slow: {
+                                            kind: "task",
+                                            task: "mock.slowBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            queued: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "queued",
+                                    nodes: {
+                                        queued: {
+                                            kind: "task",
+                                            task: "mock.queuedBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
+                    },
+                },
+                output: { $from: "scope", name: "forkOut" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch blew up");
+            expect(slowAborted).toBe(true);
+            expect(started).toEqual(["slow", "bad"]);
+            expect(elapsed).toBeLessThan(500);
+        });
     });
 
     // ---- ForkMap execution ----
@@ -7483,6 +7770,124 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("iteration failed on 3");
+        });
+
+        it("forkMap cancels in-flight iterations and stops queued work on failure", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            const started: number[] = [];
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.mixedItem",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["n"],
+                    properties: { n: { type: "number" } },
+                },
+                outputSchema: { type: "number" },
+                async execute(input: any, ctx: TaskContext) {
+                    started.push(input.n);
+                    if (input.n === 2) {
+                        return {
+                            kind: "fail" as const,
+                            error: { message: "iteration failed on 2" },
+                        };
+                    }
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow iteration aborted"));
+                        };
+                        const timer = setTimeout(
+                            () => resolve({ kind: "ok", output: input.n }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "forkmap-cancel",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.mixedItem",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "number" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        maxConcurrency: 2,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: { nums: [1, 2, 3] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("iteration failed on 2");
+            expect(slowAborted).toBe(true);
+            expect(started).toEqual([1, 2]);
+            expect(elapsed).toBeLessThan(500);
         });
     });
 

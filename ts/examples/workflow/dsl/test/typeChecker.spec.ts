@@ -1096,7 +1096,7 @@ describe("type checker", () => {
             `workflow test(): { name: string } {
                 return test.exec(command: "ls");
             }`,
-            "not assignable to declared type",
+            "Workflow return type '{ stdout: string; exitCode: integer }' is not assignable to declared type '{ name: string }'",
         );
     });
 
@@ -1106,7 +1106,7 @@ describe("type checker", () => {
                 const r: { a: string, b: number, c: boolean } = x;
                 return r.a;
             }`,
-            "not assignable to type",
+            "Type '{ a: string; b: number }' is not assignable to type '{ a: string; b: number; c: boolean }'",
         );
     });
 
@@ -1115,7 +1115,7 @@ describe("type checker", () => {
             `workflow test(flag: boolean, x: { a: string }): { a: string } {
                 return flag ? x : test.exec(command: "b");
             }`,
-            "same type",
+            "Ternary arms must have the same type: '{ a: string }' vs '{ stdout: string; exitCode: integer }'",
         );
     });
 
@@ -1124,7 +1124,16 @@ describe("type checker", () => {
             `workflow test(items: string[]): number[] {
                 return items;
             }`,
-            "not assignable to declared type",
+            "Workflow return type 'string[]' is not assignable to declared type 'number[]'",
+        );
+    });
+
+    test("object array mismatch in equality shows full object shape", () => {
+        expectError(
+            `workflow test(x: { a: string }, xs: { a: string }[]): boolean {
+                return x === xs;
+            }`,
+            "Operator '===' requires same types on both sides: '{ a: string }' vs '{ a: string }[]'",
         );
     });
 

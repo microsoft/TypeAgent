@@ -37,9 +37,13 @@ import {
     createDispatcher,
     Dispatcher,
     PortRegistrar,
+    QueuedRequest,
     QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
+import type { SubmitResult } from "@typeagent/dispatcher-types";
+import { awaitCommand } from "@typeagent/dispatcher-types";
+import { randomUUID } from "node:crypto";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
@@ -534,10 +538,12 @@ async function initializeDispatcher(
 
         async function processShellRequest(
             text: string,
-            id: string,
-            images: string[],
-        ) {
-            if (typeof text !== "string" || typeof id !== "string") {
+            attachments?: string[],
+            options?: any,
+            id?: unknown,
+            requestId?: string,
+        ): Promise<SubmitResult> {
+            if (typeof text !== "string") {
                 throw new Error("Invalid request");
             }
 
@@ -556,7 +562,48 @@ async function initializeDispatcher(
                     "send-demo-event",
                     "CommandProcessed",
                 );
-                return undefined as any;
+                // Synthesize a QueuedRequest for the local short-circuit.
+                // NOTE: this entry is NOT enqueued in context.requestQueue —
+                // queue snapshots, lifecycle events, and DisplayLog audit
+                // intentionally do not reflect it.
+                const submittedAt = Date.now();
+                const synthRequestId = requestId ?? randomUUID();
+                const synthEntry: QueuedRequest = {
+                    requestId: synthRequestId,
+                    // Sentinel — searchable in logs; never collides with a
+                    // real connection id assigned by SharedDispatcher.
+                    originatorConnectionId:
+                        dispatcher.connectionId ?? "shell-local-shortcircuit",
+                    text,
+                    submittedAt,
+                    startedAt: submittedAt,
+                    finishedAt: submittedAt,
+                    state: "succeeded",
+                    attachmentCount: attachments?.length ?? 0,
+                };
+                if (id !== undefined) synthEntry.clientRequestId = id;
+                if (options !== undefined) synthEntry.options = options;
+                // Fire commandComplete explicitly: the short-circuit bypasses
+                // commandHandlerContext (which normally emits it), and renderer
+                // awaiters wake via wrapClientIOForCompletion intercepting this
+                // notify. Without it, RPC clients' completion promises hang.
+                const completeRid: RequestId = {
+                    requestId: synthRequestId,
+                    clientRequestId: id,
+                };
+                clientIO.notify(
+                    completeRid,
+                    "commandComplete",
+                    { result: null },
+                    "shell",
+                );
+                return {
+                    ok: true,
+                    entry: {
+                        ...synthEntry,
+                        completion: Promise.resolve(undefined),
+                    },
+                };
             }
 
             // Update before processing the command in case there was change outside of command processing
@@ -566,22 +613,31 @@ async function initializeDispatcher(
                 debugShell(getConsolePrompt(summary), text);
             }
 
-            const commandResult = await newDispatcher.processCommand(
+            const submit = await newDispatcher.submitCommand(
                 text,
+                attachments,
+                options,
                 id,
-                images,
+                requestId,
             );
-            shellWindow.chatView.webContents.send(
-                "send-demo-event",
-                "CommandProcessed",
-            );
-
-            // Give the chat view the focus back after the command for the next command.
-            shellWindow.chatView.webContents.focus();
-
-            // Update the summary after processing the command in case state changed.
-            await updateSummary(dispatcher);
-            return commandResult;
+            if (!submit.ok) {
+                return submit;
+            }
+            const completion = submit.entry.completion.then(async (result) => {
+                shellWindow.chatView.webContents.send(
+                    "send-demo-event",
+                    "CommandProcessed",
+                );
+                // Give the chat view the focus back after the command for the next command.
+                shellWindow.chatView.webContents.focus();
+                // Update the summary after processing the command in case state changed.
+                await updateSummary(dispatcher);
+                return result;
+            });
+            return {
+                ok: true,
+                entry: { ...submit.entry, completion },
+            };
         }
 
         // Shared close handler — tears down RPC channels and releases resources.
@@ -608,7 +664,7 @@ async function initializeDispatcher(
 
         const dispatcher = {
             ...newDispatcher,
-            processCommand: processShellRequest,
+            submitCommand: processShellRequest,
             close: closeDispatcher,
         };
 
@@ -635,7 +691,7 @@ async function initializeDispatcher(
             // object so the RPC server sees updated method implementations.
             Object.assign(dispatcher, freshDispatcher);
             // Re-apply shell-specific overrides that must wrap the dispatcher.
-            dispatcher.processCommand = processShellRequest;
+            dispatcher.submitCommand = processShellRequest;
             dispatcher.close = closeDispatcher;
             debugShell("Dispatcher rebound after session switch");
         }
@@ -882,15 +938,15 @@ export function initializeInstance(
 
             // send the agent greeting if it's turned on
             if (shellSettings.user.agentGreeting) {
-                dispatcher
-                    .processCommand(
-                        `@greeting${mockGreetings ? " --mock" : ""}`,
-                        "agent-0",
-                        [],
-                    )
-                    .catch((e: any) => {
-                        debugShell("Initial greeting failed:", e?.message ?? e);
-                    });
+                awaitCommand(
+                    dispatcher,
+                    `@greeting${mockGreetings ? " --mock" : ""}`,
+                    [],
+                    undefined,
+                    "agent-0",
+                ).catch((e: any) => {
+                    debugShell("Initial greeting failed:", e?.message ?? e);
+                });
             }
             return;
         }
@@ -922,15 +978,15 @@ export function initializeInstance(
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
-            dispatcher
-                .processCommand(
-                    `@greeting${mockGreetings ? " --mock" : ""}`,
-                    "agent-0",
-                    [],
-                )
-                .catch((e: any) => {
-                    debugShell("Initial greeting failed:", e?.message ?? e);
-                });
+            awaitCommand(
+                dispatcher,
+                `@greeting${mockGreetings ? " --mock" : ""}`,
+                [],
+                undefined,
+                "agent-0",
+            ).catch((e: any) => {
+                debugShell("Initial greeting failed:", e?.message ?? e);
+            });
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);

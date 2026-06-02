@@ -3,7 +3,7 @@
 
 import { fixture, html, expect } from "@open-wc/testing";
 import type { GtSourceView } from "../../src/gt-source-view.js";
-import { FixtureBackend } from "../../src/fixture/fixtureBackend.js";
+import { FixtureBackend } from "../fixture/fixtureBackend.js";
 
 // Import to register element
 import "../../src/gt-source-view.js";

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f51f205a920f2085507590971dd81534f04695124088d26daaebc90b18eb6c74 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=50192329cea7296de3460d850c464cb32ed7b4ca12d32f90fff1effb59016e21 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-core — AI-generated documentation
@@ -87,16 +87,17 @@ External: _None at runtime._
 
 ### Used by
 
+- [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agr-language](../../../extensions/agr-language/README.md)
 - grammar-tools-cli
 - grammar-tools-ui
 
 ### Files of interest
 
-`./src/index.ts`, `./src/completion.ts`, `./src/coverage.ts`, …and 8 more under `./src/`.
+`./src/index.ts`, `./src/collisionScanner.ts`, `./src/completion.ts`, …and 10 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-core docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-core docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -11,6 +11,7 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -130,7 +131,7 @@ export default class ExplainCommand extends Command {
                         conversationId,
                     },
                 );
-                await conversation.dispatcher.processCommand(command.join(" "));
+                await awaitCommand(conversation.dispatcher, command.join(" "));
             });
         } finally {
             await connection?.close();

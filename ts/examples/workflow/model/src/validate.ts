@@ -14,7 +14,6 @@ import {
     BranchNode,
     BranchArm,
     Template,
-    TemplateFromRef,
     JSONSchema,
     ConstantDef,
     LoopStateVar,
@@ -96,20 +95,12 @@ export function isNeverSchema(schema: JSONSchema | undefined): boolean {
  * Structural validation for an IR v1 document.
  *
  * Checks:
- * - Entry existence and node reference integrity.
- * - Task registration.
- * - Static schema compatibility: verifies that scope references point to
- *   producers whose outputSchema declares the referenced path.
- */
-/**
- * Structural validation for an IR v1 document.
- *
- * Checks:
  * - Top-level: workflows table, entry resolution.
  * - Per workflow body: entry existence and node reference integrity,
  *   task registration, static schema compatibility, CFG passes,
  *   template passes, type compatibility.
- * - WorkflowCallNode: ref resolution, schema match, acyclic call graph.
+ * - WorkflowCallNode: ref resolution and schema match.
+ * - Workflow call graph: acyclic call graph.
  */
 export function validateWorkflowIR(
     ir: WorkflowIR,
@@ -172,13 +163,16 @@ export function validateWorkflowIR(
         }
     }
 
-    // Validate each workflow body.
+    const callGraph = new Map<string, Set<string>>();
+
+    // Validate each workflow body and collect workflow call graph edges.
     for (const [wfName, body] of Object.entries(ir.workflows)) {
-        validateWorkflowBody(ir, wfName, body, tasks, errors);
+        const callees = validateWorkflowBody(ir, wfName, body, tasks, errors);
+        callGraph.set(wfName, callees);
     }
 
-    // Validate WorkflowCallNode references and acyclic call graph.
-    validateWorkflowCalls(ir, errors);
+    // Validate the workflow call graph after all bodies have recorded callees.
+    validateWorkflowCallGraph(callGraph, errors);
 
     return { valid: errors.length === 0, errors };
 }
@@ -187,8 +181,8 @@ export function validateWorkflowIR(
  * Validate a single workflow body within an IR artifact.
  *
  * Each body is validated as a self-contained scope (entry, nodes, output,
- * schemas). Cross-workflow concerns (call resolution, acyclic call graph)
- * are validated at the IR level by `validateWorkflowCalls`.
+ * schemas). WorkflowCallNode validation records callee edges in the returned
+ * set so the caller can perform graph-level checks without walking again.
  */
 function validateWorkflowBody(
     ir: WorkflowIR,
@@ -196,8 +190,9 @@ function validateWorkflowBody(
     body: WorkflowBody,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     errors: ValidationError[],
-): void {
+): Set<string> {
     const basePath = `workflows.${wfName}`;
+    const workflowCallees = new Set<string>();
 
     if (!(body.entry in body.nodes)) {
         errors.push({
@@ -206,19 +201,22 @@ function validateWorkflowBody(
         });
     }
 
-    const ctx: ScopeValidationContext = {
+    const ambientCtx: ScopeAmbientContext = {
         constants: ir.constants,
         stateVars: undefined,
     };
-    validateScope(body, basePath, tasks, ctx, errors);
+    const workflowCallCtx: WorkflowCallContext = {
+        workflows: ir.workflows,
+        callees: workflowCallees,
+    };
+    validateScope(body, basePath, tasks, ambientCtx, workflowCallCtx, errors);
+    return workflowCallees;
 }
 
 /**
- * Validate all WorkflowCallNodes across the IR.
+ * Validate the workflow call graph across the IR.
  *
  * Checks:
- * - `workflowRef.name` resolves to a workflow in `ir.workflows`.
- * - `inputSchema` and `outputSchema` match the referenced body.
  * - The call graph (workflow A calls workflow B) is acyclic.
  */
 
@@ -233,188 +231,16 @@ function assertNever(x: never): never {
     );
 }
 
-function validateWorkflowCalls(
-    ir: WorkflowIR,
+function validateWorkflowCallGraph(
+    callGraph: Map<string, Set<string>>,
     errors: ValidationError[],
 ): void {
-    // First pass: per-call resolution + schema match.
-    for (const [wfName, body] of Object.entries(ir.workflows)) {
-        for (const [nodeId, node] of Object.entries(body.nodes)) {
-            collectCallsInNode(
-                node,
-                `workflows.${wfName}.nodes.${nodeId}`,
-                ir,
-                errors,
-            );
-        }
-    }
-
-    // Second pass: acyclic call graph (workflow -> referenced workflows).
-    const callGraph = new Map<string, Set<string>>();
-    for (const [wfName, body] of Object.entries(ir.workflows)) {
-        const callees = new Set<string>();
-        for (const node of Object.values(body.nodes)) {
-            collectCalleesInNode(node, callees);
-        }
-        callGraph.set(wfName, callees);
-    }
     const cycle = findCallGraphCycle(callGraph);
     if (cycle) {
         errors.push({
             path: "workflows",
             message: `Workflow call graph contains a cycle: ${cycle.join(" -> ")}. Recursion is not supported in IR v1.`,
         });
-    }
-}
-
-function collectCallsInNode(
-    node: WorkflowNode,
-    path: string,
-    ir: WorkflowIR,
-    errors: ValidationError[],
-): void {
-    switch (node.kind) {
-        case "task":
-            // Leaf node - no nested workflow calls.
-            break;
-        case "workflowCall": {
-            const refName = node.workflowRef?.name;
-            if (typeof refName !== "string" || refName.length === 0) {
-                errors.push({
-                    path: `${path}.workflowRef.name`,
-                    message: `Missing or invalid workflow reference name.`,
-                });
-                break;
-            }
-            const source = node.workflowRef.source ?? "bundle";
-            if (source !== "bundle") {
-                errors.push({
-                    path: `${path}.workflowRef.source`,
-                    message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
-                });
-                break;
-            }
-            const target = ir.workflows[refName];
-            if (!target) {
-                errors.push({
-                    path: `${path}.workflowRef.name`,
-                    message: `Workflow "${refName}" not found in workflows table.`,
-                });
-                break;
-            }
-            if (
-                canonicalStringify(node.inputSchema) !==
-                canonicalStringify(target.inputSchema)
-            ) {
-                errors.push({
-                    path: `${path}.inputSchema`,
-                    message: `Call inputSchema does not match referenced workflow "${refName}" inputSchema.`,
-                });
-            }
-            if (
-                canonicalStringify(node.outputSchema) !==
-                canonicalStringify(target.outputSchema)
-            ) {
-                errors.push({
-                    path: `${path}.outputSchema`,
-                    message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
-                });
-            }
-            // Cross-IR concerns end here; bindable-target and never-output
-            // guards live in validateWorkflowCallNode (per-node scope
-            // validation).
-            break;
-        }
-        case "loop":
-        case "forkMap":
-            for (const [innerId, innerNode] of Object.entries(
-                node.body.nodes,
-            )) {
-                collectCallsInNode(
-                    innerNode,
-                    `${path}.body.nodes.${innerId}`,
-                    ir,
-                    errors,
-                );
-            }
-            break;
-        case "fork":
-            for (const [branchName, branch] of Object.entries(node.branches)) {
-                for (const [innerId, innerNode] of Object.entries(
-                    branch.scope.nodes,
-                )) {
-                    collectCallsInNode(
-                        innerNode,
-                        `${path}.branches.${branchName}.scope.nodes.${innerId}`,
-                        ir,
-                        errors,
-                    );
-                }
-            }
-            break;
-        case "branch": {
-            const arms: Array<[string, BranchArm]> = [
-                ...Object.entries(node.cases),
-                ...(node.default
-                    ? [["default", node.default] as [string, BranchArm]]
-                    : []),
-            ];
-            for (const [armKey, arm] of arms) {
-                for (const [innerId, innerNode] of Object.entries(
-                    arm.scope.nodes,
-                )) {
-                    collectCallsInNode(
-                        innerNode,
-                        `${path}.cases.${armKey}.scope.nodes.${innerId}`,
-                        ir,
-                        errors,
-                    );
-                }
-            }
-            break;
-        }
-        default:
-            assertNever(node);
-    }
-}
-
-function collectCalleesInNode(node: WorkflowNode, callees: Set<string>): void {
-    switch (node.kind) {
-        case "task":
-            // Leaf node - no nested workflow calls.
-            break;
-        case "workflowCall":
-            if (node.workflowRef?.name) {
-                callees.add(node.workflowRef.name);
-            }
-            break;
-        case "loop":
-        case "forkMap":
-            for (const inner of Object.values(node.body.nodes)) {
-                collectCalleesInNode(inner, callees);
-            }
-            break;
-        case "fork":
-            for (const branch of Object.values(node.branches)) {
-                for (const inner of Object.values(branch.scope.nodes)) {
-                    collectCalleesInNode(inner, callees);
-                }
-            }
-            break;
-        case "branch": {
-            const arms = [
-                ...Object.values(node.cases),
-                ...(node.default ? [node.default] : []),
-            ];
-            for (const arm of arms) {
-                for (const inner of Object.values(arm.scope.nodes)) {
-                    collectCalleesInNode(inner, callees);
-                }
-            }
-            break;
-        }
-        default:
-            assertNever(node);
     }
 }
 
@@ -1192,6 +1018,8 @@ function validateOnErrorRules(
 
     // Rule 5: $from "recovery" refs must only appear in onError target nodes,
     // and only "error" and "trigger" are valid names in that namespace.
+    // Path existence is checked by walkTemplateAndComputeType during the
+    // normal per-node validation pass.
     const VALID_RECOVERY_NAMES = new Set(["error", "trigger"]);
     for (const [id, node] of Object.entries(nodes)) {
         if (!hasInputs(node)) continue;
@@ -1220,7 +1048,8 @@ function validateOnErrorRules(
                         `"error" and "trigger" are valid recovery names.`,
                 });
             } else if (ref.name === "trigger") {
-                // Resolve the trigger's schema from the node that declared onError.
+                // Validate that the trigger node kind supports the "trigger" ref.
+                // Path existence is checked by the template walk.
                 const triggerId = onErrorTargetToTrigger.get(id);
                 const triggerNode = triggerId ? nodes[triggerId] : undefined;
                 const schema = triggerNode
@@ -1239,27 +1068,7 @@ function validateOnErrorRules(
                             `available when the trigger is a task, ` +
                             `workflowCall, loop, or forkMap.`,
                     });
-                } else if (ref.path && ref.path.length > 0) {
-                    checkSchemaCompat(
-                        schema,
-                        ref.path,
-                        ref.templatePath,
-                        `${ref.templatePath} ($from "recovery", name "trigger")`,
-                        errors,
-                    );
                 }
-            } else if (
-                ref.name === "error" &&
-                ref.path &&
-                ref.path.length > 0
-            ) {
-                checkSchemaCompat(
-                    RECOVERY_ERROR_SCHEMA,
-                    ref.path,
-                    ref.templatePath,
-                    `${ref.templatePath} ($from "recovery", name "error")`,
-                    errors,
-                );
             }
         }
     }
@@ -1345,61 +1154,8 @@ function checkStateSoundness(
         }
     }
 
-    // Check $from: "state" refs in body nodes reference declared state vars
-    // and that the state variable's schema type is compatible with the
-    // consumer's expected type at that input position.
-    for (const [id, node] of Object.entries(loopNode.body.nodes)) {
-        if (!hasInputs(node)) continue;
-
-        const stateRefs = collectTemplateRefs(
-            node.inputs,
-            `${prefix}.body.nodes.${id}.inputs`,
-            "state",
-        );
-        const inputsPrefix = `${prefix}.body.nodes.${id}.inputs.`;
-        for (const ref of stateRefs) {
-            if (!stateNames.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "state", name "${ref.name}": no state ` +
-                        `variable "${ref.name}" is declared on this loop.`,
-                });
-            } else {
-                const stateSchema = loopNode.state[ref.name].schema;
-                // Path validation: verify path is navigable in state schema.
-                if (ref.path && ref.path.length > 0) {
-                    checkSchemaCompat(
-                        stateSchema,
-                        ref.path,
-                        ref.templatePath,
-                        `${ref.templatePath} ($from "state", name "${ref.name}")`,
-                        errors,
-                    );
-                }
-                const consumerPropSchema = resolveConsumerPropertySchema(
-                    ref.templatePath,
-                    inputsPrefix,
-                    nodeInputSchema(node),
-                );
-                if (
-                    stateSchema.type &&
-                    consumerPropSchema?.type &&
-                    !typeSetsOverlap(stateSchema.type, consumerPropSchema.type)
-                ) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "state", name "${ref.name}": type ` +
-                            `mismatch: state variable declares ` +
-                            `${JSON.stringify(stateSchema.type)} but ` +
-                            `consumer expects ` +
-                            `${JSON.stringify(consumerPropSchema.type)}.`,
-                    });
-                }
-            }
-        }
-    }
+    // Body-node state ref name/path/type checks are now handled by
+    // walkTemplateAndComputeType when validateScope processes the loop body.
 }
 
 /**
@@ -1419,9 +1175,12 @@ function validateBranchArm(
     arm: unknown,
     armPath: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
+    ambientCtx: ScopeAmbientContext,
+    workflowCallCtx: WorkflowCallContext,
+    validInputTemplatePaths: Set<string>,
     errors: ValidationError[],
 ): void {
+    const inputsPath = `${armPath}.inputs`;
     if (arm === null || typeof arm !== "object") {
         errors.push({
             path: armPath,
@@ -1432,24 +1191,12 @@ function validateBranchArm(
         return;
     }
     const armObj = arm as Partial<BranchArm>;
-    if (
-        armObj.inputs === undefined ||
-        typeof armObj.inputs !== "object" ||
-        armObj.inputs === null
-    ) {
+    const inputsAreValid = isTemplateRecord(armObj.inputs);
+    if (!inputsAreValid) {
         errors.push({
-            path: `${armPath}.inputs`,
+            path: inputsPath,
             message: `Branch arm "inputs" must be an object template.`,
         });
-    } else {
-        // Reserved-key check for arm inputs (was in validateBranchArmTemplates).
-        for (const [fieldName, tmpl] of Object.entries(armObj.inputs)) {
-            checkReservedTemplateKeys(
-                tmpl,
-                `${armPath}.inputs.${fieldName}`,
-                errors,
-            );
-        }
     }
     const scope = armObj.scope;
     if (!scope || typeof scope !== "object") {
@@ -1458,6 +1205,16 @@ function validateBranchArm(
             message: `Branch arm "scope" must be a WorkflowScope object.`,
         });
         return;
+    }
+    const inputSchemaIsValid = scope.inputSchema !== undefined;
+    if (!inputSchemaIsValid) {
+        errors.push({
+            path: `${armPath}.scope.inputSchema`,
+            message: `Branch arm scope must declare an "inputSchema".`,
+        });
+    }
+    if (inputsAreValid && inputSchemaIsValid) {
+        validInputTemplatePaths.add(inputsPath);
     }
     if (typeof scope.entry !== "string") {
         errors.push({
@@ -1484,27 +1241,16 @@ function validateBranchArm(
         scope,
         `${armPath}.scope`,
         tasks,
-        { constants: ctx.constants, stateVars: undefined },
+        withAmbientContext(ambientCtx, {
+            stateVars: undefined,
+            stateNamespaceUnavailableMessage: (name) =>
+                `$from "state", name "${name}": branch arm nodes ` +
+                `have no state namespace. Thread state values through ` +
+                `arm.inputs instead.`,
+        }),
+        workflowCallCtx,
         errors,
     );
-
-    for (const [id, node] of Object.entries(armNodes)) {
-        if (!hasInputs(node)) continue;
-        const stateRefs = collectTemplateRefs(
-            node.inputs,
-            `${armPath}.scope.nodes.${id}.inputs`,
-            "state",
-        );
-        for (const ref of stateRefs) {
-            errors.push({
-                path: ref.templatePath,
-                message:
-                    `$from "state", name "${ref.name}": branch arm nodes ` +
-                    `have no state namespace. Thread state values through ` +
-                    `arm.inputs instead.`,
-            });
-        }
-    }
 }
 
 /**
@@ -1519,11 +1265,7 @@ function validateBranchArm(
 function validateScopeNodes(
     nodes: Record<string, WorkflowNode>,
     prefix: string,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
-    typeCtx: TypeResolutionContext,
-    recoveryTriggerSchemas: Map<string, JSONSchema>,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
     // NOTE: Binding name uniqueness is intentionally NOT validated.
     // Duplicate bindings are a deliberate design pattern used for:
@@ -1534,371 +1276,383 @@ function validateScopeNodes(
     //     earlier binding (e.g., refining a value across steps).
     // The last writer wins at runtime. If this causes confusion during
     // authoring, consider a lint-level warning (not a hard error).
-    const nodeIds = new Set(Object.keys(nodes));
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
+        state.templateCtx.recoveryTriggerInputSchema =
+            state.recoveryTriggerSchemas.get(id) ?? undefined;
         switch (node.kind) {
             case "task":
-                validateTaskNode(node, path, nodeIds, tasks, errors);
+                validateTaskNode(node, path, state);
                 break;
             case "branch":
-                validateBranchNode(node, path, nodeIds, tasks, ctx, errors);
+                validateBranchNode(node, path, state);
                 break;
             case "loop":
-                validateLoopNode(
-                    node,
-                    path,
-                    nodeIds,
-                    nodes,
-                    tasks,
-                    ctx,
-                    errors,
-                );
+                validateLoopNode(node, path, state);
                 break;
             case "fork":
-                validateForkNode(node, path, nodeIds, tasks, ctx, errors);
+                validateForkNode(node, path, state);
                 break;
             case "forkMap":
-                validateForkMapNode(node, path, nodeIds, tasks, ctx, errors);
+                validateForkMapNode(node, path, state);
                 break;
             case "workflowCall":
-                validateWorkflowCallNode(node, path, nodeIds, errors);
+                validateWorkflowCallNode(node, path, state);
                 break;
             default:
                 assertNever(node);
         }
-        typeCtx.recoveryTriggerInputSchema =
-            recoveryTriggerSchemas.get(id) ?? undefined;
-        validateNodeInputTemplates(node, path, typeCtx, ctx, errors);
     }
 }
 
 /**
- * Per-node template checks (reserved-key, type-compat, input/constant refs)
- * for a single node. Sub-scope recursion is NOT done here — it happens via
- * the per-node structural validators calling validateScope for sub-scopes.
+ * Per-node template checks for a single node using the single-pass walk.
+ * For each template expression the walk simultaneously validates syntax,
+ * checks $from ref name and path existence, and computes the type.
+ * If the computed type is available after the walk, it is compared to the
+ * declared consumer schema (after-walk schema validation).
+ *
+ * Sub-scope recursion is NOT done here — it happens via the per-node
+ * structural validators calling validateScope for sub-scopes.
+ *
+ * Loop-body templates (continueWhen, iterateState) need the body-scope
+ * TemplateResolutionContext and are handled in validateLoopNode after the body
+ * scope is established.
  */
 function validateNodeInputTemplates(
-    node: WorkflowNode,
+    node: TaskNode | LoopNode | WorkflowCallNode,
     path: string,
-    typeCtx: TypeResolutionContext,
-    ctx: ScopeValidationContext,
+    templateCtx: TemplateResolutionContext,
     errors: ValidationError[],
 ): void {
-    // ---- Reserved-key checks (from validateScopeTemplates, no recursion) ----
-    switch (node.kind) {
-        case "task":
-        case "workflowCall":
-            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.inputs.${fieldName}`,
-                    errors,
-                );
-            }
-            break;
-        case "branch":
-            checkReservedTemplateKeys(
-                node.selector,
-                `${path}.selector`,
-                errors,
+    validateInputObjectTemplates(
+        node.inputs,
+        `${path}.inputs`,
+        nodeInputSchema(node),
+        templateCtx,
+        errors,
+    );
+}
+
+function validateBranchNodeTemplates(
+    node: BranchNode,
+    path: string,
+    templateCtx: TemplateResolutionContext,
+    validInputTemplatePaths: Set<string>,
+    errors: ValidationError[],
+): void {
+    const selectorType = walkTemplateAndComputeType(
+        node.selector,
+        `${path}.selector`,
+        templateCtx,
+        errors,
+    );
+    if (selectorType) {
+        if (selectorType.type) {
+            const resolvedTypes = normalizeTypeSet(selectorType.type);
+            const nonPrimitive = resolvedTypes.filter(
+                (t) => !SELECTOR_PRIMITIVE_TYPES.has(t),
             );
-            // arm.inputs reserved-key checks are done in validateBranchArm.
-            // arm.scope.output reserved-key checks are done by validateScope.
-            break;
-        case "loop":
-            for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.inputs.${fieldName}`,
-                    errors,
-                );
+            if (nonPrimitive.length > 0) {
+                errors.push({
+                    path: `${path}.selector`,
+                    message:
+                        `Selector resolves to ` +
+                        `${formatSchemaType(selectorType)} which ` +
+                        `cannot be meaningfully coerced to a case ` +
+                        `label. Selector must resolve to string, ` +
+                        `number, or boolean.`,
+                });
             }
-            // node.body.output reserved-key check is done by validateScope for body.
-            for (const [name, tmpl] of Object.entries(node.iterateState)) {
-                checkReservedTemplateKeys(
-                    tmpl,
-                    `${path}.iterateState.${name}`,
-                    errors,
-                );
-            }
-            break;
-        case "fork":
-            for (const [bName, branch] of Object.entries(node.branches)) {
-                for (const [fieldName, tmpl] of Object.entries(branch.inputs)) {
-                    checkReservedTemplateKeys(
-                        tmpl,
-                        `${path}.branches.${bName}.inputs.${fieldName}`,
-                        errors,
-                    );
-                }
-                // branch.scope.output reserved-key check done by validateScope.
-            }
-            break;
-        case "forkMap":
-            checkReservedTemplateKeys(
-                node.collection,
-                `${path}.collection`,
-                errors,
-            );
-            if (node.inputs) {
-                for (const [fieldName, tmpl] of Object.entries(node.inputs)) {
-                    checkReservedTemplateKeys(
-                        tmpl,
-                        `${path}.inputs.${fieldName}`,
-                        errors,
-                    );
-                }
-            }
-            // node.body.output reserved-key check is done by validateScope for body.
-            break;
-        default:
-            assertNever(node);
+        }
+        checkResolvedAssignability(
+            selectorType,
+            node.selectorSchema,
+            `${path}.selector`,
+            errors,
+            "Selector resolved type",
+            "selectorSchema",
+        );
     }
 
-    // ---- Input type compatibility (from validateTypeCompatibility, no recursion) ----
-    if (hasInputs(node)) {
-        const inputs = node.inputs;
-        const inputProps = nodeInputSchema(node).properties ?? {};
-        for (const [fieldName, templateValue] of Object.entries(inputs)) {
-            const resolved = resolveTemplateType(templateValue, typeCtx);
-            if (!resolved) continue;
-            const consumerPropDef = inputProps[fieldName];
-            if (!consumerPropDef || typeof consumerPropDef === "boolean") {
-                continue;
+    // Check cases keys against selectorSchema enum.
+    if (node.selectorSchema.enum) {
+        const validKeys = new Set(node.selectorSchema.enum.map(String));
+        for (const caseKey of Object.keys(node.cases)) {
+            if (!validKeys.has(caseKey)) {
+                errors.push({
+                    path: `${path}.cases.${caseKey}`,
+                    message:
+                        `Case key "${caseKey}" is not a valid ` +
+                        `value in selectorSchema.enum ` +
+                        `${JSON.stringify(node.selectorSchema.enum)}.`,
+                });
             }
-            const fieldPath = `${path}.inputs.${fieldName}`;
-            if (
-                checkUnknownAssignability(
-                    resolved,
-                    consumerPropDef,
-                    fieldPath,
-                    errors,
-                    "Resolved input",
-                    "expected",
-                )
-            ) {
-                continue;
-            }
-            checkStructuralSubtype(
-                resolved,
-                consumerPropDef,
-                fieldPath,
-                errors,
-                "Resolved input",
-                "expected",
-            );
         }
     }
 
-    if (node.kind === "branch") {
-        // Check selector template resolved type vs selectorSchema.
-        const selectorType = resolveTemplateType(node.selector, typeCtx);
-        if (selectorType) {
-            if (selectorType.type) {
-                const resolvedTypes = normalizeTypeSet(selectorType.type);
-                const nonPrimitive = resolvedTypes.filter(
-                    (t) => !SELECTOR_PRIMITIVE_TYPES.has(t),
-                );
-                if (nonPrimitive.length > 0) {
+    // Exhaustiveness: when `default` is omitted, every enum value needs a case.
+    if (node.default === undefined) {
+        const isBooleanSelector =
+            node.selectorSchema.type === "boolean" && !node.selectorSchema.enum;
+        const enumValues = isBooleanSelector
+            ? [true, false]
+            : node.selectorSchema.enum;
+        if (!enumValues || enumValues.length === 0) {
+            errors.push({
+                path: `${path}.default`,
+                message:
+                    `Branch has no default but selectorSchema is ` +
+                    `not a closed enum (selectorSchema: ` +
+                    `${formatSchemaType(node.selectorSchema)}). ` +
+                    `Fix: add a default target, or declare ` +
+                    `selectorSchema with an "enum" constraint.`,
+            });
+        } else {
+            const caseKeys = new Set(Object.keys(node.cases));
+            const missing = enumValues
+                .map(String)
+                .filter((v) => !caseKeys.has(v));
+            if (missing.length > 0) {
+                errors.push({
+                    path: `${path}.cases`,
+                    message:
+                        `Branch has no default and is not ` +
+                        `exhaustive. Missing case(s): ` +
+                        `${JSON.stringify(missing)}. ` +
+                        `Fix: add a case for each missing value, ` +
+                        `or add a default target.`,
+                });
+            }
+            if (selectorType) {
+                if (!isProvablyNarrowedTo(selectorType, enumValues)) {
                     errors.push({
                         path: `${path}.selector`,
                         message:
-                            `Selector resolves to ` +
-                            `${formatSchemaType(selectorType)} which ` +
-                            `cannot be meaningfully coerced to a case ` +
-                            `label. Selector must resolve to string, ` +
-                            `number, or boolean.`,
-                    });
-                }
-            }
-            if (!isEmptySchema(node.selectorSchema)) {
-                if (
-                    !checkUnknownAssignability(
-                        selectorType,
-                        node.selectorSchema,
-                        `${path}.selector`,
-                        errors,
-                        "Selector resolved type",
-                        "selectorSchema",
-                    )
-                ) {
-                    checkStructuralSubtype(
-                        selectorType,
-                        node.selectorSchema,
-                        `${path}.selector`,
-                        errors,
-                        "Selector resolved type",
-                        "selectorSchema",
-                    );
-                }
-            }
-        }
-
-        // Check cases keys against selectorSchema enum.
-        if (node.selectorSchema.enum) {
-            const validKeys = new Set(node.selectorSchema.enum.map(String));
-            for (const caseKey of Object.keys(node.cases)) {
-                if (!validKeys.has(caseKey)) {
-                    errors.push({
-                        path: `${path}.cases.${caseKey}`,
-                        message:
-                            `Case key "${caseKey}" is not a valid ` +
-                            `value in selectorSchema.enum ` +
-                            `${JSON.stringify(node.selectorSchema.enum)}.`,
-                    });
-                }
-            }
-        }
-
-        // Exhaustiveness: when `default` is omitted, every enum value needs a case.
-        if (node.default === undefined) {
-            const isBooleanSelector =
-                node.selectorSchema.type === "boolean" &&
-                !node.selectorSchema.enum;
-            const enumValues = isBooleanSelector
-                ? [true, false]
-                : node.selectorSchema.enum;
-            if (!enumValues || enumValues.length === 0) {
-                errors.push({
-                    path: `${path}.default`,
-                    message:
-                        `Branch has no default but selectorSchema is ` +
-                        `not a closed enum (selectorSchema: ` +
-                        `${formatSchemaType(node.selectorSchema)}). ` +
-                        `Fix: add a default target, or declare ` +
-                        `selectorSchema with an "enum" constraint.`,
-                });
-            } else {
-                const caseKeys = new Set(Object.keys(node.cases));
-                const missing = enumValues
-                    .map(String)
-                    .filter((v) => !caseKeys.has(v));
-                if (missing.length > 0) {
-                    errors.push({
-                        path: `${path}.cases`,
-                        message:
-                            `Branch has no default and is not ` +
-                            `exhaustive. Missing case(s): ` +
-                            `${JSON.stringify(missing)}. ` +
-                            `Fix: add a case for each missing value, ` +
+                            `Branch has no default but selector ` +
+                            `resolved type ` +
+                            `${formatSchemaType(selectorType)} is ` +
+                            `not statically narrowed to the enum ` +
+                            `${JSON.stringify(enumValues)}. ` +
+                            `Fix: narrow the selector's upstream ` +
+                            `type (declare an "enum" on the ` +
+                            `producing task output / constant), ` +
                             `or add a default target.`,
                     });
                 }
-                if (selectorType) {
-                    if (!isProvablyNarrowedTo(selectorType, enumValues)) {
-                        errors.push({
-                            path: `${path}.selector`,
-                            message:
-                                `Branch has no default but selector ` +
-                                `resolved type ` +
-                                `${formatSchemaType(selectorType)} is ` +
-                                `not statically narrowed to the enum ` +
-                                `${JSON.stringify(enumValues)}. ` +
-                                `Fix: narrow the selector's upstream ` +
-                                `type (declare an "enum" on the ` +
-                                `producing task output / constant), ` +
-                                `or add a default target.`,
-                        });
-                    }
-                }
             }
         }
     }
 
-    // ---- Input/constant ref checks (from validateInputConstantRefs, no recursion) ----
-    if (hasInputs(node)) {
-        checkInputConstantRefsInTemplate(
-            node.inputs,
-            `${path}.inputs`,
-            typeCtx.inputSchema,
-            ctx.constants,
+    // Walk arm.inputs with the outer template context so $from refs are validated.
+    const defaultInputsPath = `${path}.default.inputs`;
+    const defaultArm =
+        node.default && validInputTemplatePaths.has(defaultInputsPath)
+            ? [{ arm: node.default, inputsPath: defaultInputsPath }]
+            : [];
+    const arms: Array<{ arm: BranchArm; inputsPath: string }> = [
+        ...Object.entries(node.cases).flatMap(([armKey, arm]) => {
+            const inputsPath = `${path}.cases.${armKey}.inputs`;
+            return validInputTemplatePaths.has(inputsPath)
+                ? [{ arm, inputsPath }]
+                : [];
+        }),
+        ...defaultArm,
+    ];
+    for (const { arm, inputsPath } of arms) {
+        validateInputObjectTemplates(
+            arm.inputs,
+            inputsPath,
+            arm.scope.inputSchema,
+            templateCtx,
             errors,
         );
     }
+}
 
-    if (node.kind === "branch") {
-        checkInputConstantRefsInTemplate(
-            node.selector,
-            `${path}.selector`,
-            typeCtx.inputSchema,
-            ctx.constants,
+function validateForkNodeTemplates(
+    node: ForkNode,
+    path: string,
+    templateCtx: TemplateResolutionContext,
+    errors: ValidationError[],
+): void {
+    for (const [bName, branch] of Object.entries(node.branches)) {
+        validateInputObjectTemplates(
+            branch.inputs,
+            `${path}.branches.${bName}.inputs`,
+            branch.scope.inputSchema,
+            templateCtx,
             errors,
         );
     }
+}
 
-    if (node.kind === "loop") {
-        checkInputConstantRefsInTemplate(
-            node.continueWhen,
-            `${path}.continueWhen`,
-            typeCtx.inputSchema,
-            ctx.constants,
-            errors,
-        );
-        for (const [stateName, stateTemplate] of Object.entries(
-            node.iterateState,
-        )) {
-            checkInputConstantRefsInTemplate(
-                stateTemplate,
-                `${path}.iterateState.${stateName}`,
-                typeCtx.inputSchema,
-                ctx.constants,
-                errors,
-            );
-        }
-    }
-
-    if (node.kind === "forkMap") {
-        checkInputConstantRefsInTemplate(
-            node.collection,
+function validateForkMapNodeTemplates(
+    node: ForkMapNode,
+    path: string,
+    templateCtx: TemplateResolutionContext,
+    errors: ValidationError[],
+): void {
+    const collectionType = walkTemplateAndComputeType(
+        node.collection,
+        `${path}.collection`,
+        templateCtx,
+        errors,
+    );
+    if (collectionType !== undefined && node.collectionSchema) {
+        checkResolvedAssignability(
+            collectionType,
+            node.collectionSchema,
             `${path}.collection`,
-            typeCtx.inputSchema,
-            ctx.constants,
             errors,
+            "Resolved collection",
+            "collectionSchema",
         );
     }
+    if (
+        node.inputs &&
+        Object.prototype.hasOwnProperty.call(node.inputs, node.elementParam)
+    ) {
+        errors.push({
+            path: `${path}.inputs.${node.elementParam}`,
+            message:
+                `forkMap inputs must not provide elementParam ` +
+                `"${node.elementParam}". The engine supplies this value ` +
+                `from the collection for each iteration.`,
+        });
+    }
+    validateInputObjectTemplates(
+        node.inputs ?? {},
+        `${path}.inputs`,
+        omitProperty(node.body.inputSchema, node.elementParam),
+        templateCtx,
+        errors,
+    );
+}
+
+function isTemplateRecord(value: unknown): value is Record<string, Template> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateInputObjectTemplates(
+    inputs: Record<string, Template>,
+    inputsPath: string,
+    inputSchema: JSONSchema,
+    templateCtx: TemplateResolutionContext,
+    errors: ValidationError[],
+): void {
+    const resolvedProperties: Record<string, JSONSchema> = {};
+    const required: string[] = [];
+
+    for (const [fieldName, tmpl] of Object.entries(inputs)) {
+        const templatePath = `${inputsPath}.${fieldName}`;
+        const computed = walkTemplateAndComputeType(
+            tmpl,
+            templatePath,
+            templateCtx,
+            errors,
+        );
+        if (computed === undefined) continue;
+
+        resolvedProperties[fieldName] = computed;
+        required.push(fieldName);
+
+        const consumerPropDef = inputSchema.properties?.[fieldName];
+        if (!consumerPropDef || typeof consumerPropDef === "boolean") {
+            continue;
+        }
+        checkResolvedAssignability(
+            computed,
+            consumerPropDef,
+            templatePath,
+            errors,
+            "Resolved input",
+            "expected",
+        );
+    }
+
+    checkResolvedAssignability(
+        {
+            type: "object",
+            properties: resolvedProperties,
+            ...(required.length > 0 ? { required } : {}),
+        },
+        inputSchema,
+        inputsPath,
+        errors,
+        "Resolved inputs",
+        "inputSchema",
+    );
 }
 
 function validateWorkflowCallNode(
     node: WorkflowCallNode,
     path: string,
-    nodeIds: Set<string>,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
-    // Never-output calls always fail: next, bind, and onError are unreachable.
-    if (isNeverSchema(node.outputSchema)) {
-        const refLabel = node.workflowRef?.name
-            ? `Workflow call "${node.workflowRef.name}"`
-            : "Workflow call";
-        if (node.next) {
+    const { nodeIds, workflowCallCtx, templateCtx, errors } = state;
+    const refName = node.workflowRef?.name;
+    if (typeof refName !== "string" || refName.length === 0) {
+        errors.push({
+            path: `${path}.workflowRef.name`,
+            message: `Missing or invalid workflow reference name.`,
+        });
+    } else {
+        workflowCallCtx.callees.add(refName);
+        const source = node.workflowRef.source ?? "bundle";
+        if (source !== "bundle") {
             errors.push({
-                path: `${path}.next`,
-                message: `${refLabel} has outputSchema { "not": {} } (never) and must not have "next".`,
+                path: `${path}.workflowRef.source`,
+                message: `Unsupported workflow reference source "${source}". Only "bundle" is supported in IR v1.`,
             });
-        }
-        if (node.bind) {
-            errors.push({
-                path: `${path}.bind`,
-                message: `${refLabel} has outputSchema { "not": {} } (never) and must not have "bind".`,
-            });
-        }
-        if (node.onError) {
-            errors.push({
-                path: `${path}.onError`,
-                message: `${refLabel} has outputSchema { "not": {} } (never) and must not have "onError".`,
-            });
+        } else {
+            const target = workflowCallCtx.workflows[refName];
+            if (!target) {
+                errors.push({
+                    path: `${path}.workflowRef.name`,
+                    message: `Workflow "${refName}" not found in workflows table.`,
+                });
+            } else {
+                if (
+                    canonicalStringify(node.inputSchema) !==
+                    canonicalStringify(target.inputSchema)
+                ) {
+                    errors.push({
+                        path: `${path}.inputSchema`,
+                        message: `Call inputSchema does not match referenced workflow "${refName}" inputSchema.`,
+                    });
+                }
+                if (
+                    canonicalStringify(node.outputSchema) !==
+                    canonicalStringify(target.outputSchema)
+                ) {
+                    errors.push({
+                        path: `${path}.outputSchema`,
+                        message: `Call outputSchema does not match referenced workflow "${refName}" outputSchema.`,
+                    });
+                }
+            }
         }
     }
+    checkNeverOutputControlFlow(
+        node.outputSchema,
+        node.workflowRef?.name
+            ? `Workflow call "${node.workflowRef.name}"`
+            : "Workflow call",
+        node,
+        path,
+        errors,
+    );
+    validateNodeInputTemplates(node, path, templateCtx, errors);
     checkBindableTargets(nodeIds, node, path, errors);
 }
 
 function validateTaskNode(
     node: TaskNode,
     path: string,
-    nodeIds: Set<string>,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
+    const { nodeIds, tasks, templateCtx, errors } = state;
     if (tasks && !tasks.has(node.task)) {
         errors.push({
             path: `${path}.task`,
@@ -1910,38 +1664,24 @@ function validateTaskNode(
             checkNodeTaskSchemas(taskDef, node, path, errors);
         }
     }
-    // Never-output tasks always fail: next, bind, and onError are unreachable.
-    if (isNeverSchema(node.outputSchema)) {
-        if (node.next) {
-            errors.push({
-                path: `${path}.next`,
-                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "next".`,
-            });
-        }
-        if (node.bind) {
-            errors.push({
-                path: `${path}.bind`,
-                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "bind".`,
-            });
-        }
-        if (node.onError) {
-            errors.push({
-                path: `${path}.onError`,
-                message: `Task "${node.task}" has outputSchema { "not": {} } (never) and must not have "onError".`,
-            });
-        }
-    }
+    checkNeverOutputControlFlow(
+        node.outputSchema,
+        `Task "${node.task}"`,
+        node,
+        path,
+        errors,
+    );
+    validateNodeInputTemplates(node, path, templateCtx, errors);
     checkBindableTargets(nodeIds, node, path, errors);
 }
 
 function validateBranchNode(
     node: BranchNode,
     path: string,
-    nodeIds: Set<string>,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
+    const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
+    const validInputTemplatePaths = new Set<string>();
     // Validate selectorSchema type: String() coercion at runtime only
     // produces useful results for primitive types.
     const selectorType = node.selectorSchema?.type;
@@ -1959,11 +1699,34 @@ function validateBranchNode(
         }
     }
     for (const [label, arm] of Object.entries(node.cases)) {
-        validateBranchArm(arm, `${path}.cases.${label}`, tasks, ctx, errors);
+        validateBranchArm(
+            arm,
+            `${path}.cases.${label}`,
+            tasks,
+            ambientCtx,
+            state.workflowCallCtx,
+            validInputTemplatePaths,
+            errors,
+        );
     }
     if (node.default !== undefined) {
-        validateBranchArm(node.default, `${path}.default`, tasks, ctx, errors);
+        validateBranchArm(
+            node.default,
+            `${path}.default`,
+            tasks,
+            ambientCtx,
+            state.workflowCallCtx,
+            validInputTemplatePaths,
+            errors,
+        );
     }
+    validateBranchNodeTemplates(
+        node,
+        path,
+        templateCtx,
+        validInputTemplatePaths,
+        errors,
+    );
     // Branch bind / outputSchema are mutually required.
     if (node.bind !== undefined && node.outputSchema === undefined) {
         errors.push({
@@ -2011,12 +1774,10 @@ function validateBranchNode(
 function validateLoopNode(
     node: LoopNode,
     path: string,
-    nodeIds: Set<string>,
-    outerNodes: Record<string, WorkflowNode>,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
+    const { nodeIds, outerNodes, tasks, ambientCtx, templateCtx, errors } =
+        state;
     if (!(node.body.entry in node.body.nodes)) {
         errors.push({
             path: `${path}.body.entry`,
@@ -2035,8 +1796,22 @@ function validateLoopNode(
         node.body,
         `${path}.body`,
         tasks,
-        { constants: ctx.constants, stateVars: node.state },
+        withAmbientContext(ambientCtx, {
+            stateVars: node.state,
+        }),
+        state.workflowCallCtx,
         errors,
+    );
+
+    // Build a body-scope TemplateResolutionContext for templates evaluated in the
+    // body context (continueWhen, iterateState). These templates reference body
+    // bindings for $from:"scope" and body.inputSchema for $from:"input".
+    const bodyTemplateCtx = createTemplateResolutionContext(
+        node.body,
+        bodyBindings,
+        withAmbientContext(ambientCtx, {
+            stateVars: node.state,
+        }),
     );
 
     // continueWhen is required; loop body natural completion triggers evaluation.
@@ -2049,40 +1824,26 @@ function validateLoopNode(
                 `natural completion).`,
         });
     } else {
-        // $from:scope refs in continueWhen must resolve to names bound
-        // in the body scope.
-        const cwScopeRefs = collectTemplateRefs(
+        // Single-pass walk: validates syntax, name/path existence, and
+        // computes the type — using the body scope context.
+        walkTemplateAndComputeType(
             node.continueWhen,
             `${path}.continueWhen`,
-            "scope",
+            bodyTemplateCtx,
+            errors,
         );
-        for (const ref of cwScopeRefs) {
-            if (!bodyBindings.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "scope", name "${ref.name}": no node ` +
-                        `in the loop body binds "${ref.name}".`,
-                });
-            }
-        }
-        // $from:state refs in continueWhen must resolve to declared state vars.
-        const stateNames = new Set(Object.keys(node.state ?? {}));
-        const cwStateRefs = collectTemplateRefs(
-            node.continueWhen,
-            `${path}.continueWhen`,
-            "state",
+    }
+
+    // iterateState templates are evaluated in the body scope.
+    for (const [stateName, stateTemplate] of Object.entries(
+        node.iterateState,
+    )) {
+        walkTemplateAndComputeType(
+            stateTemplate,
+            `${path}.iterateState.${stateName}`,
+            bodyTemplateCtx,
+            errors,
         );
-        for (const ref of cwStateRefs) {
-            if (!stateNames.has(ref.name)) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "state", name "${ref.name}": no state ` +
-                        `variable "${ref.name}" is declared on this loop.`,
-                });
-            }
-        }
     }
 
     checkPositiveIntegerField(
@@ -2091,17 +1852,16 @@ function validateLoopNode(
         "maxIterations",
         errors,
     );
+    validateNodeInputTemplates(node, path, templateCtx, errors);
     checkBindableTargets(nodeIds, node, path, errors);
 }
 
 function validateForkNode(
     node: ForkNode,
     path: string,
-    nodeIds: Set<string>,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
+    const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
     const branchNames = Object.keys(node.branches);
     if (branchNames.length < 2) {
         errors.push({
@@ -2120,10 +1880,14 @@ function validateForkNode(
             branch.scope,
             `${path}.branches.${bName}.scope`,
             tasks,
-            { constants: ctx.constants, stateVars: undefined },
+            withAmbientContext(ambientCtx, {
+                stateVars: undefined,
+            }),
+            state.workflowCallCtx,
             errors,
         );
     }
+    validateForkNodeTemplates(node, path, templateCtx, errors);
     checkPositiveIntegerField(
         node.maxConcurrency,
         path,
@@ -2136,18 +1900,16 @@ function validateForkNode(
 function validateForkMapNode(
     node: ForkMapNode,
     path: string,
-    nodeIds: Set<string>,
-    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
-    errors: ValidationError[],
+    state: ScopeValidationState,
 ): void {
+    const { nodeIds, tasks, ambientCtx, templateCtx, errors } = state;
     if (!normalizeTypeSet(node.collectionSchema?.type).includes("array")) {
         errors.push({
             path: `${path}.collectionSchema`,
             message: `forkMap collectionSchema must be type "array".`,
         });
     }
-    // Gap 9: validate element schema against body inputSchema's elementParam.
+    // Validate collection item schema against the body input element parameter.
     const itemSchema = node.collectionSchema?.items;
     if (
         itemSchema &&
@@ -2178,18 +1940,17 @@ function validateForkMapNode(
         node.body,
         `${path}.body`,
         tasks,
-        { constants: ctx.constants, stateVars: undefined },
+        withAmbientContext(ambientCtx, {
+            stateVars: undefined,
+            stateNamespaceUnavailableMessage: (name) =>
+                `$from "state", name "${name}": forkMap body nodes ` +
+                `have no state namespace. Pass state values through ` +
+                `forkMap inputs or body input instead.`,
+        }),
+        state.workflowCallCtx,
         errors,
     );
-    // forkMap body must not use $from: "state"
-    for (const [bNodeId, bNode] of Object.entries(node.body.nodes)) {
-        if (hasInputs(bNode) && templateRefersToState(bNode.inputs)) {
-            errors.push({
-                path: `${path}.body.nodes.${bNodeId}.inputs`,
-                message: `forkMap body nodes must not use $from: "state".`,
-            });
-        }
-    }
+    validateForkMapNodeTemplates(node, path, templateCtx, errors);
     checkPositiveIntegerField(
         node.maxConcurrency,
         path,
@@ -2232,20 +1993,6 @@ function checkArmCovariance(
     );
 }
 
-/**
- * Recursively check whether a template contains any $from: "state" reference.
- */
-function templateRefersToState(template: Template): boolean {
-    if (template === null || template === undefined) return false;
-    if (typeof template !== "object") return false;
-    if (Array.isArray(template)) {
-        return template.some((t) => templateRefersToState(t));
-    }
-    const obj = template as Record<string, unknown>;
-    if ("$from" in obj && obj["$from"] === "state") return true;
-    return Object.values(obj).some((v) => templateRefersToState(v as Template));
-}
-
 // ---- Static schema compatibility ----
 
 /**
@@ -2257,7 +2004,10 @@ function buildBindingMap(
     const map = new Map<string, JSONSchema>();
     for (const node of Object.values(nodes)) {
         if (isBindableNode(node) && node.bind) {
-            map.set(node.bind, nodeOutputSchema(node));
+            const outputSchema = nodeOutputSchema(node);
+            if (outputSchema) {
+                map.set(node.bind, outputSchema);
+            }
         }
     }
     return map;
@@ -2300,59 +2050,6 @@ function resolveSchemaPath(
     return current;
 }
 
-/**
- * Check that a producer schema at a given path is type-compatible with
- * what the consumer expects. Returns an error message or undefined.
- *
- * This is a lightweight structural check: it verifies that the producer
- * declares the path exists and that the leaf types are compatible.
- */
-/**
- * Verify that a producer's `outputSchema` declares the path that a
- * consumer references, and that the resolved types are compatible.
- * Pushes one error to `errors` per failure.
- *
- * `errorPath` is the JSON path attributed to the error (typically the
- * consumer's template path). `refDesc` is the human-readable prefix
- * embedded in error messages (e.g. `${templatePath} ($from "scope",
- * name "x")`).
- */
-function checkSchemaCompat(
-    producerSchema: JSONSchema,
-    path: (string | number)[] | undefined,
-    errorPath: string,
-    refDesc: string,
-    errors: ValidationError[],
-    consumerType?: string | string[],
-): void {
-    if (!path || path.length === 0) {
-        // Reference to the whole output; compatible by definition
-        // (consumer will validate at their end).
-        return;
-    }
-    const resolved = resolveSchemaPath(producerSchema, path);
-    if (resolved === undefined) {
-        errors.push({
-            path: errorPath,
-            message: `${refDesc}: path ${JSON.stringify(path)} not declared in producer outputSchema`,
-        });
-        return;
-    }
-    // Type compatibility check: if the consumer declares a type and the
-    // producer declares a type, verify they overlap.
-    const normalizedResolved = inferSchemaType(resolved);
-    if (consumerType && normalizedResolved.type) {
-        if (!typeSetsOverlap(normalizedResolved.type, consumerType)) {
-            errors.push({
-                path: errorPath,
-                message:
-                    `${refDesc}: type mismatch: producer declares ` +
-                    `${JSON.stringify(normalizedResolved.type)} but consumer expects ${JSON.stringify(consumerType)}`,
-            });
-        }
-    }
-}
-
 /** Normalize a JSON Schema type (string or array) to an array of type strings. */
 function normalizeTypeSet(type: unknown): string[] {
     if (Array.isArray(type)) return type as string[];
@@ -2368,16 +2065,6 @@ function typeAssignableTo(a: string, b: string): boolean {
     return a === b || (a === "integer" && b === "number");
 }
 
-/**
- * True when the type sets overlap: at least one type in `aTypes` is
- * assignable to at least one type in `bTypes`.
- */
-function typeSetsOverlap(aType: unknown, bType: unknown): boolean {
-    const aTypes = normalizeTypeSet(aType);
-    const bTypes = normalizeTypeSet(bType);
-    return aTypes.some((a) => bTypes.some((b) => typeAssignableTo(a, b)));
-}
-
 /** Type guard: node kinds that carry `bind`, `next`, and `onError`. */
 function isBindableNode(
     node: WorkflowNode,
@@ -2390,7 +2077,17 @@ function isBindableNode(
     | BranchNode {
     // Branches now produce values when `bind` + `outputSchema` are
     // declared (ir-v0.2 branch-as-value-producing-node).
-    return true;
+    switch (node.kind) {
+        case "task":
+        case "loop":
+        case "fork":
+        case "forkMap":
+        case "workflowCall":
+        case "branch":
+            return true;
+        default:
+            assertNever(node);
+    }
 }
 
 /** Type guard: node kinds that carry `inputs` (task, loop, workflowCall). */
@@ -2420,9 +2117,9 @@ function nodeOutputSchema(
         | ForkMapNode
         | WorkflowCallNode
         | BranchNode,
-): JSONSchema {
+): JSONSchema | undefined {
     if (node.kind === "loop") return node.body.outputSchema;
-    if (node.kind === "branch") return node.outputSchema ?? {};
+    if (node.kind === "branch") return node.outputSchema;
     return node.outputSchema;
 }
 
@@ -2488,6 +2185,34 @@ function checkBindableTargets(
     checkTargetExists(nodeIds, node.onError, path, "onError", errors);
 }
 
+function checkNeverOutputControlFlow(
+    outputSchema: JSONSchema,
+    label: string,
+    node: { next?: string; bind?: string; onError?: string },
+    path: string,
+    errors: ValidationError[],
+): void {
+    if (!isNeverSchema(outputSchema)) return;
+    if (node.next) {
+        errors.push({
+            path: `${path}.next`,
+            message: `${label} has outputSchema { "not": {} } (never) and must not have "next".`,
+        });
+    }
+    if (node.bind) {
+        errors.push({
+            path: `${path}.bind`,
+            message: `${label} has outputSchema { "not": {} } (never) and must not have "bind".`,
+        });
+    }
+    if (node.onError) {
+        errors.push({
+            path: `${path}.onError`,
+            message: `${label} has outputSchema { "not": {} } (never) and must not have "onError".`,
+        });
+    }
+}
+
 /**
  * Validate a scope's nodes (structural + schema-compat + CFG).
  * Returns the binding map built during validation so callers can
@@ -2501,13 +2226,14 @@ function validateScope(
     scope: WorkflowScope,
     basePath: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
-    ctx: ScopeValidationContext,
+    ambientCtx: ScopeAmbientContext,
+    workflowCallCtx: WorkflowCallContext,
     errors: ValidationError[],
 ): Map<string, JSONSchema> {
     const prefix = `${basePath}.nodes`;
     const bindings = buildBindingMap(scope.nodes);
 
-    // Pre-pass: build recovery trigger schemas for TypeResolutionContext.
+    // Pre-pass: build recovery trigger schemas for TemplateResolutionContext.
     const recoveryTriggerSchemas = new Map<string, JSONSchema>();
     for (const node of Object.values(scope.nodes)) {
         if (isBindableNode(node) && node.onError) {
@@ -2518,24 +2244,22 @@ function validateScope(
         }
     }
 
-    const typeCtx: TypeResolutionContext = {
+    const templateCtx = createTemplateResolutionContext(
+        scope,
         bindings,
-        inputSchema: scope.inputSchema,
-        stateVars: ctx.stateVars,
-        constants: ctx.constants,
-        recoveryTriggerInputSchema: undefined,
-    };
+        ambientCtx,
+    );
 
-    validateScopeNodes(
-        scope.nodes,
-        prefix,
+    validateScopeNodes(scope.nodes, prefix, {
+        nodeIds: new Set(Object.keys(scope.nodes)),
+        outerNodes: scope.nodes,
         tasks,
-        ctx,
-        typeCtx,
+        ambientCtx,
+        workflowCallCtx,
+        templateCtx,
         recoveryTriggerSchemas,
         errors,
-    );
-    validateSchemaCompat(scope.nodes, prefix, errors, bindings);
+    });
     validateScopeCFG(
         scope.nodes,
         scope.entry,
@@ -2545,75 +2269,65 @@ function validateScope(
         `${basePath}.output`,
     );
 
-    // Scope-level output template checks.
+    // Scope-level output template: single-pass walk (syntax + ref checks + type),
+    // then after-walk comparison against declared outputSchema.
     if (scope.output) {
-        checkReservedTemplateKeys(scope.output, `${basePath}.output`, errors);
-
-        // Scope refs in output: name resolution + schema compat.
-        const outputRefs = collectTemplateRefs(
+        const outputResolved = walkTemplateAndComputeType(
             scope.output,
             `${basePath}.output`,
-            "scope",
-        );
-        for (const ref of outputRefs) {
-            if (!bindings.has(ref.name)) {
-                if (!ref.optional) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "scope", name "${ref.name}": no node in ` +
-                            `this scope binds that name.`,
-                    });
-                }
-            } else {
-                const producerSchema = bindings.get(ref.name)!;
-                checkSchemaCompat(
-                    producerSchema,
-                    ref.path,
-                    ref.templatePath,
-                    `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-                    errors,
-                );
-            }
-        }
-
-        // Output type vs outputSchema.
-        if (scope.outputSchema && !isEmptySchema(scope.outputSchema)) {
-            const outputResolved = resolveTemplateType(scope.output, typeCtx);
-            if (outputResolved) {
-                if (
-                    !checkUnknownAssignability(
-                        outputResolved,
-                        scope.outputSchema,
-                        `${basePath}.output`,
-                        errors,
-                        "Output resolved type",
-                        "outputSchema",
-                    )
-                ) {
-                    checkStructuralSubtype(
-                        outputResolved,
-                        scope.outputSchema,
-                        `${basePath}.output`,
-                        errors,
-                        "Output resolved type",
-                        "outputSchema",
-                    );
-                }
-            }
-        }
-
-        // Input/constant refs in output template.
-        checkInputConstantRefsInTemplate(
-            scope.output,
-            `${basePath}.output`,
-            scope.inputSchema,
-            ctx.constants,
+            templateCtx,
             errors,
         );
+        if (outputResolved && scope.outputSchema) {
+            checkResolvedAssignability(
+                outputResolved,
+                scope.outputSchema,
+                `${basePath}.output`,
+                errors,
+                "Output resolved type",
+                "outputSchema",
+            );
+        }
     }
 
     return bindings;
+}
+
+function createTemplateResolutionContext(
+    scope: WorkflowScope,
+    bindings: Map<string, JSONSchema>,
+    ambientCtx: ScopeAmbientContext,
+): TemplateResolutionContext {
+    const templateCtx: TemplateResolutionContext = {
+        bindings,
+        inputSchema: scope.inputSchema,
+        stateVars: ambientCtx.stateVars,
+        constants: ambientCtx.constants,
+        recoveryTriggerInputSchema: undefined,
+    };
+    if (ambientCtx.stateNamespaceUnavailableMessage) {
+        templateCtx.stateNamespaceUnavailableMessage =
+            ambientCtx.stateNamespaceUnavailableMessage;
+    }
+    return templateCtx;
+}
+
+function withAmbientContext(
+    ambientCtx: ScopeAmbientContext,
+    overrides: Pick<
+        ScopeAmbientContext,
+        "stateVars" | "stateNamespaceUnavailableMessage"
+    >,
+): ScopeAmbientContext {
+    const childCtx: ScopeAmbientContext = {
+        constants: ambientCtx.constants,
+        stateVars: overrides.stateVars,
+    };
+    if (overrides.stateNamespaceUnavailableMessage) {
+        childCtx.stateNamespaceUnavailableMessage =
+            overrides.stateNamespaceUnavailableMessage;
+    }
+    return childCtx;
 }
 
 /**
@@ -2651,11 +2365,24 @@ function buildArraySchema(elemSchemas: JSONSchema[]): JSONSchema {
         : { type: "array" };
 }
 
-/**
- * Returns true when a schema is `{}` (empty object: no constraints).
- *
- * In JSON Schema, `{}` is the **top type** — it accepts every value —
- * which the DSL/IR uses as the "unknown" sentinel for schema-less
+function omitProperty(
+    schema: JSONSchema,
+    propertyName: string | undefined,
+): JSONSchema {
+    if (!propertyName) {
+        return schema;
+    }
+    const required = schema.required?.filter((name) => name !== propertyName);
+    const properties = schema.properties ? { ...schema.properties } : undefined;
+    const rest = { ...schema };
+    if (properties) {
+        delete properties[propertyName];
+        rest.properties = properties;
+    }
+    delete rest.required;
+    return required && required.length > 0 ? { ...rest, required } : rest;
+}
+
 /**
  * Returns true when a schema is `{}` (empty object: no constraints).
  *
@@ -2669,38 +2396,24 @@ function isEmptySchema(schema: JSONSchema): boolean {
     return Object.keys(schema).length === 0;
 }
 
-/**
- * Decision 0011 enforcement at template-resolution sites: if a template
- * reference resolves to a `{}` (unknown) producer schema and the consumer
- * slot has a concrete schema, push an error. This is the consumer-side
- * counterpart to allowing `{}` on bound producers — the unknown value is
- * opaque, so reading it as a typed value is unsound.
- *
- * Only call this at sites where the producer schema came from resolving
- * a `$from` template reference (not from task/node definition compat,
- * where a `{}` task schema legitimately means "anything goes").
- *
- * Returns true if an error was pushed.
- */
-function checkUnknownAssignability(
+/** Validate a resolved template schema against a consumer slot. */
+function checkResolvedAssignability(
     producer: JSONSchema,
     consumer: JSONSchema,
     path: string,
     errors: ValidationError[],
     producerLabel: string,
     consumerLabel: string,
-): boolean {
-    if (!isEmptySchema(producer)) return false;
-    if (isEmptySchema(consumer)) return false;
-    errors.push({
+): void {
+    checkStructuralSubtype(
+        producer,
+        consumer,
         path,
-        message:
-            `${producerLabel} resolves to {} (unknown); not assignable to ` +
-            `${consumerLabel} ${formatSchemaType(consumer)}. ` +
-            `Only consumers that accept unknown (schema {}) may read ` +
-            `from an unknown producer.`,
-    });
-    return true;
+        errors,
+        producerLabel,
+        consumerLabel,
+        { rejectUnknownProducer: true },
+    );
 }
 
 /**
@@ -2753,64 +2466,46 @@ function canonicalStringify(value: unknown): string {
     );
 }
 
-/**
- * Look up the consumer's expected schema for an input field given a
- * template path. Returns undefined for nested paths (containing "." or
- * "[" after the inputs prefix) since those can't be directly mapped to
- * an inputSchema property.
- */
-function resolveConsumerPropertySchema(
-    templatePath: string,
-    inputsPrefix: string,
-    inputSchema: JSONSchema,
-): JSONSchema | undefined {
-    if (!templatePath.startsWith(inputsPrefix)) return undefined;
-    const fieldName = templatePath.slice(inputsPrefix.length);
-    if (!fieldName || fieldName.includes(".") || fieldName.includes("[")) {
-        return undefined;
-    }
-    const propDef = inputSchema.properties?.[fieldName];
-    if (!propDef || typeof propDef === "boolean") return undefined;
-    return propDef;
-}
-
 // ---- Pass 7: Type compatibility ----
 
-/** Context threaded through validateScope for template validation passes. */
-interface ScopeValidationContext {
+/** Ambient data carried when validateScope recurses into child scopes. */
+interface ScopeAmbientContext {
     /** IR-level constant definitions, for $from:"constant" ref checks. */
     constants: Record<string, ConstantDef> | undefined;
     /** Loop state variable declarations (only set when validating a loop body). */
     stateVars: Record<string, LoopStateVar> | undefined;
+    /** Custom diagnostic for scopes that structurally disallow $from:"state". */
+    stateNamespaceUnavailableMessage?: (name: string) => string;
 }
 
-/** Context for resolving template types within a scope. */
-interface TypeResolutionContext {
+interface WorkflowCallContext {
+    /** Bundle-local workflows, for workflowCall ref checks. */
+    workflows: Record<string, WorkflowBody>;
+    /** Callees recorded while validating the current workflow body. */
+    callees: Set<string>;
+}
+
+/** Derived context used by the template walker to resolve `$from` refs. */
+interface TemplateResolutionContext {
     bindings: Map<string, JSONSchema>;
     inputSchema: JSONSchema | undefined;
     stateVars: Record<string, LoopStateVar> | undefined;
     constants: Record<string, ConstantDef> | undefined;
     /** When resolving inside an onError target, the trigger's inputSchema. */
     recoveryTriggerInputSchema: JSONSchema | undefined;
+    /** Custom diagnostic for scopes that structurally disallow $from:"state". */
+    stateNamespaceUnavailableMessage?: (name: string) => string;
 }
 
-function isFromTemplateRef(value: Template): value is TemplateFromRef {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return false;
-    }
-    if (
-        typeof value.$from !== "string" ||
-        !FROM_NAMESPACES.includes(value.$from as FromNamespace)
-    ) {
-        return false;
-    }
-    if (typeof value.name !== "string") {
-        return false;
-    }
-    if (value.path !== undefined && !Array.isArray(value.path)) {
-        return false;
-    }
-    return true;
+interface ScopeValidationState {
+    nodeIds: Set<string>;
+    outerNodes: Record<string, WorkflowNode>;
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined;
+    ambientCtx: ScopeAmbientContext;
+    workflowCallCtx: WorkflowCallContext;
+    templateCtx: TemplateResolutionContext;
+    recoveryTriggerSchemas: Map<string, JSONSchema>;
+    errors: ValidationError[];
 }
 
 /** Derive a JSON Schema from a literal JSON value. */
@@ -2843,13 +2538,31 @@ function jsonValueToSchema(value: unknown): JSONSchema {
     return {};
 }
 
+const KNOWN_DOLLAR_KEYS = new Set(["$from", "$literal"]);
+
 /**
- * Compute the JSON Schema type that a template expression resolves to.
- * Returns undefined if the type cannot be determined (e.g. unknown ref).
+ * Single-pass template walk: validates syntax, checks $from ref name and path
+ * existence, and computes the resolved JSON Schema type.
+ *
+ * This fuses what were previously four separate passes:
+ *   1. Reserved $-key syntax check (§3.4)
+ *   2. $from namespace validity
+ *   3. Name existence + path validity for input/constant/scope/state refs
+ *   4. Type computation
+ *
+ * Recovery refs (name validity, path checks) are handled separately by
+ * validateOnErrorRules, which has the structural context to know whether
+ * a node is an onError target. The walk here only computes the type for
+ * recovery refs without re-checking their structural rules.
+ *
+ * @returns The computed JSON Schema, or undefined if the type cannot be
+ *          determined (unresolvable ref or earlier error in this walk).
  */
-function resolveTemplateType(
+function walkTemplateAndComputeType(
     template: Template,
-    ctx: TypeResolutionContext,
+    templatePath: string,
+    templateCtx: TemplateResolutionContext,
+    errors: ValidationError[],
 ): JSONSchema | undefined {
     if (template === null) return { type: "null" };
     if (typeof template === "string")
@@ -2861,72 +2574,185 @@ function resolveTemplateType(
     }
     if (typeof template === "boolean")
         return { type: "boolean", const: template };
+
     if (Array.isArray(template)) {
-        const elemSchemas = template
-            .map((e) => resolveTemplateType(e, ctx))
-            .filter((s): s is JSONSchema => s !== undefined);
+        const elemSchemas: JSONSchema[] = [];
+        for (let i = 0; i < template.length; i++) {
+            const elem = walkTemplateAndComputeType(
+                template[i],
+                `${templatePath}[${i}]`,
+                templateCtx,
+                errors,
+            );
+            if (elem !== undefined) elemSchemas.push(elem);
+        }
         return buildArraySchema(elemSchemas);
     }
 
-    if (isFromTemplateRef(template)) {
-        const from = template.$from;
-        const name = template.name;
-        const path = template.path;
+    const obj = template as Record<string, unknown>;
+
+    // ---- Syntax: reserved $-key check (§3.4) ----
+    for (const key of Object.keys(obj)) {
+        if (key.startsWith("$") && !KNOWN_DOLLAR_KEYS.has(key)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $-prefixed key "${key}" in template. ` +
+                    `Only "$from" and "$literal" are recognized by the engine; ` +
+                    `all other $-prefixed keys are reserved (§3.4).`,
+            });
+            return undefined;
+        }
+    }
+
+    // ---- $from reference ----
+    if ("$from" in obj) {
+        const from = obj["$from"];
+        if (typeof from !== "string" || !VALID_FROM_NAMESPACES.has(from)) {
+            errors.push({
+                path: templatePath,
+                message:
+                    `Unknown $from namespace "${from}". ` +
+                    `Valid namespaces are: input, constant, scope, state, recovery.`,
+            });
+            return undefined;
+        }
+
+        const name = obj["name"] as string;
+        const path = obj["path"] as (string | number)[] | undefined;
+        const optional = obj["optional"] === true;
 
         let baseSchema: JSONSchema | undefined;
-        switch (from) {
-            case "scope":
-                baseSchema = ctx.bindings.get(name);
-                break;
-            case "input":
-                if (ctx.inputSchema?.properties) {
-                    const prop = ctx.inputSchema.properties[name];
-                    if (prop && typeof prop !== "boolean") {
-                        baseSchema = prop;
+
+        switch (from as FromNamespace) {
+            case "input": {
+                // Empty name is the emitter convention for "entire scope input".
+                if (name === "") break;
+                const inputProps = templateCtx.inputSchema?.properties;
+                if (!inputProps || !(name in inputProps)) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "input", name "${name}": ` +
+                                `not declared in scope inputSchema.`,
+                        });
                     }
+                    return undefined;
+                }
+                const prop = inputProps[name];
+                if (typeof prop !== "boolean") baseSchema = prop;
+                break;
+            }
+            case "constant": {
+                if (
+                    !templateCtx.constants ||
+                    !(name in templateCtx.constants)
+                ) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "constant", name "${name}": ` +
+                                `not declared in ir.constants.`,
+                        });
+                    }
+                    return undefined;
+                }
+                baseSchema = templateCtx.constants[name]?.schema;
+                break;
+            }
+            case "scope": {
+                baseSchema = templateCtx.bindings.get(name);
+                if (!baseSchema) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "scope", name "${name}": no node in ` +
+                                `this scope binds that name.`,
+                        });
+                    }
+                    return undefined;
                 }
                 break;
-            case "state":
-                baseSchema = ctx.stateVars?.[name]?.schema;
+            }
+            case "state": {
+                if (!templateCtx.stateVars) {
+                    errors.push({
+                        path: templatePath,
+                        message:
+                            templateCtx.stateNamespaceUnavailableMessage?.(
+                                name,
+                            ) ??
+                            `$from "state", name "${name}": no state ` +
+                                `namespace is available in this scope. ` +
+                                `State references are only available in ` +
+                                `loop body templates.`,
+                    });
+                    return undefined;
+                }
+                if (!(name in templateCtx.stateVars)) {
+                    if (!optional) {
+                        errors.push({
+                            path: templatePath,
+                            message:
+                                `$from "state", name "${name}": no state ` +
+                                `variable "${name}" is declared on this loop.`,
+                        });
+                    }
+                    return undefined;
+                }
+                baseSchema = templateCtx.stateVars[name].schema;
                 break;
-            case "constant":
-                baseSchema = ctx.constants?.[name]?.schema;
-                break;
-            case "recovery":
-                // Recovery refs are engine-injected values available only on
-                // onError targets. Rule 5 validates name/domain legality.
+            }
+            case "recovery": {
+                // Name validity and "must be onError target" are checked by
+                // validateOnErrorRules; here we just resolve the type.
                 if (name === "error") {
                     baseSchema = RECOVERY_ERROR_SCHEMA;
                 } else if (name === "trigger") {
-                    // The resolved inputs of the failed task. undefined
-                    // when the trigger is fork/branch (no inputs object).
-                    baseSchema = ctx.recoveryTriggerInputSchema;
+                    baseSchema = templateCtx.recoveryTriggerInputSchema;
                 }
                 break;
+            }
             default:
-                assertNever(from);
+                assertNever(from as never);
         }
-        // Unresolvable ref (bad name, missing binding, etc.). Earlier
-        // passes already reported the root cause; skip type checking.
+
         if (!baseSchema) return undefined;
+
+        // ---- Path existence + type projection ----
         if (path && path.length > 0) {
-            // Path segment not declared in schema; earlier passes
-            // (checkSchemaCompat) already reported this.
-            return resolveSchemaPath(baseSchema, path);
+            const resolved = resolveSchemaPath(baseSchema, path);
+            if (resolved === undefined) {
+                errors.push({
+                    path: templatePath,
+                    message: `${templatePath} ($from "${from}", name "${name}"): path ${JSON.stringify(path)} not declared in producer outputSchema`,
+                });
+                return undefined;
+            }
+            return resolved;
         }
         return baseSchema;
     }
 
-    if ("$literal" in template) {
-        return jsonValueToSchema(template["$literal"]);
+    // ---- $literal ----
+    if ("$literal" in obj) {
+        return jsonValueToSchema(obj["$literal"]);
     }
 
-    // Plain object: property-wise composition
+    // ---- Plain object: property-wise composition ----
     const properties: Record<string, JSONSchema> = {};
     const required: string[] = [];
-    for (const [key, value] of Object.entries(template)) {
-        const propType = resolveTemplateType(value, ctx);
-        if (propType) {
+    for (const [key, value] of Object.entries(obj)) {
+        const propType = walkTemplateAndComputeType(
+            value as Template,
+            `${templatePath}.${key}`,
+            templateCtx,
+            errors,
+        );
+        if (propType !== undefined) {
             properties[key] = propType;
             required.push(key);
         }
@@ -2936,6 +2762,133 @@ function resolveTemplateType(
         properties,
         ...(required.length > 0 ? { required } : {}),
     };
+}
+
+interface StructuralSubtypeOptions {
+    /** Reject `{}` producer schemas as opaque unknown values. */
+    rejectUnknownProducer?: boolean;
+}
+
+function isStructuralSubtypeOfSomeVariant(
+    producer: JSONSchema,
+    variants: readonly (JSONSchema | boolean)[],
+    options: StructuralSubtypeOptions,
+): boolean {
+    return variants.some(
+        (variant) =>
+            typeof variant !== "boolean" &&
+            isStructuralSubtype(producer, variant, options),
+    );
+}
+
+function isSomeVariantStructuralSubtype(
+    variants: readonly (JSONSchema | boolean)[],
+    consumer: JSONSchema,
+    options: StructuralSubtypeOptions,
+): boolean {
+    return variants.some(
+        (variant) =>
+            typeof variant !== "boolean" &&
+            isStructuralSubtype(variant, consumer, options),
+    );
+}
+
+function checkPropertyStructuralSubtype(
+    producerProp: JSONSchema | boolean | undefined,
+    consumerProp: JSONSchema | boolean | undefined,
+    path: string,
+    errors: ValidationError[],
+    producerLabel: string,
+    consumerLabel: string,
+    options: StructuralSubtypeOptions,
+): void {
+    if (
+        !producerProp ||
+        !consumerProp ||
+        typeof producerProp === "boolean" ||
+        typeof consumerProp === "boolean"
+    ) {
+        return;
+    }
+
+    checkStructuralSubtype(
+        producerProp,
+        consumerProp,
+        path,
+        errors,
+        producerLabel,
+        consumerLabel,
+        options,
+    );
+}
+
+function checkConstEnumStructuralSubtype(
+    producer: JSONSchema,
+    consumer: JSONSchema,
+    path: string,
+    errors: ValidationError[],
+    producerLabel: string,
+    consumerLabel: string,
+): boolean {
+    if (consumer.const !== undefined) {
+        if (producer.const !== undefined) {
+            if (producer.const !== consumer.const) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `does not equal ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return true;
+        }
+        if (producer.enum) {
+            const bad = producer.enum.filter((v) => v !== consumer.const);
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `do not match ${consumerLabel} const ` +
+                        `${JSON.stringify(consumer.const)}.`,
+                });
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (consumer.enum) {
+        const allowed = new Set(consumer.enum);
+        if (producer.const !== undefined) {
+            if (!allowed.has(producer.const)) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
+                        `is not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return true;
+        }
+        if (producer.enum) {
+            const bad = producer.enum.filter((v) => !allowed.has(v));
+            if (bad.length > 0) {
+                errors.push({
+                    path,
+                    message:
+                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
+                        `are not in ${consumerLabel} enum ` +
+                        `${JSON.stringify(consumer.enum)}.`,
+                });
+            }
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -2950,16 +2903,23 @@ export function checkStructuralSubtype(
     errors: ValidationError[],
     producerLabel: string = "Producer",
     consumerLabel: string = "consumer",
+    options: StructuralSubtypeOptions = {},
 ): void {
     if (isEmptySchema(consumer)) return;
     if (isEmptySchema(producer) && !isEmptySchema(consumer)) {
+        if (options.rejectUnknownProducer) {
+            errors.push({
+                path,
+                message:
+                    `${producerLabel} resolves to {} (unknown); not assignable to ` +
+                    `${consumerLabel} ${formatSchemaType(consumer)}. ` +
+                    `Only consumers that accept unknown (schema {}) may read ` +
+                    `from an unknown producer.`,
+            });
+            return;
+        }
         // Producer is unconstrained; can't prove it's a subtype of
         // a constrained consumer. Be lenient: skip.
-        // (Decision 0011: the stricter "unknown is not assignable to T"
-        // rule is enforced narrowly at template-resolution sites \u2014 see
-        // checkUnknownAssignability \u2014 rather than here, because this
-        // helper is also used for task-vs-node schema compatibility where
-        // a `{}` task schema legitimately means "task accepts anything".)
         return;
     }
 
@@ -2979,9 +2939,10 @@ export function checkStructuralSubtype(
                 continue;
             }
             if (consumerVariants) {
-                const compatible = consumerVariants.some(
-                    (cv) =>
-                        typeof cv !== "boolean" && isStructuralSubtype(v, cv),
+                const compatible = isStructuralSubtypeOfSomeVariant(
+                    v,
+                    consumerVariants,
+                    options,
                 );
                 if (!compatible) {
                     errors.push({
@@ -3000,6 +2961,7 @@ export function checkStructuralSubtype(
                     errors,
                     `${producerLabel} variant [${i}]`,
                     consumerLabel,
+                    options,
                 );
             }
         }
@@ -3007,8 +2969,10 @@ export function checkStructuralSubtype(
     }
 
     if (consumerVariants) {
-        const compatible = consumerVariants.some(
-            (v) => typeof v !== "boolean" && isStructuralSubtype(producer, v),
+        const compatible = isStructuralSubtypeOfSomeVariant(
+            producer,
+            consumerVariants,
+            options,
         );
         if (!compatible) {
             errors.push({
@@ -3022,65 +2986,25 @@ export function checkStructuralSubtype(
     }
 
     // Const / enum narrowing checks.
-    if (consumer.const !== undefined) {
-        if (producer.const !== undefined) {
-            if (producer.const !== consumer.const) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
-                        `does not equal ${consumerLabel} const ` +
-                        `${JSON.stringify(consumer.const)}.`,
-                });
-            }
-            return;
-        }
-        if (producer.enum) {
-            const bad = producer.enum.filter((v) => v !== consumer.const);
-            if (bad.length > 0) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
-                        `do not match ${consumerLabel} const ` +
-                        `${JSON.stringify(consumer.const)}.`,
-                });
-            }
-            return;
-        }
-    } else if (consumer.enum) {
-        const allowed = new Set(consumer.enum);
-        if (producer.const !== undefined) {
-            if (!allowed.has(producer.const)) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} const ${JSON.stringify(producer.const)} ` +
-                        `is not in ${consumerLabel} enum ` +
-                        `${JSON.stringify(consumer.enum)}.`,
-                });
-            }
-            return;
-        }
-        if (producer.enum) {
-            const bad = producer.enum.filter((v) => !allowed.has(v));
-            if (bad.length > 0) {
-                errors.push({
-                    path,
-                    message:
-                        `${producerLabel} enum values ${JSON.stringify(bad)} ` +
-                        `are not in ${consumerLabel} enum ` +
-                        `${JSON.stringify(consumer.enum)}.`,
-                });
-            }
-            return;
-        }
+    if (
+        checkConstEnumStructuralSubtype(
+            producer,
+            consumer,
+            path,
+            errors,
+            producerLabel,
+            consumerLabel,
+        )
+    ) {
+        return;
     }
 
     // Handle allOf: intersection semantics.
     if (producer.allOf) {
-        const compatible = producer.allOf.some(
-            (v) => typeof v !== "boolean" && isStructuralSubtype(v, consumer),
+        const compatible = isSomeVariantStructuralSubtype(
+            producer.allOf,
+            consumer,
+            options,
         );
         if (!compatible) {
             errors.push({
@@ -3104,6 +3028,7 @@ export function checkStructuralSubtype(
                 errors,
                 producerLabel,
                 `${consumerLabel} allOf[${i}]`,
+                options,
             );
         }
         return;
@@ -3149,42 +3074,30 @@ export function checkStructuralSubtype(
         }
         const pProp = pProps[req];
         const cProp = cProps[req];
-        if (
-            pProp &&
-            cProp &&
-            typeof pProp !== "boolean" &&
-            typeof cProp !== "boolean"
-        ) {
-            checkStructuralSubtype(
-                pProp,
-                cProp,
-                `${path}.${req}`,
-                errors,
-                `${producerLabel} property "${req}"`,
-                `${consumerLabel} property "${req}"`,
-            );
-        }
+        checkPropertyStructuralSubtype(
+            pProp,
+            cProp,
+            `${path}.${req}`,
+            errors,
+            `${producerLabel} property "${req}"`,
+            `${consumerLabel} property "${req}"`,
+            options,
+        );
     }
 
     // Check optional consumer props present in producer
     for (const [key, cPropDef] of Object.entries(cProps)) {
         if (cRequired.includes(key)) continue;
         const pPropDef = pProps[key];
-        if (
-            pPropDef &&
-            cPropDef &&
-            typeof pPropDef !== "boolean" &&
-            typeof cPropDef !== "boolean"
-        ) {
-            checkStructuralSubtype(
-                pPropDef,
-                cPropDef,
-                `${path}.${key}`,
-                errors,
-                `${producerLabel} property "${key}"`,
-                `${consumerLabel} property "${key}"`,
-            );
-        }
+        checkPropertyStructuralSubtype(
+            pPropDef,
+            cPropDef,
+            `${path}.${key}`,
+            errors,
+            `${producerLabel} property "${key}"`,
+            `${consumerLabel} property "${key}"`,
+            options,
+        );
     }
 
     // Array: element type compatibility
@@ -3202,6 +3115,7 @@ export function checkStructuralSubtype(
                 errors,
                 `${producerLabel} items`,
                 `${consumerLabel} items`,
+                options,
             );
         }
     }
@@ -3213,9 +3127,18 @@ export function checkStructuralSubtype(
 export function isStructuralSubtype(
     producer: JSONSchema,
     consumer: JSONSchema,
+    options: StructuralSubtypeOptions = {},
 ): boolean {
     const errors: ValidationError[] = [];
-    checkStructuralSubtype(producer, consumer, "", errors);
+    checkStructuralSubtype(
+        producer,
+        consumer,
+        "",
+        errors,
+        "Producer",
+        "consumer",
+        options,
+    );
     return errors.length === 0;
 }
 
@@ -3300,6 +3223,7 @@ function checkPhiMergeTypes(
                 const binderNode = nodes[binderId];
                 if (!binderNode || !isBindableNode(binderNode)) continue;
                 const binderSchema = nodeOutputSchema(binderNode);
+                if (!binderSchema) continue;
 
                 // Apply path projection if present
                 const refPath = obj["path"] as (string | number)[] | undefined;
@@ -3307,9 +3231,18 @@ function checkPhiMergeTypes(
                     refPath && refPath.length > 0
                         ? resolveSchemaPath(binderSchema, refPath)
                         : binderSchema;
-                if (!projected) continue;
+                if (!projected) {
+                    errors.push({
+                        path: `${prefix}.${id}.inputs.${fieldName}`,
+                        message:
+                            `Phi-merge binder "${binderId}" for scope name ` +
+                            `"${refName}" does not declare path ` +
+                            `${JSON.stringify(refPath)} in its outputSchema.`,
+                    });
+                    continue;
+                }
 
-                checkStructuralSubtype(
+                checkResolvedAssignability(
                     projected,
                     consumerPropDef,
                     `${prefix}.${id}.inputs.${fieldName}`,
@@ -3671,63 +3604,7 @@ function schemasEqual(a: unknown, b: unknown): boolean {
     return true;
 }
 
-// ---- Pass: Reserved $-key check (§3.4) ----
-
-const KNOWN_DOLLAR_KEYS = new Set(["$from", "$literal"]);
-
-/**
- * Walk a template recursively and report any object that contains an
- * unrecognised $-prefixed key. Per §3.4, only "$from" and "$literal"
- * are legal; every other $-prefixed key is reserved for future engine use
- * and MUST be rejected.
- */
-function checkReservedTemplateKeys(
-    template: Template,
-    templatePath: string,
-    errors: ValidationError[],
-): void {
-    if (template === null || typeof template !== "object") return;
-    if (Array.isArray(template)) {
-        for (let i = 0; i < template.length; i++) {
-            checkReservedTemplateKeys(
-                template[i],
-                `${templatePath}[${i}]`,
-                errors,
-            );
-        }
-        return;
-    }
-    const obj = template as Record<string, unknown>;
-    for (const key of Object.keys(obj)) {
-        if (key.startsWith("$") && !KNOWN_DOLLAR_KEYS.has(key)) {
-            errors.push({
-                path: templatePath,
-                message:
-                    `Unknown $-prefixed key "${key}" in template. ` +
-                    `Only "$from" and "$literal" are recognized by the engine; ` +
-                    `all other $-prefixed keys are reserved (§3.4).`,
-            });
-            return; // one error per object is sufficient
-        }
-    }
-    // Don't recurse into $from or $literal — they have their own semantics.
-    if ("$from" in obj) {
-        const from = obj["$from"];
-        if (typeof from !== "string" || !VALID_FROM_NAMESPACES.has(from)) {
-            errors.push({
-                path: templatePath,
-                message:
-                    `Unknown $from namespace "${from}". ` +
-                    `Valid namespaces are: input, constant, scope, state, recovery.`,
-            });
-        }
-        return;
-    }
-    if ("$literal" in obj) return;
-    for (const value of Object.values(obj)) {
-        checkReservedTemplateKeys(value as Template, templatePath, errors);
-    }
-}
+// ---- Template ref collection (used by CFG and recovery-rule passes) ----
 
 /**
  * A reference extracted from a template expression (e.g. $from: "scope"
@@ -3789,179 +3666,4 @@ function collectTemplateRefs(
         );
     }
     return refs;
-}
-
-/**
- * Check scope refs in a template against a binding map, pushing
- * schema compatibility errors.
- */
-function checkScopeRefsAgainstBindings(
-    template: Template,
-    templatePath: string,
-    bindings: Map<string, JSONSchema>,
-    errors: ValidationError[],
-): void {
-    const refs = collectTemplateRefs(template, templatePath, "scope");
-    for (const ref of refs) {
-        const producerSchema = bindings.get(ref.name);
-        if (!producerSchema) continue;
-        checkSchemaCompat(
-            producerSchema,
-            ref.path,
-            ref.templatePath,
-            `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-            errors,
-        );
-    }
-}
-
-/**
- * Validate schema compatibility within a scope: for each node that
- * references a scope binding, verify that the binding's producer
- * outputSchema declares the referenced path.
- */
-function validateSchemaCompat(
-    nodes: Record<string, WorkflowNode>,
-    prefix: string,
-    errors: ValidationError[],
-    bindings: Map<string, JSONSchema>,
-): void {
-    const bindingMap = bindings;
-
-    for (const [id, node] of Object.entries(nodes)) {
-        const path = `${prefix}.${id}`;
-
-        // For loop nodes, check iterateState and output templates
-        // against body-scope bindings.
-        if (node.kind === "loop") {
-            const bodyBindings = buildBindingMap(node.body.nodes);
-            for (const [stateName, stateTemplate] of Object.entries(
-                node.iterateState,
-            )) {
-                checkScopeRefsAgainstBindings(
-                    stateTemplate,
-                    `${path}.iterateState.${stateName}`,
-                    bodyBindings,
-                    errors,
-                );
-            }
-            checkScopeRefsAgainstBindings(
-                node.body.output,
-                `${path}.body.output`,
-                bodyBindings,
-                errors,
-            );
-        }
-
-        if (!hasInputs(node)) continue;
-
-        const inputsPrefix = `${path}.inputs.`;
-        const refs = collectTemplateRefs(
-            node.inputs,
-            `${path}.inputs`,
-            "scope",
-        );
-        for (const ref of refs) {
-            const producerSchema = bindingMap.get(ref.name);
-            if (!producerSchema) {
-                if (!ref.optional) {
-                    errors.push({
-                        path: ref.templatePath,
-                        message:
-                            `$from "scope", name "${ref.name}": no node in ` +
-                            `this scope binds that name.`,
-                    });
-                }
-                continue;
-            }
-            const consumerType = resolveConsumerPropertySchema(
-                ref.templatePath,
-                inputsPrefix,
-                nodeInputSchema(node),
-            )?.type;
-            checkSchemaCompat(
-                producerSchema,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "scope", name "${ref.name}")`,
-                errors,
-                consumerType,
-            );
-        }
-    }
-}
-
-/**
- * Check all `$from "input"` and `$from "constant"` refs within a single
- * template expression for name existence and path validity.
- */
-function checkInputConstantRefsInTemplate(
-    template: Template,
-    templatePath: string,
-    scopeInputSchema: JSONSchema | undefined,
-    constants: Record<string, ConstantDef> | undefined,
-    errors: ValidationError[],
-): void {
-    // Check $from "input" refs.
-    const inputRefs = collectTemplateRefs(template, templatePath, "input");
-    for (const ref of inputRefs) {
-        // Empty name is the emitter convention for "entire scope input";
-        // not a property lookup - skip.
-        if (ref.name === "") continue;
-        const inputProps = scopeInputSchema?.properties;
-        if (!inputProps || !(ref.name in inputProps)) {
-            if (!ref.optional) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "input", name "${ref.name}": ` +
-                        `not declared in scope inputSchema.`,
-                });
-            }
-            continue;
-        }
-        const prop = inputProps[ref.name];
-        if (typeof prop === "boolean") continue;
-        // Path validation (gap 5): verify path is navigable.
-        if (ref.path && ref.path.length > 0) {
-            checkSchemaCompat(
-                prop,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "input", name "${ref.name}")`,
-                errors,
-            );
-        }
-    }
-
-    // Check $from "constant" refs.
-    const constantRefs = collectTemplateRefs(
-        template,
-        templatePath,
-        "constant",
-    );
-    for (const ref of constantRefs) {
-        if (!constants || !(ref.name in constants)) {
-            if (!ref.optional) {
-                errors.push({
-                    path: ref.templatePath,
-                    message:
-                        `$from "constant", name "${ref.name}": ` +
-                        `not declared in ir.constants.`,
-                });
-            }
-            continue;
-        }
-        const constDef = constants[ref.name];
-        // Path validation (gap 5): verify path is navigable.
-        if (ref.path && ref.path.length > 0 && constDef.schema) {
-            checkSchemaCompat(
-                constDef.schema,
-                ref.path,
-                ref.templatePath,
-                `${ref.templatePath} ($from "constant", name "${ref.name}")`,
-                errors,
-            );
-        }
-    }
 }

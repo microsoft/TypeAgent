@@ -8,77 +8,40 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G16: Fix `throw` message propagation.** This is a direct user-visible
-   correctness issue in already-supported error semantics.
-2. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
-   into the full sub-scope contract before improving fork runtime behavior.
-3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
-   structurally valid, align fork execution with the spec's failure and cleanup
-   semantics.
-4. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
-   surfaces real structural mismatches, switch error messages from the
-   collapsed `'object'` rendering to the existing `formatType` output so
-   users can see which fields differ.
-5. **G3: Add TypeScript-style named type aliases.** Once structural
+1. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-6. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
-   parsing and checking, and becomes more ergonomic once named aliases exist.
-7. **G18: Add union/literal types.** This is the broadest type-system expansion
+2. **G18: Add union/literal types.** This is the broadest type-system expansion
    and should come after type soundness and named types.
-8. **G11: Decide/document bind stripping for explicit user names.** This is
+3. **G11: Decide/document bind stripping for explicit user names.** This is
    primarily debuggability and spec clarity.
-9. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+4. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
    AST honesty and visual-editor clarity, but current behavior works.
-10. **G12: Decide `list.append` naming/semantics.** This is naming/API
-    consistency with coordinated emitter, engine, and snapshot churn.
-11. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
-    Decision 0010 removed `identity` / `noop` as load-bearing at branch
-    convergence, but the emitter still synthesizes them in several other
-    places. Classify each remaining usage as (a) reducible after 0010,
-    (b) forced by an IR shape that could be relaxed additively, or (c)
-    inherent to decision 0006 (no expressions). Pure audit; only
-    schedules follow-up work.
-12. **G7: Revisit composition patterns only when concrete workflow needs appear.**
-    These patterns push against the visual-node discipline and should stay out
-    of scope until justified.
-13. **G29 (open part): Decide whether to deprecate value-producing
-    `if`/`switch` in favour of ternary.** The arm-type checking part of
-    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
-    as a type error) is resolved; see decision 0011 §6 and the
-    `G29 + G30` section below. The remaining open question - whether
-    value-producing `if`/`switch` should be deprecated entirely - is
-    deferred pending a `.wf` survey + G18 (union types).
+5. **G12: Decide `list.append` naming/semantics.** This is naming/API
+   consistency with coordinated emitter, engine, and snapshot churn.
+6. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+   Decision 0010 removed `identity` / `noop` as load-bearing at branch
+   convergence, but the emitter still synthesizes them in several other
+   places. Classify each remaining usage as (a) reducible after 0010,
+   (b) forced by an IR shape that could be relaxed additively, or (c)
+   inherent to decision 0006 (no expressions). Pure audit; only
+   schedules follow-up work.
+7. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+   These patterns push against the visual-node discipline and should stay out
+   of scope until justified.
+8. **G29 (open part): Decide whether to deprecate value-producing
+   `if`/`switch` in favour of ternary.** The arm-type checking part of
+   G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
+   as a type error) is resolved; see decision 0011 §6 and the
+   `G29 + G30` section below. The remaining open question - whether
+   value-producing `if`/`switch` should be deprecated entirely - is
+   deferred pending a `.wf` survey + G18 (union types).
 
 G24-G28 capture follow-up design questions raised during the workflow
 composition implementation that have not yet been scheduled.
 
 Dependency spine:
 
-- `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
-- `G3 -> G4 -> G18` builds type-system features on sound assignability.
-
-## G2: Parallel branches missing IR schema fields
-
-**Spec:** ir-v0.2.md specifies fork branches have the same sub-scope
-contract as loop bodies: `inputs`, `inputSchema`, `entry`, `nodes`,
-`output`, `outputSchema`.
-
-**Current state:** The emitter only generates `{ entry, nodes }` per
-branch, omitting the schema and I/O fields. The IR validator may reject
-this if it enforces the full branch sub-scope contract.
-
-**What needs to happen:**
-
-1. Emit `inputSchema`, `outputSchema`, `inputs`, and `output` for each
-   fork branch.
-2. Validate that emitted fork IR passes the IR validator.
-
-**Related decision:** The emitter currently generates minimal branch
-scopes (`{ entry, nodes }`) and optionally `{ inputs, scope: { ... } }`
-for branches that need outer references. The full sub-scope contract
-(matching loop bodies) has not been enforced yet. This is a
-spec/implementation mismatch that needs the emitter to populate the
-missing fields.
+- `G3 -> G18` builds type-system features on sound assignability.
 
 ## G3: TypeScript-style type definitions
 
@@ -102,29 +65,6 @@ and inline object literals, but rejects any other identifier as
    name (already works via the "Unknown type" error, but the message
    should distinguish "did you mean to define a type?" from a typo).
 4. Consider whether types should be exportable across workflows.
-
-## G4: `llm.generateJson` needs generics for output typing
-
-**Spec:** `llm.generateJson` produces structured output, but its JSON
-schema is only known at the call site, not from the task's static
-signature.
-
-**Current state:** The builtin's output schema is `{}` (empty object),
-so the type checker infers `unknown` for its return value. Callers
-cannot access fields on the result without a type error ("Cannot access
-property on unknown type"). The only workaround is to assign the result
-to a variable and pass it opaquely to another task.
-
-**What needs to happen:**
-
-1. Add generic type parameter support so callers can write something like
-   `llm.generateJson<{ summary: string }>(prompt)` and the checker
-   infers the return type from the type argument.
-2. The emitter should use the type argument to populate the task node's
-   `outputSchema` in the IR, replacing the `{}` default.
-3. This requires parser support for `<Type>` syntax on call expressions,
-   type checker support for resolving generic instantiations, and emitter
-   support for threading the resolved type into the schema.
 
 ## G7: Composition patterns outside current scope
 
@@ -244,39 +184,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G16: `throw` produces empty error message
-
-**Spec:** dsl-v0.1.md section 2.11. `throw "message"` should emit an
-`error.fail` task node that produces a failure with the thrown value
-as the message.
-
-**Current state:** The error.fail task is emitted, but the error
-message that propagates to the RunResult is empty. The thrown string
-value is not correctly threaded into the error.fail task's input, or
-the error propagation loses the message field.
-
-## G17: Fork/forkMap does not cancel in-flight branches on failure
-
-**Spec:** ir-v0.2.md §2.1 rule 5 and §2.2 rule 5. "If any branch fails,
-remaining in-flight branches are cancelled and the error propagates
-immediately."
-
-**Current state:** The engine's `executeFork` and `executeForkMap` use
-`Promise.race` for concurrency limiting but do not cancel in-flight
-branches/iterations when one fails. Errors from `Promise.race` propagate,
-but other running branches continue executing in the background. This
-wastes resources and may cause side effects from branches that should have
-been cancelled.
-
-**What needs to happen:**
-
-1. When any branch/iteration rejects, signal cancellation to all other
-   in-flight branches via `AbortController`.
-2. `await` all in-flight promises before propagating the error (to avoid
-   unhandled rejection warnings and ensure cleanup).
-3. Add tests verifying that in-flight branches are cancelled on first
-   failure.
 
 ## G18: No union types in the DSL type system
 
@@ -536,32 +443,27 @@ name: "_infer" }`) and emit the inferred type in the emitter.
 
 ## G22: Type error messages collapse objects to `'object'`
 
-**Status:** UX gap surfaced by the G13 implementation. Pure diagnostic
-improvement; no semantic change to type checking.
+**Status:** resolved. Assignability and same-type diagnostics now use a shared
+`diagnosticTypeName` wrapper around `formatType`, so object, array, and tuple
+shapes render with their fields. `typeName` remains for short kind-oriented
+messages such as numeric/boolean operand checks.
 
-**Context:** When the type checker reports an assignability error, it
-formats both sides with `typeName(t)`. For object types this function
-returns the literal string `"object"`, discarding all field information.
-This makes object-vs-object mismatches indistinguishable to users.
+**Context:** When the type checker reported assignability and same-type errors,
+it formatted both sides with `typeName(t)`. For object types this function
+returns the literal string `"object"`, discarding all field information. This
+made object-vs-object mismatches indistinguishable to users.
 
 **Current state:**
 
-- `typeName` in `typeChecker.ts` returns `"object"` for any `ObjectTypeInfo`,
-  regardless of fields.
-- Arrays partially benefit from recursion (`string[]`) but their element
-  type collapses to `"object"` when it's an object.
-- Tuples also collapse to `"object"` for each object element.
-- A `formatType` function already exists in `typeChecker.ts` that produces
-  a full TypeScript-style rendering (e.g. `{ name: string, tag?: string }`,
-  `{ x: string }[]`), used today only for LSP hover text.
-- Affected diagnostics include (non-exhaustive):
-  - `Workflow return type 'object' is not assignable to declared type 'object'`
-  - `Type 'object' is not assignable to type 'object'` (const annotations)
-  - `Ternary arms must have the same type: 'object' vs 'object'`
-  - `Operator '===' requires same types on both sides: 'object' vs 'object'`
-- After G13 added structural object/array assignability checks, mismatches
-  between objects are now reported as errors, so the volume of
-  object-vs-object messages users see has grown.
+- Assignability diagnostics for workflow returns, const annotations, default
+  values, and workflow-call arguments use `diagnosticTypeName`.
+- Same-type diagnostics for ternary arms, value-producing `if`/`switch` arms,
+  and `===` / `!==` use `diagnosticTypeName`.
+- `diagnosticTypeName` currently delegates to `formatType`, producing
+  TypeScript-style object, array, and tuple renderings such as
+  `{ name: string; tag?: string }` and `{ x: string }[]`.
+- `typeName` remains available for terse kind-oriented diagnostics, e.g.
+  `Condition must be boolean, got 'string'`.
 
 **Reproduction:**
 
@@ -571,26 +473,8 @@ workflow test(x: { name: string, tag: number }): { name: string, tag?: string } 
 }
 ```
 
-Currently reports: `Workflow return type 'object' is not assignable to
-declared type 'object'`. Users cannot tell which field mismatches without
-manually walking both type expressions.
-
-**What needs to happen:**
-
-1. Switch the structural error messages (return-type, const-annotation,
-   ternary-arm, and `===`/`!==`) to use `formatType` instead of
-   `typeName`, or introduce a single shared diagnostic formatter.
-2. Decide whether `typeName` should be removed in favor of `formatType`,
-   or kept for short contexts (e.g. operator operand kind in
-   `must be numeric, got 'string'`). If kept, document the contract.
-3. Consider augmenting object-mismatch messages with the specific
-   offending field path (e.g. `field 'tag' has type 'number' but
-expected 'string'`), reusing the recursion already done inside
-   `isAssignableTo`. This may require threading an error-reason result
-   out of `isAssignableTo` instead of a bare boolean.
-4. Update existing type-checker tests whose substring assertions rely on
-   the collapsed `'object'` rendering, and add tests asserting the
-   richer field-level wording.
+Now reports: `Workflow return type '{ name: string; tag: number }' is not
+assignable to declared type '{ name: string; tag?: string }'`.
 
 ## G24: Named-record call syntax diverges from TypeScript
 

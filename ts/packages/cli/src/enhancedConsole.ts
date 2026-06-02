@@ -348,6 +348,37 @@ export function __testSetCurrentRequestId(id: string | undefined): void {
 export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
 }
+/**
+ * @internal Activate a TerminalLayout + stub PromptRenderer so tests can
+ * exercise inline-buffering / flush behavior without driving the readline UI.
+ * Returns a teardown function — call it in afterEach to restore module state.
+ */
+export function __testActivateTerminalLayout(promptRows: number = 1): {
+    teardown: () => void;
+    getInlineBuffer: () => string;
+    redrawCount: () => number;
+} {
+    const layout = new TerminalLayout();
+    layout.setup(promptRows);
+    terminalLayout = layout;
+    let redraws = 0;
+    const stub: PromptRenderer = {
+        redraw: () => {
+            redraws++;
+        },
+        rows: () => promptRows,
+    } as unknown as PromptRenderer;
+    activePromptRenderer = stub;
+    return {
+        teardown: () => {
+            layout.cleanup();
+            terminalLayout = null;
+            activePromptRenderer = null;
+        },
+        getInlineBuffer: () => (layout as any).inlineBuffer as string,
+        redrawCount: () => redraws,
+    };
+}
 
 /** Bootstrap CLI queue state from a snapshot, or pass `undefined` to clear. */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
@@ -1024,6 +1055,14 @@ export function createEnhancedClientIO(
                     }
                     if (completedId !== undefined) {
                         consumeSubmittedId(completedId);
+                    }
+                    // Commit any buffered inline output: actionIO.appendDisplay
+                    // defaults to "inline" mode and the non-blocking submit path
+                    // has no spinner, so one-shot commands (e.g. @config agent)
+                    // would otherwise leave their only message in inlineBuffer.
+                    if (terminalLayout?.isActive) {
+                        terminalLayout.flushInline();
+                        activePromptRenderer?.redraw();
                     }
                     break;
                 }
@@ -2323,7 +2362,7 @@ export async function processCommandsEnhanced<T>(
     // Queue-mode Ctrl+C handler: the non-blocking submit path bypasses raw-mode,
     // so install a readline SIGINT handler that cancels the queue head.
     // Double-press-to-exit is preserved.
-    if (rl && getDispatcher()?.submitCommand) {
+    if (rl) {
         rl.on("SIGINT", () => {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
@@ -2418,12 +2457,11 @@ export async function processCommandsEnhanced<T>(
             const panel = getDebugPanel();
             panel?.reset();
 
-            // Non-blocking submit path: when the dispatcher exposes submitCommand,
-            // the call resolves on enqueue. Output/completion arrive via setDisplay,
-            // commandComplete, and queue lifecycle events.
+            // Non-blocking submit path: submitCommand resolves on enqueue.
+            // Output/completion arrive via setDisplay, commandComplete, and
+            // queue lifecycle events.
             const liveDispatcher = getDispatcher();
-            const submitCommand = liveDispatcher?.submitCommand;
-            if (typeof submitCommand === "function") {
+            if (liveDispatcher) {
                 isProcessing = true;
                 currentRequestId = undefined;
                 const clientRequestId = randomUUID();
@@ -2431,8 +2469,7 @@ export async function processCommandsEnhanced<T>(
                 try {
                     let result;
                     try {
-                        result = await submitCommand.call(
-                            liveDispatcher,
+                        result = await liveDispatcher.submitCommand(
                             request,
                             undefined,
                             undefined,
@@ -2488,7 +2525,9 @@ export async function processCommandsEnhanced<T>(
                 continue;
             }
 
-            // Legacy blocking path (no queueing)
+            // Legacy path used only when the caller supplied no dispatcher
+            // (e.g. tests). Routes the command through the caller-provided
+            // processCommand callback synchronously.
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner

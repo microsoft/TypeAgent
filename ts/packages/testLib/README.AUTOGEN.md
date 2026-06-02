@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=60895249f6f36f95253ca266a820acb813bf35e1dd8b83b5a53ee1a341f6fa32 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c9cd9f6cf8412a59aee919deca999a5dc5dce4833b082562794de6e41f60c567 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # test-lib — AI-generated documentation
@@ -113,6 +113,7 @@ By following these steps, you can effectively extend the `testLib` package to me
 
 Workspace:
 
+- [@typeagent/config](../../packages/config/README.md)
 - [aiclient](../../packages/aiclient/README.md)
 
 External: `typechat`
@@ -131,6 +132,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-lib docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-lib docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

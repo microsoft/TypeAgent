@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b800117a361146a8eb183ba1e59e3308aadcc05195780031e639bbcab29e6593 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b3731ca131733fa729a6ba6e94eaaeda98bace0904065681ff97ebb6c3a2d856 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -101,7 +101,7 @@ By following these steps, you can effectively extend the functionality of the `v
 
 ### Entry points
 
-- default → `./dist/extension.js` _(not found on disk)_
+- default → [./dist/extension.js](./dist/extension.js)
 
 ### Dependencies
 
@@ -125,6 +125,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `ws`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

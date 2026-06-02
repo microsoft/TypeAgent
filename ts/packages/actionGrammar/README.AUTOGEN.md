@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=502f4233bc53e5546fa97236d9157926d30f6e38ac5adb235e127eff66ea9972 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6bdf546c48ec4b6d3d860deabd6889ee932cbc3cc05e99a7f74662d8c342b517 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # action-grammar — AI-generated documentation
@@ -108,6 +108,7 @@ For a starting point, open [grammarRuleParser.ts](./src/grammarRuleParser.ts) to
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
@@ -119,6 +120,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
+- grammar-tools-cli
 - grammar-tools-core
 
 ### Files of interest
@@ -137,6 +139,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
