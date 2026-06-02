@@ -131,6 +131,22 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.openOnboardingSummary",
+            withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                const doc = await vscode.workspace.openTextDocument({
+                    language: "markdown",
+                    content: formatOnboardingSummary(state),
+                });
+                await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                });
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);
@@ -185,4 +201,55 @@ function parseJsonInputs(rawInputs: string): unknown {
     } catch {
         throw new Error("Phase inputs must be valid JSON.");
     }
+}
+
+function formatOnboardingSummary(state: {
+    sessionId: string;
+    agentName: string;
+    description: string;
+    currentPhase: string;
+    phases: Partial<
+        Record<
+            string,
+            {
+                status: string;
+                startedAt?: number;
+                completedAt?: number;
+            }
+        >
+    >;
+    installedSandboxIds?: string[];
+}): string {
+    const lines: string[] = [];
+    lines.push("# TypeAgent Studio Onboarding Summary");
+    lines.push("");
+    lines.push(`- Session: ${state.sessionId}`);
+    lines.push(`- Agent: ${state.agentName}`);
+    lines.push(`- Current phase: ${state.currentPhase}`);
+    lines.push(
+        `- Installed sandboxes: ${state.installedSandboxIds?.length ? state.installedSandboxIds.join(", ") : "none"}`,
+    );
+    lines.push("");
+    lines.push("## Description");
+    lines.push("");
+    lines.push(state.description);
+    lines.push("");
+    lines.push("## Phase status");
+    lines.push("");
+    lines.push("| Phase | Status | Started | Completed |");
+    lines.push("| --- | --- | --- | --- |");
+
+    for (const [phase, snapshot] of Object.entries(state.phases)) {
+        const started = snapshot?.startedAt
+            ? new Date(snapshot.startedAt).toISOString()
+            : "-";
+        const completed = snapshot?.completedAt
+            ? new Date(snapshot.completedAt).toISOString()
+            : "-";
+        lines.push(
+            `| ${phase} | ${snapshot?.status ?? "pending"} | ${started} | ${completed} |`,
+        );
+    }
+
+    return lines.join("\n");
 }

@@ -62,6 +62,11 @@
         "command": "typeagent-studio.restoreOnboardingPhase",
         "title": "Restore onboarding phase",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.openOnboardingSummary",
+        "title": "Open onboarding summary",
+        "category": "TypeAgent Studio"
       }
     ]
   },
@@ -72,7 +77,8 @@
     "onCommand:typeagent-studio.installToSandbox",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.showOnboardingSnapshot",
-    "onCommand:typeagent-studio.restoreOnboardingPhase"
+    "onCommand:typeagent-studio.restoreOnboardingPhase",
+    "onCommand:typeagent-studio.openOnboardingSummary"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",
