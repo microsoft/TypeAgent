@@ -19,7 +19,7 @@ import {
     type MinimalCopilotClient,
     type MinimalCopilotSession,
 } from "../src/index.js";
-import { TaskPolicy, WorkflowIR } from "workflow-model";
+import { TaskPolicy, WorkflowIR, ConcreteTaskDefinition } from "workflow-model";
 import type { MessageOptions, SessionConfig, Tool } from "@github/copilot-sdk";
 
 // Allow-all policy for tests.
@@ -141,7 +141,9 @@ describe("copilot.invoke (decision 0010)", () => {
                         step: {
                             kind: "task",
                             task: "copilot.invoke",
-                            inputSchema: copilotInvoke.inputSchema,
+                            inputSchema: (
+                                copilotInvoke as ConcreteTaskDefinition
+                            ).inputSchema,
                             outputSchema: opts.outputSchema,
                             inputs: opts.inputs as any,
                             bind: "result",
