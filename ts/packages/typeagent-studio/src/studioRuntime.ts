@@ -7,6 +7,7 @@ import {
     InMemoryOnboardingBridge,
     ONBOARDING_PHASE_ORDER,
     type OnboardingPhaseName,
+    type PhaseStatus,
     type OnboardingState,
     routeStudioConversation,
 } from "@typeagent/core/onboardingBridge";
@@ -27,6 +28,12 @@ export interface StudioRuntime {
         phase: OnboardingPhaseName,
         inputs?: unknown,
     ): Promise<OnboardingState>;
+    getDefaultInputsForPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<unknown>;
+    getPhaseStatusOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus>;
     runRemainingPhasesOnActiveSession(): Promise<{
         state: OnboardingState;
         completedPhases: OnboardingPhaseName[];
@@ -91,6 +98,16 @@ export function createStudioRuntime(
             await onboarding.runPhase(sessionId, phase, inputs);
             return onboarding.snapshot(sessionId);
         },
+        async getDefaultInputsForPhaseOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return getDefaultPhaseInputs(state, phase);
+        },
+        async getPhaseStatusOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return state.phases[phase]?.status ?? "pending";
+        },
         async runRemainingPhasesOnActiveSession() {
             const sessionId = getRequiredSessionId(context);
             let state = await onboarding.snapshot(sessionId);
@@ -102,7 +119,11 @@ export function createStudioRuntime(
                     continue;
                 }
 
-                await onboarding.runPhase(sessionId, phase, {});
+                await onboarding.runPhase(
+                    sessionId,
+                    phase,
+                    getDefaultPhaseInputs(state, phase),
+                );
                 completedPhases.push(phase);
                 state = await onboarding.snapshot(sessionId);
             }
@@ -127,6 +148,49 @@ export function createStudioRuntime(
             };
         },
     };
+}
+
+function getDefaultPhaseInputs(
+    state: OnboardingState,
+    phase: OnboardingPhaseName,
+): unknown {
+    switch (phase) {
+        case "Discovery":
+            return {
+                description: state.description,
+                agentName: state.agentName,
+            };
+        case "PhraseGen":
+            return {
+                seed: "Generate representative utterances for the target workflow.",
+                sourcePhase: "Discovery",
+            };
+        case "SchemaGen":
+            return {
+                seed: "Draft schema/action types from discovery and phrase coverage.",
+                sourcePhase: "PhraseGen",
+            };
+        case "GrammarGen":
+            return {
+                seed: "Draft grammar variants from schema and phrase outputs.",
+                sourcePhase: "SchemaGen",
+            };
+        case "Scaffolder":
+            return {
+                seed: "Create initial manifest/schema/handler scaffolding.",
+                sourcePhase: "GrammarGen",
+            };
+        case "Testing":
+            return {
+                seed: "Run local validation and summarize failures.",
+                sourcePhase: "Scaffolder",
+            };
+        case "Packaging":
+            return {
+                seed: "Prepare package artifacts and release checklist.",
+                sourcePhase: "Testing",
+            };
+    }
 }
 
 function getRequiredSessionId(context: vscode.ExtensionContext): string {

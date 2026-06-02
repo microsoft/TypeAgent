@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
 
 export function registerStudioCommands(
@@ -91,9 +92,21 @@ export function registerStudioCommands(
                     return;
                 }
 
+                const status = await runtime.getPhaseStatusOnActiveSession(phase);
+                if (
+                    status !== "pending" &&
+                    !(await confirmPhaseRerun(phase, status))
+                ) {
+                    return;
+                }
+
+                const defaultInputs =
+                    await runtime.getDefaultInputsForPhaseOnActiveSession(phase);
+
                 const rawInputs = await vscode.window.showInputBox({
                     title: "Run Onboarding Phase",
                     prompt: "Optional JSON inputs for phase execution",
+                    value: JSON.stringify(defaultInputs, null, 2),
                     placeHolder: '{"notes":"Use the existing CRM API spec"}',
                     ignoreFocusOut: true,
                 });
@@ -114,6 +127,28 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.runRemainingOnboardingPhases",
             withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                const reruns = runtime
+                    .listPhases()
+                    .map((phase) => ({
+                        phase,
+                        status: state.phases[phase]?.status ?? "pending",
+                    }))
+                    .filter(
+                        (entry) =>
+                            entry.status !== "pending" &&
+                            entry.status !== "complete",
+                    );
+
+                if (
+                    reruns.length > 0 &&
+                    !(await confirmBatchRerun(
+                        reruns.map((r) => `${r.phase}:${r.status}`),
+                    ))
+                ) {
+                    return;
+                }
+
                 const result = await runtime.runRemainingPhasesOnActiveSession();
                 const completed =
                     result.completedPhases.length > 0
@@ -199,7 +234,7 @@ function withErrors<TArgs extends unknown[]>(
 
 async function selectPhase(
     runtime: StudioRuntime,
-): Promise<string | undefined> {
+): Promise<OnboardingPhaseName | undefined> {
     return vscode.window.showQuickPick(runtime.listPhases(), {
         title: "Onboarding Phase",
         placeHolder: "Select a phase",
@@ -217,6 +252,29 @@ function parseJsonInputs(rawInputs: string): unknown {
     } catch {
         throw new Error("Phase inputs must be valid JSON.");
     }
+}
+
+async function confirmPhaseRerun(
+    phase: string,
+    status: string,
+): Promise<boolean> {
+    const runAnyway = "Run anyway";
+    const choice = await vscode.window.showWarningMessage(
+        `Phase ${phase} is currently ${status}. Running it again may replace prior outputs.`,
+        { modal: true },
+        runAnyway,
+    );
+    return choice === runAnyway;
+}
+
+async function confirmBatchRerun(phases: string[]): Promise<boolean> {
+    const runAnyway = "Run anyway";
+    const choice = await vscode.window.showWarningMessage(
+        `Some phases are not pending and will be rerun: ${phases.join(", ")}.`,
+        { modal: true },
+        runAnyway,
+    );
+    return choice === runAnyway;
 }
 
 function formatOnboardingSummary(state: {
