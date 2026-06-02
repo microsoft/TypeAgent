@@ -27,6 +27,7 @@ export interface StudioRuntime {
         agentName?: string;
     }): Promise<OnboardingState>;
     installLastSessionToSandbox(sandboxId?: string): Promise<string>;
+    clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
     runPhaseOnActiveSession(
         phase: OnboardingPhaseName,
@@ -107,6 +108,12 @@ export function createStudioRuntimeCore(
 
             await onboarding.installToSandbox(sessionId, sandboxId);
             return sessionId;
+        },
+        async clearActiveOnboardingSession() {
+            await context.workspaceState.update(
+                LAST_ONBOARDING_SESSION_KEY,
+                undefined,
+            );
         },
         async getActiveOnboardingSession() {
             const sessionId = getRequiredSessionId(context);

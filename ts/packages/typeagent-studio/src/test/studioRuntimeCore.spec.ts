@@ -100,3 +100,22 @@ test("installLastSessionToSandbox records sandbox assignment on active session",
     assert.equal(sessionId, "session-install");
     assert.deepEqual(state.installedSandboxIds, ["sandbox-a"]);
 });
+
+test("clearActiveOnboardingSession removes the current session binding", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-clear",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Legal review workflow agent",
+    });
+    await runtime.clearActiveOnboardingSession();
+
+    await assert.rejects(
+        () => runtime.getActiveOnboardingSession(),
+        /No onboarding session found/,
+    );
+});

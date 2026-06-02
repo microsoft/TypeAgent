@@ -50,6 +50,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.clearOnboardingSession",
+        "title": "Clear active onboarding session",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.runOnboardingPhase",
         "title": "Run onboarding phase",
         "category": "TypeAgent Studio"
@@ -81,6 +86,7 @@
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
+    "onCommand:typeagent-studio.clearOnboardingSession",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",
     "onCommand:typeagent-studio.showOnboardingSnapshot",

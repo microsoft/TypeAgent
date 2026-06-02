@@ -86,6 +86,22 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.clearOnboardingSession",
+            withErrors(async () => {
+                if (!(await confirmSessionClear())) {
+                    return;
+                }
+
+                await runtime.clearActiveOnboardingSession();
+                void vscode.window.showInformationMessage(
+                    "Cleared the active onboarding session.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.runOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);
@@ -276,5 +292,15 @@ async function confirmBatchRerun(phases: string[]): Promise<boolean> {
         runAnyway,
     );
     return choice === runAnyway;
+}
+
+async function confirmSessionClear(): Promise<boolean> {
+    const clearSession = "Clear session";
+    const choice = await vscode.window.showWarningMessage(
+        "Clear the active onboarding session reference? Existing session data will no longer be attached to Studio commands until you start a new session.",
+        { modal: true },
+        clearSession,
+    );
+    return choice === clearSession;
 }
 
