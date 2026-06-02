@@ -355,10 +355,12 @@ function formatThinkingDisplay(thinking: string): string {
  */
 function formatToolCallDisplay(toolName: string, input: any): string {
     if (toolName === "discover_actions") {
-        return `**Tool:** discover_actions — schema: \`${input.schemaName}\``;
+        const schema = input?.schemaName ?? JSON.stringify(input);
+        return `**Tool:** discover_actions — schema: \`${schema}\``;
     } else if (toolName === "execute_action") {
-        const actionName = input.action?.actionName ?? "unknown";
-        return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\``;
+        const schema = input?.schemaName ?? "?";
+        const actionName = input?.action?.actionName ?? "?";
+        return `**Tool:** execute_action — \`${schema}.${actionName}\``;
     }
     return `**Tool:** ${toolName}`;
 }
@@ -708,10 +710,9 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             const parameters =
+                event.data?.arguments ||
                 event.parameters ||
                 event.data?.parameters ||
-                event.args ||
-                event.data?.args ||
                 {};
             debug(`Tool execution started: ${toolName}`);
             context.actionIO.appendDisplay(
@@ -963,10 +964,9 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 const parameters =
+                    event.data?.arguments ||
                     event.parameters ||
                     event.data?.parameters ||
-                    event.args ||
-                    event.data?.args ||
                     {};
                 debug(`Tool execution started: ${toolName}`);
 
