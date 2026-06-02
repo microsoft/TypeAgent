@@ -112,6 +112,22 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.runRemainingOnboardingPhases",
+            withErrors(async () => {
+                const result = await runtime.runRemainingPhasesOnActiveSession();
+                const completed =
+                    result.completedPhases.length > 0
+                        ? result.completedPhases.join(", ")
+                        : "none";
+                void vscode.window.showInformationMessage(
+                    `Completed phases: ${completed}. Current phase: ${result.state.currentPhase}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.showOnboardingSnapshot",
             withErrors(async () => {
                 const state = await runtime.getActiveOnboardingSession();

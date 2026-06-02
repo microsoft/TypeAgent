@@ -27,6 +27,10 @@ export interface StudioRuntime {
         phase: OnboardingPhaseName,
         inputs?: unknown,
     ): Promise<OnboardingState>;
+    runRemainingPhasesOnActiveSession(): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }>;
     restorePhaseOnActiveSession(phase: OnboardingPhaseName): Promise<{
         state: OnboardingState;
         affectedDownstream: OnboardingPhaseName[];
@@ -86,6 +90,27 @@ export function createStudioRuntime(
             const sessionId = getRequiredSessionId(context);
             await onboarding.runPhase(sessionId, phase, inputs);
             return onboarding.snapshot(sessionId);
+        },
+        async runRemainingPhasesOnActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            let state = await onboarding.snapshot(sessionId);
+            const completedPhases: OnboardingPhaseName[] = [];
+
+            for (const phase of ONBOARDING_PHASE_ORDER) {
+                const existing = state.phases[phase];
+                if (existing?.status === "complete") {
+                    continue;
+                }
+
+                await onboarding.runPhase(sessionId, phase, {});
+                completedPhases.push(phase);
+                state = await onboarding.snapshot(sessionId);
+            }
+
+            return {
+                state,
+                completedPhases,
+            };
         },
         async restorePhaseOnActiveSession(phase) {
             const sessionId = getRequiredSessionId(context);
