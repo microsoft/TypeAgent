@@ -28,6 +28,16 @@
     "watch": "node esbuild.mjs --watch"
   },
   "contributes": {
+    "configuration": {
+      "title": "TypeAgent Studio",
+      "properties": {
+        "typeagentStudio.onboarding.openSummaryAfterBatchRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
+        }
+      }
+    },
     "commands": [
       {
         "command": "typeagent-studio.hello",

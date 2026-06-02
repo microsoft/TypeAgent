@@ -174,6 +174,10 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Completed phases: ${completed}. Current phase: ${result.state.currentPhase}.`,
                 );
+
+                if (shouldOpenSummaryAfterBatchRun()) {
+                    await openOnboardingSummary(runtime);
+                }
             }),
         ),
     );
@@ -201,18 +205,22 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.openOnboardingSummary",
             withErrors(async () => {
-                const state = await runtime.getActiveOnboardingSession();
-                const doc = await vscode.workspace.openTextDocument({
-                    language: "markdown",
-                    content: formatOnboardingSummary(state),
-                });
-                await vscode.window.showTextDocument(doc, {
-                    preview: false,
-                });
+                await openOnboardingSummary(runtime);
             }),
         ),
     );
 
+
+async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
+    const state = await runtime.getActiveOnboardingSession();
+    const doc = await vscode.workspace.openTextDocument({
+        language: "markdown",
+        content: formatOnboardingSummary(state),
+    });
+    await vscode.window.showTextDocument(doc, {
+        preview: false,
+    });
+}
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
@@ -302,5 +310,11 @@ async function confirmSessionClear(): Promise<boolean> {
         clearSession,
     );
     return choice === clearSession;
+}
+
+function shouldOpenSummaryAfterBatchRun(): boolean {
+    return vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<boolean>("openSummaryAfterBatchRun", true);
 }
 
