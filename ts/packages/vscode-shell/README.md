@@ -85,8 +85,14 @@ Electron shell — don't implement that client action and would otherwise
 silently no-op the request). Enable it once per session in the chat:
 
 ```
-@config schema code-vscode-shell on
+@config schema code.code-vscode-shell
 ```
+
+Note: this is the **full canonical** sub-schema name (`<parent>.<sub-key>`).
+The schema appears as just `code-vscode-shell` in the `@config schema` table —
+the parent prefix is hidden in the display but **required** when toggling.
+
+To later disable it again, use `@config schema --off code.code-vscode-shell`.
 
 The setting is persisted in your TypeAgent user settings, so you only
 need to do this on first use. After it's on, you can drive the
