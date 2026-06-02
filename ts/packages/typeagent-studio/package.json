@@ -47,6 +47,21 @@
         "command": "typeagent-studio.installToSandbox",
         "title": "Install latest onboarding session to sandbox",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.runOnboardingPhase",
+        "title": "Run onboarding phase",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.showOnboardingSnapshot",
+        "title": "Show onboarding snapshot",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.restoreOnboardingPhase",
+        "title": "Restore onboarding phase",
+        "category": "TypeAgent Studio"
       }
     ]
   },
@@ -54,7 +69,10 @@
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
-    "onCommand:typeagent-studio.installToSandbox"
+    "onCommand:typeagent-studio.installToSandbox",
+    "onCommand:typeagent-studio.runOnboardingPhase",
+    "onCommand:typeagent-studio.showOnboardingSnapshot",
+    "onCommand:typeagent-studio.restoreOnboardingPhase"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

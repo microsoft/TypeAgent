@@ -5,6 +5,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import {
     InMemoryOnboardingBridge,
+    ONBOARDING_PHASE_ORDER,
+    type OnboardingPhaseName,
     type OnboardingState,
     routeStudioConversation,
 } from "@typeagent/core/onboardingBridge";
@@ -20,6 +22,17 @@ export interface StudioRuntime {
         agentName?: string;
     }): Promise<OnboardingState>;
     installLastSessionToSandbox(sandboxId?: string): Promise<string>;
+    getActiveOnboardingSession(): Promise<OnboardingState>;
+    runPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState>;
+    restorePhaseOnActiveSession(phase: OnboardingPhaseName): Promise<{
+        state: OnboardingState;
+        affectedDownstream: OnboardingPhaseName[];
+        reconciliationRequired: boolean;
+    }>;
+    listPhases(): readonly OnboardingPhaseName[];
     routeConversation(prompt: string): {
         target: "onboarding" | "schemaAuthor";
         reason: string;
@@ -49,14 +62,7 @@ export function createStudioRuntime(
             return state;
         },
         async installLastSessionToSandbox(sandboxId = DEFAULT_SANDBOX_ID) {
-            const sessionId = context.workspaceState.get<string>(
-                LAST_ONBOARDING_SESSION_KEY,
-            );
-            if (!sessionId) {
-                throw new Error(
-                    "No onboarding session found. Start one first with 'TypeAgent Studio: Start onboarding session'.",
-                );
-            }
+            const sessionId = getRequiredSessionId(context);
 
             try {
                 await sandbox.status(sandboxId);
@@ -72,6 +78,22 @@ export function createStudioRuntime(
             await onboarding.installToSandbox(sessionId, sandboxId);
             return sessionId;
         },
+        async getActiveOnboardingSession() {
+            const sessionId = getRequiredSessionId(context);
+            return onboarding.snapshot(sessionId);
+        },
+        async runPhaseOnActiveSession(phase, inputs = {}) {
+            const sessionId = getRequiredSessionId(context);
+            await onboarding.runPhase(sessionId, phase, inputs);
+            return onboarding.snapshot(sessionId);
+        },
+        async restorePhaseOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            return onboarding.restorePhase(sessionId, phase);
+        },
+        listPhases() {
+            return ONBOARDING_PHASE_ORDER;
+        },
         routeConversation(prompt) {
             const routed = routeStudioConversation(prompt);
             return {
@@ -80,4 +102,16 @@ export function createStudioRuntime(
             };
         },
     };
+}
+
+function getRequiredSessionId(context: vscode.ExtensionContext): string {
+    const sessionId = context.workspaceState.get<string>(
+        LAST_ONBOARDING_SESSION_KEY,
+    );
+    if (!sessionId) {
+        throw new Error(
+            "No onboarding session found. Start one first with 'TypeAgent Studio: Start onboarding session'.",
+        );
+    }
+    return sessionId;
 }

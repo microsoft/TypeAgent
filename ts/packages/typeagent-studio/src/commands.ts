@@ -11,7 +11,7 @@ export function registerStudioCommands(
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.startOnboardingSession",
-            async () => {
+            withErrors(async () => {
                 const description = await vscode.window.showInputBox({
                     title: "Start Onboarding Session",
                     prompt: "Describe the integration to onboard",
@@ -35,14 +35,14 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Started onboarding session ${state.sessionId} for ${state.agentName} (phase: ${state.currentPhase}).`,
                 );
-            },
+            }),
         ),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.ask",
-            async () => {
+            withErrors(async () => {
                 const prompt = await vscode.window.showInputBox({
                     title: "Ask TypeAgent About This",
                     prompt: "Enter your request",
@@ -56,14 +56,14 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Routed to ${route.target} (${route.reason}).`,
                 );
-            },
+            }),
         ),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.installToSandbox",
-            async () => {
+            withErrors(async () => {
                 const sandboxId =
                     (await vscode.window.showInputBox({
                         title: "Install to Sandbox",
@@ -78,7 +78,111 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Installed onboarding session ${sessionId} into sandbox ${sandboxId}.`,
                 );
-            },
+            }),
         ),
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.runOnboardingPhase",
+            withErrors(async () => {
+                const phase = await selectPhase(runtime);
+                if (!phase) {
+                    return;
+                }
+
+                const rawInputs = await vscode.window.showInputBox({
+                    title: "Run Onboarding Phase",
+                    prompt: "Optional JSON inputs for phase execution",
+                    placeHolder: '{"notes":"Use the existing CRM API spec"}',
+                    ignoreFocusOut: true,
+                });
+                if (rawInputs === undefined) {
+                    return;
+                }
+
+                const inputs = parseJsonInputs(rawInputs);
+                const state = await runtime.runPhaseOnActiveSession(phase, inputs);
+                void vscode.window.showInformationMessage(
+                    `Phase ${phase} completed. Current phase is now ${state.currentPhase}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.showOnboardingSnapshot",
+            withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                const completeCount = Object.values(state.phases).filter(
+                    (p) => p?.status === "complete",
+                ).length;
+                const staleCount = Object.values(state.phases).filter(
+                    (p) => p?.status === "stale",
+                ).length;
+
+                void vscode.window.showInformationMessage(
+                    `Session ${state.sessionId}: current=${state.currentPhase}, complete=${completeCount}, stale=${staleCount}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.restoreOnboardingPhase",
+            withErrors(async () => {
+                const phase = await selectPhase(runtime);
+                if (!phase) {
+                    return;
+                }
+
+                const restored = await runtime.restorePhaseOnActiveSession(phase);
+                const affected =
+                    restored.affectedDownstream.length > 0
+                        ? restored.affectedDownstream.join(", ")
+                        : "none";
+                void vscode.window.showInformationMessage(
+                    `Restored ${phase}. Stale downstream phases: ${affected}.`,
+                );
+            }),
+        ),
+    );
+}
+
+function withErrors<TArgs extends unknown[]>(
+    action: (...args: TArgs) => Promise<void>,
+): (...args: TArgs) => Promise<void> {
+    return async (...args: TArgs) => {
+        try {
+            await action(...args);
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "Unknown error";
+            void vscode.window.showErrorMessage(message);
+        }
+    };
+}
+
+async function selectPhase(
+    runtime: StudioRuntime,
+): Promise<string | undefined> {
+    return vscode.window.showQuickPick(runtime.listPhases(), {
+        title: "Onboarding Phase",
+        placeHolder: "Select a phase",
+        ignoreFocusOut: true,
+    });
+}
+
+function parseJsonInputs(rawInputs: string): unknown {
+    const trimmed = rawInputs.trim();
+    if (!trimmed) {
+        return {};
+    }
+    try {
+        return JSON.parse(trimmed) as unknown;
+    } catch {
+        throw new Error("Phase inputs must be valid JSON.");
+    }
 }
