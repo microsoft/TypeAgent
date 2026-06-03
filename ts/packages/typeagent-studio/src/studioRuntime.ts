@@ -1,7 +1,7 @@
-import * as vscode from "vscode";
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as vscode from "vscode";
 import {
     createStudioRuntimeCore,
     type StudioRuntime,
@@ -13,6 +13,8 @@ export function createStudioRuntime(
     return createStudioRuntimeCore({
         workspaceState: context.workspaceState,
         globalStorageFsPath: context.globalStorageUri.fsPath,
+        workspaceFolderFsPaths:
+            vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [],
     });
 }
 

@@ -78,11 +78,11 @@ export function registerStudioCommands(
                         ignoreFocusOut: true,
                     })) ?? "studio-default";
 
-                const sessionId = await runtime.installLastSessionToSandbox(
+                const installed = await runtime.installLastSessionToSandbox(
                     sandboxId,
                 );
                 void vscode.window.showInformationMessage(
-                    `Installed onboarding session ${sessionId} into sandbox ${sandboxId}.`,
+                    `Installed onboarding session ${installed.sessionId} from ${installed.artifactPath} into sandbox ${sandboxId}.`,
                 );
             }),
         ),

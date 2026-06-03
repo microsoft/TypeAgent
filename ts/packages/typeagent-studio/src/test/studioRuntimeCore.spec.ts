@@ -2,15 +2,25 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import test from "node:test";
 import { InMemoryOnboardingBridge } from "@typeagent/core/onboardingBridge";
+import type {
+    SandboxConfig,
+    SandboxHandle,
+    SandboxManager,
+    SandboxStatus,
+} from "@typeagent/core/sandbox";
 import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
 
-function createContext() {
+function createContext(workspaceFolderFsPaths: string[] = []) {
     const store = new Map<string, unknown>();
     return {
         context: {
             globalStorageFsPath: "C:/tmp/typeagent-studio-tests",
+            workspaceFolderFsPaths,
             workspaceState: {
                 get<T>(key: string): T | undefined {
                     return store.get(key) as T | undefined;
@@ -22,6 +32,45 @@ function createContext() {
         },
         store,
     };
+}
+
+class RecordingSandboxManager implements SandboxManager {
+    private readonly running = new Map<string, SandboxStatus>();
+    readonly loaded: { sandboxId: string; agentRef: string }[] = [];
+
+    async start(cfg: SandboxConfig): Promise<SandboxHandle> {
+        this.running.set(cfg.id, {
+            id: cfg.id,
+            mode: cfg.mode,
+            state: "running",
+            agents: [],
+        });
+        return { id: cfg.id, mode: cfg.mode };
+    }
+
+    async restart(_id: string): Promise<void> {}
+
+    async stop(id: string): Promise<void> {
+        this.running.delete(id);
+    }
+
+    async loadAgent(id: string, agentRef: string): Promise<void> {
+        this.loaded.push({ sandboxId: id, agentRef });
+    }
+
+    async unloadAgent(_id: string, _agentName: string): Promise<void> {}
+
+    async status(id: string): Promise<SandboxStatus> {
+        const status = this.running.get(id);
+        if (!status) {
+            throw new Error("sandbox missing");
+        }
+        return status;
+    }
+
+    async list(): Promise<SandboxStatus[]> {
+        return [...this.running.values()];
+    }
 }
 
 test("runRemainingPhasesOnActiveSession completes pipeline in order", async () => {
@@ -83,8 +132,21 @@ test("restorePhaseOnActiveSession marks downstream phases stale after ancestor r
 });
 
 test("installLastSessionToSandbox records sandbox assignment on active session", async () => {
-    const { context } = createContext();
+    const workspaceRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-workspace-"),
+    );
+    const artifactPath = path.join(
+        workspaceRoot,
+        "packages",
+        "agents",
+        "finance-approvals",
+    );
+    await fs.mkdir(artifactPath, { recursive: true });
+
+    const { context } = createContext([workspaceRoot]);
+    const sandbox = new RecordingSandboxManager();
     const runtime = createStudioRuntimeCore(context, {
+        sandbox,
         onboarding: new InMemoryOnboardingBridge({
             createSessionId: () => "session-install",
         }),
@@ -94,10 +156,14 @@ test("installLastSessionToSandbox records sandbox assignment on active session",
         description: "Finance approvals agent",
         agentName: "finance-approvals",
     });
-    const sessionId = await runtime.installLastSessionToSandbox("sandbox-a");
+    const installed = await runtime.installLastSessionToSandbox("sandbox-a");
     const state = await runtime.getActiveOnboardingSession();
 
-    assert.equal(sessionId, "session-install");
+    assert.equal(installed.sessionId, "session-install");
+    assert.equal(installed.artifactPath, artifactPath);
+    assert.deepEqual(sandbox.loaded, [
+        { sandboxId: "sandbox-a", agentRef: artifactPath },
+    ]);
     assert.deepEqual(state.installedSandboxIds, ["sandbox-a"]);
 });
 

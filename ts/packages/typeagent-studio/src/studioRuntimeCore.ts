@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as os from "node:os";
 import {
     InMemoryOnboardingBridge,
     ONBOARDING_PHASE_ORDER,
@@ -26,7 +28,10 @@ export interface StudioRuntime {
         description: string;
         agentName?: string;
     }): Promise<OnboardingState>;
-    installLastSessionToSandbox(sandboxId?: string): Promise<string>;
+    installLastSessionToSandbox(sandboxId?: string): Promise<{
+        sessionId: string;
+        artifactPath: string;
+    }>;
     clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
     runPhaseOnActiveSession(
@@ -61,6 +66,7 @@ export interface StudioWorkspaceState {
 export interface StudioRuntimeContext {
     workspaceState: StudioWorkspaceState;
     globalStorageFsPath: string;
+    workspaceFolderFsPaths?: string[];
 }
 
 export interface CreateStudioRuntimeOptions {
@@ -94,6 +100,11 @@ export function createStudioRuntimeCore(
         },
         async installLastSessionToSandbox(sandboxId = DEFAULT_SANDBOX_ID) {
             const sessionId = getRequiredSessionId(context);
+            const session = await onboarding.snapshot(sessionId);
+            const artifactPath = await resolveLocalArtifactPath(
+                session,
+                context,
+            );
 
             try {
                 await sandbox.status(sandboxId);
@@ -106,8 +117,9 @@ export function createStudioRuntimeCore(
                 });
             }
 
+            await sandbox.loadAgent(sandboxId, artifactPath);
             await onboarding.installToSandbox(sessionId, sandboxId);
-            return sessionId;
+            return { sessionId, artifactPath };
         },
         async clearActiveOnboardingSession() {
             await context.workspaceState.update(
@@ -174,6 +186,109 @@ export function createStudioRuntimeCore(
             };
         },
     };
+}
+
+const ONBOARDING_WORKSPACE_ROOT = path.join(
+    os.homedir(),
+    ".typeagent",
+    "onboarding",
+);
+
+async function resolveLocalArtifactPath(
+    state: OnboardingState,
+    context: StudioRuntimeContext,
+): Promise<string> {
+    const candidates = collectArtifactCandidates(state, context);
+    for (const candidate of candidates) {
+        const resolved = await resolveCandidatePath(candidate);
+        if (resolved && (await pathExists(resolved))) {
+            return resolved;
+        }
+    }
+
+    throw new Error(
+        `No local generated agent artifact found for ${state.agentName}. Checked ${candidates.length} candidate paths.`,
+    );
+}
+
+function collectArtifactCandidates(
+    state: OnboardingState,
+    context: StudioRuntimeContext,
+): string[] {
+    const out: string[] = [];
+    const push = (value: string | undefined) => {
+        const trimmed = value?.trim();
+        if (trimmed) {
+            out.push(trimmed);
+        }
+    };
+
+    for (const phase of ["Packaging", "Scaffolder"] as const) {
+        const outputs = state.phases[phase]?.outputs;
+        if (outputs && typeof outputs === "object") {
+            const obj = outputs as Record<string, unknown>;
+            for (const key of [
+                "artifactPath",
+                "agentPath",
+                "agentDir",
+                "outputDir",
+                "scaffoldedTo",
+                "targetDir",
+            ]) {
+                const raw = obj[key];
+                if (typeof raw === "string") {
+                    push(raw);
+                }
+            }
+        }
+    }
+
+    const onboardingScaffoldRecord = path.join(
+        ONBOARDING_WORKSPACE_ROOT,
+        state.agentName,
+        "scaffolder",
+        "scaffolded-to.txt",
+    );
+    push(onboardingScaffoldRecord);
+
+    for (const root of context.workspaceFolderFsPaths ?? []) {
+        push(path.join(root, "packages", "agents", state.agentName));
+        push(path.join(root, "packages", "agents", state.agentName.toLowerCase()));
+        push(path.join(root, "packages", "agents", stripAgentSuffix(state.agentName)));
+    }
+
+    return dedupe(out);
+}
+
+function stripAgentSuffix(agentName: string): string {
+    return agentName.endsWith("-agent")
+        ? agentName.slice(0, -"-agent".length)
+        : agentName;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+    try {
+        await fs.stat(filePath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function resolveCandidatePath(candidate: string): Promise<string | undefined> {
+    if (candidate.endsWith("scaffolded-to.txt")) {
+        try {
+            const txt = (await fs.readFile(candidate, "utf-8")).trim();
+            return txt || undefined;
+        } catch {
+            return undefined;
+        }
+    }
+    return candidate;
+}
+
+function dedupe(values: string[]): string[] {
+    return [...new Set(values.map((v) => path.normalize(v)))];
 }
 
 function getRequiredSessionId(context: StudioRuntimeContext): string {
