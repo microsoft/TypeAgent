@@ -291,6 +291,25 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.toggleBatchRunSummaryAutoOpen",
+            withErrors(async () => {
+                const current = shouldOpenSummaryAfterBatchRun();
+                await vscode.workspace
+                    .getConfiguration("typeagentStudio.onboarding")
+                    .update(
+                        "openSummaryAfterBatchRun",
+                        !current,
+                        vscode.ConfigurationTarget.Global,
+                    );
+                void vscode.window.showInformationMessage(
+                    `Open summary after batch run is now ${!current ? "enabled" : "disabled"}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);
