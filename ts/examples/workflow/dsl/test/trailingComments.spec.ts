@@ -13,7 +13,7 @@
 
 import { lex } from "../src/lexer.js";
 import { Parser } from "../src/parser.js";
-import { format } from "../src/formatter.js";
+import { format } from "./_testUtil.js";
 import { compile } from "../src/compiler.js";
 import { extractGraph } from "../src/graphExtractor.js";
 import {
@@ -28,7 +28,8 @@ function parse(source: string): WorkflowDecl {
     const { tokens, errors: lexErrors, comments } = lex(source);
     expect(lexErrors).toEqual([]);
     const parser = new Parser(tokens, comments);
-    const { ast, errors } = parser.parseSingle();
+    const { module: __m, errors } = parser.parseModule();
+    const ast = __m.workflows[0];
     expect(errors).toEqual([]);
     expect(ast).toBeDefined();
     return ast!;
@@ -1057,8 +1058,9 @@ workflow b(): string {
         const { tokens, errors: lexErrors, comments } = lex(src);
         expect(lexErrors).toEqual([]);
         const parser = new Parser(tokens, comments);
-        const { workflows, errors } = parser.parse();
+        const { module, errors } = parser.parseModule();
         expect(errors).toEqual([]);
+        const workflows = module.workflows;
         expect(workflows).toHaveLength(2);
         expect(workflows[0].body[0].trailingComments).toHaveLength(1);
         expect(workflows[0].body[0].trailingComments![0].text).toBe(
@@ -1078,10 +1080,10 @@ workflow b(): string {
     return "b"; // tail-b
 }`;
         const { tokens, comments } = lex(src);
-        const m = new Parser(tokens, comments).parse();
+        const m = new Parser(tokens, comments).parseModule().module;
         const combined = m.workflows.map((w) => format(w)).join("");
         const { tokens: t2, comments: c2 } = lex(combined);
-        const m2 = new Parser(t2, c2).parse();
+        const m2 = new Parser(t2, c2).parseModule().module;
         expect(m2.workflows).toHaveLength(2);
         expect(m2.workflows[0].body[0].trailingComments![0].text).toBe(
             "// tail-a",

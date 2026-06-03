@@ -1,0 +1,46 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar rules deliberately overlapping with other agents' .agr files.
+// Used to exercise runtime grammar/cache match collision detection.
+
+// Collides with player.play "play <song>"
+<Play> = play $(target:wildcard) -> {
+    actionName: "play",
+    parameters: {
+        target
+    }
+};
+
+// Collides with list.addItems "add X to my Y list"
+<AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "addItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+};
+
+// Collides with list.removeItems "remove X from my Y list"
+<RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+};
+
+// Collides with list.getList "what is on my Y list"
+<GetList> = what is on (the)? (my)? $(listName:wildcard) (list)? -> {
+    actionName: "getList",
+    parameters: {
+        listName
+    }
+};
+
+import { VampireAction } from "./vampireSchema.ts";
+
+<Start> : VampireAction = <Play>
+  | <AddItems>
+  | <RemoveItems>
+  | <GetList>;

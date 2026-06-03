@@ -206,9 +206,73 @@ export type DispatcherConfig = {
         matchEntityWildcard: boolean;
     };
 
+    // Action collision detection. Defaults preserve current behavior — everything off,
+    // strategies are "first-match" (today's silent winner-take-all). Opt-in per detection
+    // point. See docs/architecture and packages/dispatcher/.../matchCollision.ts.
+    collision: CollisionConfig;
+
     // Additional instructions appended to the reasoning system prompt.
     // Set this in the session config to inject dispatcher-level guidance without modifying source.
     promptAppend?: string;
+};
+
+export type CollisionStrategy =
+    | "first-match"
+    | "score-rank"
+    | "priority"
+    | "user-clarify";
+
+export type CollisionConfig = {
+    static: {
+        detect: boolean;
+        // "error" only honored on initial addProvider; the async onSchemaReady path
+        // always degrades to "warn" so a slow agent can never crash a live session.
+        strategy: "warn" | "error";
+    };
+    grammarMatch: {
+        detect: boolean;
+        // distinctActions: collision iff >1 distinct (schemaName, actionName) tuples
+        // tiedHeuristics: collision iff top two share matchedCount + nonOptionalCount + wildcardCharCount
+        classifier: "distinctActions" | "tiedHeuristics";
+        strategy: CollisionStrategy;
+    };
+    llmSelect: {
+        detect: boolean;
+        topN: number;
+        scoreDeltaThreshold: number;
+        strategy: CollisionStrategy;
+    };
+    fuzzy: {
+        detect: boolean;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;
+        similarityThreshold: number;
+        // "placeholder" returns 0 for all pairs — default and inert.
+        // "actionEmbedding" is reserved for a follow-up; selecting it now logs
+        // a "not implemented; falling back to placeholder" warning.
+        scorer: "placeholder" | "actionEmbedding";
+        strategy: CollisionStrategy;
+    };
+    // Optional explicit ranking — comma-separated agent names (e.g. "list,music,player").
+    // Stored as a string because the dispatcher config system rejects arrays.
+    // Empty / unset falls back to agent registration order.
+    priorityOrder: string;
+    // What user-clarify does inside a MultipleAction batch.
+    multipleActionBehavior:
+        | "downgrade-to-priority"
+        | "pause-and-prompt"
+        | "abort";
+    telemetry: {
+        emit: boolean;
+        debugLog: boolean;
+        // Tester-set tag for grouping events into an experiment window
+        // (e.g. "E1.2-2026-05-12").  Auto-copied into every emitted
+        // CollisionEvent so Cosmos queries can slice by experiment without
+        // joining other tables.  Empty string is the unset sentinel
+        // (mirrors `priorityOrder` — the dispatcher config layer rejects
+        // `undefined`-valued fields).
+        experimentId: string;
+    };
 };
 
 export type SessionConfig = AppAgentStateConfig & DispatcherConfig;
@@ -313,6 +377,38 @@ const defaultSessionConfig: SessionConfig = {
         matchWildcard: true,
         matchEntityWildcard: true,
         builtInCache: true,
+    },
+    collision: {
+        static: {
+            detect: false,
+            strategy: "warn",
+        },
+        grammarMatch: {
+            detect: false,
+            classifier: "distinctActions",
+            strategy: "first-match",
+        },
+        llmSelect: {
+            detect: false,
+            topN: 3,
+            scoreDeltaThreshold: 0.05,
+            strategy: "first-match",
+        },
+        fuzzy: {
+            detect: false,
+            staticEnabled: false,
+            runtimeEnabled: false,
+            similarityThreshold: 0.85,
+            scorer: "placeholder",
+            strategy: "first-match",
+        },
+        priorityOrder: "",
+        multipleActionBehavior: "downgrade-to-priority",
+        telemetry: {
+            emit: false,
+            debugLog: true,
+            experimentId: "",
+        },
     },
 };
 

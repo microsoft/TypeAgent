@@ -51,14 +51,14 @@ export async function discoverWorkflows(
                     errors.push({ file: filePath, errors: result.errors });
                     continue;
                 }
-                if (workflows.has(ir.name)) {
+                if (workflows.has(ir.entry)) {
                     errors.push({
                         file: filePath,
-                        errors: `Duplicate workflow name '${ir.name}'`,
+                        errors: `Duplicate workflow name '${ir.entry}'`,
                     });
                     continue;
                 }
-                workflows.set(ir.name, ir);
+                workflows.set(ir.entry, ir);
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
                 errors.push({ file: filePath, errors: msg });

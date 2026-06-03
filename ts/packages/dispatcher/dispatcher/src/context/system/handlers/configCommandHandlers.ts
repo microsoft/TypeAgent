@@ -1997,6 +1997,494 @@ class ConfigModelProviderCommandHandler implements CommandHandler {
     }
 }
 
+// ---------------------------------------------------------------------------
+// `@config collision …` — runtime config surface for action-collision detection.
+//
+// Why this exists: the collision detection subsystem ships off-by-default,
+// and the soft-rollout plan (`docs/architecture/collision-rollout.md`)
+// requires testers to opt in per detection point without hand-editing the
+// session JSON.  This handler is the M1 milestone: the shell-level toggle
+// that drives every Phase 1/2 experiment.  All flips route through
+// `changeContextConfig`, which calls `session.updateSettings` — that
+// already persists to `data.json` and re-applies in-memory, so settings
+// survive shell restart.
+//
+// Coverage scope: detect on/off, strategy, priorityOrder, telemetry
+// emit/debugLog.  Calibration knobs (classifier, topN, threshold, scorer,
+// similarityThreshold) are intentionally not exposed here — they're
+// long-tail tuning, not opt-in toggles, and the same JSON file accepts
+// hand edits.  We can add focused subcommands for those if a phase-2
+// experiment ends up needing repeated changes.
+// ---------------------------------------------------------------------------
+
+type CollisionPoint = "static" | "grammarMatch" | "llmSelect" | "fuzzy";
+
+const COLLISION_POINTS: readonly CollisionPoint[] = [
+    "static",
+    "grammarMatch",
+    "llmSelect",
+    "fuzzy",
+];
+
+// Strategy enums per detection point.  `static` uses warn/error;
+// the three runtime points share the four-way `CollisionStrategy` enum.
+const STATIC_STRATEGIES = ["warn", "error"] as const;
+const RUNTIME_STRATEGIES = [
+    "first-match",
+    "score-rank",
+    "priority",
+    "user-clarify",
+] as const;
+
+function strategiesFor(point: CollisionPoint): readonly string[] {
+    return point === "static" ? STATIC_STRATEGIES : RUNTIME_STRATEGIES;
+}
+
+// ---- HTML rendering helpers for `@config collision` ----
+//
+// Inline `style="…"` everywhere because the shell sanitizer strips
+// <style> blocks (same constraint as the grammar collision renderer in
+// grammarCommandHandlers.ts).  Color palette is consistent across both
+// reports so badges read the same.
+
+function escapeHtml(s: unknown): string {
+    const str = typeof s === "string" ? s : String(s);
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function statusPill(on: boolean, label?: string): string {
+    const text = label ?? (on ? "on" : "off");
+    const bg = on ? "#dfd" : "#eee";
+    const fg = on ? "#070" : "#888";
+    return (
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-size:11px;font-weight:600;color:${fg};background:${bg};">${escapeHtml(text)}</span>`
+    );
+}
+
+function strategyPill(
+    strategy: string,
+    isDefault: boolean,
+    risky: boolean,
+): string {
+    const bg = isDefault ? "#eee" : risky ? "#fee" : "#e8f0ff";
+    const fg = isDefault ? "#888" : risky ? "#c44" : "#36c";
+    return (
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-family:monospace;font-size:11px;font-weight:600;color:${fg};background:${bg};">${escapeHtml(strategy)}</span>`
+    );
+}
+
+function pointDescription(point: CollisionPoint): string {
+    switch (point) {
+        case "static":
+            return "duplicate actionName at agent registration";
+        case "grammarMatch":
+            return "multiple validated cache matches at runtime";
+        case "llmSelect":
+            return "ambiguous embedding-pick during LLM translation";
+        case "fuzzy":
+            return "semantic action overlap (fuzzy)";
+    }
+}
+
+function renderCollisionShowHTML(cfg: {
+    static: { detect: boolean; strategy: string };
+    grammarMatch: {
+        detect: boolean;
+        strategy: string;
+        classifier: string;
+    };
+    llmSelect: {
+        detect: boolean;
+        strategy: string;
+        topN: number;
+        scoreDeltaThreshold: number;
+    };
+    fuzzy: {
+        detect: boolean;
+        strategy: string;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;
+        scorer: string;
+        similarityThreshold: number;
+    };
+    priorityOrder: string;
+    multipleActionBehavior: string;
+    telemetry: {
+        emit: boolean;
+        debugLog: boolean;
+        experimentId?: string | undefined;
+    };
+}): string {
+    const C_MUTED = "#777";
+    const C_LABEL = "#555";
+
+    const cellStyle = "padding:6px 10px;border-bottom:1px solid #f0f0f0;";
+    const headStyle =
+        "padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
+    const monoCell = `${cellStyle}font-family:monospace;font-size:11px;color:${C_MUTED};`;
+
+    const rows: { point: CollisionPoint; row: string }[] = [];
+
+    // Per-point rows
+    const staticIsDefault = cfg.static.strategy === "warn";
+    const staticRisky = cfg.static.strategy === "error";
+    rows.push({
+        point: "static",
+        row: `
+            <td style="${cellStyle}"><b>static</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("static"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.static.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.static.strategy, staticIsDefault, staticRisky)}</td>
+            <td style="${monoCell}"><span style="color:${C_MUTED};">—</span></td>`,
+    });
+
+    const gmDefault = cfg.grammarMatch.strategy === "first-match";
+    const gmRisky = cfg.grammarMatch.strategy === "user-clarify";
+    rows.push({
+        point: "grammarMatch",
+        row: `
+            <td style="${cellStyle}"><b>grammarMatch</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("grammarMatch"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.grammarMatch.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.grammarMatch.strategy, gmDefault, gmRisky)}</td>
+            <td style="${monoCell}">classifier=${escapeHtml(cfg.grammarMatch.classifier)}</td>`,
+    });
+
+    const lsDefault = cfg.llmSelect.strategy === "first-match";
+    const lsRisky = cfg.llmSelect.strategy === "user-clarify";
+    rows.push({
+        point: "llmSelect",
+        row: `
+            <td style="${cellStyle}"><b>llmSelect</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("llmSelect"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.llmSelect.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.llmSelect.strategy, lsDefault, lsRisky)}</td>
+            <td style="${monoCell}">topN=${cfg.llmSelect.topN}, scoreDelta=${cfg.llmSelect.scoreDeltaThreshold}</td>`,
+    });
+
+    const fzDefault = cfg.fuzzy.strategy === "first-match";
+    const fzRisky = cfg.fuzzy.strategy === "user-clarify";
+    const scorerLabel =
+        cfg.fuzzy.scorer === "placeholder"
+            ? `<span style="color:#c80;" title="returns 0 for all pairs — fuzzy is inert until a real scorer ships">${escapeHtml(cfg.fuzzy.scorer)}</span>`
+            : escapeHtml(cfg.fuzzy.scorer);
+    rows.push({
+        point: "fuzzy",
+        row: `
+            <td style="${cellStyle}"><b>fuzzy</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("fuzzy"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.fuzzy.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.fuzzy.strategy, fzDefault, fzRisky)}</td>
+            <td style="${monoCell}">scorer=${scorerLabel}, static=${statusPill(cfg.fuzzy.staticEnabled)}, runtime=${statusPill(cfg.fuzzy.runtimeEnabled)}, threshold=${cfg.fuzzy.similarityThreshold}</td>`,
+    });
+
+    const tableRows = rows.map((r) => `<tr>${r.row}</tr>`).join("");
+
+    const priorityVal = cfg.priorityOrder
+        ? `<code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.priorityOrder)}"</code>`
+        : `<span style="color:#999;font-style:italic;">(empty — falls back to agent registration order)</span>`;
+
+    const mabRisky = cfg.multipleActionBehavior !== "downgrade-to-priority";
+    const mabVal = `<code style="background:${mabRisky ? "#fee" : "#f5f5f5"};color:${mabRisky ? "#c44" : "#555"};padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.multipleActionBehavior)}</code>`;
+
+    const settings = `
+        <div style="margin-top:14px;font-size:12px;color:${C_LABEL};line-height:1.7;">
+            <div><span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">priorityOrder</span>${priorityVal}</div>
+            <div><span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">multipleActionBehavior</span>${mabVal}</div>
+            <div style="margin-top:6px;">
+                <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">telemetry</span>
+                emit ${statusPill(cfg.telemetry.emit)}
+                debugLog ${statusPill(cfg.telemetry.debugLog)}
+                ${
+                    cfg.telemetry.experimentId
+                        ? `experimentId <code style="background:#e8f0ff;color:#36c;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.telemetry.experimentId)}"</code>`
+                        : ""
+                }
+            </div>
+        </div>`;
+
+    const anyOn =
+        cfg.static.detect ||
+        cfg.grammarMatch.detect ||
+        cfg.llmSelect.detect ||
+        cfg.fuzzy.detect;
+    const summary = anyOn
+        ? `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">Detection is <b style="color:#070;">active</b> on at least one point. Telemetry is captured when emit=on; remote upload requires <code>@config log db on</code>.</div>`
+        : `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">All detection points are <b>off</b> — runtime behavior is byte-identical to legacy first-match. Opt in with <code>@config collision &lt;point&gt; detect on</code>.</div>`;
+
+    return (
+        `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:880px;">` +
+        `<h3 style="margin:0 0 4px;font-size:14px;">Collision detection config</h3>` +
+        summary +
+        `<table style="border-collapse:collapse;width:100%;font-size:12px;">` +
+        `<thead><tr style="background:#fafafa;">` +
+        `<th style="${headStyle}">Detection point</th>` +
+        `<th style="${headStyle}">Detect</th>` +
+        `<th style="${headStyle}">Strategy</th>` +
+        `<th style="${headStyle}">Extras</th>` +
+        `</tr></thead><tbody>${tableRows}</tbody></table>` +
+        settings +
+        `</div>`
+    );
+}
+
+function renderCollisionShowText(cfg: {
+    static: { detect: boolean; strategy: string };
+    grammarMatch: {
+        detect: boolean;
+        strategy: string;
+        classifier: string;
+    };
+    llmSelect: {
+        detect: boolean;
+        strategy: string;
+        topN: number;
+        scoreDeltaThreshold: number;
+    };
+    fuzzy: {
+        detect: boolean;
+        strategy: string;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;
+        scorer: string;
+        similarityThreshold: number;
+    };
+    priorityOrder: string;
+    multipleActionBehavior: string;
+    telemetry: {
+        emit: boolean;
+        debugLog: boolean;
+        experimentId?: string | undefined;
+    };
+}): string[] {
+    const onOff = (b: boolean) => (b ? "on" : "off");
+    const expId = cfg.telemetry.experimentId
+        ? ` experimentId="${cfg.telemetry.experimentId}"`
+        : "";
+    return [
+        "collision config:",
+        `  static:       detect=${onOff(cfg.static.detect)} strategy=${cfg.static.strategy}`,
+        `  grammarMatch: detect=${onOff(cfg.grammarMatch.detect)} strategy=${cfg.grammarMatch.strategy} classifier=${cfg.grammarMatch.classifier}`,
+        `  llmSelect:    detect=${onOff(cfg.llmSelect.detect)} strategy=${cfg.llmSelect.strategy} topN=${cfg.llmSelect.topN} scoreDelta=${cfg.llmSelect.scoreDeltaThreshold}`,
+        `  fuzzy:        detect=${onOff(cfg.fuzzy.detect)} strategy=${cfg.fuzzy.strategy} static=${onOff(cfg.fuzzy.staticEnabled)} runtime=${onOff(cfg.fuzzy.runtimeEnabled)} scorer=${cfg.fuzzy.scorer} threshold=${cfg.fuzzy.similarityThreshold}`,
+        `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
+        `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
+        `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
+    ];
+}
+
+class CollisionShowCommandHandler implements CommandHandler {
+    public readonly description = "Show the current collision detection config";
+    public readonly parameters = {} as const;
+
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        const html = renderCollisionShowHTML(cfg);
+        const text = renderCollisionShowText(cfg);
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: html,
+            alternates: [{ type: "text", content: text }],
+        });
+    }
+}
+
+class CollisionStrategyCommandHandler implements CommandHandler {
+    public readonly description: string;
+    public readonly parameters = {
+        args: {
+            strategy: {
+                description: "strategy name",
+                type: "string",
+            },
+        },
+    } as const;
+
+    constructor(
+        private point: CollisionPoint,
+        private allowed: readonly string[],
+    ) {
+        this.description = `Set ${point} resolution strategy (one of: ${allowed.join(", ")})`;
+    }
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const strategy = params.args.strategy;
+        if (!this.allowed.includes(strategy)) {
+            displayWarn(
+                `Unknown strategy "${strategy}" for ${this.point}. Allowed: ${this.allowed.join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        // Nested partial works because SessionOptions is DeepPartialUndefinedAndNull.
+        const options: SessionOptions = {
+            collision: { [this.point]: { strategy } },
+        } as SessionOptions;
+        await changeContextConfig(options, context);
+        displayResult(`${this.point}.strategy = ${strategy}`, context);
+    }
+}
+
+class CollisionExperimentIdCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the experimentId tag attached to every emitted collision event. Empty string clears it.";
+    public readonly parameters = {
+        args: {
+            id: {
+                description:
+                    'Experiment tag, e.g. "E1.2-2026-05-12". Empty string "" clears.',
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        if (params.args.id === undefined) {
+            const cur = cfg.telemetry.experimentId;
+            displayResult(
+                `experimentId: ${cur ? `"${cur}"` : "(empty)"}`,
+                context,
+            );
+            return;
+        }
+        const id = params.args.id.trim();
+        await changeContextConfig(
+            {
+                collision: {
+                    telemetry: { experimentId: id },
+                },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(`experimentId = ${id ? `"${id}"` : "(empty)"}`, context);
+    }
+}
+
+class CollisionPriorityCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set priorityOrder (comma-separated agent names) used by the `priority` resolution strategy. Empty argument shows the current value.";
+    public readonly parameters = {
+        args: {
+            order: {
+                description:
+                    'Comma-separated agent names, e.g. "list,player,calendar". Use the empty string "" to clear.',
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        if (params.args.order === undefined) {
+            displayResult(
+                `priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
+                context,
+            );
+            return;
+        }
+        const order = params.args.order.trim();
+        await changeContextConfig(
+            { collision: { priorityOrder: order } } as SessionOptions,
+            context,
+        );
+        displayResult(
+            `priorityOrder = ${order ? `"${order}"` : "(empty)"}`,
+            context,
+        );
+    }
+}
+
+function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
+    const allowedStrategies = strategiesFor(point);
+    return {
+        description: `Configure ${point} collision detection`,
+        commands: {
+            detect: getToggleHandlerTable(
+                `${point} collision detection`,
+                async (context, enable) => {
+                    await changeContextConfig(
+                        {
+                            collision: {
+                                [point]: { detect: enable },
+                            },
+                        } as SessionOptions,
+                        context,
+                    );
+                },
+            ),
+            strategy: new CollisionStrategyCommandHandler(
+                point,
+                allowedStrategies,
+            ),
+        },
+    };
+}
+
+function getCollisionCommandHandlers(): CommandHandlerTable {
+    const pointHandlers: Record<string, CommandHandlerTable> = {};
+    for (const point of COLLISION_POINTS) {
+        pointHandlers[point] = getCollisionPointHandlers(point);
+    }
+    return {
+        description: "Configure action collision detection",
+        defaultSubCommand: "show",
+        commands: {
+            show: new CollisionShowCommandHandler(),
+            ...pointHandlers,
+            priority: new CollisionPriorityCommandHandler(),
+            telemetry: {
+                description: "Configure collision telemetry",
+                commands: {
+                    emit: getToggleHandlerTable(
+                        "collision telemetry ring buffer",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        telemetry: { emit: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                    debugLog: getToggleHandlerTable(
+                        "collision telemetry debug log",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        telemetry: { debugLog: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                    experimentId: new CollisionExperimentIdCommandHandler(),
+                },
+            },
+        },
+    };
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -2052,12 +2540,19 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     db: getToggleHandlerTable(
                         "logging",
                         async (context, enable) => {
+                            // Honor the toggle: previously hardcoded to
+                            // false regardless of `enable`, which made
+                            // `@config log db on` a no-op and blocked
+                            // every collision-rollout experiment from
+                            // uploading to Cosmos.
                             context.sessionContext.agentContext.dblogging =
                                 enable;
                         },
                     ),
                 },
             },
+
+            collision: getCollisionCommandHandlers(),
         },
     };
 }

@@ -1,0 +1,137 @@
+# ============================================================
+# webFlows demo — discovery, invoke, record, manage
+#
+# Reproduces the demo from webFlows-demo-04-06-26.mp4 (~3 minutes).
+# Narration is rewritten from the original transcript in the
+# recorder's voice — same content, cleaner phrasing.
+#
+# Manual steps the recorder performs in-browser are marked with
+# @pause beats. The script types commands into the Copilot CLI;
+# the browser-side UI interactions (clicking Record, filling the
+# form, clicking Save) are recorder-driven.
+# ============================================================
+
+@defaults timeout=30s on-timeout=warn type-speed=30 type-jitter=10 voice="Microsoft Aria Natural"
+@focus "Windows Terminal"
+@setup setup\macros-setup.ps1
+
+# ------------------------------------------------------------
+# Pre-roll
+# ------------------------------------------------------------
+
+@record-start
+@sleep 2s
+
+# ------------------------------------------------------------
+# Intro
+# ------------------------------------------------------------
+
+@say-block "This demo walks through how workflows get discovered, invoked, and managed in the browser agent."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 1 — Discovery on Home Depot
+# ------------------------------------------------------------
+
+@say "I'll start by navigating to Home Depot and running discovery."
+
+@cue "Switch to the browser, navigate to homedepot.com, then come back to the CLI."
+
+discover actions on this page
+@wait-completion timeout=30s on-timeout=warn
+
+@say "The agent sent the page HTML to the model and got back two things. A list of known workflows that already exist for this kind of page, and some new workflows that it inferred from the structure of the page itself."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 2 — Invoke a workflow
+# ------------------------------------------------------------
+
+@say "One of those workflows is for ordering. Let me use it."
+
+order AAA batteries
+@wait-completion timeout=30s on-timeout=warn
+
+@say-block "Notice the agent doing this is browser.webflows. It's taking the workflow definition and running the atomic steps inside it. Click on the search box, enter text, scroll. And for the parts that need the model, like finding the right item on the result page, it sends the HTML to the model and uses what comes back."
+
+@pause
+
+where's the add to cart button?
+@wait-completion timeout=20s on-timeout=warn
+
+@say "That semantic step lets us add the item to the cart."
+
+add this to my cart
+@wait-completion timeout=20s on-timeout=warn
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 3 — Library view
+# ------------------------------------------------------------
+
+@say "Now let me show the management side."
+
+open the workflow library
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Here's every workflow that's been discovered or recorded across all the sites we've used. I can click into any one of them to see the parameters, the description, and the script that runs."
+
+@sleep 5s
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 4 — Record a new workflow on Starbucks
+# ------------------------------------------------------------
+
+@say "The next scenario is recording. We'll show how a user can teach the agent a new workflow just by doing it once."
+
+@cue "Switch to the browser and navigate to starbucks.com."
+
+discover actions on this page
+@wait-completion timeout=30s on-timeout=warn
+
+@say "Same discovery as before. The agent finds the existing actions for this site, and you'll see a button for recording a new one."
+
+@pause
+
+@cue "Click Record New Action, interact with the order form (customize a drink), then click Save. Take your time."
+
+@say-block "When the user clicked save, the agent sent the page HTML and the trace of what the user did to the model. The model generalized that demonstration into a workflow with parameters and a script."
+
+@pause
+
+# ------------------------------------------------------------
+# Phase 5 — Use the recorded workflow
+# ------------------------------------------------------------
+
+@say "Now I can use that workflow the same way I used the discovered ones."
+
+order a flat white with extra milk
+@wait-completion timeout=30s on-timeout=warn
+
+@pause
+
+@say "And in the library, the new Starbucks workflow is there alongside everything else."
+
+open the workflow library
+@wait-completion timeout=15s on-timeout=warn
+
+@say "Same view as before. Parameters, description, the script that runs. Fully usable like any other workflow."
+
+@sleep 5s
+
+@pause
+
+# ------------------------------------------------------------
+# Recap
+# ------------------------------------------------------------
+
+@say-block "So to recap. Workflows are built from atomic browser actions and a few semantic actions that involve the model. We register them as regular agent actions, which means they're cacheable and dispatchable at scale. Users can view, record, and delete them from the library. Today the examples are e-commerce sites, but nothing about the mechanism is specific to shopping. Next thing to look at is how this applies to a security context."
+
+@sleep 1s
+@record-stop
+@teardown teardown\macros-teardown.ps1

@@ -31,6 +31,7 @@ import {
     FilterNode,
     ParallelNode,
     ParallelMapNode,
+    TypeExpr,
 } from "./ast.js";
 import { decodeStringLiteral } from "./literal.js";
 
@@ -239,11 +240,25 @@ class GraphExtractor {
             });
             this.bindings.set(stmt.name, nodeId);
             if (groupId) this.addToGroup(groupId, nodeId);
+        } else if (expr.kind === "DottedNameExpr") {
+            // Variable reference or property access - propagate the source binding
+            // so edges from this name resolve to the original producer node.
+            const sourceId = this.bindings.get(expr.segments[0]);
+            if (sourceId) {
+                this.bindings.set(stmt.name, sourceId);
+            }
         } else {
             // Complex expression (binary, built-in, etc.)
-            const nodeId = this.extractExprAsNode(expr, groupId);
-            if (nodeId) {
-                this.bindings.set(stmt.name, nodeId);
+            const exprId = this.extractExprAsNode(expr, groupId);
+            if (exprId) {
+                // When a built-in block (map/filter/attempts/...) produced a group,
+                // label the group with the binding name so the dashed box is
+                // identifiable and edges to/from it render correctly.
+                const grp = this.groups.find((g) => g.id === exprId);
+                if (grp && !grp.label.startsWith(`${stmt.name} =`)) {
+                    grp.label = `${stmt.name} = ${grp.label}`;
+                }
+                this.bindings.set(stmt.name, exprId);
             }
         }
     }
@@ -749,7 +764,7 @@ class GraphExtractor {
         }
     }
 
-    private typeToString(type: import("./ast.js").TypeExpr): string {
+    private typeToString(type: TypeExpr): string {
         switch (type.kind) {
             case "NamedType":
                 return type.name;

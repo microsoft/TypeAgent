@@ -5,6 +5,11 @@ export { TaskRegistry } from "./taskRegistry.js";
 export { WorkflowEngine, RunResult, RunOptions } from "./runner.js";
 export { WorkflowEvent, WorkflowEventListener } from "./events.js";
 export {
+    getBuiltinTaskSchemas,
+    BuiltinTaskSchema,
+    TypeParameterDef,
+} from "./builtinTaskSchemas.js";
+export {
     listLength,
     listElementAt,
     listAppend,

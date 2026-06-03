@@ -14,16 +14,16 @@ function parseWf(source: string): WorkflowDecl {
         );
     }
     const parser = new Parser(tokens);
-    const ast = parser.parse();
-    if (ast.errors.length > 0) {
+    const { module, errors } = parser.parseModule();
+    if (errors.length > 0) {
         throw new Error(
-            `Parse errors: ${ast.errors.map((e: { message: string }) => e.message).join(", ")}`,
+            `Parse errors: ${errors.map((e: { message: string }) => e.message).join(", ")}`,
         );
     }
-    if (ast.workflows.length === 0) {
+    if (module.workflows.length === 0) {
         throw new Error("No workflow found");
     }
-    return ast.workflows[0];
+    return module.workflows[0];
 }
 
 function extract(source: string): GraphModel {
@@ -295,6 +295,31 @@ describe("Graph extractor", () => {
         expect(callNode!.taskType).toBe("helper");
     });
 
+    // ---- Dotted name alias (regression: was silently dropped) ----
+
+    test("const assigned from a dotted name reference propagates binding", () => {
+        const g = extract(`
+            workflow test(url: string): unknown {
+                const fetched = web.fetch(url);
+                const alias = fetched.result;
+                const out = text.summarize(alias);
+                return out;
+            }
+        `);
+        // fetched -> task node; out -> task node; alias must not break the chain
+        const fetchNode = g.nodes.find((n) => n.taskType === "web.fetch");
+        const summarizeNode = g.nodes.find(
+            (n) => n.taskType === "text.summarize",
+        );
+        expect(fetchNode).toBeDefined();
+        expect(summarizeNode).toBeDefined();
+        // There should be an edge from the fetch node through alias to summarize
+        const edge = g.edges.find(
+            (e) => e.from === fetchNode!.id && e.to === summarizeNode!.id,
+        );
+        expect(edge).toBeDefined();
+    });
+
     // ---- Nested groups ----
 
     test("nested built-ins create nested groups", () => {
@@ -313,5 +338,35 @@ describe("Graph extractor", () => {
         expect(mapGroup).toBeDefined();
         expect(attemptsGroup).toBeDefined();
         expect(attemptsGroup!.parentId).toBe(mapGroup!.id);
+    });
+
+    // ---- Built-in block label includes binding name ----
+
+    test("map group label is prefixed with the binding const name", () => {
+        const g = extract(`
+            workflow test(urls: string[]): unknown {
+                const results = map(urls, (url) => {
+                    return web.fetch(url);
+                });
+                return results;
+            }
+        `);
+        const mapGroup = g.groups.find((gr) => gr.kind === "map");
+        expect(mapGroup).toBeDefined();
+        expect(mapGroup!.label).toMatch(/^results\s*=/);
+    });
+
+    test("filter group label is prefixed with the binding const name", () => {
+        const g = extract(`
+            workflow test(items: string[]): unknown {
+                const kept = filter(items, (item) => {
+                    return item === "keep";
+                });
+                return kept;
+            }
+        `);
+        const filterGroup = g.groups.find((gr) => gr.kind === "filter");
+        expect(filterGroup).toBeDefined();
+        expect(filterGroup!.label).toMatch(/^kept\s*=/);
     });
 });

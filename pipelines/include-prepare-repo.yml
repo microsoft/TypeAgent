@@ -16,7 +16,6 @@ steps:
 
   - bash: |
       echo "registry=${{ parameters.registry }}" > .npmrc
-      echo "always-auth=true" >> .npmrc
       cat .npmrc
     displayName: Set npm registry
     workingDirectory: ${{ parameters.buildDirectory }}

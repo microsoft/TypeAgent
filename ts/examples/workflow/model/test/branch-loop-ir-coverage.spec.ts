@@ -7,6 +7,7 @@
 
 import {
     WorkflowIR,
+    WorkflowBody,
     BranchArm,
     BranchNode,
     LoopNode,
@@ -29,17 +30,22 @@ function taskMap(...names: string[]): Map<string, TaskDefinition> {
     return m;
 }
 
-function baseIR(overrides: Partial<WorkflowIR>): WorkflowIR {
-    return {
-        kind: "workflow",
-        name: "branch-loop-ir-coverage",
-        version: "1",
+const WORKFLOW_NAME = "branch-loop-ir-coverage";
+
+function baseIR(overrides: Partial<WorkflowBody>): WorkflowIR {
+    const body: WorkflowBody = {
         inputSchema: { type: "object" },
         outputSchema: { type: "object" },
         entry: "start",
         nodes: {},
         output: null,
         ...overrides,
+    };
+    return {
+        kind: "workflow",
+        version: "1",
+        entry: WORKFLOW_NAME,
+        workflows: { [WORKFLOW_NAME]: body },
     };
 }
 

@@ -8,108 +8,54 @@ not yet fully wired end-to-end.
 Address the gaps in dependency order, with correctness and validation before
 new surface area:
 
-1. **G14: Fix switch lowering always taking first case.** This is a core
-   control-flow runtime correctness bug and should be fixed before richer switch
-   typing or exhaustiveness work.
-2. **G16: Fix `throw` message propagation.** This is a direct user-visible
+1. **G16: Fix `throw` message propagation.** This is a direct user-visible
    correctness issue in already-supported error semantics.
-3. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
+2. **G2: Complete fork branch IR schema fields.** Bring emitted fork branch IR
    into the full sub-scope contract before improving fork runtime behavior.
-4. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
+3. **G17: Cancel in-flight fork/forkMap branches on failure.** After fork IR is
    structurally valid, align fork execution with the spec's failure and cleanup
    semantics.
-5. **G13: Fix structural type comparison for objects and arrays.** Type-system
-   expansions should build on sound object and array compatibility checks.
-6. **G10: Fix `integer`/`number` assignability.** Make numeric compatibility
-   one-way before adding more type-system expressiveness.
-7. **G3: Add TypeScript-style named type aliases.** Once structural
+4. **G22: Improve object/array diagnostics.** Now that G13 (resolved)
+   surfaces real structural mismatches, switch error messages from the
+   collapsed `'object'` rendering to the existing `formatType` output so
+   users can see which fields differ.
+5. **G3: Add TypeScript-style named type aliases.** Once structural
    assignability is sound, add named type declarations and a type environment.
-8. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
+6. **G4: Add generics for `llm.generateJson<T>`.** This depends on richer type
    parsing and checking, and becomes more ergonomic once named aliases exist.
-9. **G18: Add union/literal types.** This is the broadest type-system expansion
-   and should come after type soundness, named types, and switch runtime
-   correctness.
-10. **G1: Implement sub-workflow calls and compile-time inlining.** This is
-    strategically important, but touches compiler architecture and emitter
-    lowering, so it should follow the core correctness and type-system
-    foundations.
-11. **G11: Decide/document bind stripping for explicit user names.** This is
-    primarily debuggability and spec clarity.
-12. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
-    AST honesty and visual-editor clarity, but current behavior works.
-13. **G12: Decide `list.append` naming/semantics.** This is naming/API
+7. **G18: Add union/literal types.** This is the broadest type-system expansion
+   and should come after type soundness and named types.
+8. **G11: Decide/document bind stripping for explicit user names.** This is
+   primarily debuggability and spec clarity.
+9. **G9: Decide whether bare task calls need `ExpressionStatement`.** This is
+   AST honesty and visual-editor clarity, but current behavior works.
+10. **G12: Decide `list.append` naming/semantics.** This is naming/API
     consistency with coordinated emitter, engine, and snapshot churn.
-14. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
+11. **G20: Audit remaining `identity` / `noop` usage in the emitter.**
     Decision 0010 removed `identity` / `noop` as load-bearing at branch
     convergence, but the emitter still synthesizes them in several other
     places. Classify each remaining usage as (a) reducible after 0010,
     (b) forced by an IR shape that could be relaxed additively, or (c)
     inherent to decision 0006 (no expressions). Pure audit; only
     schedules follow-up work.
-15. **G7: Revisit composition patterns only when concrete workflow needs appear.**
+12. **G7: Revisit composition patterns only when concrete workflow needs appear.**
     These patterns push against the visual-node discipline and should stay out
     of scope until justified.
+13. **G29 (open part): Decide whether to deprecate value-producing
+    `if`/`switch` in favour of ternary.** The arm-type checking part of
+    G29 (same-type enforcement, `_resolvedSchemas` storage, partial-return
+    as a type error) is resolved; see decision 0011 §6 and the
+    `G29 + G30` section below. The remaining open question - whether
+    value-producing `if`/`switch` should be deprecated entirely - is
+    deferred pending a `.wf` survey + G18 (union types).
+
+G24-G28 capture follow-up design questions raised during the workflow
+composition implementation that have not yet been scheduled.
 
 Dependency spine:
 
 - `G2 -> G17` brings fork/forkMap IR and runtime behavior into spec alignment.
-- `G13 + G10 -> G3 -> G4 -> G18` builds type-system features on sound
-  assignability.
-- `G14 -> G18` ensures switch runtime behavior is correct before adding
-  exhaustive union-typed switch support.
-- `G14 + G16` makes implemented control-flow and error features
-  trustworthy before adding major new DSL surface area.
-
-## G1: Sub-workflow calls
-
-**Spec:** dsl-v0.1.md section 4. Multiple workflows in a single file;
-sub-workflows are called by name and inlined at compile time.
-
-**Current state:**
-
-- Parser: works. Single-segment calls (`sendEmail(message)`) produce
-  `WorkflowCallExpr` AST nodes.
-- Type checker: partially works. Resolves return type from the called
-  workflow's declaration, but `compile()` only passes a single workflow
-  to the checker (`TypeChecker` constructor defaults `workflows` to `[]`).
-  Cross-workflow calls produce "Unknown workflow" unless the caller
-  explicitly provides sibling workflows.
-- Emitter: does not inline. Emits a `TaskNode` with
-  `task: "workflow.<name>"` and empty schemas. The current emit strategy
-  was a placeholder: it generates an unregistered task reference rather
-  than inlining the sub-workflow body.
-- Runtime: fails. `workflow.<name>` tasks are not registered in the
-  engine.
-
-**What needs to happen:**
-
-1. `compile()` should pass all parsed workflows to the type checker so
-   cross-workflow references resolve.
-2. The emitter should inline sub-workflow bodies into the calling
-   workflow's IR (as the spec says), or alternatively, register
-   `workflow.<name>` tasks in the engine at runtime.
-3. Add integration tests that compile and execute a multi-workflow file.
-
-**Related decisions:**
-
-- Recursion is unsupported. The type checker resolves return types from
-  declared signatures (no divergence), but sub-workflow calls emit as
-  unregistered tasks that fail at runtime. Once inlining lands, true
-  recursion is structurally impossible (infinite inlining). A static
-  cycle check would give a better error but is low priority.
-- Sub-workflow emit strategy: the current `workflow.<name>` task-node
-  approach is a placeholder. The intended behavior is compile-time
-  inlining per dsl-v0.1.md section 4.
-- Call classification: the parser uses a syntactic rule to distinguish
-  task calls from workflow calls: dotted names (`ns.task()`) are task
-  calls, single-segment names (`fn()`) are workflow calls. There is no
-  way to call a task without a namespace prefix. This means task naming
-  must always use dotted form, and single-segment task names are
-  unreachable from DSL code. When sub-workflow calls are implemented,
-  this classification rule should be revisited together: if tasks can
-  ever have single-segment names, the disambiguation needs a different
-  strategy (e.g., checking whether the name matches a declared workflow
-  vs. a registered task schema).
+- `G3 -> G4 -> G18` builds type-system features on sound assignability.
 
 ## G2: Parallel branches missing IR schema fields
 
@@ -242,37 +188,6 @@ bindings with synthetic names? The current approach works but:
 3. If adding `ExpressionStatement`: update parser, ast.ts, emitter, and
    graph extractor.
 
-## G10: integer/number bidirectional compatibility
-
-**Context:** JSON Schema defines `integer` as a subtype of `number`
-(one-way: integer values satisfy a number schema, but not vice versa).
-The DSL type checker treats them as bidirectionally compatible.
-
-**Current state:**
-
-- The type checker's `isAssignable` function treats `integer` and
-  `number` as interchangeable in both directions
-  (typeChecker.ts ~line 99-104).
-- You can pass a `number` value where `integer` is expected without a
-  type error, which is a silent precision-loss bug.
-- Additionally, arithmetic on two `integer` operands always returns
-  `number` (typeChecker.ts ~line 713), even though the result could
-  safely remain `integer` for `+`, `-`, `*`.
-
-**What needs to happen:**
-
-1. Make assignability one-way: `integer` assignable to `number`, but
-   `number` NOT assignable to `integer` without an explicit conversion.
-2. Consider returning `integer` from integer-only arithmetic (`+`, `-`,
-   `*`) and `number` only when a `number` operand is involved or for
-   division.
-3. Add type error tests for cases like passing a `number` variable to
-   an input that expects `integer`.
-4. Audit existing task schemas: some tasks (e.g., `math.floor`,
-   `math.round`, `math.ceil`) correctly return `integer`; verify that
-   their results can still flow into `number`-typed inputs after the
-   one-way fix.
-
 ## G11: Bind stripping removes names from side-effect tasks
 
 **Context:** After emission, the emitter runs `stripUnreferencedBinds`
@@ -329,50 +244,6 @@ suggests mutation in many languages (Python `list.append`, JS
 3. Regardless of naming: consider whether the immutable semantics should
    be made explicit in the task name (e.g., `array.appended` or
    `array.concat`) to avoid confusion with mutable append/push.
-
-## G13: `typeEq` skips structural comparison for objects and arrays
-
-**Context:** The type checker's `typeEq(target, source)` function is used
-for return type validation, const annotation checking, and ternary arm
-compatibility. It skips structural comparison for object and array kinds.
-
-**Current state:**
-
-- `typeEq` checks primitive kinds by name, handles `unknown`/`never`
-  correctly, and handles `integer`/`number` compatibility.
-- For objects and arrays it falls through to `return true` without
-  comparing fields or element types.
-- This means `{ a: string }` is considered compatible with
-  `{ x: number, y: number }` in all contexts where `typeEq` is called.
-- Affected call sites: return type vs declared type (line ~263), const
-  annotation vs inferred type (line ~308), ternary arm compatibility
-  (line ~549).
-
-**What needs to happen:**
-
-1. Add structural comparison for object types: check that all required
-   fields in the target exist in the source with compatible types.
-2. Add element-type comparison for array types.
-3. Consider splitting into two functions: `typeEq` for operator checks
-   (where the current loose behavior is fine) and `isAssignableTo` for
-   the structural contexts.
-4. Add tests for mismatched object types in return position and ternary
-   arms.
-
-## G14: Switch lowering always takes first case
-
-**Spec:** dsl-v0.1.md section 7.4. Switch emits a chain of
-condition-check nodes, each comparing the discriminant to the arm's
-value.
-
-**Current state:** The emitted IR always evaluates to the first case's
-body regardless of the discriminant's runtime value. Likely the
-branch condition for the compare.equals node is not wired to the
-actual discriminant input, or the branch edges (true/false) are
-reversed.
-
-**Reproduction:** Compile a switch with string cases, run with a value
-matching the second case. Output is always from the first case.
 
 ## G16: `throw` produces empty error message
 
@@ -614,3 +485,445 @@ Three plausible end states, one per category:
    [revisit-triggers.md](../ir/revisit-triggers.md) and either
    [ir-v0.1.md](../ir/ir-v0.1.md) or a new decision record.
 5. If all categories close as "working as intended," remove this gap.
+
+## G21: Inferred return type and typed lambda parameters
+
+**Status:** deferred - parser and type checker changes needed.
+
+**Problem 1 - inferred workflow return type:**
+The workflow declaration currently requires an explicit return type:
+
+```
+workflow summarize(repos: string[]): string { ... }
+```
+
+TypeScript allows omitting the annotation when the return type can be
+inferred from the body. The DSL type checker already infers the return
+type during `check()` (it computes `returnType` from `checkStatements`
+and validates it against the declared type). The parser and emitter
+would need changes to make the annotation optional and fall back to the
+inferred type when absent.
+
+**Problem 2 - typed lambda parameters:**
+Lambda parameters in `map`, `filter`, `parallelMap`, and
+`attempts.fallback` currently have no syntax for an explicit type
+annotation:
+
+```
+map(repos, (repo) => { ... })          // repo inferred as string
+```
+
+TypeScript allows writing `(repo: string) =>` to be explicit and get
+an error if the inferred type does not match. The DSL parser would need
+to accept an optional `: TypeExpr` after the param name in arrow
+expressions, and the type checker would need to validate the annotation
+against the inferred element type.
+
+**What needs to happen:**
+
+1. Update the parser to make the workflow return type annotation
+   optional (produce a sentinel `TypeExpr` such as `{ kind: "NamedType",
+name: "_infer" }`) and emit the inferred type in the emitter.
+2. Update the type checker to skip the return-type compatibility check
+   when the annotation is the sentinel, and instead use the inferred
+   type as the declared return type for downstream validation.
+3. Update the parser to accept `(param: TypeExpr) =>` in arrow
+   expressions, store the annotation on `MapNode`/`FilterNode`/etc.,
+   and have the type checker emit an error when the annotation does not
+   match the inferred element type.
+4. Add LSP hover and inlay-hint support that shows the inferred return
+   type next to the workflow name when the annotation is omitted.
+
+## G22: Type error messages collapse objects to `'object'`
+
+**Status:** UX gap surfaced by the G13 implementation. Pure diagnostic
+improvement; no semantic change to type checking.
+
+**Context:** When the type checker reports an assignability error, it
+formats both sides with `typeName(t)`. For object types this function
+returns the literal string `"object"`, discarding all field information.
+This makes object-vs-object mismatches indistinguishable to users.
+
+**Current state:**
+
+- `typeName` in `typeChecker.ts` returns `"object"` for any `ObjectTypeInfo`,
+  regardless of fields.
+- Arrays partially benefit from recursion (`string[]`) but their element
+  type collapses to `"object"` when it's an object.
+- Tuples also collapse to `"object"` for each object element.
+- A `formatType` function already exists in `typeChecker.ts` that produces
+  a full TypeScript-style rendering (e.g. `{ name: string, tag?: string }`,
+  `{ x: string }[]`), used today only for LSP hover text.
+- Affected diagnostics include (non-exhaustive):
+  - `Workflow return type 'object' is not assignable to declared type 'object'`
+  - `Type 'object' is not assignable to type 'object'` (const annotations)
+  - `Ternary arms must have the same type: 'object' vs 'object'`
+  - `Operator '===' requires same types on both sides: 'object' vs 'object'`
+- After G13 added structural object/array assignability checks, mismatches
+  between objects are now reported as errors, so the volume of
+  object-vs-object messages users see has grown.
+
+**Reproduction:**
+
+```
+workflow test(x: { name: string, tag: number }): { name: string, tag?: string } {
+    return x;
+}
+```
+
+Currently reports: `Workflow return type 'object' is not assignable to
+declared type 'object'`. Users cannot tell which field mismatches without
+manually walking both type expressions.
+
+**What needs to happen:**
+
+1. Switch the structural error messages (return-type, const-annotation,
+   ternary-arm, and `===`/`!==`) to use `formatType` instead of
+   `typeName`, or introduce a single shared diagnostic formatter.
+2. Decide whether `typeName` should be removed in favor of `formatType`,
+   or kept for short contexts (e.g. operator operand kind in
+   `must be numeric, got 'string'`). If kept, document the contract.
+3. Consider augmenting object-mismatch messages with the specific
+   offending field path (e.g. `field 'tag' has type 'number' but
+expected 'string'`), reusing the recursion already done inside
+   `isAssignableTo`. This may require threading an error-reason result
+   out of `isAssignableTo` instead of a bare boolean.
+4. Update existing type-checker tests whose substring assertions rely on
+   the collapsed `'object'` rendering, and add tests asserting the
+   richer field-level wording.
+
+## G24: Named-record call syntax diverges from TypeScript
+
+**Spec/intent:** The DSL supports a "named-record" call form where a
+workflow with positional params can be called with a single object
+literal: `summarize({ text: "hello", maxLen: 100 })`. This is a DSL
+convenience that maps object keys to the callee's named params.
+
+**The gap:** In TypeScript, `f({ a, b })` only works if `f` is declared
+with a destructured parameter (`f({ a, b }: T)`). Positional-param
+functions (`f(a: string, b: number)`) cannot be called with an object
+— TypeScript produces a type error. The DSL's named-record form is
+therefore a non-standard extension with no TypeScript precedent.
+
+**Consequences:**
+
+1. `summarize(myObj)` where `myObj` is a variable (not an inline literal)
+   is treated as a single positional arg in the DSL today — it does NOT
+   trigger named-record matching. This means named-record semantics are
+   only available via inline object literals, limiting use in `map`
+   bodies and other computed-argument contexts.
+
+2. There is a semantic gap: DSL callers can write
+   `summarize({ text: "x", maxLen: 1 })` but TypeScript callers of the
+   same interface would not be able to. If the DSL ever emits TypeScript
+   stubs, this call form has no direct equivalent.
+
+**Options for alignment:**
+
+- **Drop named-record syntax** and require callers to pass positional
+  args (`summarize("hello", 100)`). Aligns with TypeScript exactly.
+- **Adopt TypeScript destructuring convention**: a workflow declared
+  as `workflow summarize({ text, maxLen }: SummarizeArgs)` takes a
+  single object param — then both inline literals and variables work,
+  matching TypeScript exactly.
+- **Keep named-record as DSL sugar** (current) but document it as a
+  DSL-only convenience that does not map to TypeScript call semantics.
+
+**Decision needed:** Should DSL workflow call syntax align with
+TypeScript (positional only, or explicit destructuring) or keep the
+named-record convenience syntax as a DSL-specific ergonomic feature?
+
+**Raised during:** the workflow composition implementation (designing workflow
+call syntax).
+
+## G25: `export` conflates entry-point selection with cross-file importability; no library compile mode
+
+**Spec/intent:** `export workflow` was introduced to (1) allow a workflow to
+be imported by other `.wf` files and (2) act as the tiebreaker for which
+workflow is the entry point when a file contains multiple workflows.
+
+**The gap:** These are two distinct concerns collapsed onto one keyword:
+
+- **Importability** — whether other files can `import { foo } from "./m.wf"`.
+  This is a module-visibility concern, analogous to TypeScript `export`.
+- **Entry selection** — which workflow `compile()` / `compileFile()` treats
+  as the root to execute. This is a bundler/runner concern with no TypeScript
+  equivalent.
+
+Because they share one keyword, a workflow marked `export` for importability
+automatically becomes an entry candidate, and vice versa. This causes two
+concrete problems:
+
+1. A file intended as a pure library (multiple exported helpers, no single
+   entry) cannot be compiled today — the compiler requires exactly one entry,
+   so two `export workflow` declarations are an error unless `--entry` is
+   passed. There is no "library mode" that skips entry resolution and emits
+   all exported workflows.
+
+2. A single-purpose helper marked `export` just to be importable raises
+   ambiguity if a second `export workflow` exists in the same file, even
+   though neither was intended as the entry.
+
+**Options:**
+
+- **Separate keywords / annotations**: e.g., `export workflow` for
+  importability only, and a separate marker (`@entry`, `main workflow`, etc.)
+  for entry selection. Matches TypeScript's model more closely.
+- **Library compile mode**: keep one keyword but add a `--library` flag to
+  `compile()`/`compileFile()` that skips entry resolution and emits all
+  exported workflows as a `WorkflowIR[]` or a named map. Entry-selection
+  behavior is unchanged for non-library builds.
+- **Implicit entry by name**: treat a workflow named `main` (or the file
+  stem) as the entry when no explicit `--entry` is given, making `export`
+  purely a visibility qualifier.
+
+**Raised during:** the workflow composition implementation (designing
+export / entry-point semantics).
+
+## G26: No DSL syntax for `timeoutMs` on workflow calls
+
+**Spec/intent:** The IR `WorkflowCallNode` has an optional `timeoutMs` field.
+When set, the engine enforces it by composing an `AbortSignal` that fires
+after the deadline, aborting the sub-workflow with a clear
+`"Sub-workflow … timed out after Nms"` error.
+
+**The gap:** The DSL compiler never emits `timeoutMs` on a `workflowCall`
+node. There is no syntax for a caller to declare a per-call timeout. The
+field is only reachable by tools that build IR directly.
+
+**Options:**
+
+- **Call-site annotation**: `const r = helper(x) timeout 5000;` — reads
+  naturally, consistent with task-level timeout style.
+- **Named argument**: `const r = helper(x, @timeout: 5000);` — uses a
+  special reserved keyword argument, similar to how some languages
+  handle call-site options.
+- **Workflow-level declaration**: `workflow helper(…) timeout 5000 { … }`
+  — declares max runtime on the callee declaration rather than each call
+  site. Simpler but less flexible (no per-call override).
+
+**Raised during:** the workflow composition implementation (designing
+sub-workflow call nodes in the IR).
+
+## G27: No per-file namespacing for exported workflows in IR
+
+**Spec/intent:** The IR `workflows` map is a flat name-keyed table. Callee
+resolution is by exact name. In the current implementation, all non-entry-file
+workflows are mangled to `__f{N}_{name}` to avoid collisions, but this mangling
+is opaque to IR consumers (debuggers, tooling, introspection).
+
+**The gap:** There is no structured way in the IR to represent which file a
+workflow originated from, or to resolve name conflicts without mangling. A
+`WorkflowRef` could carry an optional `source` field (already reserved in the
+schema for registry-style resolution) but it is not used by the bundler today.
+
+**Options:**
+
+- **Structured source field**: populate `WorkflowRef.source` with the originating
+  file path; resolve by `(source, name)` pair in the engine.
+- **Per-file workflow namespaces**: nest workflows under a file key in the IR,
+  e.g. `ir.files[path].workflows[name]`.
+- **Accept mangling**: keep `__f{N}_{name}` as the implementation detail and
+  expose a `workflowOrigins` side-table mapping mangled name → original path + name.
+
+**Raised during:** the workflow composition implementation (building the
+cross-file bundler and name mangling strategy).
+
+## G28: `maxConcurrency` only accepts literal integers
+
+**Spec/intent:** `parallel(...)` and `parallelMap(...)` accept an options
+object with a `maxConcurrency` field that caps in-flight branches /
+iterations. The AST already types `maxConcurrency` as an arbitrary `Expr`
+(see `ParallelNode.maxConcurrency` and `ParallelMapNode.maxConcurrency` in
+`ast.ts`), and the type checker only requires it to be numeric, so the
+surface syntax accepts any numeric expression.
+
+**The gap:** The emitter's `constExprToValue` only handles literal
+expressions (`StringLiteralExpr`, `NumberLiteralExpr`, `BooleanLiteralExpr`,
+`NullLiteralExpr`, `ArrayLiteralExpr`, `ObjectLiteralExpr`). Anything else
+
+- a parameter reference, a const reference, an arithmetic expression, a
+  task call, a workflow call - is rejected at emit time with
+  `"Expression must be a literal value"`. That diagnostic is also generic
+  (it points at "literal value" without naming the option), so the failure
+  mode for a user who writes `{ maxConcurrency: n }` where `n` is a workflow
+  param is unhelpful.
+
+This also means the static recursion check's descent into `maxConcurrency`
+(`walkExpr` in `typeChecker.ts`) is defense-in-depth only: any cycle
+routed through `maxConcurrency` is independently rejected by the emitter
+with the literal-only error before the recursion diagnostic could matter
+at runtime.
+
+**Desired behavior:** `maxConcurrency` should accept any expression whose
+runtime value is an integer ≥ 1 (the same constraint
+`validateWorkflowIR` already enforces on the literal form). Concretely:
+
+- A workflow param (`workflow run(parallelism: integer) { ... parallel(..., { maxConcurrency: parallelism }) }`).
+- A `const` binding (`const N = computeParallelism(); ... { maxConcurrency: N }`).
+- An arithmetic expression over the above.
+- The result of a task or sub-workflow call returning an integer.
+
+**Required changes:**
+
+- IR: extend `ForkNode.maxConcurrency` / `ForkMapNode.maxConcurrency`
+  from `number | undefined` to accept either a literal integer or a
+  reference / template that resolves to one at run time (mirroring how
+  other dynamic numeric fields are represented).
+- Emitter: instead of `constExprToValue`, emit `maxConcurrency` through
+  the standard expression-lowering path used for other numeric values
+  (binding references via `Template`, generating intermediate bind
+  nodes as needed for complex sub-expressions).
+- Engine: resolve the IR field to an integer at fork/forkMap entry,
+  validate `>= 1`, and surface a clear runtime error if the resolved
+  value is non-integer, non-positive, or otherwise invalid.
+- Validator (`validate.ts`): relax the literal-integer requirement to
+  accept the new dynamic forms and validate them structurally; keep the
+  `>= 1` and integer constraints for the literal case.
+- Type checker: keep the existing numeric requirement; once the engine
+  can validate the runtime value, the type checker does not need a
+  separate integer check (the existing `isNumeric` check is sufficient).
+- Tests: add an end-to-end DSL → IR → engine test for each accepted
+  shape (param ref, const, arithmetic, task call) and a runtime test
+  that asserts `maxConcurrency: 0` and `maxConcurrency: 1.5` fail at
+  fork entry with a useful error pointing at the option name.
+
+## G29 + G30: value-producing `if`/`switch` — restricted symmetry
+
+**Status:** Mechanically sound; design open.
+
+### The gap
+
+In TypeScript, `if`/`switch` produce values implicitly through control flow.
+The two most common patterns are:
+
+```typescript
+// early-return style — TypeScript: fine; DSL: hard error
+if (flag) {
+  return r;
+}
+return null;
+
+// full-symmetry style — both legal in TypeScript and DSL
+if (flag) {
+  return r;
+} else {
+  return null;
+}
+```
+
+The DSL rejects the early-return style. It also rejects any switch where
+returning and non-returning arms are mixed. Both are hard errors.
+
+The restrictions exist because the DSL has no control-flow graph pass. It
+processes statements in order without look-ahead, so it cannot see that
+`if (flag) { return r; }` followed by `return null;` are meant to produce
+a single conditional value. Without that analysis, the then-arm's return
+would be silently dropped — a correctness bug. Rejecting the pattern is
+the only sound fix under the current architecture.
+
+### What is allowed
+
+Value-producing `if`/`switch` is legal when:
+
+1. **All arms return the same type.** Returning and non-returning arms
+   cannot be mixed; arm types cannot differ.
+
+2. **Coverage is complete.**
+   - `if`/`else`: both branches must return.
+   - `switch` with `default`: always covered.
+   - `switch` without `default`: discriminant must be an `EnumType` (from a
+     JSON Schema `enum` field) and every enum value must appear as a literal
+     case arm.
+
+### Error diagnostics
+
+| Pattern                             | Error                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| Then-arm returns, no else arm       | `Then-arm returns a value of type X but there is no else-arm.`                   |
+| Then-arm returns, else does not     | `Then-arm returns a value … but the else-arm does not return.`                   |
+| Else-arm returns, then does not     | `Else-arm returns a value … but the then-arm does not return.`                   |
+| Switch: any arm returns but not all | `Switch has arms that return a value but not all arms return.`                   |
+| Switch arms return different types  | `switch arms must return the same type: arm N returns 'X' but arm 1 returns 'Y'` |
+
+### Examples
+
+**Exhaustive enum switch without `default` (Q4).** When the task output
+constrains a field with a JSON Schema `enum`, the type checker exposes
+that as an `EnumType` and treats the switch as value-producing without a
+`default`:
+
+```ts
+// test.classify returns { label: "low" | "medium" | "high" }
+workflow priority(text: string): string {
+    const c = test.classify(text: text);
+    switch (c.label) {       // enum discriminant
+        case "low":    return "L";
+        case "medium": return "M";
+        case "high":   return "H";
+    }
+}
+```
+
+**What does NOT count as exhaustive:**
+
+```ts
+// ❌ Missing enum value — `default` would be required.
+switch (c.label) {
+    case "low":    return "L";
+    case "medium": return "M";
+    // "high" is missing → switch is not exhaustive
+}
+
+// ❌ Non-literal arm — coverage cannot be proven statically.
+const target = "low";
+switch (c.label) {
+    case target:   return "L";   // variable, not literal
+    case "medium": return "M";
+    case "high":   return "H";
+}
+
+// ❌ Plain `string` discriminant — no enum constraint to exhaust.
+workflow test(x: string): string {
+    switch (x) {
+        case "a": return "A";
+        case "b": return "B";
+    }   // → not value-producing
+}
+```
+
+In each rejected case the switch is silently treated as non-value-producing
+(no error today). Attempting to bind its result downstream surfaces the
+missing schema. A future tightening may add an "expected exhaustive"
+warning surface backed by the structured `EnumExhaustivenessResult`
+returned by `isEnumExhaustive` (it distinguishes "missing value X" from
+"arm K is non-literal").
+
+### Design examination
+
+Three directions, each with a different tradeoff:
+
+**A — Keep current restrictions.**
+Simple invariant: value-producing `if`/`switch` requires full explicit
+symmetry. Users who want early-return style use ternary instead. The cost
+is that idiomatic TypeScript patterns become errors at the DSL boundary.
+
+**B — Pre-pass if-return fusion.**
+Before type-checking, fuse `if (cond) { …; return x; }` + `return y;`
+into a synthetic `if … else`. This restores the early-return idiom without
+a full CFG pass — only the narrow pattern of a bare `if` (no `else`)
+immediately followed by a `return` at the same scope level. Cost: a
+special-case pre-pass and more complex error attribution.
+
+**C — Remove value-producing `if`/`switch` entirely.**
+Make `return` inside an `if`/`switch` a type error. All conditional value
+production moves to ternary (`?:`). The language invariant becomes clean:
+expressions produce values, statements produce side effects. Cost: awkward
+when arms need multiple `const` bindings before returning (ternary can't
+span statements). Viable if a survey of `.wf` files shows no such patterns
+in practice. Also blocked on G18 (union types) — once arms can return
+different types, `if`/`switch` becomes strictly more expressive than ternary.
+
+**Current choice:** A, with C as the intended long-term direction.
+
+Related: G7 (branch arm covariance), G18 (union types).

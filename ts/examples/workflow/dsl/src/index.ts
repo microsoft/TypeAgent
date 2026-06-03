@@ -3,15 +3,42 @@
 
 export {
     compile,
+    compileFile,
     CompileResult,
     CompileError,
     CompileOptions,
 } from "./compiler.js";
+export {
+    FileResolver,
+    LoadError,
+    LoadedModule,
+    LoadResult,
+} from "./fileLoader.js";
 export { lex, TokenKind, Token, LexError, LexComment } from "./lexer.js";
 export { Parser, ParseError } from "./parser.js";
-export { TypeChecker, TypeInfo, TypeError } from "./typeChecker.js";
-export { Emitter, TaskSchemaInfo, EmitError } from "./emitter.js";
-export { format, FormatOptions } from "./formatter.js";
+export {
+    TypeChecker,
+    TypeInfo,
+    TypeError,
+    PropertyRef,
+    formatType,
+} from "./typeChecker.js";
+export {
+    Emitter,
+    TaskSchemaInfo,
+    ConcreteTaskSchemaInfo,
+    GenericTaskSchemaInfo,
+    isGenericSchema,
+    TaskSchemaTypeParam,
+    EmitError,
+} from "./emitter.js";
+export {
+    ResolvedTaskSchemas,
+    resolveGenericSchemas,
+    resolveTypeParams,
+    typeExprToSchema,
+} from "./typeParamUtils.js";
+export { formatModule, FormatOptions } from "./formatter.js";
 export {
     decodeStringLiteral,
     decodeTemplatePart,
@@ -39,5 +66,7 @@ export {
     DottedNameExpr,
     SourceLocation,
     Comment,
+    Module,
+    ImportDecl,
     DEFAULT_FALLBACK_PARAM,
 } from "./ast.js";

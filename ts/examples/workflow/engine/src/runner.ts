@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import Debug from "debug";
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     Template,
     TaskNode,
@@ -13,6 +14,7 @@ import {
     LoopNode,
     ForkNode,
     ForkMapNode,
+    WorkflowCallNode,
     JSONSchema,
     TaskContext,
     TaskConstraints,
@@ -40,6 +42,26 @@ interface ScopeContext {
     bindings: Map<string, unknown>;
     /** The state namespace ($from: "state") - only set inside loop bodies. */
     state?: Record<string, unknown>;
+    /** The recovery namespace ($from: "recovery") - only set for onError targets. */
+    recovery?: Record<string, unknown>;
+}
+
+/**
+ * Per-run state threaded through every internal execute* method.
+ * Carrying this on the call stack (rather than on the engine instance)
+ * is what makes a single `WorkflowEngine` safe to use for concurrent
+ * `run()` invocations.
+ */
+interface RunCtx {
+    /** The currently-executing IR's workflows table; consulted by sub-workflow dispatch. */
+    workflows: Record<string, WorkflowBody>;
+    /**
+     * Immutable call stack for defense-in-depth cycle detection.
+     * Each `executeWorkflowCall` creates a new RunCtx with the callee
+     * appended, so concurrent fork branches each carry their own lineage
+     * without sharing mutable state.
+     */
+    wfCallStack: readonly string[];
 }
 
 // ---- Template resolution ----
@@ -114,6 +136,9 @@ function resolveFromRef(
             break;
         case "state":
             value = scope.state?.[name];
+            break;
+        case "recovery":
+            value = scope.recovery?.[name];
             break;
         default:
             // Unreachable after static validation (namespace check).
@@ -372,11 +397,31 @@ export class WorkflowEngine {
         const runId = `run-${randomUUID()}`;
         const abortSignal = abortSignalArg ?? new AbortController().signal;
 
-        debug("run %s started (workflow: %s)", runId, ir.name);
+        const entryBody = ir.workflows[ir.entry];
+        if (!entryBody) {
+            return {
+                runId,
+                success: false,
+                error: {
+                    message: `Entry workflow "${ir.entry}" not found in workflows table.`,
+                },
+            };
+        }
+
+        debug("run %s started (workflow: %s)", runId, ir.entry);
+
+        // Per-run state. Carrying this on the call stack rather than on
+        // `this` means a single engine instance can service multiple
+        // concurrent `run()` calls without sub-workflow dispatch racing
+        // across them.
+        const ctx: RunCtx = {
+            workflows: ir.workflows,
+            wfCallStack: [ir.entry],
+        };
 
         // Validate workflow input against inputSchema.
-        if (ir.inputSchema) {
-            const validate = this.getValidator(ir.inputSchema);
+        if (entryBody.inputSchema) {
+            const validate = this.getValidator(entryBody.inputSchema);
             if (!validate(input ?? {})) {
                 const msg = this.ajv.errorsText(validate.errors);
                 return {
@@ -410,29 +455,32 @@ export class WorkflowEngine {
             constants.set(name, def.value);
         }
 
+        // Set currentWorkflows only once we've passed all early-return
+        // validation.
         const scope: ScopeContext = {
             input: input ?? {},
             constants,
             bindings: new Map(),
         };
 
-        const scopePath = [ir.name];
+        const scopePath = [ir.entry];
 
         this.emit({
             type: "runStarted",
             runId,
-            workflowName: ir.name,
+            workflowName: ir.entry,
             timestamp: Date.now(),
         });
 
         try {
             const exit = await this.executeScope(
-                ir.nodes,
-                ir.entry,
+                entryBody.nodes,
+                entryBody.entry,
                 scope,
                 scopePath,
                 runId,
                 abortSignal,
+                ctx,
                 policy,
                 approve,
                 taskTimeoutMs,
@@ -441,7 +489,7 @@ export class WorkflowEngine {
 
             let output: unknown;
             try {
-                output = resolveTemplate(ir.output, scope);
+                output = resolveTemplate(entryBody.output, scope);
             } catch (resolveErr) {
                 // Output resolution failed. If we went through an error
                 // recovery path (e.g. cleanup), report the original error
@@ -473,8 +521,8 @@ export class WorkflowEngine {
             // Defense-in-depth: static validator checks output template type
             // compatibility; runtime #9 (task output schema) ensures upstream
             // values match declared types, so this is redundant.
-            if (this.defenseInDepth && ir.outputSchema) {
-                const validate = this.getValidator(ir.outputSchema);
+            if (this.defenseInDepth && entryBody.outputSchema) {
+                const validate = this.getValidator(entryBody.outputSchema);
                 if (!validate(output)) {
                     const msg = this.ajv.errorsText(validate.errors);
                     throw new EngineError(
@@ -513,6 +561,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         policy?: TaskPolicy,
         approve?: ApprovalFn,
         taskTimeoutMs?: number,
@@ -546,12 +595,11 @@ export class WorkflowEngine {
             }
 
             // If we have a pending error (dispatching to onError target),
-            // augment the input namespace for this node only.
+            // inject into the recovery namespace for this node only.
             const activeScope: ScopeContext = pendingError
                 ? {
                       ...scope,
-                      input: {
-                          ...scope.input,
+                      recovery: {
                           error: pendingError.error,
                           trigger: pendingError.trigger,
                       },
@@ -604,6 +652,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -630,6 +679,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -654,6 +704,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -678,6 +729,7 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        ctx,
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                             if (!handledError) {
@@ -691,6 +743,33 @@ export class WorkflowEngine {
                         approve,
                         taskTimeoutMs,
                         constraints,
+                    );
+                    break;
+
+                case "workflowCall":
+                    currentId = await this.executeWorkflowCall(
+                        node,
+                        currentId,
+                        activeScope,
+                        scope,
+                        scopePath,
+                        runId,
+                        signal,
+                        ctx,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                            if (!handledError) {
+                                handledError = {
+                                    message: err["message"] as string,
+                                    nodeId: err["node"] as string | undefined,
+                                };
+                            }
+                        },
+                        policy,
+                        approve,
+                        taskTimeoutMs,
+                        constraints,
+                        iteration,
                     );
                     break;
             }
@@ -927,6 +1006,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -978,6 +1058,7 @@ export class WorkflowEngine {
                 armScopePath,
                 runId,
                 signal,
+                ctx,
                 policy,
                 approve,
                 taskTimeoutMs,
@@ -1048,6 +1129,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1136,6 +1218,7 @@ export class WorkflowEngine {
                     bodyScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1263,6 +1346,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1328,6 +1412,7 @@ export class WorkflowEngine {
                     branchScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1410,6 +1495,7 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        ctx: RunCtx,
         onErrorDispatch: (
             error: Record<string, unknown>,
             trigger: unknown,
@@ -1488,6 +1574,7 @@ export class WorkflowEngine {
                     itemScopePath,
                     runId,
                     signal,
+                    ctx,
                     policy,
                     approve,
                     taskTimeoutMs,
@@ -1559,6 +1646,233 @@ export class WorkflowEngine {
                 return node.onError;
             }
             throw err;
+        }
+    }
+
+    /**
+     * Execute a `workflowCall` node: resolve inputs against the caller
+     * scope, validate against the callee's inputSchema, execute the
+     * callee body in a fresh sub-scope (shared `constants`, empty
+     * `bindings`, no `state`), resolve the callee's `output` template,
+     * validate, and bind the result back into the caller's scope.
+     *
+     * Sub-workflow failures propagate to the caller's `onError` if set.
+     */
+    private async executeWorkflowCall(
+        node: WorkflowCallNode,
+        nodeId: string,
+        resolveScope: ScopeContext,
+        bindScope: ScopeContext,
+        scopePath: string[],
+        runId: string,
+        signal: AbortSignal,
+        ctx: RunCtx,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
+        taskTimeoutMs?: number,
+        constraints?: TaskConstraints,
+        iteration?: number,
+    ): Promise<string | undefined> {
+        const calleeName = node.workflowRef.name;
+        const callee = ctx.workflows[calleeName];
+        if (!callee) {
+            // Unreachable after static validation: type checker verifies
+            // workflowRef.name exists in the IR's workflows table.
+            throw new EngineError(
+                `Workflow "${calleeName}" not found at "${nodeId}"`,
+                "UnrecoverableError",
+                true,
+            );
+        }
+
+        // Defense-in-depth: static validator (validateWorkflowCalls) already
+        // proves the call graph is acyclic. This guards IR that bypasses
+        // static validation and would otherwise cause unbounded recursion.
+        if (this.defenseInDepth && ctx.wfCallStack.includes(calleeName)) {
+            throw new EngineError(
+                `Recursive workflow call detected at "${nodeId}": ${[...ctx.wfCallStack, calleeName].join(" -> ")} (workflow recursion is not supported)`,
+                "UnrecoverableError",
+                true,
+            );
+        }
+
+        this.emit({
+            type: "nodeStarted",
+            runId,
+            nodeId,
+            scopePath: [...scopePath],
+            ...(iteration !== undefined ? { iteration } : {}),
+            timestamp: Date.now(),
+        });
+
+        const resolvedInput = resolveTemplate(node.inputs, resolveScope) as
+            | Record<string, unknown>
+            | undefined;
+
+        try {
+            // Defense-in-depth: static validator already checks the call
+            // inputs are structurally compatible with the callee schema.
+            if (this.defenseInDepth && callee.inputSchema) {
+                const validate = this.getValidator(callee.inputSchema);
+                if (!validate(resolvedInput ?? {})) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Sub-workflow "${calleeName}" input schema violation at "${nodeId}": ${msg}`,
+                    );
+                }
+            }
+
+            const subScope: ScopeContext = {
+                input: resolvedInput ?? {},
+                // Constants are inherited from the run: a sub-workflow
+                // sees the same constant namespace as the entry workflow.
+                constants: bindScope.constants,
+                bindings: new Map(),
+            };
+
+            const subScopePath = [...scopePath, nodeId, calleeName];
+            const subCtx: RunCtx = {
+                ...ctx,
+                wfCallStack: [...ctx.wfCallStack, calleeName],
+            };
+
+            // Honor node.timeoutMs by composing a sub-signal that
+            // aborts when the parent aborts OR when the sub-workflow
+            // exceeds the deadline.
+            const effectiveTimeout = node.timeoutMs;
+            let subSignal = signal;
+            let subAbort: AbortController | undefined;
+            let timeoutId: ReturnType<typeof setTimeout> | undefined;
+            let timedOut = false;
+            let onParentAbort: (() => void) | undefined;
+            if (effectiveTimeout !== undefined) {
+                subAbort = new AbortController();
+                if (signal.aborted) {
+                    subAbort.abort(signal.reason);
+                } else {
+                    onParentAbort = () => subAbort!.abort(signal.reason);
+                    signal.addEventListener("abort", onParentAbort, {
+                        once: true,
+                    });
+                }
+                timeoutId = setTimeout(() => {
+                    timedOut = true;
+                    subAbort!.abort("Sub-workflow timed out");
+                }, effectiveTimeout);
+                subSignal = subAbort.signal;
+            }
+
+            let exit;
+            try {
+                exit = await this.executeScope(
+                    callee.nodes,
+                    callee.entry,
+                    subScope,
+                    subScopePath,
+                    runId,
+                    subSignal,
+                    subCtx,
+                    policy,
+                    approve,
+                    taskTimeoutMs,
+                    constraints,
+                );
+            } catch (e) {
+                if (timedOut) {
+                    throw new EngineError(
+                        `Sub-workflow "${calleeName}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                    );
+                }
+                throw e;
+            } finally {
+                if (timeoutId !== undefined) {
+                    clearTimeout(timeoutId);
+                }
+                if (onParentAbort) {
+                    signal.removeEventListener("abort", onParentAbort);
+                }
+            }
+            if (timedOut) {
+                throw new EngineError(
+                    `Sub-workflow "${calleeName}" at "${nodeId}" timed out after ${effectiveTimeout}ms`,
+                );
+            }
+
+            // Sub-workflow exit must be terminal (no sentinels escape).
+            if (exit.kind !== "terminal") {
+                throw new EngineError(
+                    `Sub-workflow "${calleeName}" at "${nodeId}" exited via unexpected sentinel`,
+                    "UnrecoverableError",
+                    true,
+                );
+            }
+
+            const output = resolveTemplate(callee.output, subScope);
+
+            // Defense-in-depth: static validator checks output schema
+            // compatibility between callee.outputSchema and the call site.
+            if (this.defenseInDepth && callee.outputSchema) {
+                const validate = this.getValidator(callee.outputSchema);
+                if (!validate(output)) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Sub-workflow "${calleeName}" output schema violation at "${nodeId}": ${msg}`,
+                        "OutputSchemaViolation",
+                    );
+                }
+            }
+
+            if (node.bind) {
+                bindScope.bindings.set(node.bind, output);
+            }
+
+            this.emit({
+                type: "nodeCompleted",
+                runId,
+                nodeId,
+                scopePath: [...scopePath],
+                ...(iteration !== undefined ? { iteration } : {}),
+                output,
+                timestamp: Date.now(),
+            });
+
+            return node.next;
+        } catch (err) {
+            if (
+                node.onError &&
+                !(err instanceof EngineError && err.unrecoverable)
+            ) {
+                const errorObj = buildErrorObject(
+                    err,
+                    `workflow:${calleeName}`,
+                    nodeId,
+                    scopePath,
+                );
+
+                this.emit({
+                    type: "nodeFailed",
+                    runId,
+                    nodeId,
+                    scopePath: [...scopePath],
+                    ...(iteration !== undefined ? { iteration } : {}),
+                    error: { message: errorObj["message"] as string },
+                    timestamp: Date.now(),
+                });
+
+                onErrorDispatch(errorObj, resolvedInput ?? {});
+                return node.onError;
+            }
+
+            if (err instanceof TaskFailure || err instanceof EngineError) {
+                throw err;
+            }
+            throw new EngineError(
+                `Sub-workflow "${calleeName}" at "${nodeId}" failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
         }
     }
 }

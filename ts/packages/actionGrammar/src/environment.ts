@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { evaluateValueExpr } from "./grammarValueExprEvaluator.js";
+import type {
+    CompiledValueNode,
+    CompiledValueExprNode,
+} from "./grammarTypes.js";
+
 /**
  * Environment-based Result Slots for NFA Matching
  *
@@ -103,7 +109,8 @@ export type ValueExpression =
     | LiteralValue // literal string, number, boolean
     | ArrayExpression // [$(var1), $(var2), ...]
     | ObjectExpression // { key: value, ... }
-    | ActionExpression; // { actionName: "...", parameters: { ... } }
+    | ActionExpression // { actionName: "...", parameters: { ... } }
+    | CompiledValueExprNode; // x+1, a?b:c, obj.prop, fn(), `t${x}`, ...spread
 
 /**
  * Reference to a variable's slot value
@@ -211,39 +218,119 @@ export function writeToParent(env: Environment, result: any): void {
 }
 
 /**
+ * Coerce a string slot value to number when the variable's typeName demands it.
+ * Centralizes the rule that originally lived in dfaMatcher.evaluateActionValue.
+ */
+function coerceByTypeName(value: any, typeName: string | undefined): any {
+    if (typeName === "number" && typeof value === "string") {
+        const num = parseFloat(value);
+        if (!isNaN(num)) {
+            return num;
+        }
+    }
+    return value;
+}
+
+/**
+ * Evaluate one of the four base value-node shapes (literal, variable, object,
+ * array) against the slot environment.  Handles BOTH the legacy ValueExpression
+ * shape (VariableRef.variableName, ObjectExpression.properties: Map,
+ * ArrayExpression.elements) AND the new CompiledValueNode shape
+ * (CompiledVariableValueNode.name, CompiledObjectValueNode.value:
+ * CompiledObjectElement[] with spreads, CompiledArrayValueNode.value with
+ * spread elements).
+ *
+ * Used as the `evalBase` callback when delegating expression nodes to
+ * `evaluateValueExpr`, and called directly by `evaluateExpression` for the
+ * top-level base cases.
+ */
+function evaluateBaseAgainstSlots(node: any, env: Environment): any {
+    switch (node.type) {
+        case "literal":
+            return node.value;
+
+        case "variable": {
+            if (node.slotIndex !== undefined) {
+                return coerceByTypeName(
+                    env.slots[node.slotIndex],
+                    node.typeName,
+                );
+            }
+            throw new Error(
+                `Variable ${node.variableName ?? node.name} was not compiled to slot index`,
+            );
+        }
+
+        case "array": {
+            // Legacy: `elements`.  New: `value` with possible spreadElement entries.
+            const items: any[] = node.elements ?? node.value;
+            const out: any[] = [];
+            for (const elem of items) {
+                if (elem && elem.type === "spreadElement") {
+                    const spread = evaluateExpression(elem.argument, env);
+                    if (Array.isArray(spread)) {
+                        out.push(...spread);
+                    } else {
+                        // Non-array spread: fall back to including the value
+                        // directly.  Type-checker should have rejected this
+                        // at compile time.
+                        out.push(spread);
+                    }
+                } else {
+                    out.push(evaluateExpression(elem, env));
+                }
+            }
+            return out;
+        }
+
+        case "object": {
+            // Legacy: `properties: Map<string, ValueExpression>`.
+            // New: `value: CompiledObjectElement[]` with property + spread entries.
+            const result: Record<string, any> = {};
+            if (node.properties instanceof Map) {
+                for (const [key, value] of node.properties) {
+                    result[key] = evaluateExpression(value, env);
+                }
+                return result;
+            }
+            const elements: any[] = node.value ?? [];
+            for (const elem of elements) {
+                if (elem.type === "property") {
+                    if (elem.value === null) {
+                        // Shorthand `{ x }`: parser should have lowered this
+                        // already, but be defensive.
+                        result[elem.key] = env.slots[elem.slotIndex ?? -1];
+                    } else {
+                        result[elem.key] = evaluateExpression(elem.value, env);
+                    }
+                } else if (elem.type === "spread") {
+                    const spread = evaluateExpression(elem.argument, env);
+                    if (spread && typeof spread === "object") {
+                        Object.assign(result, spread);
+                    }
+                }
+            }
+            return result;
+        }
+    }
+    throw new Error(`Unknown base node type: ${node?.type}`);
+}
+
+/**
  * Evaluate a compiled value expression using the environment's slot values
  * The expression should have been compiled with compileValueExpression first,
  * so variable references have slotIndex instead of variableName.
  */
 export function evaluateExpression(
-    expr: ValueExpression,
+    expr: ValueExpression | CompiledValueNode,
     env: Environment,
 ): any {
     switch (expr.type) {
-        case "variable": {
-            // Use compiled slotIndex directly
-            if (expr.slotIndex !== undefined) {
-                return env.slots[expr.slotIndex];
-            }
-            // Fallback for uncompiled expressions (shouldn't happen in normal flow)
-            throw new Error(
-                `Variable ${expr.variableName} was not compiled to slot index`,
-            );
-        }
-
+        case "variable":
         case "literal":
-            return expr.value;
-
         case "array":
-            return expr.elements.map((elem) => evaluateExpression(elem, env));
-
-        case "object": {
-            const result: Record<string, any> = {};
-            for (const [key, value] of expr.properties) {
-                result[key] = evaluateExpression(value, env);
-            }
-            return result;
-        }
+        case "object":
+            return evaluateBaseAgainstSlots(expr, env);
 
         case "action": {
             const params: Record<string, any> = {};
@@ -261,6 +348,18 @@ export function evaluateExpression(
                 actionName: expr.actionName,
             };
         }
+
+        // Expression nodes: delegate to the shared evaluator.
+        case "binaryExpression":
+        case "unaryExpression":
+        case "conditionalExpression":
+        case "memberExpression":
+        case "callExpression":
+        case "spreadElement":
+        case "templateLiteral":
+            return evaluateValueExpr(expr as CompiledValueNode, (base) =>
+                evaluateBaseAgainstSlots(base, env),
+            );
 
         default:
             throw new Error(`Unknown expression type: ${(expr as any).type}`);
@@ -306,23 +405,37 @@ export function compileValueExpression(
         case "literal":
             return expr;
 
-        case "array":
-            return {
-                type: "array",
-                elements: expr.elements.map((elem) =>
-                    compileValueExpression(elem, slotMap, typeMap),
-                ),
-            };
+        case "array": {
+            // Legacy shape: `elements`.  New-shape passthrough: `value`
+            // (may contain spreadElement entries).
+            if ((expr as any).elements !== undefined) {
+                return {
+                    type: "array",
+                    elements: (expr as any).elements.map((elem: any) =>
+                        compileValueExpression(elem, slotMap, typeMap),
+                    ),
+                };
+            }
+            return compileValueNode(expr, slotMap, typeMap);
+        }
 
         case "object": {
-            const props = new Map<string, ValueExpression>();
-            for (const [key, value] of expr.properties) {
-                props.set(key, compileValueExpression(value, slotMap, typeMap));
+            // Legacy shape: `properties: Map`.  New-shape passthrough: `value`
+            // (CompiledObjectElement[] with possible spread entries).
+            if (expr.properties instanceof Map) {
+                const props = new Map<string, ValueExpression>();
+                for (const [key, value] of expr.properties) {
+                    props.set(
+                        key,
+                        compileValueExpression(value, slotMap, typeMap),
+                    );
+                }
+                return {
+                    type: "object",
+                    properties: props,
+                };
             }
-            return {
-                type: "object",
-                properties: props,
-            };
+            return compileValueNode(expr, slotMap, typeMap);
         }
 
         case "action": {
@@ -340,8 +453,228 @@ export function compileValueExpression(
             };
         }
 
+        // ── Expression nodes (CompiledValueNode subtypes) ─────────────────
+        // Pass through with children compiled; annotate inner variable nodes
+        // (which use `name`, not `variableName`) with slotIndex/typeName so
+        // the shared evaluateValueExpr can resolve them via the evalBase
+        // callback at runtime.
+        case "binaryExpression":
+            return {
+                ...expr,
+                left: compileValueNode(expr.left, slotMap, typeMap),
+                right: compileValueNode(expr.right, slotMap, typeMap),
+            };
+        case "unaryExpression":
+            return {
+                ...expr,
+                operand: compileValueNode(expr.operand, slotMap, typeMap),
+            };
+        case "conditionalExpression":
+            return {
+                ...expr,
+                test: compileValueNode(expr.test, slotMap, typeMap),
+                consequent: compileValueNode(expr.consequent, slotMap, typeMap),
+                alternate: compileValueNode(expr.alternate, slotMap, typeMap),
+            };
+        case "memberExpression":
+            return {
+                ...expr,
+                object: compileValueNode(expr.object, slotMap, typeMap),
+                property:
+                    typeof expr.property === "string"
+                        ? expr.property
+                        : compileValueNode(expr.property, slotMap, typeMap),
+            };
+        case "callExpression":
+            return {
+                ...expr,
+                callee: compileValueNode(expr.callee, slotMap, typeMap),
+                arguments: expr.arguments.map((a: any) =>
+                    compileValueNode(a, slotMap, typeMap),
+                ),
+            };
+        case "spreadElement":
+            return {
+                ...expr,
+                argument: compileValueNode(expr.argument, slotMap, typeMap),
+            };
+        case "templateLiteral":
+            return {
+                ...expr,
+                expressions: expr.expressions.map((e: any) =>
+                    compileValueNode(e, slotMap, typeMap),
+                ),
+            };
+
         default:
             return expr;
+    }
+}
+
+/**
+ * Compile a CompiledValueNode (new-shape) by annotating variable references
+ * with slotIndex/typeName and recursing into all child positions.  Used
+ * when compiling expression-node subtrees, where children use the new
+ * shape (`name`, `value`) rather than the legacy ValueExpression shape
+ * (`variableName`, `elements`, `properties` Map).
+ *
+ * Returns a structurally equivalent node with `slotIndex` (and `typeName`,
+ * if known) populated on each variable node.
+ */
+function compileValueNode(
+    node: any,
+    slotMap: Map<string, number>,
+    typeMap?: Map<string, string>,
+): any {
+    if (node === null || typeof node !== "object" || !("type" in node)) {
+        return node;
+    }
+    switch (node.type) {
+        case "literal":
+            return node;
+        case "variable": {
+            // CompiledValueNode shape uses `name`; legacy uses `variableName`.
+            const varName: string | undefined = node.name ?? node.variableName;
+            if (varName === undefined) {
+                return node;
+            }
+            const slotIndex = slotMap.get(varName);
+            if (slotIndex === undefined) {
+                throw new Error(`Cannot compile: unknown variable ${varName}`);
+            }
+            const out: any = { ...node, slotIndex };
+            const t = typeMap?.get(varName);
+            if (t !== undefined) {
+                out.typeName = t;
+            }
+            return out;
+        }
+        case "array": {
+            // New shape: `value: CompiledValueNode[]`.  Legacy: `elements`.
+            if (Array.isArray(node.elements)) {
+                return {
+                    ...node,
+                    elements: node.elements.map((e: any) =>
+                        compileValueNode(e, slotMap, typeMap),
+                    ),
+                };
+            }
+            return {
+                ...node,
+                value: (node.value ?? []).map((e: any) =>
+                    compileValueNode(e, slotMap, typeMap),
+                ),
+            };
+        }
+        case "object": {
+            // New shape: `value: CompiledObjectElement[]` (property/spread).
+            // Legacy: `properties: Map<string, ValueExpression>`.
+            if (node.properties instanceof Map) {
+                const props = new Map<string, any>();
+                for (const [k, v] of node.properties) {
+                    props.set(k, compileValueNode(v, slotMap, typeMap));
+                }
+                return { ...node, properties: props };
+            }
+            return {
+                ...node,
+                value: (node.value ?? []).map((elem: any) => {
+                    if (elem.type === "property") {
+                        if (elem.value === null) {
+                            // Shorthand `{ x }` → resolve to a variable ref
+                            const slotIndex = slotMap.get(elem.key);
+                            if (slotIndex === undefined) {
+                                throw new Error(
+                                    `Cannot compile shorthand: unknown variable ${elem.key}`,
+                                );
+                            }
+                            const variableNode: any = {
+                                type: "variable",
+                                name: elem.key,
+                                slotIndex,
+                            };
+                            const t = typeMap?.get(elem.key);
+                            if (t !== undefined) {
+                                variableNode.typeName = t;
+                            }
+                            return {
+                                ...elem,
+                                value: variableNode,
+                            };
+                        }
+                        return {
+                            ...elem,
+                            value: compileValueNode(
+                                elem.value,
+                                slotMap,
+                                typeMap,
+                            ),
+                        };
+                    }
+                    if (elem.type === "spread") {
+                        return {
+                            ...elem,
+                            argument: compileValueNode(
+                                elem.argument,
+                                slotMap,
+                                typeMap,
+                            ),
+                        };
+                    }
+                    return elem;
+                }),
+            };
+        }
+        // Expression nodes — recurse with the same helper.
+        case "binaryExpression":
+            return {
+                ...node,
+                left: compileValueNode(node.left, slotMap, typeMap),
+                right: compileValueNode(node.right, slotMap, typeMap),
+            };
+        case "unaryExpression":
+            return {
+                ...node,
+                operand: compileValueNode(node.operand, slotMap, typeMap),
+            };
+        case "conditionalExpression":
+            return {
+                ...node,
+                test: compileValueNode(node.test, slotMap, typeMap),
+                consequent: compileValueNode(node.consequent, slotMap, typeMap),
+                alternate: compileValueNode(node.alternate, slotMap, typeMap),
+            };
+        case "memberExpression":
+            return {
+                ...node,
+                object: compileValueNode(node.object, slotMap, typeMap),
+                property:
+                    typeof node.property === "string"
+                        ? node.property
+                        : compileValueNode(node.property, slotMap, typeMap),
+            };
+        case "callExpression":
+            return {
+                ...node,
+                callee: compileValueNode(node.callee, slotMap, typeMap),
+                arguments: node.arguments.map((a: any) =>
+                    compileValueNode(a, slotMap, typeMap),
+                ),
+            };
+        case "spreadElement":
+            return {
+                ...node,
+                argument: compileValueNode(node.argument, slotMap, typeMap),
+            };
+        case "templateLiteral":
+            return {
+                ...node,
+                expressions: node.expressions.map((e: any) =>
+                    compileValueNode(e, slotMap, typeMap),
+                ),
+            };
+        default:
+            return node;
     }
 }
 
@@ -382,6 +715,20 @@ export function parseValueExpression(value: any): ValueExpression {
 
     // Check if it's already a typed ValueNode from the grammar parser
     if (typeof value === "object" && "type" in value) {
+        // Expression-node passthrough.  These are CompiledValueExprNode
+        // subtypes — pass them through unchanged.  Their children are also
+        // CompiledValueNode shape; the compile/eval helpers handle that.
+        if (
+            value.type === "binaryExpression" ||
+            value.type === "unaryExpression" ||
+            value.type === "conditionalExpression" ||
+            value.type === "memberExpression" ||
+            value.type === "callExpression" ||
+            value.type === "spreadElement" ||
+            value.type === "templateLiteral"
+        ) {
+            return value as ValueExpression;
+        }
         switch (value.type) {
             case "variable":
                 // ValueNode format: { type: "variable", name: "varName" }
@@ -393,6 +740,15 @@ export function parseValueExpression(value: any): ValueExpression {
 
             case "array":
                 // ValueNode format: { type: "array", value: ValueNode[] }
+                // If any element is a spreadElement, return new shape unchanged
+                // (legacy ArrayExpression cannot carry spreads).
+                if (
+                    (value.value as any[]).some(
+                        (e: any) => e?.type === "spreadElement",
+                    )
+                ) {
+                    return value as ValueExpression;
+                }
                 return {
                     type: "array",
                     elements: value.value.map(parseValueExpression),
@@ -402,13 +758,18 @@ export function parseValueExpression(value: any): ValueExpression {
                 // New format: { type: "object", value: CompiledObjectElement[] }
                 const elements = value.value as any[];
 
+                // If any element is a spread, return the new shape unchanged.
+                // The legacy ObjectExpression shape (properties: Map) cannot
+                // carry spreads; evaluateBaseAgainstSlots handles the new
+                // shape directly.
+                const hasSpread = elements.some(
+                    (e: any) => e.type === "spread",
+                );
+                if (hasSpread) {
+                    return value as ValueExpression;
+                }
+
                 // Helper to extract properties from elements array.
-                // TODO: Spread elements are silently skipped: the current NFA
-                // and DFA matchers do not support value expressions, so
-                // spread is only evaluated in the NFA interpreter
-                // (grammarMatcher.ts).  This code path converts compiled
-                // output for environment evaluation, which only sees
-                // property elements.
                 const extractProps = (
                     elems: any[],
                 ): Map<string, ValueExpression> => {

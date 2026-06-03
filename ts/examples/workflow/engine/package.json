@@ -13,7 +13,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./schemas": "./dist/builtinTaskSchemas.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
