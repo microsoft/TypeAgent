@@ -5,9 +5,9 @@
 //
 // Templates live in `src/scaffolder/templates/*.ts` so a reviewer can
 // read them as plain TypeScript (with syntax highlighting and
-// `tsc`-level verification — see `__placeholders__.d.ts` and
-// `__agentName__Schema.ts` for the type-check stubs) instead of wading
-// through 200-line template literals inside scaffolderHandler.ts.
+// `tsc`-level verification — see `__agentName__Schema.ts` for the
+// type-check stub) instead of wading through 200-line template
+// literals inside scaffolderHandler.ts.
 //
 // Placeholders use the `__TOKEN__` convention — chosen so the templates
 // remain valid TypeScript identifiers (`class __AgentName__Bridge {}`,
@@ -37,10 +37,7 @@ function templatePath(filename: string): string {
 // Files in the templates directory that are type-check scaffolding only
 // (stubs for placeholder identifiers) and must never be loaded as a
 // template at scaffold time.
-const RESERVED_TEMPLATE_NAMES = new Set<string>([
-    "__agentName__Schema.ts",
-    "__placeholders__.d.ts",
-]);
+const RESERVED_TEMPLATE_NAMES = new Set<string>(["__agentName__Schema.ts"]);
 
 /**
  * Load `filename` from `src/scaffolder/templates/` and substitute every

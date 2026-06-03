@@ -85,8 +85,23 @@ class __AgentName__Bridge {
                     // Ignore malformed payloads.
                 }
             });
-            ws.on("close", () => this.clients.delete(id));
-            ws.on("error", () => this.clients.delete(id));
+            // Reject any pending requests routed through the bridge when
+            // the last connected client drops; without this, in-flight
+            // callers hang until the bridge is closed.
+            const onDisconnect = () => {
+                this.clients.delete(id);
+                if (this.clients.size === 0 && this.pending.size > 0) {
+                    const err = new Error(
+                        "Host plugin disconnected before responding.",
+                    );
+                    for (const entry of this.pending.values()) {
+                        entry.reject(err);
+                    }
+                    this.pending.clear();
+                }
+            };
+            ws.on("close", onDisconnect);
+            ws.on("error", onDisconnect);
         });
     }
 
@@ -192,6 +207,16 @@ class __AgentName__Bridge {
                     actionName,
                     parameters,
                 } satisfies BridgeRequest),
+                (err) => {
+                    // ws.send errors surface here; without this, a send
+                    // failure (socket closed between readyState check and
+                    // send) would leak the pending entry and hang the
+                    // caller.
+                    if (err) {
+                        this.pending.delete(id);
+                        reject(err);
+                    }
+                },
             );
         });
     }

@@ -109,8 +109,10 @@ function startViewServer(
             }
             // Re-attach a permanent error handler so post-listen errors
             // are logged rather than crashing the process.
-            server.on("error", () => {
-                /* TODO: log */
+            server.on("error", (err) => {
+                console.error(
+                    `[__agentName__ view] post-listen http server error: ${err.message}`,
+                );
             });
             resolve({ server, port: addr.port });
         };
