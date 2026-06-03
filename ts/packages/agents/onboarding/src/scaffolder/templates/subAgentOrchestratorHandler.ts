@@ -12,7 +12,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -26,7 +26,7 @@ async function initializeAgentContext(): Promise<unknown> {
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+    action: TypeAgentAction<__AgentName__Actions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
     // TODO: route to sub-schema handlers, e.g.:

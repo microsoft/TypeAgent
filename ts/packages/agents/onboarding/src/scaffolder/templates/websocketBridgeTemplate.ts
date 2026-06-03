@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// WebSocket bridge for {{NAME}}.
+// WebSocket bridge for __agentName__.
 // Manages a WebSocket connection to the host application plugin.
 // Pattern matches the Excel/VS Code agent bridge implementations.
 //
@@ -29,7 +29,7 @@ type BridgeResponse = {
     error?: string;
 };
 
-export class {{PASCAL_NAME}}Bridge {
+export class __AgentName__Bridge {
     private clients = new Map<string, WebSocket>();
     private nextClientId = 0;
     private pending = new Map<
@@ -40,7 +40,7 @@ export class {{PASCAL_NAME}}Bridge {
         }
     >();
 
-    // Construction is private — use {@link {{PASCAL_NAME}}Bridge.start} so
+    // Construction is private — use {@link __AgentName__Bridge.start} so
     // callers always get a bridge that is guaranteed to be bound before
     // they read {@link port} or pass it to the registrar.
     private constructor(
@@ -52,7 +52,9 @@ export class {{PASCAL_NAME}}Bridge {
             this.clients.set(id, ws);
             ws.on("message", (data) => {
                 try {
-                    const response = JSON.parse(data.toString()) as BridgeResponse;
+                    const response = JSON.parse(
+                        data.toString(),
+                    ) as BridgeResponse;
                     const entry = this.pending.get(response.id);
                     if (entry) {
                         this.pending.delete(response.id);
@@ -76,7 +78,7 @@ export class {{PASCAL_NAME}}Bridge {
      * the problem instead of having it swallowed by a late error
      * handler.
      */
-    public static start(port: number = 0): Promise<{{PASCAL_NAME}}Bridge> {
+    public static start(port: number = 0): Promise<__AgentName__Bridge> {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({ port });
             let settled = false;
@@ -104,10 +106,10 @@ export class {{PASCAL_NAME}}Bridge {
                 // errors are surfaced rather than crashing the process.
                 server.on("error", (err) => {
                     console.error(
-                        `[{{NAME}}Bridge] post-listen server error: ${err.message}`,
+                        `[__agentName__Bridge] post-listen server error: ${err.message}`,
                     );
                 });
-                resolve(new {{PASCAL_NAME}}Bridge(server, addr.port));
+                resolve(new __AgentName__Bridge(server, addr.port));
             };
             server.once("error", onError);
             server.once("listening", onListening);
@@ -123,7 +125,7 @@ export class {{PASCAL_NAME}}Bridge {
      */
     public close(): Promise<void> {
         const closedError = new Error(
-            "{{PASCAL_NAME}}Bridge closed before response was received.",
+            "__AgentName__Bridge closed before response was received.",
         );
         for (const entry of this.pending.values()) {
             entry.reject(closedError);
@@ -133,9 +135,7 @@ export class {{PASCAL_NAME}}Bridge {
             if (c.readyState === WebSocket.OPEN) c.close();
         }
         this.clients.clear();
-        return new Promise((resolve) =>
-            this.server.close(() => resolve()),
-        );
+        return new Promise((resolve) => this.server.close(() => resolve()));
     }
 
     public get connected(): boolean {
@@ -160,13 +160,17 @@ export class {{PASCAL_NAME}}Bridge {
             }
         }
         if (!target) {
-            throw new Error("No client connected to the {{NAME}} bridge.");
+            throw new Error("No client connected to the __agentName__ bridge.");
         }
         const id = `cmd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
             target!.send(
-                JSON.stringify({ id, actionName, parameters } satisfies BridgeCommand),
+                JSON.stringify({
+                    id,
+                    actionName,
+                    parameters,
+                } satisfies BridgeCommand),
             );
         });
     }

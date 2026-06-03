@@ -691,9 +691,9 @@ async function buildHandler(
 }
 
 function buildSchemaGrammarHandler(name: string, pascalName: string): string {
-    return loadTemplate("schemaGrammarHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("schemaGrammarHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
@@ -866,37 +866,38 @@ const PLUGIN_TEMPLATES: Record<
 
 function buildRestClientTemplate(name: string): string {
     const pascalName = toPascalCase(name);
-    return loadTemplate("restClientTemplate.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("restClientTemplate.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildWebSocketBridgeTemplate(name: string): string {
     const pascalName = toPascalCase(name);
-    return loadTemplate("websocketBridgeTemplate.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("websocketBridgeTemplate.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildOfficeAddinHtml(name: string): string {
     const pascalName = toPascalCase(name);
     return loadTemplate("officeAddinHtml.template", {
-        PASCAL_NAME: pascalName,
+        AgentName: pascalName,
     });
 }
 
 function buildOfficeAddinTs(name: string): string {
     return loadTemplate("officeAddinTs.template", {
-        NAME: name,
+        agentName: name,
+        BRIDGE_PORT: "5678",
     });
 }
 
 function buildOfficeManifestXml(name: string): string {
     const pascal = toPascalCase(name);
     return loadTemplate("officeManifestXml.template", {
-        PASCAL_NAME: pascal,
+        AgentName: pascal,
     });
 }
 
@@ -931,16 +932,16 @@ async function handleListPatterns(): Promise<ActionResult> {
 // ─── Pattern-specific handler builders ───────────────────────────────────────
 
 function buildExternalApiHandler(name: string, pascalName: string): string {
-    return loadTemplate("externalApiHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("externalApiHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildLlmStreamingHandler(name: string, pascalName: string): string {
-    return loadTemplate("llmStreamingHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("llmStreamingHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
@@ -948,46 +949,46 @@ function buildSubAgentOrchestratorHandler(
     name: string,
     pascalName: string,
 ): string {
-    return loadTemplate("subAgentOrchestratorHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("subAgentOrchestratorHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildWebSocketBridgeHandler(name: string, pascalName: string): string {
     const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_BRIDGE_PORT`;
-    return loadTemplate("websocketBridgeHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("websocketBridgeHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
         PORT_ENV: portEnv,
     });
 }
 
 function buildStateMachineHandler(name: string, pascalName: string): string {
-    return loadTemplate("stateMachineHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("stateMachineHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildNativePlatformHandler(name: string, pascalName: string): string {
-    return loadTemplate("nativePlatformHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("nativePlatformHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
     });
 }
 
 function buildViewUiHandler(name: string, pascalName: string): string {
     const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_VIEW_PORT`;
-    return loadTemplate("viewUiHandler.template", {
-        NAME: name,
-        PASCAL_NAME: pascalName,
+    return loadTemplate("viewUiHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
         PORT_ENV: portEnv,
     });
 }
 
 function buildCommandHandlerTemplate(name: string, pascalName: string): string {
-    return loadTemplate("commandHandlerTemplate.template", {
-        PASCAL_NAME: pascalName,
+    return loadTemplate("commandHandlerTemplate.ts", {
+        AgentName: pascalName,
     });
 }

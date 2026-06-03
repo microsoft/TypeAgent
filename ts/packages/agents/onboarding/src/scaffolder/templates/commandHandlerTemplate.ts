@@ -12,7 +12,7 @@ export function instantiate(): AppAgent {
 }
 
 // ---- Handlers ----------------------------------------------------------
-// Add one entry per action name defined in {{PASCAL_NAME}}Actions.
+// Add one entry per action name defined in __AgentName__Actions.
 
 const handlers: Record<string, (params: unknown) => Promise<ActionResult>> = {
     // exampleAction: async (params) => {

@@ -9,9 +9,9 @@
 // port (port=0) by default. The actual port is registered with the
 // dispatcher via context.registerPort("view", port) so external
 // clients can discover it through the agent-server's discovery channel
-// (discoverPort("{{NAME}}", "view")). context.setLocalHostPort(port) is
+// (discoverPort("__agentName__", "view")). context.setLocalHostPort(port) is
 // also called so the embedding shell knows which port to load when an
-// action returns openLocalView=true. Set {{PORT_ENV}} to pin the view
+// action returns openLocalView=true. Set __PORT_ENV__ to pin the view
 // to a fixed port when debugging.
 
 import {
@@ -28,16 +28,16 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { createServer, Server } from "node:http";
 import { AddressInfo } from "node:net";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 
-type {{PASCAL_NAME}}AgentContext = {
+type __AgentName__AgentContext = {
     server?: Server;
     port?: number;
     portRegistration?: { release: () => void };
 };
 
 function getViewBindPort(): number {
-    const v = process.env["{{PORT_ENV}}"];
+    const v = process.env["__PORT_ENV__"];
     if (!v) return 0;
     const n = parseInt(v, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -52,7 +52,7 @@ export function instantiate(): AppAgent {
     };
 }
 
-async function initializeAgentContext(): Promise<{{PASCAL_NAME}}AgentContext> {
+async function initializeAgentContext(): Promise<__AgentName__AgentContext> {
     return {};
 }
 
@@ -63,13 +63,15 @@ async function initializeAgentContext(): Promise<{{PASCAL_NAME}}AgentContext> {
  * callers see the problem instead of having it swallowed by a late
  * error handler.
  */
-function startViewServer(port: number): Promise<{ server: Server; port: number }> {
+function startViewServer(
+    port: number,
+): Promise<{ server: Server; port: number }> {
     return new Promise((resolve, reject) => {
         const server = createServer((req, res) => {
             // TODO: serve static assets from ./site/, plus any
             // JSON/IPC endpoints the view needs. For now, a placeholder.
             res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(`<h1>{{PASCAL_NAME}} view</h1><p>Path: ${req.url}</p>`);
+            res.end(`<h1>__AgentName__ view</h1><p>Path: ${req.url}</p>`);
         });
         let settled = false;
         const onError = (e: Error) => {
@@ -85,12 +87,18 @@ function startViewServer(port: number): Promise<{ server: Server; port: number }
             const addr = server.address() as AddressInfo | null;
             if (!addr || typeof addr === "string") {
                 server.close();
-                reject(new Error("http server.address() did not return AddressInfo"));
+                reject(
+                    new Error(
+                        "http server.address() did not return AddressInfo",
+                    ),
+                );
                 return;
             }
             // Re-attach a permanent error handler so post-listen errors
             // are logged rather than crashing the process.
-            server.on("error", () => { /* TODO: log */ });
+            server.on("error", () => {
+                /* TODO: log */
+            });
             resolve({ server, port: addr.port });
         };
         server.once("error", onError);
@@ -101,7 +109,7 @@ function startViewServer(port: number): Promise<{ server: Server; port: number }
 
 async function updateAgentContext(
     enable: boolean,
-    context: SessionContext<{{PASCAL_NAME}}AgentContext>,
+    context: SessionContext<__AgentName__AgentContext>,
     _schemaName: string,
 ): Promise<void> {
     const agentContext = context.agentContext;
@@ -126,46 +134,46 @@ async function updateAgentContext(
             // retry sees a clean slate.
             agentContext.portRegistration?.release();
             await new Promise<void>((resolve) => server.close(() => resolve()));
-            agentContext.server = undefined;
-            agentContext.port = undefined;
-            agentContext.portRegistration = undefined;
+            delete agentContext.server;
+            delete agentContext.port;
+            delete agentContext.portRegistration;
             throw e;
         }
     } else {
         if (agentContext.server === undefined) return;
         agentContext.portRegistration?.release();
-        agentContext.portRegistration = undefined;
+        delete agentContext.portRegistration;
         const server = agentContext.server;
-        agentContext.server = undefined;
-        agentContext.port = undefined;
+        delete agentContext.server;
+        delete agentContext.port;
         // Resolve when the server has fully released its port —
         // important for a rapid disable→enable cycle under a fixed-
-        // port override (`{{PORT_ENV}}`), where a synchronous return
+        // port override (`__PORT_ENV__`), where a synchronous return
         // would race the new bind into EADDRINUSE.
         await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 }
 
 async function closeAgentContext(
-    context: SessionContext<{{PASCAL_NAME}}AgentContext>,
+    context: SessionContext<__AgentName__AgentContext>,
 ): Promise<void> {
     // Backstop: if updateAgentContext(false) wasn't called (e.g. crash
     // during shutdown), release the registration and close the server
     // so the port doesn't leak.
     const agentContext = context.agentContext;
     agentContext.portRegistration?.release();
-    agentContext.portRegistration = undefined;
+    delete agentContext.portRegistration;
     if (agentContext.server) {
         const server = agentContext.server;
-        agentContext.server = undefined;
-        agentContext.port = undefined;
+        delete agentContext.server;
+        delete agentContext.port;
         await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
-    context: ActionContext<{{PASCAL_NAME}}AgentContext>,
+    action: TypeAgentAction<__AgentName__Actions>,
+    context: ActionContext<__AgentName__AgentContext>,
 ): Promise<ActionResult> {
     const port = context.sessionContext.agentContext.port;
     // Returning an ActivityContext with openLocalView=true signals the
@@ -175,9 +183,9 @@ async function executeAction(
     const activityContext: ActivityContext | undefined =
         port !== undefined
             ? {
-                  appAgentName: "{{NAME}}",
+                  appAgentName: "__agentName__",
                   activityName: action.actionName,
-                  description: `{{PASCAL_NAME}}: ${action.actionName}`,
+                  description: `__AgentName__: ${action.actionName}`,
                   state: {},
                   openLocalView: true,
               }
@@ -189,8 +197,9 @@ async function executeAction(
         // ActivityContext is attached so the shell can open the view.
         // The shape comes from the SDK; cast through unknown to keep
         // the template free of internal-only ActionResult fields.
-        (result as unknown as { activityContext: ActivityContext }).activityContext =
-            activityContext;
+        (
+            result as unknown as { activityContext: ActivityContext }
+        ).activityContext = activityContext;
     }
     return result;
 }

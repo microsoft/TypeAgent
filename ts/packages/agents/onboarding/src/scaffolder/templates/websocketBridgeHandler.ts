@@ -9,13 +9,13 @@
 // (port=0) by default. The actual port is registered with the dispatcher
 // via context.registerPort("default", port) so external clients can
 // discover it through the agent-server's discovery channel
-// (discoverPort("{{NAME}}", "default")). Set {{PORT_ENV}} to pin the
+// (discoverPort("__agentName__", "default")). Set __PORT_ENV__ to pin the
 // bridge to a fixed port when debugging or when a host plugin expects
 // a known address.
 //
 // Lifecycle: one bridge per process, refcounted across enabled sessions.
 // Each enabled session registers the bridge under its own
-// sessionContextId; lookup("{{NAME}}", "default") keeps returning the
+// sessionContextId; lookup("__agentName__", "default") keeps returning the
 // port as long as ≥1 session has the agent enabled. The dispatcher's
 // closeSessionContext backstop releases stale per-session registrations
 // if disable is skipped (e.g. crash).
@@ -30,10 +30,10 @@ import {
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { WebSocketServer, WebSocket } from "ws";
 import { AddressInfo } from "net";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 
 function getBridgeBindPort(): number {
-    const v = process.env["{{PORT_ENV}}"];
+    const v = process.env["__PORT_ENV__"];
     if (!v) return 0;
     const n = parseInt(v, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -42,9 +42,14 @@ function getBridgeBindPort(): number {
 // ---- WebSocket bridge --------------------------------------------------
 
 type BridgeRequest = { id: string; actionName: string; parameters: unknown };
-type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: string };
+type BridgeResponse = {
+    id: string;
+    success: boolean;
+    result?: unknown;
+    error?: string;
+};
 
-class {{PASCAL_NAME}}Bridge {
+class __AgentName__Bridge {
     private clients = new Map<string, WebSocket>();
     private nextClientId = 0;
     private pending = new Map<
@@ -55,7 +60,7 @@ class {{PASCAL_NAME}}Bridge {
         }
     >();
 
-    // Construction is private — use {@link {{PASCAL_NAME}}Bridge.start} so
+    // Construction is private — use {@link __AgentName__Bridge.start} so
     // callers always get a bridge that is guaranteed to be bound before
     // they read {@link port} or pass it to the registrar.
     private constructor(
@@ -67,7 +72,9 @@ class {{PASCAL_NAME}}Bridge {
             this.clients.set(id, ws);
             ws.on("message", (data) => {
                 try {
-                    const response = JSON.parse(data.toString()) as BridgeResponse;
+                    const response = JSON.parse(
+                        data.toString(),
+                    ) as BridgeResponse;
                     const entry = this.pending.get(response.id);
                     if (entry) {
                         this.pending.delete(response.id);
@@ -90,7 +97,7 @@ class {{PASCAL_NAME}}Bridge {
      * (EADDRINUSE under a fixed-port override) so callers see the
      * problem instead of having it swallowed by a late error handler.
      */
-    public static start(port: number = 0): Promise<{{PASCAL_NAME}}Bridge> {
+    public static start(port: number = 0): Promise<__AgentName__Bridge> {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({ port });
             let settled = false;
@@ -107,17 +114,21 @@ class {{PASCAL_NAME}}Bridge {
                 const addr = server.address() as AddressInfo | null;
                 if (!addr || typeof addr === "string") {
                     server.close();
-                    reject(new Error("ws server.address() did not return AddressInfo"));
+                    reject(
+                        new Error(
+                            "ws server.address() did not return AddressInfo",
+                        ),
+                    );
                     return;
                 }
                 // Re-attach a permanent error handler so post-listen errors
                 // are surfaced rather than crashing the process.
                 server.on("error", (err) => {
                     console.error(
-                        `[{{NAME}}Bridge] post-listen server error: ${err.message}`,
+                        `[__agentName__Bridge] post-listen server error: ${err.message}`,
                     );
                 });
-                resolve(new {{PASCAL_NAME}}Bridge(server, addr.port));
+                resolve(new __AgentName__Bridge(server, addr.port));
             };
             server.once("error", onError);
             server.once("listening", onListening);
@@ -129,12 +140,12 @@ class {{PASCAL_NAME}}Bridge {
      * `send` promises are rejected so callers never hang on a closed
      * bridge. Resolves when the server has fully released its port —
      * important for a rapid disable→enable cycle under a fixed-port
-     * override (`{{PORT_ENV}}`), where a synchronous return would race
+     * override (`__PORT_ENV__`), where a synchronous return would race
      * the new bind into EADDRINUSE.
      */
     public close(): Promise<void> {
         const closedError = new Error(
-            "{{PASCAL_NAME}}Bridge closed before response was received.",
+            "__AgentName__Bridge closed before response was received.",
         );
         for (const entry of this.pending.values()) {
             entry.reject(closedError);
@@ -154,21 +165,33 @@ class {{PASCAL_NAME}}Bridge {
         return false;
     }
 
-    public async send(actionName: string, parameters: unknown): Promise<unknown> {
+    public async send(
+        actionName: string,
+        parameters: unknown,
+    ): Promise<unknown> {
         // Use the first OPEN client (single-plugin pattern). Adapt this
         // selection if you need fan-out or per-session client targeting.
         let target: WebSocket | undefined;
         for (const c of this.clients.values()) {
-            if (c.readyState === WebSocket.OPEN) { target = c; break; }
+            if (c.readyState === WebSocket.OPEN) {
+                target = c;
+                break;
+            }
         }
         if (!target) {
-            throw new Error("No host plugin connected to the {{NAME}} bridge.");
+            throw new Error(
+                "No host plugin connected to the __agentName__ bridge.",
+            );
         }
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
             target!.send(
-                JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
+                JSON.stringify({
+                    id,
+                    actionName,
+                    parameters,
+                } satisfies BridgeRequest),
             );
         });
     }
@@ -182,14 +205,14 @@ class {{PASCAL_NAME}}Bridge {
 // fixed-port override. The shared-bridge + per-session-registration
 // pattern matches the code and browser agents.
 
-let sharedBridge: {{PASCAL_NAME}}Bridge | undefined;
-let sharedStartingPromise: Promise<{{PASCAL_NAME}}Bridge> | undefined;
+let sharedBridge: __AgentName__Bridge | undefined;
+let sharedStartingPromise: Promise<__AgentName__Bridge> | undefined;
 let sharedClosingPromise: Promise<void> | undefined;
 let sharedRefCount = 0;
 
 // Serialize concurrent starts; await any in-flight close before binding
 // again so a rapid disable→enable doesn't race the port release.
-async function ensureSharedBridge(): Promise<{{PASCAL_NAME}}Bridge> {
+async function ensureSharedBridge(): Promise<__AgentName__Bridge> {
     if (sharedClosingPromise !== undefined) {
         await sharedClosingPromise;
     }
@@ -197,7 +220,7 @@ async function ensureSharedBridge(): Promise<{{PASCAL_NAME}}Bridge> {
     if (sharedStartingPromise !== undefined) return sharedStartingPromise;
     sharedStartingPromise = (async () => {
         try {
-            sharedBridge = await {{PASCAL_NAME}}Bridge.start(getBridgeBindPort());
+            sharedBridge = await __AgentName__Bridge.start(getBridgeBindPort());
             return sharedBridge;
         } finally {
             sharedStartingPromise = undefined;
@@ -208,7 +231,7 @@ async function ensureSharedBridge(): Promise<{{PASCAL_NAME}}Bridge> {
 
 // ---- Agent lifecycle ---------------------------------------------------
 
-type {{PASCAL_NAME}}Context = {
+type __AgentName__Context = {
     enabledSchemas: Set<string>;
     portRegistration?: { release: () => void };
 };
@@ -222,7 +245,7 @@ export function instantiate(): AppAgent {
     };
 }
 
-async function initializeAgentContext(): Promise<{{PASCAL_NAME}}Context> {
+async function initializeAgentContext(): Promise<__AgentName__Context> {
     return { enabledSchemas: new Set() };
 }
 
@@ -235,7 +258,7 @@ async function initializeAgentContext(): Promise<{{PASCAL_NAME}}Context> {
  * will see an empty `enabledSchemas` and no-op.
  */
 async function closeAgentContext(
-    context: SessionContext<{{PASCAL_NAME}}Context>,
+    context: SessionContext<__AgentName__Context>,
 ): Promise<void> {
     const ctx = context.agentContext;
     const wasActive = ctx.enabledSchemas.size > 0;
@@ -256,7 +279,7 @@ async function closeAgentContext(
 
 async function updateAgentContext(
     enable: boolean,
-    context: SessionContext<{{PASCAL_NAME}}Context>,
+    context: SessionContext<__AgentName__Context>,
     schemaName: string,
 ): Promise<void> {
     const ctx = context.agentContext;
@@ -268,7 +291,7 @@ async function updateAgentContext(
             const bridge = await ensureSharedBridge();
             if (isFirstForSession) {
                 // Per-session registration: the registrar allows multiple
-                // entries for ("{{NAME}}", "default") across sessions and
+                // entries for ("__agentName__", "default") across sessions and
                 // lookup returns the most recent, so each active session
                 // independently keeps the shared port discoverable.
                 ctx.portRegistration = context.registerPort(
@@ -309,17 +332,22 @@ async function updateAgentContext(
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
-    _context: ActionContext<{{PASCAL_NAME}}Context>,
+    action: TypeAgentAction<__AgentName__Actions>,
+    _context: ActionContext<__AgentName__Context>,
 ): Promise<ActionResult> {
     if (!sharedBridge?.connected) {
         return {
-            error: "Host plugin not connected to the {{NAME}} bridge. Start the plugin and ensure it is configured for the port reported by @system ports.",
+            error: "Host plugin not connected to the __agentName__ bridge. Start the plugin and ensure it is configured for the port reported by @system ports.",
         };
     }
     try {
-        const result = await sharedBridge.send(action.actionName, action.parameters);
-        return createActionResultFromTextDisplay(JSON.stringify(result, null, 2));
+        const result = await sharedBridge.send(
+            action.actionName,
+            action.parameters,
+        );
+        return createActionResultFromTextDisplay(
+            JSON.stringify(result, null, 2),
+        );
     } catch (err: any) {
         return { error: err?.message ?? String(err) };
     }

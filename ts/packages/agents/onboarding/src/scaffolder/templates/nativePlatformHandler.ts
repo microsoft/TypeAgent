@@ -13,7 +13,7 @@ import {
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 
 const execAsync = promisify(exec);
 const platform = process.platform; // "win32" | "darwin" | "linux"
@@ -30,7 +30,7 @@ async function initializeAgentContext(): Promise<unknown> {
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+    action: TypeAgentAction<__AgentName__Actions>,
     _context: ActionContext<unknown>,
 ): Promise<ActionResult> {
     try {
@@ -46,7 +46,7 @@ async function executeAction(
 
 /**
  * Map a typed action to a platform-specific shell command or SDK call.
- * Add one case per action defined in {{PASCAL_NAME}}Actions.
+ * Add one case per action defined in __AgentName__Actions.
  */
 async function executeCommand(
     actionName: string,

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Pattern: state-machine — multi-phase disk-persisted workflow.
-// State is stored in ~/.typeagent/{{NAME}}/<workflowId>/state.json.
+// State is stored in ~/.typeagent/__agentName__/<workflowId>/state.json.
 // Each phase must be approved before the next begins.
 
 import {
@@ -12,12 +12,12 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
 
-const STATE_ROOT = path.join(os.homedir(), ".typeagent", "{{NAME}}");
+const STATE_ROOT = path.join(os.homedir(), ".typeagent", "__agentName__");
 
 // ---- State types -------------------------------------------------------
 
@@ -34,10 +34,14 @@ type WorkflowState = {
 
 // ---- State I/O ---------------------------------------------------------
 
-async function loadState(workflowId: string): Promise<WorkflowState | undefined> {
+async function loadState(
+    workflowId: string,
+): Promise<WorkflowState | undefined> {
     const statePath = path.join(STATE_ROOT, workflowId, "state.json");
     try {
-        return JSON.parse(await fs.readFile(statePath, "utf-8")) as WorkflowState;
+        return JSON.parse(
+            await fs.readFile(statePath, "utf-8"),
+        ) as WorkflowState;
     } catch {
         return undefined;
     }
@@ -69,7 +73,7 @@ async function initializeAgentContext(): Promise<unknown> {
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+    action: TypeAgentAction<__AgentName__Actions>,
     _context: ActionContext<unknown>,
 ): Promise<ActionResult> {
     // TODO: map actions to phase handlers, e.g.:

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Pattern: external-api — REST/OAuth cloud API bridge.
-// Implement {{PASCAL_NAME}}Client with your API's authentication and endpoints.
+// Implement __AgentName__Client with your API's authentication and endpoints.
 
 import {
     ActionContext,
@@ -12,21 +12,24 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+import { __AgentName__Actions } from "./__agentName__Schema.js";
 
 // ---- API client --------------------------------------------------------
 
-class {{PASCAL_NAME}}Client {
+class __AgentName__Client {
     private token: string | undefined;
 
     /** Authenticate and store the access token. */
     async authenticate(): Promise<void> {
         // TODO: implement OAuth flow or API key loading.
-        // Store token in: ~/.typeagent/profiles/<profile>/{{NAME}}/token.json
+        // Store token in: ~/.typeagent/profiles/<profile>/__agentName__/token.json
         throw new Error("authenticate() not yet implemented");
     }
 
-    async callApi(endpoint: string, params: Record<string, unknown>): Promise<unknown> {
+    async callApi(
+        endpoint: string,
+        params: Record<string, unknown>,
+    ): Promise<unknown> {
         if (!this.token) await this.authenticate();
         // TODO: implement HTTP call using this.token
         throw new Error(`callApi(${endpoint}) not yet implemented`);
@@ -35,7 +38,7 @@ class {{PASCAL_NAME}}Client {
 
 // ---- Agent lifecycle ---------------------------------------------------
 
-type Context = { client: {{PASCAL_NAME}}Client };
+type Context = { client: __AgentName__Client };
 
 export function instantiate(): AppAgent {
     return {
@@ -46,7 +49,7 @@ export function instantiate(): AppAgent {
 }
 
 async function initializeAgentContext(): Promise<Context> {
-    return { client: new {{PASCAL_NAME}}Client() };
+    return { client: new __AgentName__Client() };
 }
 
 async function updateAgentContext(
@@ -58,7 +61,7 @@ async function updateAgentContext(
 }
 
 async function executeAction(
-    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+    action: TypeAgentAction<__AgentName__Actions>,
     context: ActionContext<Context>,
 ): Promise<ActionResult> {
     const { client } = context.sessionContext.agentContext;

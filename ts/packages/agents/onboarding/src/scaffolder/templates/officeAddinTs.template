@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Office.js task pane add-in for {{NAME}} TypeAgent integration.
+// Office.js task pane add-in for __agentName__ TypeAgent integration.
 // Connects to the TypeAgent bridge via WebSocket and forwards commands
 // to the Office.js API.
 
-const BRIDGE_PORT = 5678;
+const BRIDGE_PORT = __BRIDGE_PORT__;
 
 Office.onReady(async () => {
     document.getElementById("status")!.textContent = "Connecting to TypeAgent...";
@@ -13,7 +13,7 @@ Office.onReady(async () => {
 
     ws.onopen = () => {
         document.getElementById("status")!.textContent = "Connected";
-        ws.send(JSON.stringify({ type: "hello", addinName: "{{NAME}}" }));
+        ws.send(JSON.stringify({ type: "hello", addinName: "__agentName__" }));
     };
 
     ws.onmessage = async (event) => {

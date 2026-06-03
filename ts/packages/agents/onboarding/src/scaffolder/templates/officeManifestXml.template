@@ -6,8 +6,8 @@
   <Version>1.0.0.0</Version>
   <ProviderName>Microsoft</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="{{PASCAL_NAME}} TypeAgent" />
-  <Description DefaultValue="{{PASCAL_NAME}} integration for TypeAgent" />
+  <DisplayName DefaultValue="__AgentName__ TypeAgent" />
+  <Description DefaultValue="__AgentName__ integration for TypeAgent" />
   <Hosts>
     <Host Name="Workbook" />
   </Hosts>
