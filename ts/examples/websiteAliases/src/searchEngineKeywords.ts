@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { bingWithGrounding, extractorAgent } from "azure-ai-foundry";
-import { MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
+import { bingWithGrounding, extractorAgent, agents } from "azure-ai-foundry";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import puppeteer, { TimeoutError } from "puppeteer";
 import chalk from "chalk";
@@ -216,105 +215,34 @@ export class searchKeywordExtractor {
     private async extractAliases(
         data: string,
     ): Promise<extractorAgent.extractedAliases | undefined | null> {
-        const agent = await extractorAgent.ensureKeywordExtractorAgent(
+        const agentName = await extractorAgent.ensureKeywordExtractorAgent(
             this.groundingConfig,
             this.project,
         );
-        let inCompleteReason;
-        let retVal: extractorAgent.extractedAliases | undefined | null;
 
-        if (!agent) {
+        if (!agentName) {
             throw new Error(
                 "No agent found for extracting web site aliases. Please check your configuration.",
             );
         }
 
         try {
-            const thread = await this.project.agents.threads.create();
-
-            // create the HTML message (chunk it)
-            const chunkSize = 128 * 1024; // 128k chunks
-            for (let i = 0; i < data.length; i += chunkSize) {
-                const chunk = data.slice(i, i + chunkSize);
-                await this.project.agents.messages.create(
-                    thread.id,
-                    "user",
-                    chunk,
-                );
-            }
-
-            // Create run
-            const run = await this.project.agents.runs.createAndPoll(
-                thread.id,
-                agent.id,
-                {
-                    pollingOptions: {
-                        intervalInMs: 250,
-                    },
-                    onResponse: (response): void => {
-                        console.debug(
-                            `Received response with status: ${response.status}`,
-                        );
-
-                        const pb: any = response.parsedBody;
-                        if (pb?.incomplete_details?.reason) {
-                            inCompleteReason = pb.incomplete_details.reason;
-                            console.warn(
-                                `Run incomplete due to: ${inCompleteReason}`,
-                            );
-                        }
-                    },
-                },
+            const result = await agents.runAgent(
+                this.project,
+                agentName,
+                data,
             );
 
-            const msgs: ThreadMessage[] = [];
-            if (run.status === "completed") {
-                if (run.completedAt) {
-                    // Retrieve messages
-                    const messages = await this.project.agents.messages.list(
-                        thread.id,
-                        {
-                            order: "asc",
-                        },
-                    );
-
-                    // accumulate assistant messages
-                    for await (const m of messages) {
-                        if (m.role === "assistant") {
-                            // TODO: handle multi-modal content
-                            const content: MessageContentUnion | undefined =
-                                m.content.find(
-                                    (c) => c.type === "text" && "text" in c,
-                                );
-                            if (content) {
-                                msgs.push(m);
-                                let txt: string = (content as any).text
-                                    .value as string;
-                                txt = txt
-                                    .replaceAll("```json", "")
-                                    .replaceAll("```", "");
-                                retVal = JSON.parse(
-                                    txt,
-                                ) as extractorAgent.extractedAliases;
-                            }
-                        }
-                    }
-                }
+            if (result.contentFiltered) {
+                return null;
             }
 
-            // delete the thread we just created since we are currently one and done
-            this.project.agents.threads.delete(thread.id);
+            return agents.parseJsonResponse<extractorAgent.extractedAliases>(
+                result.text,
+            );
         } catch (e) {
             console.error(`Error resolving URL with search: ${e}`);
-
-            if (inCompleteReason === "content_filter") {
-                retVal = null;
-            } else {
-                retVal = undefined;
-            }
+            return undefined;
         }
-
-        // return assistant messages
-        return retVal;
     }
 }

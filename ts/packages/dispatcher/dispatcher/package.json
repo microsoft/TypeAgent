@@ -42,8 +42,6 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
-    "@azure/ai-agents": "^1.0.0-beta.3",
-    "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/core-client": "^1.10.0",
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",

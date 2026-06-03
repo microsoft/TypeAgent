@@ -4,14 +4,7 @@
 import * as bingWithGrounding from "./bingWithGrounding.js";
 import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
-import { DefaultAzureCredential } from "@azure/identity";
 import { createTypeChat } from "typeagent";
-import {
-    Agent,
-    MessageContentUnion,
-    ThreadMessage,
-    ToolUtility,
-} from "@azure/ai-agents";
 import registerDebug from "debug";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { readFileSync } from "node:fs";
@@ -40,17 +33,14 @@ export interface urlValidityAction {
     explanation: string;
 }
 
-const urlResolutionAgentId = "TypeAgent_URLResolverAgent";
+const urlResolutionAgentId = "TypeAgent-URLResolverAgent";
 export async function flushAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
 ) {
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
+    const project = agents.getProject(groundingConfig.endpoint!);
     await agents.flushAgents(
         urlResolutionAgentId,
-        [groundingConfig.urlResolutionAgentId!],
+        [urlResolutionAgentId],
         project,
     );
 }
@@ -58,10 +48,7 @@ export async function flushAgent(
 export async function deleteThreads(
     groundingConfig: bingWithGrounding.ApiSettings,
 ) {
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
+    const project = agents.getProject(groundingConfig.endpoint!);
     await agents.deleteThreads(project);
 }
 
@@ -70,90 +57,33 @@ export async function resolveURLWithSearch(
     groundingConfig: bingWithGrounding.ApiSettings,
 ): Promise<string[] | undefined | null> {
     let retVal: string[] | undefined | null = [];
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
+    const project = agents.getProject(groundingConfig.endpoint!);
 
-    const agent = await ensureResolverAgent(groundingConfig, project);
-    let inCompleteReason;
+    const agentName = await ensureResolverAgent(groundingConfig, project);
 
-    if (!agent) {
+    if (!agentName) {
         throw new Error(
             "No agent found for Bing with Grounding. Please check your configuration.",
         );
     }
 
     try {
-        const thread = await project.agents.threads.create();
+        const result = await agents.runAgent(project, agentName, site);
 
-        // the question that needs answering
-        await project.agents.messages.create(thread.id, "user", site);
-
-        // Create run
-        const run = await project.agents.runs.createAndPoll(
-            thread.id,
-            agent.id,
-            {
-                pollingOptions: {
-                    intervalInMs: 250,
-                },
-                onResponse: (response): void => {
-                    debug(`Received response with status: ${response.status}`);
-
-                    const pb: any = response.parsedBody;
-                    if (pb?.incomplete_details?.reason) {
-                        inCompleteReason = pb.incomplete_details.reason;
-                    }
-                },
-            },
-        );
-
-        const msgs: ThreadMessage[] = [];
-        if (run.status === "completed") {
-            if (run.completedAt) {
-                // Retrieve messages
-                const messages = await project.agents.messages.list(thread.id, {
-                    order: "asc",
-                });
-
-                // accumulate assistant messages
-                for await (const m of messages) {
-                    if (m.role === "assistant") {
-                        // TODO: handle multi-modal content
-                        const content: MessageContentUnion | undefined =
-                            m.content.find(
-                                (c) => c.type === "text" && "text" in c,
-                            );
-                        if (content) {
-                            msgs.push(m);
-                            let txt: string = (content as any).text
-                                .value as string;
-                            txt = txt
-                                .replaceAll("```json", "")
-                                .replaceAll("```", "");
-                            const url = JSON.parse(txt) as urlResolutionAction;
-                            retVal.push(url.url, ...url.urlsEvaluated);
-                            retVal = [...new Set(retVal)]; // remove duplicates
-                        }
-                    }
-                }
-            }
+        if (result.contentFiltered) {
+            return null;
         }
 
-        // delete the thread we just created since we are currently one and done
-        project.agents.threads.delete(thread.id);
+        const url = agents.parseJsonResponse<urlResolutionAction>(result.text);
+        if (url) {
+            retVal.push(url.url, ...url.urlsEvaluated);
+            retVal = [...new Set(retVal)]; // remove duplicates
+        }
     } catch (e) {
         debug(`Error resolving URL with search: ${e}`);
-
-        if (inCompleteReason === "content_filter") {
-            retVal = null;
-        } else {
-            retVal = undefined;
-        }
+        retVal = undefined;
     }
 
-    // return assistant messages
     return retVal;
 }
 
@@ -163,18 +93,15 @@ export async function resolveURLWithSearch(
 async function ensureResolverAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
-): Promise<Agent | undefined> {
+): Promise<string> {
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
-    return await agents.ensureAgent(
-        groundingConfig.urlResolutionAgentId!,
-        project,
-        {
-            model: "gpt-4.1",
-            name: "TypeAgent_URLResolverAgent",
-            description: "Auto created URL Resolution Agent",
-            temperature: 0.01,
-            instructions: `
+    return await agents.ensureAgent(project, {
+        model: "gpt-4.1",
+        name: "TypeAgent-URLResolverAgent",
+        description: "Auto created URL Resolution Agent",
+        temperature: 0.01,
+        instructions: `
 You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain. If the user request doesn't specify or imply 'website', add that to the search terms.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
@@ -186,15 +113,8 @@ interface Response {
     explanation: string;
     bingSearchQuery: string;
 }`,
-            tools: [
-                ToolUtility.createBingGroundingTool([
-                    {
-                        connectionId: groundingConfig.connectionId!,
-                    },
-                ]).definition,
-            ],
-        },
-    );
+        tools: [agents.bingGroundingTool(groundingConfig.connectionId!)],
+    });
 }
 
 /**
@@ -203,18 +123,15 @@ interface Response {
 async function ensureValidatorAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
-): Promise<Agent | undefined> {
+): Promise<string> {
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
-    return await agents.ensureAgent(
-        groundingConfig.validatorAgentId!,
-        project,
-        {
-            model: "gpt-4.1",
-            name: "TypeAgent_URLValidatorAgent",
-            description: "Auto created URL Validation Agent",
-            temperature: 0.01,
-            instructions: `
+    return await agents.ensureAgent(project, {
+        model: "gpt-4.1",
+        name: "TypeAgent-URLValidatorAgent",
+        description: "Auto created URL Validation Agent",
+        temperature: 0.01,
+        instructions: `
 You are an agent that gets information from the user that includes the web page they requested and the URL they went to.  You are responsible for determining if the provided URL is the one the user requested.   Use the GetHTTPSEndpoint_Tool to get the HTML of the page to ensure the user's intent is being fullfilled.  Call the GetHTTPSEndpoint_Tool to get the HTML of the page to make sure it's what the user wants.
 
 The user's request is supplied as a JSON that conforms to the following TypeScript type:
@@ -232,16 +149,12 @@ interface Response {
  urlValidity: "valid" | "invalid" | "indeterminate";
  explanation: string;
 }`,
-            tools: [
-                ToolUtility.createBingGroundingTool([
-                    {
-                        connectionId:
-                            groundingConfig.httpEndpointLogicAppConnectionId!,
-                    },
-                ]).definition,
-            ],
-        },
-    );
+        tools: [
+            agents.bingGroundingTool(
+                groundingConfig.httpEndpointLogicAppConnectionId!,
+            ),
+        ],
+    });
 }
 
 export async function validateURL(
@@ -251,118 +164,32 @@ export async function validateURL(
 ): Promise<urlValidityAction | undefined> {
     debug(`Validating URL for utterance: ${utterance}, url: ${url}`);
 
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
+    const project = agents.getProject(groundingConfig.endpoint!);
 
     try {
-        const agent = await ensureValidatorAgent(groundingConfig, project);
-        const thread = await project.agents.threads.create();
-
-        // the question that needs answering
-        await project.agents.messages.create(
-            thread.id,
-            "user",
-            JSON.stringify({ request: utterance, url: url }),
-        );
+        const agentName = await ensureValidatorAgent(groundingConfig, project);
+        const input = JSON.stringify({ request: utterance, url: url });
 
         let retryCount = 0;
         const maxRetries = 5;
-        let success = false;
-        let lastResponse;
-        const TIMEOUT = 30_000; // 30 seconds
 
-        while (retryCount < maxRetries && !success) {
+        while (retryCount < maxRetries) {
             try {
-                // need this cause you can't access the run object until it enters the start state
-                const runStarted = Date.now();
-
-                // Create run
-                const run = await project.agents.runs.createAndPoll(
-                    thread.id,
-                    agent!.id,
-                    {
-                        pollingOptions: {
-                            intervalInMs: 3000,
-                        },
-                        onResponse: async (response): Promise<void> => {
-                            lastResponse = response;
-
-                            debug(
-                                `Received response with status: ${response.status}`,
-                            );
-
-                            if (response.status != 200) {
-                                process.stdout.write(response.bodyAsText!);
-                                debug(
-                                    `Received response with status: ${response}`,
-                                );
-                            }
-
-                            // Cancel the run if it has been running for more than 30 seconds
-                            if (
-                                Date.now() - new Date(runStarted).getTime() >
-                                    TIMEOUT &&
-                                (response.parsedBody as any).status !=
-                                    "cancelling" &&
-                                (response.parsedBody as any).status !=
-                                    "completed"
-                            ) {
-                                try {
-                                    await project.agents.runs.cancel(
-                                        thread.id,
-                                        (response.parsedBody as any).id,
-                                    );
-                                    console.log(
-                                        `TIMEOUT - Canceled ${utterance}`,
-                                    );
-                                } catch (cancelError) {
-                                    console.error(
-                                        `Error canceling run: ${cancelError}`,
-                                    );
-                                }
-                            }
-                        },
-                    },
+                const result = await agents.runAgent(
+                    project,
+                    agentName,
+                    input,
                 );
 
-                const msgs: ThreadMessage[] = [];
-                if (run.status === "completed") {
-                    if (run.completedAt) {
-                        // Retrieve messages
-                        const messages = await project.agents.messages.list(
-                            thread.id,
-                            {
-                                order: "asc",
-                            },
-                        );
-
-                        // accumulate assistant messages
-                        for await (const m of messages) {
-                            if (m.role === "assistant") {
-                                // TODO: handle multi-modal content
-                                const content: MessageContentUnion | undefined =
-                                    m.content.find(
-                                        (c) => c.type === "text" && "text" in c,
-                                    );
-                                if (content) {
-                                    msgs.push(m);
-                                    let txt: string = (content as any).text
-                                        .value as string;
-                                    txt = txt
-                                        .replaceAll("```json", "")
-                                        .replaceAll("```", "");
-
-                                    // BUGBUG: only returns the first user message in the thread
-                                    return JSON.parse(txt) as urlValidityAction;
-                                }
-                            }
-                        }
-                    }
+                if (result.contentFiltered) {
+                    return undefined;
                 }
 
-                success = true;
+                const validity =
+                    agents.parseJsonResponse<urlValidityAction>(result.text);
+                if (validity) {
+                    return validity;
+                }
             } catch (pollingError) {
                 /*
                     Getting lots of 502s from Logic App for getting web page content.
@@ -371,13 +198,9 @@ export async function validateURL(
                         code: 'tool_user_error',
                         message: 'Error: http_client_error; HTTP error 502: Bad Gateway',
                         debug_info: [Object]
-                    },                
+                    },
                 */
-
-                //console.log(lastResponse);
-                //console.log(pollingError);
-                const ee = (lastResponse as any).parsedBody;
-                console.log(`\t${JSON.stringify(ee.last_error)}`);
+                debug(`Error validating URL (attempt ${retryCount}): ${pollingError}`);
             } finally {
                 retryCount++;
             }
@@ -386,9 +209,6 @@ export async function validateURL(
         if (retryCount >= maxRetries) {
             console.log("MAXIMUM RETRY COUNT EXCEEDED!!!");
         }
-
-        // delete the thread we just created since we are currently one and done
-        project.agents.threads.delete(thread.id);
     } catch (e) {
         debug(`Error validating URL: ${e}`);
     }
