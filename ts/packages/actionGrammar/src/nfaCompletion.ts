@@ -930,17 +930,30 @@ function setPathValue(
     let cursor: Record<string, any> = obj;
     for (let i = 0; i < parts.length - 1; i++) {
         const k = parts[i];
-        const existing = cursor[k];
+        // Use Object.prototype.hasOwnProperty.call so we don't trip on a
+        // value inherited from the prototype chain, and create intermediate
+        // objects with a null prototype so later writes can't reach
+        // Object.prototype even if the key guard above were bypassed.
         if (
-            existing === undefined ||
-            existing === null ||
-            typeof existing !== "object"
+            !Object.prototype.hasOwnProperty.call(cursor, k) ||
+            cursor[k] === null ||
+            typeof cursor[k] !== "object"
         ) {
-            cursor[k] = {};
+            Object.defineProperty(cursor, k, {
+                value: Object.create(null),
+                writable: true,
+                enumerable: true,
+                configurable: true,
+            });
         }
         cursor = cursor[k];
     }
-    cursor[parts[parts.length - 1]] = value;
+    Object.defineProperty(cursor, parts[parts.length - 1], {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
 }
 
 /**
