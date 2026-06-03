@@ -253,6 +253,19 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.copyOnboardingSummary",
+            withErrors(async () => {
+                const summary = await getOnboardingSummary(runtime);
+                await vscode.env.clipboard.writeText(summary);
+                void vscode.window.showInformationMessage(
+                    "Copied onboarding summary to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);
@@ -349,13 +362,18 @@ function shouldOpenSummaryAfterBatchRun(): boolean {
 }
 
 async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
-    const state = await runtime.getActiveOnboardingSession();
+    const summary = await getOnboardingSummary(runtime);
     const doc = await vscode.workspace.openTextDocument({
         language: "markdown",
-        content: formatOnboardingSummary(state),
+        content: summary,
     });
     await vscode.window.showTextDocument(doc, {
         preview: false,
     });
+}
+
+async function getOnboardingSummary(runtime: StudioRuntime): Promise<string> {
+    const state = await runtime.getActiveOnboardingSession();
+    return formatOnboardingSummary(state);
 }
 
