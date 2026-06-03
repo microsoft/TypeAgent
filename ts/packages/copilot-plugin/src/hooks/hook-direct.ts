@@ -21,7 +21,7 @@ import { emitProgress } from "../shared/hook-progress.js";
 import type { HookInput, HookOutput } from "./types.js";
 
 export async function handleDirect(input: HookInput): Promise<HookOutput> {
-    emitProgress("Routing to TypeAgent...");
+    emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
     const clientIO = createClientIO({
@@ -29,25 +29,39 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             collectMessage(message, undefined, responseCollector);
         },
         onAppendDisplay: (message, mode) => {
-            // Emit progress for temporary messages (status updates)
+            // Emit progress for temporary messages (status updates).
+            // Mark them temporary so each replaces the previous status line
+            // instead of accumulating in the timeline.
             if (mode === "temporary") {
                 const text = message?.message;
                 if (typeof text === "string" && text.trim()) {
-                    emitProgress(text.trim());
+                    emitProgress(text.trim(), { temporary: true });
                 }
                 return;
             }
 
-            // Emit progress for info/status messages (tool calls, results during reasoning)
-            // These are skipped by collectMessage but contain useful progress info
+            // Route reasoning display by message kind. These are all progress —
+            // never part of the final response — so we return before collecting.
             const msg = message?.message;
             if (typeof msg === "object" && msg && "kind" in msg) {
                 const kind = (msg as { kind: unknown }).kind;
-                if (kind === "info" || kind === "status") {
-                    const text = extractMessageText(message);
-                    if (text?.trim()) {
-                        emitProgress(text.trim());
+                const text = extractMessageText(message)?.trim();
+                // "status" (e.g. reasoning "thinking") is transient — each
+                // replaces the previous status line.
+                if (kind === "status") {
+                    if (text) {
+                        emitProgress(text, { temporary: true });
                     }
+                    return;
+                }
+                // "info"/"warning"/"error" are persistent: tool calls and their
+                // results (including error results) accumulate, so every call is
+                // shown together with its result rather than an orphaned result.
+                if (kind === "info" || kind === "warning" || kind === "error") {
+                    if (text) {
+                        emitProgress(text);
+                    }
+                    return;
                 }
             }
 
@@ -57,9 +71,9 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
 
     let dispatcher: Dispatcher | null = null;
     try {
-        emitProgress("Connecting to TypeAgent...");
+        emitProgress("Connecting to TypeAgent...", { temporary: true });
         dispatcher = await connectToTypeAgent(clientIO);
-        emitProgress("Processing command...");
+        emitProgress("Processing command...", { temporary: true });
         const result = await awaitCommand(dispatcher, input.prompt);
 
         if (result?.cancelled) {

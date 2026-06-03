@@ -225,11 +225,20 @@ class TypeAgentMcpServer {
                         return;
                     }
 
-                    // Emit progress for info/status messages (tool calls, results during reasoning)
+                    // Emit progress for status/info/warning/error messages
+                    // (reasoning "thinking", tool calls, and their results
+                    // including error results). These are progress, not final
+                    // content, so we stream them and skip responseCollector —
+                    // keeping every tool call paired with its result.
                     const msg = message?.message;
                     if (typeof msg === "object" && msg && "kind" in msg) {
                         const kind = (msg as { kind: unknown }).kind;
-                        if (kind === "info" || kind === "status") {
+                        if (
+                            kind === "info" ||
+                            kind === "status" ||
+                            kind === "warning" ||
+                            kind === "error"
+                        ) {
                             messageCount++;
                             if (extra) {
                                 void this.sendProgress(
@@ -239,7 +248,6 @@ class TypeAgentMcpServer {
                                     0,
                                 );
                             }
-                            // Don't add to responseCollector — these are progress, not final content
                             return;
                         }
                     }
