@@ -34,13 +34,16 @@ import {
 } from "./conversationManager.js";
 import {
     ClientIO,
-    createDispatcher,
     Dispatcher,
     PortRegistrar,
     QueuedRequest,
     QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
+import {
+    createInProcessAgentServer,
+    type InProcessAgentServer,
+} from "agent-server/in-process";
 import type { SubmitResult } from "@typeagent/dispatcher-types";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { randomUUID } from "node:crypto";
@@ -201,12 +204,114 @@ async function initializeDispatcher(
 
         // Set up dispatcher
         // Use 'let' so that session switches can rebind the active dispatcher.
-        let newDispatcher: Dispatcher;
+        // Definite-assignment (!) because it is assigned inside the shared
+        // restoreOrJoinShellConversation() closure on every success path; if
+        // that throws we fall through to the catch block and never read it.
+        let newDispatcher!: Dispatcher;
         let connection: AgentServerConnection | undefined;
+        let inProcessServer: InProcessAgentServer | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
         // Bootstrap snapshot from joinConversation (remote mode only).
         let initialQueueSnapshot: QueueSnapshot | undefined;
+
+        // Restore the last-open conversation (or find-or-create the default
+        // "Shell" conversation) and join it. Shared by both the embedded
+        // in-process agent server (standalone) and the remote agent server
+        // (--connect) so there is a single conversation join code path.
+        async function restoreOrJoinShellConversation(
+            conn: AgentServerConnection,
+        ): Promise<void> {
+            const SHELL_CONVERSATION_NAME = "Shell";
+            let conversation:
+                | Awaited<ReturnType<typeof conn.joinConversation>>
+                | undefined;
+
+            // First, try to restore the conversation we last had open. This
+            // keeps the shell on the user's working conversation across
+            // restarts instead of always snapping back to the default
+            // "Shell" conversation. Best-effort: if the saved id no longer
+            // exists (deleted, data wiped, etc.) we fall through to the
+            // find-or-create flow below.
+            const savedConversationId = loadUserSettings().conversation
+                .lastConversationId as string | undefined;
+            if (savedConversationId) {
+                try {
+                    conversation = await conn.joinConversation(clientIO, {
+                        conversationId: savedConversationId,
+                    });
+                    debugShellInit(
+                        "Restored last conversation",
+                        savedConversationId,
+                    );
+                } catch (e: any) {
+                    debugShellInit(
+                        "Failed to restore last conversation, falling back:",
+                        savedConversationId,
+                        e.message,
+                    );
+                    conversation = undefined;
+                }
+            }
+
+            if (conversation === undefined) {
+                const existing = await conn.listConversations(
+                    SHELL_CONVERSATION_NAME,
+                );
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() ===
+                        SHELL_CONVERSATION_NAME.toLowerCase(),
+                );
+                const shellConversationId =
+                    match !== undefined
+                        ? match.conversationId
+                        : (
+                              await conn.createConversation(
+                                  SHELL_CONVERSATION_NAME,
+                              )
+                          ).conversationId;
+                try {
+                    conversation = await conn.joinConversation(clientIO, {
+                        conversationId: shellConversationId,
+                    });
+                } catch (e: any) {
+                    // The conversation may have been deleted between
+                    // listConversations and joinConversation (race
+                    // condition). Fall back to creating a fresh one.
+                    debugShellInit(
+                        "joinConversation failed for Shell conversation, creating new one:",
+                        e.message,
+                    );
+                    const fresh = await conn.createConversation(
+                        SHELL_CONVERSATION_NAME,
+                    );
+                    conversation = await conn.joinConversation(clientIO, {
+                        conversationId: fresh.conversationId,
+                    });
+                }
+            }
+            newDispatcher = conversation.dispatcher;
+            initialConversationId = conversation.conversationId;
+            initialConversationName = conversation.name;
+            initialQueueSnapshot = conversation.queueSnapshot;
+            // Persist the conversation we ended up on so the next launch
+            // restores it. Wrapped in try/catch because user-settings I/O
+            // shouldn't block startup if the disk write fails.
+            try {
+                saveUserSettings({
+                    conversation: {
+                        lastConversationId: conversation.conversationId,
+                    },
+                });
+            } catch (e: any) {
+                debugShellInit(
+                    "Failed to persist lastConversationId:",
+                    e.message,
+                );
+            }
+        }
+
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-session support.
@@ -375,94 +480,9 @@ async function initializeDispatcher(
             connection = await connectAgentServer(url, () =>
                 onConnectionLost?.(),
             );
-            // Find-or-create the default "Shell" conversation, matching CLI behavior.
-            const SHELL_CONVERSATION_NAME = "Shell";
-            let conversation:
-                | Awaited<ReturnType<typeof connection.joinConversation>>
-                | undefined;
-
-            // First, try to restore the conversation we last had open. This
-            // keeps the shell on the user's working conversation across
-            // restarts instead of always snapping back to the default
-            // "Shell" conversation. Best-effort: if the saved id no longer
-            // exists on the server (deleted, server data wiped, etc.) we
-            // fall through to the find-or-create flow below.
-            const savedConversationId = userSettings.conversation
-                .lastConversationId as string | undefined;
-            if (savedConversationId) {
-                try {
-                    conversation = await connection.joinConversation(clientIO, {
-                        conversationId: savedConversationId,
-                    });
-                    debugShellInit(
-                        "Restored last conversation",
-                        savedConversationId,
-                    );
-                } catch (e: any) {
-                    debugShellInit(
-                        "Failed to restore last conversation, falling back:",
-                        savedConversationId,
-                        e.message,
-                    );
-                    conversation = undefined;
-                }
-            }
-
-            if (conversation === undefined) {
-                const existing = await connection.listConversations(
-                    SHELL_CONVERSATION_NAME,
-                );
-                const match = existing.find(
-                    (s) =>
-                        s.name.toLowerCase() ===
-                        SHELL_CONVERSATION_NAME.toLowerCase(),
-                );
-                const shellConversationId =
-                    match !== undefined
-                        ? match.conversationId
-                        : (
-                              await connection.createConversation(
-                                  SHELL_CONVERSATION_NAME,
-                              )
-                          ).conversationId;
-                try {
-                    conversation = await connection.joinConversation(clientIO, {
-                        conversationId: shellConversationId,
-                    });
-                } catch (e: any) {
-                    // The conversation may have been deleted between listConversations and
-                    // joinConversation (race condition). Fall back to creating a fresh one.
-                    debugShellInit(
-                        "joinConversation failed for Shell conversation, creating new one:",
-                        e.message,
-                    );
-                    const fresh = await connection.createConversation(
-                        SHELL_CONVERSATION_NAME,
-                    );
-                    conversation = await connection.joinConversation(clientIO, {
-                        conversationId: fresh.conversationId,
-                    });
-                }
-            }
-            newDispatcher = conversation.dispatcher;
-            initialConversationId = conversation.conversationId;
-            initialConversationName = conversation.name;
-            initialQueueSnapshot = conversation.queueSnapshot;
-            // Persist the conversation we ended up on so the next launch
-            // restores it. Wrapped in try/catch because user-settings I/O
-            // shouldn't block startup if the disk write fails.
-            try {
-                saveUserSettings({
-                    conversation: {
-                        lastConversationId: conversation.conversationId,
-                    },
-                });
-            } catch (e: any) {
-                debugShellInit(
-                    "Failed to persist lastConversationId:",
-                    e.message,
-                );
-            }
+            // Find-or-create the default "Shell" conversation, matching CLI
+            // behavior. Shared with the standalone (embedded) path.
+            await restoreOrJoinShellConversation(connection);
             // Note: connection.close() is called by closeDispatcher() on
             // shutdown, so no override here — it would double-close the WebSocket.
 
@@ -513,27 +533,42 @@ async function initializeDispatcher(
                 );
             }
 
-            newDispatcher = await createDispatcher("shell", {
-                appAgentProviders: [
-                    createShellAgentProvider(shellWindow),
-                    ...getDefaultAppAgentProviders(instanceDir, configName),
-                ],
-                agentInitOptions: {
-                    browser: browserControl.control,
+            // Standalone shell embeds an agent server in this process and
+            // connects to it over an in-memory loopback — the exact same
+            // ConversationManager / dispatcher code path as --connect, just
+            // without a WebSocket. This keeps a single dispatcher path and
+            // makes conversation history persist across restarts the same way
+            // the remote agent server does.
+            inProcessServer = await createInProcessAgentServer(
+                "shell",
+                {
+                    appAgentProviders: [
+                        createShellAgentProvider(shellWindow),
+                        ...getDefaultAppAgentProviders(instanceDir, configName),
+                    ],
+                    agentInitOptions: {
+                        browser: browserControl.control,
+                    },
+                    portRegistrar,
+                    agentInstaller: getDefaultAppAgentInstaller(instanceDir),
+                    persistSession: true,
+                    storageProvider: getFsStorageProvider(),
+                    metrics: true,
+                    dblogging: true,
+                    traceId: getTraceId(),
+                    indexingServiceRegistry,
+                    constructionProvider: getDefaultConstructionProvider(),
+                    allowSharedLocalView: ["browser"],
                 },
-                portRegistrar,
-                agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-                persistSession: true,
-                persistDir: instanceDir,
-                storageProvider: getFsStorageProvider(),
-                metrics: true,
-                dblogging: true,
-                traceId: getTraceId(),
-                clientIO,
-                indexingServiceRegistry,
-                constructionProvider: getDefaultConstructionProvider(),
-                allowSharedLocalView: ["browser"],
-            });
+                instanceDir,
+                {
+                    shutdown: () => {
+                        app.quit();
+                    },
+                },
+            );
+            connection = inProcessServer.connection;
+            await restoreOrJoinShellConversation(connection);
         }
 
         async function processShellRequest(
@@ -650,7 +685,12 @@ async function initializeDispatcher(
             // after a session switch (the override set in rebindDispatcher's
             // caller). The underlying WebSocket connection must be closed
             // explicitly here so the process doesn't leak it on shutdown.
-            if (connection !== undefined) {
+            if (inProcessServer !== undefined) {
+                // Standalone embedded server: closing this also tears down the
+                // loopback transport and the ConversationManager (flushing any
+                // pending display-log writes).
+                await inProcessServer.close();
+            } else if (connection !== undefined) {
                 await connection.close();
             }
             if (standaloneDiscovery !== undefined) {

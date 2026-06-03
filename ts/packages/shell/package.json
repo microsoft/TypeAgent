@@ -69,6 +69,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "agent-server": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "browser-typeagent": "workspace:*",

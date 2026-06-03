@@ -5377,6 +5377,9 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
+      agent-server:
+        specifier: workspace:*
+        version: link:../agentServer/server
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
