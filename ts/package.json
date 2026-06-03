@@ -130,6 +130,7 @@
     },
     "overrides": {
       "@azure/core-xml": ">=1.5.0 <2.0.0",
+      "exifreader": "4.30.1",
       "express>path-to-regexp": "0.1.13",
       "fast-xml-parser": ">=5.5.7 <6.0.0",
       "hono": ">=4.12.8 <5.0.0",
