@@ -88,25 +88,34 @@ export function registerStudioCommands(
                 } catch (error) {
                     const message =
                         error instanceof Error ? error.message : "Unknown error";
-                    if (!message.includes("No local generated agent artifact")) {
+                    if (message.startsWith("Health gate failed:")) {
+                        const proceed = await confirmHealthGateBypass(message);
+                        if (!proceed) {
+                            return;
+                        }
+                        installed = await runtime.installLastSessionToSandbox(
+                            sandboxId,
+                            { skipHealthGate: true },
+                        );
+                    } else if (!message.includes("No local generated agent artifact")) {
                         throw error;
-                    }
+                    } else {
+                        const fallbackUri = await vscode.window.showOpenDialog({
+                            title: "Select local agent artifact to install",
+                            canSelectFiles: true,
+                            canSelectFolders: true,
+                            canSelectMany: false,
+                            openLabel: "Install",
+                        });
+                        if (!fallbackUri || fallbackUri.length === 0) {
+                            return;
+                        }
 
-                    const fallbackUri = await vscode.window.showOpenDialog({
-                        title: "Select local agent artifact to install",
-                        canSelectFiles: true,
-                        canSelectFolders: true,
-                        canSelectMany: false,
-                        openLabel: "Install",
-                    });
-                    if (!fallbackUri || fallbackUri.length === 0) {
-                        return;
+                        installed = await runtime.installArtifactToSandbox(
+                            fallbackUri[0].fsPath,
+                            sandboxId,
+                        );
                     }
-
-                    installed = await runtime.installArtifactToSandbox(
-                        fallbackUri[0].fsPath,
-                        sandboxId,
-                    );
                 }
                 void vscode.window.showInformationMessage(
                     `Installed onboarding session ${installed.sessionId} from ${installed.artifactPath} into sandbox ${sandboxId}.`,
@@ -355,6 +364,16 @@ export function registerStudioCommands(
             }),
         ),
     );
+}
+
+async function confirmHealthGateBypass(message: string): Promise<boolean> {
+    const installAnyway = "Install anyway";
+    const choice = await vscode.window.showWarningMessage(
+        `${message} Install into sandbox anyway?`,
+        { modal: true },
+        installAnyway,
+    );
+    return choice === installAnyway;
 }
 
 function withErrors<TArgs extends unknown[]>(

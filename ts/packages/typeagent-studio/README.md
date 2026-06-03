@@ -46,6 +46,8 @@ Install behavior for `Install latest onboarding session to sandbox`:
 - Falls back to onboarding workspace record at `~/.typeagent/onboarding/<agent>/scaffolder/scaffolded-to.txt`.
 - Falls back to local workspace candidates under `packages/agents/<agentName>`.
 - Loads the resolved local artifact path into the sandbox before marking the session installed.
+- Runs the packaging health gate (F1.4) before install when artifact path maps to `packages/agents/<agent>`.
+- Blocks on health errors by default, with an explicit "Install anyway" confirmation path.
 
 ## Settings
 

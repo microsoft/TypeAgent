@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { InMemoryOnboardingBridge } from "@typeagent/core/onboardingBridge";
+import type { HealthFinding } from "@typeagent/core/health";
 import type {
     SandboxConfig,
     SandboxHandle,
@@ -150,6 +151,13 @@ test("installLastSessionToSandbox records sandbox assignment on active session",
         onboarding: new InMemoryOnboardingBridge({
             createSessionId: () => "session-install",
         }),
+        evaluatePackagingHealthGate: async (candidatePath) => ({
+            status: "pass",
+            summary: "Health gate passed.",
+            findings: [],
+            artifactPath: candidatePath,
+            checkedAgent: "finance-approvals",
+        }),
     });
 
     await runtime.startOnboarding({
@@ -224,6 +232,66 @@ test("installArtifactToSandbox installs explicit local path", async () => {
     assert.equal(installed.artifactPath, artifactPath);
     assert.deepEqual(sandbox.loaded, [
         { sandboxId: "sandbox-c", agentRef: artifactPath },
+    ]);
+});
+
+test("installLastSessionToSandbox enforces health gate failures", async () => {
+    const workspaceRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-health-"),
+    );
+    const artifactPath = path.join(
+        workspaceRoot,
+        "packages",
+        "agents",
+        "health-gated",
+    );
+    await fs.mkdir(artifactPath, { recursive: true });
+
+    const findings: HealthFinding[] = [
+        {
+            ruleId: "manifest.parses",
+            severity: "error",
+            agent: "health-gated",
+            evidence: {
+                message: "broken manifest",
+            },
+        },
+    ];
+
+    const { context } = createContext([workspaceRoot]);
+    const sandbox = new RecordingSandboxManager();
+    const runtime = createStudioRuntimeCore(context, {
+        sandbox,
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-health",
+        }),
+        evaluatePackagingHealthGate: async (candidatePath) => ({
+            status: "fail",
+            summary: "1 error findings and 0 warning findings.",
+            findings,
+            artifactPath: candidatePath,
+            checkedAgent: "health-gated",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Health gate enforcement",
+        agentName: "health-gated",
+    });
+
+    await assert.rejects(
+        () => runtime.installLastSessionToSandbox("sandbox-health"),
+        /Health gate failed:/,
+    );
+    assert.deepEqual(sandbox.loaded, []);
+
+    const installed = await runtime.installLastSessionToSandbox(
+        "sandbox-health",
+        { skipHealthGate: true },
+    );
+    assert.equal(installed.artifactPath, artifactPath);
+    assert.deepEqual(sandbox.loaded, [
+        { sandboxId: "sandbox-health", agentRef: artifactPath },
     ]);
 });
 

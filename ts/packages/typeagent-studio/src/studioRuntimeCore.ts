@@ -13,6 +13,7 @@ import {
     type RestorePhaseResult,
     routeStudioConversation,
 } from "@typeagent/core/onboardingBridge";
+import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
 import { InProcessEventStream } from "@typeagent/core/events";
 import {
     InMemorySandboxManager,
@@ -23,12 +24,29 @@ import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
 
+export type PackagingHealthGateStatus =
+    | "pass"
+    | "warn"
+    | "fail"
+    | "unavailable";
+
+export interface PackagingHealthGateResult {
+    status: PackagingHealthGateStatus;
+    summary: string;
+    findings: HealthFinding[];
+    artifactPath: string;
+    checkedAgent?: string;
+}
+
 export interface StudioRuntime {
     startOnboarding(seed: {
         description: string;
         agentName?: string;
     }): Promise<OnboardingState>;
-    installLastSessionToSandbox(sandboxId?: string): Promise<{
+    installLastSessionToSandbox(
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{
         sessionId: string;
         artifactPath: string;
     }>;
@@ -58,6 +76,7 @@ export interface StudioRuntime {
     restorePhaseOnActiveSession(
         phase: OnboardingPhaseName,
     ): Promise<RestorePhaseResult>;
+    checkPackagingHealthGate(artifactPath: string): Promise<PackagingHealthGateResult>;
     listPhases(): readonly OnboardingPhaseName[];
     routeConversation(prompt: string): {
         target: "onboarding" | "schemaAuthor";
@@ -79,6 +98,9 @@ export interface StudioRuntimeContext {
 export interface CreateStudioRuntimeOptions {
     onboarding?: InMemoryOnboardingBridge;
     sandbox?: SandboxManager;
+    evaluatePackagingHealthGate?: (
+        artifactPath: string,
+    ) => Promise<PackagingHealthGateResult>;
 }
 
 export function createStudioRuntimeCore(
@@ -89,6 +111,8 @@ export function createStudioRuntimeCore(
     const sandbox =
         options.sandbox ?? new InMemorySandboxManager({ emitter: events });
     const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
+    const evaluatePackagingHealthGate =
+        options.evaluatePackagingHealthGate ?? defaultEvaluatePackagingHealthGate;
 
     const profileDir = path.join(
         context.globalStorageFsPath,
@@ -105,13 +129,23 @@ export function createStudioRuntimeCore(
             );
             return state;
         },
-        async installLastSessionToSandbox(sandboxId = DEFAULT_SANDBOX_ID) {
+        async installLastSessionToSandbox(
+            sandboxId = DEFAULT_SANDBOX_ID,
+            installOptions = {},
+        ) {
             const sessionId = getRequiredSessionId(context);
             const session = await onboarding.snapshot(sessionId);
             const artifactPath = await resolveLocalArtifactPath(
                 session,
                 context,
             );
+
+            if (!installOptions.skipHealthGate) {
+                const gate = await evaluatePackagingHealthGate(artifactPath);
+                if (gate.status === "fail") {
+                    throw new Error(`Health gate failed: ${gate.summary}`);
+                }
+            }
 
             return installResolvedArtifact(
                 sandbox,
@@ -194,6 +228,9 @@ export function createStudioRuntimeCore(
             const sessionId = getRequiredSessionId(context);
             return onboarding.restorePhase(sessionId, phase);
         },
+        async checkPackagingHealthGate(artifactPath) {
+            return evaluatePackagingHealthGate(artifactPath);
+        },
         listPhases() {
             return ONBOARDING_PHASE_ORDER;
         },
@@ -205,6 +242,71 @@ export function createStudioRuntimeCore(
             };
         },
     };
+}
+
+async function defaultEvaluatePackagingHealthGate(
+    artifactPath: string,
+): Promise<PackagingHealthGateResult> {
+    const resolved = path.resolve(artifactPath);
+    const inferred = inferRepoRootAndAgent(resolved);
+    if (!inferred) {
+        return {
+            status: "unavailable",
+            summary:
+                "Could not infer repo root + agent from artifact path; health gate check skipped.",
+            findings: [],
+            artifactPath: resolved,
+        };
+    }
+
+    const service = new FileHealthService({ repoRoot: inferred.repoRoot });
+    const findings = await service.check(inferred.agent);
+    const errors = findings.filter((f) => f.severity === "error").length;
+    const warnings = findings.filter((f) => f.severity === "warning").length;
+
+    if (errors > 0) {
+        return {
+            status: "fail",
+            summary: `${errors} error findings and ${warnings} warning findings for agent ${inferred.agent}.`,
+            findings,
+            artifactPath: resolved,
+            checkedAgent: inferred.agent,
+        };
+    }
+    if (warnings > 0) {
+        return {
+            status: "warn",
+            summary: `${warnings} warning findings for agent ${inferred.agent}.`,
+            findings,
+            artifactPath: resolved,
+            checkedAgent: inferred.agent,
+        };
+    }
+
+    return {
+        status: "pass",
+        summary: `Health gate passed for agent ${inferred.agent}.`,
+        findings,
+        artifactPath: resolved,
+        checkedAgent: inferred.agent,
+    };
+}
+
+function inferRepoRootAndAgent(
+    artifactPath: string,
+): { repoRoot: string; agent: string } | undefined {
+    const normalized = path.normalize(artifactPath);
+    const parts = normalized.split(path.sep);
+    const packagesIndex = parts.lastIndexOf("packages");
+    if (packagesIndex < 0 || parts[packagesIndex + 1] !== "agents") {
+        return undefined;
+    }
+    const agent = parts[packagesIndex + 2];
+    if (!agent) {
+        return undefined;
+    }
+    const repoRoot = parts.slice(0, packagesIndex).join(path.sep) || path.sep;
+    return { repoRoot, agent };
 }
 
 async function installResolvedArtifact(
