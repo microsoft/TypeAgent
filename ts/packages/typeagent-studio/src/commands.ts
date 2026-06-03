@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs/promises";
 import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
@@ -259,6 +260,30 @@ export function registerStudioCommands(
                 await vscode.env.clipboard.writeText(summary);
                 void vscode.window.showInformationMessage(
                     "Copied onboarding summary to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.saveOnboardingSummary",
+            withErrors(async () => {
+                const summary = await getOnboardingSummary(runtime);
+                const targetUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file("onboarding-summary.md"),
+                    filters: {
+                        Markdown: ["md"],
+                    },
+                    title: "Save Onboarding Summary",
+                });
+                if (!targetUri) {
+                    return;
+                }
+
+                await fs.writeFile(targetUri.fsPath, summary, "utf-8");
+                void vscode.window.showInformationMessage(
+                    `Saved onboarding summary to ${targetUri.fsPath}.`,
                 );
             }),
         ),

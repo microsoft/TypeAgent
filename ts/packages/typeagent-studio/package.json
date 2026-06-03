@@ -98,6 +98,11 @@
         "command": "typeagent-studio.copyOnboardingSummary",
         "title": "Copy onboarding summary",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.saveOnboardingSummary",
+        "title": "Save onboarding summary",
+        "category": "TypeAgent Studio"
       }
     ]
   },
@@ -113,7 +118,8 @@
     "onCommand:typeagent-studio.showOnboardingSnapshot",
     "onCommand:typeagent-studio.restoreOnboardingPhase",
     "onCommand:typeagent-studio.openOnboardingSummary",
-    "onCommand:typeagent-studio.copyOnboardingSummary"
+    "onCommand:typeagent-studio.copyOnboardingSummary",
+    "onCommand:typeagent-studio.saveOnboardingSummary"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",
