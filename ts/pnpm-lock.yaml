@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@azure/core-xml': '>=1.5.0 <2.0.0'
+  exifreader: 4.30.1
   express>path-to-regexp: 0.1.13
   fast-xml-parser: '>=5.5.7 <6.0.0'
   hono: '>=4.12.8 <5.0.0'
@@ -199,7 +200,7 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       image-memory:
         specifier: workspace:*
@@ -306,7 +307,7 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       image-memory:
         specifier: workspace:*
@@ -4225,7 +4226,7 @@ importers:
         specifier: workspace:*
         version: link:../agents/email
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       file-size:
         specifier: ^1.0.0
@@ -4430,7 +4431,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       file-size:
         specifier: ^1.0.0
@@ -4818,7 +4819,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       sharp:
         specifier: ^0.33.5
@@ -5721,7 +5722,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       telemetry:
         specifier: workspace:*
