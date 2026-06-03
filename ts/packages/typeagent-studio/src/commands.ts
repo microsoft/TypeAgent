@@ -142,6 +142,44 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.advanceOnboardingPhase",
+            withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                const target = getAdvanceTargetPhase(
+                    runtime.listPhases(),
+                    state.currentPhase,
+                    state.phases,
+                );
+                if (!target) {
+                    void vscode.window.showInformationMessage(
+                        "All onboarding phases are complete.",
+                    );
+                    return;
+                }
+
+                const targetStatus = state.phases[target]?.status ?? "pending";
+                if (
+                    targetStatus !== "pending" &&
+                    !(await confirmPhaseRerun(target, targetStatus))
+                ) {
+                    return;
+                }
+
+                const defaultInputs =
+                    await runtime.getDefaultInputsForPhaseOnActiveSession(target);
+                const nextState = await runtime.runPhaseOnActiveSession(
+                    target,
+                    defaultInputs,
+                );
+                void vscode.window.showInformationMessage(
+                    `Advanced onboarding by running ${target}. Current phase is ${nextState.currentPhase}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.runRemainingOnboardingPhases",
             withErrors(async () => {
                 const state = await runtime.getActiveOnboardingSession();
@@ -316,5 +354,20 @@ function shouldOpenSummaryAfterBatchRun(): boolean {
     return vscode.workspace
         .getConfiguration("typeagentStudio.onboarding")
         .get<boolean>("openSummaryAfterBatchRun", true);
+}
+
+function getAdvanceTargetPhase(
+    orderedPhases: readonly OnboardingPhaseName[],
+    currentPhase: OnboardingPhaseName,
+    phases: Partial<Record<OnboardingPhaseName, { status: string }>>,
+): OnboardingPhaseName | undefined {
+    const currentStatus = phases[currentPhase]?.status ?? "pending";
+    if (currentStatus !== "complete") {
+        return currentPhase;
+    }
+
+    return orderedPhases.find(
+        (phase) => (phases[phase]?.status ?? "pending") !== "complete",
+    );
 }
 
