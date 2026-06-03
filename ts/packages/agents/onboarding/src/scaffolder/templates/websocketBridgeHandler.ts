@@ -234,6 +234,16 @@ async function ensureSharedBridge(): Promise<__AgentName__Bridge> {
 type __AgentName__Context = {
     enabledSchemas: Set<string>;
     portRegistration?: { release: () => void };
+    // Serializes concurrent updateAgentContext / closeAgentContext calls
+    // for this session so the (mutate set, await ensureSharedBridge,
+    // register port, bump refcount) sequence is atomic. Without this,
+    // an interleaved second enable could observe a non-empty set before
+    // the first call registers, skip registration itself, and then the
+    // first call rolling back on failure would leave the session
+    // "enabled" with no registration — and a later disable would
+    // decrement sharedRefCount it never incremented, tearing down the
+    // bridge another session still depends on.
+    pending?: Promise<void>;
 };
 
 export function instantiate(): AppAgent {
@@ -249,6 +259,24 @@ async function initializeAgentContext(): Promise<__AgentName__Context> {
     return { enabledSchemas: new Set() };
 }
 
+// Chain `fn` after any in-flight operation for this session. Prior
+// failures don't poison the chain (we swallow them when waiting), but
+// the caller of `fn` still sees its own thrown error.
+async function withSessionLock<T>(
+    ctx: __AgentName__Context,
+    fn: () => Promise<T>,
+): Promise<T> {
+    const prev = ctx.pending ?? Promise.resolve();
+    let release!: () => void;
+    ctx.pending = new Promise<void>((r) => (release = r));
+    try {
+        await prev.catch(() => {});
+        return await fn();
+    } finally {
+        release();
+    }
+}
+
 /**
  * Backstop cleanup invoked by the dispatcher when a session closes
  * without an explicit per-schema disable (crash, client disconnect,
@@ -261,20 +289,22 @@ async function closeAgentContext(
     context: SessionContext<__AgentName__Context>,
 ): Promise<void> {
     const ctx = context.agentContext;
-    const wasActive = ctx.enabledSchemas.size > 0;
-    ctx.enabledSchemas.clear();
-    ctx.portRegistration?.release();
-    delete ctx.portRegistration;
-    if (!wasActive) return;
-    sharedRefCount = Math.max(0, sharedRefCount - 1);
-    if (sharedRefCount === 0 && sharedBridge) {
-        const bridge = sharedBridge;
-        sharedBridge = undefined;
-        sharedClosingPromise = bridge.close().finally(() => {
-            sharedClosingPromise = undefined;
-        });
-        await sharedClosingPromise;
-    }
+    await withSessionLock(ctx, async () => {
+        const hadRegistration = ctx.portRegistration !== undefined;
+        ctx.enabledSchemas.clear();
+        ctx.portRegistration?.release();
+        delete ctx.portRegistration;
+        if (!hadRegistration) return;
+        sharedRefCount = Math.max(0, sharedRefCount - 1);
+        if (sharedRefCount === 0 && sharedBridge) {
+            const bridge = sharedBridge;
+            sharedBridge = undefined;
+            sharedClosingPromise = bridge.close().finally(() => {
+                sharedClosingPromise = undefined;
+            });
+            await sharedClosingPromise;
+        }
+    });
 }
 
 async function updateAgentContext(
@@ -283,13 +313,16 @@ async function updateAgentContext(
     schemaName: string,
 ): Promise<void> {
     const ctx = context.agentContext;
-    if (enable) {
-        if (ctx.enabledSchemas.has(schemaName)) return;
-        const isFirstForSession = ctx.enabledSchemas.size === 0;
-        ctx.enabledSchemas.add(schemaName);
-        try {
+    await withSessionLock(ctx, async () => {
+        if (enable) {
+            if (ctx.enabledSchemas.has(schemaName)) return;
             const bridge = await ensureSharedBridge();
-            if (isFirstForSession) {
+            // Register + bump refcount only on the first schema for this
+            // session. `ctx.portRegistration` (not set size) is the source
+            // of truth for "this session has incremented sharedRefCount",
+            // so a later disable / closeAgentContext won't double-decrement
+            // even if a prior enable failed mid-way.
+            if (ctx.portRegistration === undefined) {
                 // Per-session registration: the registrar allows multiple
                 // entries for ("__agentName__", "default") across sessions and
                 // lookup returns the most recent, so each active session
@@ -300,35 +333,32 @@ async function updateAgentContext(
                 );
                 sharedRefCount++;
             }
-        } catch (e) {
-            // Roll back per-session bookkeeping so a subsequent retry sees
-            // a clean slate. Shared module state is untouched — the bind
-            // itself failed, so we never incremented the refcount or
-            // registered.
+            ctx.enabledSchemas.add(schemaName);
+        } else {
+            if (!ctx.enabledSchemas.has(schemaName)) return;
             ctx.enabledSchemas.delete(schemaName);
-            throw e;
-        }
-    } else {
-        if (!ctx.enabledSchemas.has(schemaName)) return;
-        ctx.enabledSchemas.delete(schemaName);
-        if (ctx.enabledSchemas.size === 0) {
-            // Release this session's registration before potentially
-            // closing the server. Release is idempotent and a no-op if
-            // already released by the dispatcher's closeSessionContext
-            // backstop.
-            ctx.portRegistration?.release();
-            delete ctx.portRegistration;
-            sharedRefCount = Math.max(0, sharedRefCount - 1);
-            if (sharedRefCount === 0 && sharedBridge) {
-                const bridge = sharedBridge;
-                sharedBridge = undefined;
-                sharedClosingPromise = bridge.close().finally(() => {
-                    sharedClosingPromise = undefined;
-                });
-                await sharedClosingPromise;
+            if (
+                ctx.enabledSchemas.size === 0 &&
+                ctx.portRegistration !== undefined
+            ) {
+                // Release this session's registration before potentially
+                // closing the server. Release is idempotent and a no-op if
+                // already released by the dispatcher's closeSessionContext
+                // backstop.
+                ctx.portRegistration.release();
+                delete ctx.portRegistration;
+                sharedRefCount = Math.max(0, sharedRefCount - 1);
+                if (sharedRefCount === 0 && sharedBridge) {
+                    const bridge = sharedBridge;
+                    sharedBridge = undefined;
+                    sharedClosingPromise = bridge.close().finally(() => {
+                        sharedClosingPromise = undefined;
+                    });
+                    await sharedClosingPromise;
+                }
             }
         }
-    }
+    });
 }
 
 async function executeAction(
