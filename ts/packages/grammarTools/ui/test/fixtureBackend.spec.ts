@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { FixtureBackend } from "../src/fixture/fixtureBackend.js";
+import { FixtureBackend } from "./fixture/fixtureBackend.js";
 
 describe("FixtureBackend", () => {
     let backend: FixtureBackend;
