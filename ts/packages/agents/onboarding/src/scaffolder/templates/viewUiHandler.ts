@@ -71,7 +71,20 @@ function startViewServer(
             // TODO: serve static assets from ./site/, plus any
             // JSON/IPC endpoints the view needs. For now, a placeholder.
             res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(`<h1>__AgentName__ view</h1><p>Path: ${req.url}</p>`);
+            // Escape req.url before echoing it into HTML — it is attacker-
+            // controlled and would otherwise be a reflected XSS sink.
+            const safePath = String(req.url ?? "/").replace(
+                /[&<>"']/g,
+                (c) =>
+                    ({
+                        "&": "&amp;",
+                        "<": "&lt;",
+                        ">": "&gt;",
+                        '"': "&quot;",
+                        "'": "&#39;",
+                    })[c] as string,
+            );
+            res.end(`<h1>__AgentName__ view</h1><p>Path: ${safePath}</p>`);
         });
         let settled = false;
         const onError = (e: Error) => {
