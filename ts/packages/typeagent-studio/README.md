@@ -38,6 +38,14 @@ Current command palette surface:
 - TypeAgent Studio: Open onboarding summary
 - TypeAgent Studio: Copy onboarding summary
 - TypeAgent Studio: Save onboarding summary
+- TypeAgent Studio: Toggle auto-open summary after batch run
+
+Install behavior for `Install latest onboarding session to sandbox`:
+
+- Prefers explicit artifact paths emitted by onboarding `Scaffolder`/`Packaging` phase outputs.
+- Falls back to onboarding workspace record at `~/.typeagent/onboarding/<agent>/scaffolder/scaffolded-to.txt`.
+- Falls back to local workspace candidates under `packages/agents/<agentName>`.
+- Loads the resolved local artifact path into the sandbox before marking the session installed.
 
 ## Settings
 
