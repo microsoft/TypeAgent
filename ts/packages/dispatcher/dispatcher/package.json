@@ -62,7 +62,7 @@
     "chalk": "^5.4.1",
     "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
-    "exifreader": "^4.30.1",
+    "exifreader": "^4.39.0",
     "file-size": "^1.0.0",
     "glob": "^13.0.0",
     "grammar-tools-core": "workspace:*",
