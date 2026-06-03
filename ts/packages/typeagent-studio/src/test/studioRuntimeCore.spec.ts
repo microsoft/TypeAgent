@@ -167,6 +167,38 @@ test("installLastSessionToSandbox records sandbox assignment on active session",
     assert.deepEqual(state.installedSandboxIds, ["sandbox-a"]);
 });
 
+test("installLastSessionToSandbox uses packaging artifact output when provided", async () => {
+    const artifactPath = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-artifact-"),
+    );
+    const { context } = createContext();
+    const sandbox = new RecordingSandboxManager();
+    const runtime = createStudioRuntimeCore(context, {
+        sandbox,
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-output-path",
+            phaseRunner: async (_session, phase, _inputs) => {
+                if (phase === "Packaging") {
+                    return { artifactPath };
+                }
+                return { phase };
+            },
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Service desk workflow agent",
+        agentName: "service-desk",
+    });
+    await runtime.runPhaseOnActiveSession("Packaging", {});
+
+    const installed = await runtime.installLastSessionToSandbox("sandbox-b");
+    assert.equal(installed.artifactPath, artifactPath);
+    assert.deepEqual(sandbox.loaded, [
+        { sandboxId: "sandbox-b", agentRef: artifactPath },
+    ]);
+});
+
 test("clearActiveOnboardingSession removes the current session binding", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context, {
