@@ -6,7 +6,6 @@ settings:
 
 overrides:
   '@azure/core-xml': '>=1.5.0 <2.0.0'
-  exifreader: 4.30.1
   express>path-to-regexp: 0.1.13
   fast-xml-parser: '>=5.5.7 <6.0.0'
   hono: '>=4.12.8 <5.0.0'
@@ -156,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -200,8 +199,8 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       image-memory:
         specifier: workspace:*
         version: link:../../packages/memory/image
@@ -307,8 +306,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       image-memory:
         specifier: workspace:*
         version: link:../../packages/memory/image
@@ -1392,7 +1391,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -4226,8 +4225,8 @@ importers:
         specifier: workspace:*
         version: link:../agents/email
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -4431,8 +4430,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -4819,8 +4818,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
@@ -5722,8 +5721,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: 4.30.1
-        version: 4.30.1
+        specifier: ^4.39.0
+        version: 4.40.3
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
@@ -11800,8 +11799,8 @@ packages:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
 
-  exifreader@4.30.1:
-    resolution: {integrity: sha512-XoEKKQ0FmJwCKHnuErceFAM+MSfZ+px7Nci5BhBP1cgEHi/fHSBvQySsdfd0MaFHzNh8ITsRNwpnvkMuIPicrg==}
+  exifreader@4.40.3:
+    resolution: {integrity: sha512-58NvuV/lmrUoxR6Y3s5U3rwxn8ITB8xod2WgOkwew0oR5ziQj2bcJSXMbOTQPytnZi3grztHQhgZnHBSe3/P4A==}
 
   exit@0.1.2:
     resolution: {integrity: sha512-Zk/eNKV2zbjpKzrsQ+n1G6poVbErQxJ0LBOJXaKZ1EViLzH+hrLu9cdXI4zw9dBQJslwBEpbQ2P1oS7nDxs6jQ==}
@@ -16708,7 +16707,7 @@ snapshots:
 
   '@anthropic-ai/claude-agent-sdk@0.2.105':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -20062,7 +20061,7 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod-to-json-schema: 3.25.1(zod@4.1.13)
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 
@@ -24590,7 +24589,7 @@ snapshots:
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
 
-  exifreader@4.30.1:
+  exifreader@4.40.3:
     optionalDependencies:
       '@xmldom/xmldom': 0.9.10
 
