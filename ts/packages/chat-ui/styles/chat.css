@@ -429,6 +429,66 @@
   border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   object-fit: contain;
+  cursor: zoom-in;
+}
+
+/* Full-window image lightbox (click an image in a bubble to open). */
+.chat-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Hosts set --chat-lightbox-backdrop per theme (white in light mode,
+     black in dark mode). Falls back to a dark translucent backdrop. */
+  background: var(--chat-lightbox-backdrop, rgba(0, 0, 0, 0.75));
+  overflow: hidden;
+  outline: none;
+  user-select: none;
+}
+
+.chat-lightbox-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
+
+.chat-lightbox-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.chat-lightbox-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-lightbox-button:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.chat-lightbox-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .chat-message-hidden {

@@ -651,6 +651,8 @@ export class ChatPanel {
     private attachButton?: HTMLButtonElement;
     private cameraButton?: HTMLButtonElement;
     private voiceBanner?: HTMLDivElement;
+    private lightboxOverlay?: HTMLDivElement;
+    private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
     private speechState: SpeechState = "idle";
 
     constructor(
@@ -770,6 +772,205 @@ export class ChatPanel {
         this.setupInputHandlers();
         this.setupContextMenu();
         this.setupProviderAffordances();
+        this.setupImageLightbox();
+    }
+
+    /**
+     * Wire a delegated click handler so that clicking any image inside a
+     * chat bubble opens a full-window lightbox (translucent backdrop, the
+     * image centered) supporting mouse-wheel zoom, drag-to-pan, double-click
+     * to toggle zoom and Esc / backdrop-click to dismiss.
+     */
+    private setupImageLightbox() {
+        this.messageDiv.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName !== "IMG") return;
+            // Ignore tiny inline icons/avatars — only open for real content
+            // images (user attachments or agent-rendered images).
+            const img = target as HTMLImageElement;
+            const rect = img.getBoundingClientRect();
+            if (rect.width < 32 && rect.height < 32) return;
+            this.openImageLightbox(img.currentSrc || img.src);
+        });
+    }
+
+    /**
+     * Open a full-window image viewer overlaying the chat. Supports
+     * wheel-zoom centered on the cursor, drag-to-pan, double-click toggle,
+     * +/- controls and Esc / backdrop dismissal.
+     */
+    public openImageLightbox(src: string) {
+        // Only one lightbox at a time.
+        this.closeImageLightbox();
+
+        const overlay = document.createElement("div");
+        overlay.className = "chat-lightbox-overlay";
+        overlay.tabIndex = -1;
+
+        const img = document.createElement("img");
+        img.className = "chat-lightbox-img";
+        img.src = src;
+        img.draggable = false;
+        overlay.appendChild(img);
+
+        // Control bar (zoom in / out / reset / close).
+        const controls = document.createElement("div");
+        controls.className = "chat-lightbox-controls";
+        const makeBtn = (html: string, title: string) => {
+            const b = document.createElement("button");
+            b.className = "chat-lightbox-button";
+            b.innerHTML = html;
+            b.title = title;
+            controls.appendChild(b);
+            return b;
+        };
+        // Magnifier-glass glyphs for zoom out (−) and zoom in (+).
+        const magMinus = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="7" y1="10" x2="13" y2="10"/></svg>`;
+        const magPlus = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="10" y1="7" x2="10" y2="13"/></svg>`;
+        const zoomOutBtn = makeBtn(magMinus, "Zoom out");
+        const resetBtn = makeBtn("\u21BA", "Reset");
+        const zoomInBtn = makeBtn(magPlus, "Zoom in");
+        const closeBtn = makeBtn("\u00D7", "Close (Esc)");
+        overlay.appendChild(controls);
+
+        // View transform state.
+        let scale = 1;
+        let tx = 0;
+        let ty = 0;
+        const minScale = 1;
+        const maxScale = 10;
+
+        const apply = () => {
+            img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+            img.style.cursor =
+                scale > 1 ? (dragging ? "grabbing" : "grab") : "default";
+            // Disable the zoom controls at their respective limits.
+            zoomOutBtn.disabled = scale <= minScale + 1e-3;
+            zoomInBtn.disabled = scale >= maxScale - 1e-3;
+        };
+
+        const reset = () => {
+            scale = 1;
+            tx = 0;
+            ty = 0;
+            apply();
+        };
+
+        // Zoom toward a point (cx, cy) in viewport coords by factor.
+        const zoomAt = (cx: number, cy: number, factor: number) => {
+            const prev = scale;
+            scale = Math.min(maxScale, Math.max(minScale, scale * factor));
+            if (scale === prev) return;
+            const rect = img.getBoundingClientRect();
+            // Center of the image in viewport coords.
+            const ox = rect.left + rect.width / 2;
+            const oy = rect.top + rect.height / 2;
+            const ratio = scale / prev;
+            tx += (ox - cx) * (ratio - 1);
+            ty += (oy - cy) * (ratio - 1);
+            if (scale === minScale) {
+                tx = 0;
+                ty = 0;
+            }
+            apply();
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let startTx = 0;
+        let startTy = 0;
+
+        const onWheel = (ev: WheelEvent) => {
+            ev.preventDefault();
+            const factor = ev.deltaY < 0 ? 1.15 : 1 / 1.15;
+            zoomAt(ev.clientX, ev.clientY, factor);
+        };
+
+        const onPointerDown = (ev: PointerEvent) => {
+            if (scale <= 1) return;
+            dragging = true;
+            startX = ev.clientX;
+            startY = ev.clientY;
+            startTx = tx;
+            startTy = ty;
+            img.setPointerCapture(ev.pointerId);
+            apply();
+        };
+        const onPointerMove = (ev: PointerEvent) => {
+            if (!dragging) return;
+            tx = startTx + (ev.clientX - startX);
+            ty = startTy + (ev.clientY - startY);
+            apply();
+        };
+        const onPointerUp = (ev: PointerEvent) => {
+            if (!dragging) return;
+            dragging = false;
+            try {
+                img.releasePointerCapture(ev.pointerId);
+            } catch {
+                // pointer may already be released
+            }
+            apply();
+        };
+
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") {
+                ev.preventDefault();
+                this.closeImageLightbox();
+            } else if (ev.key === "+" || ev.key === "=") {
+                zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.2);
+            } else if (ev.key === "-" || ev.key === "_") {
+                zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.2);
+            } else if (ev.key === "0") {
+                reset();
+            }
+        };
+
+        // Wire events.
+        overlay.addEventListener("wheel", onWheel, { passive: false });
+        img.addEventListener("pointerdown", onPointerDown);
+        img.addEventListener("pointermove", onPointerMove);
+        img.addEventListener("pointerup", onPointerUp);
+        img.addEventListener("dblclick", (ev) => {
+            ev.preventDefault();
+            if (scale > 1) {
+                reset();
+            } else {
+                zoomAt(ev.clientX, ev.clientY, 2.5);
+            }
+        });
+        // Click on the backdrop (not the image/controls) dismisses.
+        overlay.addEventListener("click", (ev) => {
+            if (ev.target === overlay) this.closeImageLightbox();
+        });
+        zoomInBtn.addEventListener("click", () =>
+            zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.3),
+        );
+        zoomOutBtn.addEventListener("click", () =>
+            zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.3),
+        );
+        resetBtn.addEventListener("click", reset);
+        closeBtn.addEventListener("click", () => this.closeImageLightbox());
+        document.addEventListener("keydown", onKey);
+
+        this.lightboxOverlay = overlay;
+        this.lightboxKeyHandler = onKey;
+        this.rootElement.appendChild(overlay);
+        overlay.focus();
+        apply();
+    }
+
+    /** Tear down the image lightbox if it is open. */
+    public closeImageLightbox() {
+        if (this.lightboxKeyHandler) {
+            document.removeEventListener("keydown", this.lightboxKeyHandler);
+            this.lightboxKeyHandler = undefined;
+        }
+        if (this.lightboxOverlay) {
+            this.lightboxOverlay.remove();
+            this.lightboxOverlay = undefined;
+        }
     }
 
     /**
@@ -1866,6 +2067,13 @@ export class ChatPanel {
                 switch (entry.kind) {
                     case "user":
                         this.addUserMessage(entry.text, entry.requestId);
+                        // Seed the up-arrow command history with replayed
+                        // user commands so it recalls prior-session input.
+                        // Entries arrive oldest-first; unshift keeps the
+                        // most recent command at index 0.
+                        if (entry.text && entry.text.trim()) {
+                            this.commandHistory.unshift(entry.text);
+                        }
                         break;
                     case "agent-replace":
                         this.replaceAgentMessage(

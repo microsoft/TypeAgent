@@ -229,6 +229,37 @@ export function createChatPanelClient(
     let settings: ShellUserSettings = defaultUserSettings;
     const notifications: NotificationEntry[] = [];
 
+    // Replay gate: history replay (triggered by `dispatcher-initialized`)
+    // runs asynchronously while the main process may already be streaming
+    // live content (e.g. the startup `@greeting`). If a live agent message
+    // creates a per-request bubble and then `replayHistory()` clears the
+    // thread-container map mid-flight, the follow-up reply lands in a fresh
+    // container — producing a duplicate bubble. Buffer live display
+    // mutations until replay has finished so they render on the post-replay
+    // slate in call order.
+    let replayDone = false;
+    const pendingDisplayOps: Array<() => void> = [];
+    const afterReplay = (op: () => void) => {
+        if (replayDone) {
+            op();
+        } else {
+            pendingDisplayOps.push(op);
+        }
+    };
+    const flushPendingDisplayOps = () => {
+        replayDone = true;
+        const ops = pendingDisplayOps.splice(0);
+        for (const op of ops) {
+            op();
+        }
+    };
+
+    // Toggle the `dark-mode` class on the document body so the shell's
+    // theme styles (styles.less) and chat-ui CSS variables switch theme.
+    const applyDarkMode = (enabled: boolean) => {
+        document.body.classList.toggle("dark-mode", enabled);
+    };
+
     // Tracks open deferred interaction prompts so they can be dismissed when
     // another client answers or the server cancels the interaction.
     const activeInteractions = new Map<string, AbortController>();
@@ -349,6 +380,7 @@ export function createChatPanelClient(
                         value: settings.ui.darkMode,
                         onChange: (v) => {
                             settings.ui.darkMode = v as boolean;
+                            applyDarkMode(settings.ui.darkMode);
                             getClientAPI().saveSettings(settings);
                         },
                     },
@@ -421,6 +453,10 @@ export function createChatPanelClient(
         helpPanel,
     });
 
+    // Apply the initial theme from current settings (subsequent changes
+    // flow through updateSettings / the dark-mode toggle).
+    applyDarkMode(settings.ui.darkMode);
+
     // Recognized speech is fed into the input by ChatPanel itself (it
     // registers speechProvider.onResult internally); no wiring needed here.
 
@@ -479,45 +515,53 @@ export function createChatPanelClient(
         exit: () => window.close(),
         shutdown: () => window.close(),
         setUserRequest: (requestId, command) => {
-            const rid = ridStr(requestId);
-            // Local requests already rendered their bubble at send time;
-            // only render peer/replayed requests we haven't seen.
-            if (rid && !chatPanel.hasUserMessage(rid)) {
-                chatPanel.addUserMessage(command, rid);
-            }
+            afterReplay(() => {
+                const rid = ridStr(requestId);
+                // Local requests already rendered their bubble at send time;
+                // only render peer/replayed requests we haven't seen.
+                if (rid && !chatPanel.hasUserMessage(rid)) {
+                    chatPanel.addUserMessage(command, rid);
+                }
+            });
         },
         setDisplayInfo: (requestId, source, _actionIndex, action) => {
-            chatPanel.setDisplayInfo(
-                source,
-                undefined,
-                action,
-                ridStr(requestId),
-            );
+            afterReplay(() => {
+                chatPanel.setDisplayInfo(
+                    source,
+                    undefined,
+                    action,
+                    ridStr(requestId),
+                );
+            });
         },
         setDisplay: (message) => {
-            if (message.kind === "toast" || message.kind === "inline") {
-                chatPanel.showInline(message.message, message.source);
-                return;
-            }
-            chatPanel.replaceAgentMessage(
-                message.message,
-                message.source,
-                message.sourceIcon,
-                ridStr(message.requestId),
-            );
+            afterReplay(() => {
+                if (message.kind === "toast" || message.kind === "inline") {
+                    chatPanel.showInline(message.message, message.source);
+                    return;
+                }
+                chatPanel.replaceAgentMessage(
+                    message.message,
+                    message.source,
+                    message.sourceIcon,
+                    ridStr(message.requestId),
+                );
+            });
         },
         appendDisplay: (message, mode) => {
-            if (message.kind === "toast" || message.kind === "inline") {
-                chatPanel.showInline(message.message, message.source);
-                return;
-            }
-            chatPanel.addAgentMessage(
-                message.message,
-                message.source,
-                message.sourceIcon,
-                mode,
-                ridStr(message.requestId),
-            );
+            afterReplay(() => {
+                if (message.kind === "toast" || message.kind === "inline") {
+                    chatPanel.showInline(message.message, message.source);
+                    return;
+                }
+                chatPanel.addAgentMessage(
+                    message.message,
+                    message.source,
+                    message.sourceIcon,
+                    mode,
+                    ridStr(message.requestId),
+                );
+            });
         },
         appendDiagnosticData: () => {
             // Diagnostic data has no ChatPanel surface yet (deferred).
@@ -879,6 +923,10 @@ export function createChatPanelClient(
     async function replayDisplayHistory(): Promise<void> {
         const d = dispatcher;
         if (d === undefined) return;
+        // Gate live display mutations until replay completes so startup
+        // greeting / streamed content renders after history, on a clean
+        // thread-container slate (avoids duplicate per-request bubbles).
+        replayDone = false;
         try {
             chatPanel.setHistoryLoading(true);
             const entries = await d.getDisplayHistory();
@@ -887,6 +935,7 @@ export function createChatPanelClient(
             // Ignore — replay is best-effort.
         } finally {
             chatPanel.setHistoryLoading(false);
+            flushPendingDisplayOps();
         }
     }
 
@@ -915,6 +964,7 @@ export function createChatPanelClient(
         },
         updateSettings(updated: ShellUserSettings): void {
             settings = updated;
+            applyDarkMode(settings.ui.darkMode);
         },
         fileSelected(fileName: string, fileContent: string): void {
             // `fileContent` arrives as a bare base64 string from the main

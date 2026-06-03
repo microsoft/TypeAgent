@@ -9,11 +9,12 @@
   bottom: 100%;
   z-index: 100;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--completion-menu-border, rgba(0, 0, 0, 0.08));
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.12),
     0 1px 4px rgba(0, 0, 0, 0.06);
-  background-color: #fffffff0;
+  background-color: var(--completion-menu-bg, #fffffff0);
+  color: var(--completion-menu-fg, inherit);
   width: max-content;
   backdrop-filter: blur(8px);
 }
@@ -31,7 +32,10 @@
 }
 
 .autocomplete-container .completions li:hover {
-  background-color: rgba(167, 139, 250, 0.08);
+  background-color: var(
+    --completion-menu-hover,
+    rgba(167, 139, 250, 0.08)
+  );
 }
 
 .autocomplete-container .completions li .search-prefix {
