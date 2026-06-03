@@ -31,6 +31,8 @@
 
 .chat-input {
   display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
   padding: 5px;
   background-color: white;
   align-self: flex-end;
@@ -40,6 +42,11 @@
   border: solid 1px rgb(224, 224, 224);
   border-radius: 6px;
   position: relative;
+}
+
+.chat-input:focus-within {
+  border-color: var(--chat-input-focus-color, #a78bfa);
+  box-shadow: 0 1px 4px var(--chat-input-focus-glow, rgba(167, 139, 250, 0.15));
 }
 
 .chat-input.listening {
@@ -66,7 +73,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  width: calc(100% - 48px);
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 5px 8px;
   min-height: 30px;
   line-height: 30px;
@@ -100,6 +108,7 @@
 
 .chat-input-button {
   align-self: flex-end;
+  flex: 0 0 auto;
   border: none;
   background-color: transparent;
   width: 24px;
@@ -110,7 +119,7 @@
   /* Inherit the host theme's foreground so glyph buttons (e.g. stop ■)
      render in the same colour as the surrounding text instead of the
      browser default. Hosts can override --chat-input-button-color. */
-  color: var(--chat-input-button-color, #e8e8f0);
+  color: var(--chat-input-button-color, #3b4252);
 }
 
 .chat-input-button:disabled svg {
@@ -206,6 +215,8 @@
   gap: 6px;
   padding: 4px 8px;
   flex-wrap: wrap;
+  flex-basis: 100%;
+  order: -1;
   width: 100%;
 }
 
@@ -403,6 +414,21 @@
 
 .chat-message-user-text {
   white-space: break-spaces;
+}
+
+.chat-message-user-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-message-user-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  object-fit: contain;
 }
 
 .chat-message-hidden {
@@ -1211,4 +1237,208 @@ span.ansi-bright-white-fg {
 
 .chat-context-menu-item-disabled:hover {
   background: transparent;
+}
+
+/* =========================================================================
+   Provider affordances: voice banner, mic, attach/camera buttons
+   ========================================================================= */
+
+.chat-voice-banner {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+  border-bottom: 1px solid #64b5f6;
+  padding: 6px 12px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 12px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.chat-mic-button.listening {
+  color: #e53935;
+  animation: chat-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-mic-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+/* =========================================================================
+   Modal popups (settings / help)
+   ========================================================================= */
+
+.chat-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.chat-modal-card {
+  background-color: var(--chat-modal-bg, #ffffff);
+  color: var(--chat-modal-fg, #1a1a1a);
+  border-radius: 8px;
+  min-width: 360px;
+  max-width: 90%;
+  max-height: 85%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.chat-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.chat-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.chat-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+}
+
+.chat-modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.chat-settings-section {
+  margin-bottom: 16px;
+}
+
+.chat-settings-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.chat-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.chat-settings-label {
+  font-size: 13px;
+}
+
+.chat-settings-select,
+.chat-settings-text {
+  min-width: 160px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+/* --- Template action editor (proposeActionEdit) --------------------- */
+.action-container {
+  width: 100%;
+}
+
+.action-text table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.action-text tr {
+  border-top: 1px solid lightgray;
+  border-bottom: 1px solid lightgray;
+}
+
+.action-text td {
+  padding: 1px 10px 1px 10px;
+  height: 22px;
+}
+
+.action-text .autocomplete-container {
+  bottom: 25px;
+}
+
+.action-text td.name-cell {
+  width: 30%;
+}
+
+.action-text td.value-cell {
+  border-left: 1px solid lightgray;
+  width: 62%;
+}
+
+.action-text td.button-cell {
+  padding: 0px;
+  text-align: center;
+}
+
+.action-text input,
+.action-text select,
+.action-text button {
+  width: 100%;
+  height: 100%;
+}
+
+.action-button {
+  padding: 4px;
+  border: lightgray;
+  background-color: transparent;
+  display: none;
+  opacity: 0;
+  width: 100%;
+}
+
+.action-text-editable .action-button {
+  display: block;
+  opacity: 0.25;
+}
+
+.action-text-editable tr:hover .action-button,
+.action-text-editable tr.editing .action-button {
+  display: block;
+  opacity: 1;
+}
+
+.action-text-editable tr.missing .delete-button {
+  display: none;
+}
+
+.action-text tr.error td.name-cell,
+.action-text tr.error input {
+  color: red;
+  font-weight: bold;
+}
+
+.action-text tr.missing {
+  display: none;
+}
+
+.action-text-editable tr.missing {
+  display: table-row;
+}
+
+.action-text-editable tr.missing td.name-cell {
+  font-style: italic;
+  color: lightgray;
 }

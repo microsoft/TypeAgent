@@ -52,6 +52,21 @@ import {
     type PcCompletionState,
     type PcPost,
 } from "./partialCompletion.js";
+import type {
+    ChoiceOption,
+    HelpPanelContent,
+    ImageCaptureProvider,
+    SettingsPanelSchema,
+    SpeechInputProvider,
+    SpeechState,
+    TtsProvider,
+} from "./providers.js";
+import { openSettingsPopup, openHelpPopup } from "./popups.js";
+import {
+    TemplateEditor,
+    type TemplateEditServices,
+} from "./templateEditor.js";
+import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -423,6 +438,44 @@ export interface ChatPanelOptions {
      * Change at runtime via ChatPanel.setFeedbackUIVariant.
      */
     feedbackUIVariant?: FeedbackUIVariant;
+
+    /**
+     * Optional speech-to-text provider. When supplied, ChatPanel renders a
+     * microphone button (reflecting the provider's state) and a "listening"
+     * banner, and inserts recognized text into the input.
+     */
+    speechProvider?: SpeechInputProvider;
+    /**
+     * Optional text-to-speech provider. When supplied (and enabled),
+     * ChatPanel speaks agent "block" messages as they arrive.
+     */
+    ttsProvider?: TtsProvider;
+    /**
+     * Optional image-capture provider. When supplied, ChatPanel renders an
+     * attach-file button (if pickFile present) and a camera button (if
+     * openCamera present) that feed the next message's attachments.
+     */
+    imageCaptureProvider?: ImageCaptureProvider;
+    /**
+     * Optional data-driven settings popup descriptor. When supplied,
+     * ChatPanel.openSettings() renders a modal from it.
+     */
+    settingsPanel?: SettingsPanelSchema;
+    /**
+     * Optional help popup content. When supplied, ChatPanel.openHelp()
+     * renders a modal from it.
+     */
+    helpPanel?: HelpPanelContent;
+    /**
+     * Optional soft-hide ("trash") hook for the feedback widget. When
+     * supplied, the feedback footer shows a trash button that toggles the
+     * hidden state of the user or agent message for the given request.
+     */
+    onFeedbackHidden?: (
+        requestId: RequestId,
+        target: "user" | "agent",
+        hidden: boolean,
+    ) => void;
 }
 
 /**
@@ -582,6 +635,24 @@ export class ChatPanel {
     // can apply the latest state. Keyed by RequestId.requestId (UUID).
     private feedbackByRequestId = new Map<string, UserFeedbackEntry>();
 
+    // Optional host-supplied capability providers (see providers.ts).
+    private speechProvider?: SpeechInputProvider;
+    private ttsProvider?: TtsProvider;
+    private imageCaptureProvider?: ImageCaptureProvider;
+    private settingsPanel?: SettingsPanelSchema;
+    private helpPanel?: HelpPanelContent;
+    public onFeedbackHidden?: (
+        requestId: RequestId,
+        target: "user" | "agent",
+        hidden: boolean,
+    ) => void;
+    // Input-bar affordances created only when the matching provider exists.
+    private micButton?: HTMLButtonElement;
+    private attachButton?: HTMLButtonElement;
+    private cameraButton?: HTMLButtonElement;
+    private voiceBanner?: HTMLDivElement;
+    private speechState: SpeechState = "idle";
+
     constructor(
         private readonly rootElement: HTMLElement,
         options: ChatPanelOptions,
@@ -595,6 +666,13 @@ export class ChatPanel {
         this.onFeedback = options.onFeedback;
         this._feedbackUIVariant = options.feedbackUIVariant ?? "footer-always";
 
+        this.speechProvider = options.speechProvider;
+        this.ttsProvider = options.ttsProvider;
+        this.imageCaptureProvider = options.imageCaptureProvider;
+        this.settingsPanel = options.settingsPanel;
+        this.helpPanel = options.helpPanel;
+        this.onFeedbackHidden = options.onFeedbackHidden;
+
         // Build DOM structure
         const wrapper = document.createElement("div");
         wrapper.className = "chat-panel-wrapper";
@@ -605,6 +683,15 @@ export class ChatPanel {
         this.reconnectBanner.className = "chat-reconnect-banner";
         this.reconnectBanner.style.display = "none";
         wrapper.appendChild(this.reconnectBanner);
+
+        // Voice/listening banner — only created when a speech provider is
+        // present. Hidden until the provider reports a listening state.
+        if (this.speechProvider) {
+            this.voiceBanner = document.createElement("div");
+            this.voiceBanner.className = "chat-voice-banner";
+            this.voiceBanner.style.display = "none";
+            wrapper.appendChild(this.voiceBanner);
+        }
 
         // Scrollable message area
         this.messageDiv = document.createElement("div");
@@ -682,6 +769,160 @@ export class ChatPanel {
 
         this.setupInputHandlers();
         this.setupContextMenu();
+        this.setupProviderAffordances();
+    }
+
+    /**
+     * Create the mic / attach / camera buttons and wire the speech
+     * provider's state callbacks. Only the affordances whose providers are
+     * present get rendered, so hosts that omit a provider see no change.
+     */
+    private setupProviderAffordances() {
+        // Attach-file + camera buttons (image capture provider).
+        if (this.imageCaptureProvider?.pickFile) {
+            this.attachButton = document.createElement("button");
+            this.attachButton.className =
+                "chat-input-button chat-attach-button";
+            this.attachButton.title = "Attach image";
+            this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
+            this.attachButton.addEventListener("click", () =>
+                this.handleAttachFile(),
+            );
+            this.inputArea.insertBefore(this.attachButton, this.sendButton);
+        }
+        if (this.imageCaptureProvider?.openCamera) {
+            this.cameraButton = document.createElement("button");
+            this.cameraButton.className =
+                "chat-input-button chat-camera-button";
+            this.cameraButton.title = "Capture image";
+            this.cameraButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M9.4 4 8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-4l-1.4-2zm2.6 5.5a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>`;
+            this.cameraButton.addEventListener("click", () =>
+                this.handleCameraCapture(),
+            );
+            this.inputArea.insertBefore(this.cameraButton, this.sendButton);
+        }
+
+        // Microphone button + speech state wiring (speech provider).
+        if (this.speechProvider) {
+            this.micButton = document.createElement("button");
+            this.micButton.className = "chat-input-button chat-mic-button";
+            this.micButton.title = "Speak";
+            this.micButton.addEventListener("click", () =>
+                this.handleMicClick(),
+            );
+            this.inputArea.insertBefore(this.micButton, this.sendButton);
+
+            this.speechState = this.speechProvider.getState();
+            this.renderMicState();
+            this.speechProvider.onStateChange((state) => {
+                this.speechState = state;
+                this.renderMicState();
+                this.renderVoiceBanner();
+            });
+            this.speechProvider.onResult((text, final) => {
+                this.handleSpeechResult(text, final);
+            });
+        }
+    }
+
+    private renderMicState() {
+        if (!this.micButton) return;
+        const listening =
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word";
+        this.micButton.classList.toggle("listening", listening);
+        this.micButton.disabled = this.speechState === "disabled";
+        // Filled mic glyph; the `listening` class drives the pulse styling.
+        this.micButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>`;
+    }
+
+    private renderVoiceBanner() {
+        if (!this.voiceBanner) return;
+        const listening =
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word";
+        if (listening) {
+            this.voiceBanner.textContent =
+                this.speechState === "wake-word"
+                    ? "Waiting for wake word…"
+                    : "Listening…";
+            this.voiceBanner.style.display = "";
+        } else {
+            this.voiceBanner.style.display = "none";
+        }
+    }
+
+    private handleMicClick() {
+        if (!this.speechProvider) return;
+        if (
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word"
+        ) {
+            this.speechProvider.stop();
+        } else {
+            this.speechProvider.start();
+        }
+    }
+
+    private handleSpeechResult(text: string, final: boolean) {
+        // Interim results replace the input text live; the committed
+        // utterance is left in the input for the user to edit/send.
+        this.textInput.textContent = text;
+        this.sendButton.disabled = !text.trim();
+        if (final) {
+            this.placeCaretAtEnd();
+        }
+    }
+
+    private async handleAttachFile() {
+        const urls = await this.imageCaptureProvider?.pickFile();
+        if (urls && urls.length > 0) {
+            for (const url of urls) {
+                this.pendingAttachments.push(url);
+                this.showAttachmentPreview(url);
+            }
+        }
+    }
+
+    private async handleCameraCapture() {
+        const url = await this.imageCaptureProvider?.openCamera?.();
+        if (url) {
+            this.pendingAttachments.push(url);
+            this.showAttachmentPreview(url);
+        }
+    }
+
+    private placeCaretAtEnd() {
+        this.textInput.focus();
+        const range = document.createRange();
+        range.selectNodeContents(this.textInput);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+    }
+
+    /**
+     * Open the data-driven settings popup built from `options.settingsPanel`.
+     * No-op when no settings schema was supplied.
+     */
+    public openSettings() {
+        if (this.settingsPanel) {
+            openSettingsPopup(this.rootElement, this.settingsPanel);
+        }
+    }
+
+    /**
+     * Open the help popup built from `options.helpPanel`. No-op when no
+     * help content was supplied.
+     */
+    public openHelp() {
+        if (this.helpPanel) {
+            openHelpPopup(this.rootElement, this.helpPanel);
+        }
     }
 
     private setupContextMenu() {
@@ -740,7 +981,7 @@ export class ChatPanel {
         });
 
         this.textInput.addEventListener("input", () => {
-            this.sendButton.disabled = !this.textInput.textContent?.trim();
+            this.updateSendButtonState();
             this.scheduleCompletionFetch();
             this.applyInputHint();
         });
@@ -800,12 +1041,25 @@ export class ChatPanel {
             if (this.pendingAttachments.length === 0 && preview) {
                 preview.remove();
             }
+            this.updateSendButtonState();
         });
         const wrapper = document.createElement("span");
         wrapper.className = "chat-attachment-item";
         wrapper.appendChild(img);
         wrapper.appendChild(removeBtn);
         preview.appendChild(wrapper);
+        // An attached image makes the message sendable even with no text.
+        this.updateSendButtonState();
+    }
+
+    /**
+     * Recompute the send button's enabled state. The message is sendable
+     * when there is non-empty text OR at least one pending image attachment.
+     */
+    private updateSendButtonState() {
+        const hasText = !!this.textInput.textContent?.trim();
+        this.sendButton.disabled =
+            !hasText && this.pendingAttachments.length === 0;
     }
 
     private clearAttachmentPreview() {
@@ -916,10 +1170,14 @@ export class ChatPanel {
     }
 
     private send(requestId?: string) {
-        const text = this.textInput.textContent?.trim();
-        if (!text) return;
+        const text = this.textInput.textContent?.trim() ?? "";
+        // Allow sending when there is text OR at least one pending image
+        // attachment (image-only requests are valid — e.g. "what is this?").
+        if (!text && this.pendingAttachments.length === 0) return;
 
-        this.commandHistory.unshift(text);
+        if (text) {
+            this.commandHistory.unshift(text);
+        }
         this.historyIndex = -1;
         this.textInput.textContent = "";
         this.sendButton.disabled = true;
@@ -935,7 +1193,7 @@ export class ChatPanel {
         this.clearAttachmentPreview();
 
         const id = requestId ?? generateRequestId();
-        this.addUserMessage(text, id);
+        this.addUserMessage(text, id, attachments);
         // Toggle input controls into "processing" state — swaps the
         // send button for the stop button so the user can cancel an
         // in-flight command. setIdle() is invoked by the host on
@@ -1098,7 +1356,11 @@ export class ChatPanel {
      * can attach decorations to this bubble. `send()` always supplies one;
      * external callers can omit it for fire-and-forget messages.
      */
-    public addUserMessage(text: string, requestId?: string) {
+    public addUserMessage(
+        text: string,
+        requestId?: string,
+        attachments?: string[],
+    ) {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
@@ -1145,6 +1407,20 @@ export class ChatPanel {
         span.className = "chat-message-user-text";
         span.textContent = text;
         messageDiv.appendChild(span);
+
+        // Render any attached images inline in the user bubble so the user
+        // sees what they sent (camera capture, file attach, drag-drop).
+        if (attachments && attachments.length > 0) {
+            const imagesDiv = document.createElement("div");
+            imagesDiv.className = "chat-message-user-images";
+            for (const url of attachments) {
+                const img = document.createElement("img");
+                img.src = url;
+                img.className = "chat-message-user-image";
+                imagesDiv.appendChild(img);
+            }
+            messageDiv.appendChild(imagesDiv);
+        }
 
         bodyDiv.appendChild(messageDiv);
 
@@ -1321,6 +1597,13 @@ export class ChatPanel {
         );
 
         container.setMessage(content, source, appendMode);
+
+        // Speak the agent's reply when a TTS provider is enabled. Only
+        // "block" (full reply) content is spoken — inline/temporary status
+        // chunks are skipped to avoid reading partial/streamed fragments.
+        if (appendMode === undefined || appendMode === "block") {
+            this.maybeSpeak(content);
+        }
 
         // After the agent's HTML lands in the DOM, lift any embedded
         // user-signed-in marker into ChatPanel state. The marker is emitted
@@ -1891,6 +2174,88 @@ export class ChatPanel {
     }
 
     /**
+     * Extract a plain-text rendering of DisplayContent for speech. Returns
+     * undefined when there's nothing speakable.
+     */
+    private displayContentToText(content: DisplayContent): string | undefined {
+        if (typeof content === "string") return content;
+        if (content && typeof content === "object" && "content" in content) {
+            const inner = (content as { content: unknown }).content;
+            if (typeof inner === "string") return inner;
+        }
+        return undefined;
+    }
+
+    /** Speak `content` when a TTS provider is present and enabled. */
+    private maybeSpeak(content: DisplayContent): void {
+        if (!this.ttsProvider || !this.ttsProvider.isEnabled()) return;
+        const text = this.displayContentToText(content);
+        if (text && text.trim()) {
+            void this.ttsProvider.speak(text);
+        }
+    }
+
+    /**
+     * Present a set of mutually-exclusive choices below a system message and
+     * resolve with the chosen option's `value`. Generalizes askYesNo to an
+     * arbitrary list with optional per-choice keyboard accelerators. Maps
+     * directly from ClientIO.question / requestChoice.
+     */
+    public addChoicePrompt<T>(
+        message: string,
+        choices: ChoiceOption<T>[],
+        opts?: { defaultValue?: T },
+    ): Promise<T> {
+        return new Promise<T>((resolve) => {
+            const container = this.createAgentContainer("system", "");
+            container.setMessage(
+                { type: "text", content: message },
+                undefined,
+                undefined,
+            );
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "chat-prompt-buttons choice-panel";
+
+            const cleanup = () => {
+                buttonDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+            };
+
+            const choose = (value: T) => {
+                cleanup();
+                resolve(value);
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                const choice = choices.find((c) => c.keys?.includes(e.key));
+                if (choice) {
+                    e.preventDefault();
+                    choose(choice.value);
+                    return;
+                }
+                if (e.key === "Escape" && opts?.defaultValue !== undefined) {
+                    e.preventDefault();
+                    choose(opts.defaultValue);
+                }
+            };
+
+            for (const choice of choices) {
+                const btn = document.createElement("button");
+                btn.className = "chat-prompt-button choice-button";
+                if (choice.icon) btn.appendChild(choice.icon);
+                btn.appendChild(document.createTextNode(choice.label));
+                btn.addEventListener("click", () => choose(choice.value));
+                buttonDiv.appendChild(btn);
+            }
+
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(buttonDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
      * Show a Yes/No prompt and return the user's choice.
      */
     public askYesNo(message: string, defaultValue?: boolean): Promise<boolean> {
@@ -2007,7 +2372,130 @@ export class ChatPanel {
     }
 
     /**
+     * Full template-editor action proposal (ported from the shell). Renders
+     * the proposed action(s) as an editable field cascade with an
+     * Accept/Edit/Cancel flow:
+     *  - Accept  → resolves `undefined` (run the action(s) as-is).
+     *  - Cancel  → resolves `null` (cancel the request).
+     *  - Edit    → switches to edit mode (Replace/Cancel); Replace resolves the
+     *              edited action data array, Cancel returns to Accept/Edit/Cancel.
+     *
+     * `services` is injected by the host (shell) so chat-ui needs no
+     * agent-dispatcher dependency.
+     */
+    public proposeActionEdit(
+        actionTemplates: TemplateEditConfig,
+        source: string,
+        services: TemplateEditServices,
+    ): Promise<unknown> {
+        const container = this.createAgentContainer(source, "");
+
+        const actionContainer = document.createElement("div");
+        actionContainer.className = "action-container";
+        container.appendElement(actionContainer);
+
+        const actionCascade = new TemplateEditor(
+            actionContainer,
+            services,
+            actionTemplates,
+        );
+
+        return new Promise<unknown>((resolve) => {
+            let keyHandler: ((e: KeyboardEvent) => void) | undefined;
+            const setKeyHandler = (h: ((e: KeyboardEvent) => void) | undefined) => {
+                if (keyHandler) {
+                    document.removeEventListener("keydown", keyHandler);
+                }
+                keyHandler = h;
+                if (keyHandler) {
+                    document.addEventListener("keydown", keyHandler);
+                }
+            };
+
+            const makeButtons = (
+                buttons: { label: string; onClick: () => void }[],
+            ): HTMLDivElement => {
+                const buttonDiv = document.createElement("div");
+                buttonDiv.className = "chat-prompt-buttons";
+                for (const b of buttons) {
+                    const btn = document.createElement("button");
+                    btn.className = "chat-prompt-button";
+                    btn.textContent = b.label;
+                    btn.addEventListener("click", b.onClick);
+                    buttonDiv.appendChild(btn);
+                }
+                return buttonDiv;
+            };
+
+            let buttonDiv: HTMLDivElement | undefined;
+            const clearButtons = () => {
+                buttonDiv?.remove();
+                buttonDiv = undefined;
+            };
+
+            const finish = (value: unknown) => {
+                setKeyHandler(undefined);
+                clearButtons();
+                actionContainer.remove();
+                resolve(value);
+            };
+
+            const confirm = () => {
+                clearButtons();
+                buttonDiv = makeButtons([
+                    { label: "Accept", onClick: () => finish(undefined) },
+                    { label: "Edit", onClick: () => edit() },
+                    { label: "Cancel", onClick: () => finish(null) },
+                ]);
+                container.appendElement(buttonDiv);
+                setKeyHandler((e: KeyboardEvent) => {
+                    if (e.key === "Enter") {
+                        finish(undefined);
+                    } else if (e.key === "Escape") {
+                        finish(null);
+                    } else if (e.key === "Delete") {
+                        edit();
+                    }
+                });
+                this.scrollToBottom();
+            };
+
+            const edit = () => {
+                clearButtons();
+                actionCascade.setEditMode(true);
+                buttonDiv = makeButtons([
+                    {
+                        label: "Replace",
+                        onClick: () => {
+                            if (actionCascade.hasErrors) {
+                                return;
+                            }
+                            finish(actionCascade.value);
+                        },
+                    },
+                    {
+                        label: "Cancel",
+                        onClick: () => {
+                            actionCascade.reset();
+                            actionCascade.setEditMode(false);
+                            confirm();
+                        },
+                    },
+                ]);
+                container.appendElement(buttonDiv);
+                // No global key accelerators in edit mode — keystrokes go to
+                // the field inputs.
+                setKeyHandler(undefined);
+                this.scrollToBottom();
+            };
+
+            confirm();
+        });
+    }
+
+    /**
      * Register a dynamic display for periodic refresh.
+     *
      * The agent calls this to indicate content at displayId should be
      * refreshed after nextRefreshMs milliseconds.
      */

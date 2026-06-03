@@ -320,20 +320,6 @@ body {
   background-color: #00000000;
 }
 
-.user-textarea {
-  padding: 5px 8px;
-  display: block;
-  width: calc(100% - 48px);
-  overflow: hidden;
-  resize: none;
-  outline: 0px solid transparent;
-  min-height: 30px;
-  line-height: 30px;
-  font-family: inherit;
-  font-size: inherit;
-  align-self: flex-start;
-}
-
 .inline-ghost {
   color: #9ca3af;
   pointer-events: none;
@@ -644,38 +630,6 @@ body {
 
   .chat {
     display: none;
-  }
-}
-
-.chat-input.listening {
-  background-color: aquamarine;
-}
-
-.chat-input {
-  display: flex;
-  padding: 6px 8px;
-  background-color: @chat-input-bg;
-  align-self: flex-end;
-  margin: 8px 12px 12px 12px;
-  width: calc(
-    100% - 24px
-  ); // Note: subtracted value should match horizontal margin total from line above
-  border: solid 1px #e0e0e0;
-  border-radius: 12px;
-  position: relative;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: border-color 0.2s ease;
-
-  &:focus-within {
-    border-color: #a78bfa;
-    box-shadow: 0 1px 4px rgba(167, 139, 250, 0.15);
-  }
-
-  .completion-toggle {
-    position: absolute;
-    top: 0;
-    z-index: 50;
-    min-width: 60px;
   }
 }
 
@@ -1027,21 +981,6 @@ table.table-message td {
   font-size: 70%;
 }
 
-.chat-input-button {
-  align-self: flex-end;
-  border: none;
-  background-color: transparent;
-  width: 24px;
-  height: 24px;
-  padding: 0px;
-  margin: 6px 3.5px;
-  cursor: pointer;
-}
-
-.chat-input-button:disabled svg {
-  fill: lightslategray;
-}
-
 .chat-input-micSelector {
   border: 0px;
   margin-left: 25px;
@@ -1366,13 +1305,6 @@ input[type="file"] {
   border-bottom: 1px solid #ffc83d;
   text-align: center;
   flex: 0 0 auto;
-}
-
-.user-textarea:empty[data-placeholder]::before {
-  content: attr(data-placeholder);
-  color: rgba(128, 128, 128, 0.6);
-  font-style: italic;
-  pointer-events: none;
 }
 
 // ─── Voice Mode Layout ────────────────────────────────────────────────────────

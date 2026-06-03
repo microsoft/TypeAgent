@@ -172,12 +172,6 @@ const api: ClientAPI = {
     openImageFile: () => {
         ipcRenderer.send("open-image-file");
     },
-    getChatHistory: () => {
-        return ipcRenderer.invoke("get-chat-history");
-    },
-    saveChatHistory: (html: string, seq: number) => {
-        ipcRenderer.send("save-chat-history", html, seq);
-    },
     saveSettings: (settings: ShellUserSettings) => {
         ipcRenderer.send("save-settings", settings);
     },
