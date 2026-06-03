@@ -27,6 +27,10 @@ import {
 } from "../translation/actionSchemaJsonTranslator.js";
 import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
+import {
+    ConversationMessage,
+    ConversationMessageMeta,
+} from "conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -361,6 +365,11 @@ function formatToolCallDisplay(toolName: string, input: any): string {
         const schema = input?.schemaName ?? "?";
         const actionName = input?.action?.actionName ?? "?";
         return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+    } else if (toolName === "search_memory") {
+        const question = input?.question ?? JSON.stringify(input);
+        return `**Tool:** search_memory — \`${question}\``;
+    } else if (toolName === "remember") {
+        return `**Tool:** remember`;
     }
     return `**Tool:** ${toolName}`;
 }
@@ -535,6 +544,89 @@ function getCopilotSessionConfig(
         },
     });
 
+    const searchMemoryTool = defineTool("search_memory", {
+        description: [
+            "Search the user's conversation memory to recall information from earlier in this or prior conversations.",
+            "Provide a natural language question; returns an answer synthesized from relevant remembered messages.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description: "Natural language question to recall",
+                },
+            },
+            required: ["question"],
+        },
+        handler: async (args: any) => {
+            const { question } = args;
+            debug(`Searching memory: ${question}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    textResultForLlm: "Conversation memory is not available.",
+                    resultType: "success" as const,
+                };
+            }
+            const result = await memory.getAnswerFromLanguage(question);
+            if (!result.success) {
+                return {
+                    textResultForLlm: `Memory search failed: ${result.message}`,
+                    resultType: "failure" as const,
+                    error: result.message,
+                };
+            }
+            const answers = result.data.map(([, answerResponse]) =>
+                answerResponse.type === "Answered"
+                    ? answerResponse.answer
+                    : `No answer: ${answerResponse.whyNoAnswer}`,
+            );
+            return {
+                textResultForLlm: answers.join("\n\n"),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const rememberTool = defineTool("remember", {
+        description: [
+            "Save a new memory to the user's conversation memory so it can be recalled later.",
+            "Use this to durably record facts, decisions, or context discovered during reasoning.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                text: {
+                    type: "string",
+                    description: "The information to remember",
+                },
+            },
+            required: ["text"],
+        },
+        handler: async (args: any) => {
+            const { text } = args;
+            debug(`Remembering: ${text}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    textResultForLlm: "Conversation memory is not available.",
+                    resultType: "success" as const,
+                };
+            }
+            memory.queueAddMessage(
+                new ConversationMessage(
+                    text,
+                    new ConversationMessageMeta("reasoning", ["user"]),
+                ),
+            );
+            return {
+                textResultForLlm: "Remembered.",
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel();
     const reasoningEffort = resolveReasoningEffort();
 
@@ -543,10 +635,12 @@ function getCopilotSessionConfig(
         model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         streaming: true,
-        tools: [discoverTool, executeTool],
+        tools: [discoverTool, executeTool, searchMemoryTool, rememberTool],
         availableTools: [
             "discover_actions",
             "execute_action",
+            "search_memory",
+            "remember",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -571,6 +665,10 @@ function getCopilotSessionConfig(
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
+                "",
+                "## Conversation Memory Tools",
+                "- `search_memory`: Recall information from earlier in this or prior conversations",
+                "- `remember`: Durably save a new memory so it can be recalled later",
                 "",
                 "## Guidelines",
                 "- **PREFER built-in tools** for web search, file operations, and code investigation",

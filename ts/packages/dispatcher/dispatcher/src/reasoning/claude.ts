@@ -30,6 +30,10 @@ import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import { Entity } from "@typeagent/agent-sdk";
 import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
+import {
+    ConversationMessage,
+    ConversationMessageMeta,
+} from "conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -420,6 +424,87 @@ function getClaudeOptions(
         },
     };
 
+    const searchMemorySchema = {
+        question: z.string(),
+    };
+    const searchMemoryTool: SdkMcpToolDefinition<typeof searchMemorySchema> = {
+        name: "search_memory",
+        description: [
+            "Search the user's conversation memory to recall information from earlier in this or prior conversations.",
+            "Provide a natural language question; returns an answer synthesized from relevant remembered messages.",
+        ].join("\n"),
+        inputSchema: searchMemorySchema,
+        handler: async (args) => {
+            debugMcp(`search_memory question=${args.question}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Conversation memory is not available.",
+                        },
+                    ],
+                };
+            }
+            const result = await memory.getAnswerFromLanguage(args.question);
+            if (!result.success) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Memory search failed: ${result.message}`,
+                        },
+                    ],
+                    isError: true,
+                };
+            }
+            const answers = result.data.map(([, answerResponse]) =>
+                answerResponse.type === "Answered"
+                    ? answerResponse.answer
+                    : `No answer: ${answerResponse.whyNoAnswer}`,
+            );
+            return {
+                content: [{ type: "text", text: answers.join("\n\n") }],
+            };
+        },
+    };
+
+    const rememberSchema = {
+        text: z.string(),
+    };
+    const rememberTool: SdkMcpToolDefinition<typeof rememberSchema> = {
+        name: "remember",
+        description: [
+            "Save a new memory to the user's conversation memory so it can be recalled later.",
+            "Use this to durably record facts, decisions, or context discovered during reasoning.",
+        ].join("\n"),
+        inputSchema: rememberSchema,
+        handler: async (args) => {
+            debugMcp(`remember text=${args.text}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Conversation memory is not available.",
+                        },
+                    ],
+                };
+            }
+            memory.queueAddMessage(
+                new ConversationMessage(
+                    args.text,
+                    new ConversationMessageMeta("reasoning", ["user"]),
+                ),
+            );
+            return {
+                content: [{ type: "text", text: "Remembered." }],
+            };
+        },
+    };
+
     const sessionId = getSessionId(context);
 
     // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
@@ -470,6 +555,8 @@ function getClaudeOptions(
                 "You have access to TypeAgent action execution via MCP tools:",
                 "- `discover_actions`: Find available actions by schema name",
                 "- `execute_action`: Execute actions conforming to discovered schemas",
+                "- `search_memory`: Recall information from earlier in this or prior conversations",
+                "- `remember`: Durably save a new memory so it can be recalled later",
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
@@ -827,7 +914,7 @@ function getClaudeOptions(
         mcpServers: {
             [mcpServerName]: createSdkMcpServer({
                 name: mcpServerName,
-                tools: [discoverTool, executeTool],
+                tools: [discoverTool, executeTool, searchMemoryTool, rememberTool],
             }),
         },
     };
