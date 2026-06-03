@@ -26,6 +26,7 @@
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
+    "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
     "docs:generate": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write",
     "docs:generate:dry": "node tools/docsAutogen/bin/docs-autogen.cjs --render --dry-run",
     "docs:generate:llm": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write --llm",

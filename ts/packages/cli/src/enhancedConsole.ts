@@ -1916,19 +1916,10 @@ async function questionWithCompletion(
                 }
                 return;
             } else if (code === 13) {
-                // Enter - accept completion (if any) AND submit
-                if (
-                    filteredCompletions.length > 0 &&
-                    completionIndex < filteredCompletions.length
-                ) {
-                    const completion = filteredCompletions[completionIndex];
-                    input =
-                        completionPrefix +
-                        (filterStartIndex > completionPrefix.length
-                            ? " "
-                            : "") +
-                        completion;
-                }
+                // Enter - submit the input as typed. The inline completion is
+                // only a suggestion; use Tab to accept it. Enter must never
+                // mutate the input, otherwise typing `@config` and pressing
+                // Enter would submit `@config actions`.
                 if (controller) {
                     controller.accept();
                 }
