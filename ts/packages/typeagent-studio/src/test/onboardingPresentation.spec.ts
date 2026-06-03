@@ -3,9 +3,13 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { OnboardingState } from "@typeagent/core/onboardingBridge";
+import {
+    ONBOARDING_PHASE_ORDER,
+    type OnboardingState,
+} from "@typeagent/core/onboardingBridge";
 import {
     formatOnboardingSummary,
+    getAdvanceTargetPhase,
     getDefaultPhaseInputs,
 } from "../onboardingPresentation.js";
 
@@ -65,4 +69,54 @@ test("formatOnboardingSummary includes all phases and sandbox metadata", () => {
     assert.match(summary, /\| PhraseGen \| stale \|/);
     assert.match(summary, /\| SchemaGen \| pending \|/);
     assert.match(summary, /\| Packaging \| pending \|/);
+});
+
+test("getAdvanceTargetPhase returns current phase when not complete", () => {
+    const state = createState();
+    const target = getAdvanceTargetPhase(
+        ONBOARDING_PHASE_ORDER,
+        "SchemaGen",
+        state.phases,
+    );
+    assert.equal(target, "SchemaGen");
+});
+
+test("getAdvanceTargetPhase advances to next incomplete phase", () => {
+    const state = createState();
+    state.currentPhase = "Discovery";
+    state.phases.Discovery = {
+        status: "complete",
+        inputs: {},
+        ancestorPhaseHashes: [],
+    };
+    state.phases.PhraseGen = {
+        status: "complete",
+        inputs: {},
+        ancestorPhaseHashes: [],
+    };
+
+    const target = getAdvanceTargetPhase(
+        ONBOARDING_PHASE_ORDER,
+        "Discovery",
+        state.phases,
+    );
+    assert.equal(target, "SchemaGen");
+});
+
+test("getAdvanceTargetPhase returns undefined when all phases complete", () => {
+    const state = createState();
+    for (const phase of ONBOARDING_PHASE_ORDER) {
+        state.phases[phase] = {
+            status: "complete",
+            inputs: {},
+            ancestorPhaseHashes: [],
+        };
+    }
+
+    const target = getAdvanceTargetPhase(
+        ONBOARDING_PHASE_ORDER,
+        "Packaging",
+        state.phases,
+    );
+    assert.equal(target, undefined);
 });

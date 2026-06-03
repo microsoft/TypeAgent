@@ -4,6 +4,7 @@
 import {
     ONBOARDING_PHASE_ORDER,
     type OnboardingPhaseName,
+    type PhaseStatus,
     type OnboardingState,
 } from "@typeagent/core/onboardingBridge";
 
@@ -84,4 +85,19 @@ export function formatOnboardingSummary(state: OnboardingState): string {
     }
 
     return lines.join("\n");
+}
+
+export function getAdvanceTargetPhase(
+    orderedPhases: readonly OnboardingPhaseName[],
+    currentPhase: OnboardingPhaseName,
+    phases: Partial<Record<OnboardingPhaseName, { status: PhaseStatus }>>,
+): OnboardingPhaseName | undefined {
+    const currentStatus = phases[currentPhase]?.status ?? "pending";
+    if (currentStatus !== "complete") {
+        return currentPhase;
+    }
+
+    return orderedPhases.find(
+        (phase) => (phases[phase]?.status ?? "pending") !== "complete",
+    );
 }

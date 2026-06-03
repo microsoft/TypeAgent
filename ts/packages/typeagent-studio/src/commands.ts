@@ -4,7 +4,10 @@
 import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
-import { formatOnboardingSummary } from "./onboardingPresentation.js";
+import {
+    formatOnboardingSummary,
+    getAdvanceTargetPhase,
+} from "./onboardingPresentation.js";
 
 export function registerStudioCommands(
     context: vscode.ExtensionContext,
@@ -248,17 +251,6 @@ export function registerStudioCommands(
         ),
     );
 
-
-async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
-    const state = await runtime.getActiveOnboardingSession();
-    const doc = await vscode.workspace.openTextDocument({
-        language: "markdown",
-        content: formatOnboardingSummary(state),
-    });
-    await vscode.window.showTextDocument(doc, {
-        preview: false,
-    });
-}
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
@@ -356,18 +348,14 @@ function shouldOpenSummaryAfterBatchRun(): boolean {
         .get<boolean>("openSummaryAfterBatchRun", true);
 }
 
-function getAdvanceTargetPhase(
-    orderedPhases: readonly OnboardingPhaseName[],
-    currentPhase: OnboardingPhaseName,
-    phases: Partial<Record<OnboardingPhaseName, { status: string }>>,
-): OnboardingPhaseName | undefined {
-    const currentStatus = phases[currentPhase]?.status ?? "pending";
-    if (currentStatus !== "complete") {
-        return currentPhase;
-    }
-
-    return orderedPhases.find(
-        (phase) => (phases[phase]?.status ?? "pending") !== "complete",
-    );
+async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
+    const state = await runtime.getActiveOnboardingSession();
+    const doc = await vscode.workspace.openTextDocument({
+        language: "markdown",
+        content: formatOnboardingSummary(state),
+    });
+    await vscode.window.showTextDocument(doc, {
+        preview: false,
+    });
 }
 
