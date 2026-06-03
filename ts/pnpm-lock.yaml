@@ -2032,8 +2032,8 @@ importers:
         specifier: ^9.5.1
         version: 9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.27.7))
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agents/calendar:
     dependencies:
@@ -2641,8 +2641,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agents/montage:
     dependencies:
@@ -5473,7 +5473,7 @@ importers:
         version: 26.8.1(dmg-builder@26.8.1)
       electron-vite:
         specifier: ^4.0.1
-        version: 4.0.1(vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.0.1(vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3))
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
@@ -5493,8 +5493,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.2
-        version: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.3
+        version: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/telemetry:
     dependencies:
@@ -16182,8 +16182,8 @@ packages:
       terser:
         optional: true
 
-  vite@6.4.2:
-    resolution: {integrity: sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==}
+  vite@6.4.3:
+    resolution: {integrity: sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -24201,7 +24201,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@4.0.1(vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)):
+  electron-vite@4.0.1(vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.28.4)
@@ -24209,7 +24209,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -30298,7 +30298,7 @@ snapshots:
       less: 4.3.0
       terser: 5.39.2
 
-  vite@6.4.2(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
+  vite@6.4.3(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.25.11
       fdir: 6.5.0(picomatch@4.0.4)
@@ -30315,7 +30315,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.3
 
-  vite@6.4.2(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
+  vite@6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.25.11
       fdir: 6.5.0(picomatch@4.0.4)
