@@ -32,6 +32,13 @@ export interface StudioRuntime {
         sessionId: string;
         artifactPath: string;
     }>;
+    installArtifactToSandbox(
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{
+        sessionId: string;
+        artifactPath: string;
+    }>;
     clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
     runPhaseOnActiveSession(
@@ -106,20 +113,32 @@ export function createStudioRuntimeCore(
                 context,
             );
 
-            try {
-                await sandbox.status(sandboxId);
-            } catch {
-                await sandbox.start({
-                    id: sandboxId,
-                    mode: "inmemory",
-                    profileDir,
-                    agents: [],
-                });
+            return installResolvedArtifact(
+                sandbox,
+                onboarding,
+                sessionId,
+                sandboxId,
+                profileDir,
+                artifactPath,
+            );
+        },
+        async installArtifactToSandbox(
+            artifactPath,
+            sandboxId = DEFAULT_SANDBOX_ID,
+        ) {
+            const sessionId = getRequiredSessionId(context);
+            if (!(await pathExists(artifactPath))) {
+                throw new Error(`Artifact path does not exist: ${artifactPath}`);
             }
 
-            await sandbox.loadAgent(sandboxId, artifactPath);
-            await onboarding.installToSandbox(sessionId, sandboxId);
-            return { sessionId, artifactPath };
+            return installResolvedArtifact(
+                sandbox,
+                onboarding,
+                sessionId,
+                sandboxId,
+                profileDir,
+                artifactPath,
+            );
         },
         async clearActiveOnboardingSession() {
             await context.workspaceState.update(
@@ -188,6 +207,29 @@ export function createStudioRuntimeCore(
     };
 }
 
+async function installResolvedArtifact(
+    sandbox: SandboxManager,
+    onboarding: InMemoryOnboardingBridge,
+    sessionId: string,
+    sandboxId: string,
+    profileDir: string,
+    artifactPath: string,
+): Promise<{ sessionId: string; artifactPath: string }> {
+    try {
+        await sandbox.status(sandboxId);
+    } catch {
+        await sandbox.start({
+            id: sandboxId,
+            mode: "inmemory",
+            profileDir,
+            agents: [],
+        });
+    }
+
+    await sandbox.loadAgent(sandboxId, artifactPath);
+    await onboarding.installToSandbox(sessionId, sandboxId);
+    return { sessionId, artifactPath };
+}
 const ONBOARDING_WORKSPACE_ROOT = path.join(
     os.homedir(),
     ".typeagent",

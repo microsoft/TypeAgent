@@ -78,9 +78,36 @@ export function registerStudioCommands(
                         ignoreFocusOut: true,
                     })) ?? "studio-default";
 
-                const installed = await runtime.installLastSessionToSandbox(
-                    sandboxId,
-                );
+                let installed: Awaited<
+                    ReturnType<StudioRuntime["installLastSessionToSandbox"]>
+                >;
+                try {
+                    installed = await runtime.installLastSessionToSandbox(
+                        sandboxId,
+                    );
+                } catch (error) {
+                    const message =
+                        error instanceof Error ? error.message : "Unknown error";
+                    if (!message.includes("No local generated agent artifact")) {
+                        throw error;
+                    }
+
+                    const fallbackUri = await vscode.window.showOpenDialog({
+                        title: "Select local agent artifact to install",
+                        canSelectFiles: true,
+                        canSelectFolders: true,
+                        canSelectMany: false,
+                        openLabel: "Install",
+                    });
+                    if (!fallbackUri || fallbackUri.length === 0) {
+                        return;
+                    }
+
+                    installed = await runtime.installArtifactToSandbox(
+                        fallbackUri[0].fsPath,
+                        sandboxId,
+                    );
+                }
                 void vscode.window.showInformationMessage(
                     `Installed onboarding session ${installed.sessionId} from ${installed.artifactPath} into sandbox ${sandboxId}.`,
                 );

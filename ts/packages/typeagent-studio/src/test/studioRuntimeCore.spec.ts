@@ -199,6 +199,34 @@ test("installLastSessionToSandbox uses packaging artifact output when provided",
     ]);
 });
 
+test("installArtifactToSandbox installs explicit local path", async () => {
+    const artifactPath = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-manual-"),
+    );
+    const { context } = createContext();
+    const sandbox = new RecordingSandboxManager();
+    const runtime = createStudioRuntimeCore(context, {
+        sandbox,
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-manual",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Manual install path",
+        agentName: "manual-install",
+    });
+
+    const installed = await runtime.installArtifactToSandbox(
+        artifactPath,
+        "sandbox-c",
+    );
+    assert.equal(installed.artifactPath, artifactPath);
+    assert.deepEqual(sandbox.loaded, [
+        { sandboxId: "sandbox-c", agentRef: artifactPath },
+    ]);
+});
+
 test("clearActiveOnboardingSession removes the current session binding", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context, {
