@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=552cb63232bb4d0baee8b873b9936f6954e4966ad8f12993ed7ae6c288acf2ea -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4855101deb920a4f6c2db045379952465f0ae074e8adcf55321d71526484f765 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # command-executor-mcp — AI-generated documentation
@@ -66,6 +66,7 @@ Workspace:
 
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - weather-agent
 
@@ -85,6 +86,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

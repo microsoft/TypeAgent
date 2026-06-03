@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@azure/core-xml': '>=1.5.0 <2.0.0'
+  exifreader: 4.30.1
   express>path-to-regexp: 0.1.13
   fast-xml-parser: '>=5.5.7 <6.0.0'
   hono: '>=4.12.8 <5.0.0'
@@ -155,7 +156,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -199,7 +200,7 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       image-memory:
         specifier: workspace:*
@@ -306,7 +307,7 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       image-memory:
         specifier: workspace:*
@@ -971,6 +972,9 @@ importers:
 
   examples/workflow/cli:
     dependencies:
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../../packages/config
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -1383,6 +1387,15 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -1787,6 +1800,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -3362,6 +3378,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../../../dispatcher/types
       chat-ui:
         specifier: workspace:*
         version: link:../../../../chat-ui
@@ -4210,7 +4229,7 @@ importers:
         specifier: workspace:*
         version: link:../agents/email
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       file-size:
         specifier: ^1.0.0
@@ -4415,7 +4434,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       file-size:
         specifier: ^1.0.0
@@ -4803,7 +4822,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       sharp:
         specifier: ^0.33.5
@@ -5706,7 +5725,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.30.1
+        specifier: 4.30.1
         version: 4.30.1
       telemetry:
         specifier: workspace:*
@@ -16696,7 +16715,7 @@ snapshots:
 
   '@anthropic-ai/claude-agent-sdk@0.2.105':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@3.25.76)
+      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -20056,7 +20075,7 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
+      zod-to-json-schema: 3.25.1(zod@4.1.13)
     transitivePeerDependencies:
       - supports-color
 

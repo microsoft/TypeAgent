@@ -4,6 +4,7 @@
 import * as vscode from "vscode";
 import * as os from "os";
 import { connectAgentServer } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
@@ -1223,8 +1224,11 @@ export class AgentServerBridge {
         }
 
         try {
-            const result = await this.session.dispatcher.processCommand(
+            const result = await awaitCommand(
+                this.session.dispatcher,
                 command,
+                undefined,
+                undefined,
                 requestId,
             );
             // Command finished — tell webview to clean up temporary status

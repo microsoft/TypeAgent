@@ -36,6 +36,8 @@ export function buildImpactHTML(payload: ImpactPayload): string {
   .phrase td { font-size: 10px; }
   .phrase td.phrase-text { font-size: 11px; max-width: 480px; overflow-wrap: anywhere; }
   .schema-cell { color: #555; }
+  a { color: #25e; text-decoration: none; }
+  a:hover { text-decoration: underline; }
 </style></head>
 <body>
 <h1>optimization-impact</h1>
@@ -75,19 +77,31 @@ function renderWinnersTable(winners: WinnerImpact[]): string {
     // winners surface at the top.
     const sorted = [...winners].sort((a, b) => b.localNet - a.localNet);
     const rows = sorted
-        .map(
-            (w) =>
+        .map((w) => {
+            // Link case + attempt cells into the per-case browser when we
+            // know the case slug. The case.html lives at
+            // `cases/<slug>/case.html` relative to optimization-impact.html
+            // (both written into the run root). Attempt id anchors into
+            // the matching <details id="..."> in case.html.
+            const caseCell = w.caseSlug
+                ? `<a href="cases/${encodeURIComponent(w.caseSlug)}/case.html">${esc(w.caseId)}</a>`
+                : esc(w.caseId);
+            const attemptCell = w.caseSlug
+                ? `<a href="cases/${encodeURIComponent(w.caseSlug)}/case.html#${encodeURIComponent(w.attemptId)}">${esc(w.attemptId)}</a>`
+                : esc(w.attemptId);
+            return (
                 `<tr${w.causedRegression ? ` class="flagged"` : ""}>` +
-                `<td>${esc(w.attemptId)}</td>` +
-                `<td>${esc(w.caseId)}</td>` +
+                `<td>${attemptCell}</td>` +
+                `<td>${caseCell}</td>` +
                 `<td>${esc(w.schemasTouched.join(", "))}</td>` +
                 `<td class="rescue">+${w.localRescues}</td>` +
                 `<td class="regress">-${w.localRegressions}</td>` +
                 `<td class="regress">-${w.causedRegressions}</td>` +
                 `<td>${w.localNet >= 0 ? "+" : ""}${w.localNet}</td>` +
                 `<td>${w.causedRegression ? `<span class="flag">REVIEW</span>` : ""}</td>` +
-                `</tr>`,
-        )
+                `</tr>`
+            );
+        })
         .join("");
     return `<table>
       <thead><tr><th>attemptId</th><th>caseId</th><th>schemas</th><th>local rescues</th><th>local regressions</th><th>caused regressions</th><th>local net</th><th></th></tr></thead>

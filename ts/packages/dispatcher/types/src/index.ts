@@ -7,3 +7,4 @@ export * from "./displayLogEntry.js";
 export * from "./pendingInteraction.js";
 export * from "./queue.js";
 export * from "./queueStateMirror.js";
+export { awaitCommand } from "./awaitCommand.js";

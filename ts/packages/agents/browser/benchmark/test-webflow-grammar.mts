@@ -13,6 +13,7 @@
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync, rmSync } from "fs";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -106,7 +107,7 @@ async function main() {
 
     // Force reload schema to pick up grammar after seeding
     try {
-        await dispatcher.processCommand("@config agent browser.webFlows");
+        await awaitCommand(dispatcher, "@config agent browser.webFlows");
         console.log("Reloaded browser.webFlows schema");
     } catch (e) {
         // Ignore — just used to trigger schema reload
@@ -155,7 +156,7 @@ async function main() {
 
     for (const utterance of testUtterances) {
         try {
-            const result = await dispatcher.processCommand(utterance);
+            const result = await awaitCommand(dispatcher, utterance);
             const actions = (result as any)?.actions ?? [];
             const firstAction = actions[0];
             const schema = firstAction?.schemaName ?? "none";

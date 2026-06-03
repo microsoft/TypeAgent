@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { awaitCommand } from "agent-dispatcher";
 import {
     connectDispatcher,
     AGENT_SERVER_DEFAULT_PORT,
@@ -63,7 +64,7 @@ async function run(): Promise<void> {
         );
         try {
             console.log(`Sending request: ${request}`);
-            await dispatcher.processCommand(request);
+            await awaitCommand(dispatcher, request);
         } finally {
             if (dispatcher) {
                 await dispatcher.close();

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d41dc937899dc99befe28cbac878dab334051908698d848e7b755b5cd7214baa -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ce70db5ac4de0270a226dc2569196a21ea472ac9364e30a1cd63728510846139 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -85,13 +85,15 @@ External: `debug`, `isomorphic-ws`
 
 - [@typeagent/copilot-plugin](../../../packages/copilot-plugin/README.md)
 - [agent-cli](../../../packages/cli/README.md)
+- [agent-coda](../../../packages/coda/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
+- [browser-typeagent](../../../packages/agents/browser/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
 - tools-scripts
 - [uri-handler](../../../packages/uriHandler/README.md)
-- [vscode-shell](../../../packages/vscode-shell/README.md)
+- _…and 1 more workspace consumers._
 
 ### Files of interest
 
@@ -99,6 +101,6 @@ External: `debug`, `isomorphic-ws`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -17,6 +17,7 @@ import type {
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import * as fs from "fs";
 import * as path from "path";
@@ -144,7 +145,8 @@ class Logger {
 
     log(message: string): void {
         const s = this.format("INFO", message);
-        console.log(s);
+        // stdout is reserved for the MCP JSON-RPC stream; logs go to stderr.
+        console.error(s);
         this.logStream.write(s + "\n");
     }
 
@@ -402,7 +404,7 @@ export class CommandServer {
             if (this.config.cache.grammarSystem !== "completionBased") {
                 const cmd = `@config cache grammarSystem ${this.config.cache.grammarSystem}`;
                 this.logger.log(`Applying config: ${cmd}`);
-                await this.dispatcher.processCommand(cmd);
+                await awaitCommand(this.dispatcher, cmd);
             }
         } catch (error) {
             this.logger.error("Failed to apply configuration settings", error);
@@ -648,9 +650,7 @@ export class CommandServer {
 
         try {
             this.responseCollector.messages = [];
-            const result = await this.dispatcher.processCommand(
-                request.request,
-            );
+            const result = await awaitCommand(this.dispatcher, request.request);
 
             if (result?.lastError) {
                 return toolResult(
@@ -896,7 +896,7 @@ export class CommandServer {
         this.responseCollector.messages = [];
 
         try {
-            const result = await this.dispatcher.processCommand(actionCommand);
+            const result = await awaitCommand(this.dispatcher, actionCommand);
             if (result?.lastError) {
                 return toolResult(`Action error: ${result.lastError}`);
             }

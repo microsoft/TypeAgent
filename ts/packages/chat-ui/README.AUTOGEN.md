@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9c136e066cb4fe832f2bc1ecd3ce36c48323de3f20631f8b793beece9e86435c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=14eaf887baa8e8e0ec64e81b20664b8f103afe6e4f36d2ce812a65f881f58bb0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -97,10 +97,10 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/feedbackWidget.ts`, …and 4 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/contextMenu.ts`, …and 5 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

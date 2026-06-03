@@ -19,6 +19,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher, IAgentMessage } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     createClientIO,
@@ -224,12 +225,39 @@ class TypeAgentMcpServer {
                         return;
                     }
 
+                    // Emit progress for status/info/warning/error messages
+                    // (reasoning "thinking", tool calls, and their results
+                    // including error results). These are progress, not final
+                    // content, so we stream them and skip responseCollector —
+                    // keeping every tool call paired with its result.
+                    const msg = message?.message;
+                    if (typeof msg === "object" && msg && "kind" in msg) {
+                        const kind = (msg as { kind: unknown }).kind;
+                        if (
+                            kind === "info" ||
+                            kind === "status" ||
+                            kind === "warning" ||
+                            kind === "error"
+                        ) {
+                            messageCount++;
+                            if (extra) {
+                                void this.sendProgress(
+                                    extra,
+                                    cleaned,
+                                    messageCount,
+                                    0,
+                                );
+                            }
+                            return;
+                        }
+                    }
+
                     responseCollector.messages.push(cleaned);
                 },
             });
 
             dispatcher = await connectToTypeAgent(clientIO);
-            const result = await dispatcher.processCommand(command);
+            const result = await awaitCommand(dispatcher, command);
 
             if (result?.lastError) {
                 return toolResult(`Error: ${result.lastError}`);

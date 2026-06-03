@@ -38,8 +38,6 @@ The package is structured as follows:
 - **Schema**: [androidMobileSchema.ts](./src/androidMobileSchema.ts) outlines the types and parameters for each action the agent can perform.
 - **Handler**: [androidMobileActionHandler.ts](./src/androidMobileActionHandler.ts) contains the logic for executing the actions defined in the schema.
 
-The agent is instantiated through the `instantiate` function, which sets up the agent context and handles action execution.
-
 ### Key Files and Their Responsibilities
 
 - **[androidMobileManifest.json](./src/androidMobileManifest.json)**: Contains metadata about the agent, such as its description and the schema file it uses.
@@ -131,6 +129,6 @@ _5 actions implemented by this agent, parsed deterministically from `./src/andro
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

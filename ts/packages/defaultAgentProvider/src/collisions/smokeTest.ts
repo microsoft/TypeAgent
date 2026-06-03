@@ -17,7 +17,7 @@ loadDotenv();
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -100,10 +100,11 @@ async function main() {
         if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
 
         process.stderr.write("\n--- @collision events (sanity) ---\n");
-        await dispatcher.processCommand("@collision events");
+        await awaitCommand(dispatcher, "@collision events");
 
         process.stderr.write("\n--- @collision corpus visualize ---\n");
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision corpus visualize --workdir "${workdir}"`,
         );
 
@@ -133,7 +134,8 @@ async function main() {
         );
         const beforeMtime = fs.statSync(reclassFresh).mtimeMs;
         await new Promise((r) => setTimeout(r, 50));
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision corpus reanalyze --workdir "${workdir}"`,
         );
         const afterMtime = fs.statSync(reclassFresh).mtimeMs;
@@ -143,7 +145,8 @@ async function main() {
         process.stderr.write("✓ reanalyze handler rewrote reclassified file\n");
 
         process.stderr.write("\n--- @collision corpus recovery ---\n");
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision corpus recovery --workdir "${workdir}"`,
         );
         process.stderr.write("✓ recovery handler ran\n");
@@ -153,7 +156,8 @@ async function main() {
         );
         const recoveryHtml = path.join(workdir, "recovery-viz.html");
         if (fs.existsSync(recoveryHtml)) fs.unlinkSync(recoveryHtml);
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision corpus visualize-recovery --workdir "${workdir}"`,
         );
         if (!fs.existsSync(recoveryHtml)) {
@@ -179,7 +183,8 @@ async function main() {
         // throws, either the subcommand isn't registered or its argument
         // parsing regressed. Real end-to-end runs happen by hand in a live
         // shell where translation is enabled.
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision corpus translate --in "${path.join(workdir, "DOES-NOT-EXIST-corpus.json")}" --workdir "${workdir}"`,
         );
         process.stderr.write(
@@ -192,7 +197,8 @@ async function main() {
         // The corpus probe-results-reclassified.json was already copied above
         // as `inFile`; the preview command picks it up automatically from the
         // workdir.
-        await dispatcher.processCommand(
+        await awaitCommand(
+            dispatcher,
             `@collision neighborhoods preview --workdir "${workdir}" --threshold 0.78`,
         );
         if (!fs.existsSync(previewHtml)) {

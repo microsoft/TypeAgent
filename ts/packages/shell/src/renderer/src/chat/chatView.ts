@@ -29,7 +29,7 @@ import {
 } from "agent-dispatcher";
 // QueueStateMirror is a value import; route through the pure types pkg so vite
 // doesn't bundle agent-dispatcher's server-only deps (telemetry, node:fs, ...).
-import { QueueStateMirror } from "@typeagent/dispatcher-types";
+import { QueueStateMirror, awaitCommand } from "@typeagent/dispatcher-types";
 
 import { PartialCompletion } from "../partial";
 import { ChoicePanel, InputChoice } from "../choicePanel";
@@ -917,10 +917,12 @@ export class ChatView {
         // Start command processing first so we have the promise for MessageGroup.
         // localId becomes clientRequestId in the RequestId; the server assigns
         // a UUID (requestId.requestId) and broadcasts it via setUserRequest.
-        const commandResult = this.getDispatcher().processCommand(
+        const commandResult = awaitCommand(
+            this.getDispatcher(),
             requestText,
-            localId,
             images,
+            undefined,
+            localId,
         );
 
         const mg: MessageGroup = new MessageGroup(

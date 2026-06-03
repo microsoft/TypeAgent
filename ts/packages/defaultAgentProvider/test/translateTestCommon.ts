@@ -6,7 +6,12 @@ loadConfigSync();
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
-import { CommandResult, createDispatcher, Dispatcher } from "agent-dispatcher";
+import {
+    awaitCommand,
+    CommandResult,
+    createDispatcher,
+    Dispatcher,
+} from "agent-dispatcher";
 import { ChatHistoryInputAssistant } from "agent-dispatcher/internal";
 import {
     normalizeParamValue,
@@ -211,7 +216,7 @@ async function setupOneStep(
     curr: TranslateTestStep,
     dispatcher: Dispatcher,
 ) {
-    const result = await dispatcher.processCommand("@history clear");
+    const result = await awaitCommand(dispatcher, "@history clear");
     checkResultError(result, "Failed to clear history");
     for (const step of steps) {
         if (step === curr) {
@@ -220,7 +225,8 @@ async function setupOneStep(
         const { request, history } = step;
 
         if (history !== undefined) {
-            const insertResult = await dispatcher.processCommand(
+            const insertResult = await awaitCommand(
+                dispatcher,
                 `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
             );
             checkResultError(insertResult, "Failed to insert history");
@@ -232,7 +238,7 @@ async function setupOneStep(
 
 async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
     const { request, attachments } = step;
-    return await dispatcher.processCommand(request, undefined, attachments);
+    return await awaitCommand(dispatcher, request, attachments);
 }
 
 function validateCommandResult(

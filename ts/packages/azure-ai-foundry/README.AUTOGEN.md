@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5baa0b53d27e713380b8c2e38dfd695e83d1cf918bf36788fce50dc87664c2ca -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e7ddce9617b08333b4fae412baa477e9996c4d3fe0119c83774dd4ce1d6ff900 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # azure-ai-foundry — AI-generated documentation
@@ -82,6 +82,7 @@ By following these steps, you can effectively extend the `azure-ai-foundry` pack
 Workspace:
 
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [aiclient](../../packages/aiclient/README.md)
 - [telemetry](../../packages/telemetry/README.md)
 - [typeagent](../../packages/typeagent/README.md)
@@ -101,6 +102,6 @@ External: `@azure/ai-agents`, `@azure/ai-projects`, `@azure/identity`, `async`, 
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter azure-ai-foundry docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter azure-ai-foundry docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

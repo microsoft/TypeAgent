@@ -15,7 +15,10 @@
 import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerInvokeFunctions,
@@ -241,19 +244,27 @@ async function doConnect(): Promise<Dispatcher> {
                     );
                     resolved = true;
 
-                    createClientIORpcServer(
-                        clientIO,
-                        channel.createChannel(
-                            getClientIOChannelName(result.conversationId),
-                        ),
-                    );
-
-                    const d = createDispatcherRpcClient(
+                    const {
+                        dispatcher: d,
+                        notifyCommandComplete,
+                        notifyRequestCancelled,
+                    } = createDispatcherRpcClient(
                         channel.createChannel(
                             getDispatcherChannelName(result.conversationId),
                         ),
                         result.connectionId,
                     );
+
+                    createClientIORpcServer(
+                        wrapClientIOForCompletion(clientIO, {
+                            notifyCommandComplete,
+                            notifyRequestCancelled,
+                        }),
+                        channel.createChannel(
+                            getClientIOChannelName(result.conversationId),
+                        ),
+                    );
+
                     // Override close to close our WebSocket
                     d.close = async () => {
                         debug("Closing dispatcher WebSocket");

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bf3ea8a2bf675e78ea8bddbfc85245e44ffdd5963f273823b8550bbc395cb59e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c2f7b8d8a07b59a0ce6db0dfa0415992a2f631e979ed9957aed091aac2a5f543 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music — AI-generated documentation
@@ -72,6 +72,7 @@ Workspace:
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
+- [@typeagent/config](../../../packages/config/README.md)
 - [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: `chalk`, `debug`, `dotenv`, `express`, `open`, `typechat`
@@ -94,6 +95,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=23accd865bc873670c2b37254248a90d73778e849cd7434d05094f2a8d407c03 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cade8197f30cbdbfd9ddebf8b7f78caa0326902c850f8a040b6329e33fcc362a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowledgevisualizer — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The Knowledge Visualizer tool is an experimental application designed for browsing stored knowledge within the system. Its primary purpose is to serve as a debugging mechanism, allowing developers to visualize and interact with various aspects of the stored data.
+The Knowledge Visualizer is an experimental TypeScript library designed to help developers browse and debug stored knowledge within the system. It provides various visualization tools to represent hierarchical structures, word clouds, and other data forms, making it easier to understand and interact with the stored information.
 
 ## What it does
 
-The Knowledge Visualizer package provides a set of tools to visualize different types of knowledge stored within the system. It includes functionalities to display hierarchical structures, word clouds, and other visual representations of data. The package listens for updates and dynamically refreshes the visualizations based on the incoming data. Key actions include:
+The Knowledge Visualizer package offers functionalities to display different types of knowledge stored within the system. It includes tools for hierarchical structures, word clouds, and other visual representations. The package listens for updates and dynamically refreshes the visualizations based on incoming data. Key actions include:
 
 - `updateListVisualization`: Updates the list visualization.
 - `updateKnowledgeVisualization`: Updates the knowledge graph visualization.
 - `updateKnowledgeHierarchyVisualization`: Updates the hierarchical visualization.
 - `updateWordCloud`: Updates the word cloud visualization.
 
-These actions enable the tool to provide real-time updates and ensure that the visualizations reflect the most current state of the data.
+These actions enable the tool to provide real-time updates, ensuring that the visualizations reflect the most current state of the data.
 
 ## Setup
 
@@ -76,6 +76,6 @@ External: `chalk`, `d3`, `d3-cloud`, `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledgevisualizer docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledgevisualizer docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
