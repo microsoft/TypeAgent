@@ -55,13 +55,17 @@ export function makeClientIOMessage(
     let sourceIcon: string | undefined;
     // When a reasoning engine is active, use its icon instead of the
     // default dispatcher robot emoji.
-    if (context.reasoningSourceIcon) {
+    if (context.reasoningSourceIcon && source === "dispatcher") {
         sourceIcon = context.reasoningSourceIcon;
     } else {
         try {
             if (context.agents.isAppAgentName(source)) {
                 sourceIcon = context.agents.getAppAgentEmoji(source);
             }
+        } catch {
+            // If we can't get the emoji, that's okay - just leave it undefined
+        }
+    }
         } catch {
             // If we can't get the emoji, that's okay - just leave it undefined
         }
