@@ -53,12 +53,18 @@ export function makeClientIOMessage(
 
     // Get the source icon (emoji) from the agent manifest
     let sourceIcon: string | undefined;
-    try {
-        if (context.agents.isAppAgentName(source)) {
-            sourceIcon = context.agents.getAppAgentEmoji(source);
+    // When a reasoning engine is active, use its icon instead of the
+    // default dispatcher robot emoji.
+    if (context.reasoningSourceIcon && source === "dispatcher") {
+        sourceIcon = context.reasoningSourceIcon;
+    } else {
+        try {
+            if (context.agents.isAppAgentName(source)) {
+                sourceIcon = context.agents.getAppAgentEmoji(source);
+            }
+        } catch {
+            // If we can't get the emoji, that's okay - just leave it undefined
         }
-    } catch {
-        // If we can't get the emoji, that's okay - just leave it undefined
     }
 
     return {

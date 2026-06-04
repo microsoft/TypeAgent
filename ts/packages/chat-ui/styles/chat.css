@@ -744,6 +744,15 @@ table.table-message td {
   font-style: normal;
 }
 
+/* Elapsed-time badge for reasoning step bubbles */
+.chat-step-elapsed {
+  font-size: 11px;
+  font-weight: normal;
+  font-style: italic;
+  color: #888;
+  margin-left: 6px;
+}
+
 /* Clickable timestamp to toggle action details */
 .chat-timestamp-toggle {
   cursor: pointer;
