@@ -361,6 +361,20 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Restored ${phase}. Stale downstream phases: ${affected}.`,
                 );
+
+                if (restored.affectedDownstream.length > 0) {
+                    const rerun = await confirmReconciliationRun(
+                        restored.affectedDownstream,
+                    );
+                    if (rerun) {
+                        const rerunResult = await runtime.rerunPhasesOnActiveSession(
+                            restored.affectedDownstream,
+                        );
+                        void vscode.window.showInformationMessage(
+                            `Reconciled phases: ${rerunResult.rerunPhases.join(", ")}. Current phase: ${rerunResult.state.currentPhase}.`,
+                        );
+                    }
+                }
             }),
         ),
     );
@@ -374,6 +388,18 @@ async function confirmHealthGateBypass(message: string): Promise<boolean> {
         installAnyway,
     );
     return choice === installAnyway;
+}
+
+async function confirmReconciliationRun(
+    stalePhases: readonly OnboardingPhaseName[],
+): Promise<boolean> {
+    const rerun = "Rerun stale phases";
+    const choice = await vscode.window.showWarningMessage(
+        `Downstream phases are stale (${stalePhases.join(", ")}). Re-run them now to reconcile?`,
+        { modal: true },
+        rerun,
+    );
+    return choice === rerun;
 }
 
 function withErrors<TArgs extends unknown[]>(

@@ -73,6 +73,10 @@ export interface StudioRuntime {
         state: OnboardingState;
         completedPhases: OnboardingPhaseName[];
     }>;
+    rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }>;
     restorePhaseOnActiveSession(
         phase: OnboardingPhaseName,
     ): Promise<RestorePhaseResult>;
@@ -222,6 +226,26 @@ export function createStudioRuntimeCore(
             return {
                 state,
                 completedPhases,
+            };
+        },
+        async rerunPhasesOnActiveSession(phases) {
+            const sessionId = getRequiredSessionId(context);
+            let state = await onboarding.snapshot(sessionId);
+            const rerunPhases: OnboardingPhaseName[] = [];
+
+            for (const phase of phases) {
+                await onboarding.runPhase(
+                    sessionId,
+                    phase,
+                    getDefaultPhaseInputs(state, phase),
+                );
+                rerunPhases.push(phase);
+                state = await onboarding.snapshot(sessionId);
+            }
+
+            return {
+                state,
+                rerunPhases,
             };
         },
         async restorePhaseOnActiveSession(phase) {

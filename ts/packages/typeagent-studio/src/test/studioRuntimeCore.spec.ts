@@ -132,6 +132,37 @@ test("restorePhaseOnActiveSession marks downstream phases stale after ancestor r
     assert.equal(restored.state.phases.Packaging?.status, "stale");
 });
 
+test("rerunPhasesOnActiveSession reruns selected stale phases in order", async () => {
+    let now = 300;
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-rerun",
+            now: () => ++now,
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Ticket routing agent",
+    });
+    await runtime.runRemainingPhasesOnActiveSession();
+    await runtime.runPhaseOnActiveSession("Discovery", {
+        description: "Ticket routing agent v2",
+    });
+    const restored = await runtime.restorePhaseOnActiveSession("Discovery");
+    assert.equal(restored.state.phases.PhraseGen?.status, "stale");
+    assert.equal(restored.state.phases.SchemaGen?.status, "stale");
+
+    const rerun = await runtime.rerunPhasesOnActiveSession([
+        "PhraseGen",
+        "SchemaGen",
+    ]);
+
+    assert.deepEqual(rerun.rerunPhases, ["PhraseGen", "SchemaGen"]);
+    assert.equal(rerun.state.phases.PhraseGen?.status, "complete");
+    assert.equal(rerun.state.phases.SchemaGen?.status, "complete");
+});
+
 test("installLastSessionToSandbox records sandbox assignment on active session", async () => {
     const workspaceRoot = await fs.mkdtemp(
         path.join(os.tmpdir(), "typeagent-studio-workspace-"),
