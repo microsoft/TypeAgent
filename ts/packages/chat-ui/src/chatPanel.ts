@@ -162,6 +162,7 @@ export type HistoryEntry =
           actionPhase?: PhaseTiming;
           totalDuration?: number;
           tokenUsage?: CompletionUsageStats;
+          actionTokenUsage?: CompletionUsageStats;
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
       }
@@ -1665,17 +1666,19 @@ export class ChatPanel {
         label: string,
         phase?: PhaseTiming,
         totalDuration?: number,
+        tokenUsage?: CompletionUsageStats,
     ) {
         const container = this.userMessageById.get(requestId);
         // The user bubble shows only the translation totals (Translation
-        // Elapsed / Total Elapsed). Phase marks such as the translation's
-        // "First Token" belong to the agent/translation internals and are
-        // intentionally NOT rendered here — they were appearing on the
-        // user bubble (and even on @-commands with no translation), which
-        // is misleading.
+        // Elapsed / Total Elapsed / Translation Tokens). Phase marks such as
+        // the translation's "First Token" belong to the agent/translation
+        // internals and are intentionally NOT rendered here — they were
+        // appearing on the user bubble (and even on @-commands with no
+        // translation), which is misleading.
         const hasContent =
             (phase?.duration !== undefined && phase.duration !== null) ||
-            totalDuration !== undefined;
+            totalDuration !== undefined ||
+            tokenUsage !== undefined;
         if (!container || !hasContent) return;
         const metricsDiv = container.querySelector(
             ".chat-message-metrics-user",
@@ -1688,9 +1691,20 @@ export class ChatPanel {
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
+        // Translation tokens: unlike action tokens on the agent bubble, an
+        // absent value here means "no translation happened" (an @-command or
+        // a cached translation), which is an expected/known state — so we
+        // simply omit the line rather than printing "not reported".
+        const leftLines: string[] = [];
+        if (tokenUsage) {
+            leftLines.push(
+                `${label} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+            );
+        }
         metricsDiv.innerHTML = sanitize(
             `<div class="metrics-details">` +
-                `<div></div>` +
+                `<div>${leftLines.join("<br>")}</div>` +
                 `<div></div>` +
                 `<div>${mainLines.join("<br>")}</div>` +
                 `</div>`,
@@ -2113,6 +2127,7 @@ export class ChatPanel {
                                 actionPhase: entry.actionPhase,
                                 totalDuration: entry.totalDuration,
                                 tokenUsage: entry.tokenUsage,
+                                actionTokenUsage: entry.actionTokenUsage,
                                 parsePhase: entry.parsePhase,
                             });
                         }
@@ -2297,6 +2312,7 @@ export class ChatPanel {
             actionPhase?: PhaseTiming;
             totalDuration?: number;
             tokenUsage?: CompletionUsageStats;
+            actionTokenUsage?: CompletionUsageStats;
             parsePhase?: PhaseTiming;
             cancelled?: boolean;
         },
@@ -2328,19 +2344,15 @@ export class ChatPanel {
             );
         }
         if (result && target) {
-            // Always surface a token line, mirroring the Electron shell's
-            // MessageContainer behavior. When the request used no LLM call
-            // (e.g. an `@command` or a cached translation) `tokenUsage` is
-            // absent — show zeros rather than omitting the line entirely.
+            // Agent bubble shows ACTION token usage (the tokens the agent
+            // consumed executing the action/command). `actionTokenUsage` is
+            // passed through as-is: `undefined` => "not reported / unknown",
+            // a present all-zero value => the agent ran but made no LLM call.
             target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
-                result.tokenUsage ?? {
-                    prompt_tokens: 0,
-                    completion_tokens: 0,
-                    total_tokens: 0,
-                },
+                result.actionTokenUsage,
                 firstMessageMs,
             );
         }
@@ -2349,11 +2361,15 @@ export class ChatPanel {
             // request had no parse phase (e.g. cached translations or
             // chat-only paths), we still show the total elapsed so the
             // user bubble gets a metrics tooltip just like the agent's.
+            // The user bubble shows TRANSLATION token usage (the LLM cost of
+            // turning the request into actions); `undefined` for @-commands
+            // and cached translations.
             this.applyUserMetrics(
                 requestId,
                 "Translation",
                 result.parsePhase,
                 result.totalDuration,
+                result.tokenUsage,
             );
         }
         // Keep the thread's bubble in the map after completion so late
@@ -3469,9 +3485,9 @@ class AgentMessageContainer {
         firstMessageMs?: number,
     ) {
         // Layout: .metrics-details flex row with three columns
-        //   left   — "First Message" + phase.marks (one line each)
+        //   left   — "First Message" + Tokens + phase.marks (one line each)
         //   middle — (reserved; tts metrics in the future)
-        //   right  — main metrics (Action Elapsed / Total Elapsed / Tokens)
+        //   right  — main metrics (Action Elapsed / Total Elapsed)
         // This mirrors the Electron shell's MessageContainer layout so the
         // tooltip reads as "marks on the left, totals on the right".
         const mainLines: string[] = [];
@@ -3483,18 +3499,28 @@ class AgentMessageContainer {
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
-        if (tokenUsage) {
-            // Compact form: "Tokens: 14356 (14257+99)" — the long
-            // "(prompt N, completion M)" form overflowed the metrics
-            // tooltip in narrow webview sidebars.
-            mainLines.push(
-                `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
-            );
-        }
         const leftLines: string[] = [];
         if (firstMessageMs !== undefined) {
             leftLines.push(metricsLine("First Message", firstMessageMs));
+        }
+        // Token usage line. Distinguish three states:
+        //   - undefined   => the agent did not report usage. This is NOT the
+        //                    same as zero — the agent may have made LLM calls
+        //                    we can't observe (esp. out-of-process agents).
+        //   - all zero    => the agent ran but made no LLM call.
+        //   - positive    => actual usage.
+        if (tokenUsage) {
+            // Compact form: "Action Tokens: 14356 (14257+99)" — the long
+            // "(prompt N, completion M)" form overflowed the metrics
+            // tooltip in narrow webview sidebars.
+            leftLines.push(
+                `${actionLabel} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+            );
+        } else {
+            leftLines.push(
+                `${actionLabel} Tokens: <b>not reported</b>`,
+            );
         }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {

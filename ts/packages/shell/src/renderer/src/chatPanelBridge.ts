@@ -85,6 +85,7 @@ function mapResult(result: any):
           actionPhase?: any;
           totalDuration?: number;
           tokenUsage?: any;
+          actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
       }
@@ -98,6 +99,7 @@ function mapResult(result: any):
         actionPhase: lastAction ?? metrics?.command,
         totalDuration: metrics?.duration,
         tokenUsage: result.tokenUsage,
+        actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
     };
@@ -197,6 +199,7 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     actionPhase: lastAction ?? m?.command,
                     totalDuration: m?.duration,
                     tokenUsage: e.tokenUsage,
+                    actionTokenUsage: e.actionTokenUsage,
                     parsePhase: m?.parse,
                     firstMessageMs: rid
                         ? firstMessageMsByRequestId.get(rid)

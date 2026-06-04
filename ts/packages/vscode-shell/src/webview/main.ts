@@ -72,16 +72,20 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 
 // Map dispatcher's CommandResult to chat-ui's completeRequest result shape.
 // dispatcher: { metrics: { actions: PhaseTiming[], command, parse, duration },
-//               tokenUsage, ... }
-// chat-ui:    { actionPhase?, totalDuration?, tokenUsage?, parsePhase? }
+//               tokenUsage, actionTokenUsage, ... }
+// chat-ui:    { actionPhase?, totalDuration?, tokenUsage?, actionTokenUsage?,
+//               parsePhase? }
 // We pick the last action's phase (or the command phase) as actionPhase, the
 // overall duration as totalDuration, the parse phase as parsePhase (drives
-// the "Translation" tooltip on the user bubble), and pass tokenUsage through.
+// the "Translation" tooltip on the user bubble), and pass both the
+// translation tokenUsage (user bubble) and actionTokenUsage (agent bubble)
+// through.
 function mapResult(result: any):
     | {
           actionPhase?: any;
           totalDuration?: number;
           tokenUsage?: any;
+          actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
       }
@@ -95,6 +99,7 @@ function mapResult(result: any):
         actionPhase: lastAction ?? metrics?.command,
         totalDuration: metrics?.duration,
         tokenUsage: result.tokenUsage,
+        actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
     };
@@ -198,6 +203,7 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     actionPhase: lastAction ?? m?.command,
                     totalDuration: m?.duration,
                     tokenUsage: e.tokenUsage,
+                    actionTokenUsage: e.actionTokenUsage,
                     parsePhase: m?.parse,
                     firstMessageMs: e.requestId
                         ? firstMessageMsByRequestId.get(e.requestId)

@@ -719,6 +719,7 @@ export async function initializeCommandHandlerContext(
                         reqId,
                         result?.metrics,
                         result?.tokenUsage,
+                        result?.actionTokenUsage,
                     );
                     context.displayLog.saveQueued();
                 } catch {

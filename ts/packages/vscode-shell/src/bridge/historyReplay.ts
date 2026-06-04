@@ -59,6 +59,7 @@ export function toHistoryReplayMessage(
                         requestId: clientIdOf(e.requestId),
                         metrics: e.metrics,
                         tokenUsage: (e as any).tokenUsage,
+                        actionTokenUsage: (e as any).actionTokenUsage,
                     };
                 default:
                     return { type: "skip", seq: e.seq };
