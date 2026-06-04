@@ -46,6 +46,11 @@
           "default": "onboarding-diagnostics.md",
           "description": "Default file name suggested by Save onboarding diagnostics bundle."
         },
+        "typeagentStudio.onboarding.settingsSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-settings.md",
+          "description": "Default file name suggested by Save onboarding settings snapshot."
+        },
         "typeagentStudio.onboarding.installHealthGatePolicy": {
           "type": "string",
           "enum": [

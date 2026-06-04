@@ -13,6 +13,7 @@ import {
     type OnboardingSettingsSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
+    normalizeMarkdownFileName,
 } from "./onboardingPresentation.js";
 
 export function registerStudioCommands(
@@ -472,8 +473,9 @@ export function registerStudioCommands(
             "typeagent-studio.saveOnboardingSettingsSnapshot",
             withErrors(async () => {
                 const content = getOnboardingSettingsSnapshotMarkdown();
+                const defaultFileName = getSettingsSnapshotDefaultFileName();
                 const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file("onboarding-settings.md"),
+                    defaultUri: vscode.Uri.file(defaultFileName),
                     filters: {
                         Markdown: ["md"],
                     },
@@ -865,14 +867,18 @@ function getDiagnosticsDefaultFileName(): string {
         .get<string>(
             "diagnosticsDefaultFileName",
             "onboarding-diagnostics.md",
-        )
-        .trim();
-    if (configured.length === 0) {
-        return "onboarding-diagnostics.md";
-    }
-    return configured.toLowerCase().endsWith(".md")
-        ? configured
-        : `${configured}.md`;
+        );
+    return normalizeMarkdownFileName(configured, "onboarding-diagnostics.md");
+}
+
+function getSettingsSnapshotDefaultFileName(): string {
+    const configured = vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<string>(
+            "settingsSnapshotDefaultFileName",
+            "onboarding-settings.md",
+        );
+    return normalizeMarkdownFileName(configured, "onboarding-settings.md");
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";

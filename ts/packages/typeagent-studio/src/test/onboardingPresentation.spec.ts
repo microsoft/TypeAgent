@@ -15,6 +15,7 @@ import {
     formatOnboardingSummary,
     getAdvanceTargetPhase,
     getDefaultPhaseInputs,
+    normalizeMarkdownFileName,
 } from "../onboardingPresentation.js";
 
 function createState(): OnboardingState {
@@ -206,4 +207,22 @@ test("formatOnboardingSettingsSnapshotMarkdown formats settings as markdown", ()
     assert.match(snapshot, /Open summary after batch run: true/);
     assert.match(snapshot, /Default sandbox id: studio-default/);
     assert.match(snapshot, /Install health gate policy: enforce/);
+});
+
+test("normalizeMarkdownFileName appends markdown extension when missing", () => {
+    assert.equal(
+        normalizeMarkdownFileName("onboarding-settings", "fallback.md"),
+        "onboarding-settings.md",
+    );
+});
+
+test("normalizeMarkdownFileName preserves markdown extension and trims whitespace", () => {
+    assert.equal(
+        normalizeMarkdownFileName("  custom-name.MD  ", "fallback.md"),
+        "custom-name.MD",
+    );
+});
+
+test("normalizeMarkdownFileName uses fallback when configured value is blank", () => {
+    assert.equal(normalizeMarkdownFileName("   ", "fallback.md"), "fallback.md");
 });

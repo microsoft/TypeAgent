@@ -200,3 +200,16 @@ export function formatOnboardingSettingsSnapshotMarkdown(
         "",
     ].join("\n");
 }
+
+export function normalizeMarkdownFileName(
+    configuredValue: string,
+    fallback: string,
+): string {
+    const trimmed = configuredValue.trim();
+    if (trimmed.length === 0) {
+        return fallback;
+    }
+    return trimmed.toLowerCase().endsWith(".md")
+        ? trimmed
+        : `${trimmed}.md`;
+}

@@ -110,4 +110,5 @@ Diagnostics bundle preview behavior for `Open onboarding diagnostics bundle`:
 - `typeagentStudio.onboarding.openSummaryAfterBatchRun` (boolean, default `true`): Automatically opens onboarding summary after running remaining onboarding phases.
 - `typeagentStudio.onboarding.defaultSandboxId` (string, default `studio-default`): Default sandbox id used by install workflows.
 - `typeagentStudio.onboarding.diagnosticsDefaultFileName` (string, default `onboarding-diagnostics.md`): Default filename suggested when saving diagnostics bundles.
+- `typeagentStudio.onboarding.settingsSnapshotDefaultFileName` (string, default `onboarding-settings.md`): Default filename suggested when saving onboarding settings snapshots.
 - `typeagentStudio.onboarding.installHealthGatePolicy` (`enforce` | `warn`, default `enforce`): Controls install behavior when packaging health gate reports errors.
