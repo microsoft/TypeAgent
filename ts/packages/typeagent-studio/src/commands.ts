@@ -485,6 +485,58 @@ export function registerStudioCommands(
             }),
         ),
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.rerunStaleOnboardingPhases",
+            withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                const stalePhases = runtime
+                    .listPhases()
+                    .filter((phase) => state.phases[phase]?.status === "stale");
+
+                if (stalePhases.length === 0) {
+                    void vscode.window.showInformationMessage(
+                        "No stale onboarding phases to rerun.",
+                    );
+                    return;
+                }
+
+                const selected = await vscode.window.showQuickPick(
+                    stalePhases.map((phase) => ({
+                        label: phase,
+                        description: "stale",
+                        picked: true,
+                    })),
+                    {
+                        title: "Rerun stale onboarding phases",
+                        placeHolder: "Select phases to rerun",
+                        canPickMany: true,
+                        ignoreFocusOut: true,
+                    },
+                );
+
+                if (!selected || selected.length === 0) {
+                    return;
+                }
+
+                const rerunPhases = selected.map(
+                    (item) => item.label as OnboardingPhaseName,
+                );
+                const rerunResult = await runtime.rerunPhasesOnActiveSession(
+                    rerunPhases,
+                );
+
+                void vscode.window.showInformationMessage(
+                    `Reran phases: ${rerunResult.rerunPhases.join(", ")}. Current phase: ${rerunResult.state.currentPhase}.`,
+                );
+
+                if (rerunResult.rerunPhases.includes("Packaging")) {
+                    await showPackagingHealthGateStatus(runtime);
+                }
+            }),
+        ),
+    );
 }
 
 async function confirmHealthGateBypass(message: string): Promise<boolean> {

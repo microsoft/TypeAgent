@@ -36,6 +36,7 @@ Current command palette surface:
 - TypeAgent Studio: Run remaining onboarding phases
 - TypeAgent Studio: Show onboarding snapshot
 - TypeAgent Studio: Restore onboarding phase
+- TypeAgent Studio: Rerun stale onboarding phases
 - TypeAgent Studio: Open onboarding summary
 - TypeAgent Studio: Copy onboarding summary
 - TypeAgent Studio: Save onboarding summary
@@ -57,6 +58,11 @@ Restore behavior for `Restore onboarding phase`:
 
 - Marks downstream completed phases stale (per onboarding bridge semantics).
 - Prompts to re-run stale downstream phases immediately for reconciliation.
+
+Manual reconciliation behavior for `Rerun stale onboarding phases`:
+
+- Lists currently stale phases and allows selecting one or many to rerun.
+- Re-runs only the selected stale phases in order.
 
 ## Settings
 
