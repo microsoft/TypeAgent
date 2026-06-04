@@ -218,11 +218,7 @@ export async function processReasoningSession(
                     break;
 
                 case "tool_result": {
-                    const isError =
-                        typeof event.result === "object" &&
-                        event.result !== null &&
-                        "isError" in event.result &&
-                        (event.result as { isError: boolean }).isError;
+                    const isError = event.isError;
                     const content =
                         typeof event.result === "string"
                             ? event.result
