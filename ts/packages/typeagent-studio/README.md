@@ -118,4 +118,5 @@ Diagnostics bundle preview behavior for `Open onboarding diagnostics bundle`:
 - `typeagentStudio.onboarding.diagnosticsDefaultFileName` (string, default `onboarding-diagnostics.md`): Default filename suggested when saving diagnostics bundles.
 - `typeagentStudio.onboarding.settingsSnapshotDefaultFileName` (string, default `onboarding-settings.md`): Default filename suggested when saving onboarding settings snapshots.
 - `typeagentStudio.onboarding.packagingHealthReportDefaultFileName` (string, default `packaging-health-report.md`): Default filename suggested when saving packaging health reports.
+- `typeagentStudio.onboarding.onboardingSummaryDefaultFileName` (string, default `onboarding-summary.md`): Default filename suggested when saving onboarding summaries.
 - `typeagentStudio.onboarding.installHealthGatePolicy` (`enforce` | `warn`, default `enforce`): Controls install behavior when packaging health gate reports errors.

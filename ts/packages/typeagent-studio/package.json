@@ -56,6 +56,11 @@
           "default": "packaging-health-report.md",
           "description": "Default file name suggested by Save packaging health report."
         },
+        "typeagentStudio.onboarding.onboardingSummaryDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-summary.md",
+          "description": "Default file name suggested by Save onboarding summary."
+        },
         "typeagentStudio.onboarding.installHealthGatePolicy": {
           "type": "string",
           "enum": [
