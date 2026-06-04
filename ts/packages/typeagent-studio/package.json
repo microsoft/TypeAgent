@@ -36,6 +36,11 @@
           "default": true,
           "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
         },
+        "typeagentStudio.onboarding.defaultSandboxId": {
+          "type": "string",
+          "default": "studio-default",
+          "description": "Default sandbox id used by Studio install commands."
+        },
         "typeagentStudio.onboarding.installHealthGatePolicy": {
           "type": "string",
           "enum": [

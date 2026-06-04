@@ -70,13 +70,14 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.installToSandbox",
             withErrors(async () => {
+                const defaultSandboxId = getDefaultSandboxId();
                 const sandboxId =
                     (await vscode.window.showInputBox({
                         title: "Install to Sandbox",
                         prompt: "Sandbox id",
-                        value: "studio-default",
+                        value: defaultSandboxId,
                         ignoreFocusOut: true,
-                    })) ?? "studio-default";
+                    })) ?? defaultSandboxId;
 
                 let installed: Awaited<
                     ReturnType<StudioRuntime["installLastSessionToSandbox"]>
@@ -668,6 +669,14 @@ function shouldOpenSummaryAfterBatchRun(): boolean {
     return vscode.workspace
         .getConfiguration("typeagentStudio.onboarding")
         .get<boolean>("openSummaryAfterBatchRun", true);
+}
+
+function getDefaultSandboxId(): string {
+    const configured = vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<string>("defaultSandboxId", "studio-default")
+        .trim();
+    return configured.length > 0 ? configured : "studio-default";
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";
