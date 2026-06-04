@@ -257,8 +257,9 @@ export function registerStudioCommands(
             "typeagent-studio.savePackagingHealthReport",
             withErrors(async () => {
                 const report = await getPackagingHealthReport(runtime);
+                const defaultFileName = getPackagingHealthReportDefaultFileName();
                 const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file("packaging-health-report.md"),
+                    defaultUri: vscode.Uri.file(defaultFileName),
                     filters: {
                         Markdown: ["md"],
                     },
@@ -921,6 +922,16 @@ function getSettingsSnapshotDefaultFileName(): string {
             "onboarding-settings.md",
         );
     return normalizeMarkdownFileName(configured, "onboarding-settings.md");
+}
+
+function getPackagingHealthReportDefaultFileName(): string {
+    const configured = vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<string>(
+            "packagingHealthReportDefaultFileName",
+            "packaging-health-report.md",
+        );
+    return normalizeMarkdownFileName(configured, "packaging-health-report.md");
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";
