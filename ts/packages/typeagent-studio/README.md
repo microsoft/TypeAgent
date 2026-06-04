@@ -31,6 +31,7 @@ Current command palette surface:
 - TypeAgent Studio: Install latest onboarding session to sandbox
 - TypeAgent Studio: Resolve install artifact path
 - TypeAgent Studio: Check packaging health gate
+- TypeAgent Studio: Copy packaging health report
 - TypeAgent Studio: Clear onboarding session
 - TypeAgent Studio: Run onboarding phase
 - TypeAgent Studio: Advance onboarding phase

@@ -203,6 +203,19 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.copyPackagingHealthReport",
+            withErrors(async () => {
+                const report = await getPackagingHealthReport(runtime);
+                await vscode.env.clipboard.writeText(report);
+                void vscode.window.showInformationMessage(
+                    "Copied packaging health report to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.clearOnboardingSession",
             withErrors(async () => {
                 if (!(await confirmSessionClear())) {
@@ -733,14 +746,19 @@ async function showPackagingHealthGateStatus(
 }
 
 async function openPackagingHealthReport(runtime: StudioRuntime): Promise<void> {
-    const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    const content = await getPackagingHealthReport(runtime);
     const doc = await vscode.workspace.openTextDocument({
         language: "markdown",
-        content: formatPackagingHealthReport(gate),
+        content,
     });
     await vscode.window.showTextDocument(doc, {
         preview: false,
     });
+}
+
+async function getPackagingHealthReport(runtime: StudioRuntime): Promise<string> {
+    const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    return formatPackagingHealthReport(gate);
 }
 
 function formatPackagingHealthReport(
