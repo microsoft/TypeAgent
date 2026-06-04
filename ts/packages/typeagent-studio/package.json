@@ -164,6 +164,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.openOnboardingDiagnosticsBundle",
+        "title": "Open onboarding diagnostics bundle",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.copyOnboardingDiagnosticsBundle",
         "title": "Copy onboarding diagnostics bundle",
         "category": "TypeAgent Studio"
@@ -208,6 +213,7 @@
     "onCommand:typeagent-studio.copyOnboardingSummary",
     "onCommand:typeagent-studio.saveOnboardingSummary",
     "onCommand:typeagent-studio.saveOnboardingDiagnosticsBundle",
+    "onCommand:typeagent-studio.openOnboardingDiagnosticsBundle",
     "onCommand:typeagent-studio.copyOnboardingDiagnosticsBundle",
     "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
     "onCommand:typeagent-studio.cycleInstallHealthGatePolicy",

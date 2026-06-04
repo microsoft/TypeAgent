@@ -480,6 +480,22 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.openOnboardingDiagnosticsBundle",
+            withErrors(async () => {
+                const content = await getOnboardingDiagnosticsBundle(runtime);
+                const doc = await vscode.workspace.openTextDocument({
+                    language: "markdown",
+                    content,
+                });
+                await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                });
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.copyOnboardingDiagnosticsBundle",
             withErrors(async () => {
                 const content = await getOnboardingDiagnosticsBundle(runtime);
