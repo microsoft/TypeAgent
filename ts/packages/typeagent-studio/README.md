@@ -72,6 +72,16 @@ Manual reconciliation behavior for `Rerun stale onboarding phases`:
 - Lists currently stale phases and allows selecting one or many to rerun.
 - Re-runs only the selected stale phases in order.
 
+Operational snapshot behavior for `Show onboarding health snapshot`:
+
+- Shows a modal summary with current phase, complete/stale/pending counts, installed sandboxes, and packaging health gate status.
+- Falls back to an unavailable gate status when no active install artifact path can be resolved.
+
+Diagnostics sharing behavior for `Copy packaging health report`:
+
+- Copies the same markdown report used by the open-report flow.
+- Useful for posting health findings directly into issues, PR comments, or chat threads.
+
 ## Settings
 
 - `typeagentStudio.onboarding.openSummaryAfterBatchRun` (boolean, default `true`): Automatically opens onboarding summary after running remaining onboarding phases.
