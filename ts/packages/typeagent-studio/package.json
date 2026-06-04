@@ -61,6 +61,11 @@
           "default": "onboarding-summary.md",
           "description": "Default file name suggested by Save onboarding summary."
         },
+        "typeagentStudio.onboarding.onboardingHealthSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-health-snapshot.md",
+          "description": "Default file name suggested by Save onboarding health snapshot."
+        },
         "typeagentStudio.onboarding.installHealthGatePolicy": {
           "type": "string",
           "enum": [

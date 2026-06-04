@@ -43,6 +43,7 @@ Current command palette surface:
 - TypeAgent Studio: Show onboarding health snapshot
 - TypeAgent Studio: Copy onboarding health snapshot
 - TypeAgent Studio: Open onboarding health snapshot
+- TypeAgent Studio: Save onboarding health snapshot
 - TypeAgent Studio: Show onboarding settings snapshot
 - TypeAgent Studio: Copy onboarding settings snapshot
 - TypeAgent Studio: Open onboarding settings snapshot
@@ -89,6 +90,10 @@ Operational snapshot behavior for `Show onboarding health snapshot`:
 - Shows a modal summary with current phase, complete/stale/pending counts, installed sandboxes, and packaging health gate status.
 - Falls back to an unavailable gate status when no active install artifact path can be resolved.
 
+Onboarding health snapshot export behavior for `Save onboarding health snapshot`:
+
+- Saves the onboarding health snapshot markdown to disk.
+
 Diagnostics sharing behavior for `Copy packaging health report`:
 
 - Copies the same markdown report used by the open-report flow.
@@ -120,4 +125,5 @@ Diagnostics bundle preview behavior for `Open onboarding diagnostics bundle`:
 - `typeagentStudio.onboarding.settingsSnapshotDefaultFileName` (string, default `onboarding-settings.md`): Default filename suggested when saving onboarding settings snapshots.
 - `typeagentStudio.onboarding.packagingHealthReportDefaultFileName` (string, default `packaging-health-report.md`): Default filename suggested when saving packaging health reports.
 - `typeagentStudio.onboarding.onboardingSummaryDefaultFileName` (string, default `onboarding-summary.md`): Default filename suggested when saving onboarding summaries.
+- `typeagentStudio.onboarding.onboardingHealthSnapshotDefaultFileName` (string, default `onboarding-health-snapshot.md`): Default filename suggested when saving onboarding health snapshots.
 - `typeagentStudio.onboarding.installHealthGatePolicy` (`enforce` | `warn`, default `enforce`): Controls install behavior when packaging health gate reports errors.

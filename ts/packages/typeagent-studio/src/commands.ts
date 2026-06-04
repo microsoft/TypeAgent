@@ -487,6 +487,31 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.saveOnboardingHealthSnapshot",
+            withErrors(async () => {
+                const content = await getOnboardingHealthSnapshotMarkdown(runtime);
+                const defaultFileName = getOnboardingHealthSnapshotDefaultFileName();
+                const targetUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file(defaultFileName),
+                    filters: {
+                        Markdown: ["md"],
+                    },
+                    title: "Save Onboarding Health Snapshot",
+                });
+                if (!targetUri) {
+                    return;
+                }
+
+                await fs.writeFile(targetUri.fsPath, content, "utf-8");
+                void vscode.window.showInformationMessage(
+                    `Saved onboarding health snapshot to ${targetUri.fsPath}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.showOnboardingSettingsSnapshot",
             withErrors(async () => {
                 const settings = getOnboardingSettingsSnapshot();
@@ -960,6 +985,16 @@ function getOnboardingSummaryDefaultFileName(): string {
             "onboarding-summary.md",
         );
     return normalizeMarkdownFileName(configured, "onboarding-summary.md");
+}
+
+function getOnboardingHealthSnapshotDefaultFileName(): string {
+    const configured = vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<string>(
+            "onboardingHealthSnapshotDefaultFileName",
+            "onboarding-health-snapshot.md",
+        );
+    return normalizeMarkdownFileName(configured, "onboarding-health-snapshot.md");
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";
