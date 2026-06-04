@@ -227,11 +227,7 @@ export class searchKeywordExtractor {
         }
 
         try {
-            const result = await agents.runAgent(
-                this.project,
-                agentName,
-                data,
-            );
+            const result = await agents.runAgent(this.project, agentName, data);
 
             if (result.contentFiltered) {
                 return null;

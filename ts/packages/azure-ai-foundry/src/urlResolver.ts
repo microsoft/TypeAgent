@@ -175,18 +175,15 @@ export async function validateURL(
 
         while (retryCount < maxRetries) {
             try {
-                const result = await agents.runAgent(
-                    project,
-                    agentName,
-                    input,
-                );
+                const result = await agents.runAgent(project, agentName, input);
 
                 if (result.contentFiltered) {
                     return undefined;
                 }
 
-                const validity =
-                    agents.parseJsonResponse<urlValidityAction>(result.text);
+                const validity = agents.parseJsonResponse<urlValidityAction>(
+                    result.text,
+                );
                 if (validity) {
                     return validity;
                 }
@@ -200,7 +197,9 @@ export async function validateURL(
                         debug_info: [Object]
                     },
                 */
-                debug(`Error validating URL (attempt ${retryCount}): ${pollingError}`);
+                debug(
+                    `Error validating URL (attempt ${retryCount}): ${pollingError}`,
+                );
             } finally {
                 retryCount++;
             }

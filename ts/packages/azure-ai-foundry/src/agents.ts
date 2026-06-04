@@ -185,9 +185,7 @@ export async function runAgentStreaming(
                 if (response?.output_text) {
                     text = response.output_text;
                 }
-                if (
-                    response?.incomplete_details?.reason === "content_filter"
-                ) {
+                if (response?.incomplete_details?.reason === "content_filter") {
                     contentFiltered = true;
                 }
                 break;
