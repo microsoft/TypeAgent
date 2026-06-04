@@ -105,6 +105,12 @@ export class ChatView {
      */
     private signedIn = false;
     private signedInEmail?: string;
+    /**
+     * Base64 data URL of the signed-in user's MS Graph profile photo, when
+     * available. Rendered as the user-icon avatar background; falls back to
+     * the letter initial when undefined.
+     */
+    private userPhoto?: string;
     public chatInput: ChatInput | undefined;
     public tts?: TTS | undefined;
     public onRequestComplete?: () => void;
@@ -794,16 +800,18 @@ export class ChatView {
      * "Signed in as ..." tooltip, and flips signedIn so the avatar's
      * click handler stops triggering sign-in.
      */
-    public setUserSignedIn(name: string, email: string) {
+    public setUserSignedIn(name: string, email: string, photo?: string) {
         this.userGivenName = name;
         this.signedIn = true;
         this.signedInEmail = email;
+        this.userPhoto = photo;
         this.refreshAllUserIcons();
     }
 
     public setUserSignedOut() {
         this.signedIn = false;
         this.signedInEmail = undefined;
+        this.userPhoto = undefined;
         // Reset display name back to placeholder so future user-icon
         // refreshes show "U" instead of the previously-signed-in user's
         // initial. (applyUserIconState falls back to "U" when
@@ -823,7 +831,40 @@ export class ChatView {
             .trim()
             .charAt(0)
             .toUpperCase();
-        iconDiv.innerText = initial || "U";
+        if (this.userPhoto) {
+            // Render the MS Graph profile photo as a circular avatar; clear
+            // the letter so it doesn't overlay the image. Use important
+            // priority so it beats themed `background: ... !important` rules.
+            iconDiv.classList.add("user-icon-photo");
+            iconDiv.style.setProperty(
+                "background-image",
+                `url("${this.userPhoto}")`,
+                "important",
+            );
+            // Set sizing inline (not just via the .user-icon-photo CSS
+            // class) so the photo fills the circle regardless of CSS load
+            // order — otherwise background-size stays `auto` and only the
+            // native-resolution top-left corner shows, looking blank.
+            iconDiv.style.setProperty("background-size", "cover", "important");
+            iconDiv.style.setProperty(
+                "background-position",
+                "center",
+                "important",
+            );
+            iconDiv.style.setProperty(
+                "background-repeat",
+                "no-repeat",
+                "important",
+            );
+            iconDiv.innerText = "";
+        } else {
+            iconDiv.classList.remove("user-icon-photo");
+            iconDiv.style.removeProperty("background-image");
+            iconDiv.style.removeProperty("background-size");
+            iconDiv.style.removeProperty("background-position");
+            iconDiv.style.removeProperty("background-repeat");
+            iconDiv.innerText = initial || "U";
+        }
         if (this.signedIn) {
             iconDiv.style.cursor = "default";
             iconDiv.title = this.signedInEmail
@@ -857,8 +898,9 @@ export class ChatView {
         signedIn.forEach((el) => {
             const name = el.getAttribute("data-name");
             const email = el.getAttribute("data-email");
+            const photo = el.getAttribute("data-photo") ?? undefined;
             if (name && email) {
-                this.setUserSignedIn(name, email);
+                this.setUserSignedIn(name, email, photo);
             }
             el.remove();
         });

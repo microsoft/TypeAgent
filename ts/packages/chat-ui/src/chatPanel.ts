@@ -543,6 +543,12 @@ export class ChatPanel {
     private isUserSignedIn = false;
     private signedInEmail?: string;
     /**
+     * Base64 data URL of the signed-in user's MS Graph profile photo, when
+     * available. Rendered as the user-icon avatar background; falls back to
+     * the letter initial when undefined.
+     */
+    private userPhoto?: string;
+    /**
      * Optional host-driven command-completion controller. Mounted by
      * attachCompletion(); pcState messages are forwarded via applyPcState().
      */
@@ -2880,16 +2886,18 @@ export class ChatPanel {
      * either by the host directly, or via the embedded HTML marker scanner
      * in addAgentMessage.
      */
-    public setUserSignedIn(name: string, email: string) {
+    public setUserSignedIn(name: string, email: string, photo?: string) {
         this.setUserInfo(name);
         this.isUserSignedIn = true;
         this.signedInEmail = email;
+        this.userPhoto = photo;
         this.refreshAllUserIcons();
     }
 
     public setUserSignedOut() {
         this.isUserSignedIn = false;
         this.signedInEmail = undefined;
+        this.userPhoto = undefined;
         // Reset display name/initial back to the default placeholders so
         // future user bubbles show "U" instead of the previously-signed-in
         // user's initial. Mirrors what setUserSignedIn does on its own
@@ -2900,7 +2908,40 @@ export class ChatPanel {
     }
 
     private applyUserIconState(iconDiv: HTMLElement) {
-        iconDiv.textContent = this.userInitial;
+        if (this.userPhoto) {
+            // Render the MS Graph profile photo as a circular avatar; clear
+            // the letter so it doesn't overlay the image. Use important
+            // priority so it beats themed `background: ... !important` rules.
+            iconDiv.classList.add("user-icon-photo");
+            iconDiv.style.setProperty(
+                "background-image",
+                `url("${this.userPhoto}")`,
+                "important",
+            );
+            // Set sizing inline (not just via the .user-icon-photo CSS
+            // class) so the photo fills the circle regardless of CSS load
+            // order — otherwise background-size stays `auto` and only the
+            // native-resolution top-left corner shows, looking blank.
+            iconDiv.style.setProperty("background-size", "cover", "important");
+            iconDiv.style.setProperty(
+                "background-position",
+                "center",
+                "important",
+            );
+            iconDiv.style.setProperty(
+                "background-repeat",
+                "no-repeat",
+                "important",
+            );
+            iconDiv.textContent = "";
+        } else {
+            iconDiv.classList.remove("user-icon-photo");
+            iconDiv.style.removeProperty("background-image");
+            iconDiv.style.removeProperty("background-size");
+            iconDiv.style.removeProperty("background-position");
+            iconDiv.style.removeProperty("background-repeat");
+            iconDiv.textContent = this.userInitial;
+        }
         if (this.isUserSignedIn) {
             iconDiv.style.cursor = "default";
             iconDiv.title = this.signedInEmail
@@ -2934,8 +2975,9 @@ export class ChatPanel {
         signedIn.forEach((el) => {
             const name = el.getAttribute("data-name");
             const email = el.getAttribute("data-email");
+            const photo = el.getAttribute("data-photo") ?? undefined;
             if (name && email) {
-                this.setUserSignedIn(name, email);
+                this.setUserSignedIn(name, email, photo);
             }
             el.remove();
         });

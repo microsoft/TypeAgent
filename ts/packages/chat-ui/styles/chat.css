@@ -703,6 +703,17 @@ table.table-message td {
   font-weight: 300;
 }
 
+/* When the signed-in user has an MS Graph profile photo, the avatar div
+   gets this class and a background-image data URL (set inline). Render the
+   photo as a cover-fit circle and drop the letter/background color. */
+.user-icon.user-icon-photo {
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: transparent;
+}
+
 .agent-icon {
   width: 30px;
   height: 30px;

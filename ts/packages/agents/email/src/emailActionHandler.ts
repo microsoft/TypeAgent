@@ -7,6 +7,7 @@ import {
     EmailProviderType,
     EmailSearchQuery,
     createEmailProviderFromConfig,
+    claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
     GoogleEmailClient,
     parseDayRange,
@@ -124,10 +125,19 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
 
         if (provider.isAuthenticated()) {
             const user = await provider.getUser();
-            displayWarn(
-                `Already logged in as ${user.displayName || "Unknown"}<${user.email || "Unknown"}>`,
-                context,
-            );
+            const name = user.displayName || "Unknown";
+            const email = user.email || "Unknown";
+            displayWarn(`Already logged in as ${name}<${email}>`, context);
+            // Re-emit the signed-in marker so the avatar (name + photo)
+            // resyncs even when the user was already authenticated — e.g.
+            // restored silently on launch before the photo had been fetched.
+            const photoAttr = user.photoUrl
+                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+                : "";
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+            });
             return;
         }
 
@@ -158,10 +168,14 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
             // Hidden marker the chat-ui / shell scan for after each agent
             // message. Lifts the signed-in identity into UI state so the
             // user-letter avatar shows the real initial and stops triggering
-            // login on click.
+            // login on click. data-photo carries the base64 profile photo
+            // (when the provider has one) so the avatar can render the image.
+            const photoAttr = user.photoUrl
+                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+                : "";
             context.actionIO.appendDisplay({
                 type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}" hidden></span>`,
+                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
             });
 
             // Kick off async index build/sync after successful login
@@ -506,6 +520,12 @@ async function updateEmailContext(
             ) {
                 startBackgroundSync(context.agentContext);
             }
+
+            // Restore a prior session from cached credentials so the avatar
+            // shows the signed-in user (name + photo) on launch without an
+            // explicit login. Fire-and-forget so agent enable isn't blocked
+            // on a network round-trip.
+            void trySilentEmailSignIn(provider, context);
         } else {
             debug("No email provider configured");
         }
@@ -783,6 +803,58 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+// Attempt a silent, non-interactive sign-in using cached MS Graph
+// credentials so a previously signed-in user sees the signed-in avatar
+// (name + photo) on app launch without clicking login. Only runs for the
+// Microsoft provider and never prompts: provider.login() with no callback
+// uses the persisted auth record and fails quietly when there is none or it
+// has expired. On success it posts a short "signed in" message carrying the
+// hidden user-signed-in marker (via an agent-initiated bubble thread — the
+// only display path both chat UIs scan for the marker), so both UIs lift the
+// identity into the avatar state. A process-wide guard ensures only the first
+// agent (calendar or email) to restore announces it.
+async function trySilentEmailSignIn(
+    provider: IEmailProvider,
+    context: SessionContext<EmailActionContext>,
+): Promise<void> {
+    try {
+        if (provider.providerName !== "microsoft") {
+            return;
+        }
+        if (!provider.isAuthenticated()) {
+            const ok = await provider.login();
+            if (!ok) {
+                return;
+            }
+        }
+        if (!claimSilentRestoreAnnouncement()) {
+            // Another agent already restored + announced this session; our
+            // client is warmed, nothing more to surface.
+            return;
+        }
+        const user = await provider.getUser();
+        const name = user.displayName || "Unknown";
+        const email = user.email || "Unknown";
+        const photoAttr = user.photoUrl
+            ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+            : "";
+        const thread = context.beginAgentThread("bubble");
+        thread.appendDisplay(
+            {
+                type: "html",
+                content:
+                    `Signed in as ${escapeHtml(name)} &lt;${escapeHtml(email)}&gt;` +
+                    `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+            },
+            "block",
+        );
+        thread.complete();
+    } catch {
+        // Silent: no cached creds / expired / offline — leave the avatar in
+        // its signed-out state; the user can still click to sign in.
+    }
 }
 
 function formatEmailListHtml(
