@@ -66,10 +66,6 @@ export function makeClientIOMessage(
             // If we can't get the emoji, that's okay - just leave it undefined
         }
     }
-        } catch {
-            // If we can't get the emoji, that's okay - just leave it undefined
-        }
-    }
 
     return {
         message,
