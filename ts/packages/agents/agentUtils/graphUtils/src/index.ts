@@ -15,7 +15,7 @@ export { createCalendarGraphClient, CalendarClient } from "./calendarClient.js";
 export { createMailGraphClient, MailClient } from "./mailClient.js";
 export { GraphEntity } from "./graphEntity.js";
 export { ErrorResponse } from "./graphClient.js";
-
+export { claimSilentRestoreAnnouncement } from "./graphClient.js";
 // Calendar Provider abstraction (multi-provider support)
 export {
     ICalendarProvider,

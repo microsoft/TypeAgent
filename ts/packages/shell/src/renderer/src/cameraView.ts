@@ -190,19 +190,20 @@ export class CameraView {
             this.canvas.height = this.height;
             context.drawImage(this.video, 0, 0, this.width, this.height);
 
-            this.canvas.toBlob((b: Blob | null) => {
-                if (b) {
-                    let url: string = URL.createObjectURL(b);
+            // Produce a base64 data URL (not a blob: URL). Downstream the
+            // captured image is sent as a message attachment, and the
+            // dispatcher parses attachments as `data:<mime>;base64,<data>`
+            // (see session.storeUserSuppliedFile). A blob: URL has no
+            // `;base64,` segment and fails to parse.
+            const url: string = this.canvas.toDataURL("image/png");
 
-                    if (this.img) {
-                        this.img.remove();
-                    }
+            if (this.img) {
+                this.img.remove();
+            }
 
-                    this.img = document.createElement("img");
-                    this.img.setAttribute("src", url);
-                    this.pictureDiv.append(this.img);
-                }
-            });
+            this.img = document.createElement("img");
+            this.img.setAttribute("src", url);
+            this.pictureDiv.append(this.img);
         } else {
             this.clearPhoto();
         }

@@ -97,6 +97,9 @@ export type CommandResultEntry = {
     requestId: RequestId;
     metrics?: RequestMetrics;
     tokenUsage?: import("./dispatcher.js").CompletionUsageStats;
+    // Token usage accumulated across executed actions/commands (self-reported
+    // via ActionResult.tokenUsage). `undefined` => not reported / unknown.
+    actionTokenUsage?: import("./dispatcher.js").CompletionUsageStats;
 };
 
 export type UserFeedbackRating = "up" | "down" | null;

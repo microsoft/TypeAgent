@@ -59,6 +59,7 @@
 
 .camera-container {
   position: absolute;
+  inset: 0;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -66,7 +67,13 @@
   height: 100%;
   flex-direction: column;
   z-index: 2500;
-  background: #ffffff99;
+  // Semi-translucent scrim that dims the chat UI behind the camera. The
+  // colour follows the host theme (light by default, dark via .dark-mode).
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.dark-mode .camera-container {
+  background: rgba(26, 26, 46, 0.75);
 }
 
 .camera-hidden {

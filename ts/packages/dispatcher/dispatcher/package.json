@@ -41,7 +41,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
     "@azure/core-client": "^1.10.0",
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",
