@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import type { ShellUserSettings } from "./shellSettingsType.js";
-import type { Dispatcher, ClientIO, QueueSnapshot } from "agent-dispatcher";
+import type {
+    Dispatcher,
+    ClientIO,
+    QueueSnapshot,
+    CommandResult,
+} from "agent-dispatcher";
 
 export type { ShellUserSettings };
 
@@ -122,6 +127,16 @@ export interface Client {
     ): void;
     markHistoryEntries?(): void;
     demoStateChanged?(state: DemoUIState): void;
+    /**
+     * A request dispatched by the *main* process (e.g. the startup
+     * `@greeting`) has completed. Lets the renderer finalize the request's
+     * metrics bubble — server-initiated requests never go through the
+     * renderer's onSend → completeRequest path.
+     */
+    requestCompleted?(
+        clientRequestId: string,
+        result: CommandResult | undefined,
+    ): void;
     /** Show/clear the reconnect banner. Pass undefined to clear. */
     reconnectStatusChanged?(message: string | undefined): void;
 }

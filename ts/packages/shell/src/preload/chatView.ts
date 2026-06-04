@@ -156,6 +156,13 @@ function registerClient(client: Client) {
         client.markHistoryEntries?.();
     });
 
+    ipcRenderer.on(
+        "request-completed",
+        (_, clientRequestId: string, result: any) => {
+            client.requestCompleted?.(clientRequestId, result);
+        },
+    );
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 

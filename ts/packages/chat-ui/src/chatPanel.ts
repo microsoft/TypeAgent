@@ -1661,13 +1661,14 @@ export class ChatPanel {
         totalDuration?: number,
     ) {
         const container = this.userMessageById.get(requestId);
-        // Note: do NOT bail when phase has no duration — chat-only requests
-        // sometimes return a parse PhaseTiming with marks but no duration,
-        // and we still want to render those marks. We bail only if there
-        // is genuinely nothing to show.
+        // The user bubble shows only the translation totals (Translation
+        // Elapsed / Total Elapsed). Phase marks such as the translation's
+        // "First Token" belong to the agent/translation internals and are
+        // intentionally NOT rendered here — they were appearing on the
+        // user bubble (and even on @-commands with no translation), which
+        // is misleading.
         const hasContent =
             (phase?.duration !== undefined && phase.duration !== null) ||
-            (phase?.marks && Object.keys(phase.marks).length > 0) ||
             totalDuration !== undefined;
         if (!container || !hasContent) return;
         const metricsDiv = container.querySelector(
@@ -1681,20 +1682,9 @@ export class ChatPanel {
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
-        const markLines: string[] = [];
-        if (phase?.marks) {
-            for (const [key, value] of Object.entries(phase.marks)) {
-                const avg = value.duration / Math.max(value.count, 1);
-                const suffix =
-                    value.count !== 1 ? `(out of ${value.count})` : "";
-                markLines.push(
-                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
-                );
-            }
-        }
         metricsDiv.innerHTML = sanitize(
             `<div class="metrics-details">` +
-                `<div>${markLines.join("<br>")}</div>` +
+                `<div></div>` +
                 `<div></div>` +
                 `<div>${mainLines.join("<br>")}</div>` +
                 `</div>`,
@@ -2127,13 +2117,15 @@ export class ChatPanel {
             this.suppressFirstMessageTracking = false;
         }
 
-        // Mark everything just appended as history. Iteration is over the
-        // live NodeList so `children.length` reflects current count.
-        for (
-            let i = firstHistoryIdx;
-            i < this.messageDiv.children.length;
-            i++
-        ) {
+        // Mark everything just appended as history. Messages are *prepended*
+        // (each insert goes to DOM index 0 via `sentinel.before(...)`), so the
+        // replayed entries occupy the first `added` children — the pre-existing
+        // children (e.g. the sentinel) were pushed to the end. Iterating from
+        // `firstHistoryIdx` would skip the newest history message (index 0,
+        // visually right above the "now" separator) and uselessly gray the
+        // sentinel instead.
+        const added = this.messageDiv.children.length - firstHistoryIdx;
+        for (let i = 0; i < added; i++) {
             this.messageDiv.children[i].classList.add("history");
         }
 

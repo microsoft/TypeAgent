@@ -981,9 +981,20 @@ export function initializeInstance(
                     [],
                     undefined,
                     "agent-0",
-                ).catch((e: any) => {
-                    debugShell("Initial greeting failed:", e?.message ?? e);
-                });
+                )
+                    .then((result) => {
+                        // Forward completion so the renderer can finalize the
+                        // greeting's metrics bubble — server-initiated requests
+                        // don't go through the renderer's completeRequest path.
+                        chatView.webContents.send(
+                            "request-completed",
+                            "agent-0",
+                            result,
+                        );
+                    })
+                    .catch((e: any) => {
+                        debugShell("Initial greeting failed:", e?.message ?? e);
+                    });
             }
             return;
         }
@@ -1027,9 +1038,20 @@ export function initializeInstance(
                 [],
                 undefined,
                 "agent-0",
-            ).catch((e: any) => {
-                debugShell("Initial greeting failed:", e?.message ?? e);
-            });
+            )
+                .then((result) => {
+                    // Forward completion so the renderer can finalize the
+                    // greeting's metrics bubble — server-initiated requests
+                    // don't go through the renderer's completeRequest path.
+                    chatView.webContents.send(
+                        "request-completed",
+                        "agent-0",
+                        result,
+                    );
+                })
+                .catch((e: any) => {
+                    debugShell("Initial greeting failed:", e?.message ?? e);
+                });
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);

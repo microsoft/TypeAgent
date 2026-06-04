@@ -1040,6 +1040,14 @@ export function createChatPanelClient(
         markHistoryEntries(): void {
             // Structured history replay marks entries; no-op here.
         },
+        requestCompleted(clientRequestId: string, result: any): void {
+            // A main-process-dispatched request (e.g. the startup @greeting)
+            // finished. Finalize its metrics bubble — these requests never
+            // flow through the renderer's onSend → completeRequest path.
+            afterReplay(() => {
+                chatPanel.completeRequest(clientRequestId, mapResult(result));
+            });
+        },
         demoStateChanged(state: "running" | "paused" | "idle"): void {
             chatPanel.setDemoRunning(state !== "idle");
             chatPanel.setDemoPaused(state === "paused");
