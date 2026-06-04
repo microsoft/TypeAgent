@@ -49,7 +49,7 @@ export function computeTriggerPhrase(
     const actionTokens = tokenizeForTriggerPhrase(actionName);
     return actionTokens.length > 0
         ? actionTokens.join(" ")
-        : actionName.toLowerCase();
+          : actionName.toLowerCase();
 }
 
 // Generate default grammar patterns: up to 3 trigger forms (displayName
