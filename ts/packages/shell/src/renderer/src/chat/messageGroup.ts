@@ -4,6 +4,7 @@
 import { DisplayContent, TypeAgentAction } from "@typeagent/agent-sdk";
 import {
     CommandResult,
+    CompletionUsageStats,
     IAgentMessage,
     NotifyExplainedData,
     RequestId,
@@ -217,7 +218,16 @@ export class MessageGroup {
     }
 
     private requestCompleted(result: CommandResult | undefined) {
-        this.updateMetrics(result?.metrics);
+        // When the translation comes from cache (no LLM call), tokenUsage is
+        // absent — show "0" tokens used rather than omitting the line.
+        this.updateMetrics(
+            result?.metrics,
+            result?.tokenUsage ?? {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+            },
+        );
         if (result?.cancelled) {
             this.notifyCancelled();
         } else if (
@@ -306,12 +316,17 @@ export class MessageGroup {
         this.chatView.updateScroll();
     }
 
-    public updateMetrics(metrics?: RequestMetrics) {
+    public updateMetrics(
+        metrics?: RequestMetrics,
+        tokenUsage?: CompletionUsageStats,
+    ) {
         if (metrics) {
-            if (metrics.parse !== undefined) {
+            if (metrics.parse !== undefined || tokenUsage !== undefined) {
                 this.userMessage.updateMainMetrics(
                     "Translation",
                     metrics.parse,
+                    undefined,
+                    tokenUsage,
                 );
             }
 

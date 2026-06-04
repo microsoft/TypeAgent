@@ -13,10 +13,27 @@ body {
   font-size: 14px;
   overflow: hidden;
   background-color: #00000000;
+  /* Light theme: image lightbox backdrop is translucent white. */
+  --chat-lightbox-backdrop: rgba(255, 255, 255, 0.85);
 }
 
 .dark-mode {
   background-color: #1a1a2e;
+  /* Dark theme: image lightbox backdrop is translucent black. */
+  --chat-lightbox-backdrop: rgba(0, 0, 0, 0.8);
+  /* Dark theme: completion dropdown menu (rendered into document.body,
+     so theme via inherited CSS variables rather than descendant rules). */
+  --completion-menu-bg: #2a2a40f0;
+  --completion-menu-fg: #e8e8f0;
+  --completion-menu-border: rgba(255, 255, 255, 0.08);
+  --completion-menu-hover: rgba(167, 139, 250, 0.12);
+
+  // Default chat text to a light foreground so sender labels, agent
+  // names and inherited body text are legible on the dark bubbles.
+  // chat-ui's stylesheet assumes a light theme (near-black default).
+  .chat {
+    color: #e8e8f0;
+  }
 
   .action-container {
     background-color: #16162a;
@@ -84,6 +101,26 @@ body {
     color: #a78bfa;
   }
 
+  // Completion dropdown is appended directly to document.body, so it is a
+  // descendant of body.dark-mode. Style it explicitly here (the CSS-variable
+  // defaults in completion-ui are not reliably picked up in the shell build).
+  .autocomplete-container {
+    background-color: #2a2a40f0;
+    color: #e8e8f0;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      0 1px 4px rgba(0, 0, 0, 0.2);
+
+    .completions li {
+      color: #e8e8f0;
+    }
+
+    .completions li:hover {
+      background-color: rgba(167, 139, 250, 0.12);
+    }
+  }
+
   .chat-message-agent {
     background-color: #2a2a40;
   }
@@ -94,6 +131,16 @@ body {
 
   .chat-message-content {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  // Bubble text must be light on the dark bubble backgrounds above —
+  // chat-ui's defaults assume a light theme (near-black text).
+  .chat-message-content,
+  .chat-message-agent-text,
+  .chat-message-user-text,
+  .chat-message-agent,
+  .chat-message-user {
+    color: #e8e8f0;
   }
 
   .chat-message-kind-info {
@@ -287,51 +334,11 @@ body {
   }
 }
 
-.history {
-  filter: grayscale(100%);
-}
-
-.chat-separator {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  text-align: center;
-  font-size: 10px;
-  margin: 20px 20px;
-}
-
-.chat-separator-line {
-  flex-grow: 1;
-  width: 40px;
-  background-color: darkgray;
-  height: 2px;
-}
-
-.chat-separator-text {
-  margin: 0px 10px;
-  color: darkgray;
-  height: 20px;
-}
-
 .wrapper {
   height: 100%;
   width: 100%;
   position: absolute;
   background-color: #00000000;
-}
-
-.user-textarea {
-  padding: 5px 8px;
-  display: block;
-  width: calc(100% - 48px);
-  overflow: hidden;
-  resize: none;
-  outline: 0px solid transparent;
-  min-height: 30px;
-  line-height: 30px;
-  font-family: inherit;
-  font-size: inherit;
-  align-self: flex-start;
 }
 
 .inline-ghost {
@@ -647,134 +654,9 @@ body {
   }
 }
 
-.chat-input.listening {
-  background-color: aquamarine;
-}
-
-.chat-input {
-  display: flex;
-  padding: 6px 8px;
-  background-color: @chat-input-bg;
-  align-self: flex-end;
-  margin: 8px 12px 12px 12px;
-  width: calc(
-    100% - 24px
-  ); // Note: subtracted value should match horizontal margin total from line above
-  border: solid 1px #e0e0e0;
-  border-radius: 12px;
-  position: relative;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: border-color 0.2s ease;
-
-  &:focus-within {
-    border-color: #a78bfa;
-    box-shadow: 0 1px 4px rgba(167, 139, 250, 0.15);
-  }
-
-  .completion-toggle {
-    position: absolute;
-    top: 0;
-    z-index: 50;
-    min-width: 60px;
-  }
-}
-
 .chat-input-drag {
   color: #cccccc;
   font-style: italic;
-}
-
-/* Container */
-.chat-message-container {
-  padding-left: 10px;
-  padding-right: 10px;
-  margin-bottom: 8px;
-  margin-top: 8px;
-  width: 55%;
-  transform-origin: 0 100%;
-  transform: scale(0);
-  animation: message 0.15s ease-out 0s forwards;
-}
-
-.chat-message-container-agent {
-  .chat-message-container;
-  margin-left: 10px;
-}
-
-.chat-message-container-user {
-  .chat-message-container;
-  margin-right: 10px;
-  align-self: flex-end;
-}
-
-/* Body */
-.chat-message-body {
-  border-radius: 12px;
-  margin-bottom: 4px;
-}
-
-.chat-message-user {
-  .chat-message-body;
-  position: relative;
-  background-color: #f0eef5;
-  margin-right: 36px;
-}
-
-.chat-message-agent {
-  margin-left: 36px;
-  position: relative;
-  background-color: #f3f4f6;
-}
-
-/* Content */
-.chat-message-content {
-  padding: 10px 16px;
-  word-wrap: break-word;
-  overflow-x: auto;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-}
-
-.chat-message-kind-status {
-  font-style: italic;
-  color: grey;
-}
-
-.chat-message-kind-warning {
-  font-style: italic;
-  color: rgb(146, 146, 0);
-}
-
-.chat-message-kind-error {
-  font-style: italic;
-  color: red;
-}
-
-.chat-message-kind-success {
-  font-style: italic;
-  color: green;
-}
-
-.chat-message-kind-info {
-  font-size: 0.85em;
-  color: #666;
-  padding: 2px 0;
-}
-
-/* Notification messages — agent-initiated toast/inline (via
- * SessionContext.beginAgentThread) and OS-forwarded notifications (via the
- * osNotifications agent). Rendered with a muted background and a left accent
- * stripe so they read as system/ephemeral rather than as a normal agent reply.
- * The class is applied to the message-container div by ChatView's
- * addNotificationMessage path. */
-.chat-message-agent.notification {
-  .chat-message-content {
-    background-color: rgba(120, 144, 156, 0.08);
-    border-left: 3px solid #78909c;
-    box-shadow: none;
-    font-size: 0.92em;
-    padding: 6px 12px 6px 13px;
-  }
 }
 
 /* Collapsible thinking block for reasoning engine */
@@ -818,182 +700,6 @@ details.reasoning-thinking pre {
   overflow-y: auto;
 }
 
-.chat-message-agent-text {
-  white-space: break-spaces;
-}
-
-.chat-message-user-text {
-  white-space: break-spaces;
-}
-
-table.table-message {
-  table-layout: fixed;
-  text-overflow: ellipsis;
-  text-wrap: pretty;
-  width: 100%;
-}
-
-table.table-message th,
-table.table-message td {
-  border: solid 1px black;
-  padding: 0px 10px 0px 10px;
-}
-
-.chat-message-metrics {
-  margin: 0px;
-  border-radius: 0px 0px 8px 8px;
-  font-size: 10px;
-  font-style: normal;
-  z-index: 50;
-  text-align: right;
-}
-
-.chat-message-metrics-agent {
-  .chat-message-metrics;
-  background-color: #e8e9eb;
-}
-
-.chat-message-metrics-user {
-  .chat-message-metrics;
-  background-color: #e2e0ec;
-}
-
-/* hidden metrics */
-.chat-message-body-hide-metrics {
-  .chat-message-body;
-}
-.chat-message-body-hide-metrics .chat-message-metrics {
-  display: none;
-}
-
-.chat-message-body-hide-metrics .tts-metrics {
-  display: none;
-}
-
-.chat-message-body-hide-metrics:hover {
-  border-radius: 8px 8px 0px 0px;
-}
-
-.chat-message-body-hide-metrics:hover .chat-message-metrics {
-  display: block;
-  position: absolute;
-  width: 100%;
-  transform-origin: 0 0;
-  transform: scaleY(0);
-  animation: metrics 0.15s ease-out 0s forwards;
-}
-
-@keyframes metrics {
-  0% {
-  }
-  100% {
-    transform: scaleY(1);
-    overflow: visible;
-  }
-}
-
-.metrics-details {
-  display: inline-flex;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 5px;
-  margin-bottom: 5px;
-}
-
-.metrics-details > div {
-  margin-left: 5px;
-  margin-right: 5px;
-}
-
-.chat-message-hidden {
-  display: none;
-  visibility: hidden;
-}
-
-.chat-timestamp {
-  font-size: 10px;
-  font-style: normal;
-  color: #aaa;
-  position: relative;
-  margin: 4px;
-  letter-spacing: 0.2px;
-}
-
-.chat-timestamp-agent {
-  .chat-timestamp;
-  margin-left: 40px;
-}
-
-.chat-timestamp-user {
-  .chat-timestamp;
-  text-align: end;
-  margin-right: 40px;
-}
-
-.agent-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 15px;
-  position: absolute;
-  left: 0px;
-  font-size: 18px;
-  font-style: normal;
-  text-align: center;
-  line-height: 30px;
-  background-color: #e8e9eb;
-}
-
-.user-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 15px;
-  position: absolute;
-  right: 0px;
-  font-size: 14px;
-  font-style: normal;
-  text-align: center;
-  line-height: 30px;
-  background: #e2dff0;
-  color: #5b4a8a;
-  font-family: inherit;
-  font-weight: 600;
-}
-
-.agent-name {
-  font-style: normal;
-  font-weight: bold;
-  margin-right: 8px;
-}
-
-.agent-name:hover .clickable {
-  cursor: pointer;
-  text-decoration: underline;
-  font-weight: bolder;
-}
-
-.timeString {
-  font-style: normal;
-}
-
-.chat-message-explained {
-  position: relative;
-}
-
-.chat-message-explained-icon {
-  align-self: flex-end;
-  border: none;
-  background-color: transparent;
-  margin-right: 5px;
-  position: absolute;
-  top: 0;
-  right: 0;
-}
-
-.chat-message-action-data {
-  white-space: nowrap;
-  font-size: 80%;
-}
-
 // Panel below an agent message that shows the action JSON when the
 // user clicks the agent name. Mirrors the chat-ui details-row pattern
 // so the JSON expands beneath the response instead of overlaying it.
@@ -1011,35 +717,6 @@ table.table-message td {
   overflow-x: auto;
   max-height: 360px;
   overflow-y: auto;
-}
-
-.chat-message-explained[data-expl]:hover:after {
-  content: attr(data-expl);
-  position: absolute;
-  text-align: right;
-  top: 0px;
-  right: 30px;
-  white-space: nowrap;
-  color: gray;
-  background-color: lightyellow;
-  border: 1px solid black;
-  padding: 1px 5px 1px 5px;
-  font-size: 70%;
-}
-
-.chat-input-button {
-  align-self: flex-end;
-  border: none;
-  background-color: transparent;
-  width: 24px;
-  height: 24px;
-  padding: 0px;
-  margin: 6px 3.5px;
-  cursor: pointer;
-}
-
-.chat-input-button:disabled svg {
-  fill: lightslategray;
 }
 
 .chat-input-micSelector {
@@ -1091,15 +768,6 @@ table.table-message td {
   font-size: 8px;
   user-select: none;
   opacity: 0.5;
-}
-
-@keyframes message {
-  0% {
-  }
-  100% {
-    transform: scale(1);
-    overflow: visible;
-  }
 }
 
 @import "./searchMenuCommon.less";
@@ -1368,13 +1036,6 @@ input[type="file"] {
   flex: 0 0 auto;
 }
 
-.user-textarea:empty[data-placeholder]::before {
-  content: attr(data-placeholder);
-  color: rgba(128, 128, 128, 0.6);
-  font-style: italic;
-  pointer-events: none;
-}
-
 // ─── Voice Mode Layout ────────────────────────────────────────────────────────
 
 .voice-mode {
@@ -1554,76 +1215,6 @@ input[type="file"] {
 @feedback-accent: #1f6feb;
 @feedback-dim: #8a8a8a;
 
-/* Bubble hidden via the trash icon. The whole MessageGroup is hidden in
-   place — user message + status + every agent reply collapse to slim
-   placeholders. The placeholder line fades and the container fully
-   collapses 10 s after the class is applied (so the chat reflows and the
-   trashed bubble doesn't permanently take up a line). `@shell trash
-   restore` removes the class and the container snaps back to normal. */
-.chat-message-container-agent.chat-message-trashed,
-.chat-message-container-user.chat-message-trashed {
-  // Real content snaps away as soon as the class is applied — no fade.
-  & > .chat-timestamp-agent,
-  & > .chat-timestamp-user,
-  & > .agent-icon,
-  & > .user-icon,
-  & > .chat-message-body,
-  & > .chat-message-body-hide-metrics,
-  & > .chat-message-actions {
-    display: none;
-  }
-  // .chat-message-container's base rule has `transform: scale(0)` plus
-  // a 0.15s `message` enter-animation that fills forward to scale(1).
-  // Setting `animation` below replaces that animation outright, so the
-  // forwards-fill state is dropped and the container would snap back to
-  // scale(0) — invisible — taking the placeholder ::after with it.
-  // Pin scale(1) explicitly so the row stays visible while the
-  // placeholder fades.
-  transform: scale(1);
-  // The container itself stays solid for the full 10 s window so the
-  // row keeps its slot in the chat — only the placeholder text fades.
-  // At t=10 s the container collapses to display:none in one snap.
-  animation: chat-trashed-collapse 6s linear forwards;
-}
-.chat-message-container-agent.chat-message-trashed::after,
-.chat-message-container-user.chat-message-trashed::after {
-  content: "🗑  message hidden — `@shell trash restore` to recover";
-  display: block;
-  font-size: 11px;
-  color: #888;
-  font-style: italic;
-  padding: 4px 0;
-  // Placeholder is at full opacity for the first 4 s then fades 1 → 0
-  // over the last 2 s (66.67% of a 6 s window). The container's
-  // collapse keyframe handles vanishing the row after the fade.
-  animation: chat-trashed-fade 6s linear forwards;
-}
-.chat-message-container-agent.chat-message-trashed::after {
-  margin-left: 40px;
-}
-.chat-message-container-user.chat-message-trashed::after {
-  text-align: right;
-  margin-right: 40px;
-}
-@keyframes chat-trashed-fade {
-  0%,
-  66.67% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-@keyframes chat-trashed-collapse {
-  0%,
-  99.99% {
-    /* container stays in place while the placeholder fades */
-  }
-  100% {
-    display: none;
-  }
-}
-
 /* Trash button — anchored absolute top-right inside the bubble body
  * for both user and agent messages. Hidden until the user hovers the
  * container, brightens to red to telegraph the destructive intent. */
@@ -1654,196 +1245,6 @@ input[type="file"] {
 .chat-message-container-user:hover .chat-message-trash {
   opacity: 1;
   pointer-events: auto;
-}
-
-.chat-action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  color: @feedback-dim;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    opacity 0.12s ease;
-
-  i {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-  i svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  &:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: #333;
-  }
-  &:focus-visible {
-    outline: 2px solid @feedback-accent;
-    outline-offset: 1px;
-  }
-  &.feedback-selected {
-    color: @feedback-accent;
-  }
-  &[data-action="thumbs-down"].feedback-selected {
-    color: #c83e3e;
-  }
-  &.feedback-copied {
-    color: #2e8b57; // sea green — quick "copied!" confirmation
-  }
-}
-
-.chat-message-actions {
-  display: flex;
-  gap: 2px;
-  margin: 2px 0 6px 40px; // align under the bubble (left of agent icon area)
-  align-items: center;
-  opacity: 0.65;
-  transition: opacity 0.15s ease;
-}
-
-.chat-message-container-agent:hover .chat-message-actions,
-.chat-message-container-agent.feedback-rated .chat-message-actions {
-  opacity: 1;
-}
-
-/* Variant: footer-always — covered by the base .chat-message-actions rules. */
-
-/* Dropdown menu (⋯ more / category menu) */
-.chat-feedback-menu {
-  background: #fff;
-  border: 1px solid #d0d7de;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 4px;
-  min-width: 220px;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-}
-.chat-feedback-menu-item {
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 7px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  color: #222;
-}
-.chat-feedback-menu-item:hover {
-  background: #f3f5f7;
-}
-
-/* Popover card (thumbs-down detail) */
-.chat-feedback-popover {
-  background: #fff;
-  border: 1px solid #d0d7de;
-  border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
-  padding: 14px 16px;
-  width: 340px;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  color: #222;
-}
-.chat-feedback-popover-heading {
-  font-weight: 600;
-  font-size: 14px;
-}
-.chat-feedback-popover-subtitle {
-  color: #555;
-  font-size: 11px;
-  line-height: 1.4;
-}
-.chat-feedback-popover-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-weight: 500;
-}
-.chat-feedback-popover-textarea {
-  width: 100%;
-  resize: vertical;
-  min-height: 60px;
-  border-radius: 6px;
-  border: 1px solid #d0d7de;
-  padding: 6px 8px;
-  font: inherit;
-}
-.chat-feedback-popover-fieldset {
-  border: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.chat-feedback-popover-fieldset legend {
-  font-weight: 500;
-  font-size: 12px;
-  padding: 0 0 4px 0;
-  color: #444;
-}
-.chat-feedback-popover-radio {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 400;
-  cursor: pointer;
-}
-.chat-feedback-popover-share {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  font-size: 12px;
-  color: #444;
-  line-height: 1.4;
-}
-.chat-feedback-popover-share input {
-  margin-top: 2px;
-}
-.chat-feedback-popover-buttons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-.chat-feedback-popover-button {
-  border: 1px solid #d0d7de;
-  background: #fff;
-  border-radius: 6px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font: inherit;
-  color: #222;
-}
-.chat-feedback-popover-button:hover {
-  background: #f3f5f7;
-}
-.chat-feedback-popover-button.submit {
-  background: @feedback-accent;
-  color: #fff;
-  border-color: @feedback-accent;
-}
-.chat-feedback-popover-button.submit:hover {
-  background: darken(@feedback-accent, 6%);
-}
-.chat-feedback-popover-button.clear {
-  color: #a23737;
-  border-color: transparent;
 }
 
 /* Dark mode */

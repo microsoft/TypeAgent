@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { createWebSocketChannelServer } from "websocket-channel-server";
-import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import {
     createConversationManager,
     ConversationManager,
 } from "./conversationManager.js";
+import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -17,23 +17,11 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
-import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
-    AgentServerInvokeFunctions,
-    AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
     AGENT_SERVER_DISCOVERY_NAME,
-    DiscoveryChannelName,
-    createDiscoveryHandlers,
-    DispatcherConnectOptions,
-    JoinConversationResult,
     UserIdentity,
-    getDispatcherChannelName,
-    getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
-import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
-import type { Dispatcher } from "agent-dispatcher";
 import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
 import { loadConfig } from "@typeagent/config";
 import {
@@ -258,201 +246,29 @@ async function main() {
         }, idleShutdownMs);
     }
 
-    wss = await createWebSocketChannelServer(
-        { port },
-        (channelProvider: ChannelProvider, closeFn: () => void) => {
+    // The per-connection wiring is shared with the in-process (embedded)
+    // agent server used by the Electron shell — both go through the same
+    // ConversationManager via createAgentServerConnectionHandler so there is
+    // a single connection code path regardless of transport.
+    const connectionHandler = createAgentServerConnectionHandler({
+        conversationManager,
+        shutdown: shutdownServer,
+        getUserIdentity: () => userIdentity,
+        portRegistrar,
+        onConnect: () => {
             connectionCount++;
             if (idleShutdownTimer !== undefined) {
                 clearTimeout(idleShutdownTimer);
                 idleShutdownTimer = undefined;
             }
-
-            // Track which conversations this WebSocket connection has joined
-            // conversationId → { dispatcher, connectionId }
-            const joinedConversations = new Map<
-                string,
-                { dispatcher: Dispatcher; connectionId: string }
-            >();
-
-            const invokeFunctions: AgentServerInvokeFunctions = {
-                joinConversation: async (
-                    options?: DispatcherConnectOptions,
-                ) => {
-                    // Resolve conversation ID first (may auto-create default)
-                    const conversationId =
-                        await conversationManager.resolveConversationId(
-                            options?.conversationId,
-                        );
-
-                    if (joinedConversations.has(conversationId)) {
-                        throw new Error(
-                            `Already joined conversation '${conversationId}'. Call leaveConversation() before joining again.`,
-                        );
-                    }
-
-                    // Create conversation-namespaced channels
-                    const clientIOChannel = channelProvider.createChannel(
-                        getClientIOChannelName(conversationId),
-                    );
-                    try {
-                        const clientIORpcClient =
-                            createClientIORpcClient(clientIOChannel);
-
-                        // Intercept shutdown: when the dispatcher calls
-                        // clientIO.shutdown(), shut down the server directly
-                        // instead of forwarding the request to the client.
-                        // Closing the WebSocket server disconnects all clients.
-                        const wrappedClientIO = {
-                            ...clientIORpcClient,
-                            shutdown: () => {
-                                shutdownServer();
-                            },
-                        };
-
-                        const result =
-                            await conversationManager.joinConversation(
-                                conversationId,
-                                wrappedClientIO,
-                                () => {
-                                    channelProvider.deleteChannel(
-                                        getDispatcherChannelName(
-                                            conversationId,
-                                        ),
-                                    );
-                                    channelProvider.deleteChannel(
-                                        getClientIOChannelName(conversationId),
-                                    );
-                                    joinedConversations.delete(conversationId);
-                                },
-                                options,
-                            );
-
-                        const dispatcherChannel = channelProvider.createChannel(
-                            getDispatcherChannelName(conversationId),
-                        );
-                        try {
-                            createDispatcherRpcServer(
-                                result.dispatcher,
-                                dispatcherChannel,
-                            );
-                        } catch (e) {
-                            channelProvider.deleteChannel(
-                                getDispatcherChannelName(conversationId),
-                            );
-                            throw e;
-                        }
-
-                        joinedConversations.set(conversationId, {
-                            dispatcher: result.dispatcher,
-                            connectionId: result.connectionId,
-                        });
-
-                        const joinResult: JoinConversationResult = {
-                            connectionId: result.connectionId,
-                            conversationId,
-                            name: result.name,
-                            pendingInteractions:
-                                result.pendingInteractions ?? [],
-                        };
-                        if (result.queueSnapshot !== undefined) {
-                            joinResult.queueSnapshot = result.queueSnapshot;
-                        }
-                        return joinResult;
-                    } catch (e) {
-                        channelProvider.deleteChannel(
-                            getClientIOChannelName(conversationId),
-                        );
-                        throw e;
-                    }
-                },
-
-                leaveConversation: async (conversationId: string) => {
-                    const entry = joinedConversations.get(conversationId);
-                    if (entry === undefined) {
-                        throw new Error(
-                            `Not joined to conversation: ${conversationId}`,
-                        );
-                    }
-                    // Channel cleanup runs in the closeFn passed to
-                    // sharedDispatcher.join() via dispatcher.close(); don't
-                    // double-delete here.
-                    await conversationManager.leaveConversation(
-                        conversationId,
-                        entry.connectionId,
-                    );
-                },
-
-                createConversation: async (name: string) => {
-                    return conversationManager.createConversation(name);
-                },
-
-                listConversations: async (name?: string) => {
-                    return conversationManager.listConversations(name);
-                },
-
-                renameConversation: async (
-                    conversationId: string,
-                    newName: string,
-                ) => {
-                    return conversationManager.renameConversation(
-                        conversationId,
-                        newName,
-                    );
-                },
-
-                deleteConversation: async (conversationId: string) => {
-                    // Channel cleanup for any joined client of this conversation
-                    // runs in the closeFn passed to sharedDispatcher.join() via
-                    // sharedDispatcher.close() → closeAllClients() →
-                    // dispatcher.close(); don't double-delete here.
-                    return conversationManager.deleteConversation(
-                        conversationId,
-                    );
-                },
-                shutdown: shutdownServer,
-                getUserIdentity: async () => userIdentity,
-            };
-
-            // Clean up all conversations on WebSocket disconnect
-            channelProvider.on("disconnect", () => {
-                connectionCount--;
-                scheduleIdleShutdown();
-                for (const [
-                    conversationId,
-                    { connectionId },
-                ] of joinedConversations.entries()) {
-                    conversationManager
-                        .leaveConversation(conversationId, connectionId)
-                        .catch(() => {
-                            // Best effort on disconnect
-                        });
-                }
-                joinedConversations.clear();
-            });
-
-            createRpc(
-                "agent-server",
-                channelProvider.createChannel(AgentServerChannelName),
-                invokeFunctions,
-            );
-
-            // Discovery channel: read-only port lookup for external
-            // clients (browser extension, VS Code extension, CLI). Hosted
-            // on the same WS as agent-server so clients only need one
-            // connection. Mutations to the registrar are NOT exposed
-            // here — only agents themselves can register, via the
-            // in-process SessionContext.registerPort. The handler
-            // factory is shared with the standalone Electron shell so
-            // both hosts speak the same protocol byte-for-byte.
-            createRpc(
-                "agent-server:discovery",
-                channelProvider.createChannel(DiscoveryChannelName),
-                createDiscoveryHandlers((agentName, role) =>
-                    portRegistrar.lookup(agentName, role),
-                ),
-            );
         },
-    );
+        onDisconnect: () => {
+            connectionCount--;
+            scheduleIdleShutdown();
+        },
+    });
+
+    wss = await createWebSocketChannelServer({ port }, connectionHandler);
 
     // Register the agent-server's own listen port as a regular
     // allocation under the well-known AGENT_SERVER_DISCOVERY_NAME with

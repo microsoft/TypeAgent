@@ -113,6 +113,153 @@ export type AgentServerConnection = {
 };
 
 /**
+ * Build an {@link AgentServerConnection} over an already-connected channel
+ * adapter. This is the transport-agnostic core shared by both the WebSocket
+ * client ({@link connectAgentServer}) and the in-process loopback client used
+ * when an agent server is embedded in the same process (e.g. the Electron
+ * shell).
+ *
+ * @param channel  A connected channel provider adapter. The caller is
+ *   responsible for pumping the underlying transport into
+ *   `channel.notifyMessage(...)` and for calling `channel.notifyDisconnected()`
+ *   when the transport drops.
+ * @param closeTransport  Invoked by `connection.close()` to tear down the
+ *   underlying transport (e.g. close the WebSocket, or disconnect the loopback).
+ */
+export function createAgentServerConnection(
+    channel: ChannelProviderAdapter,
+    closeTransport: () => void,
+): AgentServerConnection {
+    const rpc = createRpc<AgentServerInvokeFunctions>(
+        "agent-server:client",
+        channel.createChannel(AgentServerChannelName),
+    );
+
+    // Track joined conversations for cleanup on close
+    const joinedConversations = new Map<
+        string,
+        { dispatcher: Dispatcher; connectionId: string }
+    >();
+
+    let closed = false;
+
+    const connection: AgentServerConnection = {
+        async joinConversation(
+            clientIO: ClientIO,
+            options?: DispatcherConnectOptions,
+        ): Promise<ConversationDispatcher> {
+            const requestedConversationId = options?.conversationId;
+            if (
+                requestedConversationId !== undefined &&
+                joinedConversations.has(requestedConversationId)
+            ) {
+                throw new Error(
+                    `Already joined conversation '${requestedConversationId}'. Call leaveConversation() before joining again.`,
+                );
+            }
+
+            const result: JoinConversationResult = await rpc.invoke(
+                "joinConversation",
+                options,
+            );
+
+            const conversationId = result.conversationId;
+
+            // Create the dispatcher RPC client first so we can wrap the
+            // host's clientIO with completion-correlation forwarding
+            // before the clientIO RPC server starts delivering events.
+            const {
+                dispatcher,
+                notifyCommandComplete,
+                notifyRequestCancelled,
+            } = createDispatcherRpcClient(
+                channel.createChannel(getDispatcherChannelName(conversationId)),
+                result.connectionId,
+            );
+
+            createClientIORpcServer(
+                wrapClientIOForCompletion(clientIO, {
+                    notifyCommandComplete,
+                    notifyRequestCancelled,
+                }),
+                channel.createChannel(getClientIOChannelName(conversationId)),
+            );
+
+            // Override close to leave the conversation rather than close the WebSocket
+            dispatcher.close = async () => {
+                await connection.leaveConversation(conversationId);
+            };
+
+            joinedConversations.set(conversationId, {
+                dispatcher,
+                connectionId: result.connectionId,
+            });
+
+            return {
+                dispatcher,
+                conversationId,
+                name: result.name,
+                connectionId: result.connectionId,
+                queueSnapshot: result.queueSnapshot,
+            };
+        },
+
+        async leaveConversation(conversationId: string): Promise<void> {
+            const entry = joinedConversations.get(conversationId);
+            if (entry === undefined) {
+                return;
+            }
+            joinedConversations.delete(conversationId);
+            channel.deleteChannel(getDispatcherChannelName(conversationId));
+            channel.deleteChannel(getClientIOChannelName(conversationId));
+            await rpc.invoke("leaveConversation", conversationId);
+        },
+
+        async createConversation(name: string): Promise<ConversationInfo> {
+            return rpc.invoke("createConversation", name);
+        },
+
+        async listConversations(name?: string): Promise<ConversationInfo[]> {
+            return rpc.invoke("listConversations", name);
+        },
+
+        async renameConversation(
+            conversationId: string,
+            newName: string,
+        ): Promise<void> {
+            return rpc.invoke("renameConversation", conversationId, newName);
+        },
+
+        async deleteConversation(conversationId: string): Promise<void> {
+            // Clean up local channels if we're in this conversation
+            const entry = joinedConversations.get(conversationId);
+            if (entry !== undefined) {
+                joinedConversations.delete(conversationId);
+                channel.deleteChannel(getDispatcherChannelName(conversationId));
+                channel.deleteChannel(getClientIOChannelName(conversationId));
+            }
+            return rpc.invoke("deleteConversation", conversationId);
+        },
+
+        async shutdown(): Promise<void> {
+            debug("Requesting server shutdown via existing connection");
+            await rpc.invoke("shutdown");
+        },
+
+        async close(): Promise<void> {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            debug("Closing agent server connection");
+            closeTransport();
+        },
+    };
+
+    return connection;
+}
+
+/**
  * Connect to an agent server and return a connection object that supports
  * multiple conversations over a single WebSocket.
  */
@@ -122,6 +269,9 @@ export async function connectAgentServer(
 ): Promise<AgentServerConnection> {
     return new Promise((resolve, reject: (e: Error) => void) => {
         const ws = new WebSocket(url);
+        let opened = false;
+        let resolved = false;
+
         const channel: ChannelProviderAdapter = createChannelProviderAdapter(
             "agent-server:client",
             (message: any) => {
@@ -130,147 +280,14 @@ export async function connectAgentServer(
             },
         );
 
-        const rpc = createRpc<AgentServerInvokeFunctions>(
-            "agent-server:client",
-            channel.createChannel(AgentServerChannelName),
-        );
-
-        // Track joined conversations for cleanup on close
-        const joinedConversations = new Map<
-            string,
-            { dispatcher: Dispatcher; connectionId: string }
-        >();
-
-        let opened = false;
-        let resolved = false;
-        let closed = false;
-
-        const connection: AgentServerConnection = {
-            async joinConversation(
-                clientIO: ClientIO,
-                options?: DispatcherConnectOptions,
-            ): Promise<ConversationDispatcher> {
-                const requestedConversationId = options?.conversationId;
-                if (
-                    requestedConversationId !== undefined &&
-                    joinedConversations.has(requestedConversationId)
-                ) {
-                    throw new Error(
-                        `Already joined conversation '${requestedConversationId}'. Call leaveConversation() before joining again.`,
-                    );
-                }
-
-                const result: JoinConversationResult = await rpc.invoke(
-                    "joinConversation",
-                    options,
-                );
-
-                const conversationId = result.conversationId;
-
-                // Create the dispatcher RPC client first so we can wrap the
-                // host's clientIO with completion-correlation forwarding
-                // before the clientIO RPC server starts delivering events.
-                const {
-                    dispatcher,
-                    notifyCommandComplete,
-                    notifyRequestCancelled,
-                } = createDispatcherRpcClient(
-                    channel.createChannel(
-                        getDispatcherChannelName(conversationId),
-                    ),
-                    result.connectionId,
-                );
-
-                createClientIORpcServer(
-                    wrapClientIOForCompletion(clientIO, {
-                        notifyCommandComplete,
-                        notifyRequestCancelled,
-                    }),
-                    channel.createChannel(
-                        getClientIOChannelName(conversationId),
-                    ),
-                );
-
-                // Override close to leave the conversation rather than close the WebSocket
-                dispatcher.close = async () => {
-                    await connection.leaveConversation(conversationId);
-                };
-
-                joinedConversations.set(conversationId, {
-                    dispatcher,
-                    connectionId: result.connectionId,
-                });
-
-                return {
-                    dispatcher,
-                    conversationId,
-                    name: result.name,
-                    connectionId: result.connectionId,
-                    queueSnapshot: result.queueSnapshot,
-                };
-            },
-
-            async leaveConversation(conversationId: string): Promise<void> {
-                const entry = joinedConversations.get(conversationId);
-                if (entry === undefined) {
-                    return;
-                }
-                joinedConversations.delete(conversationId);
-                channel.deleteChannel(getDispatcherChannelName(conversationId));
-                channel.deleteChannel(getClientIOChannelName(conversationId));
-                await rpc.invoke("leaveConversation", conversationId);
-            },
-
-            async createConversation(name: string): Promise<ConversationInfo> {
-                return rpc.invoke("createConversation", name);
-            },
-
-            async listConversations(
-                name?: string,
-            ): Promise<ConversationInfo[]> {
-                return rpc.invoke("listConversations", name);
-            },
-
-            async renameConversation(
-                conversationId: string,
-                newName: string,
-            ): Promise<void> {
-                return rpc.invoke(
-                    "renameConversation",
-                    conversationId,
-                    newName,
-                );
-            },
-
-            async deleteConversation(conversationId: string): Promise<void> {
-                // Clean up local channels if we're in this conversation
-                const entry = joinedConversations.get(conversationId);
-                if (entry !== undefined) {
-                    joinedConversations.delete(conversationId);
-                    channel.deleteChannel(
-                        getDispatcherChannelName(conversationId),
-                    );
-                    channel.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
-                }
-                return rpc.invoke("deleteConversation", conversationId);
-            },
-
-            async shutdown(): Promise<void> {
-                debug("Requesting server shutdown via existing connection");
-                await rpc.invoke("shutdown");
-            },
-
-            async close(): Promise<void> {
-                if (closed) {
-                    return;
-                }
-                closed = true;
-                debug("Closing agent server connection");
-                ws.close();
-            },
-        };
+        let connectionClosed = false;
+        const connection = createAgentServerConnection(channel, () => {
+            if (connectionClosed) {
+                return;
+            }
+            connectionClosed = true;
+            ws.close();
+        });
 
         ws.onopen = () => {
             debug("WebSocket connection established", ws.readyState);
@@ -285,7 +302,6 @@ export async function connectAgentServer(
         ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
-            joinedConversations.clear();
             if (!opened) {
                 // Closed before onopen fired — reject the pending promise.
                 if (!resolved) {
@@ -298,8 +314,8 @@ export async function connectAgentServer(
                 }
                 return;
             }
-            if (!closed) {
-                closed = true;
+            if (!connectionClosed) {
+                connectionClosed = true;
                 onDisconnect?.();
             }
         };

@@ -137,10 +137,19 @@ export class GreetingCommandHandler implements CommandHandler {
     public async run(
         context: ActionContext<GreetingAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
-    ): Promise<void> {
+    ): Promise<ActionResult | undefined> {
         if (params.flags.mock) {
             context.actionIO.appendDisplay("Hello.  How can I help you today?");
-            return;
+            // Mock path makes no LLM call — report all-zero usage so the UI
+            // can distinguish "no tokens used" from "not reported".
+            return {
+                entities: [],
+                tokenUsage: {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                },
+            };
         }
         // Initial output to let the user know the agent is thinking...
         context.actionIO.appendDisplay(
@@ -158,7 +167,14 @@ export class GreetingCommandHandler implements CommandHandler {
             context.sessionContext.agentContext.userPromise = undefined;
         }
 
-        const response = await this.getTypeChatResponse(context);
+        // Accumulates the LLM token usage consumed while generating the
+        // greeting so it can be reported back to the dispatcher.
+        const tokenUsage = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
+        const response = await this.getTypeChatResponse(context, tokenUsage);
 
         if (response.success) {
             context.actionIO.appendDiagnosticData(response.data);
@@ -190,6 +206,14 @@ export class GreetingCommandHandler implements CommandHandler {
         } else {
             displayError("Unable to generate greeting.", context);
         }
+
+        // The greeting content is appended directly above, so return a
+        // no-display result carrying only the token usage. The dispatcher
+        // accumulates this into the request's "Action Tokens".
+        return {
+            entities: [],
+            tokenUsage,
+        };
     }
 
     private createModel(fastModel: boolean = true): ChatModelWithStreaming {
@@ -226,9 +250,29 @@ export class GreetingCommandHandler implements CommandHandler {
 
     async getTypeChatResponse(
         context: ActionContext<GreetingAgentContext>,
+        tokenUsage?: {
+            prompt_tokens: number;
+            completion_tokens: number;
+            total_tokens: number;
+        },
     ): Promise<Result<GreetingAction>> {
         // Create Model instance
         let chatModel = this.createModel(true);
+
+        // Capture per-call token usage reported by the model so the agent can
+        // attribute it to the request. TypeChat's translate() doesn't expose a
+        // usage callback, so we hook the model's completionCallback instead.
+        if (tokenUsage !== undefined) {
+            chatModel.completionCallback = (_params, data) => {
+                const usage = (data as any)?.usage;
+                if (usage) {
+                    tokenUsage.prompt_tokens += usage.prompt_tokens ?? 0;
+                    tokenUsage.completion_tokens +=
+                        usage.completion_tokens ?? 0;
+                    tokenUsage.total_tokens += usage.total_tokens ?? 0;
+                }
+            };
+        }
 
         // Create Chat History
         let maxContextLength = 8196;
