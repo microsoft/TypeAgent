@@ -126,7 +126,11 @@ const DEFAULT_REDIRECT_PORT = 6893;
  * Uses `Number()` for strict conversion (rejects partial parses like "123abc").
  * Logs a warning and falls back to `defaultPort` when the value is absent or invalid.
  */
-function parseValidPort(raw: string | undefined, defaultPort: number): number {
+function parseValidPort(
+    raw: string | undefined,
+    defaultPort: number,
+    envName: string = "MSGRAPH_APP_REDIRECT_PORT",
+): number {
     if (raw === undefined) {
         return defaultPort;
     }
@@ -135,7 +139,7 @@ function parseValidPort(raw: string | undefined, defaultPort: number): number {
         return num;
     }
     debugGraphError(
-        `Invalid port value "${raw}" for MSGRAPH_APP_REDIRECT_PORT; using default port ${defaultPort}.`,
+        `Invalid port value "${raw}" for ${envName}; using default port ${defaultPort}.`,
     );
     return defaultPort;
 }
@@ -157,9 +161,11 @@ function loadMSGraphSettings(envPrefix: string = "MSGRAPH_APP"): AppSettings {
         authModeRaw === "device-code" || authModeRaw === "devicecode"
             ? "device-code"
             : "browser";
+    const redirectPortEnv = `${envPrefix}_REDIRECT_PORT`;
     const redirectPort = parseValidPort(
-        process.env[`${envPrefix}_REDIRECT_PORT`],
+        process.env[redirectPortEnv],
         DEFAULT_REDIRECT_PORT,
+        redirectPortEnv,
     );
 
     const settings: AppSettings = {
@@ -255,6 +261,7 @@ export class GraphClient extends EventEmitter {
 
     private readonly MSGRAPH_AUTH_URL: string | string[];
     private readonly _tokenCacheName: string;
+    private readonly _graphUserScopes: string[];
 
     private readonly _settings: AppSettings;
     protected constructor(
@@ -263,13 +270,39 @@ export class GraphClient extends EventEmitter {
     ) {
         super();
         this._settings = loadMSGraphSettings(options.envPrefix);
+
+        // Restrict authRecordFile to a plain basename so a subclass (now that
+        // GraphClient is publicly exported) can't escape ~/.typeagent via
+        // `..` segments or an absolute path.
+        const authRecordFile = options.authRecordFile ?? "tokencache.bin";
+        if (
+            path.isAbsolute(authRecordFile) ||
+            path.basename(authRecordFile) !== authRecordFile
+        ) {
+            throw new Error(
+                `Invalid authRecordFile "${authRecordFile}": must be a simple filename with no path separators`,
+            );
+        }
         this.AUTH_RECORD_PATH = path.join(
             path.join(os.homedir(), ".typeagent"),
-            options.authRecordFile ?? "tokencache.bin",
+            authRecordFile,
         );
         this._tokenCacheName = options.tokenCacheName ?? "typeagent-tokencache";
         this.MSGRAPH_AUTH_URL =
             options.scopes ?? "https://graph.microsoft.com/.default";
+
+        // When a subclass supplies an explicit scope list, also use it for
+        // the Graph SDK middleware's automatic token fetches; otherwise the
+        // hard-coded `graphUserScopes` perms would still be requested even
+        // though the subclass tried to narrow them.
+        const overrideScopes = options.scopes
+            ? Array.isArray(options.scopes)
+                ? options.scopes
+                : [options.scopes]
+            : undefined;
+        this._graphUserScopes =
+            overrideScopes ?? this._settings.graphUserScopes;
+
         GraphClient._instances.add(this);
     }
 
@@ -485,7 +518,7 @@ export class GraphClient extends EventEmitter {
         const authProvider = new TokenCredentialAuthenticationProvider(
             credential,
             {
-                scopes: this._settings.graphUserScopes,
+                scopes: this._graphUserScopes,
             },
         );
 
