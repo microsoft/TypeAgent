@@ -469,6 +469,30 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.saveOnboardingSettingsSnapshot",
+            withErrors(async () => {
+                const content = getOnboardingSettingsSnapshotMarkdown();
+                const targetUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file("onboarding-settings.md"),
+                    filters: {
+                        Markdown: ["md"],
+                    },
+                    title: "Save Onboarding Settings Snapshot",
+                });
+                if (!targetUri) {
+                    return;
+                }
+
+                await fs.writeFile(targetUri.fsPath, content, "utf-8");
+                void vscode.window.showInformationMessage(
+                    `Saved onboarding settings snapshot to ${targetUri.fsPath}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.openOnboardingSummary",
             withErrors(async () => {
                 await openOnboardingSummary(runtime);

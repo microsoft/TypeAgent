@@ -159,6 +159,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.saveOnboardingSettingsSnapshot",
+        "title": "Save onboarding settings snapshot",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.restoreOnboardingPhase",
         "title": "Restore onboarding phase",
         "category": "TypeAgent Studio"
@@ -236,6 +241,7 @@
     "onCommand:typeagent-studio.showOnboardingSettingsSnapshot",
     "onCommand:typeagent-studio.copyOnboardingSettingsSnapshot",
     "onCommand:typeagent-studio.openOnboardingSettingsSnapshot",
+    "onCommand:typeagent-studio.saveOnboardingSettingsSnapshot",
     "onCommand:typeagent-studio.restoreOnboardingPhase",
     "onCommand:typeagent-studio.rerunStaleOnboardingPhases",
     "onCommand:typeagent-studio.openOnboardingSummary",
