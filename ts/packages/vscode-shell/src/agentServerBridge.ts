@@ -33,13 +33,7 @@ export type {
     BridgeFromWebviewMessage,
 } from "./bridge/messages.js";
 
-/**
- * Escape characters that are unsafe in raw HTML so untrusted strings
- * (conversation names, session ids, error messages) can be embedded in
- * the inline `conversationNotification` / `overwriteActionBubble` HTML
- * payloads without enabling markup injection. Mirrors
- * packages/shell/src/renderer/src/htmlUtil.ts.
- */
+/** HTML-escape untrusted strings (names, ids, errors) for inline notification HTML. */
 function escapeHtml(str: string): string {
     return str
         .replace(/&/g, "&amp;")
@@ -49,14 +43,7 @@ function escapeHtml(str: string): string {
         .replace(/'/g, "&#39;");
 }
 
-/**
- * Normalize a conversation name for case-insensitive lookup the same way
- * the agent-server does (`ensureNameAvailable` in
- * packages/agentServer/server/src/conversationManager.ts) — trim then
- * lowercase. Keeping both sides normalized identically avoids
- * false-negative pre-checks where the client lets a name through but the
- * server rejects it as a duplicate.
- */
+/** Match the server's case-insensitive name comparison (see `ensureNameAvailable`). */
 function normalizeName(s: string): string {
     return s.trim().toLowerCase();
 }
@@ -135,12 +122,7 @@ export class AgentServerBridge {
     // Configuration
     private readonly ownsStatusBar: boolean;
     private readonly ephemeralSessionName: string | undefined;
-    /**
-     * If set, connect() will find-or-create a session with this name when
-     * neither restoreSessionId nor ephemeralSessionName resolves to a session.
-     * Mirrors CLI's "CLI" / Shell's "Shell" default conversation behavior.
-     * Leave undefined to fall through to the server's "default" conversation.
-     */
+    /** Find-or-create fallback when no session is resolved by restore/ephemeral paths. */
     private readonly defaultSessionName: string | undefined;
     private displayName: string;
     // Track ephemeral session we created so we can delete on dispose
@@ -400,19 +382,10 @@ export class AgentServerBridge {
                 joinOpts.sessionId = this.ephemeralSessionId;
             }
 
-            // Fall-through default-conversation behavior: when no session has
-            // been resolved by the restore/ephemeral paths, find-or-create a
-            // session named `defaultSessionName` (e.g. "VS Code" for the
-            // sidebar). Mirrors CLI's "CLI" and Shell's "Shell" defaults
-            // (`packages/cli/src/commands/connect.ts`,
-            // `packages/shell/src/main/instance.ts`).
-            //
-            // Errors here propagate to the outer catch in connectImpl, which
-            // schedules a reconnect. We deliberately do NOT silently fall back
-            // to the server's "default" conversation on transient failure —
-            // doing so would let the sidebar persist that fallback id as
-            // `sidebar.lastSessionId` and never retry creating the named
-            // default on future launches.
+            // Find-or-create the named default (e.g. "VS Code"). On transient
+            // failure we rethrow rather than fall back to the server's "default"
+            // — silently landing there would persist into sidebar.lastSessionId
+            // and prevent ever retrying the named default.
             if (
                 joinOpts.sessionId === undefined &&
                 this.defaultSessionName !== undefined
@@ -433,12 +406,7 @@ export class AgentServerBridge {
                         );
                         joinOpts.sessionId = info.sessionId;
                     } catch (createErr) {
-                        // Race: another client (e.g. a second VS Code window)
-                        // may have created a same-named session between our
-                        // listSessions and createSession calls. The server
-                        // rejects duplicate names (`ensureNameAvailable`), so
-                        // re-list and pick up the winner. If still missing,
-                        // rethrow — this is a real failure, not a race.
+                        // Race with a peer client: re-list and adopt the winner.
                         const retry = await connection.listSessions(
                             this.defaultSessionName,
                         );
@@ -751,20 +719,15 @@ export class AgentServerBridge {
     }
 
     /**
-     * Leave the current conversation and join a different one.
-     */
-    /**
-     * Switch to a different conversation using the join-before-leave pattern.
-     * - Phase 1: join the new session. If this fails, the old session is
-     *   still active so we report failure cleanly.
-     * - Phase 2: leave the old session (best-effort).
-     * - Phase 3: replay the new session's display history.
+     * Switch to a different conversation using join-before-leave:
+     *   1. join the new session (on failure, old session is still active),
+     *   2. leave the old session (best-effort),
+     *   3. replay the new session's display history.
      *
-     * Returns true if the new session was joined successfully, false if
-     * Phase 1 failed (old session still active; error toast shown). Most
-     * legacy callers ignore the return value and rely on the error toast;
-     * the `manage-conversation` handlers consume it to avoid posting a
-     * false "✅ Switched to X" notification when the join silently failed.
+     * Returns true on success, false if the new-session join failed (error
+     * toast already shown). Most legacy callers discard the return; the
+     * `manage-conversation` handlers consume it to suppress a false-success
+     * notification when the join failed.
      */
     private async joinSpecificSession(
         sessionId: string,
@@ -1553,16 +1516,9 @@ export class AgentServerBridge {
     }
 
     /**
-     * Overwrite the action bubble's body for `requestId` with a display
-     * message. Used when the bridge detects that the user-visible outcome
-     * differs from the optimistic message returned by the action handler
-     * (e.g. "create" colliding with an existing name, "delete" of the
-     * current conversation), and for non-switching `manage-conversation`
-     * results that should appear inline in the same conversation.
-     *
-     * `body` accepts either a plain string (rendered as text by chat-ui)
-     * or a TypedDisplayContent object for html/markdown rendering with
-     * an optional `kind` (info/warning/error) used by chat-ui styling.
+     * Replace the action bubble body for `requestId` — used when the actual
+     * outcome differs from the optimistic action-handler reply, and for
+     * non-switching `manage-conversation` results that render inline.
      */
     private overwriteActionBubble(
         requestId: any,
@@ -1587,17 +1543,10 @@ export class AgentServerBridge {
     }
 
     /**
-     * Push a fresh agent-style notification bubble into the currently
-     * displayed conversation. Used by `manage-conversation` handlers
-     * for operations that switch sessions (new / switch / next / prev)
-     * — the user's own request bubble belongs to the OLD conversation
-     * and is wiped by `chatPanel.clear()` on sessionChanged, so result
-     * messaging needs to land in whatever conversation is now showing.
-     *
-     * `content` is treated as already-escaped HTML. Callers MUST escape
-     * any conversation names/ids via `escapeHtml()` before passing them
-     * through, exactly as the Electron Shell's `addNotificationMessage`
-     * path expects.
+     * Push an agent-style notification bubble into the currently displayed
+     * conversation. Used by switching `manage-conversation` handlers — the
+     * request bubble belongs to the old conversation and gets wiped by
+     * `chatPanel.clear()` on sessionChanged. `content` must be pre-escaped.
      */
     private displayConversationNotification(
         content: string,
@@ -1826,22 +1775,8 @@ export class AgentServerBridge {
         this.onStatusChanged?.();
     }
 
-    // ── manage-conversation (system.conversation) ─────────────────
-    //
-    // Routed from the system agent's `executeConversationAction` (NL like
-    // "list my conversations") and from the @conversation slash commands
-    // (`@conversation new/list/info/switch/prev/next/rename/delete`). Both
-    // dispatch the same payload via `clientIO.takeAction(requestId,
-    // "manage-conversation", payload)`. See:
-    //   ts/docs/architecture/agentServerConversations.md
-    //   ts/packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts
-    //
-    // Non-switching subcommands (list/info/rename/delete) write their
-    // result back into the user's request bubble via overwriteActionBubble.
-    // Switching subcommands (new/switch/prev/next) push a fresh agent
-    // bubble via displayConversationNotification AFTER the switch — the
-    // request bubble lives in the OLD conversation which `chatPanel.clear()`
-    // wipes on sessionChanged.
+    // manage-conversation handler — routed from NL and `@conversation` slash
+    // commands. See ts/docs/architecture/agentServerConversations.md.
     private async handleManageConversation(
         requestId: any,
         payload: any,
@@ -1926,10 +1861,7 @@ export class AgentServerBridge {
         name?: string,
     ): Promise<void> {
         if (!this.connection) return;
-        // Generate a default name when one isn't provided so NL like
-        // "create a new conversation" succeeds end-to-end without a
-        // second prompt. Mirrors the Electron Shell's default-name
-        // format in packages/shell/src/renderer/src/main.ts.
+        // Auto-name (matches the Electron Shell's format) so unnamed NL requests succeed.
         let chosen = name?.trim();
         if (!chosen) {
             const d = new Date();
@@ -1939,10 +1871,7 @@ export class AgentServerBridge {
             )}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
-        // Collision check (case-insensitive, normalized to match server)
-        // so the user gets a clear error rather than a silent server
-        // reject. Picks the existing conversation for them — switching to
-        // it instead of failing.
+        // On name collision, switch to the existing conversation instead of failing.
         const targetNorm = normalizeName(chosen);
         const sessions = await this.connection.listSessions();
         const existing = sessions.find(
@@ -1973,10 +1902,7 @@ export class AgentServerBridge {
             createdId = info.sessionId;
             createdName = chosen;
         } catch (createErr) {
-            // Race: a peer client (e.g. another VS Code window) may have
-            // created a same-named conversation between our list and
-            // create. The server rejects duplicate names; re-list and
-            // adopt the winner.
+            // Race with a peer client: re-list and adopt the winner.
             const retry = await this.connection.listSessions();
             const retryMatch = retry.find(
                 (s) => normalizeName(s.name) === targetNorm,
@@ -2043,11 +1969,8 @@ export class AgentServerBridge {
 
     private manageConversationInfo(requestId: any): void {
         const session = this.session;
-        // Use the raw server-side name (session.name) rather than
-        // this.getDisplayName(), which may return a friendly label
-        // ("Sidebar", panel title) for ephemeral sessions. We want
-        // `@conversation info` to be consistent with `@conversation list`
-        // and to show a string the user can pass to `@conversation switch`.
+        // Use raw session.name (not getDisplayName) to stay consistent with `list`
+        // and produce a string the user can pass to `@conversation switch`.
         const html = session
             ? `Current conversation: <b>${escapeHtml(
                   session.name,
@@ -2084,10 +2007,7 @@ export class AgentServerBridge {
             (s) => normalizeName(s.name) === targetNorm,
         );
         if (!match) {
-            // Mirror the Electron Shell's @conversation switch semantics:
-            // error on no match rather than create-on-miss. (The code agent's
-            // `code.code-vscode-shell` schema has its own create-on-switch
-            // behavior — that path remains unchanged.)
+            // Match Electron Shell: error on no match (no create-on-miss).
             this.overwriteActionBubble(
                 requestId,
                 {
@@ -2124,9 +2044,6 @@ export class AgentServerBridge {
                 `✅ Switched to conversation <b>${escapeHtml(match.name)}</b>`,
             );
         }
-        // If switch failed, joinSpecificSession already showed an error
-        // toast; suppress the success notification to avoid posting a
-        // false "✅ Switched" bubble into the OLD conversation.
     }
 
     private async manageCycleConversation(
@@ -2179,7 +2096,6 @@ export class AgentServerBridge {
                 `✅ Switched to conversation <b>${escapeHtml(target.name)}</b>`,
             );
         }
-        // On failure, joinSpecificSession already showed an error toast.
     }
 
     private async manageRenameConversation(
@@ -2203,7 +2119,7 @@ export class AgentServerBridge {
             return;
         }
 
-        // Resolve target conversation. `name` empty/missing → rename current.
+        // Resolve target: empty/missing name → rename current.
         let targetId: string;
         let isCurrent: boolean;
         if (name && name.trim()) {
@@ -2246,7 +2162,6 @@ export class AgentServerBridge {
             isCurrent = true;
         }
 
-        // Collision check excluding the target itself.
         const newNorm = normalizeName(trimmedNew);
         const allSessions = await this.connection.listSessions();
         const collision = allSessions.find(
@@ -2270,9 +2185,8 @@ export class AgentServerBridge {
 
         await this.connection.renameSession(targetId, trimmedNew);
 
-        // If we renamed the current session, refresh the status bar /
-        // panel title so the new name shows immediately. (The connection's
-        // renameSession doesn't push a sessionName change back to us.)
+        // renameSession doesn't push a name update back, so refresh manually
+        // when the current session was renamed.
         if (isCurrent && this.session) {
             this.nameOverride = trimmedNew;
             this.broadcastToWebviews({
@@ -2349,8 +2263,6 @@ export class AgentServerBridge {
             return;
         }
         await this.connection.deleteSession(match.sessionId);
-        // Notify the extension status bar / shared list (deleted session
-        // changes the available targets for switch/quick-pick UIs).
         this.onStatusChanged?.();
         this.overwriteActionBubble(
             requestId,

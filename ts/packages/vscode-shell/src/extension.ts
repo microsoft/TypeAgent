@@ -37,9 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
         ownsStatusBar: false,
         displayName: "Sidebar",
         restoreSessionId: sidebarRestoreId,
-        // Default landing conversation for the VS Code extension's sidebar,
-        // matching CLI's "CLI" and Shell's "Shell" defaults. Only the sidebar
-        // gets this fallback; tab panels remain ephemeral.
+        // Sidebar-only default; tab panels stay ephemeral.
         defaultSessionName: "VS Code",
     });
 
