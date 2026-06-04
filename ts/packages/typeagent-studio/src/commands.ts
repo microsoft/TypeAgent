@@ -835,6 +835,11 @@ async function getOnboardingDiagnosticsBundle(
         summary,
         healthReport,
         artifactPath,
+        settings: {
+            openSummaryAfterBatchRun: shouldOpenSummaryAfterBatchRun(),
+            defaultSandboxId: getDefaultSandboxId(),
+            installHealthGatePolicy: getInstallHealthGatePolicy(),
+        },
     });
 }
 

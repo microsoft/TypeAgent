@@ -148,12 +148,21 @@ test("formatOnboardingDiagnosticsBundle includes metadata summary and report", (
         summary: "# Summary\n\nTest summary",
         healthReport: "# Health\n\nNo findings.",
         artifactPath: "C:/repo/packages/agents/demo",
+        settings: {
+            openSummaryAfterBatchRun: false,
+            defaultSandboxId: "studio-qa",
+            installHealthGatePolicy: "warn",
+        },
         generatedAt: 0,
     });
 
     assert.match(bundle, /# TypeAgent Studio Onboarding Diagnostics Bundle/);
     assert.match(bundle, /Generated at: 1970-01-01T00:00:00.000Z/);
     assert.match(bundle, /Artifact path: C:\/repo\/packages\/agents\/demo/);
+    assert.match(bundle, /## Onboarding Settings/);
+    assert.match(bundle, /Open summary after batch run: false/);
+    assert.match(bundle, /Default sandbox id: studio-qa/);
+    assert.match(bundle, /Install health gate policy: warn/);
     assert.match(bundle, /## Onboarding Summary/);
     assert.match(bundle, /## Packaging Health Report/);
 });
@@ -166,4 +175,7 @@ test("formatOnboardingDiagnosticsBundle shows unresolved artifact fallback", () 
     });
 
     assert.match(bundle, /Artifact path: unresolved/);
+    assert.match(bundle, /Open summary after batch run: true/);
+    assert.match(bundle, /Default sandbox id: studio-default/);
+    assert.match(bundle, /Install health gate policy: enforce/);
 });

@@ -138,6 +138,11 @@ export function formatOnboardingDiagnosticsBundle(args: {
     summary: string;
     healthReport: string;
     artifactPath?: string;
+    settings?: {
+        openSummaryAfterBatchRun: boolean;
+        defaultSandboxId: string;
+        installHealthGatePolicy: "enforce" | "warn";
+    };
     generatedAt?: number;
 }): string {
     const timestamp = new Date(args.generatedAt ?? Date.now()).toISOString();
@@ -146,6 +151,18 @@ export function formatOnboardingDiagnosticsBundle(args: {
     lines.push("");
     lines.push(`- Generated at: ${timestamp}`);
     lines.push(`- Artifact path: ${args.artifactPath ?? "unresolved"}`);
+    lines.push("");
+    lines.push("## Onboarding Settings");
+    lines.push("");
+    lines.push(
+        `- Open summary after batch run: ${args.settings?.openSummaryAfterBatchRun ?? true}`,
+    );
+    lines.push(
+        `- Default sandbox id: ${args.settings?.defaultSandboxId ?? "studio-default"}`,
+    );
+    lines.push(
+        `- Install health gate policy: ${args.settings?.installHealthGatePolicy ?? "enforce"}`,
+    );
     lines.push("");
     lines.push("## Onboarding Summary");
     lines.push("");
