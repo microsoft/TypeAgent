@@ -408,5 +408,5 @@ async function initializeUI() {
 
 initializeUI().catch((e) => {
     const cacheExplorer = document.getElementById("content")!;
-    cacheExplorer.innerHTML = `Error rendering construction cache: ${e}`;
+    cacheExplorer.textContent = `Error rendering construction cache: ${e}`;
 });
