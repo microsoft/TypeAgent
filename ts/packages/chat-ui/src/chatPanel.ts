@@ -2328,11 +2328,19 @@ export class ChatPanel {
             );
         }
         if (result && target) {
+            // Always surface a token line, mirroring the Electron shell's
+            // MessageContainer behavior. When the request used no LLM call
+            // (e.g. an `@command` or a cached translation) `tokenUsage` is
+            // absent — show zeros rather than omitting the line entirely.
             target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
-                result.tokenUsage,
+                result.tokenUsage ?? {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                },
                 firstMessageMs,
             );
         }

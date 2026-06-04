@@ -32,10 +32,7 @@
 }
 
 .autocomplete-container .completions li:hover {
-  background-color: var(
-    --completion-menu-hover,
-    rgba(167, 139, 250, 0.08)
-  );
+  background-color: var(--completion-menu-hover, rgba(167, 139, 250, 0.08));
 }
 
 .autocomplete-container .completions li .search-prefix {

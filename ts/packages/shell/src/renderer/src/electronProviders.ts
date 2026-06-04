@@ -16,7 +16,10 @@ import type {
     TtsMetrics,
     TtsProvider,
 } from "chat-ui";
-import type { SpeechToken, ShellUserSettings } from "../../preload/electronTypes";
+import type {
+    SpeechToken,
+    ShellUserSettings,
+} from "../../preload/electronTypes";
 import { getClientAPI } from "./main";
 import { getSpeechToken } from "./speechToken";
 import {
@@ -180,7 +183,9 @@ export class ElectronTtsProvider implements TtsProvider {
 export class ElectronImageCaptureProvider implements ImageCaptureProvider {
     private pendingPick?: (urls: string[] | undefined) => void;
 
-    constructor(private readonly cameraCapture?: () => Promise<string | undefined>) {}
+    constructor(
+        private readonly cameraCapture?: () => Promise<string | undefined>,
+    ) {}
 
     public pickFile(): Promise<string[] | undefined> {
         // Only one outstanding pick at a time; resolve any prior one empty.

@@ -8,7 +8,10 @@ import {
     TemplateFieldScalar,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import type { TemplateData, TemplateEditConfig } from "@typeagent/dispatcher-types";
+import type {
+    TemplateData,
+    TemplateEditConfig,
+} from "@typeagent/dispatcher-types";
 import {
     LocalSearchMenuUI,
     type SearchMenuItem,
@@ -142,10 +145,7 @@ function createSimpleSearchIndex(): SimpleSearchIndex {
     };
 }
 
-function isUniquelySatisfied(
-    items: SearchMenuItem[],
-    prefix: string,
-): boolean {
+function isUniquelySatisfied(items: SearchMenuItem[], prefix: string): boolean {
     return (
         items.length === 1 &&
         items[0].matchText.toLowerCase() === prefix.toLowerCase()
