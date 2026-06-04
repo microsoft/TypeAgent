@@ -1230,13 +1230,6 @@ export class ChatPanel {
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
-        if (!isRemote) {
-            // Reap stale per-thread lookups; completeRequest() leaves
-            // entries for out-of-band late updates (PR #2306), but a
-            // new request invalidates those.
-            this.threadContainers.clear();
-            this.pendingThreadDisplayInfo.clear();
-        }
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
@@ -1501,10 +1494,21 @@ export class ChatPanel {
         const effectiveIcon = pending
             ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
             : (sourceIcon ?? this.iconForSource(effectiveSource));
+        // Anchor on the user bubble so the agent's response renders
+        // directly below it (column-reverse: DOM-before = visually-after).
+        // Liveness check guards against detached anchors. Falls through
+        // to default placement for ad-hoc / system / agent-N threads
+        // with no user bubble.
+        const mappedBubble = this.userMessageById.get(threadId);
+        const anchor =
+            mappedBubble?.parentElement === this.messageDiv
+                ? mappedBubble
+                : undefined;
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
             threadId,
+            anchor,
         );
         this.threadContainers.set(threadId, container);
         // Capture the elapsed time from request send to first agent
