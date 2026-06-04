@@ -144,6 +144,24 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.openPackagingHealthReport",
+            withErrors(async () => {
+                const artifactPath =
+                    await runtime.resolveInstallArtifactPathForActiveSession();
+                const gate = await runtime.checkPackagingHealthGate(artifactPath);
+                const doc = await vscode.workspace.openTextDocument({
+                    language: "markdown",
+                    content: formatPackagingHealthReport(gate),
+                });
+                await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                });
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.clearOnboardingSession",
             withErrors(async () => {
                 if (!(await confirmSessionClear())) {
@@ -534,5 +552,33 @@ async function showPackagingHealthGateStatus(
     }
 
     void vscode.window.showInformationMessage(message);
+}
+
+function formatPackagingHealthReport(
+    gate: Awaited<ReturnType<StudioRuntime["checkPackagingHealthGate"]>>,
+): string {
+    const lines: string[] = [];
+    lines.push("# TypeAgent Studio Packaging Health Report");
+    lines.push("");
+    lines.push(`- Status: ${gate.status}`);
+    lines.push(`- Summary: ${gate.summary}`);
+    lines.push(`- Artifact path: ${gate.artifactPath}`);
+    if (gate.checkedAgent) {
+        lines.push(`- Agent: ${gate.checkedAgent}`);
+    }
+    lines.push("");
+    lines.push("## Findings");
+    lines.push("");
+
+    if (gate.findings.length === 0) {
+        lines.push("No findings.");
+        return lines.join("\n");
+    }
+
+    for (const finding of gate.findings) {
+        lines.push(`- [${finding.severity}] ${finding.ruleId}: ${finding.evidence.message}`);
+    }
+
+    return lines.join("\n");
 }
 

@@ -65,6 +65,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.openPackagingHealthReport",
+        "title": "Open packaging health report",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.clearOnboardingSession",
         "title": "Clear active onboarding session",
         "category": "TypeAgent Studio"
@@ -122,6 +127,7 @@
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
     "onCommand:typeagent-studio.checkPackagingHealthGate",
+    "onCommand:typeagent-studio.openPackagingHealthReport",
     "onCommand:typeagent-studio.clearOnboardingSession",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",
