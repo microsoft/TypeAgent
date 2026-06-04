@@ -60,6 +60,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.checkPackagingHealthGate",
+        "title": "Check packaging health gate",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.clearOnboardingSession",
         "title": "Clear active onboarding session",
         "category": "TypeAgent Studio"
@@ -116,6 +121,7 @@
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
+    "onCommand:typeagent-studio.checkPackagingHealthGate",
     "onCommand:typeagent-studio.clearOnboardingSession",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",

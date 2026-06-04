@@ -57,6 +57,7 @@ export interface StudioRuntime {
         sessionId: string;
         artifactPath: string;
     }>;
+    resolveInstallArtifactPathForActiveSession(): Promise<string>;
     clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
     runPhaseOnActiveSession(
@@ -138,9 +139,9 @@ export function createStudioRuntimeCore(
             installOptions = {},
         ) {
             const sessionId = getRequiredSessionId(context);
-            const session = await onboarding.snapshot(sessionId);
-            const artifactPath = await resolveLocalArtifactPath(
-                session,
+            const artifactPath = await resolveArtifactPathForSession(
+                onboarding,
+                sessionId,
                 context,
             );
 
@@ -177,6 +178,10 @@ export function createStudioRuntimeCore(
                 profileDir,
                 artifactPath,
             );
+        },
+        async resolveInstallArtifactPathForActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            return resolveArtifactPathForSession(onboarding, sessionId, context);
         },
         async clearActiveOnboardingSession() {
             await context.workspaceState.update(
@@ -266,6 +271,15 @@ export function createStudioRuntimeCore(
             };
         },
     };
+}
+
+async function resolveArtifactPathForSession(
+    onboarding: InMemoryOnboardingBridge,
+    sessionId: string,
+    context: StudioRuntimeContext,
+): Promise<string> {
+    const session = await onboarding.snapshot(sessionId);
+    return resolveLocalArtifactPath(session, context);
 }
 
 async function defaultEvaluatePackagingHealthGate(

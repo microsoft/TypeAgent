@@ -126,6 +126,24 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.checkPackagingHealthGate",
+            withErrors(async () => {
+                const artifactPath =
+                    await runtime.resolveInstallArtifactPathForActiveSession();
+                const gate = await runtime.checkPackagingHealthGate(artifactPath);
+                const findingSummary =
+                    gate.findings.length > 0
+                        ? `${gate.findings.length} findings`
+                        : "no findings";
+                void vscode.window.showInformationMessage(
+                    `Health gate ${gate.status}: ${gate.summary} (${findingSummary}).`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.clearOnboardingSession",
             withErrors(async () => {
                 if (!(await confirmSessionClear())) {

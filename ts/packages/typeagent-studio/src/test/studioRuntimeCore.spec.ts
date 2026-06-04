@@ -326,6 +326,52 @@ test("installLastSessionToSandbox enforces health gate failures", async () => {
     ]);
 });
 
+test("resolveInstallArtifactPathForActiveSession and checkPackagingHealthGate", async () => {
+    const workspaceRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-health-check-"),
+    );
+    const artifactPath = path.join(
+        workspaceRoot,
+        "packages",
+        "agents",
+        "health-check",
+    );
+    await fs.mkdir(artifactPath, { recursive: true });
+
+    const { context } = createContext([workspaceRoot]);
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-health-check",
+        }),
+        evaluatePackagingHealthGate: async (candidatePath) => ({
+            status: "warn",
+            summary: "1 warning findings for agent health-check.",
+            findings: [
+                {
+                    ruleId: "schema.actions.haveGrammar",
+                    severity: "warning",
+                    agent: "health-check",
+                    evidence: { message: "missing grammar" },
+                },
+            ],
+            artifactPath: candidatePath,
+            checkedAgent: "health-check",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Health check command",
+        agentName: "health-check",
+    });
+
+    const resolved = await runtime.resolveInstallArtifactPathForActiveSession();
+    assert.equal(resolved, artifactPath);
+
+    const gate = await runtime.checkPackagingHealthGate(resolved);
+    assert.equal(gate.status, "warn");
+    assert.equal(gate.findings.length, 1);
+});
+
 test("clearActiveOnboardingSession removes the current session binding", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context, {
