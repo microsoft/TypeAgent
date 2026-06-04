@@ -471,6 +471,20 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.copyOnboardingHealthSnapshotMarkdown",
+            withErrors(async () => {
+                const snapshot =
+                    await getOnboardingHealthSnapshotMarkdown(runtime);
+                await vscode.env.clipboard.writeText(snapshot);
+                void vscode.window.showInformationMessage(
+                    "Copied onboarding health snapshot markdown to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.openOnboardingHealthSnapshot",
             withErrors(async () => {
                 const content = await getOnboardingHealthSnapshotMarkdown(runtime);
