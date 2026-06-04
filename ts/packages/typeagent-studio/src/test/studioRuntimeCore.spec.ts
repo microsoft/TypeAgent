@@ -163,6 +163,36 @@ test("rerunPhasesOnActiveSession reruns selected stale phases in order", async (
     assert.equal(rerun.state.phases.SchemaGen?.status, "complete");
 });
 
+test("rerunPhasesOnActiveSession normalizes phase order and de-duplicates", async () => {
+    let now = 320;
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-rerun-ordered",
+            now: () => ++now,
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Ticket routing agent",
+    });
+    await runtime.runRemainingPhasesOnActiveSession();
+    await runtime.runPhaseOnActiveSession("Discovery", {
+        description: "Ticket routing agent v3",
+    });
+    await runtime.restorePhaseOnActiveSession("Discovery");
+
+    const rerun = await runtime.rerunPhasesOnActiveSession([
+        "SchemaGen",
+        "PhraseGen",
+        "SchemaGen",
+    ]);
+
+    assert.deepEqual(rerun.rerunPhases, ["PhraseGen", "SchemaGen"]);
+    assert.equal(rerun.state.phases.PhraseGen?.status, "complete");
+    assert.equal(rerun.state.phases.SchemaGen?.status, "complete");
+});
+
 test("listStalePhasesOnActiveSession returns stale phases in pipeline order", async () => {
     let now = 350;
     const { context } = createContext();

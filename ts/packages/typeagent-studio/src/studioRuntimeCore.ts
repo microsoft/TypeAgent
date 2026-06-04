@@ -258,8 +258,11 @@ export function createStudioRuntimeCore(
             const sessionId = getRequiredSessionId(context);
             let state = await onboarding.snapshot(sessionId);
             const rerunPhases: OnboardingPhaseName[] = [];
+            const normalizedPhases = ONBOARDING_PHASE_ORDER.filter((phase) =>
+                phases.includes(phase),
+            );
 
-            for (const phase of phases) {
+            for (const phase of normalizedPhases) {
                 await onboarding.runPhase(
                     sessionId,
                     phase,
