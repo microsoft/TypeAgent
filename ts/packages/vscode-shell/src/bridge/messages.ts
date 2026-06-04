@@ -134,6 +134,18 @@ export type BridgeToWebviewMessage =
     | { type: "demoCancelTyping" }
     | { type: "historyLoading"; loading: boolean }
     | {
+          // Conversation-management feedback (list / info / switch / new /
+          // rename / delete / next / prev). Rendered as a fresh agent bubble
+          // in whatever conversation is currently displayed — used because
+          // the user request's own bubble belongs to the OLD conversation
+          // for switching ops and is wiped by `chatPanel.clear()` on
+          // sessionChanged before any post-switch result could land.
+          type: "conversationNotification";
+          // Already-escaped HTML body to display inline in the chat.
+          content: string;
+          kind?: "info" | "warning" | "error" | "success";
+      }
+    | {
           type: "historyReplay";
           entries: Array<{
               type: string;

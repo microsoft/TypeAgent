@@ -1699,6 +1699,11 @@ export class ChatPanel {
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
+        // Do NOT clear threadContainers / pendingThreadDisplayInfo here:
+        // with queued requests, an earlier request may still be in flight
+        // when a new user message is submitted, and clearing would drop
+        // its container reference (producing duplicate bubbles on late
+        // updates). Full clears happen on session change.
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);

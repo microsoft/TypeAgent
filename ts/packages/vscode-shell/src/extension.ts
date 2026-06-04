@@ -37,6 +37,8 @@ export function activate(context: vscode.ExtensionContext): void {
         ownsStatusBar: false,
         displayName: "Sidebar",
         restoreSessionId: sidebarRestoreId,
+        // Sidebar-only default; tab panels stay ephemeral.
+        defaultSessionName: "VS Code",
     });
 
     // Persist the sidebar's current session so reopening VS Code rejoins it

@@ -76,6 +76,38 @@ code --install-extension dist-pub/vscode-shell.vsix --force
     **dropdown** menu instead. Use `↑`/`↓` to navigate, `Enter`/`Tab` to
     accept, `Esc` to dismiss.
 
+### Managing conversations
+
+The sidebar lands on a conversation named **`"VS Code"`** by default — it's created automatically the first time you connect to a fresh agent server (mirroring the CLI's `"CLI"` and the Electron shell's `"Shell"` defaults). On subsequent reloads, the sidebar restores whichever conversation it was last on; the `"VS Code"` find-or-create only fires when that saved conversation is gone (deleted, server wiped, etc.).
+
+Editor-tab chat panels each get their own **ephemeral** conversation (`cli-ephemeral-vscode-<n>-<ts>`) that the server sweeps at startup if it outlives an unclean exit.
+
+You can manage conversations two ways:
+
+- **Slash / `@conversation` commands** in the chat input:
+
+  ```
+  @conversation list                    — List all conversations
+  @conversation new [name]              — Create a new conversation and switch to it
+  @conversation switch <name>           — Switch to an existing conversation by name
+  @conversation prev / next             — Cycle through conversations
+  @conversation info                    — Show current conversation info
+  @conversation rename [name] <newName> — Rename a conversation (omit name to rename current)
+  @conversation delete <name>           — Delete a named conversation
+  ```
+
+- **Natural language** in the chat input:
+
+  - "list my conversations"
+  - "create a new conversation called Brainstorm"
+  - "switch to the Research conversation"
+  - "rename this conversation to Notes"
+  - "delete the Old Project conversation"
+
+  The dispatcher's `system.conversation` agent translates these to the same `manage-conversation` action handled by the slash commands.
+
+> Conversation-management results are rendered inline in the chat. Switching results (`new`/`switch`/`prev`/`next`) appear as a fresh agent bubble in the newly-joined conversation, after the switch completes.
+
 ### Cancelling a running request
 
 While a request is being processed the send arrow morphs into a **stop

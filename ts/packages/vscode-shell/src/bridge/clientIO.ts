@@ -70,6 +70,15 @@ export interface BridgeClientIOContext {
     sweepRequestIds?(liveServerIds: Set<string>): void;
     /** Handle a "vscode-shell-action" routed from the code agent. */
     handleShellAction(requestId: RequestId, data: unknown): Promise<void>;
+    /**
+     * Handle a "manage-conversation" client action emitted by the system
+     * agent (for both `@conversation` slash commands and natural-language
+     * requests). Payload shape is the same as the Shell/CLI handlers.
+     */
+    handleManageConversation(
+        requestId: RequestId,
+        payload: unknown,
+    ): Promise<void>;
 }
 
 /**
@@ -224,6 +233,14 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                         `Shell action failed: ${e?.message ?? String(e)}`,
                     );
                 });
+            } else if (action === "manage-conversation") {
+                ctx.handleManageConversation(requestId, data).catch(
+                    (e: any) => {
+                        vscode.window.showErrorMessage(
+                            `Conversation action failed: ${e?.message ?? String(e)}`,
+                        );
+                    },
+                );
             }
         },
         shutdown: () => {},
