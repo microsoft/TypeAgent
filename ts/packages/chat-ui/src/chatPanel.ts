@@ -62,10 +62,7 @@ import type {
     TtsProvider,
 } from "./providers.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
-import {
-    TemplateEditor,
-    type TemplateEditServices,
-} from "./templateEditor.js";
+import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 
 /**
@@ -2610,7 +2607,9 @@ export class ChatPanel {
 
         return new Promise<unknown>((resolve) => {
             let keyHandler: ((e: KeyboardEvent) => void) | undefined;
-            const setKeyHandler = (h: ((e: KeyboardEvent) => void) | undefined) => {
+            const setKeyHandler = (
+                h: ((e: KeyboardEvent) => void) | undefined,
+            ) => {
                 if (keyHandler) {
                     document.removeEventListener("keydown", keyHandler);
                 }
@@ -3224,6 +3223,12 @@ export class ChatPanel {
                 }
             },
         };
+        // Only expose the trash affordance when the host supplied a hide hook.
+        if (this.onFeedbackHidden) {
+            controller.setHidden = async (hidden, target) => {
+                this.onFeedbackHidden!(requestId, target ?? "agent", hidden);
+            };
+        }
         container.attachFeedbackController(controller, this._feedbackUIVariant);
         const existing = this.feedbackByRequestId.get(threadId);
         if (existing) {

@@ -19,6 +19,7 @@ import {
     iconMore,
     iconThumbsDown,
     iconThumbsUp,
+    iconTrash,
 } from "./icons.js";
 
 export type FeedbackUIVariant = "footer-always";
@@ -139,7 +140,33 @@ export class FeedbackWidget {
             root.appendChild(moreBtn);
         }
 
+        // Soft-hide ("trash") affordance — only when the host supplied a
+        // setHidden hook. Optimistically toggles the trashed state on the
+        // bubble container, then notifies the host; reverts on failure.
+        if (withExtras && this.controller.setHidden) {
+            const trashBtn = makeIconButton(
+                "trash",
+                "Move to trash",
+                iconTrash(),
+                () => void this.onTrash(),
+            );
+            root.appendChild(trashBtn);
+        }
+
         return { root, thumbsUp, thumbsDown };
+    }
+
+    private async onTrash(): Promise<void> {
+        const setHidden = this.controller.setHidden;
+        if (!setHidden) return;
+        const container = this.host.container;
+        container.classList.add("chat-message-trashed");
+        try {
+            await setHidden(true, "agent");
+        } catch (e) {
+            container.classList.remove("chat-message-trashed");
+            console.error("setHidden callback failed", e);
+        }
     }
 
     private async onThumb(

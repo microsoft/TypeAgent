@@ -75,8 +75,7 @@ function ridStr(requestId: RequestId | string | undefined): string | undefined {
     if (requestId === undefined) return undefined;
     if (typeof requestId === "string") return requestId;
     return (
-        (requestId.clientRequestId as string | undefined) ??
-        requestId.requestId
+        (requestId.clientRequestId as string | undefined) ?? requestId.requestId
     );
 }
 
@@ -754,10 +753,7 @@ export function createChatPanelClient(
                           })
                           .join("")}</ul>`
                     : "No notifications.";
-                chatPanel.showInline(
-                    { type: "html", content: html },
-                    "shell",
-                );
+                chatPanel.showInline({ type: "html", content: html }, "shell");
                 break;
             }
             case NotifyCommands.ShowSummary: {
@@ -793,9 +789,7 @@ export function createChatPanelClient(
                 case "trash-flush":
                     dispatcher
                         ?.flushHidden()
-                        .catch((e) =>
-                            console.error("flushHidden failed", e),
-                        );
+                        .catch((e) => console.error("flushHidden failed", e));
                     break;
                 case "open-folder":
                     getClientAPI().openFolder(data as string);
@@ -886,7 +880,9 @@ export function createChatPanelClient(
                     break;
                 }
                 await api.conversationRename(conversationId, payload.newName);
-                inline(`✅ Renamed conversation to "<b>${payload.newName}</b>"`);
+                inline(
+                    `✅ Renamed conversation to "<b>${payload.newName}</b>"`,
+                );
                 break;
             }
             case "delete": {
@@ -920,7 +916,16 @@ export function createChatPanelClient(
 
     // Fetch the dispatcher's structured display history and replay it into
     // the ChatPanel. Replaces the old innerHTML chat-history persistence.
-    async function replayDisplayHistory(): Promise<void> {
+    //
+    // `cutoffSeq` (when provided) is the last display-log sequence number
+    // that existed at the moment the main process captured the connect-time
+    // snapshot — i.e. before it dispatched any startup commands such as the
+    // `@greeting`. We only replay entries up to that point so a startup
+    // greeting that races the (async) `getDisplayHistory()` fetch is not
+    // pulled into the grayed history; it instead renders live below the
+    // "now" separator. Without provided cutoff (e.g. conversation switch),
+    // the full history is replayed.
+    async function replayDisplayHistory(cutoffSeq?: number): Promise<void> {
         const d = dispatcher;
         if (d === undefined) return;
         // Gate live display mutations until replay completes so startup
@@ -929,8 +934,16 @@ export function createChatPanelClient(
         replayDone = false;
         try {
             chatPanel.setHistoryLoading(true);
-            const entries = await d.getDisplayHistory();
+            let entries = await d.getDisplayHistory();
+            if (cutoffSeq !== undefined) {
+                entries = entries.filter((e) => e.seq <= cutoffSeq);
+            }
             chatPanel.replayHistory(toHistoryEntries(entries));
+            // Divider between replayed history and live messages. Only show
+            // it when there was actually prior history to separate from.
+            if (entries.length > 0) {
+                chatPanel.addHistorySeparator("now");
+            }
         } catch {
             // Ignore — replay is best-effort.
         } finally {
@@ -942,9 +955,9 @@ export function createChatPanelClient(
     // --- Client ----------------------------------------------------------
     const client: Client = {
         clientIO,
-        dispatcherInitialized(d: Dispatcher): void {
+        dispatcherInitialized(d: Dispatcher, _snapshot, cutoffSeq): void {
             dispatcher = d;
-            void replayDisplayHistory();
+            void replayDisplayHistory(cutoffSeq);
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();

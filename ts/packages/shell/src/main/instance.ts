@@ -30,7 +30,6 @@ import {
     createLocalConversationBackend,
     createRemoteConversationBackend,
     registerConversationIpcHandlers,
-    replayDisplayHistory,
 } from "./conversationManager.js";
 import {
     ClientIO,
@@ -932,7 +931,6 @@ export function initializeInstance(
                     );
                 },
                 rebindDispatcher,
-                () => shellWindow.sendMarkHistory(),
             );
             cleanupConversationIpc =
                 registerConversationIpcHandlers(remoteBackend);
@@ -954,27 +952,26 @@ export function initializeInstance(
                 }
             });
 
-            // Notify the renderer process that the dispatcher is initialized
+            // Notify the renderer process that the dispatcher is initialized.
+            // Capture the current display-log cutoff *before* dispatching the
+            // startup greeting so the renderer's (async) history replay can
+            // exclude the greeting and only render genuine prior history.
+            const historyCutoffSeq = await getHistoryCutoffSeq(dispatcher);
             chatView.webContents.send(
                 "dispatcher-initialized",
                 initialQueueSnapshot,
+                historyCutoffSeq,
             );
 
             // Give focus to the chat view once initialization is done.
             chatView.webContents.focus();
 
-            // Clear the stale local HTML snapshot and replay the server's
-            // authoritative display history, just as switchConversation does.
-            clientIO.clear({
-                requestId: "",
-                clientRequestId: "initial-connect",
-            });
-            await replayDisplayHistory(
-                dispatcher,
-                clientIO,
-                initialConversationName,
-                () => shellWindow.sendMarkHistory(),
-            );
+            // History replay is handled entirely renderer-side: the
+            // `dispatcher-initialized` event (sent above) drives the bridge's
+            // replayDisplayHistory(), which fetches the dispatcher's structured
+            // display history and renders it through chatPanel.replayHistory()
+            // (grayed, with a "now" separator banner). The main process no
+            // longer re-emits history through clientIO.
 
             // send the agent greeting if it's turned on
             if (shellSettings.user.agentGreeting) {
@@ -1010,8 +1007,14 @@ export function initializeInstance(
         });
 
         // Notify the renderer process that the dispatcher is initialized
-        // (standalone path: no queue snapshot).
-        chatView.webContents.send("dispatcher-initialized", undefined);
+        // (standalone path: no queue snapshot). Capture the display-log
+        // cutoff before the startup greeting so history replay excludes it.
+        const historyCutoffSeq = await getHistoryCutoffSeq(dispatcher);
+        chatView.webContents.send(
+            "dispatcher-initialized",
+            undefined,
+            historyCutoffSeq,
+        );
 
         // Give focus to the chat view once initialization is done.
         chatView.webContents.focus();
@@ -1047,6 +1050,25 @@ export function initializeInstance(
 export function fatal(e: Error) {
     dialog.showErrorBox("Error starting shell", e.stack ?? e.message);
     app.quit();
+}
+
+/**
+ * Capture the last display-log sequence number currently persisted, used as
+ * the cutoff for the renderer's connect-time history replay. Capturing this
+ * before dispatching the startup greeting ensures the greeting (which is
+ * logged into the same display log) is not pulled into the grayed history by
+ * the renderer's asynchronous `getDisplayHistory()` fetch. Best-effort:
+ * returns 0 (replay everything) if history can't be read.
+ */
+async function getHistoryCutoffSeq(dispatcher: Dispatcher): Promise<number> {
+    try {
+        const history = await dispatcher.getDisplayHistory();
+        // seq starts at 0; use -1 for an empty log so a first-ever greeting
+        // (which would be logged at seq 0) is excluded from replay.
+        return history.length > 0 ? history[history.length - 1].seq : -1;
+    } catch {
+        return -1;
+    }
 }
 
 async function cleanupInstance() {

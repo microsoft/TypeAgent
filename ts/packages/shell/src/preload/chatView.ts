@@ -113,11 +113,19 @@ function registerClient(client: Client) {
 
     ipcRenderer.on(
         "dispatcher-initialized",
-        (_event, initialQueueSnapshot?: QueueSnapshot) => {
+        (
+            _event,
+            initialQueueSnapshot?: QueueSnapshot,
+            historyCutoffSeq?: number,
+        ) => {
             // The dispatcher RPC client was set up at module init; just
             // hand it (and the initial queue snapshot, if any) to the
             // renderer's registered client.
-            client.dispatcherInitialized(dispatcher, initialQueueSnapshot);
+            client.dispatcherInitialized(
+                dispatcher,
+                initialQueueSnapshot,
+                historyCutoffSeq,
+            );
         },
     );
 

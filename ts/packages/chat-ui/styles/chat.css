@@ -157,7 +157,8 @@
   margin: 8px 20px;
 }
 
-.chat-history-message {
+.chat-history-message,
+.chat > .history {
   opacity: 0.55;
 }
 
@@ -1125,7 +1126,10 @@ span.ansi-bright-white-fg {
 .chat-message-actions {
   display: flex;
   gap: 2px;
-  margin: 2px 0 6px 40px;
+  /* Align the action row's left edge with the agent bubble body, which is
+     shifted `left: 30px` within the 10px-padded container. The margin is
+     measured from the content box, so 30px here == the bubble's left edge. */
+  margin: 2px 0 6px 30px;
   align-items: center;
   opacity: 0.65;
   transition: opacity 0.15s ease;
@@ -1320,9 +1324,15 @@ span.ansi-bright-white-fg {
 }
 
 @keyframes chat-mic-pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.4; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* =========================================================================

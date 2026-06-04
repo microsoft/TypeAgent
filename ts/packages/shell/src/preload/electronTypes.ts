@@ -98,6 +98,7 @@ export interface Client {
     dispatcherInitialized(
         dispatcher: Dispatcher,
         initialQueueSnapshot?: QueueSnapshot,
+        historyCutoffSeq?: number,
     ): void;
     updateRegisterAgents(agents: [string, string][]): void;
     showInputText(message: string): Promise<void>;
