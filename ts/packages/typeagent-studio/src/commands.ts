@@ -143,6 +143,19 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.enforcePackagingHealthGate",
+            withErrors(async () => {
+                const gate =
+                    await runtime.enforcePackagingHealthGateForActiveSession();
+                void vscode.window.showInformationMessage(
+                    `Packaging health gate ${gate.status}: ${gate.summary}`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.openPackagingHealthReport",
             withErrors(async () => {
                 await openPackagingHealthReport(runtime);
