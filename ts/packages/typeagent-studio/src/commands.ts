@@ -81,9 +81,13 @@ export function registerStudioCommands(
                 let installed: Awaited<
                     ReturnType<StudioRuntime["installLastSessionToSandbox"]>
                 >;
+                const installPolicy = getInstallHealthGatePolicy();
                 try {
                     installed = await runtime.installLastSessionToSandbox(
                         sandboxId,
+                        {
+                            skipHealthGate: installPolicy === "warn",
+                        },
                     );
                 } catch (error) {
                     const message =
@@ -395,6 +399,29 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.cycleInstallHealthGatePolicy",
+            withErrors(async () => {
+                const current = getInstallHealthGatePolicy();
+                const next: InstallHealthGatePolicy =
+                    current === "enforce" ? "warn" : "enforce";
+
+                await vscode.workspace
+                    .getConfiguration("typeagentStudio.onboarding")
+                    .update(
+                        "installHealthGatePolicy",
+                        next,
+                        vscode.ConfigurationTarget.Global,
+                    );
+
+                void vscode.window.showInformationMessage(
+                    `Install health gate policy is now ${next}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);
@@ -524,6 +551,14 @@ function shouldOpenSummaryAfterBatchRun(): boolean {
     return vscode.workspace
         .getConfiguration("typeagentStudio.onboarding")
         .get<boolean>("openSummaryAfterBatchRun", true);
+}
+
+type InstallHealthGatePolicy = "enforce" | "warn";
+
+function getInstallHealthGatePolicy(): InstallHealthGatePolicy {
+    return vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<InstallHealthGatePolicy>("installHealthGatePolicy", "enforce");
 }
 
 async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {

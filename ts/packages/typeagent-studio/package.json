@@ -35,6 +35,15 @@
           "type": "boolean",
           "default": true,
           "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
+        },
+        "typeagentStudio.onboarding.installHealthGatePolicy": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "warn"
+          ],
+          "default": "enforce",
+          "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
         }
       }
     },
@@ -123,6 +132,11 @@
         "command": "typeagent-studio.toggleBatchRunSummaryAutoOpen",
         "title": "Toggle auto-open summary after batch run",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.cycleInstallHealthGatePolicy",
+        "title": "Cycle install health gate policy",
+        "category": "TypeAgent Studio"
       }
     ]
   },
@@ -143,7 +157,8 @@
     "onCommand:typeagent-studio.openOnboardingSummary",
     "onCommand:typeagent-studio.copyOnboardingSummary",
     "onCommand:typeagent-studio.saveOnboardingSummary",
-    "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen"
+    "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
+    "onCommand:typeagent-studio.cycleInstallHealthGatePolicy"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

@@ -40,6 +40,7 @@ Current command palette surface:
 - TypeAgent Studio: Copy onboarding summary
 - TypeAgent Studio: Save onboarding summary
 - TypeAgent Studio: Toggle auto-open summary after batch run
+- TypeAgent Studio: Cycle install health gate policy
 
 Install behavior for `Install latest onboarding session to sandbox`:
 
@@ -59,3 +60,4 @@ Restore behavior for `Restore onboarding phase`:
 ## Settings
 
 - `typeagentStudio.onboarding.openSummaryAfterBatchRun` (boolean, default `true`): Automatically opens onboarding summary after running remaining onboarding phases.
+- `typeagentStudio.onboarding.installHealthGatePolicy` (`enforce` | `warn`, default `enforce`): Controls install behavior when packaging health gate reports errors.
