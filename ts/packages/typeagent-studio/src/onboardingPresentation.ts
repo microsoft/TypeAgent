@@ -187,3 +187,16 @@ export function formatOnboardingSettingsSnapshot(
         `Install health gate policy: ${settings.installHealthGatePolicy}`,
     ].join("\n");
 }
+
+export function formatOnboardingSettingsSnapshotMarkdown(
+    settings: OnboardingSettingsSnapshot,
+): string {
+    return [
+        "# TypeAgent Studio Onboarding Settings",
+        "",
+        `- Open summary after batch run: ${settings.openSummaryAfterBatchRun}`,
+        `- Default sandbox id: ${settings.defaultSandboxId}`,
+        `- Install health gate policy: ${settings.installHealthGatePolicy}`,
+        "",
+    ].join("\n");
+}

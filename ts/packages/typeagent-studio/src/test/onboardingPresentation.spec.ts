@@ -10,6 +10,7 @@ import {
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
+    formatOnboardingSettingsSnapshotMarkdown,
     formatOnboardingSettingsSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
@@ -192,4 +193,17 @@ test("formatOnboardingSettingsSnapshot includes all onboarding settings", () => 
     assert.match(snapshot, /Open summary after batch run: false/);
     assert.match(snapshot, /Default sandbox id: studio-qa/);
     assert.match(snapshot, /Install health gate policy: warn/);
+});
+
+test("formatOnboardingSettingsSnapshotMarkdown formats settings as markdown", () => {
+    const snapshot = formatOnboardingSettingsSnapshotMarkdown({
+        openSummaryAfterBatchRun: true,
+        defaultSandboxId: "studio-default",
+        installHealthGatePolicy: "enforce",
+    });
+
+    assert.match(snapshot, /# TypeAgent Studio Onboarding Settings/);
+    assert.match(snapshot, /Open summary after batch run: true/);
+    assert.match(snapshot, /Default sandbox id: studio-default/);
+    assert.match(snapshot, /Install health gate policy: enforce/);
 });

@@ -8,6 +8,7 @@ import type { StudioRuntime } from "./studioRuntime.js";
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
+    formatOnboardingSettingsSnapshotMarkdown,
     formatOnboardingSettingsSnapshot,
     type OnboardingSettingsSnapshot,
     formatOnboardingSummary,
@@ -446,6 +447,22 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     "Copied onboarding settings snapshot to clipboard.",
                 );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.openOnboardingSettingsSnapshot",
+            withErrors(async () => {
+                const content = getOnboardingSettingsSnapshotMarkdown();
+                const doc = await vscode.workspace.openTextDocument({
+                    language: "markdown",
+                    content,
+                });
+                await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                });
             }),
         ),
     );
@@ -905,6 +922,12 @@ function getOnboardingSettingsSnapshot(): OnboardingSettingsSnapshot {
         defaultSandboxId: getDefaultSandboxId(),
         installHealthGatePolicy: getInstallHealthGatePolicy(),
     };
+}
+
+function getOnboardingSettingsSnapshotMarkdown(): string {
+    return formatOnboardingSettingsSnapshotMarkdown(
+        getOnboardingSettingsSnapshot(),
+    );
 }
 
 async function showPackagingHealthGateStatus(
