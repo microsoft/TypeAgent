@@ -919,28 +919,32 @@ function setPathValue(
     value: any,
 ): void {
     const parts = path.split(".");
-    // Reject path segments that would mutate Object.prototype or other
-    // built-in chains.  Grammar property paths come from compiled grammar
-    // (not user input) so this is defense-in-depth.
-    for (const p of parts) {
-        if (p === "__proto__" || p === "constructor" || p === "prototype") {
+    let cursor: Record<string, any> = obj;
+    for (let i = 0; i < parts.length; i++) {
+        const k = parts[i];
+        // Reject path segments that would mutate Object.prototype or other
+        // built-in chains.  Grammar property paths come from compiled
+        // grammar (not user input) so this is defense-in-depth.  The
+        // check is inlined at the write site so static analyzers can
+        // connect the guard to the assignment.
+        if (k === "__proto__" || k === "constructor" || k === "prototype") {
             return;
         }
-    }
-    let cursor: Record<string, any> = obj;
-    for (let i = 0; i < parts.length - 1; i++) {
-        const k = parts[i];
-        const existing = cursor[k];
+        if (i === parts.length - 1) {
+            cursor[k] = value;
+            return;
+        }
+        // Create intermediate objects with a null prototype so even an
+        // unguarded leaf write cannot reach Object.prototype.
         if (
-            existing === undefined ||
-            existing === null ||
-            typeof existing !== "object"
+            !Object.prototype.hasOwnProperty.call(cursor, k) ||
+            cursor[k] === null ||
+            typeof cursor[k] !== "object"
         ) {
-            cursor[k] = {};
+            cursor[k] = Object.create(null);
         }
         cursor = cursor[k];
     }
-    cursor[parts[parts.length - 1]] = value;
 }
 
 /**

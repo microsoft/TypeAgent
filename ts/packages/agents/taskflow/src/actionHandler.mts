@@ -3,11 +3,13 @@
 
 import {
     type AppAgent,
+    type AppAction,
     type ActionContext,
     type ActionResult,
     type SessionContext,
     type SchemaContent,
     type GrammarContent,
+    type GrammarValidationResult,
     AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
@@ -33,6 +35,41 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:taskflow:handler");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SAMPLES_DIR = join(__dirname, "..", "samples");
+
+// How long flow authoring will wait for grammar validation before proceeding.
+// Each validation LLM op is itself capped at 30s; this bounds the overall wait
+// so authoring never blocks on a slow/hung validation.
+const GRAMMAR_VALIDATION_WAIT_MS = 15_000;
+
+/**
+ * Await a grammar-validation result, but only up to `budgetMs`. Returns
+ * `undefined` if validation does not finish in time or rejects, so flow
+ * authoring can proceed with the patterns as authored. The underlying
+ * validation keeps running in the background (each LLM op has its own timeout);
+ * any late rejection is swallowed.
+ */
+async function awaitValidationWithinBudget(
+    validation: Promise<GrammarValidationResult>,
+    budgetMs: number,
+): Promise<GrammarValidationResult | undefined> {
+    // Once we stop awaiting, a late rejection must not surface as unhandled.
+    validation.catch(() => {});
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), budgetMs);
+    });
+
+    try {
+        return await Promise.race([validation, budget]);
+    } catch {
+        return undefined;
+    } finally {
+        if (timer !== undefined) {
+            clearTimeout(timer);
+        }
+    }
+}
 
 // ── Agent context ───────────────────────────────────────────────────────────
 
@@ -212,19 +249,30 @@ async function handleTaskFlowAction(
                 );
             }
 
-            // Validate grammar patterns before saving
+            // Validate grammar patterns before saving. Validation makes LLM
+            // calls, so we wait at most GRAMMAR_VALIDATION_WAIT_MS for it; if it
+            // doesn't finish in time (or errors), we proceed with the patterns
+            // as authored rather than blocking flow creation.
             if (
                 grammarPatterns.length > 0 &&
                 context.sessionContext.validateGrammarPatterns
             ) {
-                const validationResult =
-                    await context.sessionContext.validateGrammarPatterns({
+                const validationResult = await awaitValidationWithinBudget(
+                    context.sessionContext.validateGrammarPatterns({
                         actionName: flowName,
                         description,
                         patterns: grammarPatterns,
-                    });
+                    }),
+                    GRAMMAR_VALIDATION_WAIT_MS,
+                );
 
-                if (!validationResult.approved) {
+                if (validationResult === undefined) {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Warning,
+                        "⚠️ Grammar pattern validation didn't finish within " +
+                            `${GRAMMAR_VALIDATION_WAIT_MS / 1000}s — proceeding with the patterns as authored.`,
+                    );
+                } else if (!validationResult.approved) {
                     const errorMsg = [
                         "❌ Grammar pattern validation failed:",
                         "",
@@ -242,24 +290,24 @@ async function handleTaskFlowAction(
                     return createActionResultFromError(
                         errorMsg + suggestionMsg,
                     );
-                }
+                } else {
+                    if (
+                        validationResult.warnings &&
+                        validationResult.warnings.length > 0
+                    ) {
+                        context.sessionContext.notify(
+                            AppAgentEvent.Warning,
+                            `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+                        );
+                    }
 
-                if (
-                    validationResult.warnings &&
-                    validationResult.warnings.length > 0
-                ) {
-                    context.sessionContext.notify(
-                        AppAgentEvent.Warning,
-                        `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
-                    );
-                }
-
-                // Use refined patterns if provided
-                if (
-                    validationResult.patterns &&
-                    validationResult.patterns.length > 0
-                ) {
-                    grammarPatterns = validationResult.patterns;
+                    // Use refined patterns if provided
+                    if (
+                        validationResult.patterns &&
+                        validationResult.patterns.length > 0
+                    ) {
+                        grammarPatterns = validationResult.patterns;
+                    }
                 }
             }
 
@@ -513,6 +561,15 @@ async function executeFlow(
 
 // ── Instantiate ─────────────────────────────────────────────────────────────
 
+// Built-in management actions in the "taskflow" schema. Everything else is a
+// dynamic, user-created flow.
+const TASKFLOW_BUILTIN_ACTIONS = new Set([
+    "listTaskFlows",
+    "deleteTaskFlow",
+    "createTaskFlow",
+    "editTaskFlow",
+]);
+
 export function instantiate(): AppAgent {
     let agentContext: TaskFlowAgentContext = {};
 
@@ -550,6 +607,19 @@ export function instantiate(): AppAgent {
                 },
                 context,
             );
+        },
+
+        async validateWildcardMatch(
+            action: AppAction,
+            _context: SessionContext,
+        ): Promise<boolean> {
+            // Built-in management actions are always valid; a dynamic flow
+            // action is valid only if its flow still exists, so stale cached
+            // constructions for a deleted flow are rejected rather than
+            // resolving to a now-missing action.
+            if (TASKFLOW_BUILTIN_ACTIONS.has(action.actionName)) return true;
+            if (!_agentStore) return true;
+            return (await _agentStore.getFlow(action.actionName)) !== null;
         },
 
         async getDynamicSchema(

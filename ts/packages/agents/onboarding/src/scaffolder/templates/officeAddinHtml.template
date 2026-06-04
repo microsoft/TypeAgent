@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>__AgentName__ TypeAgent Add-in</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="taskpane.js" type="module"></script>
+</head>
+<body>
+    <h2>__AgentName__ TypeAgent</h2>
+    <div id="status">Connecting...</div>
+</body>
+</html>

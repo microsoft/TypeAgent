@@ -400,7 +400,13 @@ function spawnAgentServer(
             } else {
                 const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
+                // Single-quote and double any internal single quotes so a
+                // path containing quotes or PowerShell metacharacters can't
+                // break out of the -Command string. port/idleTimeout are
+                // numeric so they need no escaping.
+                const psQuote = (s: string) =>
+                    "'" + s.replace(/'/g, "''") + "'";
+                const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(
                     "cmd.exe",
