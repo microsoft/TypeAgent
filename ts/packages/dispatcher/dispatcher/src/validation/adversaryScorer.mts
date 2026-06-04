@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PatternValidationResult } from "./types.mjs";
+import {
+    runQueryWithTimeout,
+    DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
+} from "./queryWithTimeout.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:validation:adversary");
@@ -47,6 +50,8 @@ export interface AdversaryScorerConfig {
     model?: string;
     concurrency?: number;
     batchSize?: number;
+    /** Hard timeout for each scoring LLM call (ms). */
+    timeoutMs?: number;
 }
 
 export class AdversaryScorer {
@@ -57,6 +62,7 @@ export class AdversaryScorer {
             model: config?.model ?? "claude-sonnet-4-20250514",
             concurrency: config?.concurrency ?? 8,
             batchSize: config?.batchSize ?? 10,
+            timeoutMs: config?.timeoutMs ?? DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
         };
     }
 
@@ -96,20 +102,11 @@ export class AdversaryScorer {
         );
 
         try {
-            const queryInstance = query({
+            const responseText = await runQueryWithTimeout(
                 prompt,
-                options: { model: this.config.model },
-            });
-
-            let responseText = "";
-            for await (const message of queryInstance) {
-                if (message.type === "result") {
-                    if (message.subtype === "success") {
-                        responseText = message.result || "";
-                        break;
-                    }
-                }
-            }
+                { model: this.config.model },
+                this.config.timeoutMs,
+            );
 
             return this.parseResponse(responseText, patterns);
         } catch (error) {

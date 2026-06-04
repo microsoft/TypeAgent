@@ -64,7 +64,11 @@ export type WorkflowEvent =
     | {
           type: "runFailed";
           runId: string;
-          error: { message: string; data?: unknown };
+          error: {
+              message: string;
+              nodeId?: string | undefined;
+              data?: unknown;
+          };
           timestamp: number;
       }
     | {

@@ -28,6 +28,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.3.0",
     "aiclient": "workspace:*",
     "ajv": "^8.17.1",
     "debug": "^4.3.4",
