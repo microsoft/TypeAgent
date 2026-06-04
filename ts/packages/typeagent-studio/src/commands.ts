@@ -130,6 +130,39 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.resolveInstallArtifactPath",
+            withErrors(async () => {
+                const artifactPath =
+                    await runtime.resolveInstallArtifactPathForActiveSession();
+                const copyPath = "Copy path";
+                const reveal = "Reveal in OS";
+
+                const choice = await vscode.window.showInformationMessage(
+                    `Resolved install artifact path: ${artifactPath}`,
+                    copyPath,
+                    reveal,
+                );
+
+                if (choice === copyPath) {
+                    await vscode.env.clipboard.writeText(artifactPath);
+                    void vscode.window.showInformationMessage(
+                        "Copied artifact path to clipboard.",
+                    );
+                    return;
+                }
+
+                if (choice === reveal) {
+                    await vscode.commands.executeCommand(
+                        "revealFileInOS",
+                        vscode.Uri.file(artifactPath),
+                    );
+                }
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.checkPackagingHealthGate",
             withErrors(async () => {
                 const gate =

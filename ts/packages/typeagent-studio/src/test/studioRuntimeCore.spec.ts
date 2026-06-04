@@ -284,6 +284,59 @@ test("installLastSessionToSandbox uses packaging artifact output when provided",
     ]);
 });
 
+test("resolveInstallArtifactPathForActiveSession prefers packaging artifact output", async () => {
+    const artifactPath = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-resolve-artifact-"),
+    );
+    const workspaceRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-resolve-workspace-"),
+    );
+    await fs.mkdir(path.join(workspaceRoot, "packages", "agents", "service-desk"), {
+        recursive: true,
+    });
+
+    const { context } = createContext([workspaceRoot]);
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-resolve-artifact",
+            phaseRunner: async (_session, phase, _inputs) => {
+                if (phase === "Packaging") {
+                    return { artifactPath };
+                }
+                return { phase };
+            },
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Resolve artifact path",
+        agentName: "service-desk",
+    });
+    await runtime.runPhaseOnActiveSession("Packaging", {});
+
+    const resolved = await runtime.resolveInstallArtifactPathForActiveSession();
+    assert.equal(resolved, artifactPath);
+});
+
+test("resolveInstallArtifactPathForActiveSession throws when no local artifact can be found", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-resolve-missing",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Missing artifact path",
+        agentName: "missing-agent",
+    });
+
+    await assert.rejects(
+        () => runtime.resolveInstallArtifactPathForActiveSession(),
+        /No local generated agent artifact/,
+    );
+});
+
 test("installArtifactToSandbox installs explicit local path", async () => {
     const artifactPath = await fs.mkdtemp(
         path.join(os.tmpdir(), "typeagent-studio-manual-"),
