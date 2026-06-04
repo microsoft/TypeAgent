@@ -457,22 +457,7 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.saveOnboardingDiagnosticsBundle",
             withErrors(async () => {
-                const summary = await getOnboardingSummary(runtime);
-                const healthReport = await getPackagingHealthReport(runtime);
-
-                let artifactPath: string | undefined;
-                try {
-                    artifactPath =
-                        await runtime.resolveInstallArtifactPathForActiveSession();
-                } catch {
-                    artifactPath = undefined;
-                }
-
-                const content = formatOnboardingDiagnosticsBundle({
-                    summary,
-                    healthReport,
-                    artifactPath,
-                });
+                const content = await getOnboardingDiagnosticsBundle(runtime);
 
                 const targetUri = await vscode.window.showSaveDialog({
                     defaultUri: vscode.Uri.file("onboarding-diagnostics.md"),
@@ -488,6 +473,19 @@ export function registerStudioCommands(
                 await fs.writeFile(targetUri.fsPath, content, "utf-8");
                 void vscode.window.showInformationMessage(
                     `Saved onboarding diagnostics bundle to ${targetUri.fsPath}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.copyOnboardingDiagnosticsBundle",
+            withErrors(async () => {
+                const content = await getOnboardingDiagnosticsBundle(runtime);
+                await vscode.env.clipboard.writeText(content);
+                void vscode.window.showInformationMessage(
+                    "Copied onboarding diagnostics bundle to clipboard.",
                 );
             }),
         ),
@@ -802,6 +800,26 @@ async function getOnboardingHealthSnapshot(
     }
 
     return formatOnboardingHealthSnapshot(state, gate);
+}
+
+async function getOnboardingDiagnosticsBundle(
+    runtime: StudioRuntime,
+): Promise<string> {
+    const summary = await getOnboardingSummary(runtime);
+    const healthReport = await getPackagingHealthReport(runtime);
+
+    let artifactPath: string | undefined;
+    try {
+        artifactPath = await runtime.resolveInstallArtifactPathForActiveSession();
+    } catch {
+        artifactPath = undefined;
+    }
+
+    return formatOnboardingDiagnosticsBundle({
+        summary,
+        healthReport,
+        artifactPath,
+    });
 }
 
 async function showPackagingHealthGateStatus(
