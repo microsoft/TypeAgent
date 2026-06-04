@@ -104,16 +104,6 @@
         "category": "TypeAgent Studio"
       },
       {
-        "command": "typeagent-studio.copyInstallArtifactPath",
-        "title": "Copy install artifact path",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openInstallArtifactPath",
-        "title": "Open install artifact path",
-        "category": "TypeAgent Studio"
-      },
-      {
         "command": "typeagent-studio.checkPackagingHealthGate",
         "title": "Check packaging health gate",
         "category": "TypeAgent Studio"
@@ -121,21 +111,6 @@
       {
         "command": "typeagent-studio.enforcePackagingHealthGate",
         "title": "Enforce packaging health gate",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openPackagingHealthReport",
-        "title": "Open packaging health report",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyPackagingHealthReport",
-        "title": "Copy packaging health report",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.savePackagingHealthReport",
-        "title": "Save packaging health report",
         "category": "TypeAgent Studio"
       },
       {
@@ -164,43 +139,8 @@
         "category": "TypeAgent Studio"
       },
       {
-        "command": "typeagent-studio.showOnboardingHealthSnapshot",
-        "title": "Show onboarding health snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyOnboardingHealthSnapshot",
-        "title": "Copy onboarding health snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyOnboardingHealthSnapshotMarkdown",
-        "title": "Copy onboarding health snapshot markdown",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openOnboardingHealthSnapshot",
-        "title": "Open onboarding health snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.showOnboardingSettingsSnapshot",
-        "title": "Show onboarding settings snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyOnboardingSettingsSnapshot",
-        "title": "Copy onboarding settings snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openOnboardingSettingsSnapshot",
-        "title": "Open onboarding settings snapshot",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.saveOnboardingSettingsSnapshot",
-        "title": "Save onboarding settings snapshot",
+        "command": "typeagent-studio.exportOnboardingArtifact",
+        "title": "Export onboarding artifact...",
         "category": "TypeAgent Studio"
       },
       {
@@ -211,36 +151,6 @@
       {
         "command": "typeagent-studio.rerunStaleOnboardingPhases",
         "title": "Rerun stale onboarding phases",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openOnboardingSummary",
-        "title": "Open onboarding summary",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyOnboardingSummary",
-        "title": "Copy onboarding summary",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.saveOnboardingSummary",
-        "title": "Save onboarding summary",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.saveOnboardingDiagnosticsBundle",
-        "title": "Save onboarding diagnostics bundle",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.openOnboardingDiagnosticsBundle",
-        "title": "Open onboarding diagnostics bundle",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.copyOnboardingDiagnosticsBundle",
-        "title": "Copy onboarding diagnostics bundle",
         "category": "TypeAgent Studio"
       },
       {
@@ -266,34 +176,16 @@
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
     "onCommand:typeagent-studio.resolveInstallArtifactPath",
-    "onCommand:typeagent-studio.copyInstallArtifactPath",
-    "onCommand:typeagent-studio.openInstallArtifactPath",
     "onCommand:typeagent-studio.checkPackagingHealthGate",
     "onCommand:typeagent-studio.enforcePackagingHealthGate",
-    "onCommand:typeagent-studio.openPackagingHealthReport",
-    "onCommand:typeagent-studio.copyPackagingHealthReport",
-    "onCommand:typeagent-studio.savePackagingHealthReport",
     "onCommand:typeagent-studio.clearOnboardingSession",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",
     "onCommand:typeagent-studio.advanceOnboardingPhase",
     "onCommand:typeagent-studio.showOnboardingSnapshot",
-    "onCommand:typeagent-studio.showOnboardingHealthSnapshot",
-    "onCommand:typeagent-studio.copyOnboardingHealthSnapshot",
-    "onCommand:typeagent-studio.copyOnboardingHealthSnapshotMarkdown",
-    "onCommand:typeagent-studio.openOnboardingHealthSnapshot",
-    "onCommand:typeagent-studio.showOnboardingSettingsSnapshot",
-    "onCommand:typeagent-studio.copyOnboardingSettingsSnapshot",
-    "onCommand:typeagent-studio.openOnboardingSettingsSnapshot",
-    "onCommand:typeagent-studio.saveOnboardingSettingsSnapshot",
+    "onCommand:typeagent-studio.exportOnboardingArtifact",
     "onCommand:typeagent-studio.restoreOnboardingPhase",
     "onCommand:typeagent-studio.rerunStaleOnboardingPhases",
-    "onCommand:typeagent-studio.openOnboardingSummary",
-    "onCommand:typeagent-studio.copyOnboardingSummary",
-    "onCommand:typeagent-studio.saveOnboardingSummary",
-    "onCommand:typeagent-studio.saveOnboardingDiagnosticsBundle",
-    "onCommand:typeagent-studio.openOnboardingDiagnosticsBundle",
-    "onCommand:typeagent-studio.copyOnboardingDiagnosticsBundle",
     "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
     "onCommand:typeagent-studio.cycleInstallHealthGatePolicy",
     "onCommand:typeagent-studio.setInstallHealthGatePolicy"

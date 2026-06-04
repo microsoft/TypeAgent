@@ -171,38 +171,6 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
-            "typeagent-studio.copyInstallArtifactPath",
-            withErrors(async () => {
-                const artifactPath =
-                    await runtime.resolveInstallArtifactPathForActiveSession();
-                await vscode.env.clipboard.writeText(artifactPath);
-                void vscode.window.showInformationMessage(
-                    "Copied resolved install artifact path to clipboard.",
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.openInstallArtifactPath",
-            withErrors(async () => {
-                const artifactPath =
-                    await runtime.resolveInstallArtifactPathForActiveSession();
-                const artifactUri = vscode.Uri.file(artifactPath);
-                await vscode.commands.executeCommand(
-                    "revealInExplorer",
-                    artifactUri,
-                );
-                void vscode.window.showInformationMessage(
-                    `Revealed install artifact path in explorer: ${artifactPath}`,
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
             "typeagent-studio.checkPackagingHealthGate",
             withErrors(async () => {
                 const gate =
@@ -445,250 +413,68 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
-            "typeagent-studio.showOnboardingHealthSnapshot",
+            "typeagent-studio.exportOnboardingArtifact",
             withErrors(async () => {
-                const snapshot = await getOnboardingHealthSnapshot(runtime);
-                void vscode.window.showInformationMessage(
-                    snapshot,
-                    { modal: true },
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.copyOnboardingHealthSnapshot",
-            withErrors(async () => {
-                const snapshot = await getOnboardingHealthSnapshot(runtime);
-                await vscode.env.clipboard.writeText(snapshot);
-                void vscode.window.showInformationMessage(
-                    "Copied onboarding health snapshot to clipboard.",
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.copyOnboardingHealthSnapshotMarkdown",
-            withErrors(async () => {
-                const snapshot =
-                    await getOnboardingHealthSnapshotMarkdown(runtime);
-                await vscode.env.clipboard.writeText(snapshot);
-                void vscode.window.showInformationMessage(
-                    "Copied onboarding health snapshot markdown to clipboard.",
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.openOnboardingHealthSnapshot",
-            withErrors(async () => {
-                const content = await getOnboardingHealthSnapshotMarkdown(runtime);
-                const doc = await vscode.workspace.openTextDocument({
-                    language: "markdown",
-                    content,
-                });
-                await vscode.window.showTextDocument(doc, {
-                    preview: false,
-                });
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.saveOnboardingHealthSnapshot",
-            withErrors(async () => {
-                const content = await getOnboardingHealthSnapshotMarkdown(runtime);
-                const defaultFileName = getOnboardingHealthSnapshotDefaultFileName();
-                const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(defaultFileName),
-                    filters: {
-                        Markdown: ["md"],
+                const artifacts = getExportArtifacts();
+                const pickedArtifact = await vscode.window.showQuickPick(
+                    artifacts.map((artifact) => ({
+                        label: artifact.label,
+                        detail: artifact.detail,
+                        id: artifact.id,
+                    })),
+                    {
+                        title: "Export Onboarding Artifact",
+                        placeHolder: "Select an artifact to export",
+                        ignoreFocusOut: true,
                     },
-                    title: "Save Onboarding Health Snapshot",
-                });
-                if (!targetUri) {
+                );
+                if (!pickedArtifact) {
+                    return;
+                }
+                const artifact = artifacts.find(
+                    (entry) => entry.id === pickedArtifact.id,
+                );
+                if (!artifact) {
                     return;
                 }
 
-                await fs.writeFile(targetUri.fsPath, content, "utf-8");
-                void vscode.window.showInformationMessage(
-                    `Saved onboarding health snapshot to ${targetUri.fsPath}.`,
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.showOnboardingSettingsSnapshot",
-            withErrors(async () => {
-                const settings = getOnboardingSettingsSnapshot();
-                const snapshot = formatOnboardingSettingsSnapshot(settings);
-                void vscode.window.showInformationMessage(snapshot, {
-                    modal: true,
-                });
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.copyOnboardingSettingsSnapshot",
-            withErrors(async () => {
-                const settings = getOnboardingSettingsSnapshot();
-                const snapshot = formatOnboardingSettingsSnapshot(settings);
-                await vscode.env.clipboard.writeText(snapshot);
-                void vscode.window.showInformationMessage(
-                    "Copied onboarding settings snapshot to clipboard.",
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.openOnboardingSettingsSnapshot",
-            withErrors(async () => {
-                const content = getOnboardingSettingsSnapshotMarkdown();
-                const doc = await vscode.workspace.openTextDocument({
-                    language: "markdown",
-                    content,
-                });
-                await vscode.window.showTextDocument(doc, {
-                    preview: false,
-                });
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.saveOnboardingSettingsSnapshot",
-            withErrors(async () => {
-                const content = getOnboardingSettingsSnapshotMarkdown();
-                const defaultFileName = getSettingsSnapshotDefaultFileName();
-                const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(defaultFileName),
-                    filters: {
-                        Markdown: ["md"],
+                const destination = await vscode.window.showQuickPick(
+                    [
+                        {
+                            label: "Show",
+                            detail: "Display in a modal notification",
+                            id: "show" as ExportDestination,
+                        },
+                        {
+                            label: "Open in editor",
+                            detail: "Open as a Markdown document",
+                            id: "open" as ExportDestination,
+                        },
+                        {
+                            label: "Copy to clipboard",
+                            detail: "Copy Markdown to the clipboard",
+                            id: "copy" as ExportDestination,
+                        },
+                        {
+                            label: "Save to file",
+                            detail: "Write Markdown to a file",
+                            id: "save" as ExportDestination,
+                        },
+                    ],
+                    {
+                        title: `Export ${artifact.label}`,
+                        placeHolder: "Select a destination",
+                        ignoreFocusOut: true,
                     },
-                    title: "Save Onboarding Settings Snapshot",
-                });
-                if (!targetUri) {
+                );
+                if (!destination) {
                     return;
                 }
 
-                await fs.writeFile(targetUri.fsPath, content, "utf-8");
-                void vscode.window.showInformationMessage(
-                    `Saved onboarding settings snapshot to ${targetUri.fsPath}.`,
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.openOnboardingSummary",
-            withErrors(async () => {
-                await openOnboardingSummary(runtime);
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.copyOnboardingSummary",
-            withErrors(async () => {
-                const summary = await getOnboardingSummary(runtime);
-                await vscode.env.clipboard.writeText(summary);
-                void vscode.window.showInformationMessage(
-                    "Copied onboarding summary to clipboard.",
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.saveOnboardingSummary",
-            withErrors(async () => {
-                const summary = await getOnboardingSummary(runtime);
-                const defaultFileName = getOnboardingSummaryDefaultFileName();
-                const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(defaultFileName),
-                    filters: {
-                        Markdown: ["md"],
-                    },
-                    title: "Save Onboarding Summary",
-                });
-                if (!targetUri) {
-                    return;
-                }
-
-                await fs.writeFile(targetUri.fsPath, summary, "utf-8");
-                void vscode.window.showInformationMessage(
-                    `Saved onboarding summary to ${targetUri.fsPath}.`,
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.saveOnboardingDiagnosticsBundle",
-            withErrors(async () => {
-                const content = await getOnboardingDiagnosticsBundle(runtime);
-                const defaultFileName = getDiagnosticsDefaultFileName();
-
-                const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(defaultFileName),
-                    filters: {
-                        Markdown: ["md"],
-                    },
-                    title: "Save Onboarding Diagnostics Bundle",
-                });
-                if (!targetUri) {
-                    return;
-                }
-
-                await fs.writeFile(targetUri.fsPath, content, "utf-8");
-                void vscode.window.showInformationMessage(
-                    `Saved onboarding diagnostics bundle to ${targetUri.fsPath}.`,
-                );
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.openOnboardingDiagnosticsBundle",
-            withErrors(async () => {
-                const content = await getOnboardingDiagnosticsBundle(runtime);
-                const doc = await vscode.workspace.openTextDocument({
-                    language: "markdown",
-                    content,
-                });
-                await vscode.window.showTextDocument(doc, {
-                    preview: false,
-                });
-            }),
-        ),
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.copyOnboardingDiagnosticsBundle",
-            withErrors(async () => {
-                const content = await getOnboardingDiagnosticsBundle(runtime);
-                await vscode.env.clipboard.writeText(content);
-                void vscode.window.showInformationMessage(
-                    "Copied onboarding diagnostics bundle to clipboard.",
+                await exportOnboardingArtifact(
+                    runtime,
+                    artifact,
+                    destination.id,
                 );
             }),
         ),
@@ -1017,6 +803,122 @@ function getInstallHealthGatePolicy(): InstallHealthGatePolicy {
     return vscode.workspace
         .getConfiguration("typeagentStudio.onboarding")
         .get<InstallHealthGatePolicy>("installHealthGatePolicy", "enforce");
+}
+
+type ExportDestination = "show" | "open" | "copy" | "save";
+
+interface ExportArtifact {
+    id: string;
+    label: string;
+    detail: string;
+    saveTitle: string;
+    defaultFileName: () => string;
+    getContent: (
+        runtime: StudioRuntime,
+        format: "plain" | "markdown",
+    ) => Promise<string>;
+}
+
+function getExportArtifacts(): ExportArtifact[] {
+    return [
+        {
+            id: "summary",
+            label: "Onboarding Summary",
+            detail: "Phase-by-phase onboarding status",
+            saveTitle: "Save Onboarding Summary",
+            defaultFileName: getOnboardingSummaryDefaultFileName,
+            getContent: (runtime) => getOnboardingSummary(runtime),
+        },
+        {
+            id: "health",
+            label: "Health Snapshot",
+            detail: "Session health and packaging gate status",
+            saveTitle: "Save Onboarding Health Snapshot",
+            defaultFileName: getOnboardingHealthSnapshotDefaultFileName,
+            getContent: (runtime, format) =>
+                format === "markdown"
+                    ? getOnboardingHealthSnapshotMarkdown(runtime)
+                    : getOnboardingHealthSnapshot(runtime),
+        },
+        {
+            id: "settings",
+            label: "Settings Snapshot",
+            detail: "Current Studio onboarding settings",
+            saveTitle: "Save Onboarding Settings Snapshot",
+            defaultFileName: getSettingsSnapshotDefaultFileName,
+            getContent: (_runtime, format) =>
+                Promise.resolve(
+                    format === "markdown"
+                        ? getOnboardingSettingsSnapshotMarkdown()
+                        : formatOnboardingSettingsSnapshot(
+                              getOnboardingSettingsSnapshot(),
+                          ),
+                ),
+        },
+        {
+            id: "packaging",
+            label: "Packaging Health Report",
+            detail: "Detailed packaging gate findings",
+            saveTitle: "Save Packaging Health Report",
+            defaultFileName: getPackagingHealthReportDefaultFileName,
+            getContent: (runtime) => getPackagingHealthReport(runtime),
+        },
+        {
+            id: "diagnostics",
+            label: "Diagnostics Bundle",
+            detail: "Combined summary, health, settings, and artifact info",
+            saveTitle: "Save Onboarding Diagnostics Bundle",
+            defaultFileName: getDiagnosticsDefaultFileName,
+            getContent: (runtime) => getOnboardingDiagnosticsBundle(runtime),
+        },
+    ];
+}
+
+async function exportOnboardingArtifact(
+    runtime: StudioRuntime,
+    artifact: ExportArtifact,
+    destination: ExportDestination,
+): Promise<void> {
+    if (destination === "show") {
+        const content = await artifact.getContent(runtime, "plain");
+        void vscode.window.showInformationMessage(content, { modal: true });
+        return;
+    }
+
+    const content = await artifact.getContent(runtime, "markdown");
+
+    if (destination === "open") {
+        const doc = await vscode.workspace.openTextDocument({
+            language: "markdown",
+            content,
+        });
+        await vscode.window.showTextDocument(doc, { preview: false });
+        return;
+    }
+
+    if (destination === "copy") {
+        await vscode.env.clipboard.writeText(content);
+        void vscode.window.showInformationMessage(
+            `Copied ${artifact.label} to clipboard.`,
+        );
+        return;
+    }
+
+    const targetUri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(artifact.defaultFileName()),
+        filters: {
+            Markdown: ["md"],
+        },
+        title: artifact.saveTitle,
+    });
+    if (!targetUri) {
+        return;
+    }
+
+    await fs.writeFile(targetUri.fsPath, content, "utf-8");
+    void vscode.window.showInformationMessage(
+        `Saved ${artifact.label} to ${targetUri.fsPath}.`,
+    );
 }
 
 async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
