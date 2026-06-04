@@ -184,6 +184,24 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.openInstallArtifactPath",
+            withErrors(async () => {
+                const artifactPath =
+                    await runtime.resolveInstallArtifactPathForActiveSession();
+                const artifactUri = vscode.Uri.file(artifactPath);
+                await vscode.commands.executeCommand(
+                    "revealInExplorer",
+                    artifactUri,
+                );
+                void vscode.window.showInformationMessage(
+                    `Revealed install artifact path in explorer: ${artifactPath}`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.checkPackagingHealthGate",
             withErrors(async () => {
                 const gate =
