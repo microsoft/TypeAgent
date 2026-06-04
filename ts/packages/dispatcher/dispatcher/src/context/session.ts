@@ -350,7 +350,7 @@ const defaultSessionConfig: SessionConfig = {
         memory: {
             legacy: true, // use the new memory behavior
         },
-        reasoning: "claude",
+        reasoning: "copilot",
         reasoningDisplay: "inline",
         setupOnFirstUse: true,
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
