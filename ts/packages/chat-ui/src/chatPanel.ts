@@ -52,6 +52,18 @@ import {
     type PcCompletionState,
     type PcPost,
 } from "./partialCompletion.js";
+import type {
+    ChoiceOption,
+    HelpPanelContent,
+    ImageCaptureProvider,
+    SettingsPanelSchema,
+    SpeechInputProvider,
+    SpeechState,
+    TtsProvider,
+} from "./providers.js";
+import { openSettingsPopup, openHelpPopup } from "./popups.js";
+import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
+import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -150,6 +162,7 @@ export type HistoryEntry =
           actionPhase?: PhaseTiming;
           totalDuration?: number;
           tokenUsage?: CompletionUsageStats;
+          actionTokenUsage?: CompletionUsageStats;
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
       }
@@ -423,6 +436,44 @@ export interface ChatPanelOptions {
      * Change at runtime via ChatPanel.setFeedbackUIVariant.
      */
     feedbackUIVariant?: FeedbackUIVariant;
+
+    /**
+     * Optional speech-to-text provider. When supplied, ChatPanel renders a
+     * microphone button (reflecting the provider's state) and a "listening"
+     * banner, and inserts recognized text into the input.
+     */
+    speechProvider?: SpeechInputProvider;
+    /**
+     * Optional text-to-speech provider. When supplied (and enabled),
+     * ChatPanel speaks agent "block" messages as they arrive.
+     */
+    ttsProvider?: TtsProvider;
+    /**
+     * Optional image-capture provider. When supplied, ChatPanel renders an
+     * attach-file button (if pickFile present) and a camera button (if
+     * openCamera present) that feed the next message's attachments.
+     */
+    imageCaptureProvider?: ImageCaptureProvider;
+    /**
+     * Optional data-driven settings popup descriptor. When supplied,
+     * ChatPanel.openSettings() renders a modal from it.
+     */
+    settingsPanel?: SettingsPanelSchema;
+    /**
+     * Optional help popup content. When supplied, ChatPanel.openHelp()
+     * renders a modal from it.
+     */
+    helpPanel?: HelpPanelContent;
+    /**
+     * Optional soft-hide ("trash") hook for the feedback widget. When
+     * supplied, the feedback footer shows a trash button that toggles the
+     * hidden state of the user or agent message for the given request.
+     */
+    onFeedbackHidden?: (
+        requestId: RequestId,
+        target: "user" | "agent",
+        hidden: boolean,
+    ) => void;
 }
 
 /**
@@ -492,6 +543,12 @@ export class ChatPanel {
      */
     private isUserSignedIn = false;
     private signedInEmail?: string;
+    /**
+     * Base64 data URL of the signed-in user's MS Graph profile photo, when
+     * available. Rendered as the user-icon avatar background; falls back to
+     * the letter initial when undefined.
+     */
+    private userPhoto?: string;
     /**
      * Optional host-driven command-completion controller. Mounted by
      * attachCompletion(); pcState messages are forwarded via applyPcState().
@@ -582,6 +639,26 @@ export class ChatPanel {
     // can apply the latest state. Keyed by RequestId.requestId (UUID).
     private feedbackByRequestId = new Map<string, UserFeedbackEntry>();
 
+    // Optional host-supplied capability providers (see providers.ts).
+    private speechProvider?: SpeechInputProvider;
+    private ttsProvider?: TtsProvider;
+    private imageCaptureProvider?: ImageCaptureProvider;
+    private settingsPanel?: SettingsPanelSchema;
+    private helpPanel?: HelpPanelContent;
+    public onFeedbackHidden?: (
+        requestId: RequestId,
+        target: "user" | "agent",
+        hidden: boolean,
+    ) => void;
+    // Input-bar affordances created only when the matching provider exists.
+    private micButton?: HTMLButtonElement;
+    private attachButton?: HTMLButtonElement;
+    private cameraButton?: HTMLButtonElement;
+    private voiceBanner?: HTMLDivElement;
+    private lightboxOverlay?: HTMLDivElement;
+    private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
+    private speechState: SpeechState = "idle";
+
     constructor(
         private readonly rootElement: HTMLElement,
         options: ChatPanelOptions,
@@ -595,6 +672,13 @@ export class ChatPanel {
         this.onFeedback = options.onFeedback;
         this._feedbackUIVariant = options.feedbackUIVariant ?? "footer-always";
 
+        this.speechProvider = options.speechProvider;
+        this.ttsProvider = options.ttsProvider;
+        this.imageCaptureProvider = options.imageCaptureProvider;
+        this.settingsPanel = options.settingsPanel;
+        this.helpPanel = options.helpPanel;
+        this.onFeedbackHidden = options.onFeedbackHidden;
+
         // Build DOM structure
         const wrapper = document.createElement("div");
         wrapper.className = "chat-panel-wrapper";
@@ -605,6 +689,15 @@ export class ChatPanel {
         this.reconnectBanner.className = "chat-reconnect-banner";
         this.reconnectBanner.style.display = "none";
         wrapper.appendChild(this.reconnectBanner);
+
+        // Voice/listening banner — only created when a speech provider is
+        // present. Hidden until the provider reports a listening state.
+        if (this.speechProvider) {
+            this.voiceBanner = document.createElement("div");
+            this.voiceBanner.className = "chat-voice-banner";
+            this.voiceBanner.style.display = "none";
+            wrapper.appendChild(this.voiceBanner);
+        }
 
         // Scrollable message area
         this.messageDiv = document.createElement("div");
@@ -623,6 +716,7 @@ export class ChatPanel {
         this.inputArea.className = "chat-input";
 
         this.textInput = document.createElement("span");
+        this.textInput.id = "phraseDiv";
         this.textInput.className = "user-textarea";
         this.textInput.role = "textbox";
         this.textInput.contentEditable = "true";
@@ -682,6 +776,359 @@ export class ChatPanel {
 
         this.setupInputHandlers();
         this.setupContextMenu();
+        this.setupProviderAffordances();
+        this.setupImageLightbox();
+    }
+
+    /**
+     * Wire a delegated click handler so that clicking any image inside a
+     * chat bubble opens a full-window lightbox (translucent backdrop, the
+     * image centered) supporting mouse-wheel zoom, drag-to-pan, double-click
+     * to toggle zoom and Esc / backdrop-click to dismiss.
+     */
+    private setupImageLightbox() {
+        this.messageDiv.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName !== "IMG") return;
+            // Ignore tiny inline icons/avatars — only open for real content
+            // images (user attachments or agent-rendered images).
+            const img = target as HTMLImageElement;
+            const rect = img.getBoundingClientRect();
+            if (rect.width < 32 && rect.height < 32) return;
+            this.openImageLightbox(img.currentSrc || img.src);
+        });
+    }
+
+    /**
+     * Open a full-window image viewer overlaying the chat. Supports
+     * wheel-zoom centered on the cursor, drag-to-pan, double-click toggle,
+     * +/- controls and Esc / backdrop dismissal.
+     */
+    public openImageLightbox(src: string) {
+        // Only one lightbox at a time.
+        this.closeImageLightbox();
+
+        const overlay = document.createElement("div");
+        overlay.className = "chat-lightbox-overlay";
+        overlay.tabIndex = -1;
+
+        const img = document.createElement("img");
+        img.className = "chat-lightbox-img";
+        img.src = src;
+        img.draggable = false;
+        overlay.appendChild(img);
+
+        // Control bar (zoom in / out / reset / close).
+        const controls = document.createElement("div");
+        controls.className = "chat-lightbox-controls";
+        const makeBtn = (html: string, title: string) => {
+            const b = document.createElement("button");
+            b.className = "chat-lightbox-button";
+            b.innerHTML = html;
+            b.title = title;
+            controls.appendChild(b);
+            return b;
+        };
+        // Magnifier-glass glyphs for zoom out (−) and zoom in (+).
+        const magMinus = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="7" y1="10" x2="13" y2="10"/></svg>`;
+        const magPlus = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="7" y1="10" x2="13" y2="10"/><line x1="10" y1="7" x2="10" y2="13"/></svg>`;
+        const zoomOutBtn = makeBtn(magMinus, "Zoom out");
+        const resetBtn = makeBtn("\u21BA", "Reset");
+        const zoomInBtn = makeBtn(magPlus, "Zoom in");
+        const closeBtn = makeBtn("\u00D7", "Close (Esc)");
+        overlay.appendChild(controls);
+
+        // View transform state.
+        let scale = 1;
+        let tx = 0;
+        let ty = 0;
+        const minScale = 1;
+        const maxScale = 10;
+
+        const apply = () => {
+            img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+            img.style.cursor =
+                scale > 1 ? (dragging ? "grabbing" : "grab") : "default";
+            // Disable the zoom controls at their respective limits.
+            zoomOutBtn.disabled = scale <= minScale + 1e-3;
+            zoomInBtn.disabled = scale >= maxScale - 1e-3;
+        };
+
+        const reset = () => {
+            scale = 1;
+            tx = 0;
+            ty = 0;
+            apply();
+        };
+
+        // Zoom toward a point (cx, cy) in viewport coords by factor.
+        const zoomAt = (cx: number, cy: number, factor: number) => {
+            const prev = scale;
+            scale = Math.min(maxScale, Math.max(minScale, scale * factor));
+            if (scale === prev) return;
+            const rect = img.getBoundingClientRect();
+            // Center of the image in viewport coords.
+            const ox = rect.left + rect.width / 2;
+            const oy = rect.top + rect.height / 2;
+            const ratio = scale / prev;
+            tx += (ox - cx) * (ratio - 1);
+            ty += (oy - cy) * (ratio - 1);
+            if (scale === minScale) {
+                tx = 0;
+                ty = 0;
+            }
+            apply();
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let startTx = 0;
+        let startTy = 0;
+
+        const onWheel = (ev: WheelEvent) => {
+            ev.preventDefault();
+            const factor = ev.deltaY < 0 ? 1.15 : 1 / 1.15;
+            zoomAt(ev.clientX, ev.clientY, factor);
+        };
+
+        const onPointerDown = (ev: PointerEvent) => {
+            if (scale <= 1) return;
+            dragging = true;
+            startX = ev.clientX;
+            startY = ev.clientY;
+            startTx = tx;
+            startTy = ty;
+            img.setPointerCapture(ev.pointerId);
+            apply();
+        };
+        const onPointerMove = (ev: PointerEvent) => {
+            if (!dragging) return;
+            tx = startTx + (ev.clientX - startX);
+            ty = startTy + (ev.clientY - startY);
+            apply();
+        };
+        const onPointerUp = (ev: PointerEvent) => {
+            if (!dragging) return;
+            dragging = false;
+            try {
+                img.releasePointerCapture(ev.pointerId);
+            } catch {
+                // pointer may already be released
+            }
+            apply();
+        };
+
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") {
+                ev.preventDefault();
+                this.closeImageLightbox();
+            } else if (ev.key === "+" || ev.key === "=") {
+                zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.2);
+            } else if (ev.key === "-" || ev.key === "_") {
+                zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.2);
+            } else if (ev.key === "0") {
+                reset();
+            }
+        };
+
+        // Wire events.
+        overlay.addEventListener("wheel", onWheel, { passive: false });
+        img.addEventListener("pointerdown", onPointerDown);
+        img.addEventListener("pointermove", onPointerMove);
+        img.addEventListener("pointerup", onPointerUp);
+        img.addEventListener("dblclick", (ev) => {
+            ev.preventDefault();
+            if (scale > 1) {
+                reset();
+            } else {
+                zoomAt(ev.clientX, ev.clientY, 2.5);
+            }
+        });
+        // Click on the backdrop (not the image/controls) dismisses.
+        overlay.addEventListener("click", (ev) => {
+            if (ev.target === overlay) this.closeImageLightbox();
+        });
+        zoomInBtn.addEventListener("click", () =>
+            zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.3),
+        );
+        zoomOutBtn.addEventListener("click", () =>
+            zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.3),
+        );
+        resetBtn.addEventListener("click", reset);
+        closeBtn.addEventListener("click", () => this.closeImageLightbox());
+        document.addEventListener("keydown", onKey);
+
+        this.lightboxOverlay = overlay;
+        this.lightboxKeyHandler = onKey;
+        this.rootElement.appendChild(overlay);
+        overlay.focus();
+        apply();
+    }
+
+    /** Tear down the image lightbox if it is open. */
+    public closeImageLightbox() {
+        if (this.lightboxKeyHandler) {
+            document.removeEventListener("keydown", this.lightboxKeyHandler);
+            this.lightboxKeyHandler = undefined;
+        }
+        if (this.lightboxOverlay) {
+            this.lightboxOverlay.remove();
+            this.lightboxOverlay = undefined;
+        }
+    }
+
+    /**
+     * Create the mic / attach / camera buttons and wire the speech
+     * provider's state callbacks. Only the affordances whose providers are
+     * present get rendered, so hosts that omit a provider see no change.
+     */
+    private setupProviderAffordances() {
+        // Attach-file + camera buttons (image capture provider).
+        if (this.imageCaptureProvider?.pickFile) {
+            this.attachButton = document.createElement("button");
+            this.attachButton.className =
+                "chat-input-button chat-attach-button";
+            this.attachButton.title = "Attach image";
+            this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
+            this.attachButton.addEventListener("click", () =>
+                this.handleAttachFile(),
+            );
+            this.inputArea.insertBefore(this.attachButton, this.sendButton);
+        }
+        if (this.imageCaptureProvider?.openCamera) {
+            this.cameraButton = document.createElement("button");
+            this.cameraButton.className =
+                "chat-input-button chat-camera-button";
+            this.cameraButton.title = "Capture image";
+            this.cameraButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M9.4 4 8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-4l-1.4-2zm2.6 5.5a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>`;
+            this.cameraButton.addEventListener("click", () =>
+                this.handleCameraCapture(),
+            );
+            this.inputArea.insertBefore(this.cameraButton, this.sendButton);
+        }
+
+        // Microphone button + speech state wiring (speech provider).
+        if (this.speechProvider) {
+            this.micButton = document.createElement("button");
+            this.micButton.className = "chat-input-button chat-mic-button";
+            this.micButton.title = "Speak";
+            this.micButton.addEventListener("click", () =>
+                this.handleMicClick(),
+            );
+            this.inputArea.insertBefore(this.micButton, this.sendButton);
+
+            this.speechState = this.speechProvider.getState();
+            this.renderMicState();
+            this.speechProvider.onStateChange((state) => {
+                this.speechState = state;
+                this.renderMicState();
+                this.renderVoiceBanner();
+            });
+            this.speechProvider.onResult((text, final) => {
+                this.handleSpeechResult(text, final);
+            });
+        }
+    }
+
+    private renderMicState() {
+        if (!this.micButton) return;
+        const listening =
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word";
+        this.micButton.classList.toggle("listening", listening);
+        this.micButton.disabled = this.speechState === "disabled";
+        // Filled mic glyph; the `listening` class drives the pulse styling.
+        this.micButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>`;
+    }
+
+    private renderVoiceBanner() {
+        if (!this.voiceBanner) return;
+        const listening =
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word";
+        if (listening) {
+            this.voiceBanner.textContent =
+                this.speechState === "wake-word"
+                    ? "Waiting for wake word…"
+                    : "Listening…";
+            this.voiceBanner.style.display = "";
+        } else {
+            this.voiceBanner.style.display = "none";
+        }
+    }
+
+    private handleMicClick() {
+        if (!this.speechProvider) return;
+        if (
+            this.speechState === "listening" ||
+            this.speechState === "always-on" ||
+            this.speechState === "wake-word"
+        ) {
+            this.speechProvider.stop();
+        } else {
+            this.speechProvider.start();
+        }
+    }
+
+    private handleSpeechResult(text: string, final: boolean) {
+        // Interim results replace the input text live; the committed
+        // utterance is left in the input for the user to edit/send.
+        this.textInput.textContent = text;
+        this.sendButton.disabled = !text.trim();
+        if (final) {
+            this.placeCaretAtEnd();
+        }
+    }
+
+    private async handleAttachFile() {
+        const urls = await this.imageCaptureProvider?.pickFile();
+        if (urls && urls.length > 0) {
+            for (const url of urls) {
+                this.pendingAttachments.push(url);
+                this.showAttachmentPreview(url);
+            }
+        }
+    }
+
+    private async handleCameraCapture() {
+        const url = await this.imageCaptureProvider?.openCamera?.();
+        if (url) {
+            this.pendingAttachments.push(url);
+            this.showAttachmentPreview(url);
+        }
+    }
+
+    private placeCaretAtEnd() {
+        this.textInput.focus();
+        const range = document.createRange();
+        range.selectNodeContents(this.textInput);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+    }
+
+    /**
+     * Open the data-driven settings popup built from `options.settingsPanel`.
+     * No-op when no settings schema was supplied.
+     */
+    public openSettings() {
+        if (this.settingsPanel) {
+            openSettingsPopup(this.rootElement, this.settingsPanel);
+        }
+    }
+
+    /**
+     * Open the help popup built from `options.helpPanel`. No-op when no
+     * help content was supplied.
+     */
+    public openHelp() {
+        if (this.helpPanel) {
+            openHelpPopup(this.rootElement, this.helpPanel);
+        }
     }
 
     private setupContextMenu() {
@@ -711,10 +1158,13 @@ export class ChatPanel {
                 this.send();
             } else if (e.key === "Escape") {
                 if (this.completions.length > 0) {
+                    // preventDefault so host's doc-level Esc handler doesn't double-handle.
+                    e.preventDefault();
                     this.clearCompletions();
                     return;
                 }
                 if (this.activeRequestId) {
+                    e.preventDefault();
                     this.onCancel?.(this.activeRequestId);
                     return;
                 }
@@ -740,7 +1190,7 @@ export class ChatPanel {
         });
 
         this.textInput.addEventListener("input", () => {
-            this.sendButton.disabled = !this.textInput.textContent?.trim();
+            this.updateSendButtonState();
             this.scheduleCompletionFetch();
             this.applyInputHint();
         });
@@ -800,12 +1250,25 @@ export class ChatPanel {
             if (this.pendingAttachments.length === 0 && preview) {
                 preview.remove();
             }
+            this.updateSendButtonState();
         });
         const wrapper = document.createElement("span");
         wrapper.className = "chat-attachment-item";
         wrapper.appendChild(img);
         wrapper.appendChild(removeBtn);
         preview.appendChild(wrapper);
+        // An attached image makes the message sendable even with no text.
+        this.updateSendButtonState();
+    }
+
+    /**
+     * Recompute the send button's enabled state. The message is sendable
+     * when there is non-empty text OR at least one pending image attachment.
+     */
+    private updateSendButtonState() {
+        const hasText = !!this.textInput.textContent?.trim();
+        this.sendButton.disabled =
+            !hasText && this.pendingAttachments.length === 0;
     }
 
     private clearAttachmentPreview() {
@@ -916,10 +1379,14 @@ export class ChatPanel {
     }
 
     private send(requestId?: string) {
-        const text = this.textInput.textContent?.trim();
-        if (!text) return;
+        const text = this.textInput.textContent?.trim() ?? "";
+        // Allow sending when there is text OR at least one pending image
+        // attachment (image-only requests are valid — e.g. "what is this?").
+        if (!text && this.pendingAttachments.length === 0) return;
 
-        this.commandHistory.unshift(text);
+        if (text) {
+            this.commandHistory.unshift(text);
+        }
         this.historyIndex = -1;
         this.textInput.textContent = "";
         this.sendButton.disabled = true;
@@ -935,7 +1402,7 @@ export class ChatPanel {
         this.clearAttachmentPreview();
 
         const id = requestId ?? generateRequestId();
-        this.addUserMessage(text, id);
+        this.addUserMessage(text, id, attachments);
         // Toggle input controls into "processing" state — swaps the
         // send button for the stop button so the user can cancel an
         // in-flight command. setIdle() is invoked by the host on
@@ -1089,6 +1556,14 @@ export class ChatPanel {
     }
 
     /**
+     * Returns the in-flight requestId, or undefined when idle. Used by
+     * hosts to gate document-level interrupt gestures.
+     */
+    public getActiveRequestId(): string | undefined {
+        return this.activeRequestId;
+    }
+
+    /**
      * Display a user message bubble.
      *
      * `requestId` is stamped on the container as `data-request-id` so later
@@ -1098,21 +1573,132 @@ export class ChatPanel {
      * can attach decorations to this bubble. `send()` always supplies one;
      * external callers can omit it for fire-and-forget messages.
      */
-    public addUserMessage(text: string, requestId?: string) {
+    public addUserMessage(
+        text: string,
+        requestId?: string,
+        attachments?: string[],
+    ) {
+        this._addUserMessageImpl(text, requestId, false, attachments);
+    }
+
+    /**
+     * Add a peer-originated user bubble. Same DOM as `addUserMessage`
+     * but skips side-effects that re-route local thread state. Idempotent.
+     */
+    public addRemoteUserMessage(text: string, requestId: string) {
+        if (this.userMessageById.has(requestId)) return;
+        this._addUserMessageImpl(text, requestId, true);
+    }
+
+    /**
+     * Stamp / clear a "queued" or "running" pill on the user bubble.
+     * No-op if the bubble doesn't exist. When `status === "queued"`
+     * with `onCancel`, renders an `×` button that invokes it on click.
+     */
+    public setUserBubbleQueueStatus(
+        requestId: string,
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ): void {
+        const container = this.userMessageById.get(requestId);
+        if (!container) return;
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        if (!bodyDiv) return;
+        let chip = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-queue-status-chip",
+        );
+        if (status === null) {
+            chip?.remove();
+            return;
+        }
+        if (!chip) {
+            chip = document.createElement("div");
+            chip.className = "chat-queue-status-chip";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            chip.style.gap = "4px";
+            // VS Code webview font sits low in the line-box; +1px bottom
+            // padding visually centers the lowercase label text.
+            chip.style.padding = "2px 6px 3px 6px";
+            // Matches Electron chip insets (messageContainer.ts:363-365).
+            chip.style.marginLeft = "4px";
+            chip.style.marginTop = "4px";
+            chip.style.marginBottom = "2px";
+            chip.style.fontSize = "11px";
+            chip.style.lineHeight = "1";
+            chip.style.borderRadius = "8px";
+            chip.style.opacity = "0.85";
+            chip.style.boxSizing = "border-box";
+            bodyDiv.insertBefore(chip, bodyDiv.firstChild);
+        }
+        chip.replaceChildren();
+        chip.dataset.status = status;
+        const label = document.createElement("span");
+        label.textContent = status;
+        chip.appendChild(label);
+        if (status === "queued") {
+            // Alpha-tinted yellow reads on both light and dark themes.
+            chip.style.background =
+                "var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.18))";
+            chip.style.color =
+                "var(--vscode-inputValidation-warningForeground, rgba(120, 80, 0, 0.95))";
+            if (onCancel) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chat-queue-cancel-button";
+                btn.title = "Cancel this queued request";
+                btn.setAttribute("aria-label", "Cancel queued request");
+                btn.textContent = "×";
+                btn.style.display = "inline-flex";
+                btn.style.alignItems = "center";
+                btn.style.justifyContent = "center";
+                btn.style.padding = "0";
+                btn.style.margin = "0";
+                btn.style.border = "none";
+                btn.style.background = "transparent";
+                btn.style.color = "inherit";
+                btn.style.cursor = "pointer";
+                btn.style.fontSize = "0.7em";
+                btn.style.lineHeight = "1";
+                btn.style.fontFamily = "inherit";
+                // Reset VS Code webview's UA button defaults that would
+                // otherwise inflate chip height.
+                btn.style.minHeight = "0";
+                btn.style.minWidth = "0";
+                btn.style.height = "auto";
+                btn.style.boxSizing = "border-box";
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                });
+                chip.appendChild(btn);
+            }
+        } else {
+            chip.style.background =
+                "var(--vscode-inputValidation-infoBackground, rgba(0, 150, 255, 0.18))";
+            chip.style.color =
+                "var(--vscode-inputValidation-infoForeground, rgba(0, 80, 140, 0.95))";
+        }
+    }
+
+    /**
+     * Shared DOM construction for both `addUserMessage` (local sends)
+     * and `addRemoteUserMessage` (peer-conversation echoes). `isRemote`
+     * gates the side-effects that would inappropriately re-route the
+     * local thread state when a peer-originated bubble is added.
+     */
+    private _addUserMessageImpl(
+        text: string,
+        requestId: string | undefined,
+        isRemote: boolean,
+        attachments?: string[],
+    ) {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
-        // Reap stale per-thread bubble lookups now that a new user request
-        // is starting. completeRequest() intentionally leaves the entry in
-        // threadContainers so out-of-band setDisplay updates from a host's
-        // takeAction handler can still target the existing bubble (see
-        // PR #2306). Once the user starts a new request, any pending late
-        // update from a prior thread would be unsafe to apply, so we free
-        // the references here. New threads will re-populate the map via
-        // getOrCreateAgentContainer.
-        this.threadContainers.clear();
-        this.pendingThreadDisplayInfo.clear();
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
@@ -1120,14 +1706,10 @@ export class ChatPanel {
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
         iconDiv.textContent = this.userInitial;
-        // Click the user-letter avatar to start a Microsoft sign-in flow.
-        // Routes through the standard send path so it appears in history,
-        // shows in the user's bubble, and the dispatcher handles it like
-        // any typed `@calendar login`. Calendar+email share an MS Graph
-        // identity (single tenant), so one login covers both. The handler
-        // reads isUserSignedIn at click time so the avatar becomes inert
-        // once the user is signed in (without needing to remove listeners
-        // from each historic bubble).
+        // Click avatar to start MS sign-in via the normal send path
+        // (`@calendar login` covers both calendar + email — shared MS
+        // Graph identity). Handler reads `isUserSignedIn` at click
+        // time so historic bubbles become inert post-signin.
         this.applyUserIconState(iconDiv);
         iconDiv.addEventListener("click", () => {
             if (this.isUserSignedIn) return;
@@ -1145,6 +1727,20 @@ export class ChatPanel {
         span.className = "chat-message-user-text";
         span.textContent = text;
         messageDiv.appendChild(span);
+
+        // Render any attached images inline in the user bubble so the user
+        // sees what they sent (camera capture, file attach, drag-drop).
+        if (attachments && attachments.length > 0) {
+            const imagesDiv = document.createElement("div");
+            imagesDiv.className = "chat-message-user-images";
+            for (const url of attachments) {
+                const img = document.createElement("img");
+                img.src = url;
+                img.className = "chat-message-user-image";
+                imagesDiv.appendChild(img);
+            }
+            messageDiv.appendChild(imagesDiv);
+        }
 
         bodyDiv.appendChild(messageDiv);
 
@@ -1164,15 +1760,15 @@ export class ChatPanel {
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
-        if (!this.suppressFirstMessageTracking) {
-            this.requestStartByRequestId.set(id, Date.now());
+        if (!isRemote) {
+            if (!this.suppressFirstMessageTracking) {
+                this.requestStartByRequestId.set(id, Date.now());
+            }
+            // New request becomes default thread for setDisplay calls
+            // without a requestId. Remote bubbles must NOT take over
+            // thread routing — they belong to peers.
+            this.currentUserThreadId = id;
         }
-        // The new user request becomes the default thread for subsequent
-        // setDisplay/appendDisplay calls that omit a requestId. Old threads
-        // (agent-initiated reminders, prior user requests) stay alive in
-        // threadContainers and continue to receive their own follow-up
-        // messages addressed by their threadId.
-        this.currentUserThreadId = id;
     }
 
     /**
@@ -1185,16 +1781,19 @@ export class ChatPanel {
         label: string,
         phase?: PhaseTiming,
         totalDuration?: number,
+        tokenUsage?: CompletionUsageStats,
     ) {
         const container = this.userMessageById.get(requestId);
-        // Note: do NOT bail when phase has no duration — chat-only requests
-        // sometimes return a parse PhaseTiming with marks but no duration,
-        // and we still want to render those marks. We bail only if there
-        // is genuinely nothing to show.
+        // The user bubble shows only the translation totals (Translation
+        // Elapsed / Total Elapsed / Translation Tokens). Phase marks such as
+        // the translation's "First Token" belong to the agent/translation
+        // internals and are intentionally NOT rendered here — they were
+        // appearing on the user bubble (and even on @-commands with no
+        // translation), which is misleading.
         const hasContent =
             (phase?.duration !== undefined && phase.duration !== null) ||
-            (phase?.marks && Object.keys(phase.marks).length > 0) ||
-            totalDuration !== undefined;
+            totalDuration !== undefined ||
+            tokenUsage !== undefined;
         if (!container || !hasContent) return;
         const metricsDiv = container.querySelector(
             ".chat-message-metrics-user",
@@ -1207,20 +1806,20 @@ export class ChatPanel {
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
-        const markLines: string[] = [];
-        if (phase?.marks) {
-            for (const [key, value] of Object.entries(phase.marks)) {
-                const avg = value.duration / Math.max(value.count, 1);
-                const suffix =
-                    value.count !== 1 ? `(out of ${value.count})` : "";
-                markLines.push(
-                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
-                );
-            }
+        // Translation tokens: unlike action tokens on the agent bubble, an
+        // absent value here means "no translation happened" (an @-command or
+        // a cached translation), which is an expected/known state — so we
+        // simply omit the line rather than printing "not reported".
+        const leftLines: string[] = [];
+        if (tokenUsage) {
+            leftLines.push(
+                `${label} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+            );
         }
         metricsDiv.innerHTML = sanitize(
             `<div class="metrics-details">` +
-                `<div>${markLines.join("<br>")}</div>` +
+                `<div>${leftLines.join("<br>")}</div>` +
                 `<div></div>` +
                 `<div>${mainLines.join("<br>")}</div>` +
                 `</div>`,
@@ -1314,13 +1913,46 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
+        // "step" mode — force a new bubble for each reasoning phase so
+        // thinking, tool calls, tool results, and final text each appear
+        // as distinct first-class chat messages instead of being appended
+        // into a single monolithic bubble.
+        if (appendMode === "step") {
+            // Detach the existing container for this request (if any) so
+            // getOrCreateAgentContainer will spin up a fresh one.
+            if (requestId) {
+                const threadId = this.resolveThreadId(requestId);
+                this.threadContainers.delete(threadId);
+            }
+        }
+
         const container = this.getOrCreateAgentContainer(
             source,
             sourceIcon,
             requestId,
         );
 
-        container.setMessage(content, source, appendMode);
+        // For step bubbles, stamp elapsed time since the request started.
+        if (appendMode === "step" && requestId) {
+            const start = this.requestStartByRequestId.get(requestId);
+            if (start !== undefined) {
+                const elapsed = Date.now() - start;
+                container.setElapsedBadge(elapsed);
+            }
+        }
+
+        container.setMessage(
+            content,
+            source,
+            appendMode === "step" ? "block" : appendMode,
+        );
+
+        // Speak the agent's reply when a TTS provider is enabled. Only
+        // "block" (full reply) content is spoken — inline/temporary status
+        // chunks are skipped to avoid reading partial/streamed fragments.
+        if (appendMode === undefined || appendMode === "block") {
+            this.maybeSpeak(content);
+        }
 
         // After the agent's HTML lands in the DOM, lift any embedded
         // user-signed-in marker into ChatPanel state. The marker is emitted
@@ -1381,10 +2013,21 @@ export class ChatPanel {
         const effectiveIcon = pending
             ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
             : (sourceIcon ?? this.iconForSource(effectiveSource));
+        // Anchor on the user bubble so the agent's response renders
+        // directly below it (column-reverse: DOM-before = visually-after).
+        // Liveness check guards against detached anchors. Falls through
+        // to default placement for ad-hoc / system / agent-N threads
+        // with no user bubble.
+        const mappedBubble = this.userMessageById.get(threadId);
+        const anchor =
+            mappedBubble?.parentElement === this.messageDiv
+                ? mappedBubble
+                : undefined;
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
             threadId,
+            anchor,
         );
         this.threadContainers.set(threadId, container);
         // Capture the elapsed time from request send to first agent
@@ -1583,6 +2226,13 @@ export class ChatPanel {
                 switch (entry.kind) {
                     case "user":
                         this.addUserMessage(entry.text, entry.requestId);
+                        // Seed the up-arrow command history with replayed
+                        // user commands so it recalls prior-session input.
+                        // Entries arrive oldest-first; unshift keeps the
+                        // most recent command at index 0.
+                        if (entry.text && entry.text.trim()) {
+                            this.commandHistory.unshift(entry.text);
+                        }
                         break;
                     case "agent-replace":
                         this.replaceAgentMessage(
@@ -1629,6 +2279,7 @@ export class ChatPanel {
                                 actionPhase: entry.actionPhase,
                                 totalDuration: entry.totalDuration,
                                 tokenUsage: entry.tokenUsage,
+                                actionTokenUsage: entry.actionTokenUsage,
                                 parsePhase: entry.parsePhase,
                             });
                         }
@@ -1639,13 +2290,15 @@ export class ChatPanel {
             this.suppressFirstMessageTracking = false;
         }
 
-        // Mark everything just appended as history. Iteration is over the
-        // live NodeList so `children.length` reflects current count.
-        for (
-            let i = firstHistoryIdx;
-            i < this.messageDiv.children.length;
-            i++
-        ) {
+        // Mark everything just appended as history. Messages are *prepended*
+        // (each insert goes to DOM index 0 via `sentinel.before(...)`), so the
+        // replayed entries occupy the first `added` children — the pre-existing
+        // children (e.g. the sentinel) were pushed to the end. Iterating from
+        // `firstHistoryIdx` would skip the newest history message (index 0,
+        // visually right above the "now" separator) and uselessly gray the
+        // sentinel instead.
+        const added = this.messageDiv.children.length - firstHistoryIdx;
+        for (let i = 0; i < added; i++) {
             this.messageDiv.children[i].classList.add("history");
         }
 
@@ -1811,6 +2464,7 @@ export class ChatPanel {
             actionPhase?: PhaseTiming;
             totalDuration?: number;
             tokenUsage?: CompletionUsageStats;
+            actionTokenUsage?: CompletionUsageStats;
             parsePhase?: PhaseTiming;
             cancelled?: boolean;
         },
@@ -1823,30 +2477,48 @@ export class ChatPanel {
         const target = this.threadContainers.get(threadId);
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
-            // Mirror the Electron shell's "⚠ Cancelled" status line so the
-            // user has visible confirmation that Stop / Esc cancelled the
-            // in-flight command. If no agent bubble was created yet (cancel
-            // landed before any agent output), spin up a minimal one so
-            // the status is still visible.
-            const cancelTarget =
-                target ??
-                this.createAgentContainer("shell", this.iconForSource("shell"));
-            cancelTarget.setMessage(
-                {
-                    type: "text",
-                    content: "⚠ Cancelled",
-                    kind: "status",
-                },
-                "shell",
-                "block",
-            );
+            // Mirror Electron's "⚠ Cancelled" status, anchored to the
+            // user bubble (column-reverse: DOM-before = visually-after).
+            // Liveness check guards against detached anchors.
+            const mappedBubble = this.userMessageById.get(threadId);
+            const userBubble =
+                mappedBubble && mappedBubble.parentElement === this.messageDiv
+                    ? mappedBubble
+                    : undefined;
+            // Drop unknown explicit requestIds (post-clear stragglers)
+            // rather than orphan them at the chat bottom.
+            if (!target && requestId !== undefined && !userBubble) {
+                // Orphan: chip already cleared by the queue path.
+            } else {
+                const cancelTarget =
+                    target ??
+                    this.createAgentContainer(
+                        "shell",
+                        this.iconForSource("shell"),
+                        undefined,
+                        userBubble,
+                    );
+                cancelTarget.setMessage(
+                    {
+                        type: "text",
+                        content: "⚠ Cancelled",
+                        kind: "status",
+                    },
+                    "shell",
+                    "block",
+                );
+            }
         }
         if (result && target) {
+            // Agent bubble shows ACTION token usage (the tokens the agent
+            // consumed executing the action/command). `actionTokenUsage` is
+            // passed through as-is: `undefined` => "not reported / unknown",
+            // a present all-zero value => the agent ran but made no LLM call.
             target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
-                result.tokenUsage,
+                result.actionTokenUsage,
                 firstMessageMs,
             );
         }
@@ -1855,11 +2527,15 @@ export class ChatPanel {
             // request had no parse phase (e.g. cached translations or
             // chat-only paths), we still show the total elapsed so the
             // user bubble gets a metrics tooltip just like the agent's.
+            // The user bubble shows TRANSLATION token usage (the LLM cost of
+            // turning the request into actions); `undefined` for @-commands
+            // and cached translations.
             this.applyUserMetrics(
                 requestId,
                 "Translation",
                 result.parsePhase,
                 result.totalDuration,
+                result.tokenUsage,
             );
         }
         // Keep the thread's bubble in the map after completion so late
@@ -1888,6 +2564,88 @@ export class ChatPanel {
             undefined,
         );
         this.scrollToBottom();
+    }
+
+    /**
+     * Extract a plain-text rendering of DisplayContent for speech. Returns
+     * undefined when there's nothing speakable.
+     */
+    private displayContentToText(content: DisplayContent): string | undefined {
+        if (typeof content === "string") return content;
+        if (content && typeof content === "object" && "content" in content) {
+            const inner = (content as { content: unknown }).content;
+            if (typeof inner === "string") return inner;
+        }
+        return undefined;
+    }
+
+    /** Speak `content` when a TTS provider is present and enabled. */
+    private maybeSpeak(content: DisplayContent): void {
+        if (!this.ttsProvider || !this.ttsProvider.isEnabled()) return;
+        const text = this.displayContentToText(content);
+        if (text && text.trim()) {
+            void this.ttsProvider.speak(text);
+        }
+    }
+
+    /**
+     * Present a set of mutually-exclusive choices below a system message and
+     * resolve with the chosen option's `value`. Generalizes askYesNo to an
+     * arbitrary list with optional per-choice keyboard accelerators. Maps
+     * directly from ClientIO.question / requestChoice.
+     */
+    public addChoicePrompt<T>(
+        message: string,
+        choices: ChoiceOption<T>[],
+        opts?: { defaultValue?: T },
+    ): Promise<T> {
+        return new Promise<T>((resolve) => {
+            const container = this.createAgentContainer("system", "");
+            container.setMessage(
+                { type: "text", content: message },
+                undefined,
+                undefined,
+            );
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "chat-prompt-buttons choice-panel";
+
+            const cleanup = () => {
+                buttonDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+            };
+
+            const choose = (value: T) => {
+                cleanup();
+                resolve(value);
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                const choice = choices.find((c) => c.keys?.includes(e.key));
+                if (choice) {
+                    e.preventDefault();
+                    choose(choice.value);
+                    return;
+                }
+                if (e.key === "Escape" && opts?.defaultValue !== undefined) {
+                    e.preventDefault();
+                    choose(opts.defaultValue);
+                }
+            };
+
+            for (const choice of choices) {
+                const btn = document.createElement("button");
+                btn.className = "chat-prompt-button choice-button";
+                if (choice.icon) btn.appendChild(choice.icon);
+                btn.appendChild(document.createTextNode(choice.label));
+                btn.addEventListener("click", () => choose(choice.value));
+                buttonDiv.appendChild(btn);
+            }
+
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(buttonDiv);
+            this.scrollToBottom();
+        });
     }
 
     /**
@@ -2007,7 +2765,132 @@ export class ChatPanel {
     }
 
     /**
+     * Full template-editor action proposal (ported from the shell). Renders
+     * the proposed action(s) as an editable field cascade with an
+     * Accept/Edit/Cancel flow:
+     *  - Accept  → resolves `undefined` (run the action(s) as-is).
+     *  - Cancel  → resolves `null` (cancel the request).
+     *  - Edit    → switches to edit mode (Replace/Cancel); Replace resolves the
+     *              edited action data array, Cancel returns to Accept/Edit/Cancel.
+     *
+     * `services` is injected by the host (shell) so chat-ui needs no
+     * agent-dispatcher dependency.
+     */
+    public proposeActionEdit(
+        actionTemplates: TemplateEditConfig,
+        source: string,
+        services: TemplateEditServices,
+    ): Promise<unknown> {
+        const container = this.createAgentContainer(source, "");
+
+        const actionContainer = document.createElement("div");
+        actionContainer.className = "action-container";
+        container.appendElement(actionContainer);
+
+        const actionCascade = new TemplateEditor(
+            actionContainer,
+            services,
+            actionTemplates,
+        );
+
+        return new Promise<unknown>((resolve) => {
+            let keyHandler: ((e: KeyboardEvent) => void) | undefined;
+            const setKeyHandler = (
+                h: ((e: KeyboardEvent) => void) | undefined,
+            ) => {
+                if (keyHandler) {
+                    document.removeEventListener("keydown", keyHandler);
+                }
+                keyHandler = h;
+                if (keyHandler) {
+                    document.addEventListener("keydown", keyHandler);
+                }
+            };
+
+            const makeButtons = (
+                buttons: { label: string; onClick: () => void }[],
+            ): HTMLDivElement => {
+                const buttonDiv = document.createElement("div");
+                buttonDiv.className = "chat-prompt-buttons";
+                for (const b of buttons) {
+                    const btn = document.createElement("button");
+                    btn.className = "chat-prompt-button";
+                    btn.textContent = b.label;
+                    btn.addEventListener("click", b.onClick);
+                    buttonDiv.appendChild(btn);
+                }
+                return buttonDiv;
+            };
+
+            let buttonDiv: HTMLDivElement | undefined;
+            const clearButtons = () => {
+                buttonDiv?.remove();
+                buttonDiv = undefined;
+            };
+
+            const finish = (value: unknown) => {
+                setKeyHandler(undefined);
+                clearButtons();
+                actionContainer.remove();
+                resolve(value);
+            };
+
+            const confirm = () => {
+                clearButtons();
+                buttonDiv = makeButtons([
+                    { label: "Accept", onClick: () => finish(undefined) },
+                    { label: "Edit", onClick: () => edit() },
+                    { label: "Cancel", onClick: () => finish(null) },
+                ]);
+                container.appendElement(buttonDiv);
+                setKeyHandler((e: KeyboardEvent) => {
+                    if (e.key === "Enter") {
+                        finish(undefined);
+                    } else if (e.key === "Escape") {
+                        finish(null);
+                    } else if (e.key === "Delete") {
+                        edit();
+                    }
+                });
+                this.scrollToBottom();
+            };
+
+            const edit = () => {
+                clearButtons();
+                actionCascade.setEditMode(true);
+                buttonDiv = makeButtons([
+                    {
+                        label: "Replace",
+                        onClick: () => {
+                            if (actionCascade.hasErrors) {
+                                return;
+                            }
+                            finish(actionCascade.value);
+                        },
+                    },
+                    {
+                        label: "Cancel",
+                        onClick: () => {
+                            actionCascade.reset();
+                            actionCascade.setEditMode(false);
+                            confirm();
+                        },
+                    },
+                ]);
+                container.appendElement(buttonDiv);
+                // No global key accelerators in edit mode — keystrokes go to
+                // the field inputs.
+                setKeyHandler(undefined);
+                this.scrollToBottom();
+            };
+
+            confirm();
+        });
+    }
+
+    /**
      * Register a dynamic display for periodic refresh.
+     *
      * The agent calls this to indicate content at displayId should be
      * refreshed after nextRefreshMs milliseconds.
      */
@@ -2193,16 +3076,18 @@ export class ChatPanel {
      * either by the host directly, or via the embedded HTML marker scanner
      * in addAgentMessage.
      */
-    public setUserSignedIn(name: string, email: string) {
+    public setUserSignedIn(name: string, email: string, photo?: string) {
         this.setUserInfo(name);
         this.isUserSignedIn = true;
         this.signedInEmail = email;
+        this.userPhoto = photo;
         this.refreshAllUserIcons();
     }
 
     public setUserSignedOut() {
         this.isUserSignedIn = false;
         this.signedInEmail = undefined;
+        this.userPhoto = undefined;
         // Reset display name/initial back to the default placeholders so
         // future user bubbles show "U" instead of the previously-signed-in
         // user's initial. Mirrors what setUserSignedIn does on its own
@@ -2213,7 +3098,40 @@ export class ChatPanel {
     }
 
     private applyUserIconState(iconDiv: HTMLElement) {
-        iconDiv.textContent = this.userInitial;
+        if (this.userPhoto) {
+            // Render the MS Graph profile photo as a circular avatar; clear
+            // the letter so it doesn't overlay the image. Use important
+            // priority so it beats themed `background: ... !important` rules.
+            iconDiv.classList.add("user-icon-photo");
+            iconDiv.style.setProperty(
+                "background-image",
+                `url("${this.userPhoto}")`,
+                "important",
+            );
+            // Set sizing inline (not just via the .user-icon-photo CSS
+            // class) so the photo fills the circle regardless of CSS load
+            // order — otherwise background-size stays `auto` and only the
+            // native-resolution top-left corner shows, looking blank.
+            iconDiv.style.setProperty("background-size", "cover", "important");
+            iconDiv.style.setProperty(
+                "background-position",
+                "center",
+                "important",
+            );
+            iconDiv.style.setProperty(
+                "background-repeat",
+                "no-repeat",
+                "important",
+            );
+            iconDiv.textContent = "";
+        } else {
+            iconDiv.classList.remove("user-icon-photo");
+            iconDiv.style.removeProperty("background-image");
+            iconDiv.style.removeProperty("background-size");
+            iconDiv.style.removeProperty("background-position");
+            iconDiv.style.removeProperty("background-repeat");
+            iconDiv.textContent = this.userInitial;
+        }
         if (this.isUserSignedIn) {
             iconDiv.style.cursor = "default";
             iconDiv.title = this.signedInEmail
@@ -2247,8 +3165,9 @@ export class ChatPanel {
         signedIn.forEach((el) => {
             const name = el.getAttribute("data-name");
             const email = el.getAttribute("data-email");
+            const photo = el.getAttribute("data-photo") ?? undefined;
             if (name && email) {
-                this.setUserSignedIn(name, email);
+                this.setUserSignedIn(name, email, photo);
             }
             el.remove();
         });
@@ -2406,6 +3325,17 @@ export class ChatPanel {
     }
 
     /**
+     * Mark the dispatcher as initialized + display-log replay complete by
+     * setting `data-dispatcher-ready="true"` on the scroll container
+     * (`.chat`). Hosts call this once the dispatcher is connected and the
+     * initial history replay has finished, so automated tests can wait for a
+     * stable DOM before sending requests.
+     */
+    public markDispatcherReady(): void {
+        this.messageDiv.setAttribute("data-dispatcher-ready", "true");
+    }
+
+    /**
      * Toggle "demo paused" mode. While paused, the panel installs a
      * window-level capture-phase keydown listener that swallows
      * Ctrl/Meta+→ (continue) and Esc (cancel) before the focused input
@@ -2485,10 +3415,12 @@ export class ChatPanel {
         source: string,
         icon: string,
         threadId?: string,
+        anchorElement?: Element,
     ): AgentMessageContainer {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const beforeElement =
+            anchorElement ?? this.messageDiv.firstElementChild!;
         const container = new AgentMessageContainer(
-            sentinel,
+            beforeElement,
             source,
             icon,
             this.settingsView,
@@ -2528,6 +3460,12 @@ export class ChatPanel {
                 }
             },
         };
+        // Only expose the trash affordance when the host supplied a hide hook.
+        if (this.onFeedbackHidden) {
+            controller.setHidden = async (hidden, target) => {
+                this.onFeedbackHidden!(requestId, target ?? "agent", hidden);
+            };
+        }
         container.attachFeedbackController(controller, this._feedbackUIVariant);
         const existing = this.feedbackByRequestId.get(threadId);
         if (existing) {
@@ -2726,9 +3664,9 @@ class AgentMessageContainer {
         firstMessageMs?: number,
     ) {
         // Layout: .metrics-details flex row with three columns
-        //   left   — "First Message" + phase.marks (one line each)
+        //   left   — "First Message" + Tokens + phase.marks (one line each)
         //   middle — (reserved; tts metrics in the future)
-        //   right  — main metrics (Action Elapsed / Total Elapsed / Tokens)
+        //   right  — main metrics (Action Elapsed / Total Elapsed)
         // This mirrors the Electron shell's MessageContainer layout so the
         // tooltip reads as "marks on the left, totals on the right".
         const mainLines: string[] = [];
@@ -2740,18 +3678,26 @@ class AgentMessageContainer {
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
-        if (tokenUsage) {
-            // Compact form: "Tokens: 14356 (14257+99)" — the long
-            // "(prompt N, completion M)" form overflowed the metrics
-            // tooltip in narrow webview sidebars.
-            mainLines.push(
-                `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
-            );
-        }
         const leftLines: string[] = [];
         if (firstMessageMs !== undefined) {
             leftLines.push(metricsLine("First Message", firstMessageMs));
+        }
+        // Token usage line. Distinguish three states:
+        //   - undefined   => the agent did not report usage. This is NOT the
+        //                    same as zero — the agent may have made LLM calls
+        //                    we can't observe (esp. out-of-process agents).
+        //   - all zero    => the agent ran but made no LLM call.
+        //   - positive    => actual usage.
+        if (tokenUsage) {
+            // Compact form: "Action Tokens: 14356 (14257+99)" — the long
+            // "(prompt N, completion M)" form overflowed the metrics
+            // tooltip in narrow webview sidebars.
+            leftLines.push(
+                `${actionLabel} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+            );
+        } else {
+            leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
         }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {
@@ -2926,6 +3872,28 @@ class AgentMessageContainer {
         }
         if (icon) {
             this.iconDiv.textContent = icon;
+        }
+    }
+
+    /**
+     * Show a small elapsed-time badge on this bubble (e.g. "+3.2s").
+     * Used for reasoning step bubbles so the user can see how long
+     * into the reasoning loop each phase occurred.
+     */
+    public setElapsedBadge(elapsedMs: number) {
+        const badge = this.div.querySelector(".chat-step-elapsed");
+        const text =
+            elapsedMs < 1000
+                ? `+${elapsedMs}ms`
+                : `+${(elapsedMs / 1000).toFixed(1)}s`;
+        if (badge) {
+            badge.textContent = text;
+        } else {
+            const span = document.createElement("span");
+            span.className = "chat-step-elapsed";
+            span.textContent = text;
+            // Insert after the agent name in the timestamp row
+            this.nameSpan.parentElement?.appendChild(span);
         }
     }
 

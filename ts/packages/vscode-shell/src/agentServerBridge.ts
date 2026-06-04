@@ -297,6 +297,7 @@ export class AgentServerBridge {
                         );
                     }
                     this.session = undefined;
+                    this.clearRequestIdMaps();
                     this.updateStatusBar(false);
                     this.broadcastToWebviews({
                         type: "status",
@@ -424,6 +425,7 @@ export class AgentServerBridge {
                 );
             }
             this.session = undefined;
+            this.clearRequestIdMaps();
             this.isConnected = false;
             this.updateStatusBar(false);
             this.broadcastToWebviews({ type: "status", connected: false });
@@ -736,6 +738,7 @@ export class AgentServerBridge {
 
             const oldSession = this.session;
             this.session = newSession;
+            this.clearRequestIdMaps();
             this.nameOverride = undefined;
 
             if (oldSession) {
@@ -894,6 +897,30 @@ export class AgentServerBridge {
                         toHistoryReplayMessage(entries),
                     );
                 }
+                // Also seed the webview's QueueStateMirror with the current
+                // snapshot so double-Esc / queue-aware UI has a baseline
+                // before the next push event arrives. Best-effort: a missing
+                // getQueueSnapshot (older dispatcher) is silently skipped.
+                try {
+                    if (
+                        typeof session.dispatcher.getQueueSnapshot ===
+                        "function"
+                    ) {
+                        const snap =
+                            await session.dispatcher.getQueueSnapshot();
+                        if (snap) {
+                            this.postToWebview(webview, {
+                                type: "queueStateChanged",
+                                snapshot: snap,
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] hydrateWebview queue snapshot failed:",
+                        e,
+                    );
+                }
             } catch (e) {
                 console.warn(
                     "[agentServerBridge] hydrateWebview replay failed:",
@@ -955,6 +982,16 @@ export class AgentServerBridge {
                         e,
                     );
                 }
+                break;
+            case "cancelAllQueuedAndRunning":
+                // Double-Esc gesture from the webview: cancel every queued
+                // and running entry on this session. Mirrors the Electron
+                // shell's `ChatView.cancelAllQueuedAndRunning` (chatView.ts:462).
+                // Prefer the authoritative queue snapshot — it includes
+                // peer-originated entries the local clientToServerRequestId
+                // map doesn't know about. Fall back to that map only when
+                // the snapshot is unavailable (older dispatcher contract).
+                await this.cancelAllQueuedAndRunning();
                 break;
             case "openExternal":
                 // Webviews can't open arbitrary external URLs; route through
@@ -1054,6 +1091,58 @@ export class AgentServerBridge {
                 );
             }
         }
+    }
+
+    /**
+     * Cancel every queued AND running entry on this session's queue. Backs
+     * the webview's double-Esc gesture and mirrors `ChatView.cancelAllQueuedAndRunning`
+     * in the Electron shell (chatView.ts:462).
+     *
+     * Prefers the authoritative queue snapshot so peer-originated entries
+     * (which this bridge never saw a setUserRequest for) are also cancelled.
+     * Falls back to the local clientToServerRequestId map only when the
+     * snapshot is unavailable (older dispatcher, transient error). Per-id
+     * errors are swallowed so one dead call doesn't strand the rest — the
+     * server's requestCancelled broadcast still drives UI updates.
+     */
+    public async cancelAllQueuedAndRunning(): Promise<void> {
+        const session = this.session;
+        if (!session) return;
+        const ids = new Set<string>();
+        try {
+            if (typeof session.dispatcher.getQueueSnapshot === "function") {
+                const snap = await session.dispatcher.getQueueSnapshot();
+                if (snap?.running) ids.add(snap.running.requestId);
+                for (const entry of snap?.queued ?? []) {
+                    ids.add(entry.requestId);
+                }
+            }
+        } catch (e) {
+            console.warn(
+                "[agentServerBridge] cancelAllQueuedAndRunning getQueueSnapshot failed:",
+                e,
+            );
+        }
+        // Degraded fallback (and belt-and-suspenders for races): also pull
+        // any ids the bridge has tracked locally that the snapshot missed.
+        for (const serverId of this.clientToServerRequestId.values()) {
+            ids.add(serverId);
+        }
+        if (ids.size === 0) return;
+        await Promise.all(
+            Array.from(ids).map(async (serverId) => {
+                try {
+                    await Promise.resolve(
+                        session.dispatcher.cancelCommand(serverId),
+                    );
+                } catch (e) {
+                    console.warn(
+                        `[agentServerBridge] cancelAllQueuedAndRunning(${serverId}) failed:`,
+                        e,
+                    );
+                }
+            }),
+        );
     }
 
     private ensureCompletionController(
@@ -1192,6 +1281,25 @@ export class AgentServerBridge {
     // populate it from setUserRequest, which fires on every accepted
     // command with both ids on the RequestId object.
     private clientToServerRequestId = new Map<string, string>();
+    /**
+     * Reverse direction of `clientToServerRequestId`. The dispatcher's queue
+     * lifecycle ClientIO events (requestQueued / requestStarted / requestCancelled)
+     * carry the canonical SERVER requestId, but chat-ui keys bubbles by the
+     * clientRequestId — so the bridge looks up the alias here before forwarding
+     * to the webview. Populated alongside the forward map in setUserRequest.
+     */
+    private serverToClientRequestId = new Map<string, string>();
+
+    /**
+     * Wipe both cross-ref maps. Called on session change / disconnect —
+     * the old session's queued and in-flight requestIds are no longer
+     * valid against the dispatcher we'll be talking to next, and
+     * holding them risks routing a future cancelCommand at a stale id.
+     */
+    private clearRequestIdMaps(): void {
+        this.clientToServerRequestId.clear();
+        this.serverToClientRequestId.clear();
+    }
 
     private async sendCommand(
         command: string,
@@ -1236,6 +1344,9 @@ export class AgentServerBridge {
                 type: "commandComplete",
                 requestId: requestId ?? "",
                 result: result ?? null,
+                aliasRequestId: requestId
+                    ? this.clientToServerRequestId.get(requestId)
+                    : undefined,
             });
             // Forward metrics to peer tabs sharing this session so their
             // bubbles for this requestId also pick up the timing tooltip.
@@ -1245,10 +1356,14 @@ export class AgentServerBridge {
                 type: "commandComplete",
                 requestId: requestId ?? "",
                 result: null,
+                aliasRequestId: requestId
+                    ? this.clientToServerRequestId.get(requestId)
+                    : undefined,
             });
             this.broadcastToWebviews({
                 type: "error",
                 message: e?.message ?? String(e),
+                requestId: requestId,
             });
         } finally {
             // Wake up any demo-runner await waiting on this requestId.
@@ -1260,7 +1375,11 @@ export class AgentServerBridge {
                 }
                 // Also drop the client→server requestId mapping; the
                 // dispatcher has freed its AbortController by now.
+                const serverId = this.clientToServerRequestId.get(requestId);
                 this.clientToServerRequestId.delete(requestId);
+                if (serverId !== undefined) {
+                    this.serverToClientRequestId.delete(serverId);
+                }
             }
         }
     }
@@ -1292,6 +1411,41 @@ export class AgentServerBridge {
             broadcast: (msg) => this.broadcastToWebviews(msg),
             rememberServerRequestId: (clientId, serverId) => {
                 this.clientToServerRequestId.set(clientId, serverId);
+                this.serverToClientRequestId.set(serverId, clientId);
+            },
+            lookupClientRequestId: (serverId) =>
+                this.serverToClientRequestId.get(serverId),
+            lookupServerRequestId: (clientId) =>
+                this.clientToServerRequestId.get(clientId),
+            forgetRequestId: (serverId) => {
+                const clientId = this.serverToClientRequestId.get(serverId);
+                this.serverToClientRequestId.delete(serverId);
+                if (clientId !== undefined) {
+                    // Only delete the forward entry if it still points at the
+                    // serverId we're forgetting — otherwise a subsequent
+                    // setUserRequest may have re-bound the client rid to a
+                    // newer serverId and we'd strand its mapping.
+                    if (
+                        this.clientToServerRequestId.get(clientId) === serverId
+                    ) {
+                        this.clientToServerRequestId.delete(clientId);
+                    }
+                }
+            },
+            sweepRequestIds: (liveServerIds) => {
+                for (const serverId of Array.from(
+                    this.serverToClientRequestId.keys(),
+                )) {
+                    if (liveServerIds.has(serverId)) continue;
+                    const clientId = this.serverToClientRequestId.get(serverId);
+                    this.serverToClientRequestId.delete(serverId);
+                    if (
+                        clientId !== undefined &&
+                        this.clientToServerRequestId.get(clientId) === serverId
+                    ) {
+                        this.clientToServerRequestId.delete(clientId);
+                    }
+                }
             },
             handleShellAction: (requestId, data) =>
                 this.handleShellAction(requestId, data),

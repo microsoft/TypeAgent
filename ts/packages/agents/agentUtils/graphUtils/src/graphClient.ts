@@ -16,7 +16,7 @@ import {
     serializeAuthenticationRecord,
 } from "@azure/identity";
 
-import { Client } from "@microsoft/microsoft-graph-client";
+import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { User } from "@microsoft/microsoft-graph-types";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import { useIdentityPlugin } from "@azure/identity";
@@ -58,6 +58,21 @@ export interface ErrorResponse {
     code: string;
     message: string;
 }
+
+// One-shot guard so a silent session restore on app launch is announced by
+// only the first agent (calendar or email) to succeed — both share this
+// in-process module, so the second agent skips the duplicate "signed in"
+// message while still warming its own Graph client. Process-scoped: resets
+// naturally on the next launch.
+let silentRestoreAnnounced = false;
+export function claimSilentRestoreAnnouncement(): boolean {
+    if (silentRestoreAnnounced) {
+        return false;
+    }
+    silentRestoreAnnounced = true;
+    return true;
+}
+
 export interface AppSettings {
     clientId: string;
     tenantId: string;
@@ -631,6 +646,33 @@ export class GraphClient extends EventEmitter {
             .api("/me")
             .select(["displayName", "mail", "userPrincipalName"])
             .get();
+    }
+
+    /**
+     * Fetch the signed-in user's profile photo from MS Graph
+     * (`/me/photo/$value`) and return it as a base64 data URL suitable for
+     * use as a CSS background-image / <img> src. Returns undefined when the
+     * user has no photo set (Graph responds 404) or any error occurs, so
+     * callers can fall back to the letter-initial avatar.
+     */
+    public async getUserPhotoAsync(): Promise<string | undefined> {
+        try {
+            const client = await this.ensureClient();
+            const arrayBuffer: ArrayBuffer = await client
+                .api("/me/photo/$value")
+                .responseType(ResponseType.ARRAYBUFFER)
+                .get();
+            if (!arrayBuffer) {
+                return undefined;
+            }
+            const base64 = Buffer.from(arrayBuffer).toString("base64");
+            return `data:image/jpeg;base64,${base64}`;
+        } catch (error) {
+            // 404 = no photo set for the user; any other error is logged and
+            // treated the same (fall back to letter avatar).
+            debugGraphError(`Error fetching user photo: ${error}`);
+            return undefined;
+        }
     }
 
     public async getUserInfo(nameHint: string): Promise<any[]> {

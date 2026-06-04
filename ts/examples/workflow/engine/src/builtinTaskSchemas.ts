@@ -235,6 +235,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { $typeParam: "N" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.floor",
         inputSchema: {
             type: "object",
@@ -244,6 +245,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { type: "integer" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.round",
         inputSchema: {
             type: "object",
@@ -253,6 +255,7 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
         outputSchema: { type: "integer" },
     },
     {
+        // Not generic: output is always integer, regardless of input subtype.
         name: "math.ceil",
         inputSchema: {
             type: "object",
