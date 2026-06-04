@@ -128,9 +128,8 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.checkPackagingHealthGate",
             withErrors(async () => {
-                const artifactPath =
-                    await runtime.resolveInstallArtifactPathForActiveSession();
-                const gate = await runtime.checkPackagingHealthGate(artifactPath);
+                const gate =
+                    await runtime.evaluatePackagingHealthGateForActiveSession();
                 const findingSummary =
                     gate.findings.length > 0
                         ? `${gate.findings.length} findings`
@@ -146,16 +145,7 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.openPackagingHealthReport",
             withErrors(async () => {
-                const artifactPath =
-                    await runtime.resolveInstallArtifactPathForActiveSession();
-                const gate = await runtime.checkPackagingHealthGate(artifactPath);
-                const doc = await vscode.workspace.openTextDocument({
-                    language: "markdown",
-                    content: formatPackagingHealthReport(gate),
-                });
-                await vscode.window.showTextDocument(doc, {
-                    preview: false,
-                });
+                await openPackagingHealthReport(runtime);
             }),
         ),
     );
@@ -542,16 +532,41 @@ async function getOnboardingSummary(runtime: StudioRuntime): Promise<string> {
 async function showPackagingHealthGateStatus(
     runtime: StudioRuntime,
 ): Promise<void> {
-    const artifactPath = await runtime.resolveInstallArtifactPathForActiveSession();
-    const gate = await runtime.checkPackagingHealthGate(artifactPath);
+    const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
     const message = `Packaging health gate ${gate.status}: ${gate.summary}`;
 
     if (gate.status === "fail") {
-        void vscode.window.showWarningMessage(message);
+        const openReport = "Open report";
+        const restoreTesting = "Restore to Testing";
+        const choice = await vscode.window.showWarningMessage(
+            message,
+            openReport,
+            restoreTesting,
+        );
+        if (choice === openReport) {
+            await openPackagingHealthReport(runtime);
+        }
+        if (choice === restoreTesting) {
+            await runtime.restorePhaseOnActiveSession("Testing");
+            void vscode.window.showInformationMessage(
+                "Restored onboarding to Testing. Packaging is now stale and can be re-run.",
+            );
+        }
         return;
     }
 
     void vscode.window.showInformationMessage(message);
+}
+
+async function openPackagingHealthReport(runtime: StudioRuntime): Promise<void> {
+    const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    const doc = await vscode.workspace.openTextDocument({
+        language: "markdown",
+        content: formatPackagingHealthReport(gate),
+    });
+    await vscode.window.showTextDocument(doc, {
+        preview: false,
+    });
 }
 
 function formatPackagingHealthReport(

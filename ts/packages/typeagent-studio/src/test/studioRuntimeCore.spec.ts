@@ -370,6 +370,54 @@ test("resolveInstallArtifactPathForActiveSession and checkPackagingHealthGate", 
     const gate = await runtime.checkPackagingHealthGate(resolved);
     assert.equal(gate.status, "warn");
     assert.equal(gate.findings.length, 1);
+
+    const activeGate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    assert.equal(activeGate.status, "warn");
+    assert.equal(activeGate.findings.length, 1);
+});
+
+test("enforcePackagingHealthGateForActiveSession throws on fail", async () => {
+    const workspaceRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-studio-health-enforce-"),
+    );
+    const artifactPath = path.join(
+        workspaceRoot,
+        "packages",
+        "agents",
+        "health-enforce",
+    );
+    await fs.mkdir(artifactPath, { recursive: true });
+
+    const { context } = createContext([workspaceRoot]);
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-health-enforce",
+        }),
+        evaluatePackagingHealthGate: async (candidatePath) => ({
+            status: "fail",
+            summary: "2 error findings and 0 warning findings.",
+            findings: [
+                {
+                    ruleId: "manifest.parses",
+                    severity: "error",
+                    agent: "health-enforce",
+                    evidence: { message: "invalid manifest" },
+                },
+            ],
+            artifactPath: candidatePath,
+            checkedAgent: "health-enforce",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Health enforcement command",
+        agentName: "health-enforce",
+    });
+
+    await assert.rejects(
+        () => runtime.enforcePackagingHealthGateForActiveSession(),
+        /Health gate failed:/,
+    );
 });
 
 test("clearActiveOnboardingSession removes the current session binding", async () => {

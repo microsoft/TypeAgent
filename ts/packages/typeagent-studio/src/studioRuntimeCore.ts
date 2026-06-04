@@ -58,6 +58,8 @@ export interface StudioRuntime {
         artifactPath: string;
     }>;
     resolveInstallArtifactPathForActiveSession(): Promise<string>;
+    evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
+    enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
     clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
     runPhaseOnActiveSession(
@@ -182,6 +184,17 @@ export function createStudioRuntimeCore(
         async resolveInstallArtifactPathForActiveSession() {
             const sessionId = getRequiredSessionId(context);
             return resolveArtifactPathForSession(onboarding, sessionId, context);
+        },
+        async evaluatePackagingHealthGateForActiveSession() {
+            const artifactPath = await this.resolveInstallArtifactPathForActiveSession();
+            return evaluatePackagingHealthGate(artifactPath);
+        },
+        async enforcePackagingHealthGateForActiveSession() {
+            const gate = await this.evaluatePackagingHealthGateForActiveSession();
+            if (gate.status === "fail") {
+                throw new Error(`Health gate failed: ${gate.summary}`);
+            }
+            return gate;
         },
         async clearActiveOnboardingSession() {
             await context.workspaceState.update(
