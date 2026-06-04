@@ -5,8 +5,12 @@ import {
     ActionContext,
     AppAction,
     TypeAgentAction,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     createSdkMcpServer,
@@ -15,6 +19,7 @@ import {
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import registerDebug from "debug";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +33,10 @@ import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import { Entity } from "@typeagent/agent-sdk";
 import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
+import {
+    ConversationMessage,
+    ConversationMessageMeta,
+} from "conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -46,6 +55,39 @@ const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 const debugMcp = registerDebug("typeagent:dispatcher:reasoning:mcp");
 
 const model = "claude-opus-4-6";
+
+/**
+ * Resolve the display append mode for reasoning phases based on config.
+ * "inline" config → "step" mode (new bubble per phase).
+ * "block" config  → "block" mode (legacy single-bubble behavior).
+ */
+function resolveReasoningDisplayMode(
+    context: ActionContext<CommandHandlerContext>,
+): DisplayAppendMode {
+    const config = context.sessionContext.agentContext.session.getConfig();
+    return config.execution.reasoningDisplay === "inline" ? "step" : "block";
+}
+
+/**
+ * Resolve the path to the SDK's JS-based CLI (assistant.mjs).
+ * We use this instead of the default native binary (claude.exe) because
+ * the native binary sends a hardcoded `context-1m-2025-08-07` beta header
+ * that the API rejects for accounts without the 1M-context entitlement.
+ * The JS-based CLI has been patched (via postinstall or manual edit) to
+ * remove that beta.
+ */
+function getClaudeCodeJsCliPath(): string {
+    // Use createRequire (works in both Node and Electron) instead of
+    // import.meta.resolve which may not be available in Electron's main process.
+    const require = createRequire(import.meta.url);
+    const sdkEntry = require.resolve("@anthropic-ai/claude-agent-sdk");
+    const sdkDir = path.dirname(sdkEntry);
+    const cliPath = path.resolve(sdkDir, "..", "assistant.mjs");
+    debug(
+        `[claude-cli] sdkEntry=${sdkEntry} sdkDir=${sdkDir} cliPath=${cliPath} exists=${fs.existsSync(cliPath)}`,
+    );
+    return cliPath;
+}
 
 const mcpServerName = "action-executor";
 const allowedTools = [
@@ -227,6 +269,55 @@ function formatToolCallDisplay(toolName: string, input: any): string {
 const formatToolResultDisplay = sharedFormatToolResultDisplay;
 const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
+const mcpExecuteActionTool = `mcp__${mcpServerName}__execute_action`;
+
+/**
+ * Recover the TypeAgent action that an `execute_action` MCP tool call ran.
+ * Returns undefined for any other tool. The reasoning loop invokes TypeAgent
+ * actions exclusively through this tool, so this is how we recover the
+ * structured actions it executed.
+ */
+function extractExecutedAction(
+    toolName: string,
+    input: any,
+): TypeAgentAction | undefined {
+    if (toolName !== mcpExecuteActionTool) {
+        return undefined;
+    }
+    const schemaName = input?.schemaName;
+    const actionName = input?.action?.actionName;
+    if (typeof schemaName !== "string" || typeof actionName !== "string") {
+        return undefined;
+    }
+    return {
+        schemaName,
+        actionName,
+        parameters: input?.action?.parameters,
+    } as TypeAgentAction;
+}
+
+/**
+ * Record actions the reasoning loop successfully executed into the dispatcher's
+ * CommandResult. Reasoning runs actions through the action-executor MCP tools,
+ * bypassing executeActions(), so without this they never appear in
+ * CommandResult.actions. Callers (e.g. the Copilot direct hook) rely on
+ * CommandResult.actions to detect that TypeAgent recognized and handled the
+ * request — a successful `learn:` registers its taskflow action this way.
+ */
+function recordReasoningActions(
+    context: ActionContext<CommandHandlerContext>,
+    actions: TypeAgentAction[],
+): void {
+    if (actions.length === 0) {
+        return;
+    }
+    const commandResult = getCommandResult(context.sessionContext.agentContext);
+    if (commandResult === undefined) {
+        return;
+    }
+    commandResult.actions = [...(commandResult.actions ?? []), ...actions];
+}
+
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
@@ -385,6 +476,87 @@ function getClaudeOptions(
         },
     };
 
+    const searchMemorySchema = {
+        question: z.string(),
+    };
+    const searchMemoryTool: SdkMcpToolDefinition<typeof searchMemorySchema> = {
+        name: "search_memory",
+        description: [
+            "Search the user's conversation memory to recall information from earlier in this or prior conversations.",
+            "Provide a natural language question; returns an answer synthesized from relevant remembered messages.",
+        ].join("\n"),
+        inputSchema: searchMemorySchema,
+        handler: async (args) => {
+            debugMcp(`search_memory question=${args.question}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Conversation memory is not available.",
+                        },
+                    ],
+                };
+            }
+            const result = await memory.getAnswerFromLanguage(args.question);
+            if (!result.success) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Memory search failed: ${result.message}`,
+                        },
+                    ],
+                    isError: true,
+                };
+            }
+            const answers = result.data.map(([, answerResponse]) =>
+                answerResponse.type === "Answered"
+                    ? answerResponse.answer
+                    : `No answer: ${answerResponse.whyNoAnswer}`,
+            );
+            return {
+                content: [{ type: "text", text: answers.join("\n\n") }],
+            };
+        },
+    };
+
+    const rememberSchema = {
+        text: z.string(),
+    };
+    const rememberTool: SdkMcpToolDefinition<typeof rememberSchema> = {
+        name: "remember",
+        description: [
+            "Save a new memory to the user's conversation memory so it can be recalled later.",
+            "Use this to durably record facts, decisions, or context discovered during reasoning.",
+        ].join("\n"),
+        inputSchema: rememberSchema,
+        handler: async (args) => {
+            debugMcp(`remember text=${args.text}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Conversation memory is not available.",
+                        },
+                    ],
+                };
+            }
+            memory.queueAddMessage(
+                new ConversationMessage(
+                    args.text,
+                    new ConversationMessageMeta("reasoning", ["user"]),
+                ),
+            );
+            return {
+                content: [{ type: "text", text: "Remembered." }],
+            };
+        },
+    };
+
     const sessionId = getSessionId(context);
 
     // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
@@ -417,6 +589,14 @@ function getClaudeOptions(
         maxTurns: 20,
         thinking: { type: "adaptive" },
         effort: "max",
+        // Suppress the context-1m-2025-08-07 beta header that the SDK's
+        // bundled native binary sends by default.  The API rejects it for
+        // accounts without the 1M-context entitlement.  We bypass the native
+        // binary (claude.exe) and use the patched JS CLI (assistant.mjs)
+        // which has the beta removed.
+        executable: "node",
+        pathToClaudeCodeExecutable: getClaudeCodeJsCliPath(),
+        stderr: (data: string) => debug(`[claude-stderr] ${data}`),
         systemPrompt: customSystemPrompt ?? {
             type: "preset",
             preset: "claude_code",
@@ -427,6 +607,8 @@ function getClaudeOptions(
                 "You have access to TypeAgent action execution via MCP tools:",
                 "- `discover_actions`: Find available actions by schema name",
                 "- `execute_action`: Execute actions conforming to discovered schemas",
+                "- `search_memory`: Recall information from earlier in this or prior conversations",
+                "- `remember`: Durably save a new memory so it can be recalled later",
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
@@ -530,6 +712,7 @@ function getClaudeOptions(
                 "   - description: updated description (optional)",
                 "   - grammarPatterns: updated patterns as JSON array (optional)",
                 "10. Tell user: 'Task flow registered: ACTION_NAME. It is now available for use.'",
+                "    Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                 "",
                 "DEV MODE RECORDING — interactive improvement loop:",
                 "When triggered with 'dev: learn: [task]':",
@@ -619,6 +802,22 @@ function getClaudeOptions(
                 "- For LLM steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "",
+                "# Showing Invocation Examples",
+                "",
+                "Whenever you tell the user a flow is registered and show example phrases to invoke",
+                "it (for TaskFlow, WebFlow, or PowerShell), derive EVERY example directly from a",
+                "grammar pattern you actually registered for that flow:",
+                "- Keep ALL fixed/literal tokens of the pattern EXACTLY as written — do not drop,",
+                "  add, reorder, or reword any of them (e.g. never shorten 'roots music report' to",
+                "  'roots report', and never append extra words the pattern does not contain).",
+                "- For each $(name:wildcard) capture substitute one concrete, realistic value; for",
+                "  each $(name:number) capture substitute a number.",
+                "- For optional tokens (word)? and alternations (a | b), pick exactly one concrete form.",
+                "- Every example you show MUST be matchable by one of the patterns you registered.",
+                "  Do NOT invent phrasings that no registered pattern covers. If you cannot produce a",
+                "  natural-sounding example from the patterns, fix the patterns (editTaskFlow / the",
+                "  equivalent) rather than showing a phrase that will not match.",
+                "",
                 "# WebFlow Recording",
                 "",
                 "WHEN TO USE WEBFLOW instead of TaskFlow:",
@@ -636,6 +835,7 @@ function getClaudeOptions(
                 "3. The flow is automatically saved to instance storage with grammar patterns and",
                 "   becomes immediately available for grammar matching.",
                 "4. Tell user: 'WebFlow registered: ACTION_NAME. It is now available for use.'",
+                "   Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                 "",
                 ...(process.platform === "win32"
                     ? [
@@ -664,8 +864,15 @@ function getClaudeOptions(
                           "   - scriptParameters: array of { name, type, required, description, default? }",
                           "   - grammarPatterns: array of { pattern, isAlias } with $(param:wildcard) captures",
                           "   - allowedCmdlets: cmdlets the script uses",
+                          "   - allowedModules: modules to load — pass the SAME list you used in",
+                          "     testPowerShellFlow (e.g. ['NetTCPIP'] for Get-NetTCPConnection). The",
+                          "     registered flow runs with EXACTLY the sandbox you supply here, so omitting",
+                          "     allowedModules makes module cmdlets fail at invocation with 'not recognized'",
+                          "     even though the test passed. Always carry over the exact allowedCmdlets",
+                          "     AND allowedModules that made the test succeed.",
                           "6. If testPowerShellFlow FAILS, fix the script and test again before registering",
                           "7. Tell user: 'PowerShell registered: ACTION_NAME. It is now available for use.'",
+                          "   Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                           "",
                           "POWERSHELL SCRIPT RULES:",
                           "- Scripts run in FullLanguage mode with cmdlet whitelisting",
@@ -784,7 +991,12 @@ function getClaudeOptions(
         mcpServers: {
             [mcpServerName]: createSdkMcpServer({
                 name: mcpServerName,
-                tools: [discoverTool, executeTool],
+                tools: [
+                    discoverTool,
+                    executeTool,
+                    searchMemoryTool,
+                    rememberTool,
+                ],
             }),
         },
     };
@@ -842,8 +1054,7 @@ async function executeReasoningWithoutPlanning(
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
-
-    // Create query to Claude Agent SDK with chat history context
+    const displayMode = resolveReasoningDisplayMode(context);
     const queryInstance = query({
         prompt: buildPromptWithContext(
             originalRequest,
@@ -857,6 +1068,8 @@ async function executeReasoningWithoutPlanning(
     let toolUseCount = 0;
     let reasoningStepCount = 0;
     const toolUseIdToName = new Map<string, string>();
+    const pendingExecuteActions = new Map<string, TypeAgentAction>();
+    const executedActions: TypeAgentAction[] = [];
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -876,12 +1089,19 @@ async function executeReasoningWithoutPlanning(
                             type: "markdown",
                             content: content.text,
                         },
-                        "block",
+                        displayMode,
                     );
                 } else if (content.type === "tool_use") {
                     toolUseCount++;
                     reasoningStepCount++;
                     toolUseIdToName.set(content.id, content.name);
+                    const executedAction = extractExecutedAction(
+                        content.name,
+                        content.input,
+                    );
+                    if (executedAction) {
+                        pendingExecuteActions.set(content.id, executedAction);
+                    }
                     const actionInfo = extractActionInfo(
                         content.name,
                         content.input,
@@ -905,7 +1125,7 @@ async function executeReasoningWithoutPlanning(
                             ),
                             kind: "info",
                         },
-                        "block",
+                        displayMode,
                     );
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
@@ -914,8 +1134,9 @@ async function executeReasoningWithoutPlanning(
                             {
                                 type: "html",
                                 content: formatThinkingDisplay(thinkingContent),
+                                kind: "status",
                             },
-                            "block",
+                            displayMode,
                         );
                     }
                 }
@@ -934,6 +1155,14 @@ async function executeReasoningWithoutPlanning(
                             }
                         } else if (typeof block.content === "string") {
                             content = block.content;
+                        }
+                        if (!isError) {
+                            const executed = pendingExecuteActions.get(
+                                block.tool_use_id,
+                            );
+                            if (executed) {
+                                executedActions.push(executed);
+                            }
                         }
                         const toolName = toolUseIdToName.get(block.tool_use_id);
                         context.actionIO.appendDiagnosticData({
@@ -954,7 +1183,7 @@ async function executeReasoningWithoutPlanning(
                                 ),
                                 kind: isError ? "warning" : "info",
                             },
-                            "block",
+                            displayMode,
                         );
                     }
                 }
@@ -983,6 +1212,7 @@ async function executeReasoningWithoutPlanning(
         );
     }
 
+    recordReasoningActions(context, executedActions);
     return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
 }
 
@@ -1024,6 +1254,7 @@ async function executeReasoningWithTracing(
     try {
         // Display initial message
         context.actionIO.appendDisplay("Thinking...", "temporary");
+        const displayMode = resolveReasoningDisplayMode(context);
 
         // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
@@ -1039,6 +1270,8 @@ async function executeReasoningWithTracing(
         let toolUseCount = 0;
         let reasoningStepCount = 0;
         const toolUseIdToName = new Map<string, string>();
+        const pendingExecuteActions = new Map<string, TypeAgentAction>();
+        const executedActions: TypeAgentAction[] = [];
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1056,15 +1289,28 @@ async function executeReasoningWithTracing(
                 for (const content of message.message.content) {
                     if (content.type === "text") {
                         // Update display with current thinking content
-                        context.actionIO.appendDisplay({
-                            type: "markdown",
-                            content: content.text,
-                        });
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "markdown",
+                                content: content.text,
+                            },
+                            displayMode,
+                        );
                     } else if (content.type === "tool_use") {
                         toolUseCount++;
                         reasoningStepCount++;
                         // Track tool_use_id → name for matching results
                         toolUseIdToName.set(content.id, content.name);
+                        const executedAction = extractExecutedAction(
+                            content.name,
+                            content.input,
+                        );
+                        if (executedAction) {
+                            pendingExecuteActions.set(
+                                content.id,
+                                executedAction,
+                            );
+                        }
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
 
@@ -1092,7 +1338,7 @@ async function executeReasoningWithTracing(
                                 ),
                                 kind: "info",
                             },
-                            "block",
+                            displayMode,
                         );
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
@@ -1102,8 +1348,9 @@ async function executeReasoningWithTracing(
                                     type: "html",
                                     content:
                                         formatThinkingDisplay(thinkingContent),
+                                    kind: "status",
                                 },
-                                "block",
+                                displayMode,
                             );
                         }
                     }
@@ -1122,6 +1369,15 @@ async function executeReasoningWithTracing(
                                 }
                             } else if (typeof block.content === "string") {
                                 content = block.content;
+                            }
+
+                            if (!isError) {
+                                const executed = pendingExecuteActions.get(
+                                    block.tool_use_id,
+                                );
+                                if (executed) {
+                                    executedActions.push(executed);
+                                }
                             }
 
                             // Record tool result in trace for script extraction
@@ -1153,7 +1409,7 @@ async function executeReasoningWithTracing(
                                     ),
                                     kind: isError ? "warning" : "info",
                                 },
-                                "block",
+                                displayMode,
                             );
                         }
                     }
@@ -1172,15 +1428,6 @@ async function executeReasoningWithTracing(
                     throw new Error(errorMessage);
                 }
             }
-        }
-
-        // A success result with zero tool calls means the model replied with
-        // text only (e.g. described the change in prose) without executing
-        // anything. Nothing was actually modified — surface as a failure.
-        if (finalResult && toolUseCount === 0) {
-            throw new Error(
-                "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
-            );
         }
 
         // Mark trace as successful
@@ -1267,6 +1514,8 @@ async function executeReasoningWithTracing(
                 }
             }
         }
+
+        recordReasoningActions(context, executedActions);
 
         return finalResult
             ? createActionResultNoDisplay(finalResult)

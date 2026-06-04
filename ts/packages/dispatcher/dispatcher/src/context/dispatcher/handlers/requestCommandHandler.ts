@@ -58,29 +58,37 @@ async function runConfiguredReasoning(
     context: ActionContext<CommandHandlerContext>,
     options?: { fallbackContext?: ReasoningFallbackContext },
 ): Promise<void> {
-    const engine =
-        context.sessionContext.agentContext.session.getConfig().execution
-            .reasoning;
-    switch (engine) {
-        case "copilot":
-            await executeCopilotReasoning(request, context, {
-                engine: "copilot",
-            });
-            return;
-        case "claude":
-            await executeClaudeReasoning(request, context, {
-                engine: "claude",
-                ...(options?.fallbackContext
-                    ? { fallbackContext: options.fallbackContext }
-                    : {}),
-            });
-            return;
-        case "none":
-            throw new Error(
-                "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
-            );
-        default:
-            throw new Error(`Unknown reasoning engine: ${engine}`);
+    const systemContext = context.sessionContext.agentContext;
+    const engine = systemContext.session.getConfig().execution.reasoning;
+    const reasoningIcons: Record<string, string> = {
+        claude: "🧠",
+        copilot: "✨",
+    };
+    systemContext.reasoningSourceIcon = reasoningIcons[engine] ?? undefined;
+    try {
+        switch (engine) {
+            case "copilot":
+                await executeCopilotReasoning(request, context, {
+                    engine: "copilot",
+                });
+                return;
+            case "claude":
+                await executeClaudeReasoning(request, context, {
+                    engine: "claude",
+                    ...(options?.fallbackContext
+                        ? { fallbackContext: options.fallbackContext }
+                        : {}),
+                });
+                return;
+            case "none":
+                throw new Error(
+                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
+                );
+            default:
+                throw new Error(`Unknown reasoning engine: ${engine}`);
+        }
+    } finally {
+        systemContext.reasoningSourceIcon = undefined;
     }
 }
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
@@ -93,7 +101,10 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayError,
+} from "@typeagent/agent-sdk/helpers/display";
 
 const debugExplain = registerDebug("typeagent:explain");
 const debugRequest = registerDebug("typeagent:request");
@@ -524,6 +535,7 @@ export class RequestCommandHandler implements CommandHandler {
                             }
                         },
                     );
+                    let errorReasoningResolved = false;
                     if (needsErrorReasoning) {
                         const { error, failedAction } = execResult;
                         const augmentedRequest =
@@ -550,11 +562,18 @@ export class RequestCommandHandler implements CommandHandler {
                                     },
                                 },
                             );
+                            errorReasoningResolved = true;
                         } catch (e: any) {
                             debugRequest(
                                 `Error-triggered reasoning failed, keeping original error: ${e.message}`,
                             );
                         }
+                    }
+                    // If error-triggered reasoning did not run (schema opted out)
+                    // or failed to resolve the failure, surface the original
+                    // action error instead of silently reporting success.
+                    if (!errorReasoningResolved) {
+                        displayError(execResult.error, context);
                     }
                 }
             }

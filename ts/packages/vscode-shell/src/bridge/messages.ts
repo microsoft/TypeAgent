@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { IAgentMessage } from "@typeagent/dispatcher-types";
+import type {
+    IAgentMessage,
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
 import type {
     CompletionDirection,
     DisplayAppendMode,
@@ -58,9 +63,23 @@ export type BridgeToWebviewMessage =
           source: string;
           seq?: number;
           requestId?: string;
+          // See `commandComplete.aliasRequestId` — only populated when
+          // `event === "commandComplete"` and a cross-ref is known.
+          aliasRequestId?: string;
       }
     | { type: "commandResult"; requestId: string; result: any }
-    | { type: "commandComplete"; requestId: string; result: any }
+    | {
+          type: "commandComplete";
+          requestId: string;
+          result: any;
+          // Companion id form so the webview's cancellation dedupe set can
+          // mark BOTH the client rid (what this `requestId` carries) and
+          // the canonical server UUID. Without this, when queueRequestCancelled
+          // arrives keyed by server UUID and commandComplete by client rid,
+          // they each pass the per-id claim check and the bubble paints
+          // "⚠ Cancelled" twice.
+          aliasRequestId?: string;
+      }
     | { type: "peerMetrics"; requestId: string; result: any }
     | { type: "pcState"; state?: CompletionState }
     | { type: "error"; message: string; requestId?: string }
@@ -79,6 +98,32 @@ export type BridgeToWebviewMessage =
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
+    // Per-conversation queue lifecycle. The bridge forwards the dispatcher's
+    // ClientIO push events so the webview can mirror queue state and dedupe
+    // cancellation rendering across the {commandComplete, requestCancelled}
+    // paths. `entry.requestId` is the canonical server UUID; we additionally
+    // surface `clientRequestId` (when known via setUserRequest reverse map)
+    // so chat-ui — which keys bubbles by clientRequestId — can find them.
+    | {
+          type: "queueRequestQueued";
+          entry: QueuedRequest;
+          version: number;
+          clientRequestId?: string;
+      }
+    | {
+          type: "queueRequestStarted";
+          entry: QueuedRequest;
+          version: number;
+          clientRequestId?: string;
+      }
+    | {
+          type: "queueRequestCancelled";
+          requestId: string;
+          reason: QueueCancelReason;
+          version: number;
+          clientRequestId?: string;
+      }
+    | { type: "queueStateChanged"; snapshot: QueueSnapshot }
     | {
           type: "demoState";
           running: boolean;
@@ -117,6 +162,8 @@ export type BridgeToWebviewMessage =
 export type BridgeFromWebviewMessage =
     | { type: "sendCommand"; command: string; requestId?: string }
     | { type: "cancelCommand"; requestId: string }
+    // Double-Esc gesture: cancel every queued + running entry on the session.
+    | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
     | { type: "connect" }
     | { type: "disconnect" }

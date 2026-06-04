@@ -161,6 +161,10 @@ export type DispatcherConfig = {
             legacy: boolean; // use legacy memory behavior
         };
         reasoning: "claude" | "copilot" | "none";
+        // Controls how reasoning events are displayed in the chat UI.
+        // "inline": each reasoning phase (thinking, tool call, result, text) gets its own chat bubble.
+        // "block": all reasoning output is appended into a single chat bubble (legacy behavior).
+        reasoningDisplay: "inline" | "block";
         // When true, the dispatcher's pre-flight readiness gate auto-invokes
         // `AppAgent.setup` on agents reporting `setup-required` — instead of
         // throwing the "needs setup" error. The setup hook's ActionResult is
@@ -346,7 +350,8 @@ const defaultSessionConfig: SessionConfig = {
         memory: {
             legacy: true, // use the new memory behavior
         },
-        reasoning: "none",
+        reasoning: "copilot",
+        reasoningDisplay: "inline",
         setupOnFirstUse: true,
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent

@@ -399,7 +399,15 @@ export interface RunResult {
     runId: string;
     success: boolean;
     output?: unknown;
-    error?: { message: string; nodeId?: string | undefined };
+    error?: {
+        message: string;
+        nodeId?: string | undefined;
+        /**
+         * Structured error context attached by the failing task. Opaque to the
+         * engine; callers may log or serialize it for diagnostics.
+         */
+        data?: unknown;
+    };
 }
 
 // ---- Engine ----
@@ -626,17 +634,31 @@ export class WorkflowEngine {
 
             return { runId, success: true, output };
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            const nodeId = err instanceof TaskFailure ? err.nodeId : undefined;
+            const isTaskFailure = err instanceof TaskFailure;
+            const errorPayload: {
+                message: string;
+                nodeId?: string | undefined;
+                data?: unknown;
+            } = {
+                message: err instanceof Error ? err.message : String(err),
+                ...(isTaskFailure ? { nodeId: err.nodeId } : {}),
+                ...(isTaskFailure && err.taskError.data !== undefined
+                    ? { data: err.taskError.data }
+                    : {}),
+            };
 
             this.emit({
                 type: "runFailed",
                 runId,
-                error: { message },
+                error: errorPayload,
                 timestamp: Date.now(),
             });
 
-            return { runId, success: false, error: { message, nodeId } };
+            return {
+                runId,
+                success: false,
+                error: errorPayload,
+            };
         }
     }
 
@@ -959,9 +981,8 @@ export class WorkflowEngine {
                 scopePath: [...scopePath],
                 signal: taskSignal,
                 ...(constraints ? { constraints } : {}),
-                ...(node.outputSchema
-                    ? { outputSchema: node.outputSchema }
-                    : {}),
+                // The dispatching node's declared output schema.
+                outputSchema: node.outputSchema,
             };
 
             let result: TaskResult;
