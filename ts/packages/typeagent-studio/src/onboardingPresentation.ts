@@ -8,6 +8,12 @@ import {
     type OnboardingState,
 } from "@typeagent/core/onboardingBridge";
 
+export interface OnboardingSettingsSnapshot {
+    openSummaryAfterBatchRun: boolean;
+    defaultSandboxId: string;
+    installHealthGatePolicy: "enforce" | "warn";
+}
+
 export function getDefaultPhaseInputs(
     state: OnboardingState,
     phase: OnboardingPhaseName,
@@ -138,11 +144,7 @@ export function formatOnboardingDiagnosticsBundle(args: {
     summary: string;
     healthReport: string;
     artifactPath?: string;
-    settings?: {
-        openSummaryAfterBatchRun: boolean;
-        defaultSandboxId: string;
-        installHealthGatePolicy: "enforce" | "warn";
-    };
+    settings?: OnboardingSettingsSnapshot;
     generatedAt?: number;
 }): string {
     const timestamp = new Date(args.generatedAt ?? Date.now()).toISOString();
@@ -173,4 +175,15 @@ export function formatOnboardingDiagnosticsBundle(args: {
     lines.push(args.healthReport);
     lines.push("");
     return lines.join("\n");
+}
+
+export function formatOnboardingSettingsSnapshot(
+    settings: OnboardingSettingsSnapshot,
+): string {
+    return [
+        "TypeAgent Studio onboarding settings",
+        `Open summary after batch run: ${settings.openSummaryAfterBatchRun}`,
+        `Default sandbox id: ${settings.defaultSandboxId}`,
+        `Install health gate policy: ${settings.installHealthGatePolicy}`,
+    ].join("\n");
 }

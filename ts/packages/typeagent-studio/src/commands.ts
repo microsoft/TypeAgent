@@ -8,6 +8,8 @@ import type { StudioRuntime } from "./studioRuntime.js";
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
+    formatOnboardingSettingsSnapshot,
+    type OnboardingSettingsSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
 } from "./onboardingPresentation.js";
@@ -417,6 +419,19 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     "Copied onboarding health snapshot to clipboard.",
                 );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.showOnboardingSettingsSnapshot",
+            withErrors(async () => {
+                const settings = getOnboardingSettingsSnapshot();
+                const snapshot = formatOnboardingSettingsSnapshot(settings);
+                void vscode.window.showInformationMessage(snapshot, {
+                    modal: true,
+                });
             }),
         ),
     );
@@ -866,12 +881,16 @@ async function getOnboardingDiagnosticsBundle(
         summary,
         healthReport,
         artifactPath,
-        settings: {
-            openSummaryAfterBatchRun: shouldOpenSummaryAfterBatchRun(),
-            defaultSandboxId: getDefaultSandboxId(),
-            installHealthGatePolicy: getInstallHealthGatePolicy(),
-        },
+        settings: getOnboardingSettingsSnapshot(),
     });
+}
+
+function getOnboardingSettingsSnapshot(): OnboardingSettingsSnapshot {
+    return {
+        openSummaryAfterBatchRun: shouldOpenSummaryAfterBatchRun(),
+        defaultSandboxId: getDefaultSandboxId(),
+        installHealthGatePolicy: getInstallHealthGatePolicy(),
+    };
 }
 
 async function showPackagingHealthGateStatus(

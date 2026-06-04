@@ -10,6 +10,7 @@ import {
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
+    formatOnboardingSettingsSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
     getDefaultPhaseInputs,
@@ -178,4 +179,17 @@ test("formatOnboardingDiagnosticsBundle shows unresolved artifact fallback", () 
     assert.match(bundle, /Open summary after batch run: true/);
     assert.match(bundle, /Default sandbox id: studio-default/);
     assert.match(bundle, /Install health gate policy: enforce/);
+});
+
+test("formatOnboardingSettingsSnapshot includes all onboarding settings", () => {
+    const snapshot = formatOnboardingSettingsSnapshot({
+        openSummaryAfterBatchRun: false,
+        defaultSandboxId: "studio-qa",
+        installHealthGatePolicy: "warn",
+    });
+
+    assert.match(snapshot, /TypeAgent Studio onboarding settings/);
+    assert.match(snapshot, /Open summary after batch run: false/);
+    assert.match(snapshot, /Default sandbox id: studio-qa/);
+    assert.match(snapshot, /Install health gate policy: warn/);
 });
