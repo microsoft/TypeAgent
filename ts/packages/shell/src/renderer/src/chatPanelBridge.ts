@@ -952,6 +952,11 @@ export function createChatPanelClient(
         } finally {
             chatPanel.setHistoryLoading(false);
             flushPendingDisplayOps();
+            // Signal that the dispatcher is initialized and the initial
+            // display-log replay has completed (messages marked .history).
+            // Automated tests wait for `.chat[data-dispatcher-ready='true']`
+            // before sending requests.
+            chatPanel.markDispatcherReady();
         }
     }
 

@@ -716,6 +716,7 @@ export class ChatPanel {
         this.inputArea.className = "chat-input";
 
         this.textInput = document.createElement("span");
+        this.textInput.id = "phraseDiv";
         this.textInput.className = "user-textarea";
         this.textInput.role = "textbox";
         this.textInput.contentEditable = "true";
@@ -3321,6 +3322,17 @@ export class ChatPanel {
                 );
             }
         }
+    }
+
+    /**
+     * Mark the dispatcher as initialized + display-log replay complete by
+     * setting `data-dispatcher-ready="true"` on the scroll container
+     * (`.chat`). Hosts call this once the dispatcher is connected and the
+     * initial history replay has finished, so automated tests can wait for a
+     * stable DOM before sending requests.
+     */
+    public markDispatcherReady(): void {
+        this.messageDiv.setAttribute("data-dispatcher-ready", "true");
     }
 
     /**
