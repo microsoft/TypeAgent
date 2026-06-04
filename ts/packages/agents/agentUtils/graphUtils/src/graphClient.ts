@@ -149,25 +149,25 @@ const invalidSettings: AppSettings = {
     redirectPort: DEFAULT_REDIRECT_PORT,
 };
 
-function loadMSGraphSettings(): AppSettings {
+function loadMSGraphSettings(envPrefix: string = "MSGRAPH_APP"): AppSettings {
     const authModeRaw = (
-        process.env["MSGRAPH_APP_AUTH_MODE"] ?? "browser"
+        process.env[`${envPrefix}_AUTH_MODE`] ?? "browser"
     ).toLowerCase();
     const authMode: "browser" | "device-code" =
         authModeRaw === "device-code" || authModeRaw === "devicecode"
             ? "device-code"
             : "browser";
     const redirectPort = parseValidPort(
-        process.env["MSGRAPH_APP_REDIRECT_PORT"],
+        process.env[`${envPrefix}_REDIRECT_PORT`],
         DEFAULT_REDIRECT_PORT,
     );
 
     const settings: AppSettings = {
-        clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
-        clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
-        tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
-        username: process.env["MSGRAPH_APP_USERNAME"],
-        password: process.env["MSGRAPH_APP_PASSWD"],
+        clientId: process.env[`${envPrefix}_CLIENTID`] ?? "",
+        clientSecret: process.env[`${envPrefix}_CLIENTSECRET`] ?? "",
+        tenantId: process.env[`${envPrefix}_TENANTID`] ?? "",
+        username: process.env[`${envPrefix}_USERNAME`],
+        password: process.env[`${envPrefix}_PASSWD`],
         graphUserScopes: [
             "user.read",
             "mail.read",
@@ -198,6 +198,42 @@ function loadMSGraphSettings(): AppSettings {
  */
 export type DevicePromptCallback = SignInPromptCallback;
 
+/**
+ * Optional per-subclass overrides for the MS Graph auth plumbing.
+ *
+ * All fields default to the legacy single-app values used by
+ * CalendarClient / MailClient, so subclasses that don't pass options
+ * behave exactly as before. Subclasses targeting a different AAD app
+ * supply an `envPrefix` plus matching scopes and a distinct cache name
+ * so their tokens don't collide with the default cache.
+ */
+export interface GraphClientOptions {
+    /**
+     * Env var prefix used to look up clientId/tenantId/etc.
+     * E.g. `"MSGRAPH_OTHER_APP"` reads `MSGRAPH_OTHER_APP_CLIENTID`,
+     * `MSGRAPH_OTHER_APP_TENANTID`, etc. Default: `"MSGRAPH_APP"`.
+     */
+    envPrefix?: string;
+    /**
+     * Filename (under `~/.typeagent/`) for the persisted authentication
+     * record. Use a distinct value per AAD app to avoid clobbering the
+     * calendar/email cache. Default: `"tokencache.bin"`.
+     */
+    authRecordFile?: string;
+    /**
+     * Name passed to Azure Identity's `tokenCachePersistenceOptions`.
+     * Pair with `authRecordFile` to fully isolate per-app tokens.
+     * Default: `"typeagent-tokencache"`.
+     */
+    tokenCacheName?: string;
+    /**
+     * Scopes used when acquiring tokens. Pass a specific scope list
+     * for apps that don't have `.default` consent.
+     * Default: `"https://graph.microsoft.com/.default"`.
+     */
+    scopes?: string | string[];
+}
+
 export class GraphClient extends EventEmitter {
     /**
      * All live GraphClient instances. Used by logout() to broadcast a
@@ -210,23 +246,30 @@ export class GraphClient extends EventEmitter {
     private static _instances: Set<GraphClient> = new Set();
 
     private _userClient: Client | undefined = undefined;
-    private AUTH_RECORD_PATH: string = path.join(
-        path.join(os.homedir(), ".typeagent"),
-        "tokencache.bin",
-    );
+    private AUTH_RECORD_PATH: string;
 
     private _userEmailAddresses: Map<string, string> = new Map<
         string,
         string
     >();
 
-    private readonly MSGRAPH_AUTH_URL: string =
-        "https://graph.microsoft.com/.default";
+    private readonly MSGRAPH_AUTH_URL: string | string[];
+    private readonly _tokenCacheName: string;
 
     private readonly _settings: AppSettings;
-    protected constructor(private readonly authCommand: string) {
+    protected constructor(
+        private readonly authCommand: string,
+        options: GraphClientOptions = {},
+    ) {
         super();
-        this._settings = loadMSGraphSettings();
+        this._settings = loadMSGraphSettings(options.envPrefix);
+        this.AUTH_RECORD_PATH = path.join(
+            path.join(os.homedir(), ".typeagent"),
+            options.authRecordFile ?? "tokencache.bin",
+        );
+        this._tokenCacheName = options.tokenCacheName ?? "typeagent-tokencache";
+        this.MSGRAPH_AUTH_URL =
+            options.scopes ?? "https://graph.microsoft.com/.default";
         GraphClient._instances.add(this);
     }
 
@@ -246,7 +289,7 @@ export class GraphClient extends EventEmitter {
 
                     tokenCachePersistenceOptions: {
                         enabled: true,
-                        name: "typeagent-tokencache",
+                        name: this._tokenCacheName,
                     },
                 };
                 if (cb) {
@@ -326,7 +369,7 @@ export class GraphClient extends EventEmitter {
                     disableAutomaticAuthentication: cb === undefined,
                     tokenCachePersistenceOptions: {
                         enabled: true,
-                        name: "typeagent-tokencache",
+                        name: this._tokenCacheName,
                     },
                 };
 
