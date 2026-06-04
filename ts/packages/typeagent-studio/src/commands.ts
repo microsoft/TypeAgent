@@ -385,25 +385,23 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.showOnboardingHealthSnapshot",
             withErrors(async () => {
-                const state = await runtime.getActiveOnboardingSession();
-                let gate:
-                    | Awaited<
-                          ReturnType<
-                              StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
-                          >
-                      >
-                    | undefined;
-                try {
-                    gate =
-                        await runtime.evaluatePackagingHealthGateForActiveSession();
-                } catch {
-                    gate = undefined;
-                }
-
-                const snapshot = formatOnboardingHealthSnapshot(state, gate);
+                const snapshot = await getOnboardingHealthSnapshot(runtime);
                 void vscode.window.showInformationMessage(
                     snapshot,
                     { modal: true },
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.copyOnboardingHealthSnapshot",
+            withErrors(async () => {
+                const snapshot = await getOnboardingHealthSnapshot(runtime);
+                await vscode.env.clipboard.writeText(snapshot);
+                void vscode.window.showInformationMessage(
+                    "Copied onboarding health snapshot to clipboard.",
                 );
             }),
         ),
@@ -784,6 +782,26 @@ async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
 async function getOnboardingSummary(runtime: StudioRuntime): Promise<string> {
     const state = await runtime.getActiveOnboardingSession();
     return formatOnboardingSummary(state);
+}
+
+async function getOnboardingHealthSnapshot(
+    runtime: StudioRuntime,
+): Promise<string> {
+    const state = await runtime.getActiveOnboardingSession();
+    let gate:
+        | Awaited<
+              ReturnType<
+                  StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
+              >
+          >
+        | undefined;
+    try {
+        gate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    } catch {
+        gate = undefined;
+    }
+
+    return formatOnboardingHealthSnapshot(state, gate);
 }
 
 async function showPackagingHealthGateStatus(
