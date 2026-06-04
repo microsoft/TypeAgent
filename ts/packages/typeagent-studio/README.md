@@ -41,6 +41,7 @@ Current command palette surface:
 - TypeAgent Studio: Show onboarding health snapshot
 - TypeAgent Studio: Copy onboarding health snapshot
 - TypeAgent Studio: Show onboarding settings snapshot
+- TypeAgent Studio: Copy onboarding settings snapshot
 - TypeAgent Studio: Restore onboarding phase
 - TypeAgent Studio: Rerun stale onboarding phases
 - TypeAgent Studio: Open onboarding summary

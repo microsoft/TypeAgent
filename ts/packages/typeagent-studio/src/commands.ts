@@ -438,6 +438,20 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.copyOnboardingSettingsSnapshot",
+            withErrors(async () => {
+                const settings = getOnboardingSettingsSnapshot();
+                const snapshot = formatOnboardingSettingsSnapshot(settings);
+                await vscode.env.clipboard.writeText(snapshot);
+                void vscode.window.showInformationMessage(
+                    "Copied onboarding settings snapshot to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.openOnboardingSummary",
             withErrors(async () => {
                 await openOnboardingSummary(runtime);
