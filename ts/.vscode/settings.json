@@ -49,18 +49,6 @@
     "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "chat.tools.terminal.autoApprove": {
         "ForEach-Object": true,
-        "/^node -e \"const fs = require\\('fs'\\); const p = JSON\\.parse\\(fs\\.readFileSync\\('node_modules/\\.pnpm/@github\\+copilot-win32-x64@1\\.0\\.17/node_modules/@github/copilot-win32-x64/package\\.json','utf8'\\)\\); console\\.log\\('exports:', JSON\\.stringify\\(p\\.exports\\)\\); console\\.log\\('main:', p\\.main\\);\"$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd c:\\\\repos\\\\TypeAgent\\\\ts\\\\packages\\\\dispatcher\\\\dispatcher; node -e \"import \\{ createRequire \\} from 'node:module'; import \\{ existsSync \\} from 'node:fs'; import \\{ fileURLToPath \\} from 'node:url'; import path from 'node:path'; const p = process\\.platform, a = process\\.arch; const pkg = '@github/copilot-' \\+ p \\+ '-' \\+ a; console\\.log\\('Platform:', p \\+ '-' \\+ a\\); try \\{ const sdk = fileURLToPath\\(import\\.meta\\.resolve\\('@github/copilot-sdk'\\)\\); console\\.log\\('1\\. SDK:', sdk\\); const r1 = createRequire\\(sdk\\); const copilotSdk = r1\\.resolve\\('@github/copilot/sdk'\\); console\\.log\\('2\\. copilot/sdk:', copilotSdk\\); const r2 = createRequire\\(copilotSdk\\); const nativeBin = r2\\.resolve\\(pkg\\); console\\.log\\('3\\. native binary:', nativeBin\\); console\\.log\\('   exists:', existsSync\\(nativeBin\\)\\); \\} catch\\(e\\) \\{ console\\.error\\('FAILED:', e\\.message\\); \\}\" --input-type=module$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd c:\\\\repos\\\\TypeAgent\\\\ts\\\\packages\\\\dispatcher\\\\dispatcher; node dist/reasoning/testCopilotResolve\\.js$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
     },
     "files.watcherExclude": {
         "**/node_modules/**": true,
