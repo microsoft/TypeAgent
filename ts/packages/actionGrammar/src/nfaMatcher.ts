@@ -11,6 +11,7 @@ import {
     type FirstTokenIndex,
 } from "./nfaInterpreter.js";
 import { applySplitToTokens } from "./tokenSplit.js";
+import { matchNFACharBased } from "./nfaInterpreterChar.js";
 
 // Lazy-built, NFA-lifetime cache: one index per NFA object.
 const indexCache = new WeakMap<NFA, FirstTokenIndex>();
@@ -198,11 +199,54 @@ function collectNFASplitCandidates(nfa: NFA): string[] {
  * @param request The request string to match
  * @returns Array of grammar match results, sorted by priority
  */
+/**
+ * Per-call options for NFA grammar matching.
+ *
+ * `charBased: true` routes through the char-based experimental matcher
+ * (Phase 1 of nfa-char-based-rewrite plan).  Off by default — the
+ * production path uses the token-based matcher.
+ */
+export interface NFAMatchOptions {
+    charBased?: boolean;
+}
+
 export function matchGrammarWithNFA(
     _grammar: Grammar,
     nfa: NFA,
     request: string,
+    opts?: NFAMatchOptions,
 ): NFAGrammarMatchResult[] {
+    if (opts?.charBased) {
+        const result = matchNFACharBased(nfa, request);
+        if (!result.matched) return [];
+        const matchedRule =
+            result.ruleIndex !== undefined
+                ? _grammar.alternatives[result.ruleIndex]
+                : undefined;
+        // spacing=none + outer whitespace: reject (matches token-path
+        // post-match check).
+        if (matchedRule?.spacingMode === "none") {
+            const hasOuter =
+                request.length !== request.trim().length &&
+                request.trim().length > 0;
+            if (hasOuter) return [];
+        }
+        const hasExplicitValue = matchedRule?.value !== undefined;
+        const actionObject = hasExplicitValue
+            ? result.actionValue
+            : (result.actionValue ?? request);
+        return [
+            {
+                match: actionObject,
+                matchedValueCount:
+                    result.fixedStringPartCount +
+                    result.checkedWildcardCount +
+                    result.uncheckedWildcardCount,
+                wildcardCharCount: result.uncheckedWildcardCount,
+                entityWildcardPropertyNames: [],
+            },
+        ];
+    }
     const tokens = tokenizeRequest(request);
     // Positional context for multi-input-token separator validation.  Only
     // the original-token pass uses it; pre-split tokens have synthetic
@@ -273,7 +317,17 @@ export function matchGrammarWithNFA(
     debug(`Match result: MATCHED`);
     debug(`Action value: %O`, bestResult.actionValue);
 
-    const actionObject = bestResult.actionValue ?? request;
+    // If the matched rule has an explicit `-> value` expression, return
+    // the evaluated value (even when it's undefined — e.g. an unset
+    // optional variable).  Otherwise default to the request string.
+    const matchedRule =
+        bestResult.ruleIndex !== undefined
+            ? _grammar.alternatives[bestResult.ruleIndex]
+            : undefined;
+    const hasExplicitValue = matchedRule?.value !== undefined;
+    const actionObject = hasExplicitValue
+        ? bestResult.actionValue
+        : (bestResult.actionValue ?? request);
     const wildcardCharCount = bestResult.uncheckedWildcardCount;
     const entityWildcardPropertyNames: string[] = [];
 

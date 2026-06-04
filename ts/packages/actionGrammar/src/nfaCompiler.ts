@@ -523,6 +523,10 @@ function createRuleSlotMap(rule: GrammarRule): Map<string, number> {
  */
 function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
     const typeMap = new Map<string, string>();
+    // Visited set guards against right-recursive / mutually-recursive
+    // grammars where a rule references itself transitively.  Without this,
+    // walking part.alternatives recurses forever (RangeError).
+    const visited = new WeakSet<GrammarRule>();
 
     function collectFromPart(part: GrammarPart): void {
         switch (part.type) {
@@ -542,6 +546,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 // RulesPart has nested rules
                 if (part.alternatives) {
                     for (const nestedRule of part.alternatives) {
+                        if (visited.has(nestedRule)) continue;
+                        visited.add(nestedRule);
                         for (const nestedPart of nestedRule.parts) {
                             collectFromPart(nestedPart);
                         }
