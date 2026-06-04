@@ -72,10 +72,11 @@ export type ClientIOCallFunctions = {
     requestChoice(
         requestId: RequestId,
         choiceId: string,
-        type: "yesNo" | "multiChoice",
+        type: "yesNo" | "multiChoice" | "pickRemember",
         message: string,
         choices: string[],
         source: string,
+        checkboxLabel?: string,
     ): void;
 
     requestInteraction(interaction: PendingInteractionRequest): void;

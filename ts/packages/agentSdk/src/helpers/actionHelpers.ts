@@ -10,7 +10,7 @@ import {
 import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
-import { ChoiceManager } from "./choiceManager.js";
+import { ChoiceManager, PickRememberResponse } from "./choiceManager.js";
 export { ChoiceManager };
 
 export function createActionResultNoDisplay(
@@ -169,6 +169,41 @@ export function createMultiChoiceResult(
             ? { type: "html", content: displayHtml }
             : message,
         pendingChoice: { choiceId, type: "multiChoice", message, choices },
+    };
+}
+
+// Single-select pick + a "remember this" checkbox rendered as one card. The
+// callback receives the picked index and the checkbox state. Like the other
+// choice helpers, the callback's `actionContext` is the LIVE context created
+// when the user responds.
+export function createPickRememberChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    choices: string[],
+    checkboxLabel: string,
+    onResponse: (
+        selected: number,
+        remember: boolean,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    displayHtml?: string,
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response, actionContext) => {
+        const r = response as PickRememberResponse;
+        return onResponse(r.selected, r.remember, actionContext);
+    });
+    return {
+        entities: [],
+        displayContent: displayHtml
+            ? { type: "html", content: displayHtml }
+            : message,
+        pendingChoice: {
+            choiceId,
+            type: "pickRemember",
+            message,
+            choices,
+            checkboxLabel,
+        },
     };
 }
 

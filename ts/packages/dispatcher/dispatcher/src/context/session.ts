@@ -220,7 +220,11 @@ export type CollisionStrategy =
     | "first-match"
     | "score-rank"
     | "priority"
-    | "user-clarify";
+    | "user-clarify"
+    // Two-tier resolution: Tier 1 consults the profile-scoped preference
+    // store ("given these options the user always picks X") and auto-resolves
+    // on a hit; Tier 2 falls back to user-clarify when there is no preference.
+    | "preference-clarify";
 
 export type CollisionConfig = {
     static: {
@@ -272,6 +276,36 @@ export type CollisionConfig = {
         // (mirrors `priorityOrder` — the dispatcher config layer rejects
         // `undefined`-valued fields).
         experimentId: string;
+    };
+    // Two-tier resolution (the `preference-clarify` strategy) settings.
+    preference: {
+        // Master switch for consulting/recording the profile-scoped
+        // preference store in Tier 1. When false, `preference-clarify`
+        // behaves like plain `user-clarify` (every collision asks).
+        enabled: boolean;
+        // What drives "known to be ambiguous" for Tier 2 escalation:
+        //  - "runtime": only collisions detected at the active detection point
+        //  - "registry": only members of the persisted neighborhood registry
+        //  - "both": either signal triggers a clarify
+        ambiguitySource: "runtime" | "registry" | "both";
+        // Path to a persisted neighborhood registry (neighborhoods.json).
+        // Empty = no registry loaded (registry/both sources become inert).
+        registryPath: string;
+        // Registry-first detection mode (independent on/off switch). When on
+        // and a registry is loaded, every embedding candidate for a request is
+        // scanned against the neighborhood registry — independent of the
+        // embedding score-delta detector (`llmSelect.detect`). The
+        // highest-ranked candidate the registry marks as known-ambiguous
+        // drives a clarify enriched with its neighborhood siblings. This lets
+        // the registry act as a standalone ambiguity detector rather than only
+        // refining the embedding top-1.
+        registryFirst: boolean;
+        // After Tier 2 resolves via the user's pick, whether to persist it
+        // as a learned preference:
+        //  - "prompt": ask "remember this for next time?" before saving
+        //  - "always": save silently
+        //  - "never": don't learn (explicit `@collision prefer` still works)
+        remember: "prompt" | "always" | "never";
     };
 };
 
@@ -408,6 +442,13 @@ const defaultSessionConfig: SessionConfig = {
             emit: false,
             debugLog: true,
             experimentId: "",
+        },
+        preference: {
+            enabled: true,
+            ambiguitySource: "runtime",
+            registryPath: "",
+            registryFirst: false,
+            remember: "prompt",
         },
     },
 };

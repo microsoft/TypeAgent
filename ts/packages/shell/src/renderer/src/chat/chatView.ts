@@ -1567,10 +1567,11 @@ export class ChatView {
     public showChoice(
         requestId: RequestId,
         choiceId: string,
-        type: "yesNo" | "multiChoice",
+        type: "yesNo" | "multiChoice" | "pickRemember",
         _message: string,
         choiceLabels: string[],
         source: string,
+        checkboxLabel?: string,
     ) {
         // Append choice UI to the last agent message (the action result bubble)
         const messageGroup = this.getMessageGroup(requestId);
@@ -1599,6 +1600,17 @@ export class ChatView {
             agentMessage.addChoicePanel(choices, (choice) => {
                 this.getDispatcher().respondToChoice(choiceId, choice.value);
             });
+        } else if (type === "pickRemember") {
+            agentMessage.addPickRememberPanel(
+                choiceLabels,
+                checkboxLabel ?? "Remember this for next time",
+                (selected: number, remember: boolean) => {
+                    this.getDispatcher().respondToChoice(choiceId, {
+                        selected,
+                        remember,
+                    });
+                },
+            );
         } else {
             // multiChoice — checkboxes
             agentMessage.addCheckboxPanel(

@@ -88,6 +88,9 @@ import {
     createCollisionRingBuffer,
     emitCollisionEvent,
 } from "./collisionTelemetry.js";
+import { CollisionPreferenceStore } from "./collisionPreferences.js";
+import { CollisionRegistry } from "./collisionRegistry.js";
+import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
@@ -210,6 +213,25 @@ export type CommandHandlerContext = {
     // True while a MultipleAction batch is being executed; consulted by the
     // collision resolver to apply collision.multipleActionBehavior.
     executingMultipleAction: boolean;
+    // Tier 1 of the two-tier collision flow: profile-scoped "the user always
+    // picks X" preferences. Loaded once at context init.
+    collisionPreferences: CollisionPreferenceStore;
+    // Tier 2 "known-ambiguous" registry (neighborhoods.json). Loaded lazily
+    // from collision.preference.registryPath; rebuilt when the path changes.
+    collisionRegistry: CollisionRegistry;
+    // The registry path the loaded `collisionRegistry` was built from, so we
+    // can detect config changes and reload.
+    collisionRegistryPath: string;
+    // Drives the interactive `preference-clarify` card (candidate pick +
+    // "remember this" checkbox). The dispatcher AppAgent's handleChoice
+    // delegates back to this manager.
+    collisionChoiceManager: ChoiceManager;
+    // One-shot resolution overrides as a set of chosen member ids
+    // ("schema.action"). Set just before re-running the original request from
+    // a clarify pick so the re-translation resolves deterministically to the
+    // chosen candidate; consumed on first read. Covers the "don't remember"
+    // case (no durable preference written).
+    collisionOneShotPicks: Set<string>;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -692,6 +714,14 @@ export async function initializeCommandHandlerContext(
 
             collisionEvents: createCollisionRingBuffer(),
             executingMultipleAction: false,
+            collisionPreferences: CollisionPreferenceStore.load(instanceDir),
+            collisionRegistry: CollisionRegistry.load(
+                session.getConfig().collision.preference.registryPath,
+            ),
+            collisionRegistryPath:
+                session.getConfig().collision.preference.registryPath,
+            collisionChoiceManager: new ChoiceManager(),
+            collisionOneShotPicks: new Set(),
             // Replaced below; the queue's broadcaster needs `context` to be
             // available so it can route through `context.clientIO`.
             requestQueue: undefined as unknown as RequestQueue,

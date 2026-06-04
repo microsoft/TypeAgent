@@ -287,6 +287,7 @@ function registerClient(
             message,
             choices,
             source,
+            checkboxLabel,
         ) => {
             chatView.showChoice(
                 requestId,
@@ -295,6 +296,7 @@ function registerClient(
                 message,
                 choices,
                 source,
+                checkboxLabel,
             );
         },
         proposeAction: async (requestId, actionTemplates, source) => {

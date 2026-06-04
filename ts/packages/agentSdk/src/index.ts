@@ -74,6 +74,7 @@ export {
     PendingChoice,
     PendingYesNoChoice,
     PendingMultiChoice,
+    PendingPickRememberChoice,
 } from "./action.js";
 
 export type {

@@ -1,0 +1,539 @@
+
+> typeagent-root@0.0.1 build F:\repos\TypeAgent\ts
+> fluid-build . -t build "agent-dispatcher"
+
+Build Root: F:\repos\TypeAgent\ts ([93minferred packages and tasks[39m)
+Release group [96mroot[39m matched (directory: .)
+
+[K[?25lΓáï Creating build graph...
+
+[K[1A
+[K[?25lΓ£ö Build graph created.
+[?25h
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÖ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╣ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╕ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá╝ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓá┤ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáª Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáº Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáç Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáÅ Checking incremental build task status...
+
+[K[1A
+[K[?25lΓáï Checking incremental build task status...
+
+[K[1A
+[K[?25lΓ£ö Tasks loaded.
+[?25hStart tasks '[96mbuild[39m' in 2 matched packages (270 total tasks in 127 packages)
+Skipping 230 up to date tasks.
+[ 1/40] [92mΓ£ô[39m [97mworkflow-vscode[39m: node esbuild.mjs - 0.829s (non-incremental)
+[ 2/40] [92mΓ£ô[39m [97mworkflow-vscode[39m: node scripts/check-server-bundle.mjs - 0.726s (non-incremental)
+[ 3/40] [92mΓ£ô[39m [93magent-coda[39m: pnpm run esbuild-base --sourcemap - 2.222s (non-incremental)
+[ 4/40] [92mΓ£ô[39m [36mdiscord-agent[39m: asc -i ./src/discordSchema.ts -o ./dist/discordSchema.pas.json -t DiscordActions - 2.813s (non-incremental)
+[ 5/40] [92mΓ£ô[39m [92mgrammar-tools-ui[39m: vite build - 2.603s (non-incremental)
+[ 6/40] [92mΓ£ô[39m [93mipconfig-agent[39m: asc -i ./src/ipconfigSchema.ts -o ./dist/ipconfigSchema.pas.json -t IpconfigActions - 2.815s (non-incremental)
+[ 7/40] [92mΓ£ô[39m [93mipconfig-agent[39m: agc -i ./src/ipconfigSchema.agr -o ./dist/ipconfigSchema.ag.json - 4.165s (non-incremental)
+[ 8/40] [92mΓ£ô[39m [36mdiscord-agent[39m: agc -i ./src/discordSchema.agr -o ./dist/discordSchema.ag.json - 4.319s (non-incremental)
+[ 9/40] [92mΓ£ô[39m [32mweather-agent[39m: tsc -b - 5.094s
+[10/40] [92mΓ£ô[39m [91mchat-ui[39m: tsc -b - 5.314s (non-incremental)
+[11/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/views/shared/tsconfig.json - 0.112s
+[12/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/electron/tsconfig.json - 0.134s
+[13/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/puppeteer/tsconfig.json - 0.230s
+[14/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/views/server/tsconfig.json - 0.161s
+[15/40] [92mΓ£ô[39m [97mworkflow-vscode[39m: tsc -p tsconfig.json --noEmit - 3.749s (non-incremental)
+[16/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/common/tsconfig.json - 0.365s
+[17/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/views/client/pdf/tsconfig.json - 0.337s
+[18/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/extension/tsconfig.json - 0.666s
+[19/40] [96m-[39m [96mcommand-executor-mcp[39m: tsc -b - 1.312s
+[20/40] [96m-[39m [31mbrowser-typeagent[39m: tsc -p src/agent/tsconfig.json - 2.350s
+[21/40] [92mΓ£ô[39m [92mgrammar-tools-ui[39m: tsc -b test test/components - 6.069s
+[22/40] [96m-[39m [32magr-language[39m: tsc -b - 0.377s
+uri-handler: warning during command 'node bundle-config.js'
+uri-handler: Γ£ô Bundle created successfully
+uri-handler: 
+uri-handler: Bundle location: F:\repos\TypeAgent\ts\packages\uriHandler\bundle\agent-uri-handler.bundle.js
+uri-handler: 
+uri-handler: Γû▓ [WARNING] This case clause will never be evaluated because it duplicates an earlier case clause [duplicate-case]
+uri-handler: 
+uri-handler:     ../textPro/dist/html.js:478:17:
+uri-handler:       478 Γöé             case "code":
+uri-handler:           Γò╡                  ~~~~~~
+uri-handler: 
+uri-handler:   The earlier case clause is here:
+uri-handler: 
+uri-handler:     ../textPro/dist/html.js:477:17:
+uri-handler:       477 Γöé             case "code":
+uri-handler:           Γò╡                  ~~~~~~
+uri-handler: 
+uri-handler: Γû▓ [WARNING] This case clause will never be evaluated because it duplicates an earlier case clause [duplicate-case]
+uri-handler: 
+uri-handler:     ../textPro/dist/markdown.js:237:17:
+uri-handler:       237 Γöé             case "image":
+uri-handler:           Γò╡                  ~~~~~~~
+uri-handler: 
+uri-handler:   The earlier case clause is here:
+uri-handler: 
+uri-handler:     ../textPro/dist/markdown.js:231:17:
+uri-handler:       231 Γöé             case "image":
+uri-handler:           Γò╡                  ~~~~~~~
+[23/40] [92mΓ£ô[39m [97muri-handler[39m: node bundle-config.js - 9.327s (non-incremental)
+[24/40] [92mΓ£ô[39m [31mvisualstudio-extension-webview[39m: vite build - 4.852s (non-incremental)
+[25/40] [92mΓ£ô[39m [32magr-language[39m: vite build --config vite.config.webview.ts - 3.411s (non-incremental)
+[26/40] [92mΓ£ô[39m [31mbrowser-typeagent[39m: vite build - 7.639s
+[27/40] [92mΓ£ô[39m [31mbrowser-typeagent[39m: build-extension - 87.903s
+[28/40] [96m-[39m [94mutility-typeagent[39m: tsc -b src test - 0.109s
+[29/40] [96m-[39m [33mdefault-agent-provider[39m: tsc -b - 0.815s
+[30/40] [96m-[39m [34mcache-rest-endpoint[39m: tsc -b - 0.303s
+Warning: no config file found; assuming F:\repos\TypeAgent\ts\packages\shell\tsconfig.json
+[31/40] [96m-[39m [92magent-shell[39m: tsc -b src test - 0.188s (non-incremental)
+[32/40] [96m-[39m [95magent-server[39m: tsc -b - 0.404s
+[33/40] [96m-[39m [31mschema-studio[39m: tsc -p src - 0.444s
+[34/40] [96m-[39m [31mschema-studio[39m: copyfiles -u 1 "src/**/*Schema.ts" "src/**/*.txt" dist - 0.006s
+[35/40] [96m-[39m [92magent-cli[39m: tsc -b - 0.581s
+[36/40] [96m-[39m [92magent-shell[39m: tsc -p tsconfig.node.json - 0.910s
+[37/40] [96m-[39m [92magent-shell[39m: tsc -p tsconfig.web.json - 0.959s
+[38/40] [96m-[39m [35magent-api[39m: tsc -b - 1.349s
+[39/40] [92mΓ£ô[39m [92magent-shell[39m: electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error - 4.644s
+[40/40] [92mΓ£ô[39m [92magent-shell[39m: electron-vite build - 34.847s
+Build [92msucceeded[39m
+Total time: 153.384s (2m 33.384s)

@@ -345,8 +345,9 @@ export function emitActionResult(
             pc.choiceId,
             pc.type,
             pc.message,
-            pc.type === "multiChoice" ? pc.choices : [],
+            pc.type === "yesNo" ? [] : pc.choices,
             schemaName,
+            pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
         );
     }
 }

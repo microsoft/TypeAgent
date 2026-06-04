@@ -639,6 +639,99 @@ export class MessageContainer {
         }
     }
 
+    public addPickRememberPanel(
+        labels: string[],
+        checkboxLabel: string,
+        onConfirm: (selected: number, remember: boolean) => void,
+    ) {
+        const panelDiv = document.createElement("div");
+        panelDiv.className = "pick-remember-panel";
+
+        // Single-select candidate radio group.
+        const radios: HTMLInputElement[] = [];
+        const groupName = `pick-remember-${Date.now()}`;
+        for (let i = 0; i < labels.length; i++) {
+            const label = document.createElement("label");
+            label.className = "pick-remember-choice";
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = groupName;
+            radio.dataset.index = String(i);
+            if (i === 0) {
+                radio.checked = true;
+            }
+            radios.push(radio);
+            label.appendChild(radio);
+            const span = document.createElement("span");
+            span.textContent = labels[i];
+            label.appendChild(span);
+            panelDiv.appendChild(label);
+        }
+
+        // Single "remember this" checkbox.
+        const rememberLabel = document.createElement("label");
+        rememberLabel.className = "pick-remember-toggle";
+        const rememberCb = document.createElement("input");
+        rememberCb.type = "checkbox";
+        rememberLabel.appendChild(rememberCb);
+        const rememberSpan = document.createElement("span");
+        rememberSpan.textContent = checkboxLabel;
+        rememberLabel.appendChild(rememberSpan);
+        panelDiv.appendChild(rememberLabel);
+
+        const buttonDiv = document.createElement("div");
+        buttonDiv.className = "checkbox-buttons";
+
+        const confirmBtn = document.createElement("button");
+        confirmBtn.className = "choice-button";
+        confirmBtn.textContent = "Confirm (Enter)";
+        confirmBtn.addEventListener("click", submit);
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "choice-button";
+        cancelBtn.textContent = "Cancel (Del)";
+        cancelBtn.addEventListener("click", cancel);
+
+        buttonDiv.appendChild(confirmBtn);
+        buttonDiv.appendChild(cancelBtn);
+        panelDiv.appendChild(buttonDiv);
+
+        this.messageDiv.after(panelDiv);
+
+        const keyHandler = (ev: KeyboardEvent) => {
+            if (!panelDiv.isConnected) {
+                window.removeEventListener("keydown", keyHandler);
+                return;
+            }
+            if (ev.key === "Enter") {
+                ev.preventDefault();
+                submit();
+            } else if (ev.key === "Delete") {
+                ev.preventDefault();
+                cancel();
+            }
+        };
+        window.addEventListener("keydown", keyHandler);
+
+        function submit() {
+            const picked = radios.find((r) => r.checked) ?? radios[0];
+            const selected = picked
+                ? parseInt(picked.dataset.index!, 10)
+                : 0;
+            const remember = rememberCb.checked;
+            window.removeEventListener("keydown", keyHandler);
+            panelDiv.remove();
+            onConfirm(selected, remember);
+        }
+
+        function cancel() {
+            window.removeEventListener("keydown", keyHandler);
+            panelDiv.remove();
+            // -1 signals no selection / cancelled.
+            onConfirm(-1, false);
+        }
+    }
+
     public async proposeAction(
         dispatcher: Dispatcher,
         actionTemplates: TemplateEditConfig,

@@ -1,12 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isCollision } from "../src/translation/matchCollision.js";
+import {
+    isCollision,
+    resolveGrammarRegistryFirst,
+} from "../src/translation/matchCollision.js";
 import {
     MatchResult,
     RequestAction,
     createExecutableAction,
 } from "agent-cache";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { CollisionRegistry } from "../src/context/collisionRegistry.js";
+import type {
+    Neighborhood,
+    NeighborhoodPreview,
+} from "../src/neighborhoods/types.js";
+import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 
 function makeMatch(
     schemaName: string,
@@ -97,5 +109,144 @@ describe("matchCollision.isCollision", () => {
             ];
             expect(isCollision(matches, "tiedHeuristics")).toBe(false);
         });
+    });
+});
+
+// Registry-first detection on the grammar/cache path. The cache can return a
+// single confident match (isCollision needs >=2), so the registry must be
+// able to escalate even one match to a clarify when it is known-ambiguous.
+
+function tmpdir(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-collmatch-"));
+}
+
+function writePreview(dir: string, neighborhoods: Neighborhood[]): string {
+    const preview: NeighborhoodPreview = {
+        builtAt: new Date().toISOString(),
+        sources: {
+            similarityStrategy: "test",
+            similarityThreshold: 0.5,
+            minMisrouteCount: 1,
+            includeSameSchema: true,
+        },
+        neighborhoods,
+    };
+    const file = path.join(dir, "neighborhoods.json");
+    fs.writeFileSync(file, JSON.stringify(preview), "utf8");
+    return file;
+}
+
+const calendarNeighborhood: Neighborhood = {
+    id: "calendar--taskflow.findTodaysEvents",
+    kind: "cross-schema",
+    members: [
+        { schemaName: "calendar", actionName: "findTodaysEvents" },
+        { schemaName: "taskflow", actionName: "dailyAgendaEmail" },
+    ],
+    evidence: {},
+    sources: ["similarity"],
+};
+
+function makeGrammarCtx(
+    registryFirst: boolean,
+    registry: CollisionRegistry,
+    registryPath: string,
+): CommandHandlerContext {
+    return {
+        session: {
+            getConfig: () => ({
+                collision: {
+                    preference: { registryFirst, registryPath },
+                    grammarMatch: { classifier: "distinctActions" },
+                    telemetry: { emit: false, debugLog: false },
+                    priorityOrder: "",
+                },
+            }),
+        },
+        collisionRegistry: registry,
+        collisionRegistryPath: registryPath,
+        agents: { getAgentRank: () => 0 },
+    } as unknown as CommandHandlerContext;
+}
+
+describe("matchCollision.resolveGrammarRegistryFirst", () => {
+    it("escalates a single confident known-ambiguous match to clarify", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const ctx = makeGrammarCtx(true, registry, file);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            expect(decision).toBeDefined();
+            expect(decision?.kind).toBe("clarify");
+            if (decision?.kind === "clarify") {
+                const candidates =
+                    decision.clarify.parameters.candidates.map(
+                        (c) => `${c.schemaName}.${c.actionName}`,
+                    );
+                // The single cache match plus its registry sibling.
+                expect(candidates).toEqual(
+                    expect.arrayContaining([
+                        "calendar.findTodaysEvents",
+                        "taskflow.dailyAgendaEmail",
+                    ]),
+                );
+                expect(candidates).toHaveLength(2);
+                // The flagging neighborhood id is stamped on the card.
+                expect(
+                    decision.clarify.parameters.clarifyingQuestion,
+                ).toContain("calendar--taskflow.findTodaysEvents");
+            }
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("returns undefined when registry-first is off", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const ctx = makeGrammarCtx(false, registry, file);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            expect(decision).toBeUndefined();
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("returns undefined when the match is not a registry member", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const ctx = makeGrammarCtx(true, registry, file);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("player", "play")],
+                ctx,
+                "play something",
+            );
+            expect(decision).toBeUndefined();
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("returns undefined with an empty registry", () => {
+        const ctx = makeGrammarCtx(true, CollisionRegistry.empty(), "");
+        const decision = resolveGrammarRegistryFirst(
+            [makeMatch("calendar", "findTodaysEvents")],
+            ctx,
+            "what's on my calendar today",
+        );
+        expect(decision).toBeUndefined();
     });
 });
