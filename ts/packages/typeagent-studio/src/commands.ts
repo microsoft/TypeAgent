@@ -194,6 +194,9 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Phase ${phase} completed. Current phase is now ${state.currentPhase}.`,
                 );
+                if (phase === "Packaging") {
+                    await showPackagingHealthGateStatus(runtime);
+                }
             }),
         ),
     );
@@ -232,6 +235,9 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     `Advanced onboarding by running ${target}. Current phase is ${nextState.currentPhase}.`,
                 );
+                if (target === "Packaging") {
+                    await showPackagingHealthGateStatus(runtime);
+                }
             }),
         ),
     );
@@ -273,6 +279,10 @@ export function registerStudioCommands(
 
                 if (shouldOpenSummaryAfterBatchRun()) {
                     await openOnboardingSummary(runtime);
+                }
+
+                if (result.completedPhases.includes("Packaging")) {
+                    await showPackagingHealthGateStatus(runtime);
                 }
             }),
         ),
@@ -509,5 +519,20 @@ async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
 async function getOnboardingSummary(runtime: StudioRuntime): Promise<string> {
     const state = await runtime.getActiveOnboardingSession();
     return formatOnboardingSummary(state);
+}
+
+async function showPackagingHealthGateStatus(
+    runtime: StudioRuntime,
+): Promise<void> {
+    const artifactPath = await runtime.resolveInstallArtifactPathForActiveSession();
+    const gate = await runtime.checkPackagingHealthGate(artifactPath);
+    const message = `Packaging health gate ${gate.status}: ${gate.summary}`;
+
+    if (gate.status === "fail") {
+        void vscode.window.showWarningMessage(message);
+        return;
+    }
+
+    void vscode.window.showInformationMessage(message);
 }
 
