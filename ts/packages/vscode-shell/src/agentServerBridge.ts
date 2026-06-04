@@ -50,6 +50,18 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Normalize a conversation name for case-insensitive lookup the same way
+ * the agent-server does (`ensureNameAvailable` in
+ * packages/agentServer/server/src/conversationManager.ts) — trim then
+ * lowercase. Keeping both sides normalized identically avoids
+ * false-negative pre-checks where the client lets a name through but the
+ * server rejects it as a duplicate.
+ */
+function normalizeName(s: string): string {
+    return s.trim().toLowerCase();
+}
+
+/**
  * Manages the RPC connection to the agent server from the extension host
  * and bridges messages to/from webview panels.
  */
@@ -88,7 +100,7 @@ export class AgentServerBridge {
     /** In-flight connect promise — prevents parallel connect() races. */
     private connectInFlight: Promise<void> | undefined;
     /** In-flight session-join promise — serializes joinSpecificSession calls. */
-    private joinInFlight: Promise<void> | undefined;
+    private joinInFlight: Promise<boolean> | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
     /**
@@ -123,6 +135,13 @@ export class AgentServerBridge {
     // Configuration
     private readonly ownsStatusBar: boolean;
     private readonly ephemeralSessionName: string | undefined;
+    /**
+     * If set, connect() will find-or-create a session with this name when
+     * neither restoreSessionId nor ephemeralSessionName resolves to a session.
+     * Mirrors CLI's "CLI" / Shell's "Shell" default conversation behavior.
+     * Leave undefined to fall through to the server's "default" conversation.
+     */
+    private readonly defaultSessionName: string | undefined;
     private displayName: string;
     // Track ephemeral session we created so we can delete on dispose
     private ephemeralSessionId: string | undefined;
@@ -153,11 +172,13 @@ export class AgentServerBridge {
     constructor(opts?: {
         ownsStatusBar?: boolean;
         ephemeralSessionName?: string;
+        defaultSessionName?: string;
         displayName?: string;
         restoreSessionId?: string;
     }) {
         this.ownsStatusBar = opts?.ownsStatusBar ?? true;
         this.ephemeralSessionName = opts?.ephemeralSessionName;
+        this.defaultSessionName = opts?.defaultSessionName;
         this.displayName = opts?.displayName ?? "TypeAgent";
         this.restoreSessionId = opts?.restoreSessionId;
         if (this.ownsStatusBar) {
@@ -377,6 +398,60 @@ export class AgentServerBridge {
                 this.ephemeralSessionId
             ) {
                 joinOpts.sessionId = this.ephemeralSessionId;
+            }
+
+            // Fall-through default-conversation behavior: when no session has
+            // been resolved by the restore/ephemeral paths, find-or-create a
+            // session named `defaultSessionName` (e.g. "VS Code" for the
+            // sidebar). Mirrors CLI's "CLI" and Shell's "Shell" defaults
+            // (`packages/cli/src/commands/connect.ts`,
+            // `packages/shell/src/main/instance.ts`).
+            //
+            // Errors here propagate to the outer catch in connectImpl, which
+            // schedules a reconnect. We deliberately do NOT silently fall back
+            // to the server's "default" conversation on transient failure —
+            // doing so would let the sidebar persist that fallback id as
+            // `sidebar.lastSessionId` and never retry creating the named
+            // default on future launches.
+            if (
+                joinOpts.sessionId === undefined &&
+                this.defaultSessionName !== undefined
+            ) {
+                const targetNorm = normalizeName(this.defaultSessionName);
+                const existing = await connection.listSessions(
+                    this.defaultSessionName,
+                );
+                const match = existing.find(
+                    (s) => normalizeName(s.name) === targetNorm,
+                );
+                if (match !== undefined) {
+                    joinOpts.sessionId = match.sessionId;
+                } else {
+                    try {
+                        const info = await connection.createSession(
+                            this.defaultSessionName,
+                        );
+                        joinOpts.sessionId = info.sessionId;
+                    } catch (createErr) {
+                        // Race: another client (e.g. a second VS Code window)
+                        // may have created a same-named session between our
+                        // listSessions and createSession calls. The server
+                        // rejects duplicate names (`ensureNameAvailable`), so
+                        // re-list and pick up the winner. If still missing,
+                        // rethrow — this is a real failure, not a race.
+                        const retry = await connection.listSessions(
+                            this.defaultSessionName,
+                        );
+                        const retryMatch = retry.find(
+                            (s) => normalizeName(s.name) === targetNorm,
+                        );
+                        if (retryMatch !== undefined) {
+                            joinOpts.sessionId = retryMatch.sessionId;
+                        } else {
+                            throw createErr;
+                        }
+                    }
+                }
             }
 
             this.session = await connection.joinSession(clientIO, joinOpts);
@@ -684,11 +759,17 @@ export class AgentServerBridge {
      *   still active so we report failure cleanly.
      * - Phase 2: leave the old session (best-effort).
      * - Phase 3: replay the new session's display history.
+     *
+     * Returns true if the new session was joined successfully, false if
+     * Phase 1 failed (old session still active; error toast shown). Most
+     * legacy callers ignore the return value and rely on the error toast;
+     * the `manage-conversation` handlers consume it to avoid posting a
+     * false "✅ Switched to X" notification when the join silently failed.
      */
     private async joinSpecificSession(
         sessionId: string,
         targetName?: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         // Serialize concurrent calls. Two joinSpecificSession invocations
         // overlapping (e.g., user rapid-clicks the session picker) would
         // otherwise both pass the no-op guard below — `this.session` hasn't
@@ -703,10 +784,10 @@ export class AgentServerBridge {
             }
         }
         if (this.session?.sessionId === sessionId) {
-            return;
+            return true;
         }
         if (!this.connection) {
-            return;
+            return false;
         }
         const p = this.joinSpecificSessionImpl(sessionId, targetName);
         this.joinInFlight = p.finally(() => {
@@ -720,13 +801,13 @@ export class AgentServerBridge {
     private async joinSpecificSessionImpl(
         sessionId: string,
         targetName?: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         if (!this.connection) {
-            return;
+            return false;
         }
 
         if (this.session?.sessionId === sessionId) {
-            return;
+            return true;
         }
 
         this.isSwitching = true;
@@ -749,7 +830,7 @@ export class AgentServerBridge {
                 vscode.window.showErrorMessage(
                     `Failed to switch conversation: ${e?.message ?? String(e)}`,
                 );
-                return;
+                return false;
             }
 
             const oldSession = this.session;
@@ -804,6 +885,7 @@ export class AgentServerBridge {
             this.onStatusChanged?.();
             await this.replayHistory(newSession);
             this.lastReplayedSessionId = newSession.sessionId;
+            return true;
         } finally {
             this.isSwitching = false;
             this.broadcastToWebviews({
@@ -1857,28 +1939,78 @@ export class AgentServerBridge {
             )}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
-        // Collision check (case-insensitive) so the user gets a clear
-        // error rather than a silent server reject. Picks the existing
-        // conversation for them — switching to it instead of failing.
+        // Collision check (case-insensitive, normalized to match server)
+        // so the user gets a clear error rather than a silent server
+        // reject. Picks the existing conversation for them — switching to
+        // it instead of failing.
+        const targetNorm = normalizeName(chosen);
         const sessions = await this.connection.listSessions();
         const existing = sessions.find(
-            (s) => s.name.toLowerCase() === chosen!.toLowerCase(),
+            (s) => normalizeName(s.name) === targetNorm,
         );
         if (existing) {
-            await this.joinSpecificSession(existing.sessionId, existing.name);
+            const switched = await this.joinSpecificSession(
+                existing.sessionId,
+                existing.name,
+            );
             this.displayConversationNotification(
-                `A conversation named <b>${escapeHtml(
-                    existing.name,
-                )}</b> already exists — switched to it.`,
+                switched
+                    ? `A conversation named <b>${escapeHtml(
+                          existing.name,
+                      )}</b> already exists — switched to it.`
+                    : `A conversation named <b>${escapeHtml(
+                          existing.name,
+                      )}</b> already exists, but switching to it failed.`,
                 "warning",
             );
             return;
         }
 
-        const info = await this.connection.createSession(chosen);
-        await this.joinSpecificSession(info.sessionId, chosen);
+        let createdId: string;
+        let createdName: string;
+        try {
+            const info = await this.connection.createSession(chosen);
+            createdId = info.sessionId;
+            createdName = chosen;
+        } catch (createErr) {
+            // Race: a peer client (e.g. another VS Code window) may have
+            // created a same-named conversation between our list and
+            // create. The server rejects duplicate names; re-list and
+            // adopt the winner.
+            const retry = await this.connection.listSessions();
+            const retryMatch = retry.find(
+                (s) => normalizeName(s.name) === targetNorm,
+            );
+            if (!retryMatch) {
+                throw createErr;
+            }
+            const switched = await this.joinSpecificSession(
+                retryMatch.sessionId,
+                retryMatch.name,
+            );
+            this.displayConversationNotification(
+                switched
+                    ? `A conversation named <b>${escapeHtml(
+                          retryMatch.name,
+                      )}</b> already exists — switched to it.`
+                    : `A conversation named <b>${escapeHtml(
+                          retryMatch.name,
+                      )}</b> already exists, but switching to it failed.`,
+                "warning",
+            );
+            return;
+        }
+
+        const switched = await this.joinSpecificSession(createdId, createdName);
         this.displayConversationNotification(
-            `✅ Created and switched to conversation <b>${escapeHtml(chosen)}</b>`,
+            switched
+                ? `✅ Created and switched to conversation <b>${escapeHtml(
+                      createdName,
+                  )}</b>`
+                : `Created conversation <b>${escapeHtml(
+                      createdName,
+                  )}</b>, but switching to it failed.`,
+            switched ? "info" : "warning",
         );
     }
 
@@ -1911,9 +2043,14 @@ export class AgentServerBridge {
 
     private manageConversationInfo(requestId: any): void {
         const session = this.session;
+        // Use the raw server-side name (session.name) rather than
+        // this.getDisplayName(), which may return a friendly label
+        // ("Sidebar", panel title) for ephemeral sessions. We want
+        // `@conversation info` to be consistent with `@conversation list`
+        // and to show a string the user can pass to `@conversation switch`.
         const html = session
             ? `Current conversation: <b>${escapeHtml(
-                  this.getDisplayName(),
+                  session.name,
               )}</b> (${escapeHtml(session.sessionId)})`
             : "No active conversation.";
         this.overwriteActionBubble(
@@ -1941,9 +2078,10 @@ export class AgentServerBridge {
             );
             return;
         }
+        const targetNorm = normalizeName(trimmed);
         const sessions = await this.connection.listSessions();
         const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+            (s) => normalizeName(s.name) === targetNorm,
         );
         if (!match) {
             // Mirror the Electron Shell's @conversation switch semantics:
@@ -1977,10 +2115,18 @@ export class AgentServerBridge {
             );
             return;
         }
-        await this.joinSpecificSession(match.sessionId, match.name);
-        this.displayConversationNotification(
-            `✅ Switched to conversation <b>${escapeHtml(match.name)}</b>`,
+        const switched = await this.joinSpecificSession(
+            match.sessionId,
+            match.name,
         );
+        if (switched) {
+            this.displayConversationNotification(
+                `✅ Switched to conversation <b>${escapeHtml(match.name)}</b>`,
+            );
+        }
+        // If switch failed, joinSpecificSession already showed an error
+        // toast; suppress the success notification to avoid posting a
+        // false "✅ Switched" bubble into the OLD conversation.
     }
 
     private async manageCycleConversation(
@@ -2024,10 +2170,16 @@ export class AgentServerBridge {
             );
             return;
         }
-        await this.joinSpecificSession(target.sessionId, target.name);
-        this.displayConversationNotification(
-            `✅ Switched to conversation <b>${escapeHtml(target.name)}</b>`,
+        const switched = await this.joinSpecificSession(
+            target.sessionId,
+            target.name,
         );
+        if (switched) {
+            this.displayConversationNotification(
+                `✅ Switched to conversation <b>${escapeHtml(target.name)}</b>`,
+            );
+        }
+        // On failure, joinSpecificSession already showed an error toast.
     }
 
     private async manageRenameConversation(
@@ -2056,9 +2208,10 @@ export class AgentServerBridge {
         let isCurrent: boolean;
         if (name && name.trim()) {
             const trimmedName = name.trim();
+            const lookupNorm = normalizeName(trimmedName);
             const sessions = await this.connection.listSessions();
             const match = sessions.find(
-                (s) => s.name.toLowerCase() === trimmedName.toLowerCase(),
+                (s) => normalizeName(s.name) === lookupNorm,
             );
             if (!match) {
                 this.overwriteActionBubble(
@@ -2094,11 +2247,11 @@ export class AgentServerBridge {
         }
 
         // Collision check excluding the target itself.
+        const newNorm = normalizeName(trimmedNew);
         const allSessions = await this.connection.listSessions();
         const collision = allSessions.find(
             (s) =>
-                s.sessionId !== targetId &&
-                s.name.toLowerCase() === trimmedNew.toLowerCase(),
+                s.sessionId !== targetId && normalizeName(s.name) === newNorm,
         );
         if (collision) {
             this.overwriteActionBubble(
@@ -2162,9 +2315,10 @@ export class AgentServerBridge {
             );
             return;
         }
+        const targetNorm = normalizeName(trimmed);
         const sessions = await this.connection.listSessions();
         const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+            (s) => normalizeName(s.name) === targetNorm,
         );
         if (!match) {
             this.overwriteActionBubble(
