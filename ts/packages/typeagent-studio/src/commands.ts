@@ -422,6 +422,37 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.setInstallHealthGatePolicy",
+            withErrors(async () => {
+                const selection = await vscode.window.showQuickPick(
+                    ["enforce", "warn"],
+                    {
+                        title: "Install health gate policy",
+                        placeHolder: "Select policy",
+                        ignoreFocusOut: true,
+                    },
+                );
+                if (!selection) {
+                    return;
+                }
+
+                await vscode.workspace
+                    .getConfiguration("typeagentStudio.onboarding")
+                    .update(
+                        "installHealthGatePolicy",
+                        selection,
+                        vscode.ConfigurationTarget.Global,
+                    );
+
+                void vscode.window.showInformationMessage(
+                    `Install health gate policy set to ${selection}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.restoreOnboardingPhase",
             withErrors(async () => {
                 const phase = await selectPhase(runtime);

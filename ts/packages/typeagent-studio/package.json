@@ -137,6 +137,11 @@
         "command": "typeagent-studio.cycleInstallHealthGatePolicy",
         "title": "Cycle install health gate policy",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.setInstallHealthGatePolicy",
+        "title": "Set install health gate policy",
+        "category": "TypeAgent Studio"
       }
     ]
   },
@@ -158,7 +163,8 @@
     "onCommand:typeagent-studio.copyOnboardingSummary",
     "onCommand:typeagent-studio.saveOnboardingSummary",
     "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
-    "onCommand:typeagent-studio.cycleInstallHealthGatePolicy"
+    "onCommand:typeagent-studio.cycleInstallHealthGatePolicy",
+    "onCommand:typeagent-studio.setInstallHealthGatePolicy"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

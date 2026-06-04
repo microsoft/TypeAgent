@@ -41,6 +41,7 @@ Current command palette surface:
 - TypeAgent Studio: Save onboarding summary
 - TypeAgent Studio: Toggle auto-open summary after batch run
 - TypeAgent Studio: Cycle install health gate policy
+- TypeAgent Studio: Set install health gate policy
 
 Install behavior for `Install latest onboarding session to sandbox`:
 
