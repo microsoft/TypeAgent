@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e8a9f44c7679a3f759c1f9dbe227831a3ea068321a052ac4d03fd205b5d91dc2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5ceb819f21a0b2c60c5a9f39aa9647e04cbcfa3f04e370b3ed43072612b26cef -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -99,7 +99,7 @@ External: `debug`, `type-fest`
 - [agent-cli](../../packages/cli/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-shell](../../packages/shell/README.md)
-- _…and 44 more workspace consumers._
+- _…and 46 more workspace consumers._
 
 ### Files of interest
 
@@ -117,6 +117,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

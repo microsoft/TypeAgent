@@ -65,6 +65,18 @@ export type CompiledLiteralValueNode = {
 export type CompiledVariableValueNode = {
     type: "variable";
     name: string;
+    /**
+     * Slot index resolved at compile time by environment.compileValueExpression.
+     * Only present on variable nodes that live inside expression-node subtrees
+     * (binaryExpression, conditionalExpression, etc.) compiled for NFA/DFA
+     * evaluation — the canonical grammarMatcher path uses `name` directly.
+     */
+    slotIndex?: number;
+    /**
+     * Expected type, set alongside slotIndex.  Drives the same number-coercion
+     * applied to legacy VariableRef.
+     */
+    typeName?: string;
 };
 // A named property in a compiled object: { key: value }.
 // null value = shorthand: { x } means { x: x }.

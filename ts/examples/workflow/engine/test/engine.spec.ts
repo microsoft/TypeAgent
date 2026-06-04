@@ -6,14 +6,21 @@
  *
  * This exercises: template resolution ($from references, literal pass-through),
  * linear task chains, onError recovery dispatch, loop with state/iterateState/
- * sentinels, branch nodes, and all six standard-library tasks.
+ * continueWhen, branch nodes, and all six standard-library tasks.
  */
 
 import {
     WorkflowIR,
+    WorkflowNode,
+    WorkflowCallNode,
+    JSONSchema,
+    ConstantDef,
     TaskDefinition,
+    TaskContext,
+    TaskResult,
     TaskPolicy,
     Template,
+    validateWorkflowIR,
 } from "workflow-model";
 import {
     TaskRegistry,
@@ -21,6 +28,7 @@ import {
     WorkflowEvent,
     RunOptions,
     allBuiltinTasks,
+    getBuiltinTaskSchemas,
     listLength,
     listElementAt,
     listAppend,
@@ -41,11 +49,86 @@ import {
     mathRound,
     mathCeil,
     errorFail,
+    httpGet,
 } from "../src/index.js";
-import { readFileSync, unlinkSync, existsSync } from "node:fs";
+import {
+    readFileSync,
+    writeFileSync,
+    realpathSync,
+    unlinkSync,
+    existsSync,
+} from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import { compile as compileDsl, TaskSchemaInfo } from "workflow-dsl";
+
+// ---- Test helper: wrap legacy flat WorkflowIR into multi-workflow shape ----
+// Engine tests were written against the pre-multi-workflow flat WorkflowIR
+// shape (`{ kind, name, version, ...WorkflowScope fields }`). The multi-
+// workflow refactor moves the body into `workflows[name]`. This helper lets
+// the existing fixtures keep their compact flat literal form by wrapping at
+// call sites.
+type LegacyWorkflowIR = {
+    kind: "workflow";
+    name: string;
+    description?: string;
+    version: string;
+    types?: Record<string, JSONSchema>;
+    constants?: Record<string, ConstantDef>;
+    inputSchema: JSONSchema;
+    entry: string;
+    nodes: Record<string, WorkflowNode>;
+    output: Template;
+    outputSchema: JSONSchema;
+};
+
+function wrapIR(legacy: LegacyWorkflowIR): WorkflowIR {
+    const {
+        kind,
+        name,
+        version,
+        types,
+        constants,
+        inputSchema,
+        entry,
+        nodes,
+        output,
+        outputSchema,
+    } = legacy;
+    const ir: WorkflowIR = {
+        kind,
+        version,
+        entry: name,
+        workflows: {
+            [name]: {
+                inputSchema,
+                entry,
+                nodes,
+                output,
+                outputSchema,
+            },
+        },
+    };
+    if (types) ir.types = types;
+    if (constants) ir.constants = constants;
+    return ir;
+}
+
+function compileWfFile(relPath: string): WorkflowIR {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const abs = resolve(__dirname, relPath);
+    const source = readFileSync(abs, "utf8");
+    const schemas = getBuiltinTaskSchemas() as TaskSchemaInfo[];
+    const result = compileDsl(source, schemas, { validate: true });
+    if (result.errors.length > 0 || !result.ir) {
+        const msg = result.errors
+            .map((e) => `${e.line}:${e.col} [${e.phase}] ${e.message}`)
+            .join("\n");
+        throw new Error(`Failed to compile ${relPath}:\n${msg}`);
+    }
+    return result.ir as WorkflowIR;
+}
 
 // Policy that allows all tasks (for tests not specifically exercising policy).
 // Uses a Proxy so any task name returns "allow", matching secure-by-default.
@@ -200,7 +283,7 @@ const domainTasks: TaskDefinition[] = [
 // ---- A4 morning-brief IR ----
 
 function makeA4IR(): WorkflowIR {
-    return {
+    return wrapIR({
         kind: "workflow",
         name: "morningBrief",
         version: "1",
@@ -282,10 +365,12 @@ function makeA4IR(): WorkflowIR {
                 inputs: {
                     section: "calendar",
                     reason: {
-                        $from: "input",
+                        $from: "recovery",
                         name: "error",
                         path: ["message"],
                     },
+                    error: { $from: "recovery", name: "error" },
+                    trigger: { $from: "recovery", name: "trigger" },
                 },
                 next: "fetchEmail",
                 bind: "calendarSection",
@@ -361,10 +446,12 @@ function makeA4IR(): WorkflowIR {
                 inputs: {
                     section: "email",
                     reason: {
-                        $from: "input",
+                        $from: "recovery",
                         name: "error",
                         path: ["message"],
                     },
+                    error: { $from: "recovery", name: "error" },
+                    trigger: { $from: "recovery", name: "trigger" },
                 },
                 next: "repoLoop",
                 bind: "emailSection",
@@ -409,7 +496,7 @@ function makeA4IR(): WorkflowIR {
                                     index: { type: "integer" },
                                 },
                             },
-                            outputSchema: {},
+                            outputSchema: { type: "string" },
                             inputs: {
                                 list: { $from: "input", name: "repos" },
                                 index: { $from: "state", name: "i" },
@@ -506,9 +593,14 @@ function makeA4IR(): WorkflowIR {
                             inputs: {
                                 section: "repo",
                                 reason: {
-                                    $from: "input",
+                                    $from: "recovery",
                                     name: "error",
                                     path: ["message"],
+                                },
+                                error: { $from: "recovery", name: "error" },
+                                trigger: {
+                                    $from: "recovery",
+                                    name: "trigger",
                                 },
                             },
                             next: "appendSection",
@@ -599,14 +691,59 @@ function makeA4IR(): WorkflowIR {
                                 name: "hasMore",
                             },
                             selectorSchema: { type: "boolean" },
-                            cases: { true: "@iterate", false: "@exit" },
-                            default: "@exit",
+                            cases: {
+                                true: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                                false: {
+                                    inputs: {},
+                                    scope: {
+                                        inputSchema: { type: "object" },
+                                        entry: "noop",
+                                        nodes: {
+                                            noop: {
+                                                kind: "task",
+                                                task: "identity",
+                                                inputSchema: {
+                                                    type: "object",
+                                                    required: ["value"],
+                                                    properties: { value: {} },
+                                                },
+                                                outputSchema: { type: "null" },
+                                                inputs: { value: null },
+                                            },
+                                        },
+                                        output: null as Template,
+                                        outputSchema: { type: "null" },
+                                    },
+                                },
+                            },
                         },
                     },
                     // NOTE: output reads from scope (body binding), not state.
-                    // At @exit, state reflects the beginning of the last iteration
-                    // (set by the prior @iterate). The final appendSection result
-                    // is only in the scope binding "appended".
+                    // At loop exit (continueWhen=false), state reflects the
+                    // beginning of the last iteration. The final
+                    // appendSection result is only in the scope binding
+                    // "appended".
                     output: {
                         $from: "scope",
                         name: "appended",
@@ -623,6 +760,10 @@ function makeA4IR(): WorkflowIR {
                         name: "appended",
                     } as Template,
                 },
+                continueWhen: {
+                    $from: "scope",
+                    name: "hasMore",
+                } as Template,
                 maxIterations: 1000,
                 next: "compose",
                 bind: "repoSections",
@@ -659,7 +800,7 @@ function makeA4IR(): WorkflowIR {
         },
         entry: "fetchCalendar",
         output: { $from: "scope", name: "result" } as Template,
-    };
+    });
 }
 
 // ---- Helpers ----
@@ -839,7 +980,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("standard-library tasks", () => {
         it("math.add computes correctly", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "addTest",
                 version: "1",
@@ -873,7 +1014,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "sum" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: { a: 3, b: 7 } });
             expect(result.success).toBe(true);
@@ -883,7 +1024,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("bool.toLabel converts boolean to string (legacy)", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "labelTest",
                 version: "1",
@@ -913,7 +1054,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "label",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -923,7 +1064,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("branch nodes", () => {
         it("routes based on boolean discriminant", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchTest",
                 version: "1",
@@ -934,43 +1075,79 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: false as Template,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "onYes", false: "onNo" },
-                        default: "onNo",
-                    },
-                    onYes: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 1 as Template,
+                                                right: 1 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
                             },
                         },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
-                    },
-                    onNo: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
                         outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
                     },
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -1016,7 +1193,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "templateTest",
                 version: "1",
@@ -1048,7 +1225,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "tmpl",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1059,7 +1236,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "multiReplace",
                 version: "1",
@@ -1090,7 +1267,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "tmpl",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1103,7 +1280,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "joinTest",
                 version: "1",
@@ -1134,7 +1311,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "join",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1145,7 +1322,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "joinEmpty",
                 version: "1",
@@ -1176,7 +1353,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "join",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1189,7 +1366,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "echoTest",
                 version: "1",
@@ -1231,7 +1408,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "echo",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1251,7 +1428,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "falseTest",
                 version: "1",
@@ -1293,7 +1470,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fail",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1312,7 +1489,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "notFoundTest",
                 version: "1",
@@ -1346,7 +1523,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "bad",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1359,12 +1536,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D1 standup-prep workflow", () => {
         function loadD1(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d1-standup-prep.json",
-            );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+            return compileWfFile("../../../workflows/dsl/d1-standup-prep.wf");
         }
 
         it("validates against all builtins", async () => {
@@ -1403,6 +1575,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             items: { type: "string" },
                         },
                         cwd: { type: "string" },
+                        maxBuffer: { type: "integer" },
                     },
                 },
                 outputSchema: {
@@ -1459,7 +1632,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d4-commit-summary.json",
+                "../../../workflows/ir/d4-commit-summary.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1565,7 +1738,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "splitTest",
                 version: "1",
@@ -1596,7 +1769,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "split",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1607,7 +1780,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "splitEmpty",
                 version: "1",
@@ -1638,7 +1811,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "split",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -1651,7 +1824,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path = resolve(
                 __dirname,
-                "../../../workflows/d5-code-review-prep.json",
+                "../../../workflows/ir/d5-code-review-prep.json",
             );
             return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
         }
@@ -1822,7 +1995,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "httpTest",
                 version: "1",
@@ -1851,7 +2024,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -1879,7 +2052,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Write
-            const writeIr: WorkflowIR = {
+            const writeIr: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "writeTest",
                 version: "1",
@@ -1907,7 +2080,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "write",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const writeResult = await eng.run(writeIr, {
                 input: {},
@@ -1917,7 +2090,7 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(writeResult.output).toBe(testFile);
 
             // Read back
-            const readIr: WorkflowIR = {
+            const readIr: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "readTest",
                 version: "1",
@@ -1939,7 +2112,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "read",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const readResult = await eng.run(readIr, {
                 input: {},
@@ -1952,12 +2125,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("D8 summarize-url workflow", () => {
         function loadD8(): WorkflowIR {
-            const __dirname = dirname(fileURLToPath(import.meta.url));
-            const path = resolve(
-                __dirname,
-                "../../../workflows/d8-summarize-url.json",
-            );
-            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+            return compileWfFile("../../../workflows/dsl/d8-summarize-url.wf");
         }
 
         it("validates against all builtins", async () => {
@@ -1989,7 +2157,11 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["url"],
-                    properties: { url: { type: "string" } },
+                    properties: {
+                        url: { type: "string" },
+                        headers: { type: "object" },
+                        maxResponseBytes: { type: "integer" },
+                    },
                 },
                 outputSchema: {
                     type: "object",
@@ -2016,7 +2188,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
-                    properties: { prompt: { type: "string" } },
+                    properties: {
+                        prompt: { type: "string" },
+                        endpoint: { type: "string" },
+                    },
                 },
                 outputSchema: { type: "string" },
                 async execute(input: any) {
@@ -2086,7 +2261,11 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["url"],
-                    properties: { url: { type: "string" } },
+                    properties: {
+                        url: { type: "string" },
+                        headers: { type: "object" },
+                        maxResponseBytes: { type: "integer" },
+                    },
                 },
                 outputSchema: {
                     type: "object",
@@ -2120,7 +2299,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: {
                     type: "object",
                     required: ["prompt"],
-                    properties: { prompt: { type: "string" } },
+                    properties: {
+                        prompt: { type: "string" },
+                        endpoint: { type: "string" },
+                    },
                 },
                 outputSchema: { type: "string" },
                 async execute() {
@@ -2194,7 +2376,7 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("task policy", () => {
         // Minimal workflow that calls a single side-effecting task.
         function sideEffectWorkflow(taskName: string): WorkflowIR {
-            return {
+            return wrapIR({
                 kind: "workflow",
                 name: "policyTest",
                 version: "1",
@@ -2216,7 +2398,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
         }
 
         it("denies a side-effecting task when policy is 'deny'", async () => {
@@ -2311,7 +2493,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // math.add has no sideEffects, should run even with no approve fn
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pureTest",
                 version: "1",
@@ -2336,7 +2518,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No policy, no approve fn: pure tasks should still work
             const opts: RunOptions = { input: {} };
@@ -2350,7 +2532,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             // Confirm the old two-arg signature still works for pure tasks
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "legacyTest",
                 version: "1",
@@ -2375,7 +2557,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: { a: 1, b: 2 } });
             expect(result.success).toBe(true);
@@ -2410,7 +2592,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, badTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "schemaViolation",
                 version: "1",
@@ -2428,7 +2610,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -2450,7 +2632,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, goodTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "schemaOk",
                 version: "1",
@@ -2468,7 +2650,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -2476,12 +2658,10 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator detects invalid scope path reference", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
             // Node "consumer" references $from: "scope", name: "data",
             // path: ["nonexistent"] - but the producer's outputSchema
             // has no such property.
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badRef",
                 version: "1",
@@ -2529,7 +2709,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2541,9 +2721,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator passes valid scope path reference", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "goodRef",
                 version: "1",
@@ -2590,7 +2768,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2598,9 +2776,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("static validator detects invalid path in loop iterateState", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badLoopState",
                 version: "1",
@@ -2636,15 +2812,7 @@ describe("WorkflowEngine (IR v1)", () => {
                                         left: 1 as Template,
                                         right: 1 as Template,
                                     },
-                                    next: "done",
                                     bind: "stepped",
-                                },
-                                done: {
-                                    kind: "branch",
-                                    selector: true as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { false: "@iterate", true: "@exit" },
-                                    default: "@exit",
                                 },
                             },
                             output: 0 as Template,
@@ -2657,13 +2825,14 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["nonexistent"],
                             } as Template,
                         },
+                        continueWhen: false as Template,
                         maxIterations: 1,
                         bind: "result",
                     },
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
@@ -2677,7 +2846,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "typedInput",
                 version: "1",
@@ -2709,7 +2878,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // String where integer is required
             const result = await eng.run(ir, {
@@ -2720,42 +2889,9 @@ describe("WorkflowEngine (IR v1)", () => {
         });
     });
 
-    describe("sentinel validation", () => {
-        it("rejects @iterate in top-level branch node", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                name: "badSentinel",
-                version: "1",
-                inputSchema: { type: "object" },
-                outputSchema: { type: "number" },
-                nodes: {
-                    decide: {
-                        kind: "branch",
-                        selector: true as Template,
-                        selectorSchema: { type: "boolean" },
-                        cases: { true: "@iterate", false: "@exit" },
-                        default: "@exit",
-                    },
-                },
-                entry: "decide",
-                output: null as Template,
-            };
-
-            const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
-            const validation = validateWorkflowIR(ir, tasks);
-            expect(validation.valid).toBe(false);
-            expect(validation.errors.length).toBeGreaterThanOrEqual(2);
-            expect(validation.errors[0].message).toContain(
-                "only valid inside a loop body",
-            );
-        });
-    });
-
     describe("branch node events", () => {
         it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchEvents",
                 version: "1",
@@ -2766,43 +2902,79 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: false as Template,
                         selectorSchema: { type: "boolean" },
-                        cases: { true: "onTrue", false: "onFalse" },
-                        default: "onFalse",
-                    },
-                    onTrue: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
+                        cases: {
+                            true: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onTrue",
+                                    nodes: {
+                                        onTrue: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 1 as Template,
+                                                right: 1 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            false: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onFalse",
+                                    nodes: {
+                                        onFalse: {
+                                            kind: "task",
+                                            task: "math.add",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["left", "right"],
+                                                properties: {
+                                                    left: { type: "number" },
+                                                    right: { type: "number" },
+                                                },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: {
+                                                left: 0 as Template,
+                                                right: 0 as Template,
+                                            },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
                             },
                         },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
                         bind: "answer",
-                    },
-                    onFalse: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
                         outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
                     },
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const events = collectEvents(engine);
             const result = await engine.run(ir, { input: {} });
@@ -2840,7 +3012,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopOnError",
                 version: "1",
@@ -2874,6 +3046,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         iterateState: {
                             i: { $from: "state", name: "i" } as Template,
                         },
+                        continueWhen: false as Template,
                         maxIterations: 1,
                         onError: "recover",
                     },
@@ -2895,7 +3068,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "badLoop",
                 output: { $from: "scope", name: "recovered" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -2939,7 +3112,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "timeoutTest",
                 version: "1",
@@ -2950,7 +3123,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.slow",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },
@@ -2960,7 +3133,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "result",
                 } as Template,
-            };
+            });
 
             const start = Date.now();
             const result = await eng.run(ir, {
@@ -2980,7 +3153,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fastTask",
                 version: "1",
@@ -3011,7 +3184,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "result",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3027,7 +3200,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pathTraversalRead",
                 version: "1",
@@ -3051,7 +3224,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "read",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3067,7 +3240,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "pathTraversalWrite",
                 version: "1",
@@ -3095,7 +3268,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "write",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3116,11 +3289,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 tmpdir(),
                 `workflow-pathtest-${Date.now()}.txt`,
             );
-            const { writeFileSync } = await import("node:fs");
             writeFileSync(testPath, "safe-content", "utf8");
 
             try {
-                const ir: WorkflowIR = {
+                const ir: WorkflowIR = wrapIR({
                     kind: "workflow",
                     name: "allowedRead",
                     version: "1",
@@ -3142,7 +3314,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                     entry: "read",
                     output: { $from: "scope", name: "result" } as Template,
-                };
+                });
 
                 const result = await eng.run(ir, {
                     input: {},
@@ -3204,7 +3376,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "httpTruncateTest",
                 version: "1",
@@ -3239,7 +3411,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3255,7 +3427,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "branchNoDefault",
                 version: "1",
@@ -3267,46 +3439,71 @@ describe("WorkflowEngine (IR v1)", () => {
                         selector: "unknown" as Template,
                         selectorSchema: { type: "string" },
                         cases: {
-                            yes: "onYes",
-                            no: "onNo",
+                            yes: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onYes",
+                                    nodes: {
+                                        onYes: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 2 as Template },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
+                            no: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "onNo",
+                                    nodes: {
+                                        onNo: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: { type: "number" },
+                                            inputs: { value: 0 as Template },
+                                            bind: "answer",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "answer",
+                                    } as Template,
+                                    outputSchema: { type: "number" },
+                                },
+                            },
                         },
+                        bind: "answer",
+                        outputSchema: { type: "number" },
                     } as any, // no default field
-                    onYes: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 1 as Template, right: 1 as Template },
-                        bind: "answer",
-                    },
-                    onNo: {
-                        kind: "task",
-                        task: "math.add",
-                        inputSchema: {
-                            type: "object",
-                            required: ["left", "right"],
-                            properties: {
-                                left: { type: "number" },
-                                right: { type: "number" },
-                            },
-                        },
-                        outputSchema: { type: "number" },
-                        inputs: { left: 0 as Template, right: 0 as Template },
-                        bind: "answer",
-                    },
                 },
                 entry: "decide",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
-            const result = await eng.run(ir, { input: {} });
+            const result = await eng.run(ir, {
+                input: {},
+                skipValidation: true,
+            });
             expect(result.success).toBe(false);
             expect(result.error?.message).toBeDefined();
         });
@@ -3317,7 +3514,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badConstant",
                 version: "1",
@@ -3348,7 +3545,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3361,7 +3558,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "goodConstant",
                 version: "1",
@@ -3398,7 +3595,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -3411,7 +3608,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "approvalTimeout",
                 version: "1",
@@ -3435,7 +3632,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -3478,7 +3675,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, slowTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "abortTest",
                 version: "1",
@@ -3496,7 +3693,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 50);
@@ -3527,7 +3724,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, counterTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopAbortTest",
                 version: "1",
@@ -3564,14 +3761,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                         } as Template,
                                     },
                                     bind: "incResult",
-                                    next: "check",
-                                },
-                                check: {
-                                    kind: "branch",
-                                    selector: false as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { true: "@exit" },
-                                    default: "@iterate",
                                 },
                             },
                             output: {
@@ -3586,13 +3775,14 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "incResult",
                             } as Template,
                         },
+                        continueWhen: true as Template,
                         maxIterations: 1000,
                         bind: "result",
                     },
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const ac = new AbortController();
             setTimeout(() => ac.abort(), 100);
@@ -3610,7 +3800,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "maxIterTest",
                 version: "1",
@@ -3650,14 +3840,6 @@ describe("WorkflowEngine (IR v1)", () => {
                                         right: 1 as Template,
                                     },
                                     bind: "next",
-                                    next: "cont",
-                                },
-                                cont: {
-                                    kind: "branch",
-                                    selector: false as Template,
-                                    selectorSchema: { type: "boolean" },
-                                    cases: { true: "@exit" },
-                                    default: "@iterate",
                                 },
                             },
                             output: {
@@ -3672,13 +3854,14 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "next",
                             } as Template,
                         },
+                        continueWhen: true as Template,
                         maxIterations: 3,
                         bind: "result",
                     },
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3691,7 +3874,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "loopConstantTest",
                 version: "1",
@@ -3769,14 +3952,25 @@ describe("WorkflowEngine (IR v1)", () => {
                                     next: "check",
                                 },
                                 check: {
-                                    kind: "branch",
-                                    selector: {
-                                        $from: "scope",
-                                        name: "nextIter",
-                                    } as Template,
-                                    selectorSchema: { type: "number" },
-                                    cases: { 2: "@exit" },
-                                    default: "@iterate",
+                                    kind: "task",
+                                    task: "compare.lessThan",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: { type: "number" },
+                                            right: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "nextIter",
+                                        } as Template,
+                                        right: 2 as Template,
+                                    },
+                                    bind: "shouldContinue",
                                 },
                             },
                             output: {
@@ -3795,13 +3989,17 @@ describe("WorkflowEngine (IR v1)", () => {
                                 name: "nextIter",
                             } as Template,
                         },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
                         maxIterations: 10,
                         bind: "result",
                     },
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -3838,7 +4036,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "nodeFailedTest",
                 version: "1",
@@ -3849,7 +4047,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -3857,14 +4055,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.noop",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -3872,7 +4063,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             await eng.run(ir, { input: {} });
 
@@ -3902,7 +4093,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "runFailedTest",
                 version: "1",
@@ -3913,14 +4104,14 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
                     },
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -3933,7 +4124,7 @@ describe("WorkflowEngine (IR v1)", () => {
         it("emits runStarted and runCompleted in order", async () => {
             const events = collectEvents(engine);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "eventOrderTest",
                 version: "1",
@@ -3958,7 +4149,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             await engine.run(ir, { input: {} });
 
@@ -3987,7 +4178,7 @@ describe("WorkflowEngine (IR v1)", () => {
             eng.on(listener1);
             eng.on(listener2);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "offTest",
                 version: "1",
@@ -4012,7 +4203,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             // Both get events from first run
             await eng.run(ir, { input: {} });
@@ -4037,7 +4228,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "bindOverwrite",
                 version: "1",
@@ -4078,7 +4269,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "answer" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4121,7 +4312,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cascadeError",
                 version: "1",
@@ -4132,7 +4323,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         onError: "recover",
                         bind: "r",
@@ -4140,14 +4331,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.failRecovery",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {},
                         bind: "r",
@@ -4155,7 +4339,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "r" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -4169,7 +4353,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 name: "test.echo",
                 sideEffects: false,
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object" },
+                outputSchema: { type: "string" },
                 async execute(input: any) {
                     return {
                         kind: "ok" as const,
@@ -4181,7 +4365,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "optionalRef",
                 version: "1",
@@ -4192,7 +4376,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "string" },
                         inputs: {
                             value: {
                                 $from: "scope",
@@ -4205,7 +4389,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4240,7 +4424,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "optionalPath",
                 version: "1",
@@ -4284,7 +4468,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4298,7 +4482,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cwdTest",
                 version: "1",
@@ -4342,7 +4526,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4351,7 +4535,6 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.success).toBe(true);
             const stdout = (result.output as any).stdout.trim();
             // realpath to handle symlinks like /tmp -> /private/tmp
-            const { realpathSync } = await import("node:fs");
             expect(stdout).toBe(realpathSync(tmpdir()));
         });
 
@@ -4359,7 +4542,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "stderrTest",
                 version: "1",
@@ -4398,7 +4581,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4424,7 +4607,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, echoTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "literalTest",
                 version: "1",
@@ -4435,7 +4618,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.echo",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {
                             data: {
                                 $literal: {
@@ -4449,7 +4632,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4467,7 +4650,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfTest",
                 version: "1",
@@ -4498,7 +4681,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4512,7 +4695,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfMetadata",
                 version: "1",
@@ -4543,7 +4726,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4557,7 +4740,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrf127",
                 version: "1",
@@ -4588,7 +4771,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4602,7 +4785,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrf192",
                 version: "1",
@@ -4633,7 +4816,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4647,7 +4830,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "ssrfFile",
                 version: "1",
@@ -4678,7 +4861,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -4694,8 +4877,6 @@ describe("WorkflowEngine (IR v1)", () => {
             // Use a mock that simulates a streaming response.
             // The real http.get code streams and checks byte count.
             // We test via the builtinTasks import directly.
-            const { httpGet } = await import("../src/builtinTasks.js");
-
             // Mock a global fetch that returns a large streaming body
             const originalFetch = globalThis.fetch;
             const largeBody = "X".repeat(200);
@@ -4723,7 +4904,8 @@ describe("WorkflowEngine (IR v1)", () => {
                         nodeId: "test",
                         scopePath: [],
                         signal: new AbortController().signal,
-                    },
+                        outputSchema: { type: "object" },
+                    } as any,
                 );
                 expect(result.kind).toBe("fail");
                 if (result.kind === "fail") {
@@ -4764,7 +4946,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, captureTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "errorStructure",
                 version: "1",
@@ -4782,18 +4964,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },
@@ -4802,7 +4977,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4842,7 +5017,7 @@ describe("WorkflowEngine (IR v1)", () => {
             );
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "runtimeError",
                 version: "1",
@@ -4860,18 +5035,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     capture: {
                         kind: "task",
                         task: "test.capture",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },
@@ -4880,7 +5048,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -4897,7 +5065,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "unrecoverable",
                 version: "1",
@@ -4908,29 +5076,52 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "branch",
                         selector: { $from: "input", name: "x" } as Template,
                         selectorSchema: { type: "string" },
-                        cases: { a: "done" },
+                        cases: {
+                            a: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: { type: "object" },
+                                    entry: "done",
+                                    nodes: {
+                                        done: {
+                                            kind: "task",
+                                            task: "identity",
+                                            inputSchema: {
+                                                type: "object",
+                                                required: ["value"],
+                                                properties: { value: {} },
+                                            },
+                                            outputSchema: {},
+                                            inputs: { value: null },
+                                            bind: "result",
+                                        },
+                                    },
+                                    output: {
+                                        $from: "scope",
+                                        name: "result",
+                                    } as Template,
+                                    outputSchema: {},
+                                },
+                            },
+                        },
                         // no default — any value other than "a" is unmatched
                     } as any,
-                    done: {
-                        kind: "task",
-                        task: "identity",
-                        inputSchema: { type: "object" },
-                        outputSchema: {},
-                        inputs: {},
-                        bind: "result",
-                    },
                     recover: {
                         kind: "task",
                         task: "identity",
-                        inputSchema: { type: "object" },
+                        inputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: {} },
+                        },
                         outputSchema: {},
-                        inputs: {},
+                        inputs: { value: null },
                         bind: "result",
                     },
                 },
                 entry: "branch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // Even if the branch node had an onError, unrecoverable errors bypass it.
             // Here we just confirm the run fails (not recovers silently).
@@ -4947,9 +5138,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("static schema type checking", () => {
         it("detects type mismatch (producer: string, consumer: integer)", async () => {
-            const { validateWorkflowIR } = await import("workflow-model");
-
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "typeMismatch",
                 version: "1",
@@ -5001,77 +5190,18 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "producer",
                 output: { $from: "scope", name: "final" } as Template,
-            };
+            });
 
             const tasks = new Map(allBuiltinTasks.map((t) => [t.name, t]));
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(false);
-            expect(validation.errors[0].message).toContain("Type mismatch");
-        });
-    });
-
-    describe("loop sentinel validation", () => {
-        it("rejects loop body without sentinel at validation time", async () => {
-            const ir: WorkflowIR = {
-                kind: "workflow",
-                name: "noSentinel",
-                version: "1",
-                inputSchema: { type: "object" },
-                outputSchema: { type: "integer" },
-                nodes: {
-                    loop: {
-                        kind: "loop",
-                        inputs: {},
-                        state: {
-                            i: {
-                                schema: { type: "integer" },
-                                initial: 0 as Template,
-                            },
-                        },
-                        body: {
-                            inputSchema: { type: "object" },
-                            entry: "step",
-                            nodes: {
-                                step: {
-                                    kind: "task",
-                                    task: "math.add",
-                                    inputSchema: {
-                                        type: "object",
-                                        required: ["left", "right"],
-                                        properties: {
-                                            left: { type: "number" },
-                                            right: { type: "number" },
-                                        },
-                                    },
-                                    outputSchema: { type: "number" },
-                                    inputs: {
-                                        left: 1 as Template,
-                                        right: 1 as Template,
-                                    },
-                                    bind: "r",
-                                },
-                            },
-                            output: 0 as Template,
-                            outputSchema: { type: "integer" },
-                        },
-                        iterateState: {},
-                        maxIterations: 10,
-                        bind: "result",
-                    },
-                },
-                entry: "loop",
-                output: { $from: "scope", name: "result" } as Template,
-            };
-
-            const result = await engine.run(ir, { input: {} });
-            expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("@iterate or @exit");
+            expect(validation.errors[0].message).toContain("is not assignable");
         });
     });
 
     describe("unresolved $from reference", () => {
         it("fails with clear error for missing scope binding", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "missingRef",
                 version: "1",
@@ -5102,7 +5232,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5113,7 +5243,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
     describe("unknown $from namespace", () => {
         it("fails with clear error for invalid namespace", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badNamespace",
                 version: "1",
@@ -5144,7 +5274,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5167,7 +5297,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, numTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "badProjection",
                 version: "1",
@@ -5208,7 +5338,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "first",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5235,7 +5365,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "unhandledFail",
                 version: "1",
@@ -5246,14 +5376,14 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.fail",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
@@ -5271,7 +5401,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "defaultTimeoutOk",
                 version: "1",
@@ -5296,7 +5426,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "add",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No taskTimeoutMs: should use 60s default, fast task succeeds
             const result = await eng.run(ir, { input: {} });
@@ -5317,7 +5447,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(slow);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "noTimeout",
                 version: "1",
@@ -5328,14 +5458,14 @@ describe("WorkflowEngine (IR v1)", () => {
                         kind: "task",
                         task: "test.slow200",
                         inputSchema: { type: "object" },
-                        outputSchema: {},
+                        outputSchema: { type: "object" },
                         inputs: {},
                         bind: "result",
                     },
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // taskTimeoutMs: 0 disables timeout; 200ms task should succeed
             const result = await eng.run(ir, {
@@ -5351,7 +5481,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "inputValidation",
                 version: "1",
@@ -5380,7 +5510,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // Missing required "name" field
             const result = await eng.run(ir, { input: {} });
@@ -5392,7 +5522,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "missingInput",
                 version: "1",
@@ -5421,7 +5551,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             // No input at all
             const result = await eng.run(ir);
@@ -5469,7 +5599,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "blockedCmd",
                 version: "1",
@@ -5499,7 +5629,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5550,7 +5680,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(mockExec);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "allowedCmd",
                 version: "1",
@@ -5580,7 +5710,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5597,7 +5727,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "blockedHost",
                 version: "1",
@@ -5628,7 +5758,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5646,7 +5776,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "notAllowedHost",
                 version: "1",
@@ -5677,7 +5807,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "fetch",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5721,7 +5851,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> cleanup runs (binds "cleanupResult")
             // but output references "happyResult" which was never bound
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "cleanupFail",
                 version: "1",
@@ -5758,7 +5888,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "happyResult",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -5803,7 +5933,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
             // step fails -> recover runs and binds "result"
             // output references "result", which IS bound by the recovery node
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "recoverSuccess",
                 version: "1",
@@ -5821,18 +5951,11 @@ describe("WorkflowEngine (IR v1)", () => {
                     recover: {
                         kind: "task",
                         task: "test.recover",
-                        inputSchema: {
-                            type: "object",
-                            required: ["error", "trigger"],
-                            properties: {
-                                error: { type: "object" },
-                                trigger: { type: "object" },
-                            },
-                        },
+                        inputSchema: { type: "object" },
                         outputSchema: { type: "object" },
                         inputs: {
                             error: {
-                                $from: "input",
+                                $from: "recovery",
                                 name: "error",
                             } as Template,
                         },
@@ -5841,7 +5964,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 entry: "step",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
@@ -5875,7 +5998,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const reg = makeRegistry(...allBuiltinTasks, failTask, noopTask);
             const eng = new WorkflowEngine(reg);
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "nodeIdCheck",
                 version: "1",
@@ -5912,7 +6035,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     $from: "scope",
                     name: "workOutput",
                 } as Template,
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6214,7 +6337,7 @@ describe("WorkflowEngine (IR v1)", () => {
     describe("error tasks", () => {
         it("error.fail always fails with string message", async () => {
             const result = await errorFail.execute(
-                { value: "boom" },
+                { message: "boom" },
                 {} as any,
             );
             expect(result.kind).toBe("fail");
@@ -6225,7 +6348,7 @@ describe("WorkflowEngine (IR v1)", () => {
 
         it("error.fail serializes non-string values", async () => {
             const result = await errorFail.execute(
-                { value: { code: 42 } },
+                { message: { code: 42 } },
                 {} as any,
             );
             expect(result.kind).toBe("fail");
@@ -6323,7 +6446,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-test",
                 version: "1",
@@ -6390,7 +6513,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6420,7 +6543,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-min2-test",
                 version: "1",
@@ -6459,7 +6582,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6502,7 +6625,7 @@ describe("WorkflowEngine (IR v1)", () => {
             reg.register(makeSlowTask("mock.slow3"));
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-concurrency",
                 version: "1",
@@ -6577,7 +6700,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6630,7 +6753,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-multinode",
                 version: "1",
@@ -6730,7 +6853,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkResult" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6787,7 +6910,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-error",
                 version: "1",
@@ -6855,7 +6978,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6892,7 +7015,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-no-onerror",
                 version: "1",
@@ -6947,7 +7070,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "forkOut" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: {},
@@ -6956,6 +7079,282 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("branch blew up");
+        });
+
+        it("fork cancels in-flight branches when a sibling fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            let slowStarted = false;
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.slowUntilAbort",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: unknown, ctx: TaskContext) {
+                    slowStarted = true;
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow branch aborted"));
+                        };
+                        const timer = setTimeout(
+                            () =>
+                                resolve({
+                                    kind: "ok",
+                                    output: { late: true },
+                                }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+            reg.register({
+                name: "mock.failTask",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch blew up" },
+                    };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "fork-cancel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        maxConcurrency: 2,
+                        branches: {
+                            slow: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "slow",
+                                    nodes: {
+                                        slow: {
+                                            kind: "task",
+                                            task: "mock.slowUntilAbort",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failTask",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
+                    },
+                },
+                output: { $from: "scope", name: "forkOut" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch blew up");
+            expect(slowStarted).toBe(true);
+            expect(slowAborted).toBe(true);
+            expect(elapsed).toBeLessThan(500);
+        });
+
+        it("fork stops queued branches when a sibling fails", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            const started: string[] = [];
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.slowBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input: unknown, ctx: TaskContext) {
+                    started.push("slow");
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow branch aborted"));
+                        };
+                        const timer = setTimeout(
+                            () => resolve({ kind: "ok", output: {} }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+            reg.register({
+                name: "mock.failBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    started.push("bad");
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "branch blew up" },
+                    };
+                },
+            });
+            reg.register({
+                name: "mock.queuedBranch",
+                sideEffects: false,
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    started.push("queued");
+                    return { kind: "ok" as const, output: {} };
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "fork-queued-cancel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: {},
+                entry: "fork_0",
+                nodes: {
+                    fork_0: {
+                        kind: "fork",
+                        maxConcurrency: 2,
+                        branches: {
+                            slow: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "slow",
+                                    nodes: {
+                                        slow: {
+                                            kind: "task",
+                                            task: "mock.slowBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            bad: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "fail",
+                                    nodes: {
+                                        fail: {
+                                            kind: "task",
+                                            task: "mock.failBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                            queued: {
+                                inputs: {},
+                                scope: {
+                                    inputSchema: {},
+                                    entry: "queued",
+                                    nodes: {
+                                        queued: {
+                                            kind: "task",
+                                            task: "mock.queuedBranch",
+                                            inputSchema: { type: "object" },
+                                            outputSchema: { type: "object" },
+                                            inputs: {},
+                                            bind: "r",
+                                        },
+                                    },
+                                    output: { $from: "scope", name: "r" },
+                                    outputSchema: { type: "object" },
+                                },
+                            },
+                        },
+                        outputSchema: { type: "object" },
+                        bind: "forkOut",
+                    },
+                },
+                output: { $from: "scope", name: "forkOut" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch blew up");
+            expect(slowAborted).toBe(true);
+            expect(started).toEqual(["slow", "bad"]);
+            expect(elapsed).toBeLessThan(500);
         });
     });
 
@@ -6983,7 +7382,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-test",
                 version: "1",
@@ -7037,7 +7436,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4] },
@@ -7076,7 +7475,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-concurrency",
                 version: "1",
@@ -7123,7 +7522,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: ["a", "b", "c", "d", "e"] },
@@ -7152,7 +7551,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-maxiter",
                 version: "1",
@@ -7199,7 +7598,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
@@ -7226,7 +7625,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-empty",
                 version: "1",
@@ -7272,7 +7671,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { items: [] },
@@ -7308,7 +7707,7 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             const eng = new WorkflowEngine(reg);
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-fail",
                 version: "1",
@@ -7363,7 +7762,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             const result = await eng.run(ir, {
                 input: { nums: [1, 2, 3, 4, 5] },
@@ -7372,6 +7771,124 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("iteration failed on 3");
+        });
+
+        it("forkMap cancels in-flight iterations and stops queued work on failure", async () => {
+            const reg = new TaskRegistry();
+            for (const t of allBuiltinTasks) reg.register(t);
+
+            const started: number[] = [];
+            let slowAborted = false;
+
+            reg.register({
+                name: "mock.mixedItem",
+                sideEffects: false,
+                inputSchema: {
+                    type: "object",
+                    required: ["n"],
+                    properties: { n: { type: "number" } },
+                },
+                outputSchema: { type: "number" },
+                async execute(input: any, ctx: TaskContext) {
+                    started.push(input.n);
+                    if (input.n === 2) {
+                        return {
+                            kind: "fail" as const,
+                            error: { message: "iteration failed on 2" },
+                        };
+                    }
+                    return new Promise<TaskResult>((resolve, reject) => {
+                        const abort = () => {
+                            slowAborted = true;
+                            clearTimeout(timer);
+                            reject(new Error("slow iteration aborted"));
+                        };
+                        const timer = setTimeout(
+                            () => resolve({ kind: "ok", output: input.n }),
+                            5000,
+                        );
+                        if (ctx.signal.aborted) {
+                            abort();
+                        } else {
+                            ctx.signal.addEventListener("abort", abort, {
+                                once: true,
+                            });
+                        }
+                    });
+                },
+            });
+
+            const eng = new WorkflowEngine(reg);
+            const ir: WorkflowIR = wrapIR({
+                kind: "workflow",
+                name: "forkmap-cancel",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["nums"],
+                    properties: {
+                        nums: { type: "array", items: { type: "number" } },
+                    },
+                },
+                outputSchema: { type: "array" },
+                entry: "fm",
+                nodes: {
+                    fm: {
+                        kind: "forkMap",
+                        collection: { $from: "input", name: "nums" },
+                        collectionSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        elementParam: "n",
+                        body: {
+                            inputSchema: {},
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "mock.mixedItem",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["n"],
+                                        properties: {
+                                            n: { type: "number" },
+                                        },
+                                    },
+                                    outputSchema: { type: "number" },
+                                    inputs: {
+                                        n: { $from: "input", name: "n" },
+                                    },
+                                    bind: "r",
+                                },
+                            },
+                            output: { $from: "scope", name: "r" },
+                            outputSchema: { type: "number" },
+                        },
+                        outputSchema: {
+                            type: "array",
+                            items: { type: "number" },
+                        },
+                        maxConcurrency: 2,
+                        bind: "out",
+                    },
+                },
+                output: { $from: "scope", name: "out" },
+            });
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: { nums: [1, 2, 3] },
+                policy: allowAllPolicy,
+                skipValidation: true,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("iteration failed on 2");
+            expect(slowAborted).toBe(true);
+            expect(started).toEqual([1, 2]);
+            expect(elapsed).toBeLessThan(500);
         });
     });
 
@@ -7395,7 +7912,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-events",
                 version: "1",
@@ -7450,7 +7967,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7501,7 +8018,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-fail-events",
                 version: "1",
@@ -7565,7 +8082,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "recovered" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7597,7 +8114,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "forkmap-events",
                 version: "1",
@@ -7645,7 +8162,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: { items: [10, 20, 30] },
@@ -7685,7 +8202,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             eng.on((e: WorkflowEvent) => events.push(e));
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "fork-order",
                 version: "1",
@@ -7740,7 +8257,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: { $from: "scope", name: "out" },
-            };
+            });
 
             await eng.run(ir, {
                 input: {},
@@ -7770,7 +8287,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             };
 
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "never-output-violation",
                 version: "1",
@@ -7787,7 +8304,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 output: {},
-            };
+            });
 
             const reg = makeRegistry(...allBuiltinTasks, rogueFail);
             const engine = new WorkflowEngine(reg);
@@ -7802,7 +8319,7 @@ describe("WorkflowEngine (IR v1)", () => {
         });
 
         it("allows a proper never-output task that fails", async () => {
-            const ir: WorkflowIR = {
+            const ir: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "proper-throw",
                 version: "1",
@@ -7815,15 +8332,15 @@ describe("WorkflowEngine (IR v1)", () => {
                         task: "error.fail",
                         inputSchema: {
                             type: "object",
-                            required: ["value"],
-                            properties: { value: {} },
+                            required: ["message"],
+                            properties: { message: {} },
                         },
                         outputSchema: { not: {} },
-                        inputs: { value: "boom" },
+                        inputs: { message: "boom" },
                     },
                 },
                 output: {},
-            };
+            });
 
             const reg = makeRegistry(...allBuiltinTasks);
             const engine = new WorkflowEngine(reg);
@@ -7865,7 +8382,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
             const events = collectEvents(eng);
 
-            const loopIR: WorkflowIR = {
+            const loopIR: WorkflowIR = wrapIR({
                 kind: "workflow",
                 name: "iterTest",
                 version: "1",
@@ -7907,16 +8424,26 @@ describe("WorkflowEngine (IR v1)", () => {
                                     bind: "counted",
                                 },
                                 check: {
-                                    kind: "branch",
-                                    selector: {
-                                        $from: "scope",
-                                        name: "counted",
-                                        path: ["next"],
-                                    } as Template,
-                                    selectorSchema: { type: "integer" },
-                                    // exit when counter reaches 3
-                                    cases: { "3": "@exit" },
-                                    default: "@iterate",
+                                    kind: "task",
+                                    task: "compare.notEquals",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["left", "right"],
+                                        properties: {
+                                            left: {},
+                                            right: {},
+                                        },
+                                    },
+                                    outputSchema: { type: "boolean" },
+                                    inputs: {
+                                        left: {
+                                            $from: "scope",
+                                            name: "counted",
+                                            path: ["next"],
+                                        } as Template,
+                                        right: 3 as Template,
+                                    },
+                                    bind: "shouldContinue",
                                 },
                             },
                             output: { $from: "state", name: "i" } as Template,
@@ -7929,13 +8456,17 @@ describe("WorkflowEngine (IR v1)", () => {
                                 path: ["next"],
                             } as Template,
                         },
+                        continueWhen: {
+                            $from: "scope",
+                            name: "shouldContinue",
+                        } as Template,
                         maxIterations: 10,
                         bind: "result",
                     },
                 },
                 entry: "loop",
                 output: { $from: "scope", name: "result" } as Template,
-            };
+            });
 
             const result = await eng.run(loopIR, { input: {} });
             expect(result.success).toBe(true);
@@ -8008,6 +8539,119 @@ describe("WorkflowEngine (IR v1)", () => {
                 expect(e.iteration).toBeDefined();
                 expect(typeof e.iteration).toBe("number");
             });
+        });
+    });
+
+    // ---- Defense-in-depth: runtime workflow call cycle detection ----
+
+    describe("defense-in-depth: runtime workflow call cycle detection", () => {
+        /** Minimal call node whose schemas match a body with inputSchema/outputSchema: {type:"object"}. */
+        function callNode(
+            targetName: string,
+            bind = "result",
+        ): WorkflowCallNode {
+            return {
+                kind: "workflowCall",
+                workflowRef: { name: targetName },
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                inputs: {},
+                bind,
+            };
+        }
+
+        it("fails at runtime when a direct call cycle bypasses static validation", async () => {
+            // alpha -> beta -> alpha: the static check (validateWorkflowCalls)
+            // normally catches this, but skipValidation lets crafted IR through.
+            // defenseInDepth must then catch it in executeWorkflowCall.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callBeta",
+                        nodes: { callBeta: callNode("beta") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
+        });
+
+        it("fails at runtime when a cycle is routed through a branch arm", async () => {
+            // alpha has a branch node whose arm calls beta; beta calls alpha.
+            // This exercises the wfCallStack check across nested sub-scopes.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                version: "1",
+                entry: "alpha",
+                workflows: {
+                    alpha: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "pick",
+                        nodes: {
+                            pick: {
+                                kind: "branch",
+                                selector: { $literal: true },
+                                selectorSchema: { type: "boolean" },
+                                cases: {
+                                    true: {
+                                        inputs: {},
+                                        scope: {
+                                            inputSchema: { type: "object" },
+                                            entry: "callBeta",
+                                            nodes: {
+                                                callBeta: callNode("beta"),
+                                            },
+                                            output: {
+                                                $from: "scope",
+                                                name: "result",
+                                            },
+                                            outputSchema: { type: "object" },
+                                        },
+                                    },
+                                },
+                                bind: "result",
+                                outputSchema: { type: "object" },
+                            },
+                        },
+                        output: { $from: "scope", name: "result" },
+                    },
+                    beta: {
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        entry: "callAlpha",
+                        nodes: { callAlpha: callNode("alpha") },
+                        output: { $from: "scope", name: "result" },
+                    },
+                },
+            };
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+            const result = await eng.run(ir, {
+                skipValidation: true,
+                defenseInDepth: true,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toMatch(/[Rr]ecursive|cycle/i);
         });
     });
 });

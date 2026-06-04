@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f1c9d73ec38b94c2e2263558797db9f34f2b72495a7e6dd8e4195f4e99c7debe -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0804a208445d076d3b304616a92d7cf159da3ac5391fb2060312ba56177be392 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-types` package defines TypeScript types used by the TypeAgent dispatcher. These types are essential for ensuring consistent communication and data handling across various components of the TypeAgent system.
+The `@typeagent/dispatcher-types` package defines TypeScript types used by the TypeAgent dispatcher. These types are essential for ensuring consistent communication and data handling across various components of the TypeAgent system. By providing a standardized set of types, this package facilitates reliable interactions between different parts of the system, such as agents, clients, and dispatchers.
 
 ## What it does
 
 This package provides a collection of TypeScript types that are used by the dispatcher to manage interactions, messages, and statuses. The types defined here are utilized by other packages within the TypeAgent monorepo, such as `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. Key functionalities include:
 
-- Defining the structure of dispatcher requests and responses.
-- Managing client interactions and messages.
-- Handling dispatcher statuses and summaries.
+- **Defining the structure of dispatcher requests and responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` are used to manage the flow of requests and responses between clients and the dispatcher.
+- **Managing client interactions and messages**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` help in handling client input/output operations and message formatting.
+- **Handling dispatcher statuses and summaries**: Types and helper functions in [src/helpers/status.ts](./src/helpers/status.ts) provide mechanisms to summarize and manage dispatcher statuses.
 
 ## Setup
 
@@ -36,6 +36,8 @@ The package is structured into several key files, each responsible for different
 - [src/displayLogEntry.ts](./src/displayLogEntry.ts): Defines types for logging display entries, including `SetDisplayEntry` and `AppendDisplayEntry`.
 - [src/pendingInteraction.ts](./src/pendingInteraction.ts): Manages types for pending interactions, such as `PendingInteractionRequest` and `PendingInteractionResponse`.
 - [src/helpers/status.ts](./src/helpers/status.ts): Provides helper functions for summarizing dispatcher statuses.
+- [src/queue.ts](./src/queue.ts): Defines types related to the server-side message queue, such as `QueuedRequest` and `QueueCancelReason`.
+- [src/queueStateMirror.ts](./src/queueStateMirror.ts): Implements the client-side mirror of the server's per-conversation queue.
 
 ## How to extend
 
@@ -78,18 +80,18 @@ External: _None at runtime._
 - [agent-cli](../../../packages/cli/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
+- [agent-shell](../../../packages/shell/README.md)
 - [chat-ui](../../../packages/chat-ui/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
-- [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
-- _…and 2 more workspace consumers._
+- _…and 3 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/clientIO.ts`, `./src/dispatcher.ts`, …and 4 more under `./src/`.
+`./src/index.ts`, `./src/clientIO.ts`, `./src/dispatcher.ts`, …and 6 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

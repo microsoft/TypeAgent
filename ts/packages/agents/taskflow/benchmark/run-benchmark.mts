@@ -198,7 +198,15 @@ async function createLiveDispatcher(
     return {
         async processCommand(command: string): Promise<unknown> {
             lastDisplayText = "";
-            const result = await dispatcher.processCommand(command);
+            const submit = await dispatcher.submitCommand(command);
+            if (!submit.ok) {
+                throw new Error(
+                    submit.error === "queue_full"
+                        ? `Queue full (maxDepth=${submit.maxDepth})`
+                        : "Server stopping",
+                );
+            }
+            const result = await submit.entry.completion;
             return result ?? null;
         },
         getDisplayText(): string {

@@ -3,9 +3,11 @@
 
 import { Emitter, TaskSchemaInfo } from "../src/emitter.js";
 import { Parser } from "../src/parser.js";
+import { TypeChecker } from "../src/typeChecker.js";
 import { lex } from "../src/lexer.js";
 import {
     WorkflowIR,
+    WorkflowBody,
     WorkflowNode,
     TaskNode,
     BranchNode,
@@ -13,6 +15,10 @@ import {
     ForkNode,
     ForkMapNode,
 } from "workflow-model";
+
+function bodyOf(ir: WorkflowIR): WorkflowBody {
+    return ir.workflows[ir.entry];
+}
 
 // Common task schemas for testing
 const taskSchemas: TaskSchemaInfo[] = [
@@ -149,6 +155,23 @@ const taskSchemas: TaskSchemaInfo[] = [
         inputSchema: {},
         outputSchema: {},
     },
+    {
+        name: "test.classify",
+        // String-enum output — used to exercise Q4 exhaustive switch at the
+        // emitter level.
+        inputSchema: {
+            type: "object",
+            required: ["text"],
+            properties: { text: { type: "string" } },
+        },
+        outputSchema: {
+            type: "object",
+            required: ["label"],
+            properties: {
+                label: { type: "string", enum: ["low", "medium", "high"] },
+            },
+        },
+    },
 ];
 
 function compile(source: string): {
@@ -165,20 +188,34 @@ function compile(source: string): {
         };
     }
     const parser = new Parser(tokens.tokens);
-    const ast = parser.parse();
-    if (ast.errors.length > 0) {
+    const { module, errors } = parser.parseModule();
+    if (errors.length > 0) {
         return {
             ir: undefined,
-            errors: ast.errors.map((e: { message: string }) => ({
+            errors: errors.map((e: { message: string }) => ({
                 message: e.message,
             })),
         };
     }
-    if (ast.workflows.length === 0) {
+    if (module.workflows.length === 0) {
         return { ir: undefined, errors: [{ message: "No workflow found" }] };
     }
-    const emitter = new Emitter(taskSchemas);
-    return emitter.emit(ast.workflows[0]);
+    const checker = new TypeChecker(taskSchemas, module.workflows);
+    checker.checkAll(module.workflows);
+    const symbolTypes = checker.collectSymbolTypes(module.workflows);
+    const emitter = new Emitter(
+        taskSchemas,
+        checker.resolvedSchemas,
+        symbolTypes,
+    );
+    // Use multi-workflow emit so workflow-to-workflow calls resolve.
+    // Pick the first 'export' workflow as the entry, or the first
+    // workflow if none exported (matches compiler.ts behavior for
+    // single-workflow tests).
+    const entry =
+        module.workflows.find((w) => w.exported)?.name ??
+        module.workflows[0].name;
+    return emitter.emitAll(module.workflows, entry);
 }
 
 function compileOk(source: string): WorkflowIR {
@@ -195,9 +232,9 @@ function compileOk(source: string): WorkflowIR {
 }
 
 function getNode(ir: WorkflowIR, id: string): WorkflowNode {
-    const node = ir.nodes[id];
+    const node = bodyOf(ir).nodes[id];
     if (!node) {
-        const keys = Object.keys(ir.nodes);
+        const keys = Object.keys(bodyOf(ir).nodes);
         throw new Error(
             `Node '${id}' not found. Available: ${keys.join(", ")}`,
         );
@@ -206,7 +243,7 @@ function getNode(ir: WorkflowIR, id: string): WorkflowNode {
 }
 
 function findNodeByTask(ir: WorkflowIR, task: string): [string, TaskNode] {
-    for (const [id, node] of Object.entries(ir.nodes)) {
+    for (const [id, node] of Object.entries(bodyOf(ir).nodes)) {
         if (node.kind === "task" && node.task === task) {
             return [id, node];
         }
@@ -218,7 +255,7 @@ function findNodeByKind<T extends WorkflowNode>(
     ir: WorkflowIR,
     kind: T["kind"],
 ): [string, T] {
-    for (const [id, node] of Object.entries(ir.nodes)) {
+    for (const [id, node] of Object.entries(bodyOf(ir).nodes)) {
         if (node.kind === kind) {
             return [id, node as T];
         }
@@ -231,38 +268,42 @@ describe("Emitter", () => {
 
     test("minimal workflow with literal return", () => {
         const ir = compileOk(`workflow hello(): string { return "hi"; }`);
-        expect(ir.name).toBe("hello");
+        expect(ir.entry).toBe("hello");
         // Pure literal returns are wrapped in identity nodes for engine entry
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect(ir.nodes["return_0"]).toBeDefined();
-        expect((ir.nodes["return_0"] as any).task).toBe("identity");
-        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hi");
-        expect(ir.inputSchema).toEqual({
+        expect(bodyOf(ir).nodes["return_0"]).toBeDefined();
+        expect((bodyOf(ir).nodes["return_0"] as any).task).toBe("identity");
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe("hi");
+        // Identity wrapper outputSchema matches the workflow's declared return type
+        expect((bodyOf(ir).nodes["return_0"] as any).outputSchema).toEqual({
+            type: "string",
+        });
+        expect(bodyOf(ir).inputSchema).toEqual({
             type: "object",
             required: [],
             properties: {},
         });
-        expect(ir.outputSchema).toEqual({ type: "string" });
+        expect(bodyOf(ir).outputSchema).toEqual({ type: "string" });
     });
 
     test("workflow with params", () => {
         const ir = compileOk(
             `workflow greet(name: string): string { return name; }`,
         );
-        expect(ir.inputSchema).toEqual({
+        expect(bodyOf(ir).inputSchema).toEqual({
             type: "object",
             required: ["name"],
             properties: { name: { type: "string" } },
         });
         // Input-only return is wrapped in identity for engine entry
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toEqual({
             $from: "input",
             name: "name",
         });
@@ -277,7 +318,7 @@ describe("Emitter", () => {
                 return result;
             }
         `);
-        expect(ir.entry).toBe("result");
+        expect(bodyOf(ir).entry).toBe("result");
         const node = getNode(ir, "result") as TaskNode;
         expect(node.kind).toBe("task");
         expect(node.task).toBe("web.fetch");
@@ -321,11 +362,11 @@ describe("Emitter", () => {
             schema: { type: "string" },
             value: "hello",
         });
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toEqual({
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toEqual({
             $from: "constant",
             name: "greeting",
         });
@@ -511,7 +552,7 @@ describe("Emitter", () => {
                 throw "always fails";
             }
         `);
-        expect(ir.outputSchema).toEqual({ not: {} });
+        expect(bodyOf(ir).outputSchema).toEqual({ not: {} });
     });
 
     test("unknown return type produces {} outputSchema", () => {
@@ -520,7 +561,7 @@ describe("Emitter", () => {
                 return "anything";
             }
         `);
-        expect(ir.outputSchema).toEqual({});
+        expect(bodyOf(ir).outputSchema).toEqual({});
     });
 
     // ---- Ternary expression ----
@@ -572,22 +613,21 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Default arm is a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                node.kind === "task" && node.task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
-
-    // ---- Filter built-in ----
 
     test("filter lowers to loop node with branch", () => {
         const ir = compileOk(`
@@ -625,23 +665,25 @@ describe("Emitter", () => {
 
         const checkNode = body.nodes[compareNode.next!] as BranchNode;
         expect(checkNode.kind).toBe("branch");
-        expect(checkNode.default).toBe("@exit");
+        // Default arm is a BranchArm sub-scope (no-op).
+        expect(checkNode.default).toBeDefined();
 
-        const pickId = checkNode.cases["true"];
-        const pickNode = body.nodes[pickId] as TaskNode;
+        const trueArm = checkNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const pickNode = trueArm.scope.nodes[trueArm.scope.entry] as TaskNode;
         expect(pickNode.task).toBe("list.elementAt");
 
-        const conditionalBranch = Object.values(body.nodes).find(
-            (node): node is BranchNode =>
-                node.kind === "branch" && node !== checkNode,
+        // Conditional filter branch lives inside the true arm scope.
+        const conditionalBranch = Object.values(trueArm.scope.nodes).find(
+            (node) => (node as { kind: string }).kind === "branch",
         );
         expect(conditionalBranch).toBeDefined();
 
-        const stepNode = Object.values(body.nodes).find(
+        const stepNode = Object.values(trueArm.scope.nodes).find(
             (node): node is TaskNode =>
-                node.kind === "task" &&
-                node.task === "math.add" &&
-                node.next === "@iterate",
+                (node as { kind: string }).kind === "task" &&
+                (node as TaskNode).task === "math.add",
         );
         expect(stepNode).toBeDefined();
     });
@@ -702,7 +744,7 @@ describe("Emitter", () => {
         expect(loopNode.state!.attempt.initial).toBe(0);
     });
 
-    test("attempts body: last task has next @exit", () => {
+    test("attempts body: last task chains to set_done (success path)", () => {
         const ir = compileOk(`
             workflow test(url: string): unknown {
                 return attempts(3, () => {
@@ -713,11 +755,12 @@ describe("Emitter", () => {
         `);
         const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
         const body = loopNode.body;
-        // Find the last node in the body's main chain (from entry)
         const entryNode = body.nodes[body.entry] as TaskNode;
         expect(entryNode).toBeDefined();
-        // The last body task should have next: "@exit"
-        expect(entryNode.next).toBe("@exit");
+        // Success path leads to attempts_done (binds _should_retry = false).
+        const doneNode = body.nodes[entryNode.next!] as TaskNode;
+        expect(doneNode.task).toBe("identity");
+        expect(doneNode.bind).toBe("_should_retry");
     });
 
     test("attempts body: task nodes have onError pointing to step_attempt", () => {
@@ -761,11 +804,16 @@ describe("Emitter", () => {
 
         const branchNode = body.nodes[checkNode.next!] as BranchNode;
         expect(branchNode.kind).toBe("branch");
-        expect(branchNode.default).toBe("@iterate");
+        // The default arm is the retry arm (a sub-scope).
+        expect(branchNode.default).toBeDefined();
 
-        // The true case should point to the exhaust node
-        const exhaustId = branchNode.cases["true"] as string;
-        const exhaustNode = body.nodes[exhaustId] as TaskNode;
+        // The true case is the exhausted arm whose entry is error.fail.
+        const exhaustArm = branchNode.cases["true"] as unknown as {
+            scope: { entry: string; nodes: Record<string, TaskNode> };
+        };
+        const exhaustNode = exhaustArm.scope.nodes[
+            exhaustArm.scope.entry
+        ] as TaskNode;
         expect(exhaustNode.task).toBe("error.fail");
     });
 
@@ -784,7 +832,7 @@ describe("Emitter", () => {
         // Walk the body's main chain from entry via next pointers
         const mainChain = new Set<string>();
         let nodeId: string | undefined = body.entry;
-        while (nodeId && nodeId !== "@exit" && nodeId !== "@iterate") {
+        while (nodeId) {
             mainChain.add(nodeId);
             const node: WorkflowNode = body.nodes[nodeId];
             nodeId =
@@ -816,7 +864,7 @@ describe("Emitter", () => {
                 return { data: result, source: url };
             }
         `);
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             data: expect.objectContaining({ $from: "scope" }),
             source: { $from: "input", name: "url" },
         });
@@ -824,17 +872,84 @@ describe("Emitter", () => {
 
     // ---- Workflow call ----
 
-    test("workflow call emits task node", () => {
-        // compile only the main workflow that calls helper
+    test("workflow call emits workflowCall node", () => {
         const ir = compileOk(`
-            workflow main(url: string): unknown {
+            workflow helper(url: string): unknown { return url; }
+            export workflow main(url: string): unknown {
                 const result = helper(url);
                 return result;
             }
         `);
-        // Should have a workflow.helper task node
-        const [, node] = findNodeByTask(ir, "workflow.helper");
-        expect(node).toBeDefined();
+        // Should emit a workflowCall node referencing helper.
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        );
+        expect(callNode).toBeDefined();
+        expect(
+            (callNode as { workflowRef: { name: string } }).workflowRef.name,
+        ).toBe("helper");
+        // helper body must also be present in the workflows table.
+        expect(ir.workflows.helper).toBeDefined();
+    });
+
+    test("workflow call inlines literal default for omitted arg", () => {
+        const ir = compileOk(`
+            workflow helper(a: string, n: number = 7): unknown { return a; }
+            export workflow main(s: string): unknown {
+                const r = helper(s);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // The omitted 'n' is filled from the default literal 7.
+        expect(callNode.inputs.n).toBe(7);
+    });
+
+    test("workflow call inlines default referencing earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: number, b: number = a): number { return b; }
+            export workflow main(x: number): number {
+                const r = helper(x);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'a' resolved from caller input 'x'; 'b' inlined to same template.
+        expect(callNode.inputs.a).toEqual(callNode.inputs.b);
+    });
+
+    test("workflow call inlines default with path access on earlier param", () => {
+        const ir = compileOk(`
+            workflow helper(a: { n: number }, b: number = a.n): number { return b; }
+            export workflow main(obj: { n: number }): number {
+                const r = helper(obj);
+                return r;
+            }
+        `);
+        const body = ir.workflows[ir.entry];
+        const callNode = Object.values(body.nodes).find(
+            (n) => (n as { kind: string }).kind === "workflowCall",
+        ) as { inputs: Record<string, unknown> };
+        expect(callNode).toBeDefined();
+        // 'b' default = a.n; 'a' was resolved to the input ref for 'obj',
+        // so 'b' should be that same ref with path ["n"] appended.
+        const bInput = callNode.inputs.b as {
+            $from: string;
+            name: string;
+            path: string[];
+        };
+        expect(bInput.$from).toBe("input");
+        expect(bInput.name).toBe("obj");
+        expect(bInput.path).toEqual(["n"]);
     });
 
     // ---- Error cases ----
@@ -860,11 +975,40 @@ describe("Emitter", () => {
             }
         `);
         // a is a literal binding resolved to "hello", wrapped in identity
-        expect(ir.output).toEqual({
+        expect(bodyOf(ir).output).toEqual({
             $from: "scope",
             name: "return_0",
         });
-        expect((ir.nodes["return_0"] as any).inputs.value).toBe("hello");
+        expect((bodyOf(ir).nodes["return_0"] as any).inputs.value).toBe(
+            "hello",
+        );
+    });
+
+    test("destructuring pick nodes get concrete outputSchema from type checker", () => {
+        const ir = compileOk(`
+            workflow test(urls: string[]): unknown {
+                const [a, b] = parallel(
+                    () => {
+                        const r = web.fetch("https://a.com");
+                        return r;
+                    },
+                    () => {
+                        const r = web.fetch("https://b.com");
+                        return r;
+                    }
+                );
+                return a;
+            }
+        `);
+        // Pick nodes should have concrete outputSchema (not {})
+        const pickNodes = Object.values(bodyOf(ir).nodes).filter(
+            (n) =>
+                n.kind === "task" && (n as TaskNode).task === "list.elementAt",
+        ) as TaskNode[];
+        expect(pickNodes.length).toBe(2);
+        for (const pn of pickNodes) {
+            expect(pn.outputSchema).not.toEqual({});
+        }
     });
 
     // ---- Bind stripping ----
@@ -877,7 +1021,7 @@ describe("Emitter", () => {
             }
         `);
         // The web.fetch node should exist but bind should be stripped
-        const nodes = Object.values(ir.nodes);
+        const nodes = Object.values(bodyOf(ir).nodes);
         const fetchNode = nodes.find(
             (n) => n.kind === "task" && n.task === "web.fetch",
         ) as TaskNode | undefined;
@@ -898,12 +1042,12 @@ describe("Emitter", () => {
             }
         `);
         // The summarize node should be reachable via a merge node
-        const summarizeNode = Object.values(ir.nodes).find(
+        const summarizeNode = Object.values(bodyOf(ir).nodes).find(
             (n) => n.kind === "task" && n.task === "text.summarize",
         ) as TaskNode | undefined;
         expect(summarizeNode).toBeDefined();
         // There should be a merge (noop) node
-        const noopNodes = Object.values(ir.nodes).filter(
+        const noopNodes = Object.values(bodyOf(ir).nodes).filter(
             (n) => n.kind === "task" && (n as TaskNode).task === "noop",
         );
         expect(noopNodes.length).toBeGreaterThan(0);
@@ -925,8 +1069,16 @@ describe("Emitter", () => {
         `);
         const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
         expect(branchNode.cases).toHaveProperty("a");
-        // Default should point to the default body, not the branch itself
-        expect(branchNode.default).toContain("default_");
+        // Default arm runs the fallback web.fetch.
+        expect(branchNode.default).toBeDefined();
+        const defaultArm = branchNode.default!;
+        const defaultEntryId = defaultArm.scope.entry;
+        expect(defaultEntryId).toMatch(/^r2|^default_/);
+        const defaultEntry = defaultArm.scope.nodes[defaultEntryId];
+        expect(defaultEntry.kind).toBe("task");
+        expect((defaultEntry as TaskNode).inputs.url).toBe(
+            "https://fallback.com",
+        );
     });
 
     // ---- Dotted-name with path ----
@@ -938,7 +1090,7 @@ describe("Emitter", () => {
                 return result.body;
             }
         `);
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output.$from).toBe("scope");
         // Should have a path for .body access
         expect(output.path).toEqual(["body"]);
@@ -953,7 +1105,7 @@ describe("Emitter", () => {
             }
         `);
         // Should have at least 2 math nodes (add and multiply)
-        const mathNodes = Object.values(ir.nodes).filter(
+        const mathNodes = Object.values(bodyOf(ir).nodes).filter(
             (n) =>
                 n.kind === "task" && (n as TaskNode).task.startsWith("math."),
         );
@@ -966,5 +1118,339 @@ describe("Emitter", () => {
         // The parser doesn't support descriptions in the DSL syntax currently,
         // so we test the emitter directly with a manually constructed AST
         // (skip this test - covered by the parser)
+    });
+
+    // ---- BranchArm sub-scope structural assertions ----
+
+    // Both arms of an if/else that contain only a return statement
+    // must compile to a single-task noop arm whose output template
+    // points at the workflow input passed in via the arm's `inputs`.
+    test("if/else with return-only arms uses buildOutputOnlyArm shape", () => {
+        const ir = compileOk(`
+            workflow choose(x: boolean, a: string, b: string): string {
+                if (x) {
+                    return a;
+                } else {
+                    return b;
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+
+        for (const armKey of ["true", "false"] as const) {
+            const arm = branchNode.cases[armKey];
+            expect(arm).toBeDefined();
+            const armNodes = Object.values(arm.scope.nodes);
+            // Single synthetic noop task in each arm.
+            expect(armNodes).toHaveLength(1);
+            const only = armNodes[0] as TaskNode;
+            expect(only.kind).toBe("task");
+            expect(only.task).toBe("noop");
+            // The outer input is hoisted into the arm's inputs and the
+            // scope output template reads from input.value, so neither arm
+            // ends up with a stray $from:input reference inside.
+            expect(Object.keys(arm.inputs).length).toBeGreaterThan(0);
+            const output = arm.scope.output as Record<string, unknown>;
+            expect(output.$from).toBe("input");
+        }
+    });
+
+    // emitFilter emits an inner `filter_check` branch that decides whether
+    // to append the current element. threadNext does not auto-link branch
+    // nodes, so the emitter wires `filter_check.next = step_i` manually.
+    // Without this wiring the loop body would not advance the counter.
+    test("filter inner branch is wired to the step counter", () => {
+        const ir = compileOk(`
+            workflow test(items: string[]): unknown {
+                return filter(items, (item) => {
+                    return item === "keep";
+                });
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        const body = loopNode.body;
+
+        // The body's outer iteration check (true arm = work).
+        const checkNode = Object.values(body.nodes).find(
+            (n) => n.kind === "branch",
+        ) as BranchNode | undefined;
+        expect(checkNode).toBeDefined();
+
+        // The inner filter branch sits in the work arm.
+        const workScope = (
+            checkNode!.cases["true"] as unknown as {
+                scope: { nodes: Record<string, WorkflowNode> };
+            }
+        ).scope;
+        const filterBranchEntry = Object.entries(workScope.nodes).find(
+            ([, n]) => n.kind === "branch",
+        );
+        expect(filterBranchEntry).toBeDefined();
+        const [, filterBranch] = filterBranchEntry!;
+        const fb = filterBranch as BranchNode;
+
+        // The branch must point at a step_i (math.add) task; without
+        // this wiring the loop body would not advance the counter.
+        expect(fb.next).toBeDefined();
+        const stepNode = workScope.nodes[fb.next!] as TaskNode;
+        expect(stepNode).toBeDefined();
+        expect(stepNode.kind).toBe("task");
+        expect(stepNode.task).toBe("math.add");
+    });
+
+    // ---- Soundness: typed outputSchema on bound producers ----
+    //
+    // These tests pin the {} -> typed schema migration on bound producers
+    // (validator-soundness plan phases 2 + 4, decision 0011).  Each test
+    // asserts the relevant outputSchema is NOT `{}` and is the expected
+    // concrete schema derived from the type checker.
+
+    test("attempts loop body has typed outputSchema (gap 8)", () => {
+        const ir = compileOk(`
+            workflow test(url: string): unknown {
+                return attempts(3, () => {
+                    const result = web.fetch(url);
+                    return result;
+                });
+            }
+        `);
+        const [, loopNode] = findNodeByKind<LoopNode>(ir, "loop");
+        expect(loopNode.body.outputSchema).not.toEqual({});
+        expect(loopNode.body.outputSchema).toEqual({
+            type: "object",
+            properties: { body: { type: "string" } },
+        });
+    });
+
+    test("parallelMap body has typed outputSchema (phase 2)", () => {
+        const ir = compileOk(`
+            workflow test(urls: string[]): unknown {
+                return parallelMap(urls, (url) => {
+                    const result = web.fetch(url);
+                    return result;
+                });
+            }
+        `);
+        const [, forkMapNode] = findNodeByKind<ForkMapNode>(ir, "forkMap");
+        expect(forkMapNode.body.outputSchema).not.toEqual({});
+        expect(forkMapNode.body.outputSchema).toEqual({
+            type: "object",
+            properties: { body: { type: "string" } },
+        });
+    });
+
+    test("parallel branch scopes have typed outputSchema (phase 2)", () => {
+        const ir = compileOk(`
+            workflow test(): unknown {
+                return parallel(
+                    () => {
+                        const a = web.fetch("https://a.com");
+                        return a;
+                    },
+                    () => {
+                        const b = web.fetch("https://b.com");
+                        return b;
+                    }
+                );
+            }
+        `);
+        const [, forkNode] = findNodeByKind<ForkNode>(ir, "fork");
+        for (const key of Object.keys(forkNode.branches)) {
+            const arm = forkNode.branches[key];
+            expect(arm.scope.outputSchema).not.toEqual({});
+            expect(arm.scope.outputSchema).toEqual({
+                type: "object",
+                properties: { body: { type: "string" } },
+            });
+        }
+    });
+
+    test("ternary branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                return x ? "yes" : "no";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        // Arm scope outputSchema also typed (was {} before phase 4).
+        const trueArm = branchNode.cases.true!;
+        expect(trueArm.scope.outputSchema).toEqual({ type: "string" });
+        expect(branchNode.default).toBeDefined();
+        expect(branchNode.default!.scope.outputSchema).toEqual({
+            type: "string",
+        });
+    });
+
+    test("value-producing if/else branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                if (x) { return "a"; } else { return "b"; }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        // bind is set => value-producing => outputSchema must be typed.
+        expect(branchNode.bind).toBeDefined();
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        // Each arm scope output is typed too.
+        const trueArm = branchNode.cases.true!;
+        const falseArm = branchNode.cases.false!;
+        expect(trueArm.scope.outputSchema).toEqual({ type: "string" });
+        expect(falseArm.scope.outputSchema).toEqual({ type: "string" });
+    });
+
+    test("value-producing switch branch has typed outputSchema (phase 4)", () => {
+        const ir = compileOk(`
+            workflow test(x: string): unknown {
+                switch (x) {
+                    case "a": const r1 = web.fetch("https://a.com"); return r1.body;
+                    case "b": const r2 = web.fetch("https://b.com"); return r2.body;
+                    default:  const r3 = web.fetch("https://c.com"); return r3.body;
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.bind).toBeDefined();
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        for (const key of Object.keys(branchNode.cases)) {
+            expect(branchNode.cases[key]!.scope.outputSchema).toEqual({
+                type: "string",
+            });
+        }
+        expect(branchNode.default).toBeDefined();
+        expect(branchNode.default!.scope.outputSchema).toEqual({
+            type: "string",
+        });
+    });
+
+    // ---- Statement-form if/switch (no value production) ----
+
+    test("statement-form if (no returns) emits no bind / no outputSchema", () => {
+        // No arm returns — the branch is purely side-effecting. The emitter
+        // must NOT set `bind` (no value to bind) and must leave
+        // `outputSchema` unset (the "no produced value" signal).
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                if (x) {
+                    const r1 = web.fetch("https://a.com");
+                } else {
+                    const r2 = web.fetch("https://b.com");
+                }
+                return "done";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.bind).toBeUndefined();
+        // outputSchema is either absent or `{}` — both indicate "no value".
+        const out = branchNode.outputSchema;
+        expect(out === undefined || Object.keys(out).length === 0).toBe(true);
+    });
+
+    test("statement-form switch (no returns) emits no bind / no outputSchema", () => {
+        const ir = compileOk(`
+            workflow test(x: string): unknown {
+                switch (x) {
+                    case "a": const r1 = web.fetch("https://a.com");
+                    case "b": const r2 = web.fetch("https://b.com");
+                    default:  const r3 = web.fetch("https://c.com");
+                }
+                return "done";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.bind).toBeUndefined();
+        const out = branchNode.outputSchema;
+        expect(out === undefined || Object.keys(out).length === 0).toBe(true);
+    });
+
+    // ---- Ternary identity-wrapper inner outputSchema (gap 6) ----
+
+    test("ternary with literal arms: inner identity wrappers carry typed outputSchema", () => {
+        // Both arms are literals (no nodeOrder), so the emitter creates
+        // synthetic `ternary_then` / `ternary_else` identity nodes inside
+        // each arm scope. Those wrapper nodes must carry the result type
+        // (not `{}`) so downstream consumers see a concrete schema.
+        const ir = compileOk(`
+            workflow test(x: boolean): unknown {
+                return x ? "yes" : "no";
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        // Ternary represents then-arm as cases.true and else-arm as default.
+        const thenArm = branchNode.cases.true!;
+        const elseArm = branchNode.default!;
+        const thenNodes = Object.values(thenArm.scope.nodes);
+        const elseNodes = Object.values(elseArm.scope.nodes);
+        expect(thenNodes.length).toBe(1);
+        expect(elseNodes.length).toBe(1);
+        for (const n of [...thenNodes, ...elseNodes]) {
+            expect(n.kind).toBe("task");
+            const t = n as TaskNode;
+            expect(t.task).toBe("identity");
+            // The inner wrapper output schema must be the concrete result
+            // schema, not the empty `{}` sentinel.
+            expect(t.outputSchema).toEqual({ type: "string" });
+        }
+    });
+
+    // ---- Q4: value-producing exhaustive-enum switch at emitter level ----
+
+    test("exhaustive enum switch (no default) is value-producing at the emitter (Q4)", () => {
+        // All enum values appear as literal arms; no `default` clause is
+        // present. The type checker treats this as exhaustive (Q4), and
+        // the emitter must surface that as a value-producing branch with
+        // `bind` set and a concrete `outputSchema`.
+        const ir = compileOk(`
+            workflow test(text: string): unknown {
+                const c = test.classify(text: text);
+                switch (c.label) {
+                    case "low":    return "L";
+                    case "medium": return "M";
+                    case "high":   return "H";
+                }
+            }
+        `);
+        const [, branchNode] = findNodeByKind<BranchNode>(ir, "branch");
+        expect(branchNode.bind).toBeDefined();
+        expect(branchNode.outputSchema).toEqual({ type: "string" });
+        // No `default` arm — Q4 covers coverage via the enum constraint.
+        expect(branchNode.default).toBeUndefined();
+        // Each enum value should appear as a case.
+        expect(Object.keys(branchNode.cases).sort()).toEqual([
+            "high",
+            "low",
+            "medium",
+        ]);
+    });
+
+    // ---- Destructuring fallback when symbol type is unknown ----
+
+    test("destructuring from a task with unknown outputSchema falls back to {}", () => {
+        // `list.elementAt` is declared with `outputSchema: {}` — the
+        // symbol types for destructured names default to `unknown`. The
+        // emitter must not crash; it must emit a destructure pick with
+        // an empty outputSchema rather than fabricating a type.
+        const ir = compileOk(`
+            workflow test(items: array, i: integer): unknown {
+                const [a, b] = list.elementAt(list: items, index: i);
+                return a;
+            }
+        `);
+        // Find any pick node (task: "list.elementAt") with empty
+        // outputSchema — that's the fallback under test.
+        let foundPick = false;
+        for (const node of Object.values(bodyOf(ir).nodes)) {
+            if (
+                node.kind === "task" &&
+                (node as TaskNode).task === "list.elementAt" &&
+                (node as TaskNode).bind !== undefined
+            ) {
+                const t = node as TaskNode;
+                if (Object.keys(t.outputSchema as object).length === 0) {
+                    foundPick = true;
+                }
+            }
+        }
+        expect(foundPick).toBe(true);
     });
 });

@@ -40,6 +40,12 @@
   border: solid 1px rgb(224, 224, 224);
   border-radius: 6px;
   position: relative;
+  /* Show the text caret across the whole input surface (container padding,
+     wrapper, ghost text) so the entire box reads as an editable area —
+     not just the contenteditable .user-textarea inside it. Buttons inside
+     the container override this via their own `cursor: pointer` (see
+     .chat-input-button). */
+  cursor: text;
 }
 
 .chat-input.listening {
@@ -1183,4 +1189,41 @@ span.ansi-bright-white-fg {
 .chat-feedback-popover-button.clear {
   color: #a23737;
   border-color: transparent;
+}
+
+/* =========================================================================
+   Context Menu (right-click copy/paste)
+   ========================================================================= */
+.chat-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 140px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  padding: 4px 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 13px;
+  color: #1f2328;
+  user-select: none;
+}
+
+.chat-context-menu-item {
+  padding: 6px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chat-context-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.chat-context-menu-item-disabled {
+  color: #9aa0a6;
+  cursor: default;
+}
+
+.chat-context-menu-item-disabled:hover {
+  background: transparent;
 }

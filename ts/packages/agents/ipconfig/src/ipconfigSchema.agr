@@ -1,0 +1,290 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<DisplayHelpMessage> = can you show me the help message for ipconfig -> {
+  actionName: "displayHelpMessage",
+  parameters: {}
+}
+| i need some help with ipconfig please display the help message -> {
+  actionName: "displayHelpMessage",
+  parameters: {}
+}
+| what's the help message for ipconfig -> {
+  actionName: "displayHelpMessage",
+  parameters: {}
+}
+| could you display the ipconfig help message -> {
+  actionName: "displayHelpMessage",
+  parameters: {}
+};
+
+<DisplayFullConfigurationInformation> = show me the full network configuration details -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+}
+| can you display all the configuration information for my network -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+}
+| what's my ip address -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+}
+| what is my ip address -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+}
+| i need to see the complete ip configuration -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+}
+| please provide the full configuration info for my network adapters -> {
+  actionName: "displayFullConfigurationInformation",
+  parameters: {}
+};
+
+<ReleaseIPv4Address> = please release the ipv4 address for the $(adapter:wildcard) adapter -> {
+  actionName: "releaseIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| can you release the ipv4 address on my $(adapter:wildcard) adapter -> {
+  actionName: "releaseIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| release the ipv4 address for the network adapter named $(adapter:wildcard) -> {
+  actionName: "releaseIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| i need to release the ipv4 address for the adapter called $(adapter:wildcard) -> {
+  actionName: "releaseIPv4Address",
+  parameters: {
+    adapter
+  }
+};
+
+<ReleaseIPv6Address> = please release the ipv6 address for the adapter named $(adapter:wildcard) -> {
+  actionName: "releaseIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| can you release the ipv6 address on my $(adapter:wildcard) adapter -> {
+  actionName: "releaseIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| i need to release the ipv6 address for the $(adapter:wildcard) adapter -> {
+  actionName: "releaseIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| release the ipv6 address for the $(adapter:wildcard) please -> {
+  actionName: "releaseIPv6Address",
+  parameters: {
+    adapter
+  }
+};
+
+<RenewIPv4Address> = can you renew the ipv4 address for the $(adapter:wildcard) adapter -> {
+  actionName: "renewIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| please refresh the ipv4 address for my $(adapter:wildcard) adapter -> {
+  actionName: "renewIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| renew the ipv4 address for the network adapter named $(adapter:wildcard) -> {
+  actionName: "renewIPv4Address",
+  parameters: {
+    adapter
+  }
+}
+| i need to renew the ipv4 address for the $(adapter:wildcard) -> {
+  actionName: "renewIPv4Address",
+  parameters: {
+    adapter
+  }
+};
+
+<RenewIPv6Address> = can you renew the ipv6 address for the adapter named $(adapter:wildcard) -> {
+  actionName: "renewIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| please refresh the ipv6 address for my $(adapter:wildcard) adapter -> {
+  actionName: "renewIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| renew the ipv6 address for the $(adapter:wildcard) adapter -> {
+  actionName: "renewIPv6Address",
+  parameters: {
+    adapter
+  }
+}
+| i need to update the ipv6 address for the $(adapter:wildcard) -> {
+  actionName: "renewIPv6Address",
+  parameters: {
+    adapter
+  }
+};
+
+<PurgeDNSResolverCache> = clear the dns cache please -> {
+  actionName: "purgeDNSResolverCache",
+  parameters: {}
+}
+| can you purge the dns resolver cache -> {
+  actionName: "purgeDNSResolverCache",
+  parameters: {}
+}
+| i need to flush the dns cache -> {
+  actionName: "purgeDNSResolverCache",
+  parameters: {}
+}
+| please empty the dns resolver cache -> {
+  actionName: "purgeDNSResolverCache",
+  parameters: {}
+};
+
+<RefreshDHCPLeasesAndReRegisterDNSNames> = can you refresh the dhcp leases and re register the dns names for me -> {
+  actionName: "refreshDHCPLeasesAndReRegisterDNSNames",
+  parameters: {}
+}
+| please update the dhcp leases and dns registrations -> {
+  actionName: "refreshDHCPLeasesAndReRegisterDNSNames",
+  parameters: {}
+}
+| i need to refresh all dhcp leases and re register the dns names -> {
+  actionName: "refreshDHCPLeasesAndReRegisterDNSNames",
+  parameters: {}
+}
+| could you refresh the dhcp leases and re register the dns names -> {
+  actionName: "refreshDHCPLeasesAndReRegisterDNSNames",
+  parameters: {}
+};
+
+<DisplayDNSResolverCacheContents> = show me the dns cache contents -> {
+  actionName: "displayDNSResolverCacheContents",
+  parameters: {}
+}
+| can you display the dns resolver cache -> {
+  actionName: "displayDNSResolverCacheContents",
+  parameters: {}
+}
+| i'd like to see the dns resolver cache details -> {
+  actionName: "displayDNSResolverCacheContents",
+  parameters: {}
+}
+| please provide the contents of the dns cache -> {
+  actionName: "displayDNSResolverCacheContents",
+  parameters: {}
+};
+
+<DisplayDHCPClassIDs> = can you show me the dhcp class ids for the adapter -> {
+  actionName: "displayDHCPClassIDs",
+  parameters: {}
+}
+| please display the dhcp class ids for the network adapter -> {
+  actionName: "displayDHCPClassIDs",
+  parameters: {}
+}
+| i need to see the dhcp class ids for my adapter -> {
+  actionName: "displayDHCPClassIDs",
+  parameters: {}
+}
+| what are the dhcp class ids for the specified adapter -> {
+  actionName: "displayDHCPClassIDs",
+  parameters: {}
+};
+
+<ModifyDHCPClassID> = can you change the dhcp class id for the $(adapter:wildcard) adapter to $(classID:wildcard) -> {
+  actionName: "modifyDHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| please update the dhcp class id on the $(adapter:wildcard) adapter to $(classID:wildcard) -> {
+  actionName: "modifyDHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| set the dhcp class id for the $(adapter:wildcard) adapter to $(classID:wildcard) -> {
+  actionName: "modifyDHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| i'd like to modify the dhcp class id for the $(adapter:wildcard) adapter use $(classID:wildcard) -> {
+  actionName: "modifyDHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+};
+
+<DisplayIPv6DHCPClassIDs> = can you show me the ipv6 dhcp class ids for the adapter -> {
+  actionName: "displayIPv6DHCPClassIDs",
+  parameters: {}
+}
+| please display the ipv6 dhcp class ids for the network adapter -> {
+  actionName: "displayIPv6DHCPClassIDs",
+  parameters: {}
+}
+| what are the ipv6 dhcp class ids allowed for the adapter -> {
+  actionName: "displayIPv6DHCPClassIDs",
+  parameters: {}
+}
+| i'd like to see the ipv6 dhcp class ids for my adapter -> {
+  actionName: "displayIPv6DHCPClassIDs",
+  parameters: {}
+};
+
+<ModifyIPv6DHCPClassID> = can you change the ipv6 dhcp class id for the adapter named $(adapter:wildcard) to $(classID:wildcard) -> {
+  actionName: "modifyIPv6DHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| please update the ipv6 dhcp class id for my $(adapter:wildcard) adapter to $(classID:wildcard) -> {
+  actionName: "modifyIPv6DHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| set the ipv6 dhcp class id to $(classID:wildcard) for the network adapter $(adapter:wildcard) -> {
+  actionName: "modifyIPv6DHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+}
+| i'd like to modify the ipv6 dhcp class id for $(adapter:wildcard) adapter to $(classID:wildcard) -> {
+  actionName: "modifyIPv6DHCPClassID",
+  parameters: {
+    adapter,
+    classID
+  }
+};
+
+import { IpconfigActions } from "./ipconfigSchema.ts";
+<Start> : IpconfigActions = <DisplayHelpMessage> | <DisplayFullConfigurationInformation> | <ReleaseIPv4Address> | <ReleaseIPv6Address> | <RenewIPv4Address> | <RenewIPv6Address> | <PurgeDNSResolverCache> | <RefreshDHCPLeasesAndReRegisterDNSNames> | <DisplayDNSResolverCacheContents> | <DisplayDHCPClassIDs> | <ModifyDHCPClassID> | <DisplayIPv6DHCPClassIDs> | <ModifyIPv6DHCPClassID>;

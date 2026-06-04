@@ -19,6 +19,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher, IAgentMessage } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     createClientIO,
@@ -40,19 +41,14 @@ function toolResult(text: string): CallToolResult {
 
 /**
  * Format a large result for display. Strips markdown formatting and wraps
- * in a code fence so the LLM preserves newlines and doesn't summarize.
+ * in a code fence so the CLI preserves newlines and structured layout.
  */
 function formatLargeResult(response: string): CallToolResult {
     const lines = response.split("\n").length;
     if (lines > 5) {
         // Strip markdown bold (**text**) — doesn't render inside code fences
         const plain = response.replace(/\*\*([^*]+)\*\*/g, "$1");
-        return toolResult(
-            `[Display the following TypeAgent result verbatim to the user. Do not summarize.]\n\n` +
-                "```\n" +
-                plain +
-                "\n```",
-        );
+        return toolResult("```\n" + plain + "\n```");
     }
     return toolResult(response);
 }
@@ -115,6 +111,7 @@ class TypeAgentMcpServer {
                         "The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'",
                     ),
             },
+            { displayVerbatim: true } as Record<string, unknown>,
             async (params, extra) =>
                 this.processCommand(params.command, extra as ToolExtra),
         );
@@ -228,12 +225,39 @@ class TypeAgentMcpServer {
                         return;
                     }
 
+                    // Emit progress for status/info/warning/error messages
+                    // (reasoning "thinking", tool calls, and their results
+                    // including error results). These are progress, not final
+                    // content, so we stream them and skip responseCollector —
+                    // keeping every tool call paired with its result.
+                    const msg = message?.message;
+                    if (typeof msg === "object" && msg && "kind" in msg) {
+                        const kind = (msg as { kind: unknown }).kind;
+                        if (
+                            kind === "info" ||
+                            kind === "status" ||
+                            kind === "warning" ||
+                            kind === "error"
+                        ) {
+                            messageCount++;
+                            if (extra) {
+                                void this.sendProgress(
+                                    extra,
+                                    cleaned,
+                                    messageCount,
+                                    0,
+                                );
+                            }
+                            return;
+                        }
+                    }
+
                     responseCollector.messages.push(cleaned);
                 },
             });
 
             dispatcher = await connectToTypeAgent(clientIO);
-            const result = await dispatcher.processCommand(command);
+            const result = await awaitCommand(dispatcher, command);
 
             if (result?.lastError) {
                 return toolResult(`Error: ${result.lastError}`);

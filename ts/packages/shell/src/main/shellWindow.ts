@@ -21,10 +21,12 @@ import {
 } from "./shellSettings.js";
 import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import type { QueueSnapshot } from "agent-dispatcher";
 import {
     BrowserViewManager,
     BrowserViewContext,
 } from "./browserViewManager.js";
+import { attachEditContextMenu } from "./contextMenu.js";
 
 import registerDebug from "debug";
 import { ChatServer } from "./chatServer.js";
@@ -178,6 +180,9 @@ export class ShellWindow {
         chatView.webContents.on("focus", () => {
             this.setOverlayVisibility(true);
         });
+
+        attachEditContextMenu(chatView.webContents);
+        attachEditContextMenu(mainWindow.webContents);
 
         mainWindow.contentView.addChildView(chatView);
 
@@ -499,11 +504,16 @@ export class ShellWindow {
     /**
      * Notify the renderer that the active conversation has changed.
      */
-    public sendConversationChanged(conversationId: string, name: string): void {
+    public sendConversationChanged(
+        conversationId: string,
+        name: string,
+        queueSnapshot?: QueueSnapshot,
+    ): void {
         this.chatView.webContents.send(
             "conversation-changed",
             conversationId,
             name,
+            queueSnapshot,
         );
     }
 

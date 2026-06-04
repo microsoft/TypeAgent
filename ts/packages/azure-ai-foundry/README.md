@@ -14,7 +14,7 @@ The library includes support for getting settings needed to call these services 
 
 # Dependencies
 
-This package depends on Azure AI Foundry packages: (@azure/ai-projects)[https://www.npmjs.com/package/@azure/ai-projects] and (@azure/ai-agents)[https://www.npmjs.com/package/@azure/ai-agents].
+This package depends on the Azure AI Foundry package (@azure/ai-projects)[https://www.npmjs.com/package/@azure/ai-projects] and the (openai)[https://www.npmjs.com/package/openai] SDK for the Responses API.
 
 ## Trademarks
 

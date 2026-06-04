@@ -95,6 +95,9 @@
     },
     "discord": {
       "name": "discord-agent"
+    },
+    "ipconfig": {
+      "name": "ipconfig-agent"
     }
   },
   "mcpServers": {

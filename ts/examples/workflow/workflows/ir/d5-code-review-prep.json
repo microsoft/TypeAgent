@@ -1,0 +1,573 @@
+{
+  "kind": "workflow",
+  "version": "1",
+  "description": "Generate a code review guide: per-file diff summaries composed into a reviewer's document.",
+  "constants": {
+    "defaultBase": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "main"
+    },
+    "summaryPromptPrefix": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "You are a senior code reviewer. Summarize the following git diff for one file. Focus on: what changed, why it might matter, and any concerns a reviewer should look at. Be concise (3-5 sentences).\n\n"
+    },
+    "guideHeader": {
+      "schema": {
+        "type": "string"
+      },
+      "value": "# Code Review Guide\\n\\n"
+    }
+  },
+  "entry": "d5-code-review-prep",
+  "workflows": {
+    "d5-code-review-prep": {
+      "inputSchema": {
+        "type": "object",
+        "required": ["repoPath"],
+        "properties": {
+          "repoPath": {
+            "type": "string",
+            "description": "Absolute path to the git repo."
+          },
+          "baseBranch": {
+            "type": "string",
+            "description": "Branch to diff against (default: main)."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["guide"],
+        "properties": {
+          "guide": {
+            "type": "string"
+          }
+        }
+      },
+      "entry": "getFileList",
+      "nodes": {
+        "getFileList": {
+          "kind": "task",
+          "task": "shell.exec",
+          "inputSchema": {
+            "type": "object",
+            "required": ["command"],
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "object",
+            "required": ["stdout", "stderr", "exitCode"],
+            "properties": {
+              "stdout": {
+                "type": "string"
+              },
+              "stderr": {
+                "type": "string"
+              },
+              "exitCode": {
+                "type": "integer"
+              }
+            }
+          },
+          "inputs": {
+            "command": "git",
+            "args": ["diff", "--name-only", "main..HEAD"],
+            "cwd": {
+              "$from": "input",
+              "name": "repoPath"
+            }
+          },
+          "next": "splitFiles",
+          "bind": "fileListResult"
+        },
+        "splitFiles": {
+          "kind": "task",
+          "task": "string.split",
+          "inputSchema": {
+            "type": "object",
+            "required": ["text", "delimiter"],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "delimiter": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputs": {
+            "text": {
+              "$from": "scope",
+              "name": "fileListResult",
+              "path": ["stdout"]
+            },
+            "delimiter": "\n"
+          },
+          "next": "fileLoop",
+          "bind": "files"
+        },
+        "fileLoop": {
+          "kind": "loop",
+          "inputs": {
+            "files": {
+              "$from": "scope",
+              "name": "files"
+            },
+            "repoPath": {
+              "$from": "input",
+              "name": "repoPath"
+            }
+          },
+          "state": {
+            "i": {
+              "schema": {
+                "type": "integer"
+              },
+              "initial": 0
+            },
+            "sections": {
+              "schema": {
+                "type": "array"
+              },
+              "initial": []
+            }
+          },
+          "iterateState": {
+            "i": {
+              "$from": "scope",
+              "name": "stepped"
+            },
+            "sections": {
+              "$from": "scope",
+              "name": "appended"
+            }
+          },
+          "maxIterations": 500,
+          "next": "joinSections",
+          "bind": "fileSections",
+          "body": {
+            "inputSchema": {
+              "type": "object",
+              "required": ["files", "repoPath"],
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "repoPath": {
+                  "type": "string"
+                }
+              }
+            },
+            "entry": "pickFile",
+            "nodes": {
+              "pickFile": {
+                "kind": "task",
+                "task": "list.elementAt",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["list", "index"],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    },
+                    "index": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "input",
+                    "name": "files"
+                  },
+                  "index": {
+                    "$from": "state",
+                    "name": "i"
+                  }
+                },
+                "next": "getFileDiff",
+                "bind": "picked"
+              },
+              "getFileDiff": {
+                "kind": "task",
+                "task": "shell.exec",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["command"],
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "cwd": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "object",
+                  "required": ["stdout", "stderr", "exitCode"],
+                  "properties": {
+                    "stdout": {
+                      "type": "string"
+                    },
+                    "stderr": {
+                      "type": "string"
+                    },
+                    "exitCode": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "inputs": {
+                  "command": "git",
+                  "args": [
+                    "diff",
+                    "main..HEAD",
+                    "--",
+                    {
+                      "$from": "scope",
+                      "name": "picked"
+                    }
+                  ],
+                  "cwd": {
+                    "$from": "input",
+                    "name": "repoPath"
+                  }
+                },
+                "next": "buildSummaryPrompt",
+                "bind": "fileDiff"
+              },
+              "buildSummaryPrompt": {
+                "kind": "task",
+                "task": "text.template",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["template", "vars"],
+                  "properties": {
+                    "template": {
+                      "type": "string"
+                    },
+                    "vars": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "template": "{{prefix}}File: {{file}}\n\nDiff:\n{{diff}}",
+                  "vars": {
+                    "prefix": {
+                      "$from": "constant",
+                      "name": "summaryPromptPrefix"
+                    },
+                    "file": {
+                      "$from": "scope",
+                      "name": "picked"
+                    },
+                    "diff": {
+                      "$from": "scope",
+                      "name": "fileDiff",
+                      "path": ["stdout"]
+                    }
+                  }
+                },
+                "next": "summarizeFile",
+                "bind": "summaryPrompt"
+              },
+              "summarizeFile": {
+                "kind": "task",
+                "task": "llm.generate",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["prompt"],
+                  "properties": {
+                    "prompt": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "prompt": {
+                    "$from": "scope",
+                    "name": "summaryPrompt"
+                  }
+                },
+                "next": "formatSection",
+                "bind": "summary"
+              },
+              "formatSection": {
+                "kind": "task",
+                "task": "text.template",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["template", "vars"],
+                  "properties": {
+                    "template": {
+                      "type": "string"
+                    },
+                    "vars": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "template": "### {{file}}\n\n{{summary}}",
+                  "vars": {
+                    "file": {
+                      "$from": "scope",
+                      "name": "picked"
+                    },
+                    "summary": {
+                      "$from": "scope",
+                      "name": "summary"
+                    }
+                  }
+                },
+                "next": "appendSection",
+                "bind": "section"
+              },
+              "appendSection": {
+                "kind": "task",
+                "task": "list.append",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["list", "item"],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    },
+                    "item": {}
+                  }
+                },
+                "outputSchema": {
+                  "type": "array"
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "state",
+                    "name": "sections"
+                  },
+                  "item": {
+                    "$from": "scope",
+                    "name": "section"
+                  }
+                },
+                "next": "stepIndex",
+                "bind": "appended"
+              },
+              "stepIndex": {
+                "kind": "task",
+                "task": "math.add",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["left", "right"],
+                  "properties": {
+                    "left": {
+                      "type": "number"
+                    },
+                    "right": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "number"
+                },
+                "inputs": {
+                  "left": {
+                    "$from": "state",
+                    "name": "i"
+                  },
+                  "right": 1
+                },
+                "next": "computeLength",
+                "bind": "stepped"
+              },
+              "computeLength": {
+                "kind": "task",
+                "task": "list.length",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["list"],
+                  "properties": {
+                    "list": {
+                      "type": "array"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "integer"
+                },
+                "inputs": {
+                  "list": {
+                    "$from": "input",
+                    "name": "files"
+                  }
+                },
+                "next": "compareIndex",
+                "bind": "fileCount"
+              },
+              "compareIndex": {
+                "kind": "task",
+                "task": "compare.lessThan",
+                "inputSchema": {
+                  "type": "object",
+                  "required": ["left", "right"],
+                  "properties": {
+                    "left": {
+                      "type": "number"
+                    },
+                    "right": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "boolean"
+                },
+                "inputs": {
+                  "left": {
+                    "$from": "scope",
+                    "name": "stepped"
+                  },
+                  "right": {
+                    "$from": "scope",
+                    "name": "fileCount"
+                  }
+                },
+                "bind": "hasMore"
+              }
+            },
+            "output": {
+              "$from": "scope",
+              "name": "appended"
+            },
+            "outputSchema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "continueWhen": {
+            "$from": "scope",
+            "name": "hasMore"
+          }
+        },
+        "joinSections": {
+          "kind": "task",
+          "task": "string.join",
+          "inputSchema": {
+            "type": "object",
+            "required": ["list", "delimiter"],
+            "properties": {
+              "list": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "delimiter": {
+                "type": "string"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "inputs": {
+            "list": {
+              "$from": "scope",
+              "name": "fileSections"
+            },
+            "delimiter": "\n\n"
+          },
+          "next": "addHeader",
+          "bind": "body"
+        },
+        "addHeader": {
+          "kind": "task",
+          "task": "text.template",
+          "inputSchema": {
+            "type": "object",
+            "required": ["template", "vars"],
+            "properties": {
+              "template": {
+                "type": "string"
+              },
+              "vars": {
+                "type": "object"
+              }
+            }
+          },
+          "outputSchema": {
+            "type": "string"
+          },
+          "inputs": {
+            "template": "{{header}}{{body}}",
+            "vars": {
+              "header": {
+                "$from": "constant",
+                "name": "guideHeader"
+              },
+              "body": {
+                "$from": "scope",
+                "name": "body"
+              }
+            }
+          },
+          "bind": "guide"
+        }
+      },
+      "output": {
+        "guide": {
+          "$from": "scope",
+          "name": "guide"
+        }
+      }
+    }
+  }
+}

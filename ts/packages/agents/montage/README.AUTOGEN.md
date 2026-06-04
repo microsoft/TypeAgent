@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3725ce07d9888cad8fb3dfca00dda7d128d6e0f17016a510ba20d8a11273372f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3af30c74b3ab9c3ab05d27900ce2b96743f3aa573072a44b7d952082955fadb4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # montage-agent — AI-generated documentation
@@ -71,6 +71,7 @@ Workspace:
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
+- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
 External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-limit`, `koffi`, `sharp`, `typechat`, `winreg`
 
@@ -85,15 +86,15 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 - [./src/agent/montageActionSchema.ts](./src/agent/montageActionSchema.ts)
 - [./src/site/index.ts](./src/site/index.ts)
 - [./src/agent/tsconfig.json](./src/agent/tsconfig.json)
+- [./src/route/originAllowlist.ts](./src/route/originAllowlist.ts)
 - [./src/route/route.ts](./src/route/route.ts)
 - [./src/route/tsconfig.json](./src/route/tsconfig.json)
 - [./src/site/index.html](./src/site/index.html)
 - [./src/site/photo.ts](./src/site/photo.ts)
-- [./src/site/styles.css](./src/site/styles.css)
-- _…and 1 more under `./src/`._
+- _…and 2 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

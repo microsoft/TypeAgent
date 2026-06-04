@@ -14,6 +14,7 @@ import {
     WorkflowEngine,
     TaskRegistry,
     allBuiltinTasks,
+    RunOptions,
     RunResult,
     WorkflowEvent,
 } from "workflow-engine";
@@ -27,7 +28,7 @@ interface WorkflowAgentContext {
     engine: WorkflowEngine;
     registry: TaskRegistry;
     workflows: Map<string, WorkflowIR>;
-    workflowDir: string;
+    workflowDirs: string[];
     /** Active run progress keyed by dynamicDisplayId. */
     activeRuns: Map<string, RunProgress>;
 }
@@ -44,11 +45,12 @@ let agentContext: WorkflowAgentContext | undefined;
 
 // ---- Helpers ----
 
-function getWorkflowDir(): string {
+function getWorkflowDirs(): string[] {
     const thisFile = fileURLToPath(import.meta.url);
     const thisDir = dirname(thisFile);
-    // From dist/ -> ../workflows/
-    return join(thisDir, "..", "..", "workflows");
+    // From dist/ -> ../../workflows/{ir,built}
+    const root = join(thisDir, "..", "..", "workflows");
+    return [join(root, "ir"), join(root, "built")];
 }
 
 function formatRunResult(result: RunResult): string {
@@ -118,7 +120,7 @@ async function executeWorkflowAction(
     ctx.engine.on(listener);
 
     try {
-        const runOptions: import("workflow-engine").RunOptions = {
+        const runOptions: RunOptions = {
             input: action.parameters ?? {},
             policy: {}, // all side-effecting tasks default to "prompt"
             approve: async (taskName, _resolvedInputs) => {
@@ -169,7 +171,7 @@ export function instantiate(): AppAgent {
                 engine,
                 registry,
                 workflows: new Map(),
-                workflowDir: getWorkflowDir(),
+                workflowDirs: getWorkflowDirs(),
                 activeRuns: new Map(),
             };
             return agentContext;
@@ -183,7 +185,7 @@ export function instantiate(): AppAgent {
             if (!agentContext) return;
             if (enable) {
                 const result = await discoverWorkflows(
-                    agentContext.workflowDir,
+                    agentContext.workflowDirs,
                     agentContext.registry.all(),
                 );
                 agentContext.workflows = result.workflows;

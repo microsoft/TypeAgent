@@ -8,15 +8,33 @@ import {
     ShellUserSettings,
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
-import { Dispatcher } from "agent-dispatcher";
+import { QueueSnapshot } from "agent-dispatcher";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
-import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 
 ipcRenderer.on("send-demo-event", (_, name) => {
     // bounce back to the main process
     ipcRenderer.send("send-demo-event", name);
 });
+
+// Set up the dispatcher RPC channel and client up-front so the
+// completion-correlation hooks are available when registerClient wraps
+// the renderer's ClientIO. The main process will start delivering
+// dispatcher RPC replies on this channel once it's ready; the renderer
+// only calls into `dispatcher` after the `dispatcher-initialized`
+// event fires below.
+const dispatcherChannel = createChannelAdapter((message: any) =>
+    ipcRenderer.send("dispatcher-rpc-call", message),
+);
+ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+    dispatcherChannel.notifyMessage(message);
+});
+const { dispatcher, notifyCommandComplete, notifyRequestCancelled } =
+    createDispatcherRpcClient(dispatcherChannel.channel);
 
 let clientRegistered = false;
 function registerClient(client: Client) {
@@ -32,7 +50,13 @@ function registerClient(client: Client) {
     ipcRenderer.on("clientio-rpc-call", (_event, message) => {
         clientIOChannel.notifyMessage(message);
     });
-    createClientIORpcServer(client.clientIO, clientIOChannel.channel);
+    createClientIORpcServer(
+        wrapClientIOForCompletion(client.clientIO, {
+            notifyCommandComplete,
+            notifyRequestCancelled,
+        }),
+        clientIOChannel.channel,
+    );
 
     ipcRenderer.on("listen-event", (_, token, useLocalWhisper) => {
         client.listen(token, useLocalWhisper);
@@ -87,23 +111,15 @@ function registerClient(client: Client) {
         },
     );
 
-    ipcRenderer.on("dispatcher-initialized", () => {
-        // Resolve the dispatcher promise when the dispatcher is initialized)
-        // set up dispatch RPC client
-        const dispatcherChannel = createChannelAdapter((message: any) =>
-            ipcRenderer.send("dispatcher-rpc-call", message),
-        );
-
-        ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
-            dispatcherChannel.notifyMessage(message);
-        });
-
-        const dispatcher: Dispatcher = createDispatcherRpcClient(
-            dispatcherChannel.channel,
-        );
-
-        client.dispatcherInitialized(dispatcher);
-    });
+    ipcRenderer.on(
+        "dispatcher-initialized",
+        (_event, initialQueueSnapshot?: QueueSnapshot) => {
+            // The dispatcher RPC client was set up at module init; just
+            // hand it (and the initial queue snapshot, if any) to the
+            // renderer's registered client.
+            client.dispatcherInitialized(dispatcher, initialQueueSnapshot);
+        },
+    );
 
     ipcRenderer.on("tab-restore-status", (_, count: number) => {
         client.tabRestoreStatus(count);
@@ -118,8 +134,13 @@ function registerClient(client: Client) {
 
     ipcRenderer.on(
         "conversation-changed",
-        (_, conversationId: string, name: string) => {
-            client.conversationChanged?.(conversationId, name);
+        (
+            _,
+            conversationId: string,
+            name: string,
+            queueSnapshot?: QueueSnapshot,
+        ) => {
+            client.conversationChanged?.(conversationId, name, queueSnapshot);
         },
     );
 

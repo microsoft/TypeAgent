@@ -3,20 +3,31 @@
 
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
-import type { Dispatcher } from "@typeagent/dispatcher-types";
+import type { Dispatcher, SubmitResult } from "@typeagent/dispatcher-types";
 import type {
     DispatcherCallFunctions,
     DispatcherInvokeFunctions,
+    WireSubmitResult,
 } from "./dispatcherTypes.js";
+
+/**
+ * Drop the in-process-only `completion` promise from a `SubmitResult` so it
+ * can cross the RPC boundary. The client wrapper re-attaches a synthesized
+ * completion promise on the other side.
+ */
+function toWire(result: SubmitResult): WireSubmitResult {
+    if (result.ok) {
+        const { completion: _c, ...entry } = result.entry;
+        return { ok: true, entry };
+    }
+    return result;
+}
 
 export function createDispatcherRpcServer(
     dispatcher: Dispatcher,
     channel: RpcChannel,
 ) {
     const dispatcherCallHandler: DispatcherCallFunctions = {
-        cancelCommand(...args) {
-            dispatcher.cancelCommand(...args);
-        },
         cancelCommandByClientId(...args) {
             dispatcher.cancelCommandByClientId(...args);
         },
@@ -26,8 +37,17 @@ export function createDispatcherRpcServer(
     };
 
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
-        processCommand: async (...args) => {
-            return dispatcher.processCommand(...args);
+        submitCommand: async (...args) => {
+            return toWire(await dispatcher.submitCommand(...args));
+        },
+        interrupt: async (...args) => {
+            return toWire(await dispatcher.interrupt(...args));
+        },
+        cancelCommand: async (...args) => {
+            return dispatcher.cancelCommand(...args);
+        },
+        getQueueSnapshot: async () => {
+            return dispatcher.getQueueSnapshot();
         },
         getDynamicDisplay: async (...args) => {
             return dispatcher.getDynamicDisplay(...args);

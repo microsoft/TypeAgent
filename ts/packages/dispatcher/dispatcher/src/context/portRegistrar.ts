@@ -64,6 +64,32 @@ export interface IPortRegistrar {
     lookup(agentName: string, role?: string): number | undefined;
     hasActiveAllocations(): boolean;
     list(): readonly Allocation[];
+    /**
+     * Update the cached client count for the live allocation matching
+     * `(agentName, role, sessionContextId)`. Writes for which no live
+     * allocation exists are silently dropped (defends against late
+     * notifications arriving after a session closed its registrations).
+     * Updates are best-effort and informational only — the count is
+     * surfaced via `@system ports` and used nowhere else.
+     */
+    setClientCount(
+        agentName: string,
+        role: string,
+        sessionContextId: string,
+        count: number,
+    ): void;
+    /**
+     * Read the most recently reported client count for
+     * `(agentName, role, sessionContextId)`. `undefined` means
+     * "no count ever reported" — distinct from `0`, which means an
+     * agent has explicitly reported that no clients are currently
+     * connected.
+     */
+    getClientCount(
+        agentName: string,
+        role: string,
+        sessionContextId: string,
+    ): number | undefined;
 }
 
 /**
@@ -100,6 +126,16 @@ export class PortRegistrar implements IPortRegistrar {
      * Key is built by {@link keyOf} from an Allocation-shaped object.
      */
     private readonly tripleIndex = new Map<string, RegistrationId>();
+
+    /**
+     * Cached client counts keyed by the same `(agentName, role,
+     * sessionContextId)` triple as {@link tripleIndex}. Populated by
+     * agents calling `SessionContext.notifyClientCountChanged`;
+     * consumed by the `@system ports` diagnostic. Cleared whenever
+     * the matching allocation is released so a stale count can't
+     * outlive its registration.
+     */
+    private readonly clientCounts = new Map<string, number>();
 
     /**
      * Record a port that an agent has just bound. Idempotent on the
@@ -211,6 +247,7 @@ export class PortRegistrar implements IPortRegistrar {
         }
         this.allocations.delete(regId);
         this.tripleIndex.delete(keyOf(allocation));
+        this.clientCounts.delete(keyOf(allocation));
         debug(
             `release ${allocation.agentName}/${allocation.role} session=${allocation.sessionContextId} port=${allocation.port} regId=${regId}`,
         );
@@ -299,6 +336,45 @@ export class PortRegistrar implements IPortRegistrar {
      */
     public list(): readonly Allocation[] {
         return Array.from(this.allocations.values()).map((a) => ({ ...a }));
+    }
+
+    public setClientCount(
+        agentName: string,
+        role: string,
+        sessionContextId: string,
+        count: number,
+    ): void {
+        if (!Number.isInteger(count) || count < 0) {
+            debugWarn(
+                `setClientCount ignored: invalid count ${count} for ${agentName}/${role} session=${sessionContextId}`,
+            );
+            return;
+        }
+        const tripleKey = keyOf({ agentName, role, sessionContextId });
+        if (!this.tripleIndex.has(tripleKey)) {
+            // Late notification after release, or agent published a
+            // count before registering its port. Either way, no live
+            // allocation to attach the count to — drop it. If the agent
+            // re-registers later it will publish a fresh count.
+            debugWarn(
+                `setClientCount ignored: no live allocation for ${agentName}/${role} session=${sessionContextId}`,
+            );
+            return;
+        }
+        this.clientCounts.set(tripleKey, count);
+        debug(
+            `setClientCount ${agentName}/${role} session=${sessionContextId} count=${count}`,
+        );
+    }
+
+    public getClientCount(
+        agentName: string,
+        role: string,
+        sessionContextId: string,
+    ): number | undefined {
+        return this.clientCounts.get(
+            keyOf({ agentName, role, sessionContextId }),
+        );
     }
 }
 

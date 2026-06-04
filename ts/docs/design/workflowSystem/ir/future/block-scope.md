@@ -1,62 +1,76 @@
-# Post-v1: explicit `block` scope
+# Post-v1: explicit `block` node
 
 Status: **Post-v1 sketch.** Listed in [../ir-v0.1.md](../ir-v0.1.md) §2.2.
 
+Reframed after [../workflow-scope-proposal.md](../workflow-scope-proposal.md)
+(Accepted) and [../decisions/0010-finish-workflow-scope-unification.md](../decisions/0010-finish-workflow-scope-unification.md):
+this is no longer "a new scope kind" but "a new structured node whose body
+is a `WorkflowScope`", parallel to fork branches, branch arms, forkMap
+bodies, and loop bodies.
+
 ## 1. Motivation
 
-v1 has two scope kinds: the workflow root and the loop body. Both follow
-the same shape (entry, nodes map, declared inputs, optional state, optional
-outputs, sentinel rules). The validator's per-scope checks are already
-parameterized over "scope kind".
+The post-0010 IR has one scope abstraction (`WorkflowScope`) used at every
+embedding site: top-level workflow, loop body, fork branches, forkMap body,
+branch arms. What it does **not** have is a way to wrap a linear region of
+sibling nodes inside an enclosing scope under a single boundary.
 
-A third scope kind, **`block`**, would be a run-once sub-scope sitting in
-its enclosing scope as a single node. It is the post-v1 closure for two
-distinct gaps in v1:
+The `block` node is the post-v1 closure for the gaps that remain after
+0010:
 
-- **Multi-statement `try`.** A single `onError` on the block node catches
-  any failure that propagates out of the block. Without blocks, the only
-  ways to cover several nodes with one handler are (a) duplicate `onError`
-  per node and accept duplicate handlers (which v1 forbids: one trigger
-  per handler), or (b) let failures bubble to the surrounding loop or
-  workflow scope and lose locality.
+- **Multi-statement `try`.** A single `onError` on the block catches any
+  failure that propagates out of the body. Without blocks, the only ways
+  to cover several nodes with one handler are (a) duplicate `onError` per
+  node and accept duplicate handlers (which v1 forbids: one trigger per
+  handler), or (b) let failures bubble to the surrounding loop, branch
+  arm, or workflow scope and lose locality. Decision 0010 gave branch arms
+  their own `onError`, but that only protects the arm-as-a-whole; it does
+  not let you wrap an arbitrary contiguous region of siblings in one
+  handler.
 - **Regional grouping with localized error handling.** When a join is
   itself a region (each branch arm is several steps that together need
-  their own try / their own intermediate hiding), the block makes that
-  region first-class. v1's bound outputs already handle simple diamond
-  merges (each arm binds the same name); blocks become valuable when each
-  arm is itself non-trivial.
+  their own try / their own intermediate hiding), today the choices are a
+  full branch arm (heavyweight, requires a selector and sibling arms) or
+  inlining the steps directly. A block makes the region first-class
+  without inventing dispatch.
+- **Inline sub-workflow precursor.** A block is a `WorkflowScope` embedded
+  at a use site. Promoting it to a separately-stored sub-workflow becomes
+  a mechanical refactor: lift the `scope` to its own document, replace the
+  inline `scope` with a reference.
 
-Per-node hiding is **already handled in v1** by bound outputs (hide-by-
-default `bind`); blocks are not needed for that case. See
+Per-node hiding is **already handled** by bound outputs (hide-by-default
+`bind`); blocks are not needed for that case. See
 [../decisions/0001-bound-outputs.md](../decisions/0001-bound-outputs.md).
-
-Secondary value: mechanical "promote this region to a sub-workflow"
-refactor (block + document boundary = sub-workflow).
 
 ## 2. Why it slots in cleanly
 
-The IR already treats "scope" as an abstract concept with a small
-contract. A new scope kind only specifies the cells in this table:
+Under the post-0010 IR, every structured node embeds a `WorkflowScope` via
+the same `{ inputs, scope, ... }` shape. A block is one more embedding
+site with the same contract:
 
-| Scope contract piece      | Workflow root | Loop body            | Sub-workflow (post-v1)   | Block (this doc)     |
-| ------------------------- | ------------- | -------------------- | ------------------------ | -------------------- |
-| Has its own `entry`       | yes           | yes                  | yes                      | yes                  |
-| Has its own `nodes` map   | yes           | yes                  | yes                      | yes                  |
-| Carries declared `inputs` | yes           | yes (loop-level)     | yes                      | yes                  |
-| Carries `state`           | no            | yes                  | optional                 | no (proposed)        |
-| Carries `constants`       | yes           | no                   | yes                      | no (proposed)        |
-| Carries `outputs`         | `output`      | `outputs` on `@exit` | yes                      | yes                  |
-| Allowed sentinels         | none          | `@iterate`, `@exit`  | none                     | `@exit` only         |
-| `next: null` legality     | yes           | no                   | yes (terminates the sub) | no (use `@exit`)     |
-| Cross-scope visibility    | n/a           | only outer constants | only declared `inputs`   | only outer constants |
-| Handlers / `onError` work | yes           | yes                  | yes                      | yes                  |
-| DDG dominator check       | within scope  | within scope         | within scope             | within scope         |
+| Embedding site                | Outer wiring           | Body            | Dispatch                  | May `bind` / `onError` / `next` |
+| ----------------------------- | ---------------------- | --------------- | ------------------------- | ------------------------------- |
+| top-level workflow            | n/a (runtime-provided) | `WorkflowScope` | runs once                 | n/a                             |
+| `loop.body`                   | `loop.inputs`          | `WorkflowScope` | runs until `continueWhen` | yes                             |
+| `fork.branches[k]`            | `branch.inputs`        | `branch.scope`  | all run concurrently      | yes                             |
+| `forkMap.body`                | `forkMap.inputs`       | `WorkflowScope` | one run per element       | yes                             |
+| `branch.cases[k]` / `default` | `arm.inputs`           | `arm.scope`     | exactly one arm runs      | yes                             |
+| **`block` (this doc)**        | `block.inputs`         | `block.scope`   | runs once                 | yes                             |
 
-Implementation cost is roughly: define the JSON shape, add it to the
-scope-kinds set the validator iterates, document. No new dominator math,
-no changes to handler semantics, no changes to the reference model.
+Blocks are the degenerate case: no dispatch, no fan-out, no iteration.
+Just "run this `WorkflowScope` once at this point."
+
+Implementation cost is roughly: add the node kind, route it through the
+existing `WorkflowScope` validation and execution paths, document. No new
+scope abstraction, no new dominator math, no changes to handler
+semantics, no changes to the reference model.
 
 ## 3. Sketch
+
+Shape mirrors fork branches and branch arms: `{ inputs, scope, ... }`,
+where `scope` is a `WorkflowScope` (per
+[../workflow-scope-proposal.md](../workflow-scope-proposal.md): declared
+`inputSchema`, `entry`, `nodes`, `output`, `outputSchema`).
 
 ```jsonc
 "buildAndShip": {
@@ -64,68 +78,63 @@ no changes to handler semantics, no changes to the reference model.
   "inputs": {
     "version": { "$from": "node", "name": "computeVersion" }
   },
-  "body": {
+  "scope": {
+    "inputSchema": { /* shape of values the block receives */ },
     "entry": "build",
     "nodes": {
       "build": { "kind": "task", "task": "build.run", /* ... */, "next": "test" },
       "test":  { "kind": "task", "task": "test.run",  /* ... */, "next": "ship" },
-      "ship":  { "kind": "task", "task": "ship.run",  /* ... */, "next": "@exit" }
-    }
+      "ship":  { "kind": "task", "task": "ship.run",  /* ... */, "next": null }
+    },
+    "output": { "$from": "scope", "name": "ship" },
+    "outputSchema": { /* shape of the block's output */ }
   },
-  "outputSchema": { /* shape of the block's output */ },
-  "output": { "$from": "node", "name": "ship" },
   "next": "notify",
-  "onError": "buildShipError"
+  "onError": "buildShipError",
+  "bind": "shipResult"
 }
 ```
 
 `buildShipError` is a handler in the **outer** scope. It catches any
-failure inside `body` that wasn't caught by an inner body-scope handler,
-plus any failure of the block's own `inputs` / `output` resolution.
+failure inside `scope` that wasn't caught by an inner body-scope handler,
+plus any failure of the block's own `inputs` resolution or `scope.output`
+resolution.
 
 Inside the block, individual nodes can still carry their own `onError`
-pointing to body-scope handlers, exactly like a loop body. Nested catch
-behavior falls out of the existing rules.
+pointing to body-scope handlers, exactly like fork branches and branch
+arms. Nested catch behavior falls out of the existing rules.
 
-## 4. The five design choices
+## 4. Design choices specific to `block`
 
-### 4.1 Cross-scope read rules
+Most of what earlier drafts of this doc listed (state, constants,
+sentinels) is now subsumed by "it's a `WorkflowScope`": the rules for
+those are defined once in [../workflow-scope-proposal.md](../workflow-scope-proposal.md)
+and applied uniformly. The only block-specific knobs are below.
 
-Same as loop body: a block reads only workflow-root constants from outside;
-everything else enters via declared `inputs`.
+### 4.1 Outer-to-inner wiring
 
-- **Pro:** P4 - block is composable; "lift this block into a sub-workflow"
-  is a mechanical refactor with zero rewrite.
-- **Con:** more typing for short blocks.
-- The lax alternative (block nodes can directly reference outer node ids
-  whose dominators include the block's entry point) saves typing but breaks
-  P4 composability and forces the validator to cross scope boundaries.
+Same as every other `WorkflowScope` embedding site since the unification:
+all scopes start clean and receive only what they declare. The block has
+an `inputs` map at the embedding site that resolves templates in the
+outer scope; the body reads them via `$from: "input"`. Workflow-root
+constants remain visible per the standard reference-namespace rules.
 
-The strict rule is the consistent choice.
+This gives P4 composability for free: "lift this block into a stored
+sub-workflow" is a mechanical refactor because the block already declares
+everything it consumes and produces.
 
-### 4.2 State
+### 4.2 Termination
 
-Blocks have no `state`. Intermediate values are just node outputs,
-referenced via `$from: "scope"`. If iteration state is needed, use a loop.
+A block runs once. Body completion follows the same "runs to natural end"
+rule as fork branches and forkMap bodies after decision 0010: terminal
+nodes use `next: null`, and `scope.output` is resolved in the body
+context at completion. No sentinels; nothing block-specific.
 
-### 4.3 Sentinels
+### 4.3 Block-level `onError`, `next`, `bind`
 
-Reuse `@exit` as the block's terminator. `@iterate` is not applicable
-(blocks run once).
-
-Using `next: null` instead of `@exit` would change `next: null`'s meaning
-depending on enclosing scope, costing P5. `@exit` keeps the rule
-"sentinels terminate the enclosing non-root scope, root uses `null`".
-
-### 4.4 Block-level `onError`
-
-This is the whole point. The block node, like any other node in its
-enclosing scope, carries an optional `onError` pointing to a handler in
-that outer scope. No new mechanism.
-
-### 4.5 Constants and types
-
-`constants` and `types` remain workflow-root only. Same rule as loop body.
+This is the whole point. The block, like any other structured node in
+its enclosing scope, carries optional `onError`, `next`, and `bind`
+fields with the standard semantics. No new mechanism.
 
 ## 5. What this does NOT buy
 
@@ -140,18 +149,21 @@ These remain separate post-v1 items.
 
 ## 6. Relationship to sub-workflows
 
-A block is essentially a sub-workflow inlined into the parent document.
-Two coherent end states:
+Under the post-0010 IR, a block **is** a `WorkflowScope` inlined at a use
+site. A stored sub-workflow is the same `WorkflowScope` lifted into its
+own document and referenced. Two coherent end states:
 
 - **Coexist:** sub-workflow is a separate document referenced by id; block
-  is the same shape inlined.
+  is the same `WorkflowScope` inlined.
 - **Unified:** the inline form is a block; the document-reference form is
-  a "block call". Reference vs. inline is a packaging choice.
+  a "block call". Reference vs. inline is a packaging choice over the
+  same `WorkflowScope`.
 
 Adding **block first** and treating sub-workflow as "block in a separate
 file" later is the easier path: it doesn't require multi-document
 machinery (id resolution across files, versioning, packaging) up front,
-yet it pays off the multi-statement-try use case immediately.
+yet it pays off the multi-statement-try use case immediately, and it
+reuses the `WorkflowScope` plumbing that already exists.
 
 ## 7. Why record this now
 
@@ -162,18 +174,20 @@ exists in the post-v1 backlog:
   "this is the planned closure" rather than re-litigating shared handlers.
 - **Sub-workflow design** can be framed as "block + document boundary"
   rather than as a from-scratch construct.
-- **Validator architecture** can be written so the per-scope check loop
-  is parameterized from day one, rather than hard-coding "workflow or loop
-  body".
+- **Validator and runner architecture** already iterate over
+  `WorkflowScope` embedding sites; adding `block` is one more site, not
+  a new branch in the architecture.
 
 ## 8. Open questions
 
-- Should the block carry an explicit `inputSchema` (like a task / handler)
-  so that the validator can type-check the inputs block against a single
-  declared shape, or just rely on per-input schemas?
-- Does the block need an `outputSchema`, or can it be inferred from the
-  `outputs` references plus their producers' schemas? (Loop chose
-  explicit; consistency argues for explicit here too.)
+- Is there ever a reason for a block to _omit_ `scope.output` (a
+  side-effect-only region)? Other `WorkflowScope` embedding sites all
+  require it; consistency argues for required here too, with `output:
+{ "$literal": null }` as the explicit "no value" form.
 - If a block fails before any body node runs (its own `inputs`
   resolution fails), is that a block failure that the outer `onError`
-  catches? Most likely yes, by analogy with loop init failures.
+  catches? Most likely yes, by analogy with fork branch and loop init
+  failures.
+- Should `block` and the post-v1 sub-workflow call share a single node
+  kind that discriminates on inline vs. referenced `scope`, or stay as
+  two kinds? Resolve when sub-workflow lands.

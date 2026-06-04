@@ -5,6 +5,11 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { compile, TaskSchemaInfo, CompileOptions } from "../src/index.js";
+import { WorkflowIR, WorkflowBody } from "workflow-model";
+
+function bodyOf(ir: WorkflowIR): WorkflowBody {
+    return ir.workflows[ir.entry];
+}
 
 const VALIDATE: CompileOptions = { validate: true };
 import { lex } from "../src/lexer.js";
@@ -132,10 +137,12 @@ describe("DSL lexer", () => {
         expect(tokens[1].value).toBe("hello");
     });
 
-    it("handles string escapes", () => {
+    it("preserves string escape sequences as raw text", () => {
+        // Under raw-only AST design the lexer does NOT decode escapes;
+        // the captured value is the verbatim source between delimiters.
         const { tokens, errors } = lex(`"hello\\nworld"`);
         expect(errors).toHaveLength(0);
-        expect(tokens[0].value).toBe("hello\nworld");
+        expect(tokens[0].value).toBe("hello\\nworld");
     });
 });
 
@@ -147,7 +154,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast).toBeDefined();
         expect(ast!.name).toBe("hello");
@@ -166,7 +174,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         expect(ast!.body[0].kind).toBe("ConstStatement");
     });
@@ -177,7 +186,8 @@ describe("DSL parser", () => {
         }`;
         const { tokens } = lex(source);
         const parser = new Parser(tokens);
-        const { ast, errors } = parser.parseSingle();
+        const { module: __m, errors } = parser.parseModule();
+        const ast = __m.workflows[0];
         expect(errors).toHaveLength(0);
         const paramType = ast!.params[0].type;
         expect(paramType.kind).toBe("ObjectType");
@@ -195,12 +205,15 @@ describe("DSL compiler", () => {
         expect(result.ir).toBeDefined();
         const ir = result.ir!;
         expect(ir.kind).toBe("workflow");
-        expect(ir.name).toBe("hello");
+        expect(ir.entry).toBe("hello");
         expect(ir.version).toBe("1");
-        expect(ir.entry).toBe("greeting");
-        expect(ir.nodes["greeting"]).toBeDefined();
-        expect(ir.nodes["greeting"].kind).toBe("task");
-        const taskNode = ir.nodes["greeting"] as { task: string; bind: string };
+        expect(bodyOf(ir).entry).toBe("greeting");
+        expect(bodyOf(ir).nodes["greeting"]).toBeDefined();
+        expect(bodyOf(ir).nodes["greeting"].kind).toBe("task");
+        const taskNode = bodyOf(ir).nodes["greeting"] as {
+            task: string;
+            bind: string;
+        };
         expect(taskNode.task).toBe("text.template");
         expect(taskNode.bind).toBe("greeting");
     });
@@ -212,7 +225,10 @@ describe("DSL compiler", () => {
         }`;
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
-        const schema = result.ir!.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(result.ir!).inputSchema as Record<
+            string,
+            unknown
+        >;
         expect(schema.type).toBe("object");
         expect(schema.required).toEqual(["repos", "author"]);
         const props = schema.properties as Record<
@@ -237,7 +253,7 @@ describe("DSL compiler", () => {
         const ir = result.ir!;
 
         // Should have a loop node
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
@@ -263,7 +279,7 @@ describe("DSL compiler", () => {
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
-        const nodeB = result.ir!.nodes["b"] as {
+        const nodeB = bodyOf(result.ir!).nodes["b"] as {
             inputs: Record<string, unknown>;
         };
         const varsInput = nodeB.inputs.vars as Record<string, unknown>;
@@ -293,8 +309,8 @@ describe("DSL compiler", () => {
         const result = compile(source, TASK_SCHEMAS, VALIDATE);
         expect(result.errors).toHaveLength(0);
 
-        const nodeA = result.ir!.nodes["a"] as { next?: string };
-        const nodeB = result.ir!.nodes["b"] as { next?: string };
+        const nodeA = bodyOf(result.ir!).nodes["a"] as { next?: string };
+        const nodeB = bodyOf(result.ir!).nodes["b"] as { next?: string };
         expect(nodeA.next).toBe("b");
         expect(nodeB.next).toBe("c");
     });
@@ -311,7 +327,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
@@ -330,7 +346,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const branchNodes = Object.entries(ir.nodes).filter(
+        const branchNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "branch",
         );
         expect(branchNodes.length).toBeGreaterThanOrEqual(1);
@@ -354,7 +370,7 @@ describe("DSL compiler", () => {
         expect(result.errors).toHaveLength(0);
         const ir = result.ir!;
 
-        const forkNodes = Object.entries(ir.nodes).filter(
+        const forkNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "fork",
         );
         expect(forkNodes.length).toBe(1);
@@ -367,7 +383,9 @@ describe("DSL d1-standup-prep", () => {
             __dirname,
             "..",
             "..",
-            "examples",
+            "..",
+            "workflows",
+            "dsl",
             "d1-standup-prep.wf",
         );
         const source = fs.readFileSync(wfPath, "utf-8");
@@ -378,26 +396,26 @@ describe("DSL d1-standup-prep", () => {
         const ir = result.ir!;
 
         // Top-level structure
-        expect(ir.name).toBe("standupPrep");
+        expect(ir.entry).toBe("standupPrep");
         expect(ir.version).toBe("1");
-        const schema = ir.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(ir).inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["repos", "author"]);
 
         // Should have a loop node (from map)
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
 
         // Post-loop: joined task should reference the loop's output
-        expect(ir.nodes["joined"]).toBeDefined();
-        const joinedNode = ir.nodes["joined"] as {
+        expect(bodyOf(ir).nodes["joined"]).toBeDefined();
+        const joinedNode = bodyOf(ir).nodes["joined"] as {
             task: string;
         };
         expect(joinedNode.task).toBe("string.join");
 
         // Output should reference joined
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output.$from).toBe("scope");
         expect(output.name).toBe("joined");
     });
@@ -409,7 +427,9 @@ describe("DSL d8-summarize-url", () => {
             __dirname,
             "..",
             "..",
-            "examples",
+            "..",
+            "workflows",
+            "dsl",
             "d8-summarize-url.wf",
         );
         const source = fs.readFileSync(wfPath, "utf-8");
@@ -423,24 +443,375 @@ describe("DSL d8-summarize-url", () => {
         const ir = result.ir!;
 
         // Top-level structure
-        expect(ir.name).toBe("summarizeUrl");
+        expect(ir.entry).toBe("summarizeUrl");
         expect(ir.version).toBe("1");
-        const schema = ir.inputSchema as Record<string, unknown>;
+        const schema = bodyOf(ir).inputSchema as Record<string, unknown>;
         expect(schema.required).toEqual(["url", "outputPath"]);
 
         // Should have a loop node (from attempts)
-        const loopNodes = Object.entries(ir.nodes).filter(
+        const loopNodes = Object.entries(bodyOf(ir).nodes).filter(
             ([_, n]) => n.kind === "loop",
         );
         expect(loopNodes.length).toBe(1);
 
         // Post-loop: should have prompt, summaryResult, writeResult
-        expect(ir.nodes["prompt"]).toBeDefined();
-        expect(ir.nodes["summaryResult"]).toBeDefined();
-        expect(ir.nodes["writeResult"]).toBeDefined();
+        expect(bodyOf(ir).nodes["prompt"]).toBeDefined();
+        expect(bodyOf(ir).nodes["summaryResult"]).toBeDefined();
+        expect(bodyOf(ir).nodes["writeResult"]).toBeDefined();
 
         // Output should be an object
-        const output = ir.output as Record<string, unknown>;
+        const output = bodyOf(ir).output as Record<string, unknown>;
         expect(output).toBeDefined();
+    });
+});
+
+describe("generic type arguments", () => {
+    const GENERIC_SCHEMAS: TaskSchemaInfo[] = [
+        ...TASK_SCHEMAS,
+        {
+            name: "llm.generateJson",
+            typeParameters: [{ name: "T", default: {} }],
+            inputSchema: {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            outputSchema: { $typeParam: "T" },
+        },
+        {
+            name: "llm.requiredGen",
+            typeParameters: [{ name: "T" }],
+            inputSchema: {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            outputSchema: { $typeParam: "T" },
+        },
+        {
+            name: "llm.nestedGen",
+            typeParameters: [{ name: "T", default: {} }],
+            inputSchema: {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            outputSchema: {
+                type: "object",
+                required: ["value"],
+                properties: { value: { $typeParam: "T" } },
+            },
+        },
+        {
+            name: "llm.arrayGen",
+            typeParameters: [{ name: "T", default: {} }],
+            inputSchema: {
+                type: "object",
+                required: ["prompt"],
+                properties: { prompt: { type: "string" } },
+            },
+            outputSchema: { type: "array", items: { $typeParam: "T" } },
+        },
+        {
+            name: "llm.inputGen",
+            typeParameters: [{ name: "T", default: {} }],
+            inputSchema: {
+                type: "object",
+                required: ["data"],
+                properties: { data: { $typeParam: "T" } },
+            },
+            outputSchema: { type: "string" },
+        },
+    ];
+
+    it("emits typed outputSchema from type arg", () => {
+        const result = compile(
+            `workflow test(p: string): string {
+                const r = llm.generateJson<{ name: string }>(prompt: p);
+                return r.name;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const body = bodyOf(ir);
+        const rNode = body.nodes["r"] as any;
+        expect(rNode.task).toBe("llm.generateJson");
+        expect(rNode.outputSchema).toEqual({
+            type: "object",
+            required: ["name"],
+            properties: { name: { type: "string" } },
+        });
+    });
+
+    it("emits default outputSchema when no type arg", () => {
+        const result = compile(
+            `workflow test(p: string): unknown {
+                const r = llm.generateJson(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const body = bodyOf(ir);
+        const rNode = body.nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({});
+    });
+
+    it("resolves $typeParam nested in output properties", () => {
+        const result = compile(
+            `workflow test(p: string): { value: number } {
+                const r = llm.nestedGen<number>(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({
+            type: "object",
+            required: ["value"],
+            properties: { value: { type: "number" } },
+        });
+    });
+
+    it("resolves $typeParam in array items", () => {
+        const result = compile(
+            `workflow test(p: string): string[] {
+                const r = llm.arrayGen<string>(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({
+            type: "array",
+            items: { type: "string" },
+        });
+    });
+
+    it("resolves $typeParam in inputSchema", () => {
+        const result = compile(
+            `workflow test(p: { x: number }): string {
+                const r = llm.inputGen<{ x: number }>(data: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.inputSchema).toEqual({
+            type: "object",
+            required: ["data"],
+            properties: {
+                data: {
+                    type: "object",
+                    required: ["x"],
+                    properties: { x: { type: "number" } },
+                },
+            },
+        });
+    });
+
+    it("required generic without type arg produces type error", () => {
+        const result = compile(
+            `workflow test(p: string): unknown {
+                const r = llm.requiredGen(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+        );
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0].message).toContain("requires a type argument");
+    });
+
+    it("required generic with type arg resolves correctly", () => {
+        const result = compile(
+            `workflow test(p: string): boolean {
+                const r = llm.requiredGen<boolean>(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({ type: "boolean" });
+    });
+
+    it("generic with complex object type arg", () => {
+        const result = compile(
+            `workflow test(p: string): { items: string[], count: number } {
+                const r = llm.generateJson<{ items: string[], count: number }>(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({
+            type: "object",
+            required: ["items", "count"],
+            properties: {
+                items: { type: "array", items: { type: "string" } },
+                count: { type: "number" },
+            },
+        });
+    });
+
+    it("generic result used in downstream expressions", () => {
+        const result = compile(
+            `workflow test(p: string): string {
+                const r = llm.generateJson<{ name: string, age: number }>(prompt: p);
+                const greeting = text.template(template: "Hello {{name}}", vars: { name: r.name });
+                return greeting;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const body = bodyOf(ir);
+        // The generic task should have resolved output schema
+        const rNode = body.nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({
+            type: "object",
+            required: ["name", "age"],
+            properties: {
+                name: { type: "string" },
+                age: { type: "number" },
+            },
+        });
+        // The downstream task should reference the generic result
+        const greetingNode = body.nodes["greeting"] as any;
+        expect(greetingNode.task).toBe("text.template");
+    });
+
+    it("generic inside if branch resolves schemas", () => {
+        const result = compile(
+            `workflow test(p: string, flag: boolean): unknown {
+                if (flag) {
+                    const r = llm.generateJson<{ x: number }>(prompt: p);
+                    return r;
+                } else {
+                    const r = llm.generateJson<{ x: number }>(prompt: p);
+                    return r;
+                }
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const body = bodyOf(ir);
+        // Find the generic task node (it'll be inside a branch arm scope)
+        const findGenericNode = (nodes: Record<string, any>): any => {
+            for (const node of Object.values(nodes)) {
+                if (node.task === "llm.generateJson") return node;
+                if (node.kind === "branch") {
+                    for (const arm of Object.values(node.cases ?? {})) {
+                        const found = findGenericNode(
+                            (arm as any).scope?.nodes ?? {},
+                        );
+                        if (found) return found;
+                    }
+                    if (node.default?.scope?.nodes) {
+                        const found = findGenericNode(node.default.scope.nodes);
+                        if (found) return found;
+                    }
+                }
+            }
+            return undefined;
+        };
+        const genNode = findGenericNode(body.nodes);
+        expect(genNode).toBeDefined();
+        expect(genNode.outputSchema).toEqual({
+            type: "object",
+            required: ["x"],
+            properties: { x: { type: "number" } },
+        });
+    });
+
+    it("generic inside map body resolves schemas", () => {
+        const result = compile(
+            `workflow test(prompts: string[]): unknown[] {
+                const results = map(prompts, (p) => {
+                    const r = llm.generateJson<{ answer: string }>(prompt: p);
+                    return r;
+                });
+                return results;
+            }`,
+            GENERIC_SCHEMAS,
+            VALIDATE,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const body = bodyOf(ir);
+        // The generic task is inside the loop body arm scope
+        const findGenericNode = (obj: unknown): any => {
+            if (!obj || typeof obj !== "object") return undefined;
+            const o = obj as Record<string, any>;
+            if (o.task === "llm.generateJson") return o;
+            for (const v of Object.values(o)) {
+                const found = findGenericNode(v);
+                if (found) return found;
+            }
+            return undefined;
+        };
+        const genNode = findGenericNode(body.nodes);
+        expect(genNode).toBeDefined();
+        expect(genNode.outputSchema).toEqual({
+            type: "object",
+            required: ["answer"],
+            properties: { answer: { type: "string" } },
+        });
+    });
+
+    it("default outputSchema with nested $typeParam uses empty schema", () => {
+        const result = compile(
+            `workflow test(p: string): unknown {
+                const r = llm.nestedGen(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        // With default {}, the nested property "value" should be {}
+        expect(rNode.outputSchema).toEqual({
+            type: "object",
+            required: ["value"],
+            properties: { value: {} },
+        });
+    });
+
+    it("default outputSchema with array items uses empty schema", () => {
+        const result = compile(
+            `workflow test(p: string): unknown {
+                const r = llm.arrayGen(prompt: p);
+                return r;
+            }`,
+            GENERIC_SCHEMAS,
+        );
+        expect(result.errors).toEqual([]);
+        const ir = result.ir!;
+        const rNode = bodyOf(ir).nodes["r"] as any;
+        expect(rNode.outputSchema).toEqual({
+            type: "array",
+            items: {},
+        });
     });
 });

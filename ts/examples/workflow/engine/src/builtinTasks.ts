@@ -15,8 +15,81 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { JSONSchema, TaskDefinition } from "workflow-model";
+import {
+    JSONSchema,
+    TaskDefinition,
+    ConcreteTaskDefinition,
+    GenericTaskDefinition,
+    TaskTypeParameter,
+} from "workflow-model";
+import { isGenericBuiltinSchema } from "./builtinTaskSchemas.js";
 import { openai } from "aiclient";
+import type { CustomAgentConfig } from "@github/copilot-sdk";
+import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
+import { invokeCopilotAgent } from "./copilotClientHost.js";
+
+const SCHEMA_BY_NAME = new Map(
+    BUILTIN_TASK_SCHEMAS.map((s) => [s.name, s] as const),
+);
+
+type ConcreteSchemaFields = Pick<
+    ConcreteTaskDefinition,
+    "name" | "inputSchema" | "outputSchema"
+>;
+type GenericSchemaFields = Pick<
+    GenericTaskDefinition,
+    "name" | "inputSchemaTemplate" | "outputSchemaTemplate" | "typeParameters"
+>;
+
+/**
+ * Look up a non-generic task's schema from `builtinTaskSchemas.ts`.
+ */
+function taskSchema(name: string): ConcreteSchemaFields {
+    const s = SCHEMA_BY_NAME.get(name);
+    if (!s) {
+        throw new Error(
+            `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
+        );
+    }
+    if (isGenericBuiltinSchema(s)) {
+        throw new Error(
+            `Task '${name}' has type parameters; use genericTaskSchema() instead`,
+        );
+    }
+    return {
+        name: s.name,
+        inputSchema: s.inputSchema,
+        outputSchema: s.outputSchema,
+    };
+}
+
+/**
+ * Look up a generic task's schema from `builtinTaskSchemas.ts`.
+ * Returns the template and type parameter metadata.
+ */
+function genericTaskSchema(name: string): GenericSchemaFields {
+    const s = SCHEMA_BY_NAME.get(name);
+    if (!s) {
+        throw new Error(
+            `No schema declared for builtin task '${name}' in builtinTaskSchemas.ts`,
+        );
+    }
+    if (!isGenericBuiltinSchema(s)) {
+        throw new Error(
+            `Task '${name}' has no type parameters; use taskSchema() instead`,
+        );
+    }
+    const typeParameters: TaskTypeParameter[] = s.typeParameters.map((p) => ({
+        name: p.name,
+        ...(p.default ? { default: p.default } : {}),
+    }));
+    return {
+        name: s.name,
+        inputSchemaTemplate: s.inputSchema,
+        outputSchemaTemplate: s.outputSchema,
+        typeParameters,
+    };
+}
 
 /**
  * Recursively enforce OpenAI structured output requirements on a schema:
@@ -55,14 +128,8 @@ function sealObjects(schema: JSONSchema): JSONSchema {
 }
 
 export const listLength: TaskDefinition<{ list: unknown[] }, number> = {
-    name: "list.length",
+    ...taskSchema("list.length"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list"],
-        properties: { list: { type: "array" } },
-    },
-    outputSchema: { type: "integer" },
     async execute(input) {
         return { kind: "ok", output: input.list.length };
     },
@@ -72,17 +139,8 @@ export const listElementAt: TaskDefinition<
     { list: unknown[]; index: number },
     unknown
 > = {
-    name: "list.elementAt",
+    ...genericTaskSchema("list.elementAt"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "index"],
-        properties: {
-            list: { type: "array" },
-            index: { type: "integer" },
-        },
-    },
-    outputSchema: {},
     async execute(input) {
         if (input.index < 0 || input.index >= input.list.length) {
             return {
@@ -100,14 +158,8 @@ export const listAppend: TaskDefinition<
     { list: unknown[]; item: unknown },
     unknown[]
 > = {
-    name: "list.append",
+    ...taskSchema("list.append"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "item"],
-        properties: { list: { type: "array" }, item: {} },
-    },
-    outputSchema: { type: "array" },
     async execute(input) {
         return { kind: "ok", output: [...input.list, input.item] };
     },
@@ -117,18 +169,8 @@ export const boolToLabel: TaskDefinition<
     { value: boolean; ifTrue: string; ifFalse: string },
     string
 > = {
-    name: "bool.toLabel",
+    ...taskSchema("bool.toLabel"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value", "ifTrue", "ifFalse"],
-        properties: {
-            value: { type: "boolean" },
-            ifTrue: { type: "string" },
-            ifFalse: { type: "string" },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input) {
         return {
             kind: "ok",
@@ -148,30 +190,8 @@ export const shellExec: TaskDefinition<
     },
     { stdout: string; stderr: string; exitCode: number }
 > = {
-    name: "shell.exec",
+    ...taskSchema("shell.exec"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["command"],
-        properties: {
-            command: { type: "string" },
-            args: { type: "array", items: { type: "string" } },
-            cwd: { type: "string" },
-            maxBuffer: {
-                type: "integer",
-                description: "Max stdout+stderr in bytes (default 1MB)",
-            },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["stdout", "stderr", "exitCode"],
-        properties: {
-            stdout: { type: "string" },
-            stderr: { type: "string" },
-            exitCode: { type: "integer" },
-        },
-    },
     async execute(input, ctx) {
         const { command, args = [], cwd } = input;
         const maxBuffer = input.maxBuffer ?? 1024 * 1024; // 1MB default
@@ -240,17 +260,8 @@ export const llmGenerate: TaskDefinition<
     { prompt: string; endpoint?: string },
     string
 > = {
-    name: "llm.generate",
+    ...taskSchema("llm.generate"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["prompt"],
-        properties: {
-            prompt: { type: "string" },
-            endpoint: { type: "string" },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         let model;
@@ -275,21 +286,12 @@ export const llmGenerate: TaskDefinition<
     },
 };
 
-export const llmGenerateJson: TaskDefinition<
+export const llmGenerateJson: GenericTaskDefinition<
     { prompt: string; endpoint?: string },
     unknown
 > = {
-    name: "llm.generateJson",
+    ...genericTaskSchema("llm.generateJson"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["prompt"],
-        properties: {
-            prompt: { type: "string" },
-            endpoint: { type: "string" },
-        },
-    },
-    outputSchema: {},
     async execute(input, ctx) {
         ctx?.signal?.throwIfAborted();
         let model;
@@ -341,23 +343,126 @@ export const llmGenerateJson: TaskDefinition<
     },
 };
 
+/**
+ * This task runs a Copilot agent turn against a fresh session, with the agent's
+ * response shaped by the IR node's declared `outputSchema`.
+ *
+ * Key contracts:
+ *   - Registered output schema: `{type: "object"}`. The actual per-call
+ *     output shape is whatever the IR node declares.
+ *   - Authentication: env vars (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
+ *     `GITHUB_TOKEN`) or the logged-in `copilot` CLI user. No IR knob.
+ *   - Permission posture: Tools restricted to set listed in `allowedTools`.
+ *     Requests to `allowedTools` are `approveAll` for v1. Capability-based
+ *     security model is the longer-term follow-up (decision 0010 §7).
+ */
+export const copilotInvoke: TaskDefinition<
+    {
+        prompt: string;
+        model?: string;
+        systemMessage?: string;
+        customAgents?: CustomAgentConfig[];
+        allowedTools?: string[];
+        attachments?: Array<{ path: string }>;
+        timeoutMs?: number;
+        reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+        repairBudget?: number;
+    },
+    unknown
+> = {
+    name: "copilot.invoke",
+    sideEffects: true,
+    inputSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: {
+            prompt: { type: "string" },
+            model: { type: "string" },
+            systemMessage: { type: "string" },
+            customAgents: { type: "array" },
+            allowedTools: { type: "array", items: { type: "string" } },
+            attachments: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["path"],
+                    properties: { path: { type: "string" } },
+                },
+            },
+            timeoutMs: { type: "integer" },
+            reasoningEffort: {
+                type: "string",
+                enum: ["low", "medium", "high", "xhigh"],
+            },
+            repairBudget: {
+                type: "integer",
+                minimum: 1,
+                maximum: 10,
+                description: "Schema-repair attempts; default 3.",
+            },
+        },
+    },
+    // `copilot.invoke`'s actual per-call output shape is whatever the
+    // dispatching node declares (`{}` is JSONSchema for `any`).
+    outputSchema: {},
+    async execute(input, ctx) {
+        // Validate any attachment paths against the same allowed roots
+        // file.read / file.write enforce.
+        if (input.attachments) {
+            for (const a of input.attachments) {
+                try {
+                    a.path = validateFilePath(a.path);
+                } catch (err) {
+                    return {
+                        kind: "fail",
+                        error: {
+                            message: `copilot.invoke attachment ${a.path} rejected: ${err instanceof Error ? err.message : String(err)}`,
+                        },
+                    };
+                }
+            }
+        }
+
+        const result = await invokeCopilotAgent({
+            prompt: input.prompt,
+            outputSchema: ctx.outputSchema,
+            ...(input.model !== undefined ? { model: input.model } : {}),
+            ...(input.systemMessage !== undefined
+                ? { systemMessageAppend: input.systemMessage }
+                : {}),
+            ...(input.customAgents !== undefined
+                ? { customAgents: input.customAgents }
+                : {}),
+            ...(input.allowedTools !== undefined
+                ? { availableTools: input.allowedTools }
+                : {}),
+            ...(input.attachments !== undefined
+                ? { attachments: input.attachments }
+                : {}),
+            ...(input.timeoutMs !== undefined
+                ? { timeoutMs: input.timeoutMs }
+                : {}),
+            ...(input.reasoningEffort !== undefined
+                ? { reasoningEffort: input.reasoningEffort }
+                : {}),
+            ...(input.repairBudget !== undefined
+                ? { repairBudget: input.repairBudget }
+                : {}),
+            signal: ctx.signal,
+        });
+
+        return result;
+    },
+};
+
 // ---- Utility tasks ----
 
 export const textTemplate: TaskDefinition<
     { template: string; vars: Record<string, unknown> },
     string
 > = {
-    name: "text.template",
+    ...taskSchema("text.template"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["template", "vars"],
-        properties: {
-            template: { type: "string" },
-            vars: { type: "object" },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input) {
         let text = input.template;
         for (const [key, value] of Object.entries(input.vars)) {
@@ -371,17 +476,8 @@ export const stringJoin: TaskDefinition<
     { list: string[]; delimiter: string },
     string
 > = {
-    name: "string.join",
+    ...taskSchema("string.join"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["list", "delimiter"],
-        properties: {
-            list: { type: "array", items: { type: "string" } },
-            delimiter: { type: "string" },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input) {
         return { kind: "ok", output: input.list.join(input.delimiter) };
     },
@@ -391,22 +487,8 @@ export const stringSplit: TaskDefinition<
     { text: string; delimiter: string; keepEmpty?: boolean },
     string[]
 > = {
-    name: "string.split",
+    ...taskSchema("string.split"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["text", "delimiter"],
-        properties: {
-            text: { type: "string" },
-            delimiter: { type: "string" },
-            keepEmpty: {
-                type: "boolean",
-                description:
-                    "Keep empty strings in the result (default: false).",
-            },
-        },
-    },
-    outputSchema: { type: "array", items: { type: "string" } },
     async execute(input) {
         const list = input.text.split(input.delimiter);
         return {
@@ -424,29 +506,8 @@ export const httpGet: TaskDefinition<
     },
     { body: string; status: number }
 > = {
-    name: "http.get",
+    ...taskSchema("http.get"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["url"],
-        properties: {
-            url: { type: "string" },
-            headers: { type: "object" },
-            maxResponseBytes: {
-                type: "integer",
-                description:
-                    "Max response body size in bytes (default 10MB). Responses larger than this are truncated.",
-            },
-        },
-    },
-    outputSchema: {
-        type: "object",
-        required: ["body", "status"],
-        properties: {
-            body: { type: "string" },
-            status: { type: "integer" },
-        },
-    },
     async execute(input, ctx) {
         const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024; // 10MB
         try {
@@ -588,20 +649,8 @@ export const fileRead: TaskDefinition<
     { path: string; maxBytes?: number },
     string
 > = {
-    name: "file.read",
+    ...taskSchema("file.read"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["path"],
-        properties: {
-            path: { type: "string" },
-            maxBytes: {
-                type: "integer",
-                description: "Max file size in bytes (default 10MB)",
-            },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input) {
         const maxBytes = input.maxBytes ?? DEFAULT_MAX_FILE_READ_BYTES;
         try {
@@ -631,17 +680,8 @@ export const fileWrite: TaskDefinition<
     { path: string; content: string },
     string
 > = {
-    name: "file.write",
+    ...taskSchema("file.write"),
     sideEffects: true,
-    inputSchema: {
-        type: "object",
-        required: ["path", "content"],
-        properties: {
-            path: { type: "string" },
-            content: { type: "string" },
-        },
-    },
-    outputSchema: { type: "string" },
     async execute(input) {
         try {
             const safePath = validateFilePath(input.path);
@@ -665,14 +705,8 @@ export const compareEquals: TaskDefinition<
     { left: unknown; right: unknown },
     boolean
 > = {
-    name: "compare.equals",
+    ...taskSchema("compare.equals"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: {}, right: {} },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left === input.right };
     },
@@ -682,14 +716,8 @@ export const compareNotEquals: TaskDefinition<
     { left: unknown; right: unknown },
     boolean
 > = {
-    name: "compare.notEquals",
+    ...taskSchema("compare.notEquals"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: {}, right: {} },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left !== input.right };
     },
@@ -699,14 +727,8 @@ export const compareGreaterThan: TaskDefinition<
     { left: number; right: number },
     boolean
 > = {
-    name: "compare.greaterThan",
+    ...taskSchema("compare.greaterThan"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left > input.right };
     },
@@ -716,14 +738,8 @@ export const compareLessThan: TaskDefinition<
     { left: number; right: number },
     boolean
 > = {
-    name: "compare.lessThan",
+    ...taskSchema("compare.lessThan"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left < input.right };
     },
@@ -733,14 +749,8 @@ export const compareGreaterOrEqual: TaskDefinition<
     { left: number; right: number },
     boolean
 > = {
-    name: "compare.greaterOrEqual",
+    ...taskSchema("compare.greaterOrEqual"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left >= input.right };
     },
@@ -750,14 +760,8 @@ export const compareLessOrEqual: TaskDefinition<
     { left: number; right: number },
     boolean
 > = {
-    name: "compare.lessOrEqual",
+    ...taskSchema("compare.lessOrEqual"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: input.left <= input.right };
     },
@@ -766,14 +770,8 @@ export const compareLessOrEqual: TaskDefinition<
 // ---- bool tasks ----
 
 export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
-    name: "bool.not",
+    ...taskSchema("bool.not"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: { type: "boolean" } },
-    },
-    outputSchema: { type: "boolean" },
     async execute(input) {
         return { kind: "ok", output: !input.value };
     },
@@ -781,33 +779,23 @@ export const boolNot: TaskDefinition<{ value: boolean }, boolean> = {
 
 // ---- math tasks ----
 
-export const mathAdd: TaskDefinition<{ left: number; right: number }, number> =
-    {
-        name: "math.add",
-        sideEffects: false,
-        inputSchema: {
-            type: "object",
-            required: ["left", "right"],
-            properties: { left: { type: "number" }, right: { type: "number" } },
-        },
-        outputSchema: { type: "number" },
-        async execute(input) {
-            return { kind: "ok", output: input.left + input.right };
-        },
-    };
+export const mathAdd: GenericTaskDefinition<
+    { left: number; right: number },
+    number
+> = {
+    ...genericTaskSchema("math.add"),
+    sideEffects: false,
+    async execute(input) {
+        return { kind: "ok", output: input.left + input.right };
+    },
+};
 
 export const mathSubtract: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    name: "math.subtract",
+    ...genericTaskSchema("math.subtract"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "number" },
     async execute(input) {
         return { kind: "ok", output: input.left - input.right };
     },
@@ -817,31 +805,20 @@ export const mathMultiply: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    name: "math.multiply",
+    ...genericTaskSchema("math.multiply"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "number" },
     async execute(input) {
         return { kind: "ok", output: input.left * input.right };
     },
 };
 
+// Not generic: integer / integer can yield non-integer (1 / 2 = 0.5).
 export const mathDivide: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    name: "math.divide",
+    ...taskSchema("math.divide"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "number" },
     async execute(input) {
         return { kind: "ok", output: input.left / input.right };
     },
@@ -851,70 +828,43 @@ export const mathModulo: TaskDefinition<
     { left: number; right: number },
     number
 > = {
-    name: "math.modulo",
+    ...genericTaskSchema("math.modulo"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["left", "right"],
-        properties: { left: { type: "number" }, right: { type: "number" } },
-    },
-    outputSchema: { type: "number" },
     async execute(input) {
         return { kind: "ok", output: input.left % input.right };
     },
 };
 
 export const mathNegate: TaskDefinition<{ value: number }, number> = {
-    name: "math.negate",
+    ...genericTaskSchema("math.negate"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: { type: "number" } },
-    },
-    outputSchema: { type: "number" },
     async execute(input) {
         return { kind: "ok", output: -input.value };
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathFloor: TaskDefinition<{ value: number }, number> = {
-    name: "math.floor",
+    ...taskSchema("math.floor"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: { type: "number" } },
-    },
-    outputSchema: { type: "integer" },
     async execute(input) {
         return { kind: "ok", output: Math.floor(input.value) };
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathRound: TaskDefinition<{ value: number }, number> = {
-    name: "math.round",
+    ...taskSchema("math.round"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: { type: "number" } },
-    },
-    outputSchema: { type: "integer" },
     async execute(input) {
         return { kind: "ok", output: Math.round(input.value) };
     },
 };
 
+// Not generic: output is always integer, regardless of input subtype.
 export const mathCeil: TaskDefinition<{ value: number }, number> = {
-    name: "math.ceil",
+    ...taskSchema("math.ceil"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: { type: "number" } },
-    },
-    outputSchema: { type: "integer" },
     async execute(input) {
         return { kind: "ok", output: Math.ceil(input.value) };
     },
@@ -926,10 +876,8 @@ export const noop: TaskDefinition<
     Record<string, never>,
     Record<string, never>
 > = {
-    name: "noop",
+    ...taskSchema("noop"),
     sideEffects: false,
-    inputSchema: { type: "object", properties: {} },
-    outputSchema: { type: "object", properties: {} },
     async execute() {
         return { kind: "ok", output: {} };
     },
@@ -938,14 +886,8 @@ export const noop: TaskDefinition<
 // ---- identity (pass-through for literal values in branches) ----
 
 export const identity: TaskDefinition<{ value: unknown }, unknown> = {
-    name: "identity",
+    ...taskSchema("identity"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: {} },
-    },
-    outputSchema: {},
     async execute(input) {
         return { kind: "ok", output: input.value };
     },
@@ -953,24 +895,18 @@ export const identity: TaskDefinition<{ value: unknown }, unknown> = {
 
 // ---- error tasks ----
 
-export const errorFail: TaskDefinition<{ value: unknown }, never> = {
-    name: "error.fail",
+export const errorFail: TaskDefinition<{ message: unknown }, never> = {
+    ...taskSchema("error.fail"),
     sideEffects: false,
-    inputSchema: {
-        type: "object",
-        required: ["value"],
-        properties: { value: {} },
-    },
-    outputSchema: { not: {} },
     async execute(input) {
         return {
             kind: "fail",
             error: {
                 message:
-                    typeof input.value === "string"
-                        ? input.value
-                        : JSON.stringify(input.value),
-                data: input.value,
+                    typeof input.message === "string"
+                        ? input.message
+                        : JSON.stringify(input.message),
+                data: input.message,
             },
         };
     },
@@ -1009,6 +945,7 @@ export const allBuiltinTasks: TaskDefinition[] = [
     shellExec,
     llmGenerate,
     llmGenerateJson,
+    copilotInvoke,
     httpGet,
     fileRead,
     fileWrite,

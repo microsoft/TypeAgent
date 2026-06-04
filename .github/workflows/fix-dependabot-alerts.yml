@@ -417,7 +417,15 @@ jobs:
         working-directory: ts
         run: |
           node tools/scripts/repo-policy-check.mjs --fix || true
-          pnpm run build
+          # Use `rebuild` (fluid-build --rebuild), not `build`, so the
+          # verification matches the clean-checkout CI build_ts job.
+          # fluid-build's incremental cache and tsc's .tsbuildinfo are
+          # keyed off the package's own sources + declared dep specs in
+          # package.json; an in-range transitive dep upgrade doesn't
+          # bust the cache, so a breaking .d.ts change in a dep can
+          # pass the incremental build here while still failing CI's
+          # fresh build.
+          pnpm run rebuild
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
         env:
           DEBUG_DEMB: true
@@ -431,10 +439,25 @@ jobs:
           echo "shell_ok=true" >> "$GITHUB_OUTPUT"
 
       # ── Create PR ───────────────────────────────────────────────────
+      # GitHub App installation tokens expire after 1 hour. The build/verify
+      # phase routinely runs longer than that, so the original app-token
+      # minted at job start is expired by the time we get here, causing
+      # `gh pr create` to fail with 401 Bad credentials (the `git push`
+      # itself works because actions/checkout uses the workflow's own
+      # GITHUB_TOKEN, which is valid for the full job lifetime). Mint a
+      # fresh app token immediately before any late-running `gh` calls.
+      - name: Refresh GitHub App token
+        id: app-token-pr
+        if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DEPENDABOT_APP_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+
       - name: Create pull request
         if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token-pr.outputs.token }}
         run: |
           BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-${{ github.run_number }}"
 

@@ -64,12 +64,13 @@
     "source=pnpm-global-store,target=/home/codespace/.local/share/pnpm/store,type=volume",
     // Per-container node_modules (symlinks to global store)
     "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
-    // Per-container writable sibling worktree root for agent windows
-    "source=typeagent-agent-worktrees-${devcontainerId},target=/workspaces/${localWorkspaceFolderBasename}.worktrees,type=volume",
     // Claude Code config persistence
     "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume",
     // Copilot CLI chat log persistence
-    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume"
+    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume",
+    // VS Code server data (extensions, settings cache, workspace storage, history)
+    // so editor state survives container recreate.
+    "source=vscode-server-${devcontainerId},target=/home/codespace/.vscode-server,type=volume"
   ],
 
   "containerEnv": {

@@ -8,9 +8,14 @@
  * Tokens are position-tracked for source-map generation.
  */
 
+import { decodeStringLiteral, decodeTemplatePart } from "./literal.js";
+
 export enum TokenKind {
     // Keywords
     Workflow = "workflow",
+    Export = "export",
+    Import = "import",
+    From = "from",
     Const = "const",
     If = "if",
     Else = "else",
@@ -75,23 +80,44 @@ export enum TokenKind {
     EOF = "EOF",
 }
 
-export interface Token {
-    kind: TokenKind;
+export interface BaseToken {
     value: string;
     line: number;
     col: number;
     offset: number;
 }
 
+/**
+ * String-literal token. Carries the original delimiter character so a
+ * round-trip serializer can reproduce single-quoted vs. double-quoted
+ * sources without guessing. Template tokens always use backticks and
+ * are represented by separate `TemplateHead` / `TemplateMiddle` /
+ * `TemplateTail` / `TemplateNoSub` kinds.
+ */
+export interface StringToken extends BaseToken {
+    kind: TokenKind.StringLiteral;
+    quote: '"' | "'";
+}
+
+export interface OtherToken extends BaseToken {
+    kind: Exclude<TokenKind, TokenKind.StringLiteral>;
+}
+
+export type Token = StringToken | OtherToken;
+
 export interface LexError {
     message: string;
     line: number;
     col: number;
     offset: number;
+    length: number;
 }
 
 const KEYWORDS = new Map<string, TokenKind>([
     ["workflow", TokenKind.Workflow],
+    ["export", TokenKind.Export],
+    ["import", TokenKind.Import],
+    ["from", TokenKind.From],
     ["const", TokenKind.Const],
     ["if", TokenKind.If],
     ["else", TokenKind.Else],
@@ -106,9 +132,33 @@ const KEYWORDS = new Map<string, TokenKind>([
     ["null", TokenKind.NullLiteral],
 ]);
 
-export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
+/**
+ * A comment captured by the lexer.
+ *
+ * `text` stores the FULL lexeme including the leading `//` (line) or
+ * the block delimiters (`/*` ... close marker) so that an AST-to-source
+ * serializer can reproduce the original spelling without ambiguity.
+ * This is a superset of the spec's `{ text, pos }` shape; the extra
+ * `block` flag makes downstream serializers cheaper.
+ */
+export interface LexComment {
+    /** Full comment text, including the `//` or block delimiters. */
+    text: string;
+    line: number;
+    col: number;
+    offset: number;
+    /** True for block comments, false for line comments. */
+    block: boolean;
+}
+
+export function lex(source: string): {
+    tokens: Token[];
+    errors: LexError[];
+    comments: LexComment[];
+} {
     const tokens: Token[] = [];
     const errors: LexError[] = [];
+    const comments: LexComment[] = [];
     let pos = 0;
     let line = 1;
     let col = 1;
@@ -146,7 +196,91 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             line: startLine,
             col: startCol,
             offset: startOffset,
-        };
+        } as Token;
+    }
+
+    /**
+     * Translate a raw-slice offset back to source line/col coordinates
+     * and push a LexError. `rawStartLine` / `rawStartCol` /
+     * `rawStartOffset` describe the source position of `raw[0]`. For
+     * string literals (no raw newlines allowed) `raw` is single-line so
+     * line stays constant; for template spans `raw` may contain `\n`
+     * and we walk it to recover the right line/col. This makes invalid
+     * escapes (e.g. `\xZZ`) surface as real lex errors at the offending
+     * character, matching JS strict-mode behavior where such literals
+     * are SyntaxErrors at parse time.
+     */
+    function reportDecodeError(
+        message: string,
+        raw: string,
+        offsetInRaw: number,
+        rawStartLine: number,
+        rawStartCol: number,
+        rawStartOffset: number,
+    ): void {
+        let l = rawStartLine;
+        let c = rawStartCol;
+        for (let i = 0; i < offsetInRaw && i < raw.length; i++) {
+            if (raw[i] === "\n") {
+                l++;
+                c = 1;
+            } else {
+                c++;
+            }
+        }
+        errors.push({
+            message,
+            line: l,
+            col: c,
+            offset: rawStartOffset + offsetInRaw,
+            length: 1,
+        });
+    }
+
+    /**
+     * Validate the cooked content of a template span (the slice between
+     * a backtick or `}` and the next `${` or backtick). Invalid escape
+     * sequences in template literals are SyntaxErrors in untagged JS;
+     * the formatter doesn't distinguish tagged vs untagged, so we
+     * report them unconditionally.
+     */
+    function validateTemplateRaw(
+        raw: string,
+        spanLine: number,
+        spanCol: number,
+        spanOffset: number,
+    ): void {
+        const decoded = decodeTemplatePart(raw);
+        for (const e of decoded.errors) {
+            reportDecodeError(
+                e.message,
+                raw,
+                e.offsetInRaw,
+                spanLine,
+                spanCol,
+                spanOffset,
+            );
+        }
+    }
+
+    /**
+     * Consume a `\` escape sequence's payload, leaving the cooked value
+     * unchanged on the output side (raw-text scanning). Handles the one
+     * special case that matters for raw scanning: a `\` immediately
+     * followed by CRLF is a single line-continuation escape and both
+     * the `\r` and the `\n` are consumed together. Caller must have
+     * already consumed the leading backslash.
+     */
+    function consumeEscapedCharRaw(): void {
+        if (pos >= source.length) return;
+        if (source[pos] === "\r") {
+            advance();
+            if (pos < source.length && source[pos] === "\n") {
+                advance();
+            }
+            return;
+        }
+        advance();
     }
 
     // Template literal depth: tracks nested `${}` so that `}` inside a
@@ -165,7 +299,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
         const spanLine = line;
         const spanCol = col;
         const spanOffset = pos;
-        let str = "";
+        const startOffset = pos;
 
         while (pos < source.length) {
             if (
@@ -173,6 +307,8 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 pos + 1 < source.length &&
                 source[pos + 1] === "{"
             ) {
+                const raw = source.slice(startOffset, pos);
+                validateTemplateRaw(raw, spanLine, spanCol, startOffset);
                 // Interpolation start: emit Head or Middle
                 advance(); // $
                 advance(); // {
@@ -181,7 +317,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                         isHead
                             ? TokenKind.TemplateHead
                             : TokenKind.TemplateMiddle,
-                        str,
+                        raw,
                         spanLine,
                         spanCol,
                         spanOffset,
@@ -191,14 +327,15 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                 return;
             }
             if (source[pos] === "`") {
-                // End of template: emit Tail or NoSub
+                const raw = source.slice(startOffset, pos);
+                validateTemplateRaw(raw, spanLine, spanCol, startOffset);
                 advance(); // closing backtick
                 tokens.push(
                     token(
                         isHead
                             ? TokenKind.TemplateNoSub
                             : TokenKind.TemplateTail,
-                        str,
+                        raw,
                         spanLine,
                         spanCol,
                         spanOffset,
@@ -208,32 +345,9 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             }
             if (source[pos] === "\\") {
                 advance(); // backslash
-                const esc = advance();
-                switch (esc) {
-                    case "n":
-                        str += "\n";
-                        break;
-                    case "t":
-                        str += "\t";
-                        break;
-                    case "r":
-                        str += "\r";
-                        break;
-                    case "\\":
-                        str += "\\";
-                        break;
-                    case "`":
-                        str += "`";
-                        break;
-                    case "$":
-                        str += "$";
-                        break;
-                    default:
-                        str += esc;
-                        break;
-                }
+                consumeEscapedCharRaw();
             } else {
-                str += advance();
+                advance();
             }
         }
 
@@ -242,6 +356,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             line: spanLine,
             col: spanCol,
             offset: spanOffset,
+            length: pos - spanOffset,
         });
     }
 
@@ -259,14 +374,23 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
 
         // Line comments
         if (ch === "/" && peekAt(1) === "/") {
+            const commentStartOffset = pos;
             while (pos < source.length && source[pos] !== "\n") {
                 advance();
             }
+            comments.push({
+                text: source.slice(commentStartOffset, pos),
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                block: false,
+            });
             continue;
         }
 
         // Block comments
         if (ch === "/" && peekAt(1) === "*") {
+            const commentStartOffset = pos;
             advance(); // /
             advance(); // *
             let closed = false;
@@ -285,8 +409,16 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                     line: startLine,
                     col: startCol,
                     offset: startOffset,
+                    length: pos - startOffset,
                 });
             }
+            comments.push({
+                text: source.slice(commentStartOffset, pos),
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                block: true,
+            });
             continue;
         }
 
@@ -294,57 +426,74 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
         if (ch === '"' || ch === "'") {
             const quote = ch;
             advance();
-            let str = "";
+            const innerStart = pos;
+            let unterminated = false;
             while (pos < source.length && source[pos] !== quote) {
-                if (source[pos] === "\\") {
-                    advance();
-                    const esc = advance();
-                    switch (esc) {
-                        case "n":
-                            str += "\n";
-                            break;
-                        case "t":
-                            str += "\t";
-                            break;
-                        case "r":
-                            str += "\r";
-                            break;
-                        case "\\":
-                            str += "\\";
-                            break;
-                        case "'":
-                            str += "'";
-                            break;
-                        case '"':
-                            str += '"';
-                            break;
-                        default:
-                            str += esc;
-                            break;
-                    }
+                const c = source[pos];
+                // Raw line terminators are forbidden inside string literals
+                // (strict-mode JS semantics). Use `\<newline>` for line
+                // continuation, or a template literal for multi-line text.
+                if (
+                    c === "\n" ||
+                    c === "\r" ||
+                    c === "\u2028" ||
+                    c === "\u2029"
+                ) {
+                    errors.push({
+                        message:
+                            "Unterminated string literal (raw newline not allowed)",
+                        line: startLine,
+                        col: startCol,
+                        offset: startOffset,
+                        length: pos - startOffset,
+                    });
+                    unterminated = true;
+                    break;
+                }
+                if (c === "\\") {
+                    advance(); // backslash
+                    consumeEscapedCharRaw();
                 } else {
-                    str += advance();
+                    advance();
                 }
             }
-            if (pos < source.length) {
+            const raw = source.slice(innerStart, pos);
+            if (!unterminated && pos < source.length) {
                 advance(); // closing quote
-            } else {
+            } else if (!unterminated) {
                 errors.push({
                     message: "Unterminated string literal",
                     line: startLine,
                     col: startCol,
                     offset: startOffset,
+                    length: pos - startOffset,
                 });
             }
-            tokens.push(
-                token(
-                    TokenKind.StringLiteral,
-                    str,
+            // Validate escapes inside the raw slice: invalid sequences
+            // (e.g. `\xZZ`, `\u{ABCDEFG}`, `\1`) become lex errors,
+            // matching JS strict-mode behavior. Without this check the
+            // emitter would silently substitute a default cooked value.
+            const decoded = decodeStringLiteral(raw, quote as '"' | "'");
+            for (const e of decoded.errors) {
+                reportDecodeError(
+                    e.message,
+                    raw,
+                    e.offsetInRaw,
                     startLine,
-                    startCol,
-                    startOffset,
-                ),
-            );
+                    // +1 for the opening quote character
+                    startCol + 1,
+                    innerStart,
+                );
+            }
+            const tok: StringToken = {
+                kind: TokenKind.StringLiteral,
+                value: raw,
+                line: startLine,
+                col: startCol,
+                offset: startOffset,
+                quote: quote as '"' | "'",
+            };
+            tokens.push(tok);
             continue;
         }
 
@@ -564,6 +713,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
+                            length: 2,
                         });
                     }
                 } else if (peek() === ">") {
@@ -611,6 +761,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                             line: startLine,
                             col: startCol,
                             offset: startOffset,
+                            length: 2,
                         });
                     }
                 } else {
@@ -694,6 +845,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                         line: startLine,
                         col: startCol,
                         offset: startOffset,
+                        length: 1,
                     });
                 }
                 continue;
@@ -716,6 +868,7 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
                         line: startLine,
                         col: startCol,
                         offset: startOffset,
+                        length: 1,
                     });
                 }
                 continue;
@@ -824,10 +977,11 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
             line: startLine,
             col: startCol,
             offset: startOffset,
+            length: 1,
         });
         advance();
     }
 
     tokens.push(token(TokenKind.EOF, "", line, col, pos));
-    return { tokens, errors };
+    return { tokens, errors, comments };
 }

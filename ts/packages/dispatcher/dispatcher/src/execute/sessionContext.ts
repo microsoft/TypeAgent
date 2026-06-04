@@ -21,6 +21,9 @@ import { validateGrammarPatternsImpl } from "../validation/grammarValidationServ
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:sessionContext");
+const debugClientCountWarn = registerDebug(
+    "typeagent:dispatcher:clientCount:warn",
+);
 import { randomUUID } from "node:crypto";
 
 export function createSessionContext<T = unknown>(
@@ -231,6 +234,38 @@ export function createSessionContext<T = unknown>(
         },
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);
+        },
+        async notifyReadinessChanged(): Promise<void> {
+            // Best-effort: swallow errors so an event-driven trigger
+            // (e.g. WebSocket onClientConnected) never throws into the
+            // event-emitter path. The cache will reconcile on the next
+            // refresh.
+            try {
+                await context.agents.refreshReadiness(name);
+            } catch {
+                // ignore
+            }
+        },
+        async notifyClientCountChanged(
+            role: string,
+            count: number,
+        ): Promise<void> {
+            // Best-effort: counts are informational (surfaced only via
+            // `@system ports`) so any failure is swallowed; logged
+            // under typeagent:dispatcher:clientCount:warn so it isn't
+            // entirely invisible.
+            try {
+                context.portRegistrar.setClientCount(
+                    name,
+                    role,
+                    sessionContextId,
+                    count,
+                );
+            } catch (e) {
+                debugClientCountWarn(
+                    `notifyClientCountChanged failed for ${name}/${role}: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
         },
         async validateGrammarPatterns(
             request: GrammarValidationRequest,

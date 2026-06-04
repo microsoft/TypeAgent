@@ -27,22 +27,27 @@ function taskMap(...names: string[]): Map<string, TaskDefinition> {
 function validWorkflowJson(name: string, taskName: string): string {
     return JSON.stringify({
         kind: "workflow",
-        name,
         version: "1",
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-        nodes: {
-            start: {
-                kind: "task",
-                task: taskName,
+        entry: name,
+        workflows: {
+            [name]: {
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 inputs: {},
-                bind: "out",
+                nodes: {
+                    start: {
+                        kind: "task",
+                        task: taskName,
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "out",
+                    },
+                },
+                entry: "start",
+                output: { $from: "scope", name: "out" },
             },
         },
-        entry: "start",
-        output: { $from: "scope", name: "out" },
     });
 }
 
@@ -107,7 +112,7 @@ describe("discoverWorkflows", () => {
         const result = await discoverWorkflows(dir, taskMap("noop"));
         expect(result.workflows.size).toBe(0);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe("bad.json");
+        expect(result.errors[0].file).toBe(join(dir, "bad.json"));
         expect(typeof result.errors[0].errors).toBe("string");
     });
 
@@ -138,7 +143,7 @@ describe("discoverWorkflows", () => {
         const result = await discoverWorkflows(dir, taskMap("noop"));
         expect(result.workflows.size).toBe(0);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe("invalid.json");
+        expect(result.errors[0].file).toBe(join(dir, "invalid.json"));
         expect(Array.isArray(result.errors[0].errors)).toBe(true);
     });
 

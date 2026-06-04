@@ -5,7 +5,10 @@ import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
@@ -88,6 +91,11 @@ export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
     name: string;
+    /** Server-assigned connectionId for this client (e.g. to label own queued requests). */
+    connectionId: string;
+    /** Server-side queue snapshot at join time, so clients can render correct
+     *  queue state when joining mid-queue. Omitted by older servers. */
+    queueSnapshot?: JoinConversationResult["queueSnapshot"];
 };
 
 export type AgentServerConnection = {
@@ -159,19 +167,28 @@ export async function connectAgentServer(
 
                 const conversationId = result.conversationId;
 
-                // Create conversation-namespaced channels
-                createClientIORpcServer(
-                    clientIO,
-                    channel.createChannel(
-                        getClientIOChannelName(conversationId),
-                    ),
-                );
-
-                const dispatcher = createDispatcherRpcClient(
+                // Create the dispatcher RPC client first so we can wrap the
+                // host's clientIO with completion-correlation forwarding
+                // before the clientIO RPC server starts delivering events.
+                const {
+                    dispatcher,
+                    notifyCommandComplete,
+                    notifyRequestCancelled,
+                } = createDispatcherRpcClient(
                     channel.createChannel(
                         getDispatcherChannelName(conversationId),
                     ),
                     result.connectionId,
+                );
+
+                createClientIORpcServer(
+                    wrapClientIOForCompletion(clientIO, {
+                        notifyCommandComplete,
+                        notifyRequestCancelled,
+                    }),
+                    channel.createChannel(
+                        getClientIOChannelName(conversationId),
+                    ),
                 );
 
                 // Override close to leave the conversation rather than close the WebSocket
@@ -188,6 +205,8 @@ export async function connectAgentServer(
                     dispatcher,
                     conversationId,
                     name: result.name,
+                    connectionId: result.connectionId,
+                    queueSnapshot: result.queueSnapshot,
                 };
             },
 
@@ -381,7 +400,13 @@ function spawnAgentServer(
             } else {
                 const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
+                // Single-quote and double any internal single quotes so a
+                // path containing quotes or PowerShell metacharacters can't
+                // break out of the -Command string. port/idleTimeout are
+                // numeric so they need no escaping.
+                const psQuote = (s: string) =>
+                    "'" + s.replace(/'/g, "''") + "'";
+                const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(
                     "cmd.exe",

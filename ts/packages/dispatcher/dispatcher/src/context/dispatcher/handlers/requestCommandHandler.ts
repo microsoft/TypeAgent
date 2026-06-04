@@ -101,7 +101,10 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayError,
+} from "@typeagent/agent-sdk/helpers/display";
 
 const debugExplain = registerDebug("typeagent:explain");
 const debugRequest = registerDebug("typeagent:request");
@@ -535,6 +538,7 @@ export class RequestCommandHandler implements CommandHandler {
                             }
                         },
                     );
+                    let errorReasoningResolved = false;
                     if (needsErrorReasoning) {
                         const { error, failedAction } = execResult;
                         const augmentedRequest =
@@ -561,11 +565,18 @@ export class RequestCommandHandler implements CommandHandler {
                                     },
                                 },
                             );
+                            errorReasoningResolved = true;
                         } catch (e: any) {
                             debugRequest(
                                 `Error-triggered reasoning failed, keeping original error: ${e.message}`,
                             );
                         }
+                    }
+                    // If error-triggered reasoning did not run (schema opted out)
+                    // or failed to resolve the failure, surface the original
+                    // action error instead of silently reporting success.
+                    if (!errorReasoningResolved) {
+                        displayError(execResult.error, context);
                     }
                 }
             }

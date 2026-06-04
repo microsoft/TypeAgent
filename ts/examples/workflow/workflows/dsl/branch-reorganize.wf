@@ -1,0 +1,109 @@
+// Analyze changes in a feature branch against a base branch, reorganize into
+// separate buildable/testable commits on new branches suitable for independent
+// PRs, then create a validation branch merging all new branches to verify the
+// combined diff matches the original.
+
+workflow branchReorganize(
+    repoPath: string,
+    featureBranch: string,
+    baseBranch: string,
+    branchPrefix: string,
+    buildCommand: string,
+    testCommand: string
+): { plan: unknown, branches: string[], validationBranch: string, validated: string } {
+
+    const analysisPrompt = "You are an expert software engineer reorganizing a feature branch into clean, independently-reviewable PRs.\n\nGiven the following information about changes in a feature branch:\n- Changed files list\n- Full diff\n\nAnalyze the changes and produce a JSON reorganization plan. Each group becomes a separate branch/PR.\n\nRules:\n1. Each group MUST be independently buildable and pass tests when applied on top of the base branch (plus any dependencies).\n2. The groups array MUST be in topological order: if group B depends on group A, A must appear before B in the array.\n3. Every changed file must appear in exactly one group.\n4. Group by logical concern: e.g., refactoring, new feature, bug fix, config changes, test additions.\n5. Prefer smaller, focused groups over large ones.\n6. If a group depends on another, list it in dependsOn. The branch for a dependent group will be created by first merging its dependency branches, so it will contain those changes.\n7. dependsOn references must only refer to groups that appear earlier in the array.\n\nRespond with ONLY valid JSON in this exact format (no markdown fencing):\n{\n  \"groups\": [\n    {\n      \"name\": \"short-kebab-case-name\",\n      \"description\": \"What this group does\",\n      \"files\": [\"path/to/file1.ts\", \"path/to/file2.ts\"],\n      \"dependsOn\": [],\n      \"commitMessage\": \"type(scope): description\"\n    }\n  ]\n}\n\nThe dependsOn array lists names of groups that must be merged before this one. Empty means the branch is created directly from the base branch.";
+
+    // Record current branch so we can restore on error
+    const originalBranch = shell.exec(command: "git", args: ["rev-parse", "--abbrev-ref", "HEAD"], cwd: repoPath);
+
+    // Build diff range string
+    const diffRange = `${baseBranch}...HEAD`;
+
+    // Get the full diff and file list
+    const fullDiff = shell.exec(command: "git", args: ["diff", diffRange], cwd: repoPath);
+    const fileList = shell.exec(command: "git", args: ["diff", "--name-status", diffRange], cwd: repoPath);
+
+    // Build the analysis prompt with file list and diff content
+    const prompt = `${analysisPrompt}\n\nChanged files:\n${fileList.stdout}\n\nFull diff:\n${fullDiff.stdout}`;
+
+    // Ask LLM to produce the reorganization plan
+    const analysisResult = llm.generateJson<{
+        groups: {
+            name: string,
+            description: string,
+            files: string[],
+            dependsOn: string[],
+            commitMessage: string
+        }[]
+    }>(prompt: prompt, endpoint: "GPT_4_1");
+
+    // Create branches: iterate over each group, create branch, cherry-pick files,
+    // verify build and tests pass
+    const branches = map(analysisResult.groups, (group) => {
+        const filesJoined = string.join(list: group.files, delimiter: "\n");
+        const depsJoined = string.join(list: group.dependsOn, delimiter: " ");
+
+        // Build the script to create the branch and cherry-pick the right files
+        const branchScript = `set -e
+BRANCH_NAME="${branchPrefix}${group.name}"
+DEPS="${depsJoined}"
+if [ -n "$DEPS" ]; then
+  git checkout -b "$BRANCH_NAME" "${baseBranch}"
+  for dep in $DEPS; do
+    git merge --no-edit "${branchPrefix}$dep"
+  done
+else
+  git checkout -b "$BRANCH_NAME" "${baseBranch}"
+fi
+while IFS= read -r f; do
+  [ -n "$f" ] && git checkout "${featureBranch}" -- "$f"
+done <<'FILELIST'
+${filesJoined}
+FILELIST
+git add .
+git commit -m "${group.commitMessage}"`;
+
+        const branchCreated = shell.exec(command: "bash", args: ["-c", branchScript], cwd: repoPath);
+
+        // Verify build
+        const buildResult = shell.exec(command: "bash", args: ["-c", buildCommand], cwd: repoPath);
+
+        // Verify tests
+        const testResult = shell.exec(command: "bash", args: ["-c", testCommand], cwd: repoPath);
+
+        // Return to base branch before next iteration
+        const returned = shell.exec(command: "git", args: ["checkout", baseBranch], cwd: repoPath);
+
+        return `${branchPrefix}${group.name}`;
+    });
+
+    // Create validation merge branch: merge all created branches
+    const branchNamesJoined = string.join(list: branches, delimiter: " ");
+    const mergeScript = `set -e
+git checkout -b ${branchPrefix}validation-merge "${baseBranch}"
+for branch in ${branchNamesJoined}; do
+  git merge --no-edit "$branch"
+done`;
+    const mergeResult = shell.exec(command: "bash", args: ["-c", mergeScript], cwd: repoPath);
+
+    // Validate that the combined diff matches the original feature branch diff
+    const validationScript = `set -e
+ORIGINAL=$(git diff "${baseBranch}"..."${featureBranch}" | sha256sum | cut -d' ' -f1)
+VALIDATION=$(git diff "${baseBranch}"..."${branchPrefix}validation-merge" | sha256sum | cut -d' ' -f1)
+if [ "$ORIGINAL" = "$VALIDATION" ]; then
+  echo MATCH
+else
+  echo MISMATCH
+  echo "Original SHA: $ORIGINAL"
+  echo "Validation SHA: $VALIDATION"
+fi`;
+    const validationResult = shell.exec(command: "bash", args: ["-c", validationScript], cwd: repoPath);
+
+    return {
+        plan: analysisResult,
+        branches: branches,
+        validationBranch: `${branchPrefix}validation-merge`,
+        validated: validationResult.stdout
+    };
+}

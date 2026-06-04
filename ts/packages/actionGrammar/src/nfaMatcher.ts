@@ -44,7 +44,13 @@ export interface NFAGrammarMatchResult {
 }
 
 /**
- * Strip trailing punctuation from a token (linear time)
+ * Strip trailing punctuation from a token (linear time).
+ *
+ * Punctuation-only tokens (e.g. `"..."`, `"!?"`) are PRESERVED — the strip is
+ * meant to remove incidental trailing punctuation on word-bearing tokens
+ * (`"hello,"` → `"hello"`), not to eliminate keywords that are themselves
+ * punctuation segments.  Without this guard, grammar `... done` would
+ * normalize to just `done`.
  */
 function stripTrailingPunctuation(token: string): string {
     const punctuation = "?!.,;:";
@@ -52,16 +58,53 @@ function stripTrailingPunctuation(token: string): string {
     while (end > 0 && punctuation.includes(token[end - 1])) {
         end--;
     }
+    if (end === 0) {
+        // Token is all punctuation — return as-is.
+        return token;
+    }
     return end === token.length ? token : token.slice(0, end);
 }
 
 /**
- * Normalize a single token for NFA matching: lowercase and strip trailing
- * punctuation.  Applied to both input tokens and grammar tokens so that both
- * sides of the comparison are on the same canonical form.
+ * Normalize a single token for NFA matching: lowercase, trim outer whitespace,
+ * and strip trailing sentence punctuation.  Applied to both input tokens and
+ * grammar tokens so that both sides of the comparison are on the same
+ * canonical form.
+ *
+ * The outer-whitespace trim handles grammar segments produced by escape-space
+ * authoring (`hello\ world` produces segments `["hello", " world"]`); without
+ * the trim the literal leading space prevents the segment from matching the
+ * whitespace-stripped input token "world".  Input tokens come from `\S+` so
+ * never have outer whitespace, making the trim a no-op for input.
  */
 export function normalizeToken(token: string): string {
-    return stripTrailingPunctuation(token.toLowerCase());
+    return stripTrailingPunctuation(token.trim().toLowerCase());
+}
+
+// Number token recognition — mirrors the canonical regex in grammarMatcher.ts
+// (matchNumberPartRegexp).  Accepts:
+//   - Octal:  0o[0-7]+
+//   - Hex:    0x[0-9a-f]+
+//   - Binary: 0b[01]+
+//   - Decimal with optional sign, fraction, and positive exponent
+const numberTokenRegExp =
+    /^(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)$/i;
+
+/**
+ * Parse a single token as a JavaScript number, accepting the same extended
+ * formats the canonical grammarMatcher recognizes (octal `0o…`, hex `0x…`,
+ * binary `0b…`, plus signed decimal with optional fraction/exponent).
+ *
+ * Returns the parsed `number`, or `undefined` if the token isn't a recognized
+ * numeric literal.  Unlike `parseFloat`, this rejects partial matches and
+ * understands the non-decimal prefixes.
+ */
+export function parseNumberToken(token: string): number | undefined {
+    if (!numberTokenRegExp.test(token)) {
+        return undefined;
+    }
+    const n = Number(token);
+    return Number.isNaN(n) ? undefined : n;
 }
 
 /**
@@ -77,6 +120,41 @@ export function tokenizeRequest(request: string): string[] {
         .split(/\s+/)
         .map(stripTrailingPunctuation)
         .filter((token) => token.length > 0);
+}
+
+/**
+ * Tokenize a request string while also recording each token's character
+ * offsets in the original (untrimmed) input.  Used by completion to compute
+ * `matchedPrefixLength` — the canonical matcher tracks this directly in chars;
+ * the NFA/DFA need to reconstruct it from token positions.
+ *
+ * `tokens[i]` is the *normalized* token (trailing sentence punctuation
+ * stripped) — what the matcher compares.
+ * `starts[i]` is the offset where the raw (pre-strip) match begins.
+ * `ends[i]` is the offset just past the raw match — i.e., it INCLUDES the
+ * trailing punctuation if any.  Canonical's `matchedPrefixLength` advances
+ * through trailing punctuation when the grammar token itself contains it
+ * (e.g. keyword `set:`), so we report the raw end here.
+ */
+export function tokenizeRequestWithOffsets(request: string): {
+    tokens: string[];
+    starts: number[];
+    ends: number[];
+} {
+    const tokens: string[] = [];
+    const starts: number[] = [];
+    const ends: number[] = [];
+    const re = /\S+/g;
+    for (const m of request.matchAll(re)) {
+        const raw = m[0];
+        const stripped = stripTrailingPunctuation(raw);
+        if (stripped.length === 0) continue;
+        const start = m.index ?? 0;
+        tokens.push(stripped);
+        starts.push(start);
+        ends.push(start + raw.length);
+    }
+    return { tokens, starts, ends };
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +204,15 @@ export function matchGrammarWithNFA(
     request: string,
 ): NFAGrammarMatchResult[] {
     const tokens = tokenizeRequest(request);
+    // Positional context for multi-input-token separator validation.  Only
+    // the original-token pass uses it; pre-split tokens have synthetic
+    // boundaries that don't correspond to the raw input.
+    const offsets = tokenizeRequestWithOffsets(request);
+    const inputCtx = {
+        request,
+        starts: offsets.starts,
+        ends: offsets.ends,
+    };
 
     debug(`Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
 
@@ -133,10 +220,21 @@ export function matchGrammarWithNFA(
         return [];
     }
 
+    // Canonical matcher rejects leading/trailing whitespace under spacing=none
+    // via the regex prefix (leadingIsNone) and finalizeState's trailing check
+    // (grammarMatcher.ts:632-644).  In the token-based NFA path, tokenizer trim
+    // erases that signal before matching ever starts — mirror the rejection
+    // here, gated on the matched rule's spacing mode.  Leading/trailing
+    // *punctuation* is left to the in-grammar tokens to match or not match;
+    // pure whitespace at the edges is the case the tokenizer alone can't
+    // recover.
+    const hasOuterWhitespace =
+        request.length !== request.trim().length && request.trim().length > 0;
+
     const index = getIndex(nfa);
 
     // Pass 1: original token array (handles spacing=required correctly)
-    const origResult = matchNFAWithIndex(nfa, index, tokens);
+    const origResult = matchNFAWithIndex(nfa, index, tokens, false, inputCtx);
 
     // Pass 2: pre-split fused tokens for optional/auto rules
     let bestResult = origResult;
@@ -159,6 +257,17 @@ export function matchGrammarWithNFA(
     if (!bestResult.matched) {
         debug(`Match result: NO MATCH`);
         return [];
+    }
+
+    // spacing=none + outer whitespace: reject (see comment near tokenization).
+    if (hasOuterWhitespace && bestResult.ruleIndex !== undefined) {
+        const matchedRule = _grammar.alternatives[bestResult.ruleIndex];
+        if (matchedRule?.spacingMode === "none") {
+            debug(
+                `Match rejected: rule ${bestResult.ruleIndex} is spacing=none but request has leading/trailing whitespace`,
+            );
+            return [];
+        }
     }
 
     debug(`Match result: MATCHED`);

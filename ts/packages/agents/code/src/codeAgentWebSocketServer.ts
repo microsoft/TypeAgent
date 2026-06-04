@@ -4,6 +4,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { AddressInfo } from "net";
 import registerDebug from "debug";
+import { isAllowedAgentOrigin } from "./originAllowlist.js";
 
 const debug = registerDebug("typeagent:code:websocket");
 
@@ -11,6 +12,15 @@ export class CodeAgentWebSocketServer {
     private clients: Map<string, WebSocket> = new Map();
     private clientIdCounter = 0;
     public onMessage?: (message: string) => void;
+    /**
+     * Fired after the {@link clients} map mutation completes for any
+     * connect / disconnect, with the post-mutation total. Used by the
+     * code agent to push counts up via `SessionContext.notifyClientCountChanged`
+     * so `@system ports` can surface them. NOTE: code's WS protocol
+     * has no session identity, so this count is global across every
+     * session sharing the bound port — not per-session.
+     */
+    public onClientCountChanged?: (count: number) => void;
 
     /**
      * @param server the underlying ws server, already bound and listening.
@@ -42,7 +52,25 @@ export class CodeAgentWebSocketServer {
      */
     public static start(port: number = 0): Promise<CodeAgentWebSocketServer> {
         return new Promise((resolve, reject) => {
-            const server = new WebSocketServer({ port });
+            const server = new WebSocketServer({
+                port,
+                // Gate every upgrade on Origin so a random web page on
+                // the same host can't dial the ephemeral port assigned
+                // by the OS. `verifyClient` is invoked synchronously
+                // before the `connection` event fires; rejected requests
+                // get HTTP 403.
+                verifyClient: (info, cb) => {
+                    const origin = info.req.headers.origin as
+                        | string
+                        | undefined;
+                    if (isAllowedAgentOrigin(origin)) {
+                        cb(true);
+                    } else {
+                        debug(`Rejecting WS upgrade from origin ${origin}`);
+                        cb(false, 403, "Origin not allowed");
+                    }
+                },
+            });
             let settled = false;
             const onError = (error: Error) => {
                 if (settled) {
@@ -85,6 +113,7 @@ export class CodeAgentWebSocketServer {
             const clientId = `client-${++this.clientIdCounter}-${Date.now()}`;
             debug("New client connected");
             this.clients.set(clientId, ws);
+            this.onClientCountChanged?.(this.clients.size);
 
             // Store client ID on the WebSocket for reference
             (ws as any).clientId = clientId;
@@ -99,11 +128,14 @@ export class CodeAgentWebSocketServer {
             ws.on("close", () => {
                 debug("Client disconnected");
                 this.clients.delete(clientId);
+                this.onClientCountChanged?.(this.clients.size);
             });
 
             ws.on("error", (error) => {
                 debug("Client error:", error);
-                this.clients.delete(clientId);
+                if (this.clients.delete(clientId)) {
+                    this.onClientCountChanged?.(this.clients.size);
+                }
             });
         });
     }

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5af77e4ff4664550315aa7731993925c1fdd1559dd470c712b1ba44410110adf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=bdb89958dbd279471b546e6e996cad66a9b029674b9f2bf555f1dceba18d3f95 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -31,6 +31,7 @@ To set up the `agent-shell` package, you need to configure several environment v
 - `SPEECH_SDK_ENDPOINT`: Service URL or speech API resource ID for Azure Speech Services.
 - `SPEECH_SDK_KEY`: API key for Azure Speech Services.
 - `SPEECH_SDK_REGION`: Region of the Azure Speech Services (e.g., `westus2`).
+- `WEBSOCKET_HOST`: Host for WebSocket connections.
 
 Additionally, you need to install the necessary libraries for building and using Electron in a Linux/WSL environment. Follow the instructions provided in the Electron documentation (`https://www.electronjs.org/docs/latest/development/build-instructions-linux`) to complete this setup.
 
@@ -72,9 +73,12 @@ Workspace:
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
+- [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
+- [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [aiclient](../../packages/aiclient/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
@@ -82,25 +86,27 @@ Workspace:
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
+- [websocket-channel-server](../../packages/utils/webSocketChannelServer/README.md)
 - [websocket-utils](../../packages/utils/webSocketUtils/README.md)
 
-External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/preload`, `ansi_up`, `debug`, `dompurify`, `dotenv`, `electron-updater`, `jose`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `typechat`, `ws`
+External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/preload`, `ansi_up`, `debug`, `dompurify`, `dotenv`, `electron-updater`, `jose`, `js-yaml`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `typechat`, `ws`
 
 ### Files of interest
 
-`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 83 more under `./src/`.
+`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 85 more under `./src/`.
 
 ### Environment variables
 
-_4 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_5 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `ELECTRON_RENDERER_URL`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
+- `WEBSOCKET_HOST`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

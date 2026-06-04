@@ -7,7 +7,10 @@ import {
     TypeAgentAction,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     createSdkMcpServer,
@@ -265,6 +268,55 @@ function formatToolCallDisplay(toolName: string, input: any): string {
 
 const formatToolResultDisplay = sharedFormatToolResultDisplay;
 const formatThinkingDisplay = sharedFormatThinkingDisplay;
+
+const mcpExecuteActionTool = `mcp__${mcpServerName}__execute_action`;
+
+/**
+ * Recover the TypeAgent action that an `execute_action` MCP tool call ran.
+ * Returns undefined for any other tool. The reasoning loop invokes TypeAgent
+ * actions exclusively through this tool, so this is how we recover the
+ * structured actions it executed.
+ */
+function extractExecutedAction(
+    toolName: string,
+    input: any,
+): TypeAgentAction | undefined {
+    if (toolName !== mcpExecuteActionTool) {
+        return undefined;
+    }
+    const schemaName = input?.schemaName;
+    const actionName = input?.action?.actionName;
+    if (typeof schemaName !== "string" || typeof actionName !== "string") {
+        return undefined;
+    }
+    return {
+        schemaName,
+        actionName,
+        parameters: input?.action?.parameters,
+    } as TypeAgentAction;
+}
+
+/**
+ * Record actions the reasoning loop successfully executed into the dispatcher's
+ * CommandResult. Reasoning runs actions through the action-executor MCP tools,
+ * bypassing executeActions(), so without this they never appear in
+ * CommandResult.actions. Callers (e.g. the Copilot direct hook) rely on
+ * CommandResult.actions to detect that TypeAgent recognized and handled the
+ * request — a successful `learn:` registers its taskflow action this way.
+ */
+function recordReasoningActions(
+    context: ActionContext<CommandHandlerContext>,
+    actions: TypeAgentAction[],
+): void {
+    if (actions.length === 0) {
+        return;
+    }
+    const commandResult = getCommandResult(context.sessionContext.agentContext);
+    if (commandResult === undefined) {
+        return;
+    }
+    commandResult.actions = [...(commandResult.actions ?? []), ...actions];
+}
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
@@ -660,6 +712,7 @@ function getClaudeOptions(
                 "   - description: updated description (optional)",
                 "   - grammarPatterns: updated patterns as JSON array (optional)",
                 "10. Tell user: 'Task flow registered: ACTION_NAME. It is now available for use.'",
+                "    Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                 "",
                 "DEV MODE RECORDING — interactive improvement loop:",
                 "When triggered with 'dev: learn: [task]':",
@@ -749,6 +802,22 @@ function getClaudeOptions(
                 "- For LLM steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "",
+                "# Showing Invocation Examples",
+                "",
+                "Whenever you tell the user a flow is registered and show example phrases to invoke",
+                "it (for TaskFlow, WebFlow, or PowerShell), derive EVERY example directly from a",
+                "grammar pattern you actually registered for that flow:",
+                "- Keep ALL fixed/literal tokens of the pattern EXACTLY as written — do not drop,",
+                "  add, reorder, or reword any of them (e.g. never shorten 'roots music report' to",
+                "  'roots report', and never append extra words the pattern does not contain).",
+                "- For each $(name:wildcard) capture substitute one concrete, realistic value; for",
+                "  each $(name:number) capture substitute a number.",
+                "- For optional tokens (word)? and alternations (a | b), pick exactly one concrete form.",
+                "- Every example you show MUST be matchable by one of the patterns you registered.",
+                "  Do NOT invent phrasings that no registered pattern covers. If you cannot produce a",
+                "  natural-sounding example from the patterns, fix the patterns (editTaskFlow / the",
+                "  equivalent) rather than showing a phrase that will not match.",
+                "",
                 "# WebFlow Recording",
                 "",
                 "WHEN TO USE WEBFLOW instead of TaskFlow:",
@@ -766,6 +835,7 @@ function getClaudeOptions(
                 "3. The flow is automatically saved to instance storage with grammar patterns and",
                 "   becomes immediately available for grammar matching.",
                 "4. Tell user: 'WebFlow registered: ACTION_NAME. It is now available for use.'",
+                "   Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                 "",
                 ...(process.platform === "win32"
                     ? [
@@ -794,8 +864,15 @@ function getClaudeOptions(
                           "   - scriptParameters: array of { name, type, required, description, default? }",
                           "   - grammarPatterns: array of { pattern, isAlias } with $(param:wildcard) captures",
                           "   - allowedCmdlets: cmdlets the script uses",
+                          "   - allowedModules: modules to load — pass the SAME list you used in",
+                          "     testPowerShellFlow (e.g. ['NetTCPIP'] for Get-NetTCPConnection). The",
+                          "     registered flow runs with EXACTLY the sandbox you supply here, so omitting",
+                          "     allowedModules makes module cmdlets fail at invocation with 'not recognized'",
+                          "     even though the test passed. Always carry over the exact allowedCmdlets",
+                          "     AND allowedModules that made the test succeed.",
                           "6. If testPowerShellFlow FAILS, fix the script and test again before registering",
                           "7. Tell user: 'PowerShell registered: ACTION_NAME. It is now available for use.'",
+                          "   Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                           "",
                           "POWERSHELL SCRIPT RULES:",
                           "- Scripts run in FullLanguage mode with cmdlet whitelisting",
@@ -914,7 +991,12 @@ function getClaudeOptions(
         mcpServers: {
             [mcpServerName]: createSdkMcpServer({
                 name: mcpServerName,
-                tools: [discoverTool, executeTool, searchMemoryTool, rememberTool],
+                tools: [
+                    discoverTool,
+                    executeTool,
+                    searchMemoryTool,
+                    rememberTool,
+                ],
             }),
         },
     };
@@ -986,6 +1068,8 @@ async function executeReasoningWithoutPlanning(
     let toolUseCount = 0;
     let reasoningStepCount = 0;
     const toolUseIdToName = new Map<string, string>();
+    const pendingExecuteActions = new Map<string, TypeAgentAction>();
+    const executedActions: TypeAgentAction[] = [];
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -1011,6 +1095,13 @@ async function executeReasoningWithoutPlanning(
                     toolUseCount++;
                     reasoningStepCount++;
                     toolUseIdToName.set(content.id, content.name);
+                    const executedAction = extractExecutedAction(
+                        content.name,
+                        content.input,
+                    );
+                    if (executedAction) {
+                        pendingExecuteActions.set(content.id, executedAction);
+                    }
                     const actionInfo = extractActionInfo(
                         content.name,
                         content.input,
@@ -1043,6 +1134,7 @@ async function executeReasoningWithoutPlanning(
                             {
                                 type: "html",
                                 content: formatThinkingDisplay(thinkingContent),
+                                kind: "status",
                             },
                             displayMode,
                         );
@@ -1063,6 +1155,14 @@ async function executeReasoningWithoutPlanning(
                             }
                         } else if (typeof block.content === "string") {
                             content = block.content;
+                        }
+                        if (!isError) {
+                            const executed = pendingExecuteActions.get(
+                                block.tool_use_id,
+                            );
+                            if (executed) {
+                                executedActions.push(executed);
+                            }
                         }
                         const toolName = toolUseIdToName.get(block.tool_use_id);
                         context.actionIO.appendDiagnosticData({
@@ -1102,6 +1202,17 @@ async function executeReasoningWithoutPlanning(
         }
     }
 
+    // A success result with zero tool calls means the model replied with text
+    // only (e.g. described the change in prose) without executing anything.
+    // Nothing was actually modified — surface as a failure instead of letting
+    // the text be reported as a successful action.
+    if (finalResult && toolUseCount === 0) {
+        throw new Error(
+            "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
+        );
+    }
+
+    recordReasoningActions(context, executedActions);
     return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
 }
 
@@ -1159,6 +1270,8 @@ async function executeReasoningWithTracing(
         let toolUseCount = 0;
         let reasoningStepCount = 0;
         const toolUseIdToName = new Map<string, string>();
+        const pendingExecuteActions = new Map<string, TypeAgentAction>();
+        const executedActions: TypeAgentAction[] = [];
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1176,15 +1289,28 @@ async function executeReasoningWithTracing(
                 for (const content of message.message.content) {
                     if (content.type === "text") {
                         // Update display with current thinking content
-                        context.actionIO.appendDisplay({
-                            type: "markdown",
-                            content: content.text,
-                        }, displayMode);
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "markdown",
+                                content: content.text,
+                            },
+                            displayMode,
+                        );
                     } else if (content.type === "tool_use") {
                         toolUseCount++;
                         reasoningStepCount++;
                         // Track tool_use_id → name for matching results
                         toolUseIdToName.set(content.id, content.name);
+                        const executedAction = extractExecutedAction(
+                            content.name,
+                            content.input,
+                        );
+                        if (executedAction) {
+                            pendingExecuteActions.set(
+                                content.id,
+                                executedAction,
+                            );
+                        }
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
 
@@ -1222,6 +1348,7 @@ async function executeReasoningWithTracing(
                                     type: "html",
                                     content:
                                         formatThinkingDisplay(thinkingContent),
+                                    kind: "status",
                                 },
                                 displayMode,
                             );
@@ -1242,6 +1369,15 @@ async function executeReasoningWithTracing(
                                 }
                             } else if (typeof block.content === "string") {
                                 content = block.content;
+                            }
+
+                            if (!isError) {
+                                const executed = pendingExecuteActions.get(
+                                    block.tool_use_id,
+                                );
+                                if (executed) {
+                                    executedActions.push(executed);
+                                }
                             }
 
                             // Record tool result in trace for script extraction
@@ -1378,6 +1514,8 @@ async function executeReasoningWithTracing(
                 }
             }
         }
+
+        recordReasoningActions(context, executedActions);
 
         return finalResult
             ? createActionResultNoDisplay(finalResult)

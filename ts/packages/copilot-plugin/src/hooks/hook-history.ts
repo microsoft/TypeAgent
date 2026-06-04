@@ -15,6 +15,7 @@
 
 import { readFileSync } from "fs";
 import type { Dispatcher } from "@typeagent/agent-server-client";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createClientIO,
     connectToTypeAgent,
@@ -171,7 +172,7 @@ async function sendToTypeAgentHistory(turn: TurnSummary): Promise<void> {
             `[agentStop] Inserting history: ${json.substring(0, 200)}`,
         );
 
-        await dispatcher.processCommand(`@history insert ${json}`);
+        await awaitCommand(dispatcher, `@history insert ${json}`);
 
         console.error("[agentStop] History insert succeeded");
     } catch (error) {

@@ -10,7 +10,7 @@ function getChromeRpc() {
 }
 
 interface ExtensionSettings {
-    websocketHost: string;
+    agentServerHost: string;
     defaultExtractionMode: "basic" | "content" | "full";
     maxConcurrentExtractions: number;
     qualityThreshold: number;
@@ -28,7 +28,7 @@ interface AIModelStatus {
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-    websocketHost: "ws://localhost:8081/",
+    agentServerHost: "",
     defaultExtractionMode: "content",
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
@@ -106,8 +106,8 @@ class EnhancedOptionsPage {
 
             // Update form fields
             (
-                document.getElementById("websocketHost") as HTMLInputElement
-            ).value = this.settings.websocketHost;
+                document.getElementById("agentServerHost") as HTMLInputElement
+            ).value = this.settings.agentServerHost;
             (
                 document.getElementById(
                     "maxConcurrentExtractions",
@@ -240,20 +240,24 @@ class EnhancedOptionsPage {
     private async saveOptions(e: Event) {
         e.preventDefault();
 
-        // Validate WebSocket URL
-        const websocketHost = (
-            document.getElementById("websocketHost") as HTMLInputElement
+        // Validate WebSocket URL — blank means "use default agent-server
+        // URL" (the service worker falls back to AGENT_SERVER_DEFAULT_URL).
+        const agentServerHost = (
+            document.getElementById("agentServerHost") as HTMLInputElement
         ).value.trim();
-        if (!this.isValidWebSocketUrl(websocketHost)) {
+        if (
+            agentServerHost !== "" &&
+            !this.isValidWebSocketUrl(agentServerHost)
+        ) {
             this.showStatus(
-                "Please enter a valid WebSocket URL (ws:// or wss://)",
+                "Please enter a valid WebSocket URL (ws:// or wss://) or leave blank",
                 "danger",
             );
             return;
         }
 
         // Update settings
-        this.settings.websocketHost = websocketHost;
+        this.settings.agentServerHost = agentServerHost;
 
         // Get selected mode
         const selectedMode = document.querySelector(

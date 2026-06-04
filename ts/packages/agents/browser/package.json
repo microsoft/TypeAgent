@@ -60,10 +60,12 @@
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",
@@ -105,7 +107,7 @@
     "typescript": "~5.4.5",
     "website-memory": "workspace:*",
     "websocket-utils": "workspace:*",
-    "ws": "^8.17.1",
+    "ws": "^8.21.0",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
     "zod": "^4.1.13"
@@ -144,7 +146,7 @@
     "rollup-plugin-copy": "^3.5.0",
     "ts-jest": "^29.3.2",
     "ts-loader": "^9.5.1",
-    "vite": "^6.4.2"
+    "vite": "^6.4.3"
   },
   "fluidBuild": {
     "tasks": {

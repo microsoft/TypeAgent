@@ -62,10 +62,12 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/completion-ui": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
@@ -83,8 +85,9 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
+    "websocket-channel-server": "workspace:*",
     "websocket-utils": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
@@ -106,7 +109,7 @@
     "run-script-os": "^1.1.6",
     "type-fest": "^4.39.1",
     "typescript": "~5.4.5",
-    "vite": "^6.4.2"
+    "vite": "^6.4.3"
   },
   "fluidBuild": {
     "tasks": {

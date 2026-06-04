@@ -33,28 +33,6 @@ ENV=$(detect_env)
 echo "Environment: $ENV"
 echo ""
 
-# Ensure worktree roots are writable for agent windows.
-echo "Preparing worktree roots for agent windows..."
-WORKSPACE_DIR=$(pwd -P)
-WORKTREES_DIR="${WORKSPACE_DIR}.worktrees"
-for dir in "$WORKTREES_DIR"; do
-    if [[ ! -d "$dir" ]]; then
-        if sudo mkdir -p "$dir"; then
-            echo "  created $dir"
-        else
-            echo "  warn: could not create $dir"
-            continue
-        fi
-    fi
-
-    if sudo chown codespace:codespace "$dir"; then
-        echo "  $dir owned by codespace"
-    else
-        echo "  warn: could not set ownership for $dir"
-    fi
-done
-echo ""
-
 # Fix ownership of Docker named-volume mount points.
 # Named volumes mounted into the container are owned by root:root by default,
 # which prevents the non-root `codespace` user from writing into them
@@ -65,10 +43,18 @@ VOLUME_PATHS=(
     "/home/codespace/.local/share/pnpm/store"
     "/home/codespace/.claude"
     "/home/codespace/.copilot"
+    "/home/codespace/.vscode-server"
 )
-# Discover the workspace ts/node_modules path dynamically (works for worktrees too)
+# Discover the workspace ts/node_modules path dynamically (works for worktrees
+# and for variants that mount the workspace outside /workspaces, e.g. the
+# `agent` devcontainer that bind-mounts the host path verbatim).
 WS_TS_DIR=""
-if [[ -d "/workspaces/TypeAgent/ts" ]]; then
+_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [[ -n "$_REPO_ROOT" ]] && [[ -d "$_REPO_ROOT/ts" ]]; then
+    WS_TS_DIR="$_REPO_ROOT/ts"
+elif [[ -d "$(pwd)/ts" ]]; then
+    WS_TS_DIR="$(pwd)/ts"
+elif [[ -d "/workspaces/TypeAgent/ts" ]]; then
     WS_TS_DIR="/workspaces/TypeAgent/ts"
 else
     WS_TS_DIR=$(find /workspaces -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1)

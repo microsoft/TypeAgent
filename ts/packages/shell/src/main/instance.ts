@@ -36,8 +36,14 @@ import {
     ClientIO,
     createDispatcher,
     Dispatcher,
+    PortRegistrar,
+    QueuedRequest,
+    QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
+import type { SubmitResult } from "@typeagent/dispatcher-types";
+import { awaitCommand } from "@typeagent/dispatcher-types";
+import { randomUUID } from "node:crypto";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
@@ -47,12 +53,17 @@ import {
     ensureAgentServer,
     connectAgentServer,
     stopAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     loadUserSettings,
     saveUserSettings,
 } from "agent-dispatcher/helpers/userSettings";
+import {
+    startStandaloneDiscoveryServer,
+    type StandaloneDiscoveryServer,
+} from "./discoveryServer.js";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -69,6 +80,7 @@ type InitResult = {
     connection?: AgentServerConnection;
     initialConversationId?: string;
     initialConversationName?: string;
+    initialQueueSnapshot?: QueueSnapshot;
     rebindDispatcher?: (freshDispatcher: Dispatcher) => void;
 };
 
@@ -85,6 +97,12 @@ async function initializeDispatcher(
         // Make sure the previous cleanup is done.
         await cleanupP;
     }
+    // Hoisted above the try{} so the catch can clean up an already-bound
+    // discovery WS if a later step (createDispatcher, etc.) throws —
+    // otherwise the listening socket on AGENT_SERVER_DEFAULT_PORT would
+    // leak across re-init attempts and block the next launch with
+    // EADDRINUSE.
+    let standaloneDiscovery: StandaloneDiscoveryServer | undefined;
     try {
         const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
@@ -187,6 +205,8 @@ async function initializeDispatcher(
         let connection: AgentServerConnection | undefined;
         let initialConversationId: string | undefined;
         let initialConversationName: string | undefined;
+        // Bootstrap snapshot from joinConversation (remote mode only).
+        let initialQueueSnapshot: QueueSnapshot | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-session support.
@@ -427,6 +447,7 @@ async function initializeDispatcher(
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
+            initialQueueSnapshot = conversation.queueSnapshot;
             // Persist the conversation we ended up on so the next launch
             // restores it. Wrapped in try/catch because user-settings I/O
             // shouldn't block startup if the disk write fails.
@@ -461,6 +482,37 @@ async function initializeDispatcher(
                 configName,
             );
 
+            // Standalone shell hosts its own dispatcher in-process. Pre-build
+            // a PortRegistrar so we can hand the same instance to both the
+            // dispatcher (where agents register their dynamically assigned
+            // ports) and the discovery WS server below (which reads from it
+            // to answer external lookups). Without this shared instance, the
+            // dispatcher would silently make its own private registrar and
+            // the Chrome extension's discoverPort lookup would never find
+            // the browser agent's port.
+            const portRegistrar = new PortRegistrar();
+
+            // Stand up the discovery WS so the Chrome extension (and any
+            // other external client speaking the agent-server discovery
+            // protocol) can find in-process agents at parity with what
+            // they get when connecting to a real agent-server. Bind is
+            // exact on AGENT_SERVER_DEFAULT_PORT (8999): an EADDRINUSE
+            // here usually means a real agent-server is already running,
+            // and silently picking a random port would only confuse the
+            // user (their default-configured extension would still fail).
+            try {
+                standaloneDiscovery = await startStandaloneDiscoveryServer(
+                    AGENT_SERVER_DEFAULT_PORT,
+                    portRegistrar,
+                );
+            } catch (e) {
+                debugShellError(
+                    "Failed to start standalone discovery server on port %d: %s. External clients (e.g. Chrome extension) will not be able to discover in-process agent ports.",
+                    AGENT_SERVER_DEFAULT_PORT,
+                    (e as Error).message,
+                );
+            }
+
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
@@ -469,6 +521,7 @@ async function initializeDispatcher(
                 agentInitOptions: {
                     browser: browserControl.control,
                 },
+                portRegistrar,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 persistSession: true,
                 persistDir: instanceDir,
@@ -485,10 +538,12 @@ async function initializeDispatcher(
 
         async function processShellRequest(
             text: string,
-            id: string,
-            images: string[],
-        ) {
-            if (typeof text !== "string" || typeof id !== "string") {
+            attachments?: string[],
+            options?: any,
+            id?: unknown,
+            requestId?: string,
+        ): Promise<SubmitResult> {
+            if (typeof text !== "string") {
                 throw new Error("Invalid request");
             }
 
@@ -507,7 +562,48 @@ async function initializeDispatcher(
                     "send-demo-event",
                     "CommandProcessed",
                 );
-                return undefined as any;
+                // Synthesize a QueuedRequest for the local short-circuit.
+                // NOTE: this entry is NOT enqueued in context.requestQueue —
+                // queue snapshots, lifecycle events, and DisplayLog audit
+                // intentionally do not reflect it.
+                const submittedAt = Date.now();
+                const synthRequestId = requestId ?? randomUUID();
+                const synthEntry: QueuedRequest = {
+                    requestId: synthRequestId,
+                    // Sentinel — searchable in logs; never collides with a
+                    // real connection id assigned by SharedDispatcher.
+                    originatorConnectionId:
+                        dispatcher.connectionId ?? "shell-local-shortcircuit",
+                    text,
+                    submittedAt,
+                    startedAt: submittedAt,
+                    finishedAt: submittedAt,
+                    state: "succeeded",
+                    attachmentCount: attachments?.length ?? 0,
+                };
+                if (id !== undefined) synthEntry.clientRequestId = id;
+                if (options !== undefined) synthEntry.options = options;
+                // Fire commandComplete explicitly: the short-circuit bypasses
+                // commandHandlerContext (which normally emits it), and renderer
+                // awaiters wake via wrapClientIOForCompletion intercepting this
+                // notify. Without it, RPC clients' completion promises hang.
+                const completeRid: RequestId = {
+                    requestId: synthRequestId,
+                    clientRequestId: id,
+                };
+                clientIO.notify(
+                    completeRid,
+                    "commandComplete",
+                    { result: null },
+                    "shell",
+                );
+                return {
+                    ok: true,
+                    entry: {
+                        ...synthEntry,
+                        completion: Promise.resolve(undefined),
+                    },
+                };
             }
 
             // Update before processing the command in case there was change outside of command processing
@@ -517,22 +613,31 @@ async function initializeDispatcher(
                 debugShell(getConsolePrompt(summary), text);
             }
 
-            const commandResult = await newDispatcher.processCommand(
+            const submit = await newDispatcher.submitCommand(
                 text,
+                attachments,
+                options,
                 id,
-                images,
+                requestId,
             );
-            shellWindow.chatView.webContents.send(
-                "send-demo-event",
-                "CommandProcessed",
-            );
-
-            // Give the chat view the focus back after the command for the next command.
-            shellWindow.chatView.webContents.focus();
-
-            // Update the summary after processing the command in case state changed.
-            await updateSummary(dispatcher);
-            return commandResult;
+            if (!submit.ok) {
+                return submit;
+            }
+            const completion = submit.entry.completion.then(async (result) => {
+                shellWindow.chatView.webContents.send(
+                    "send-demo-event",
+                    "CommandProcessed",
+                );
+                // Give the chat view the focus back after the command for the next command.
+                shellWindow.chatView.webContents.focus();
+                // Update the summary after processing the command in case state changed.
+                await updateSummary(dispatcher);
+                return result;
+            });
+            return {
+                ok: true,
+                entry: { ...submit.entry, completion },
+            };
         }
 
         // Shared close handler — tears down RPC channels and releases resources.
@@ -548,6 +653,10 @@ async function initializeDispatcher(
             if (connection !== undefined) {
                 await connection.close();
             }
+            if (standaloneDiscovery !== undefined) {
+                standaloneDiscovery.close();
+                standaloneDiscovery = undefined;
+            }
             clientIOChannel.notifyDisconnected();
             ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);
             browserControl.close();
@@ -555,7 +664,7 @@ async function initializeDispatcher(
 
         const dispatcher = {
             ...newDispatcher,
-            processCommand: processShellRequest,
+            submitCommand: processShellRequest,
             close: closeDispatcher,
         };
 
@@ -582,7 +691,7 @@ async function initializeDispatcher(
             // object so the RPC server sees updated method implementations.
             Object.assign(dispatcher, freshDispatcher);
             // Re-apply shell-specific overrides that must wrap the dispatcher.
-            dispatcher.processCommand = processShellRequest;
+            dispatcher.submitCommand = processShellRequest;
             dispatcher.close = closeDispatcher;
             debugShell("Dispatcher rebound after session switch");
         }
@@ -611,9 +720,16 @@ async function initializeDispatcher(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         };
     } catch (e: any) {
+        // Tear down the discovery WS if it was already bound before the
+        // failure — otherwise port AGENT_SERVER_DEFAULT_PORT stays held
+        // by this process and the next shell launch hits EADDRINUSE.
+        if (standaloneDiscovery !== undefined) {
+            standaloneDiscovery.close();
+        }
         if (isTest) {
             // In test mode, avoid blocking dialogs so the process can exit cleanly
             console.error("Exception initializing dispatcher:", e.stack);
@@ -748,6 +864,7 @@ export function initializeInstance(
             connection,
             initialConversationId,
             initialConversationName,
+            initialQueueSnapshot,
             rebindDispatcher,
         } = result;
 
@@ -767,8 +884,12 @@ export function initializeInstance(
                 clientIO,
                 initialConversationId,
                 initialConversationName,
-                (conversationId, name) => {
-                    shellWindow.sendConversationChanged(conversationId, name);
+                (conversationId, name, queueSnapshot) => {
+                    shellWindow.sendConversationChanged(
+                        conversationId,
+                        name,
+                        queueSnapshot,
+                    );
                 },
                 rebindDispatcher,
                 () => shellWindow.sendMarkHistory(),
@@ -794,7 +915,10 @@ export function initializeInstance(
             });
 
             // Notify the renderer process that the dispatcher is initialized
-            chatView.webContents.send("dispatcher-initialized");
+            chatView.webContents.send(
+                "dispatcher-initialized",
+                initialQueueSnapshot,
+            );
 
             // Give focus to the chat view once initialization is done.
             chatView.webContents.focus();
@@ -814,15 +938,15 @@ export function initializeInstance(
 
             // send the agent greeting if it's turned on
             if (shellSettings.user.agentGreeting) {
-                dispatcher
-                    .processCommand(
-                        `@greeting${mockGreetings ? " --mock" : ""}`,
-                        "agent-0",
-                        [],
-                    )
-                    .catch((e: any) => {
-                        debugShell("Initial greeting failed:", e?.message ?? e);
-                    });
+                awaitCommand(
+                    dispatcher,
+                    `@greeting${mockGreetings ? " --mock" : ""}`,
+                    [],
+                    undefined,
+                    "agent-0",
+                ).catch((e: any) => {
+                    debugShell("Initial greeting failed:", e?.message ?? e);
+                });
             }
             return;
         }
@@ -846,22 +970,23 @@ export function initializeInstance(
         });
 
         // Notify the renderer process that the dispatcher is initialized
-        chatView.webContents.send("dispatcher-initialized");
+        // (standalone path: no queue snapshot).
+        chatView.webContents.send("dispatcher-initialized", undefined);
 
         // Give focus to the chat view once initialization is done.
         chatView.webContents.focus();
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
-            dispatcher
-                .processCommand(
-                    `@greeting${mockGreetings ? " --mock" : ""}`,
-                    "agent-0",
-                    [],
-                )
-                .catch((e: any) => {
-                    debugShell("Initial greeting failed:", e?.message ?? e);
-                });
+            awaitCommand(
+                dispatcher,
+                `@greeting${mockGreetings ? " --mock" : ""}`,
+                [],
+                undefined,
+                "agent-0",
+            ).catch((e: any) => {
+                debugShell("Initial greeting failed:", e?.message ?? e);
+            });
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);

@@ -50,14 +50,41 @@ import {
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
 import {
+    findFuzzyCollisions,
+    selectFuzzyScorer,
+    type ActionDescriptor,
+    type FuzzyCollision,
+} from "../translation/fuzzyCollision.js";
+import {
     IPortRegistrar,
     DEFAULT_ROLE,
     RegistrationId,
 } from "./portRegistrar.js";
 
+/**
+ * Role string used by agents that have migrated off the legacy
+ * `setLocalHostPort` shim and onto explicit
+ * `sessionContext.registerPort("view", port)` for their per-session
+ * local view (browser views, montage gallery, markdown preview).
+ *
+ * The legacy "default" role and this "view" role coexist: lookups for
+ * `getLocalHostPort` / `getSharedLocalHostPort` try "default" first
+ * (back-compat) and fall back to "view" (new pattern). This lets
+ * cross-agent site lookup keep working through the migration.
+ */
+const LOCAL_VIEW_ROLE = "view";
+
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
 const debugLoad = registerDebug("typeagent:dispatcher:agents:load");
+const debugCollisionStatic = registerDebug(
+    "typeagent:dispatcher:collision:static",
+);
+
+export type StaticCollision = {
+    actionName: string;
+    occurrences: { schemaName: string; agentName: string }[];
+};
 
 type AppAgentRecord = {
     name: string;
@@ -143,6 +170,11 @@ export class AppAgentManager implements ActionConfigProvider {
     private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
+
+    // Static collision diagnostics. Populated by scanActionNameCollisions on
+    // every addProvider / onSchemaReady; readable for `@dispatcher debug collisions`-style commands.
+    public lastStaticCollisions: StaticCollision[] = [];
+    public lastFuzzyCollisions: FuzzyCollision[] = [];
     // Cached per-agent readiness state. Populated by checkReadiness() right
     // after the agent's session context is created. Agents that don't
     // implement checkReadiness have no entry, and getReadiness() returns
@@ -203,6 +235,23 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
+    }
+
+    /**
+     * Return the registration-order rank for an agent. Lower = registered earlier.
+     * Used by collision resolution's "priority" strategy as the implicit default
+     * when no explicit collision.priorityOrder is set. Unknown agent names get
+     * MAX_SAFE_INTEGER so they sort to the end.
+     */
+    public getAgentRank(agentName: string): number {
+        let i = 0;
+        for (const name of this.agents.keys()) {
+            if (name === agentName) {
+                return i;
+            }
+            i++;
+        }
+        return Number.MAX_SAFE_INTEGER;
     }
 
     public isSchemaLoading(schemaName: string): boolean {
@@ -435,7 +484,13 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     public getLocalHostPort(appAgentName: string) {
-        return this.portRegistrar.lookup(appAgentName, DEFAULT_ROLE);
+        // Fall back to the "view" role for agents migrated off the
+        // legacy `setLocalHostPort` shim (browser-views, montage,
+        // markdown). Lookup order matches `getSharedLocalHostPort`.
+        return (
+            this.portRegistrar.lookup(appAgentName, DEFAULT_ROLE) ??
+            this.portRegistrar.lookup(appAgentName, LOCAL_VIEW_ROLE)
+        );
     }
 
     /**
@@ -490,7 +545,13 @@ export class AppAgentManager implements ActionConfigProvider {
             );
         }
 
-        const port = this.portRegistrar.lookup(target, DEFAULT_ROLE);
+        // Lookup order: "default" first for back-compat with legacy
+        // `setLocalHostPort` callers, then "view" for agents that
+        // migrated to the explicit `registerPort("view", ...)` pattern
+        // (browser-views, montage, markdown).
+        const port =
+            this.portRegistrar.lookup(target, DEFAULT_ROLE) ??
+            this.portRegistrar.lookup(target, LOCAL_VIEW_ROLE);
         if (port === undefined) {
             throw new Error(`Local view not available for agent '${target}'.`);
         }
@@ -561,6 +622,92 @@ export class AppAgentManager implements ActionConfigProvider {
                 ? record.commands
                 : null
             : undefined;
+    }
+
+    /**
+     * Walk the loaded actionConfigs and find action names that appear in more
+     * than one schema. Caller decides whether to warn or throw.
+     */
+    public scanActionNameCollisions(): StaticCollision[] {
+        const seen = new Map<
+            string,
+            { schemaName: string; agentName: string }[]
+        >();
+        for (const [schemaName, config] of this.actionConfigs) {
+            const agentName = getAppAgentName(schemaName);
+            let actionNames: string[];
+            try {
+                const file =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                actionNames = Array.from(
+                    file.parsedActionSchema.actionSchemas.keys(),
+                );
+            } catch (e) {
+                // Schema not loadable yet (e.g., agent failed to start). Skip.
+                debugCollisionStatic(
+                    `skip ${schemaName} (could not load schema): ${e}`,
+                );
+                continue;
+            }
+            for (const actionName of actionNames) {
+                const list = seen.get(actionName) ?? [];
+                list.push({ schemaName, agentName });
+                seen.set(actionName, list);
+            }
+        }
+        const collisions: StaticCollision[] = [];
+        for (const [actionName, occurrences] of seen) {
+            if (occurrences.length > 1) {
+                collisions.push({ actionName, occurrences });
+            }
+        }
+        this.lastStaticCollisions = collisions;
+        return collisions;
+    }
+
+    /**
+     * Build the descriptor list used by fuzzy scanning. Pulls action name +
+     * (eventually) schema documentation. Returns [] if no schemas loaded.
+     */
+    public collectActionDescriptors(): ActionDescriptor[] {
+        const out: ActionDescriptor[] = [];
+        for (const [schemaName, config] of this.actionConfigs) {
+            try {
+                const file =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                for (const [actionName, def] of file.parsedActionSchema
+                    .actionSchemas) {
+                    out.push({
+                        schemaName,
+                        actionName,
+                        // ActionSchemaTypeDefinition.comments is the schema doc;
+                        // safe-fall back to no description if absent.
+                        description:
+                            (
+                                def as unknown as { comments?: string[] }
+                            ).comments?.join(" ") ?? undefined,
+                    });
+                }
+            } catch {
+                // Skip unloadable schema; descriptors only feed fuzzy scoring.
+            }
+        }
+        return out;
+    }
+
+    public async runStaticFuzzyScan(
+        scorerKind: "placeholder" | "actionEmbedding",
+        threshold: number,
+    ): Promise<FuzzyCollision[]> {
+        const scorer = selectFuzzyScorer(scorerKind);
+        const descriptors = this.collectActionDescriptors();
+        const collisions = await findFuzzyCollisions(
+            descriptors,
+            scorer,
+            threshold,
+        );
+        this.lastFuzzyCollisions = collisions;
+        return collisions;
     }
 
     public async semanticSearchActionSchema(
@@ -1274,8 +1421,20 @@ export class AppAgentManager implements ActionConfigProvider {
             }
         }
 
-        // Fallback: read grammar/dynamic.agr from instance storage
-        if (dynamicGrammar === undefined) {
+        // Fallback: read grammar/dynamic.agr from instance storage.
+        //
+        // Only for agents that do NOT implement getDynamicGrammar. An agent that
+        // implements the callback is authoritative about which of its schemas
+        // get dynamic grammar (e.g. PowerShell returns rules for the root
+        // "powershell" schema but undefined for its sub-schemas). Without this
+        // guard, the shared per-agent grammar/dynamic.agr would be loaded into
+        // every sub-schema too, so a flow's grammar would match under a
+        // sub-schema (e.g. powershell.powershell-files) where the flow's action
+        // schema does not exist — producing "Action schema not found".
+        if (
+            dynamicGrammar === undefined &&
+            appAgent.getDynamicGrammar === undefined
+        ) {
             const instanceStorage = sessionContext.instanceStorage;
             if (instanceStorage) {
                 try {
@@ -1684,6 +1843,17 @@ export class AppAgentManager implements ActionConfigProvider {
 
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
+
+        // Drop construction-cache entries whose schema hash no longer matches
+        // the reloaded schema (e.g. constructions for a deleted or edited flow),
+        // so a stale cached match can't resolve to a now-missing action.
+        try {
+            await context.agentCache.prune();
+        } catch (e) {
+            debugError(
+                `Failed to prune construction cache after reloading ${appAgentName}: ${e}`,
+            );
+        }
     }
 
     public setTraceNamespaces(namespaces: string) {

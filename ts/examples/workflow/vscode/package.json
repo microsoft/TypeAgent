@@ -1,0 +1,153 @@
+{
+  "name": "workflow-vscode",
+  "displayName": "Workflow DSL",
+  "version": "0.0.1",
+  "private": true,
+  "description": "VS Code language support for the workflow DSL (.wf): syntax highlighting and language server integration.",
+  "categories": [
+    "Programming Languages"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/workflow/vscode"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs && node scripts/check-server-bundle.mjs && npm run tsc",
+    "build:ext:vscode": "npm run package",
+    "clean": "rimraf --glob dist dist-pub *.vsix *.tsbuildinfo",
+    "compile": "node esbuild.mjs",
+    "install:ext:vscode": "code --install-extension dist-pub/workflow-vscode.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/workflow-vscode.vsix",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "test:ui": "npm run build && npm run test:compile && node ./dist/test/runTests.js",
+    "tsc": "tsc -p tsconfig.json --noEmit",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "workflow.previewIR",
+        "title": "Workflow: Preview IR",
+        "category": "Workflow"
+      },
+      {
+        "command": "workflow.previewGraph",
+        "title": "Workflow: Preview Graph",
+        "category": "Workflow"
+      },
+      {
+        "command": "workflow.showServerOutput",
+        "title": "Workflow: Show Server Output",
+        "category": "Workflow"
+      }
+    ],
+    "configuration": {
+      "title": "Workflow DSL",
+      "properties": {
+        "workflow.trace.server": {
+          "type": "string",
+          "scope": "window",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace messages exchanged between VS Code and the workflow language server."
+        },
+        "workflow.inlayHints.enable": {
+          "type": "boolean",
+          "scope": "language-overridable",
+          "default": false,
+          "description": "Show inlay type hints for const bindings (e.g. `: string` after `const x = ...`)."
+        }
+      }
+    },
+    "grammars": [
+      {
+        "language": "workflow",
+        "scopeName": "source.wf",
+        "path": "./syntaxes/workflow.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "workflow-icons",
+        "label": "Workflow DSL Icons",
+        "path": "./icons/icons.json"
+      }
+    ],
+    "languages": [
+      {
+        "id": "workflow",
+        "aliases": [
+          "Workflow",
+          "workflow"
+        ],
+        "extensions": [
+          ".wf"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "workflow",
+        "path": "./snippets/workflow.code-snippets"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:workflow"
+  ],
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "workflow-lsp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.25.12",
+    "glob": "^11.0.0",
+    "mkdirp": "^3.0.1",
+    "mocha": "^10.7.3",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "icon": "icons/wf.png",
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "workflow-lsp#build"
+        ]
+      },
+      "build:ext:vscode": {
+        "dependsOn": [
+          "^build",
+          "build"
+        ]
+      },
+      "install:ext:vscode": {
+        "dependsOn": [
+          "build:ext:vscode"
+        ]
+      }
+    }
+  }
+}

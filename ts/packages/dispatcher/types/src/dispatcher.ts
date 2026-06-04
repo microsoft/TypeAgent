@@ -16,6 +16,7 @@ import type {
     UserFeedbackRating,
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
+import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -163,19 +164,62 @@ export interface Dispatcher {
     readonly connectionId: ConnectionId | undefined;
 
     /**
-     * Process a single user request.
+     * Submit a request for queued execution.
      *
-     * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
-     * @param requestId an optional request id to track the command
-     * @param attachments encoded image attachments for the model
-     * @param options optional processing options
+     * Resolves with a discriminated `SubmitResult`:
+     *
+     * - On success, `{ok: true, entry}` where `entry` is a
+     *   `SubmittedRequest` — the server-assigned `QueuedRequest`
+     *   (use `entry.requestId` to key UI state, cancellation, etc.)
+     *   plus an `entry.completion` promise that resolves with the
+     *   eventual `CommandResult` (or `{cancelled: true}` when the
+     *   request is cancelled) and rejects with `ServerStoppingError`
+     *   if the server abandons the entry during shutdown.
+     *
+     * - On submit-time failure, `{ok: false, error: "queue_full" | "server_stopping"}`
+     *   with a typed `error` discriminant. Callers that need to preserve
+     *   the historical `processCommand` semantics convert these to thrown
+     *   `QueueFullError` / `ServerStoppingError` instances before awaiting
+     *   `entry.completion`.
+     *
+     * The drain loop, fan-out, and cancellation semantics are described in
+     * `docs/architecture/messageQueueing.md`.
+     *
+     * @param command user request to process. Requests that start with '@' are direct commands, otherwise treated as natural language.
+     * @param attachments encoded image attachments forwarded to the inner dispatcher.
+     * @param options optional processing options.
+     * @param clientRequestId opaque client-assigned id surfaced back on the entry; pair with `cancelCommandByClientId` for early cancel.
+     * @param requestId optional caller-supplied server-side request id. Defaults to a fresh UUID when omitted; useful for hosts (Shell main, VS) that pre-allocate ids to keep UI state in sync before the ack arrives.
      */
-    processCommand(
+    submitCommand(
         command: string,
-        clientRequestId?: unknown,
         attachments?: string[],
         options?: ProcessCommandOptions,
-    ): Promise<CommandResult | undefined>;
+        clientRequestId?: unknown,
+        requestId?: string,
+    ): Promise<SubmitResult>;
+
+    /**
+     * Snapshot of the server-side queue. Cheap, in-memory.
+     */
+    getQueueSnapshot(): Promise<QueueSnapshot>;
+
+    /**
+     * Cancel the currently-running request (if any) and enqueue `text` at the
+     * head of the queue so it runs next. The cancel-then-prepend pair is
+     * atomic within the server's critical section so a racing `submitCommand`
+     * cannot steal the head slot — this is why `interrupt` exists as a server
+     * RPC rather than client-side composition.
+     *
+     * Pre-existing queued entries are preserved (just shifted back). Side
+     * effects from the cancelled running request are NOT rolled back.
+     */
+    interrupt(
+        text: string,
+        attachments?: string[],
+        options?: ProcessCommandOptions,
+        clientRequestId?: unknown,
+    ): Promise<SubmitResult>;
 
     /**
      * Close the dispatcher and release all resources.
@@ -262,24 +306,28 @@ export interface Dispatcher {
     cancelInteraction(interactionId: string): void;
 
     /**
-     * Cancel an in-flight command. If the command identified by requestId is
-     * currently executing, its AbortController is triggered, causing the
-     * command pipeline to stop at the next cancellation checkpoint.
+     * Cancel an in-flight or queued command.
      *
-     * This is a fire-and-forget operation — the in-flight processCommand()
-     * call will resolve with `{ cancelled: true }`.
+     * The returned `CancelResult` indicates whether the entry was cancelled
+     * while queued (no work ran), while running (the AbortController was
+     * triggered; the entry's `completion` resolves with `{ cancelled: true }`
+     * at the next checkpoint), or whether the requestId was unknown.
+     *
+     * Never rejects under normal operation.
      *
      * @param requestId the requestId string of the command to cancel
+     * @returns a `CancelResult` describing what the server did
      */
-    cancelCommand(requestId: string): void;
+    cancelCommand(requestId: string): Promise<CancelResult>;
 
     /**
      * Cancel an in-flight command using the client-assigned id that was passed
-     * as the second argument to processCommand().  This is the early-cancel
-     * path: the client can call this immediately after processCommand() returns
-     * without waiting for setUserRequest() to deliver the server-assigned UUID.
+     * as the `clientRequestId` argument to `submitCommand()`.  This is the
+     * early-cancel path: the client can call this immediately after
+     * `submitCommand()` returns without waiting for the server-assigned UUID
+     * to round-trip back via `entry.requestId`.
      *
-     * @param clientRequestId the same value passed to processCommand() as clientRequestId
+     * @param clientRequestId the same value passed to submitCommand() as clientRequestId
      */
     cancelCommandByClientId(clientRequestId: unknown): void;
 

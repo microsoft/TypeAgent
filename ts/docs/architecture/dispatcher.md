@@ -107,12 +107,20 @@ hosts (shell, CLI, web).
 
 ```typescript
 interface Dispatcher {
-  processCommand(
+  submitCommand(
     command,
-    clientRequestId?,
     attachments?,
     options?,
-  ): Promise<CommandResult | undefined>;
+    clientRequestId?,
+    requestId?,
+  ): Promise<SubmitResult>;
+  interrupt(
+    command,
+    attachments?,
+    options?,
+    clientRequestId?,
+    requestId?,
+  ): Promise<SubmitResult>;
   getCommandCompletion(prefix, direction): Promise<CommandCompletionResult>;
   checkCache(request): Promise<CommandResult | undefined>;
   getDynamicDisplay(appAgentName, type, displayId): Promise<DynamicDisplay>;
@@ -124,6 +132,19 @@ interface Dispatcher {
   close(): Promise<void>;
 }
 ```
+
+`submitCommand` is the unified entry point for both ack-on-enqueue and
+await-completion callers. On success it returns `{ok:true, entry}` where
+`entry` is the queued request descriptor (a `SubmittedRequest`) with a
+`completion: Promise<CommandResult | undefined>` attached. Hosts that
+want to block on the result `await r.entry.completion` after checking
+`r.ok`; hosts that just want a queue ack ignore `r.entry.completion`.
+The `awaitCommand(dispatcher, …)` utility in
+`@typeagent/dispatcher-types` wraps this into a one-liner that returns
+`Promise<CommandResult | undefined>` and throws on submit failure for
+callers that want the classic shape. See
+[`messageQueueing.md`](./messageQueueing.md) §14.1 for the unification
+history and the wire/in-process split.
 
 ### `CommandHandlerContext`
 
@@ -160,14 +181,19 @@ web clients. Handles:
 
 ## Command processing pipeline
 
-Every user interaction enters through `processCommand()`, which acquires
-a command lock (ensuring serial execution), sets up request tracking, and
-delegates to the resolution → translation → execution pipeline.
+Every user interaction enters through `submitCommand()`. The request is
+enqueued on the per-conversation `RequestQueue`; when its turn arrives
+the drain loop invokes the in-dispatcher `processCommand` pipeline body
+(see [`messageQueueing.md`](./messageQueueing.md) §3 for the queue
+diagram). The pipeline body acquires the command lock (kept as
+defense-in-depth — the queue already serializes), sets up request
+tracking, and delegates to the resolution → translation → execution
+pipeline.
 
 ### 1. Command resolution
 
 ```
-processCommand(input)
+submitCommand(input) ──► RequestQueue ──► drain loop ──► processCommand pipeline
      │
      ▼
 normalizeCommand(input)          # Add "@" prefix if missing
@@ -489,25 +515,215 @@ Embeddings are cached to disk and loaded at startup.
 
 ---
 
+## Action collision detection
+
+> **Soft-rollout plan:** the staged experiment plan
+> ([`collision-rollout.md`](./collision-rollout.md)) is the canonical
+> record of which detection points / strategies are being tested, how
+> testers opt in, what telemetry shape we capture, and the Cosmos query
+> reference. Update it as experiments run.
+>
+> **Analysis tooling:** [`collision-analysis.md`](./collision-analysis.md)
+> is the user guide to the data + analysis surface — corpus pipeline,
+> action similarity, neighborhood preview, and the three interactive
+> HTML visualizations.
+
+When two or more agents can plausibly handle the same input, the
+dispatcher needs a policy for picking a winner. Before this subsystem,
+the pipeline silently took the first validated match — invisible
+collisions, no way to evaluate alternatives. Action collision detection
+makes the decision observable and configurable across four detection
+points, each with one of four resolution strategies. The whole subsystem
+is opt-in: defaults preserve legacy behavior.
+
+See [`packages/dispatcher/dispatcher/README.md`](../../packages/dispatcher/dispatcher/README.md#action-collision-detection)
+for the user-facing config reference. This section documents the design.
+
+### Detection points
+
+| Point              | When                                                                                | Hook                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`static`**       | Agent registration time                                                             | `AppAgentManager.scanActionNameCollisions()` — walks `actionConfigs`, builds `Map<actionName, occurrences[]>`, returns entries with `length > 1`.           |
+| **`grammarMatch`** | Cache/grammar match path, after wildcard validation                                 | `getValidatedMatches()` returns all validated matches (legacy `getValidatedMatch` returned only the first); `resolveGrammarCollision()` applies a strategy. |
+| **`llmSelect`**    | Embedding-based schema selection in `pickInitialSchema()`                           | When `llmSelect.detect` is on, `semanticSearchActionSchema` is called with `topN ≥ 2`; ambiguity = top-2 score delta < `scoreDeltaThreshold`.               |
+| **`fuzzy`**        | Static (post-load) and runtime (post-resolver) — semantic similarity across schemas | `fuzzyCollision.ts` — pluggable `FuzzyScorer` interface; ships `PlaceholderScorer` (returns 0); `ActionEmbeddingScorer` is reserved for a follow-up.        |
+
+### Pipeline integration
+
+```
+User input
+     │
+     ▼
+matchRequest()
+     │
+     ▼
+agentCache.match()                 # heuristically-sorted MatchResult[]
+     │
+     ▼
+getValidatedMatches()              # validated subset, original order
+     │
+     ▼
+collision.grammarMatch.detect ?
+     │
+     ├── no  → return validated[0]                        (legacy path)
+     │
+     └── yes → isCollision(validated, classifier)
+                │
+                ├── no  → return validated[0]
+                │
+                └── yes → resolveGrammarCollision(validated, ctx, request)
+                          │
+                          ├── { kind: "match", match }    → use as TranslationResult
+                          │
+                          └── { kind: "clarify", clarify } → wrap in ClarifyMultipleAgentMatches
+                                                             ExecutableAction; downstream
+                                                             execution renders the prompt.
+```
+
+The LLM-select path follows the same shape inside `pickInitialSchema`:
+the function's return type is widened to `string | { clarify }`, and the
+caller (`translateRequestWithActiveSchemas`) short-circuits to return the
+clarify action directly when ambiguity fires.
+
+### Resolution strategies
+
+All runtime detection points share the same four-way strategy enum:
+
+| Strategy       | Implementation                                                                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `first-match`  | `validated[0]`. Byte-identical to legacy `getValidatedMatch`.                                                                                                                                                                 |
+| `score-rank`   | Re-sort by `(matchedCount desc, nonOptionalCount desc, -wildcardCharCount)`; ties fall through to `priority`. Today the cache pre-sorts by these heuristics, so this is a no-op except on ties.                               |
+| `priority`     | Sort by `getAgentPriority(getAppAgentName(schemaName), ctx)`. Priority comes from `collision.priorityOrder` (comma-separated names) if set, otherwise registration order from `AppAgentManager.getAgentRank()`.               |
+| `user-clarify` | Build a `ClarifyMultipleAgentMatches` listing all `(schemaName, actionName, score?)` candidates. The dispatcher agent's clarify handler renders it via `actionIO.appendDisplay`; the user's reply re-enters the request loop. |
+
+The `static` point uses `warn` / `error`. The async `onSchemaReady`
+re-scan path (for late-arriving MCP agents) **always** degrades `error`
+to `warn` so a slow agent can never crash a live session.
+
+### Clarify schema
+
+A new `ClarifyMultipleAgentMatches` variant lives in
+`clarifyActionSchema.ts` alongside the existing intra-schema variants:
+
+```ts
+export interface ClarifyMultipleAgentMatches {
+  actionName: "clarifyMultipleAgentMatches";
+  parameters: {
+    request: string;
+    candidates: { schemaName: string; actionName: string; score?: number }[];
+    clarifyingQuestion: string;
+  };
+}
+```
+
+Cross-agent collisions need both the schema and the action — overloading
+the existing `ClarifyMultiplePossibleActionName.possibleActionNames:
+string[]` with `"agent.action"` strings would be a covert schema change
+that other handlers (LLM clarifying flows) might not understand.
+
+### Telemetry
+
+`CommandHandlerContext.collisionEvents: CollisionEvent[]` is a
+50-entry ring buffer; `emitCollisionEvent()` in `collisionTelemetry.ts`
+appends events and (independently) writes a `debug("typeagent:dispatcher:collision")`
+line. Each event includes `kind`, `request`, `candidates`, `chosen`,
+`strategy`, and `elapsedMs`.
+
+This is the **A/B evaluation surface** — the user wants to compare the
+four strategies empirically, and without telemetry the choice is opaque.
+Ring-buffer-on-context (rather than file-based logging) keeps the
+data accessible programmatically for tests and tooling.
+
+### MultipleAction interaction
+
+When a request decomposes into a `MultipleAction` batch, sub-action
+collisions need a policy. `collision.multipleActionBehavior` selects one:
+
+| Value                             | Behavior                                                                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `downgrade-to-priority` (default) | Silently fall back to `priority` for any sub-action collision. Telemetry records the original collision so the choice is auditable. |
+| `pause-and-prompt`                | **TODO** — requires non-trivial batch-executor pause/resume support. Today auto-degrades to `downgrade-to-priority`.                |
+| `abort`                           | Surface the clarify and fail the batch; the user re-issues.                                                                         |
+
+The flag is checked by reading `ctx.executingMultipleAction` (a new
+boolean on `CommandHandlerContext` set true while a batch is being processed).
+
+### Vampire test agent
+
+[`packages/agents/vampire`](../../packages/agents/vampire) — a
+default-disabled agent purpose-built to deliberately collide with player,
+list, and calendar via exact-name actions, grammar overlap, and synonym
+actions. It exists so the four resolution strategies can be evaluated on
+real input rather than synthetic `MatchResult[]` fixtures. See its README
+for the action surface and smoke-test sequence.
+
+### Out of scope (and why)
+
+- **`MatchResult.conflictValues`** — that field tracks parameter-value
+  conflicts during cache matching, **not** action collisions. A leading
+  comment in `matchCollision.ts` notes this so future readers don't
+  conflate them.
+- **`switch.fixed` short-circuit** — when a user has pinned a schema via
+  `translation.switch.fixed`, LLM-select detection is skipped. A pin is
+  by definition not ambiguous.
+
+### TODOs
+
+Listed in the dispatcher README under
+[Action Collision Detection › TODOs](../../packages/dispatcher/dispatcher/README.md#todos--open-work).
+The big ones:
+
+- Real `ActionEmbeddingScorer` implementation (currently placeholder).
+- Runtime fuzzy detection hook (config exists; call site not yet wired).
+- `pause-and-prompt` behavior for `MultipleAction` (auto-degrades today).
+- Fuzzy threshold calibration once a real scorer lands.
+- Surface the runtime `collisionEvents` ring buffer through a command
+  (`@grammar collisions` covers the static-scan side via NFA product
+  construction with concrete witnesses; the runtime side is still
+  programmatic-only).
+
+---
+
 ## Built-in agents
 
 The dispatcher registers two built-in agents via `inlineAgentProvider`:
 
 ### System agent
 
-Handles `@`-prefixed system commands:
+Handles `@`-prefixed system commands. The full set is registered in
+`systemHandlers` ([systemAgent.ts](../../packages/dispatcher/dispatcher/src/context/system/systemAgent.ts)):
 
-- `@config` — Session configuration (models, caching, agents)
-- `@help` — Help and documentation
-- `@history` — Chat history management
-- `@trace` — Debug tracing
-- `@clear` — Clear display
-- `@notify` — Notification management
-- `@construction` — Cache construction management
-- `@explain` — Explanation of cached translations
-- `@reasoning` / `@reason` — Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override
-- `@feedback` — Inspect and export user-feedback entries
-  recorded by the chat UI (`list`, `top`, `filter`, `export`, `count`)
+| Command                  | Purpose                                                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@action`                | Direct invocation of a typed action (bypasses NL translation).                                                                                                                                               |
+| `@clear`                 | Clear the display.                                                                                                                                                                                           |
+| `@config`                | Session configuration — models, caching, agents, schema toggles, collision detection.                                                                                                                        |
+| `@const`                 | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                            |
+| `@conversation`          | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                   |
+| `@debug`                 | Wait-for-debugger and other developer hooks.                                                                                                                                                                 |
+| `@display`               | Tweak how output is rendered.                                                                                                                                                                                |
+| `@env`                   | Inspect environment variables and config-relevant runtime values.                                                                                                                                            |
+| `@exit`                  | Exit the program.                                                                                                                                                                                            |
+| `@explain`               | Explanation of cached translations                                                                                                                                                                           |
+| `@feedback`              | Inspect and export user-feedback entries                                                                                                                                                                     |
+| `@grammar`               | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses). |
+| `@help`                  | Inline help for any command.                                                                                                                                                                                 |
+| `@history`               | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                                                                                 |
+| `@index`                 | Image / memory indexing controls.                                                                                                                                                                            |
+| `@install`               | Install an external app agent.                                                                                                                                                                               |
+| `@memory`                | Conversation-memory operations (RAG store maintenance).                                                                                                                                                      |
+| `@notify`                | Notification stream control.                                                                                                                                                                                 |
+| `@open`                  | Open a file or folder via the host.                                                                                                                                                                          |
+| `@ports`                 | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.                                                              |
+| `@random`                | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                                                                               |
+| `@reason` / `@reasoning` | Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override.                                                                                                                         |
+| `@run`                   | Execute a script of dispatcher commands in sequence.                                                                                                                                                         |
+| `@session`               | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                                                                                           |
+| `@settings`              | User-level settings (theme, etc.).                                                                                                                                                                           |
+| `@shutdown`              | Shut down the agent server and exit.                                                                                                                                                                         |
+| `@token`                 | Token-counter inspection.                                                                                                                                                                                    |
+| `@trace`                 | Add a `debug` trace pattern.                                                                                                                                                                                 |
+| `@uninstall`             | Uninstall an external app agent.                                                                                                                                                                             |
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.
@@ -614,7 +830,7 @@ the dispatcher in a separate process):
 ┌──────────────┐         RPC Channel          ┌───────────────────┐
 │  Shell/CLI   │ ◄━━━━━━━━━━━━━━━━━━━━━━━━━►  │  Dispatcher       │
 │              │                              │                   │
-│  Dispatcher  │  processCommand ──────────►  │  DispatcherServer │
+│  Dispatcher  │  submitCommand  ──────────►  │  DispatcherServer │
 │  Client      │  getCompletion  ──────────►  │                   │
 │              │                              │                   │
 │  ClientIO    │  ◄──────────── appendDisplay │  ClientIO Client  │
@@ -625,8 +841,13 @@ the dispatcher in a separate process):
 Two RPC pairs are involved:
 
 1. **Dispatcher RPC** — The shell calls dispatcher methods
-   (`processCommand`, `getCommandCompletion`, etc.) via
-   `DispatcherClient` → `DispatcherServer`.
+   (`submitCommand`, `getCommandCompletion`, etc.) via
+   `DispatcherClient` → `DispatcherServer`. The `submitCommand` wire
+   payload omits the `completion` promise (promises can't be
+   serialized); the RPC client synthesizes a fresh `completion`
+   wired to the host's `commandComplete` / `requestCancelled` push
+   events before handing the result to the caller — see
+   [`messageQueueing.md`](./messageQueueing.md) §14.1.
 2. **ClientIO RPC** — The dispatcher calls display methods
    (`appendDisplay`, `proposeAction`, etc.) via
    `ClientIOClient` → `ClientIOServer`.
@@ -642,8 +863,10 @@ A complete request lifecycle, from keystroke to result:
 
 ```
 1. User types "play Yesterday by the Beatles"
-2. Shell calls dispatcher.processCommand("play Yesterday by the Beatles")
-3. processCommand() acquires commandLock, creates AbortController
+2. Shell calls dispatcher.submitCommand("play Yesterday by the Beatles")
+3. submit returns {ok:true, entry} where entry is a SubmittedRequest carrying
+   entry.completion; queue drain dispatches the entry,
+   processCommand pipeline acquires commandLock, creates AbortController
 4. normalizeCommand() → "@dispatcher play Yesterday by the Beatles"
 5. resolveCommand() → no matching command → natural language request
 6. interpretRequest() entered
@@ -690,7 +913,7 @@ The dispatcher uses structured error handling at several levels:
   - `cancelCommand(requestId)` — cancel by the server-assigned UUID, available
     after `setUserRequest()` fires. Used by Escape/Ctrl+C once a request is running.
   - `cancelCommandByClientId(clientRequestId)` — cancel by the client-assigned
-    id passed as the second argument to `processCommand()`. This AbortController
+    id passed as the fourth argument to `submitCommand()`. This AbortController
     is created before the command lock is acquired, so it can abort a command
     that is queued behind another in-flight command before `setUserRequest()` fires.
 - **Unknown actions** — When no agent matches, the dispatcher displays

@@ -3,17 +3,22 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
+    applyQueueSnapshot,
+    clearRecentSubmissions,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
     setServerPort,
     setServerConnection,
+    setQueueDispatcher,
+    setCliConnectionId,
 } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
@@ -337,6 +342,11 @@ export default class Connect extends Command {
                 saveLastConversationId(activeConversationId);
             }
             bindDispatcher(activeDispatcher);
+            // Wire slash-command dispatcher and bootstrap the queue snapshot for the first prompt.
+            setQueueDispatcher(activeDispatcher);
+            setCliConnectionId(conversation.connectionId);
+            clearRecentSubmissions();
+            applyQueueSnapshot(conversation.queueSnapshot);
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
@@ -365,6 +375,10 @@ export default class Connect extends Command {
                         activeConversationId = newConversation.conversationId;
                         activeName = newConversation.name;
                         bindDispatcher(activeDispatcher);
+                        setQueueDispatcher(activeDispatcher);
+                        setCliConnectionId(newConversation.connectionId);
+                        clearRecentSubmissions();
+                        applyQueueSnapshot(newConversation.queueSnapshot);
                         if (!isEphemeral) {
                             saveLastConversationId(activeConversationId);
                         }
@@ -384,11 +398,11 @@ export default class Connect extends Command {
             try {
                 let processed = false;
                 if (flags.request) {
-                    await activeDispatcher.processCommand(flags.request);
+                    await awaitCommand(activeDispatcher, flags.request);
                     processed = true;
                 }
                 if (args.input) {
-                    await activeDispatcher.processCommand(`@run ${args.input}`);
+                    await awaitCommand(activeDispatcher, `@run ${args.input}`);
                     processed = true;
                 }
                 if (processed && flags.exit) {
@@ -407,14 +421,23 @@ export default class Connect extends Command {
                         _dispatcher: Dispatcher,
                         clientRequestId: string,
                     ) => {
-                        return activeDispatcher.processCommand(
+                        return awaitCommand(
+                            activeDispatcher,
                             command,
+                            undefined,
+                            undefined,
                             clientRequestId,
                         );
                     },
                     activeDispatcher,
                     undefined,
-                    createCompletionController(activeDispatcher),
+                    createCompletionController({
+                        getCommandCompletion: (input, direction) =>
+                            activeDispatcher.getCommandCompletion(
+                                input,
+                                direction,
+                            ),
+                    }),
                     activeDispatcher,
                     () => loadUserSettings().ui.autoComplete,
                 );

@@ -19,11 +19,17 @@ import {
     NotifyExplainedData,
     PendingInteractionRequest,
     PendingInteractionResponse,
+    QueueCancelReason,
+    QueuedRequest,
+    QueueSnapshot,
     RequestId,
     TemplateEditConfig,
     UserFeedbackEntry,
     UserMessageHiddenEntry,
 } from "agent-dispatcher";
+// QueueStateMirror is a value import; route through the pure types pkg so vite
+// doesn't bundle agent-dispatcher's server-only deps (telemetry, node:fs, ...).
+import { QueueStateMirror, awaitCommand } from "@typeagent/dispatcher-types";
 
 import { PartialCompletion } from "../partial";
 import { ChoicePanel, InputChoice } from "../choicePanel";
@@ -38,6 +44,9 @@ import {
 import { iconTrash } from "../icon";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
+
+/** Window for the double-Escape "clear entire queue" gesture (mirrors the CLI). */
+const DOUBLE_ESCAPE_WINDOW_MS = 1000;
 
 // The canonical MessageGroup key is requestId.requestId — a UUID assigned by
 // the dispatcher (via randomUUID()). This value is guaranteed to be unique
@@ -81,6 +90,13 @@ export class ChatView {
 
     private _voiceBanner: HTMLElement;
     private _reconnectBanner!: HTMLElement;
+
+    /** Mirror of the server's per-conversation queue. UI side effects live in handlers below. */
+    private queueMirror = new QueueStateMirror();
+    /** Queue status chips deferred until their MessageGroup is created. */
+    private pendingQueueStatus = new Map<string, "queued" | "running">();
+    /** Timestamp of the last Escape press; powers the double-Escape gesture. */
+    private lastEscapeTime = 0;
 
     public userGivenName: string = "";
     /**
@@ -347,7 +363,10 @@ export class ChatView {
         };
     }
 
-    public initializeDispatcher(dispatcher: Dispatcher) {
+    public initializeDispatcher(
+        dispatcher: Dispatcher,
+        initialQueueSnapshot?: QueueSnapshot,
+    ) {
         if (this._dispatcher !== undefined) {
             throw new Error("Dispatcher already initialized");
         }
@@ -357,6 +376,16 @@ export class ChatView {
         }
 
         this._dispatcher = dispatcher;
+
+        // Bootstrap from the join snapshot when provided; otherwise fall back to RPC.
+        if (initialQueueSnapshot !== undefined) {
+            this.applyQueueSnapshot(initialQueueSnapshot);
+        } else if (typeof dispatcher.getQueueSnapshot === "function") {
+            dispatcher
+                .getQueueSnapshot()
+                .then((snap) => this.applyQueueSnapshot(snap))
+                .catch(() => {});
+        }
 
         this.chatInput.textarea.enable(true);
         this.chatInput.focus();
@@ -375,11 +404,23 @@ export class ChatView {
             this.showStopButton(false);
         };
 
-        // Escape key cancels during processing
+        // Escape cancels the running request; a second Escape within
+        // DOUBLE_ESCAPE_WINDOW_MS clears the entire queue (mirrors the CLI).
         document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && this.activeRequestId) {
+            if (e.key !== "Escape") return;
+            const now = Date.now();
+            const isDouble =
+                now - this.lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+            this.lastEscapeTime = now;
+            if (this.activeRequestId) {
                 e.preventDefault();
                 this.cancelCommand();
+            }
+            if (isDouble) {
+                // Reset so a third Escape doesn't immediately re-trigger.
+                this.lastEscapeTime = 0;
+                e.preventDefault();
+                void this.cancelAllQueuedAndRunning();
             }
         });
 
@@ -417,6 +458,25 @@ export class ChatView {
             this.activeRequestId = undefined;
             this.showStopButton(false);
         }
+    }
+
+    // Best-effort: per-id RPC errors are swallowed so one dead call doesn't
+    // strand the rest. Server `requestCancelled` broadcasts drive the UI.
+    private async cancelAllQueuedAndRunning(): Promise<void> {
+        const snap = this.queueMirror.snapshot;
+        const dispatcher = this._dispatcher;
+        if (!dispatcher || !snap) return;
+        const ids: string[] = [];
+        if (snap.running) ids.push(snap.running.requestId);
+        for (const e of snap.queued) ids.push(e.requestId);
+        if (ids.length === 0) return;
+        await Promise.all(
+            ids.map(async (id) => {
+                try {
+                    await Promise.resolve(dispatcher.cancelCommand(id));
+                } catch {}
+            }),
+        );
     }
 
     private showStopButton(processing: boolean) {
@@ -620,6 +680,8 @@ export class ChatView {
                     // Stamp the canonical requestId on the group now that
                     // it's known — drives the feedback widget.
                     pending.setRequestId(requestId);
+                    // Apply any queue chip deferred while the MG was pending.
+                    this.applyPendingQueueStatus(id, pending);
                     return pending;
                 }
             }
@@ -707,6 +769,7 @@ export class ChatView {
         this.idToMessageGroup.clear();
         this.pendingLocalGroups.clear();
         this.clientMessageGroups.clear();
+        this.pendingQueueStatus.clear();
         this.commandBackStackIndex = -1;
         this.commandBackStack = [];
     }
@@ -857,10 +920,12 @@ export class ChatView {
         // Start command processing first so we have the promise for MessageGroup.
         // localId becomes clientRequestId in the RequestId; the server assigns
         // a UUID (requestId.requestId) and broadcasts it via setUserRequest.
-        const commandResult = this.getDispatcher().processCommand(
+        const commandResult = awaitCommand(
+            this.getDispatcher(),
             requestText,
-            localId,
             images,
+            undefined,
+            localId,
         );
 
         const mg: MessageGroup = new MessageGroup(
@@ -886,6 +951,10 @@ export class ChatView {
 
     addRemoteUserMessage(requestId: RequestId, command: string) {
         const id = requestId.requestId;
+        // LOAD-BEARING IDEMPOTENCE: callers in `getOrMaterializeRemoteMessageGroup`
+        // (queue events) and `main.ts/setUserRequest` (processing start) both fire
+        // for the same remote requestId; the `idToMessageGroup.has(id)` guard is
+        // what prevents duplicate bubbles. Do not remove without replacing.
         if (!id || this.idToMessageGroup.has(id)) {
             return;
         }
@@ -909,6 +978,8 @@ export class ChatView {
         mg.setRequestId(requestId);
 
         this.idToMessageGroup.set(id, mg);
+        // Apply any queue status deferred until the MG materialized.
+        this.applyPendingQueueStatus(id, mg);
         this.updateScroll();
     }
 
@@ -984,6 +1055,168 @@ export class ChatView {
      */
     applyFeedback(entry: UserFeedbackEntry) {
         this.getMessageGroup(entry.requestId)?.applyFeedback(entry);
+    }
+
+    // Server-side queue: drives per-bubble "queued"/"running" chips.
+
+    public applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
+        const prev = this.queueMirror.snapshot;
+        this.queueMirror.reset(snapshot);
+        this.reconcileChipsToSnapshot(prev, snapshot);
+    }
+
+    public onRequestQueued(entry: QueuedRequest, version: number): void {
+        if (!this.queueMirror.applyQueued(entry, version).admitted) return;
+        this.tryApplyQueueStatusToGroup(entry, "queued");
+    }
+
+    public onRequestStarted(entry: QueuedRequest, version: number): void {
+        const result = this.queueMirror.applyStarted(entry, version);
+        if (!result.admitted) return;
+        if (result.previousRunning) {
+            const prevId = result.previousRunning.requestId;
+            this.pendingQueueStatus.delete(prevId);
+            this.idToMessageGroup.get(prevId)?.setQueueStatus(null);
+        }
+        this.tryApplyQueueStatusToGroup(entry, "running");
+    }
+
+    public onRequestCancelled(
+        requestId: string,
+        _reason: QueueCancelReason,
+        version: number,
+    ): void {
+        if (!this.queueMirror.applyCancelled(requestId, version).admitted)
+            return;
+        this.pendingQueueStatus.delete(requestId);
+        const mg = this.idToMessageGroup.get(requestId);
+        if (mg) {
+            mg.setQueueStatus(null);
+            // Remote-origin bubbles have no commandResult promise, so this is
+            // the only signal that renders the "⚠ Cancelled" affordance.
+            // notifyCancelled is idempotent — local-origin bubbles unaffected.
+            mg.notifyCancelled();
+        }
+    }
+
+    public onQueueStateChanged(snapshot: QueueSnapshot): void {
+        const result = this.queueMirror.applyQueueStateChanged(snapshot);
+        if (!result.admitted) return;
+        this.reconcileChipsToSnapshot(result.previous, snapshot);
+    }
+
+    /** Stamp/clear chips to match an authoritative snapshot; sweep stale pending entries. */
+    private reconcileChipsToSnapshot(
+        prev: QueueSnapshot | undefined,
+        next: QueueSnapshot | undefined,
+    ): void {
+        const liveIds = new Set<string>();
+        if (next?.running) {
+            liveIds.add(next.running.requestId);
+            this.tryApplyQueueStatusToGroup(next.running, "running");
+        }
+        for (const entry of next?.queued ?? []) {
+            liveIds.add(entry.requestId);
+            this.tryApplyQueueStatusToGroup(entry, "queued");
+        }
+        // Clear chips on entries the new snapshot dropped.
+        const prevIds = new Set<string>();
+        if (prev?.running) prevIds.add(prev.running.requestId);
+        for (const e of prev?.queued ?? []) prevIds.add(e.requestId);
+        for (const id of prevIds) {
+            if (liveIds.has(id)) continue;
+            this.pendingQueueStatus.delete(id);
+            this.idToMessageGroup.get(id)?.setQueueStatus(null);
+        }
+        // Sweep pending statuses whose entry is no longer live.
+        for (const id of Array.from(this.pendingQueueStatus.keys())) {
+            if (!liveIds.has(id)) {
+                this.pendingQueueStatus.delete(id);
+            }
+        }
+    }
+
+    /**
+     * Apply a chip to the matching MessageGroup, or stash the status in
+     * `pendingQueueStatus` so it's applied when the MG materializes.
+     */
+    private tryApplyQueueStatusToGroup(
+        entry: QueuedRequest,
+        status: "queued" | "running" | null,
+    ): void {
+        const mg = this.getOrMaterializeRemoteMessageGroup(entry);
+        const onCancel =
+            status === "queued"
+                ? () => this.cancelQueuedById(entry.requestId)
+                : undefined;
+        if (mg) {
+            mg.setQueueStatus(status, onCancel);
+            this.pendingQueueStatus.delete(entry.requestId);
+            return;
+        }
+        if (status === null) {
+            this.pendingQueueStatus.delete(entry.requestId);
+        } else {
+            this.pendingQueueStatus.set(entry.requestId, status);
+        }
+    }
+
+    /**
+     * Resolve the MessageGroup for a queue entry, materializing a remote-origin
+     * user bubble eagerly from the entry text if needed. Remote entries' bubbles
+     * would otherwise only appear on `setUserRequest` (which doesn't fire until
+     * processing begins), so peer clients would never see queued/running chips.
+     */
+    private getOrMaterializeRemoteMessageGroup(
+        entry: QueuedRequest,
+    ): MessageGroup | undefined {
+        const existing = this.idToMessageGroup.get(entry.requestId);
+        if (existing) return existing;
+        const requestId: RequestId = {
+            requestId: entry.requestId,
+            clientRequestId: entry.clientRequestId,
+        };
+        if (entry.text && !this.isLocalRequest(requestId)) {
+            this.addRemoteUserMessage(requestId, entry.text);
+            const created = this.idToMessageGroup.get(entry.requestId);
+            if (created) return created;
+        }
+        // Falls through for local entries (lazy-promoted in getMessageGroup)
+        // and remote entries without text (rare, but possible during replay).
+        return this.getMessageGroup(requestId);
+    }
+
+    /** Apply any deferred queue status for `requestId` to the now-live MG. */
+    private applyPendingQueueStatus(requestId: string, mg: MessageGroup): void {
+        const status = this.pendingQueueStatus.get(requestId);
+        if (status !== undefined) {
+            const onCancel =
+                status === "queued"
+                    ? () => this.cancelQueuedById(requestId)
+                    : undefined;
+            mg.setQueueStatus(status, onCancel);
+            this.pendingQueueStatus.delete(requestId);
+        }
+    }
+
+    /**
+     * Cancel a single queued entry from the per-bubble X button. The
+     * authoritative UI update arrives via the server's `requestCancelled`
+     * broadcast; rejection here means the cancel never reached the server.
+     */
+    private cancelQueuedById(requestId: string): void {
+        const dispatcher = this._dispatcher;
+        if (!dispatcher) return;
+        try {
+            // cancelCommand returns Promise<CancelResult>; warn on rejection
+            // so a wedged dispatcher doesn't silently drop the user's click.
+            dispatcher.cancelCommand(requestId).catch((err) => {
+                console.warn(`cancelQueuedById(${requestId}) rejected:`, err);
+            });
+        } catch (err) {
+            // Sync throw — disconnected channel stub.
+            console.warn(`cancelQueuedById(${requestId}) threw:`, err);
+        }
     }
 
     /**

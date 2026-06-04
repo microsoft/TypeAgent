@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { loadConfigSync } from "@typeagent/config";
 import dotenv from "dotenv";
 import {
     WorkflowIR,
@@ -12,6 +13,9 @@ import {
     ApprovalFn,
     ApprovalResult,
     validateWorkflowIR,
+    isGenericTask,
+    isTypeParamRef,
+    SchemaTemplateDefinition,
 } from "workflow-model";
 import {
     TaskRegistry,
@@ -20,14 +24,22 @@ import {
     allBuiltinTasks,
 } from "workflow-engine";
 
+// Load layered TypeAgent config (config.defaults.yaml + config.local.yaml + .env fallback)
+// before command parsing so runtime API settings are available to workflow tasks.
+loadConfigSync();
+
 const usage = `Usage:
-  workflow run <file.json> [--input <json>] [--env <file>] [--dry-run | --allow-all]   Run a workflow
+  workflow run <file.json> [--input <json>] [--env <file>] [--task-timeout-ms <ms>] [--dry-run | --allow-all]   Run a workflow
   workflow validate <file.json>                                                        Validate a workflow
   workflow list-tasks                                                                  List registered tasks
 
 Options:
   --env <file>  Load environment variables from the given dotenv file before
                 running. Can be specified multiple times.
+  --task-timeout-ms <ms>  
+                Global timeout in milliseconds for each task execution.
+                Defaults to 60000. Use 0 or Infinity to disable global
+                task timeout.
   --dry-run     Deny all side-effecting tasks (shell, network, file, LLM)
                 without prompting. Useful for testing workflow structure.
   --allow-all   Allow all tasks without prompting. Use for scripted/CI runs
@@ -65,6 +77,7 @@ async function cmdRun(
     file: string,
     inputJson?: string,
     mode?: "dry-run" | "allow-all",
+    taskTimeoutMs?: number,
 ): Promise<void> {
     const ir = loadIR(file);
     let input: Record<string, unknown> = {};
@@ -160,6 +173,7 @@ async function cmdRun(
         input,
         ...(policy ? { policy } : {}),
         ...(approve ? { approve } : {}),
+        ...(taskTimeoutMs !== undefined ? { taskTimeoutMs } : {}),
     };
     const result = await engine.run(ir, opts);
     if (result.success) {
@@ -174,6 +188,14 @@ async function cmdRun(
         console.error(
             `${prefix} Workflow failed${location}: ${result.error?.message ?? "unknown error"}`,
         );
+
+        // Log any structured context attached to the error.
+        if (result.error?.data !== undefined) {
+            console.error(
+                `${prefix} error data: ${JSON.stringify(result.error.data, null, 2)}`,
+            );
+        }
+
         process.exit(1);
     }
 }
@@ -201,30 +223,85 @@ function cmdListTasks(): void {
     }
     for (const task of allBuiltinTasks) {
         console.log(`${task.name}`);
-        if (task.inputSchema) {
-            const props = (task.inputSchema as any).properties ?? {};
-            const required = (task.inputSchema as any).required ?? [];
-            const fields = Object.keys(props)
-                .map((k) => {
-                    const req = required.includes(k) ? "" : "?";
-                    const type = props[k].type ?? "any";
-                    return `${k}${req}: ${type}`;
-                })
-                .join(", ");
-            if (fields) {
-                console.log(`  input:  { ${fields} }`);
+        if (isGenericTask(task)) {
+            const params = task.typeParameters.map((p) => p.name).join(", ");
+            console.log(`  <${params}> (generic)`);
+            const inputTmpl = task.inputSchemaTemplate;
+            if (
+                typeof inputTmpl === "object" &&
+                inputTmpl !== null &&
+                typeof inputTmpl !== "boolean"
+            ) {
+                const tmpl = inputTmpl as SchemaTemplateDefinition;
+                const props = tmpl.properties ?? {};
+                const required = tmpl.required ?? [];
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const p = props[k] as Record<string, unknown>;
+                        const req = required.includes(k) ? "" : "?";
+                        const type = p?.$typeParam ?? p?.type ?? "any";
+                        return `${k}${req}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  input:  { ${fields} }`);
+                }
             }
-        }
-        if (task.outputSchema) {
-            const props = (task.outputSchema as any).properties ?? {};
-            const fields = Object.keys(props)
-                .map((k) => {
-                    const type = props[k].type ?? "any";
-                    return `${k}: ${type}`;
-                })
-                .join(", ");
-            if (fields) {
-                console.log(`  output: { ${fields} }`);
+            const outputTmpl = task.outputSchemaTemplate;
+            if (
+                typeof outputTmpl === "object" &&
+                outputTmpl !== null &&
+                typeof outputTmpl !== "boolean"
+            ) {
+                if (isTypeParamRef(outputTmpl)) {
+                    console.log(`  output: ${outputTmpl.$typeParam}`);
+                } else {
+                    const tmpl = outputTmpl as SchemaTemplateDefinition;
+                    if (tmpl.properties) {
+                        const fields = Object.keys(tmpl.properties)
+                            .map((k) => {
+                                const p = tmpl.properties![k] as Record<
+                                    string,
+                                    unknown
+                                >;
+                                const type = p?.$typeParam ?? p?.type ?? "any";
+                                return `${k}: ${type}`;
+                            })
+                            .join(", ");
+                        if (fields) {
+                            console.log(`  output: { ${fields} }`);
+                        }
+                    }
+                }
+            }
+        } else {
+            if (task.inputSchema) {
+                const props = task.inputSchema.properties ?? {};
+                const required = task.inputSchema.required ?? [];
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const req = required.includes(k) ? "" : "?";
+                        const p = props[k] as Record<string, unknown>;
+                        const type = p?.type ?? "any";
+                        return `${k}${req}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  input:  { ${fields} }`);
+                }
+            }
+            if (task.outputSchema) {
+                const props = task.outputSchema.properties ?? {};
+                const fields = Object.keys(props)
+                    .map((k) => {
+                        const p = props[k] as Record<string, unknown>;
+                        const type = p?.type ?? "any";
+                        return `${k}: ${type}`;
+                    })
+                    .join(", ");
+                if (fields) {
+                    console.log(`  output: { ${fields} }`);
+                }
             }
         }
         console.log();
@@ -254,6 +331,28 @@ function loadEnvFiles(argv: string[]): void {
     }
 }
 
+function parseTaskTimeoutMs(argv: string[]): number | undefined {
+    const idx = argv.indexOf("--task-timeout-ms");
+    if (idx < 0) {
+        return undefined;
+    }
+
+    const raw = argv[idx + 1];
+    if (!raw || raw.startsWith("--")) {
+        fail("--task-timeout-ms requires a numeric value argument");
+    }
+
+    if (raw === "Infinity") {
+        return Infinity;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        fail("--task-timeout-ms must be a non-negative number (or Infinity)");
+    }
+    return parsed;
+}
+
 switch (command) {
     case "run": {
         const file = args[1];
@@ -272,7 +371,8 @@ switch (command) {
             : args.includes("--allow-all")
               ? "allow-all"
               : undefined;
-        await cmdRun(file, inputJson, mode);
+        const taskTimeoutMs = parseTaskTimeoutMs(args);
+        await cmdRun(file, inputJson, mode, taskTimeoutMs);
         break;
     }
     case "validate": {

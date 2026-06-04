@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5649e446b0baf71e5d13f269967efe7af4c6af0fe98244ef5cd22c53ba6d184f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c95811c705d8b4085f51133a381a4697d08198ffb6f6df0df0b7377b4eb09242 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin — AI-generated documentation
@@ -94,14 +94,15 @@ External: `@modelcontextprotocol/sdk`, `html-to-text`, `zod`
 
 ### Files of interest
 
-`./src/hooks/hook-agent-stop.ts`, `./src/hooks/hook-debug.ts`, `./src/hooks/hook-direct.ts`, …and 11 more under `./src/`.
+`./src/hooks/demo-state.ts`, `./src/hooks/hook-agent-stop.ts`, `./src/hooks/hook-debug.ts`, …and 13 more under `./src/`.
 
 ### Environment variables
 
-_6 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `CLAUDE_PLUGIN_DATA`
 - `HOOK_TYPE`
+- `TYPEAGENT_DEMO_STATE_PATH`
 - `TYPEAGENT_HOST`
 - `TYPEAGENT_MODE`
 - `TYPEAGENT_PLUGIN_DATA`
@@ -109,6 +110,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

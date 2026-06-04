@@ -11,5 +11,5 @@
     "skipLibCheck": true
   },
   "include": ["./**/*.ts"],
-  "references": [{ "path": "../../src" }]
+  "references": [{ "path": "../../src" }, { "path": ".." }]
 }

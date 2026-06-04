@@ -56,6 +56,18 @@ function compile(
     return { grammar, nfa, dfa };
 }
 
+function compileWithExpressions(
+    name: string,
+    agr: string,
+): { grammar: Grammar; nfa: NFA; dfa: DFA } {
+    const grammar = loadGrammarRules(name, agr, {
+        enableValueExpressions: true,
+    });
+    const nfa = compileGrammarToNFA(grammar, name);
+    const dfa = compileNFAToDFA(nfa, name);
+    return { grammar, nfa, dfa };
+}
+
 /** Adapt a DFA match result into the same shape as NFAGrammarMatchResult */
 function adaptDFA(
     raw: DFAMatchResult,
@@ -1544,7 +1556,14 @@ describe("Real Grammar Value Parity", () => {
             "previous",
         ];
 
-        // TODO: NFA/DFA doesn't support value expressions for ordinal
+        // The DFA-AST matcher (matchDFAToASTWithSplitting + evaluateMatchAST)
+        // inlines rule alternatives down to tokens, dropping the $(n:<Ordinal>)
+        // ruleRef structure that carries the variable binding.  NFA correctly
+        // produces { trackNumber: 1 }; DFA-AST loses `n` from bindings and
+        // returns { parameters: {} }.  This is a structural gap in the AST
+        // matcher's alternative-inlining — not a value-expression issue.
+        // Tracked separately from the NFA/DFA value-expression support added
+        // in this change.
         const skippedAstRequests = [
             "play the first track",
             "play the third track",
@@ -1563,7 +1582,7 @@ describe("Real Grammar Value Parity", () => {
         });
 
         it.skip.each(skippedAstRequests)(
-            "AST value matches NFA for '%s' (ordinal value expressions)",
+            "AST value matches NFA for '%s' (DFA-AST loses ruleRef binding for $(n:<Ordinal>))",
             (req) => {
                 if (!loaded) return;
                 const { grammar, nfa, dfa } = loaded;
@@ -2352,6 +2371,126 @@ describe("Rich Entity Matching Parity", () => {
 
         it("completion parity with NFA after 'skip'", () => {
             assertCompletionParity(nfa, dfa, ["skip"]);
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // Value expressions — NFA/DFA must support the full expression grammar
+    // (binary, unary, conditional, member, call, spread, template literal)
+    // via the shared evaluateValueExpr evaluator.
+    // -----------------------------------------------------------------------
+    describe("value expressions", () => {
+        // Helper: the NFA/DFA slot-based matchers (matchDFAWithSplitting +
+        // matchGrammarWithNFA) are the production path for value expressions.
+        // The DFA-AST matcher (matchDFAToASTWithSplitting + evaluateMatchAST)
+        // has a separate, unrelated gap around alternative-inlining, so this
+        // block targets the slot-based path only.
+        const expectMatch = (
+            grammar: Grammar,
+            nfa: NFA,
+            dfa: DFA,
+            request: string,
+            expected: unknown,
+        ) => {
+            const nfaResults = matchGrammarWithNFA(grammar, nfa, request);
+            const tokens = tokenizeRequest(request);
+            const dfaRaw = matchDFAWithSplitting(dfa, tokens);
+            expect(nfaResults.length).toBeGreaterThan(0);
+            expect(nfaResults[0].match).toEqual(expected);
+            expect(dfaRaw.matched).toBe(true);
+            expect(dfaRaw.actionValue).toEqual(expected);
+        };
+
+        it("binary addition", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-binary-add",
+                `<Start> = add $(x:number) -> x + 1;`,
+            );
+            expectMatch(grammar, nfa, dfa, "add 41", 42);
+        });
+
+        it("binary subtraction with two variables", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-binary-sub",
+                `<Start> = sub $(a:number) $(b:number) -> a - b;`,
+            );
+            expectMatch(grammar, nfa, dfa, "sub 10 3", 7);
+        });
+
+        it("comparison operator", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-cmp",
+                `<Start> = check $(x:number) -> x < 10;`,
+            );
+            expectMatch(grammar, nfa, dfa, "check 3", true);
+            expectMatch(grammar, nfa, dfa, "check 20", false);
+        });
+
+        it("logical && short-circuit returns left when falsy", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-and",
+                `<Start> = both $(x:number) -> x > 0 && x < 10;`,
+            );
+            expectMatch(grammar, nfa, dfa, "both 5", true);
+            expectMatch(grammar, nfa, dfa, "both 20", false);
+        });
+
+        it("conditional ternary expression", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-tern",
+                `<Start> = pick $(x:number) -> x > 0 ? "positive" : "non-positive";`,
+            );
+            expectMatch(grammar, nfa, dfa, "pick 5", "positive");
+            expectMatch(grammar, nfa, dfa, "pick 0", "non-positive");
+        });
+
+        it("unary negation and typeof", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-unary",
+                `<Start> = negate $(x:number) -> -x;`,
+            );
+            expectMatch(grammar, nfa, dfa, "negate 7", -7);
+
+            const tof = compileWithExpressions(
+                "vx-typeof",
+                `<Start> = ty $(x:number) -> typeof x;`,
+            );
+            expectMatch(tof.grammar, tof.nfa, tof.dfa, "ty 7", "number");
+        });
+
+        it("template literal with embedded expression", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-template",
+                "<Start> = hi $(name:wildcard) -> `hello, ${name}!`;",
+            );
+            expectMatch(grammar, nfa, dfa, "hi alex", "hello, alex!");
+        });
+
+        it("method call on whitelisted method (string.toUpperCase)", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-call",
+                `<Start> = upper $(s:wildcard) -> s.toUpperCase();`,
+            );
+            expectMatch(grammar, nfa, dfa, "upper hello", "HELLO");
+        });
+
+        it("array spread in array literal", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-spread-array",
+                `<Start> = join $(a:number) $(b:number) -> [0, ...[a, b], 99];`,
+            );
+            expectMatch(grammar, nfa, dfa, "join 1 2", [0, 1, 2, 99]);
+        });
+
+        it("expression inside object literal", () => {
+            const { grammar, nfa, dfa } = compileWithExpressions(
+                "vx-obj-expr",
+                `<Start> = make $(x:number) -> { actionName: "compute", parameters: { doubled: x * 2, label: \`v=\${x}\` } };`,
+            );
+            expectMatch(grammar, nfa, dfa, "make 5", {
+                actionName: "compute",
+                parameters: { doubled: 10, label: "v=5" },
+            });
         });
     });
 });

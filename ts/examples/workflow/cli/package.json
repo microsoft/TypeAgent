@@ -26,6 +26,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/config": "workspace:*",
     "dotenv": "^17.4.2",
     "workflow-engine": "workspace:*",
     "workflow-model": "workspace:*"
@@ -35,6 +36,7 @@
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
-    "typescript": "~5.4.5"
+    "typescript": "~5.4.5",
+    "workflow-dsl": "workspace:*"
   }
 }

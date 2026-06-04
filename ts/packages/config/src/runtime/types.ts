@@ -208,11 +208,43 @@ export interface AzureFoundryConfig {
     readonly httpEndpointLogicAppConnectionId?: string | undefined;
 }
 
+/**
+ * LLM provider modes for the global override switch. Kept as a string
+ * literal union (not an import from aiclient) to avoid a circular
+ * package dependency — aiclient depends on @typeagent/config, not the
+ * other way around.
+ */
+export type ModelProviderMode = "azure" | "openai" | "ollama" | "copilot";
+
 export interface ReasoningConfig {
     /** Reasoning-loop timeout in milliseconds (0 = disabled). */
     readonly timeoutMs?: number | undefined;
     /** Override the default Copilot reasoning model. */
     readonly copilotModel?: string | undefined;
+}
+
+/**
+ * GitHub Copilot SDK provider configuration. Used by the translation
+ * pipeline when a caller selects `copilot:<model>` (or just `copilot`).
+ * Authentication is handled externally by the `copilot` / `gh` CLI —
+ * there are no credentials here.
+ */
+export interface CopilotConfig {
+    /** Model id used when `copilot:` is selected with no name. */
+    readonly defaultModel?: string | undefined;
+    /** Override the auto-detected `copilot` CLI binary path. */
+    readonly cliPath?: string | undefined;
+    /** Default reasoning effort to forward for capable models. */
+    readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh" | undefined;
+    /**
+     * Disable infinite/persistent sessions so per-call session setup
+     * stays cheap. Defaults to `true` for translation use cases.
+     */
+    readonly disableInfiniteSessions?: boolean | undefined;
+    readonly maxConcurrency?: number | undefined;
+    readonly maxTimeoutMs?: number | undefined;
+    readonly maxRetryAttempts?: number | undefined;
+    readonly enableModelRequestLogging?: boolean | undefined;
 }
 
 /** Root typed configuration. */
@@ -229,6 +261,13 @@ export interface Config {
     readonly vault?: VaultConfig | undefined;
     readonly azureFoundry?: AzureFoundryConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
+    readonly copilot?: CopilotConfig | undefined;
+    /**
+     * Active provider mode for model resolution. When set, unprefixed
+     * `createChatModel` calls route through this provider's mapping.
+     * Bound to `aiclient`'s singleton at startup.
+     */
+    readonly modelProvider?: ModelProviderMode | undefined;
     /**
      * Untyped passthrough: any flat `KEY=value` pair that wasn't
      * recognized by the typed schema lives here. This is what makes

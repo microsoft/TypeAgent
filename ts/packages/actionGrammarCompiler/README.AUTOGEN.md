@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e949f36ebc91069c4bd699922af8ccfd43e508a8003b8d082f3c7bbd2ff3f64c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=66b46c1eed4cc779997ca3a834bb3ca2c3688c3bb1e86ac995780d589f638949 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # action-grammar-compiler — AI-generated documentation
@@ -103,12 +103,12 @@ External: `@oclif/core`, `@oclif/plugin-help`
 - [desktop-automation](../../packages/agents/desktop/README.md)
 - [discord-agent](../../packages/agents/discord/README.md)
 - [github-cli-agent](../../packages/agents/github-cli/README.md)
+- ipconfig-agent
 - [list-agent](../../packages/agents/list/README.md)
 - [music](../../packages/agents/player/README.md)
 - [music-local](../../packages/agents/playerLocal/README.md)
 - [onboarding-agent](../../packages/agents/onboarding/README.md)
-- [os-notifications-agent](../../packages/agents/osNotifications/README.md)
-- _…and 6 more workspace consumers._
+- _…and 8 more workspace consumers._
 
 ### Files of interest
 
@@ -116,6 +116,6 @@ External: `@oclif/core`, `@oclif/plugin-help`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar-compiler docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar-compiler docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
