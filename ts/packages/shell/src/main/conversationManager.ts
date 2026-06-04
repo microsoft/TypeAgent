@@ -21,138 +21,6 @@ import type { ClientIO, Dispatcher, QueueSnapshot } from "agent-dispatcher";
 import { debugShell } from "./debug.js";
 import { saveUserSettings } from "agent-dispatcher/helpers/userSettings";
 
-/**
- * Replay display history entries from a dispatcher through clientIO.
- * This sends user requests, agent displays, and interaction outcomes
- * through the same IPC pipeline that live messages use, so the renderer
- * displays them identically without needing any special handling.
- */
-export async function replayDisplayHistory(
-    dispatcher: Dispatcher,
-    clientIO: ClientIO,
-    conversationName?: string,
-    markHistoryFn?: () => void,
-): Promise<void> {
-    const entries = await dispatcher.getDisplayHistory();
-    const ts = Date.now(); // ensure unique clientRequestIds across replays
-
-    if (entries.length === 0) {
-        // Nothing to mark as history — skip markHistoryFn entirely.
-        if (conversationName !== undefined) {
-            clientIO.setDisplay({
-                message: {
-                    type: "text",
-                    content: `Connected to conversation '${conversationName}'. (no history)`,
-                    kind: "info",
-                },
-                requestId: {
-                    requestId: "",
-                    clientRequestId: `notification-conversation-info-${ts}`,
-                },
-                source: "conversation",
-            });
-        }
-        return;
-    }
-
-    debugShell(
-        `Replaying ${entries.length} history entries for conversation "${conversationName}"`,
-    );
-
-    // Send a "conversation history" separator notification
-    clientIO.setDisplay({
-        message: {
-            type: "text",
-            content: "─── conversation history ───",
-            kind: "info",
-        },
-        requestId: {
-            requestId: "",
-            clientRequestId: `notification-conversation-history-start-${ts}`,
-        },
-        source: "conversation",
-    });
-
-    for (const entry of entries) {
-        switch (entry.type) {
-            case "user-request":
-                clientIO.setUserRequest(entry.requestId, entry.command);
-                break;
-            case "set-display":
-                clientIO.setDisplay(entry.message);
-                break;
-            case "append-display":
-                clientIO.appendDisplay(entry.message, entry.mode);
-                break;
-            case "set-display-info":
-                clientIO.setDisplayInfo(
-                    entry.requestId,
-                    entry.source,
-                    entry.actionIndex,
-                    entry.action,
-                );
-                break;
-            case "notify":
-                // Only persist:true notifications are written to the log, so
-                // any notify entry we see here was opted in to replay. Re-emit
-                // through the same channel; downstream renderers handle it.
-                clientIO.notify(
-                    entry.notificationId,
-                    entry.event,
-                    entry.data,
-                    entry.source,
-                );
-                break;
-            case "user-feedback":
-                // Last-wins is enforced at apply time by the renderer
-                // (newer entry replaces older). The renderer simply applies
-                // each entry in order.
-                clientIO.onUserFeedback?.(entry);
-                break;
-            case "user-message-hidden":
-                clientIO.onUserHide?.(entry);
-                break;
-            // pending-interaction, interaction-resolved, interaction-cancelled
-            // are not replayed — the Shell does not yet support deferred
-            // interactions so there is no UI to display them.
-        }
-    }
-
-    // Mark all replayed entries as history (grayscale) before adding the "now"
-    // separator. All messages go through the same webContents IPC channel, so
-    // this event is guaranteed to be processed before the separator below.
-    markHistoryFn?.();
-
-    // Send a "now" separator + connected notification
-    clientIO.setDisplay({
-        message: {
-            type: "text",
-            content: "─── now ───",
-            kind: "info",
-        },
-        requestId: {
-            requestId: "",
-            clientRequestId: `notification-conversation-history-end-${ts}`,
-        },
-        source: "conversation",
-    });
-
-    if (conversationName !== undefined) {
-        clientIO.setDisplay({
-            message: {
-                type: "text",
-                content: `Connected to conversation '${conversationName}'.`,
-                kind: "info",
-            },
-            requestId: {
-                requestId: "",
-                clientRequestId: `notification-conversation-connected-${ts}`,
-            },
-            source: "conversation",
-        });
-    }
-}
-
 export type ConversationManagerBackend = {
     listConversations(): Promise<ConversationInfo[]>;
     createConversation(name: string): Promise<ConversationInfo>;
@@ -307,7 +175,6 @@ export function createRemoteConversationBackend(
         queueSnapshot?: QueueSnapshot,
     ) => void,
     onDispatcherSwitch?: (newDispatcher: Dispatcher) => void,
-    markHistoryFn?: () => void,
 ): ConversationManagerBackend {
     let currentConversationId = initialConversationId;
     let currentName = initialName;
@@ -399,28 +266,10 @@ export function createRemoteConversationBackend(
             // rebind its command-processing pipeline to the new instance.
             onDispatcherSwitch?.(newConversation.dispatcher);
 
-            // Clear the renderer and replay the new conversation's display
-            // history through clientIO (same IPC path as live messages).
-            clientIO.clear({
-                requestId: "",
-                clientRequestId: "conversation-switch",
-            });
-            try {
-                await replayDisplayHistory(
-                    newConversation.dispatcher,
-                    clientIO,
-                    newConversation.name,
-                    markHistoryFn,
-                );
-            } catch (e: any) {
-                // History replay is best-effort — the switch itself succeeded.
-                debugShell(
-                    "Failed to replay display history for conversation %s: %s",
-                    newConversation.name,
-                    e.message,
-                );
-            }
-
+            // History replay is handled renderer-side: sendConversationChanged
+            // triggers the bridge's conversationChanged handler, which clears
+            // the panel and replays the new conversation's structured display
+            // history via chatPanel.replayHistory() (grayed + "now" banner).
             sendConversationChanged(
                 currentConversationId,
                 currentName,

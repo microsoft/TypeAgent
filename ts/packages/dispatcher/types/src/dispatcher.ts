@@ -79,7 +79,14 @@ export type CommandResult = {
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
     metrics?: RequestMetrics;
+    // Token usage for translating the user's request into actions (the LLM
+    // "translation" step). Absent for @-commands and cached translations.
     tokenUsage?: CompletionUsageStats;
+    // Token usage accumulated across all executed actions/commands that
+    // self-reported via `ActionResult.tokenUsage`. `undefined` => no action
+    // reported usage (unknown). A present all-zero value => actions ran but
+    // made no LLM call.
+    actionTokenUsage?: CompletionUsageStats;
 };
 
 // Architecture: docs/architecture/completion.md — Data flow / Key types

@@ -64,6 +64,12 @@ export interface CalendarUser {
     id: string | undefined;
     displayName: string | undefined;
     email: string | undefined;
+    /**
+     * Base64 data URL of the user's profile photo, when available
+     * (MS Graph `/me/photo`). Undefined for providers without a photo or
+     * when the user has none set.
+     */
+    photoUrl?: string | undefined;
 }
 
 /**
