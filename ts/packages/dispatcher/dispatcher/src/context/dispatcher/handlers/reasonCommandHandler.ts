@@ -18,7 +18,7 @@ export class ReasonCommandHandler implements CommandHandler {
     public readonly description = "Reason about a request";
     public readonly parameters = {
         flags: {
-            model: {
+            engine: {
                 description:
                     "Reasoning engine to use: claude, copilot, or none",
                 type: "string",
@@ -38,11 +38,11 @@ export class ReasonCommandHandler implements CommandHandler {
     ) {
         const request = params.args.request;
 
-        // Use --model flag if provided, otherwise fall back to config
+        // Use --engine flag if provided, otherwise fall back to config
         const systemContext = context.sessionContext.agentContext;
         const config = systemContext.session.getConfig();
         const engine =
-            (params.flags.model as string) || config.execution.reasoning;
+            (params.flags.engine as string) || config.execution.reasoning;
 
         const reasoningIcons: Record<string, string> = {
             claude: "🧠",
@@ -79,7 +79,7 @@ export class ReasonCommandHandler implements CommandHandler {
     ): Promise<CompletionGroups> {
         const result: CompletionGroups = { groups: [] };
         for (const name of names) {
-            if (name === "model") {
+            if (name === "engine") {
                 result.groups.push({
                     name: "engine",
                     completions: validEngines,
