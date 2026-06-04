@@ -163,6 +163,52 @@ test("rerunPhasesOnActiveSession reruns selected stale phases in order", async (
     assert.equal(rerun.state.phases.SchemaGen?.status, "complete");
 });
 
+test("listStalePhasesOnActiveSession returns stale phases in pipeline order", async () => {
+    let now = 350;
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-list-stale",
+            now: () => ++now,
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "Policy sync workflow",
+    });
+    await runtime.runRemainingPhasesOnActiveSession();
+    await runtime.runPhaseOnActiveSession("Discovery", {
+        description: "Policy sync workflow v2",
+    });
+    await runtime.restorePhaseOnActiveSession("Discovery");
+
+    const stale = await runtime.listStalePhasesOnActiveSession();
+    assert.deepEqual(stale, [
+        "PhraseGen",
+        "SchemaGen",
+        "GrammarGen",
+        "Scaffolder",
+        "Testing",
+        "Packaging",
+    ]);
+});
+
+test("listStalePhasesOnActiveSession returns empty when no phase is stale", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        onboarding: new InMemoryOnboardingBridge({
+            createSessionId: () => "session-list-stale-empty",
+        }),
+    });
+
+    await runtime.startOnboarding({
+        description: "No stale phases yet",
+    });
+
+    const stale = await runtime.listStalePhasesOnActiveSession();
+    assert.deepEqual(stale, []);
+});
+
 test("installLastSessionToSandbox records sandbox assignment on active session", async () => {
     const workspaceRoot = await fs.mkdtemp(
         path.join(os.tmpdir(), "typeagent-studio-workspace-"),

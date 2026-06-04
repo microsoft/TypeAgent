@@ -72,6 +72,7 @@ export interface StudioRuntime {
     getPhaseStatusOnActiveSession(
         phase: OnboardingPhaseName,
     ): Promise<PhaseStatus>;
+    listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]>;
     runRemainingPhasesOnActiveSession(): Promise<{
         state: OnboardingState;
         completedPhases: OnboardingPhaseName[];
@@ -220,6 +221,13 @@ export function createStudioRuntimeCore(
             const sessionId = getRequiredSessionId(context);
             const state = await onboarding.snapshot(sessionId);
             return state.phases[phase]?.status ?? "pending";
+        },
+        async listStalePhasesOnActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return ONBOARDING_PHASE_ORDER.filter(
+                (phase) => state.phases[phase]?.status === "stale",
+            );
         },
         async runRemainingPhasesOnActiveSession() {
             const sessionId = getRequiredSessionId(context);

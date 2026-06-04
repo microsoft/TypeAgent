@@ -490,10 +490,7 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.rerunStaleOnboardingPhases",
             withErrors(async () => {
-                const state = await runtime.getActiveOnboardingSession();
-                const stalePhases = runtime
-                    .listPhases()
-                    .filter((phase) => state.phases[phase]?.status === "stale");
+                const stalePhases = await runtime.listStalePhasesOnActiveSession();
 
                 if (stalePhases.length === 0) {
                     void vscode.window.showInformationMessage(
