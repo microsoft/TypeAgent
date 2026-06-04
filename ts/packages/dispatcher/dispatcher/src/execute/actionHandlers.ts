@@ -10,6 +10,7 @@ import {
 import {
     type CommandHandlerContext,
     getCommandResult,
+    ensureCommandResult,
     getRequestId,
 } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
@@ -320,6 +321,25 @@ export function emitActionResult(
             displayError(result.error, actionContext);
         }
         return;
+    }
+    // Accumulate any self-reported action token usage onto the command
+    // result so the UI can show "Action Tokens". This is the single choke
+    // point for both the action pipeline (executeAction) and command
+    // pipeline (executeCommand), so all agent-reported usage lands here.
+    // Use ensureCommandResult (not getCommandResult) so this is recorded
+    // even when collectCommandResult is off — same as how metrics are
+    // attached in endProcessCommand, which always returns context.commandResult.
+    if (result.tokenUsage !== undefined) {
+        const commandResult = ensureCommandResult(systemContext);
+        const acc = commandResult.actionTokenUsage ?? {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
+        acc.prompt_tokens += result.tokenUsage.prompt_tokens;
+        acc.completion_tokens += result.tokenUsage.completion_tokens;
+        acc.total_tokens += result.tokenUsage.total_tokens;
+        commandResult.actionTokenUsage = acc;
     }
     if (result.displayContent !== undefined) {
         actionContext.actionIO.appendDisplay(result.displayContent, "block");

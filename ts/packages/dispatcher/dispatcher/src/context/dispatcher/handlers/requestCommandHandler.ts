@@ -14,7 +14,7 @@ import {
 
 import {
     type CommandHandlerContext,
-    getCommandResult,
+    ensureCommandResult,
     getRequestId,
 } from "../../commandHandlerContext.js";
 import { CachedImageWithDetails } from "typechat-utils";
@@ -484,10 +484,7 @@ export class RequestCommandHandler implements CommandHandler {
             const { requestAction, tokenUsage } = interpretResult;
 
             if (tokenUsage) {
-                const commandResult = getCommandResult(systemContext);
-                if (commandResult !== undefined) {
-                    commandResult.tokenUsage = tokenUsage;
-                }
+                ensureCommandResult(systemContext).tokenUsage = tokenUsage;
             }
 
             // If translation produced unknown or clarification actions,

@@ -1437,6 +1437,19 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
         },
     );
 
+    // The renderer is served either from a local dev server
+    // (http(s)://localhost) or, in preview/packaged builds, directly from the
+    // bundled file:// html. Camera/microphone capture must be allowed for the
+    // app's own renderer in both cases, otherwise enumerateDevices() returns
+    // devices with empty ids and getUserMedia() fails.
+    const isAppMediaOrigin = (origin: string | undefined): boolean =>
+        origin === undefined ||
+        origin === "" ||
+        origin === "null" ||
+        origin.startsWith("file://") ||
+        origin.startsWith("http://localhost") ||
+        origin.startsWith("https://localhost");
+
     mainWindow.webContents.session.setPermissionCheckHandler(
         (
             _webContents: WebContents | null,
@@ -1448,16 +1461,32 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
                 (permission === "usb" &&
                     details.securityOrigin === "file:///") ||
                 (permission === "media" &&
-                    (details.securityOrigin?.startsWith("http://localhost") ||
-                        details.securityOrigin?.startsWith(
-                            "https://localhost",
-                        ))) ||
+                    isAppMediaOrigin(details.securityOrigin)) ||
                 permission.endsWith("fullscreen")
             ) {
                 return true;
             }
 
             return false;
+        },
+    );
+
+    // getUserMedia goes through the permission request handler. Without one,
+    // Electron rejects media requests for file:// origins, so grant media (and
+    // fullscreen) for the app's own renderer here as well.
+    mainWindow.webContents.session.setPermissionRequestHandler(
+        (_webContents, permission, callback, details) => {
+            const securityOrigin = (details as { securityOrigin?: string })
+                .securityOrigin;
+            if (
+                (permission === "media" && isAppMediaOrigin(securityOrigin)) ||
+                permission.endsWith("fullscreen")
+            ) {
+                callback(true);
+                return;
+            }
+
+            callback(false);
         },
     );
 

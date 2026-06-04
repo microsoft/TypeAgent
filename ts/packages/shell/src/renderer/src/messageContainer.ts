@@ -10,6 +10,7 @@ import { TTS, TTSMetrics } from "./tts/tts";
 import {
     TemplateEditConfig,
     PhaseTiming,
+    CompletionUsageStats,
     NotifyExplainedData,
     Dispatcher,
     UserFeedbackEntry,
@@ -29,6 +30,7 @@ function updateMetrics(
     name: string,
     metrics?: PhaseTiming,
     total?: number,
+    tokenUsage?: CompletionUsageStats,
 ) {
     // clear out previous perf data
     mainMetricsDiv.innerHTML = "";
@@ -49,7 +51,15 @@ function updateMetrics(
     if (total !== undefined) {
         messages.push(metricsString("Total Elapsed Time", total));
     }
+    if (tokenUsage !== undefined) {
+        messages.push(tokensString(tokenUsage));
+    }
     mainMetricsDiv.innerHTML = messages.join("<br>");
+}
+
+function tokensString(tokenUsage: CompletionUsageStats) {
+    const { prompt_tokens, completion_tokens, total_tokens } = tokenUsage;
+    return `Tokens: <b>${prompt_tokens.toLocaleString()} + ${completion_tokens.toLocaleString()} = ${total_tokens.toLocaleString()}</b>`;
 }
 
 function formatTimeReaderFriendly(time: number) {
@@ -875,8 +885,13 @@ export class MessageContainer {
         name: string,
         metrics?: PhaseTiming,
         total?: number,
+        tokenUsage?: CompletionUsageStats,
     ) {
-        if (metrics === undefined && total === undefined) {
+        if (
+            metrics === undefined &&
+            total === undefined &&
+            tokenUsage === undefined
+        ) {
             return;
         }
         const metricsDiv = this.ensureMetricsDiv();
@@ -886,6 +901,7 @@ export class MessageContainer {
             name,
             metrics,
             total,
+            tokenUsage,
         );
     }
 

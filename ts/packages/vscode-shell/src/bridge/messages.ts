@@ -152,6 +152,7 @@ export type BridgeToWebviewMessage =
               // command-result
               metrics?: any;
               tokenUsage?: any;
+              actionTokenUsage?: any;
           }>;
       };
 
