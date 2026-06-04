@@ -42,6 +42,12 @@
   border: solid 1px rgb(224, 224, 224);
   border-radius: 6px;
   position: relative;
+  /* Show the text caret across the whole input surface (container padding,
+     wrapper, ghost text) so the entire box reads as an editable area —
+     not just the contenteditable .user-textarea inside it. Buttons inside
+     the container override this via their own `cursor: pointer` (see
+     .chat-input-button). */
+  cursor: text;
 }
 
 .chat-input:focus-within {

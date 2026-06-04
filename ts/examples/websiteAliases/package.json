@@ -25,8 +25,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@azure/ai-agents": "^1.0.0-beta.3",
-    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/ai-projects": "^2.2.0",
     "@azure/identity": "^4.10.0",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",

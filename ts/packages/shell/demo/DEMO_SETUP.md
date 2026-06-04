@@ -52,10 +52,10 @@ Run these once in the **Electron shell** before starting Part 1, then save the
 session so the vscode-shell sidebar inherits them:
 
 ```
-@config schema code on             # editor actions (split, theme, new file)
-@config schema desktop on          # for "switch to Code"
-@config schema github-cli on       # all github actions
-@config schema onboarding off      # prevents "Integration not found" on "create scratch.ts"
+@config schema code               # editor actions (split, theme, new file)
+@config schema desktop            # for "switch to Code"
+@config schema github-cli         # all github actions
+@config schema --off onboarding   # prevents "Integration not found" on "create scratch.ts"
 @config request reasoning copilot  # PR/issue memory across turns
 @session save vscode-demo
 ```
@@ -95,8 +95,8 @@ listener installed by the webview.
 | `show check runs for that PR` runs `gh run view <num>` and 404s                    | Reasoning maps "for that PR" to a workflow-run id, and there's no conversation memory of the prior PR       | Use the explicit phrasing `show check runs for PR N [in OWNER/REPO]` (now backed by `gh pr checks`)                                   |
 | `create scratch.ts` returns "Unknown action name: code.code-general"               | Reasoning hallucinates a sub-schema name as an action name                                                  | Rephrase as `create a typescript file scratch.ts with a hello world function` (drop "called" and "new"); long-term tracked in plan.md |
 | `splitEditor` returns "Did not handle the action"                                  | Installed coda is older than `ts/packages/coda` source                                                      | Rebuild & reinstall coda                                                                                                              |
-| `splitEditor` returns "No websocket connection"                                    | Code agent WS server isn't up in this session                                                               | `@config schema code on` (the agent-server's discovery channel will then publish the dynamic port to the coda extension)              |
-| `create scratch.ts` returns "Integration ... not found"                            | Onboarding agent grabbed the request                                                                        | `@config schema onboarding off`                                                                                                       |
+| `splitEditor` returns "No websocket connection"                                    | Code agent WS server isn't up in this session                                                               | `@config schema code` (the agent-server's discovery channel will then publish the dynamic port to the coda extension)                 |
+| `create scratch.ts` returns "Integration ... not found"                            | Onboarding agent grabbed the request                                                                        | `@config schema --off onboarding`                                                                                                     |
 | `change my color theme to ...` toggles the title-bar instead of the theme          | Desktop agent grabbed the request because the prompt didn't say "vscode"                                    | Use the exact wording in the demo file                                                                                                |
 | "remind me which PR we were just looking at" hallucinates PR #123 / `example/repo` | Reasoning has no conversation memory                                                                        | `@config request reasoning copilot`                                                                                                   |
 | `switch to Code` doesn't foreground the IDE                                        | autoShell missing or desktop agent not pointed at it                                                        | Rebuild `dotnet/autoShell` and re-link                                                                                                |

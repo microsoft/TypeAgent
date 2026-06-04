@@ -1156,10 +1156,13 @@ export class ChatPanel {
                 this.send();
             } else if (e.key === "Escape") {
                 if (this.completions.length > 0) {
+                    // preventDefault so host's doc-level Esc handler doesn't double-handle.
+                    e.preventDefault();
                     this.clearCompletions();
                     return;
                 }
                 if (this.activeRequestId) {
+                    e.preventDefault();
                     this.onCancel?.(this.activeRequestId);
                     return;
                 }
@@ -1551,6 +1554,14 @@ export class ChatPanel {
     }
 
     /**
+     * Returns the in-flight requestId, or undefined when idle. Used by
+     * hosts to gate document-level interrupt gestures.
+     */
+    public getActiveRequestId(): string | undefined {
+        return this.activeRequestId;
+    }
+
+    /**
      * Display a user message bubble.
      *
      * `requestId` is stamped on the container as `data-request-id` so later
@@ -1565,20 +1576,127 @@ export class ChatPanel {
         requestId?: string,
         attachments?: string[],
     ) {
+        this._addUserMessageImpl(text, requestId, false, attachments);
+    }
+
+    /**
+     * Add a peer-originated user bubble. Same DOM as `addUserMessage`
+     * but skips side-effects that re-route local thread state. Idempotent.
+     */
+    public addRemoteUserMessage(text: string, requestId: string) {
+        if (this.userMessageById.has(requestId)) return;
+        this._addUserMessageImpl(text, requestId, true);
+    }
+
+    /**
+     * Stamp / clear a "queued" or "running" pill on the user bubble.
+     * No-op if the bubble doesn't exist. When `status === "queued"`
+     * with `onCancel`, renders an `×` button that invokes it on click.
+     */
+    public setUserBubbleQueueStatus(
+        requestId: string,
+        status: "queued" | "running" | null,
+        onCancel?: () => void,
+    ): void {
+        const container = this.userMessageById.get(requestId);
+        if (!container) return;
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        if (!bodyDiv) return;
+        let chip = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-queue-status-chip",
+        );
+        if (status === null) {
+            chip?.remove();
+            return;
+        }
+        if (!chip) {
+            chip = document.createElement("div");
+            chip.className = "chat-queue-status-chip";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            chip.style.gap = "4px";
+            // VS Code webview font sits low in the line-box; +1px bottom
+            // padding visually centers the lowercase label text.
+            chip.style.padding = "2px 6px 3px 6px";
+            // Matches Electron chip insets (messageContainer.ts:363-365).
+            chip.style.marginLeft = "4px";
+            chip.style.marginTop = "4px";
+            chip.style.marginBottom = "2px";
+            chip.style.fontSize = "11px";
+            chip.style.lineHeight = "1";
+            chip.style.borderRadius = "8px";
+            chip.style.opacity = "0.85";
+            chip.style.boxSizing = "border-box";
+            bodyDiv.insertBefore(chip, bodyDiv.firstChild);
+        }
+        chip.replaceChildren();
+        chip.dataset.status = status;
+        const label = document.createElement("span");
+        label.textContent = status;
+        chip.appendChild(label);
+        if (status === "queued") {
+            // Alpha-tinted yellow reads on both light and dark themes.
+            chip.style.background =
+                "var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.18))";
+            chip.style.color =
+                "var(--vscode-inputValidation-warningForeground, rgba(120, 80, 0, 0.95))";
+            if (onCancel) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "chat-queue-cancel-button";
+                btn.title = "Cancel this queued request";
+                btn.setAttribute("aria-label", "Cancel queued request");
+                btn.textContent = "×";
+                btn.style.display = "inline-flex";
+                btn.style.alignItems = "center";
+                btn.style.justifyContent = "center";
+                btn.style.padding = "0";
+                btn.style.margin = "0";
+                btn.style.border = "none";
+                btn.style.background = "transparent";
+                btn.style.color = "inherit";
+                btn.style.cursor = "pointer";
+                btn.style.fontSize = "0.7em";
+                btn.style.lineHeight = "1";
+                btn.style.fontFamily = "inherit";
+                // Reset VS Code webview's UA button defaults that would
+                // otherwise inflate chip height.
+                btn.style.minHeight = "0";
+                btn.style.minWidth = "0";
+                btn.style.height = "auto";
+                btn.style.boxSizing = "border-box";
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel();
+                });
+                chip.appendChild(btn);
+            }
+        } else {
+            chip.style.background =
+                "var(--vscode-inputValidation-infoBackground, rgba(0, 150, 255, 0.18))";
+            chip.style.color =
+                "var(--vscode-inputValidation-infoForeground, rgba(0, 80, 140, 0.95))";
+        }
+    }
+
+    /**
+     * Shared DOM construction for both `addUserMessage` (local sends)
+     * and `addRemoteUserMessage` (peer-conversation echoes). `isRemote`
+     * gates the side-effects that would inappropriately re-route the
+     * local thread state when a peer-originated bubble is added.
+     */
+    private _addUserMessageImpl(
+        text: string,
+        requestId: string | undefined,
+        isRemote: boolean,
+        attachments?: string[],
+    ) {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
-        // Reap stale per-thread bubble lookups now that a new user request
-        // is starting. completeRequest() intentionally leaves the entry in
-        // threadContainers so out-of-band setDisplay updates from a host's
-        // takeAction handler can still target the existing bubble (see
-        // PR #2306). Once the user starts a new request, any pending late
-        // update from a prior thread would be unsafe to apply, so we free
-        // the references here. New threads will re-populate the map via
-        // getOrCreateAgentContainer.
-        this.threadContainers.clear();
-        this.pendingThreadDisplayInfo.clear();
 
         const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
@@ -1586,14 +1704,10 @@ export class ChatPanel {
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
         iconDiv.textContent = this.userInitial;
-        // Click the user-letter avatar to start a Microsoft sign-in flow.
-        // Routes through the standard send path so it appears in history,
-        // shows in the user's bubble, and the dispatcher handles it like
-        // any typed `@calendar login`. Calendar+email share an MS Graph
-        // identity (single tenant), so one login covers both. The handler
-        // reads isUserSignedIn at click time so the avatar becomes inert
-        // once the user is signed in (without needing to remove listeners
-        // from each historic bubble).
+        // Click avatar to start MS sign-in via the normal send path
+        // (`@calendar login` covers both calendar + email — shared MS
+        // Graph identity). Handler reads `isUserSignedIn` at click
+        // time so historic bubbles become inert post-signin.
         this.applyUserIconState(iconDiv);
         iconDiv.addEventListener("click", () => {
             if (this.isUserSignedIn) return;
@@ -1644,15 +1758,15 @@ export class ChatPanel {
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
-        if (!this.suppressFirstMessageTracking) {
-            this.requestStartByRequestId.set(id, Date.now());
+        if (!isRemote) {
+            if (!this.suppressFirstMessageTracking) {
+                this.requestStartByRequestId.set(id, Date.now());
+            }
+            // New request becomes default thread for setDisplay calls
+            // without a requestId. Remote bubbles must NOT take over
+            // thread routing — they belong to peers.
+            this.currentUserThreadId = id;
         }
-        // The new user request becomes the default thread for subsequent
-        // setDisplay/appendDisplay calls that omit a requestId. Old threads
-        // (agent-initiated reminders, prior user requests) stay alive in
-        // threadContainers and continue to receive their own follow-up
-        // messages addressed by their threadId.
-        this.currentUserThreadId = id;
     }
 
     /**
@@ -1858,10 +1972,21 @@ export class ChatPanel {
         const effectiveIcon = pending
             ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
             : (sourceIcon ?? this.iconForSource(effectiveSource));
+        // Anchor on the user bubble so the agent's response renders
+        // directly below it (column-reverse: DOM-before = visually-after).
+        // Liveness check guards against detached anchors. Falls through
+        // to default placement for ad-hoc / system / agent-N threads
+        // with no user bubble.
+        const mappedBubble = this.userMessageById.get(threadId);
+        const anchor =
+            mappedBubble?.parentElement === this.messageDiv
+                ? mappedBubble
+                : undefined;
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
             threadId,
+            anchor,
         );
         this.threadContainers.set(threadId, container);
         // Capture the elapsed time from request send to first agent
@@ -2309,23 +2434,37 @@ export class ChatPanel {
         const target = this.threadContainers.get(threadId);
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
-            // Mirror the Electron shell's "⚠ Cancelled" status line so the
-            // user has visible confirmation that Stop / Esc cancelled the
-            // in-flight command. If no agent bubble was created yet (cancel
-            // landed before any agent output), spin up a minimal one so
-            // the status is still visible.
-            const cancelTarget =
-                target ??
-                this.createAgentContainer("shell", this.iconForSource("shell"));
-            cancelTarget.setMessage(
-                {
-                    type: "text",
-                    content: "⚠ Cancelled",
-                    kind: "status",
-                },
-                "shell",
-                "block",
-            );
+            // Mirror Electron's "⚠ Cancelled" status, anchored to the
+            // user bubble (column-reverse: DOM-before = visually-after).
+            // Liveness check guards against detached anchors.
+            const mappedBubble = this.userMessageById.get(threadId);
+            const userBubble =
+                mappedBubble && mappedBubble.parentElement === this.messageDiv
+                    ? mappedBubble
+                    : undefined;
+            // Drop unknown explicit requestIds (post-clear stragglers)
+            // rather than orphan them at the chat bottom.
+            if (!target && requestId !== undefined && !userBubble) {
+                // Orphan: chip already cleared by the queue path.
+            } else {
+                const cancelTarget =
+                    target ??
+                    this.createAgentContainer(
+                        "shell",
+                        this.iconForSource("shell"),
+                        undefined,
+                        userBubble,
+                    );
+                cancelTarget.setMessage(
+                    {
+                        type: "text",
+                        content: "⚠ Cancelled",
+                        kind: "status",
+                    },
+                    "shell",
+                    "block",
+                );
+            }
         }
         if (result && target) {
             // Always surface a token line, mirroring the Electron shell's
@@ -3222,10 +3361,12 @@ export class ChatPanel {
         source: string,
         icon: string,
         threadId?: string,
+        anchorElement?: Element,
     ): AgentMessageContainer {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const beforeElement =
+            anchorElement ?? this.messageDiv.firstElementChild!;
         const container = new AgentMessageContainer(
-            sentinel,
+            beforeElement,
             source,
             icon,
             this.settingsView,

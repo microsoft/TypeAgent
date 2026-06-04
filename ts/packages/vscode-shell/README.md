@@ -76,7 +76,49 @@ code --install-extension dist-pub/vscode-shell.vsix --force
     **dropdown** menu instead. Use `↑`/`↓` to navigate, `Enter`/`Tab` to
     accept, `Esc` to dismiss.
 
-### Conversation management (chat-driven)
+### Cancelling a running request
+
+While a request is being processed the send arrow morphs into a **stop
+button (`■`)**. There are three ways to interrupt:
+
+| Gesture                            | Effect                                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Click **■** (or press `Esc`)       | Cancels the **current** in-flight request. The bubble gets a `⚠ Cancelled` affordance and the send arrow returns. |
+| `Esc` twice within 1 second        | Cancels the in-flight request **and** every queued entry on this session.                                          |
+| Click the **`×`** on a queued chip | Drops just that queued entry (local or peer/CLI-originated) without affecting other requests.                      |
+
+While multiple requests are stacking up, each user bubble carries an
+inline status chip:
+
+- A **yellow `queued ×`** pill — request is waiting in the dispatcher
+  queue. Click the `×` to drop just this one.
+- A **blue `running`** pill — request is currently being processed.
+
+Chips appear on both local and peer-originated bubbles (e.g. when
+another VS Code chat tab or the CLI is joined to the same
+conversation), so all participants see the queue evolve in real time.
+
+Notes:
+
+- `Esc` works whether the chat input is focused or not — the webview
+  installs a document-level listener that fires as long as no other
+  control has consumed the key (e.g. an open completion popup or menu).
+- Cancellations originated from a peer (another VS Code chat tab,
+  the Electron shell, or the CLI joined to the same conversation)
+  appear on the local bubble too, via the dispatcher's
+  `requestCancelled` push event. Late `setDisplay` / `appendDisplay`
+  fragments that arrive after the cancel are dropped so the `⚠ Cancelled`
+  marker is the final state of the bubble.
+- The `⚠ Cancelled` affordance is anchored to the **corresponding user
+  bubble** rather than appended at the bottom of the chat, so when a
+  batch of queued requests is cancelled each "Cancelled" line shows up
+  directly below the user message it belongs to (matching the Electron
+  shell). For requests that already had agent output when cancelled,
+  the affordance is appended to the existing agent bubble.
+- Both the bridge and the webview deduplicate the multiple events that
+  can fire for a single cancel (`requestCancelled` + `commandComplete`
+  with `result.cancelled === true`), so each cancel paints **exactly
+  one** `⚠ Cancelled` affordance per bubble.
 
 The `code` agent's `code-vscode-shell` sub-schema implements a
 `vscode-shell-action` client action that this extension handles. It is
@@ -85,8 +127,14 @@ Electron shell — don't implement that client action and would otherwise
 silently no-op the request). Enable it once per session in the chat:
 
 ```
-@config schema code-vscode-shell on
+@config schema code.code-vscode-shell
 ```
+
+Note: this is the **full canonical** sub-schema name (`<parent>.<sub-key>`).
+The schema appears as just `code-vscode-shell` in the `@config schema` table —
+the parent prefix is hidden in the display but **required** when toggling.
+
+To later disable it again, use `@config schema --off code.code-vscode-shell`.
 
 The setting is persisted in your TypeAgent user settings, so you only
 need to do this on first use. After it's on, you can drive the
@@ -101,13 +149,15 @@ e.g. `@code rename this conversation to Brainstorm`.
 
 ### Keybindings (defaults)
 
-| Action              | Windows / Linux | macOS         |
-| ------------------- | --------------- | ------------- |
-| New Chat in Editor  | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
-| New Conversation    | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
-| Switch Conversation | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
-| Rename Conversation | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
-| Clear Chat View     | `Ctrl+K Ctrl+L` | `Cmd+K Cmd+L` |
+| Action                 | Windows / Linux        | macOS                  |
+| ---------------------- | ---------------------- | ---------------------- |
+| New Chat in Editor     | `Ctrl+K Ctrl+T`        | `Cmd+K Cmd+T`          |
+| New Conversation       | `Ctrl+K Ctrl+N`        | `Cmd+K Cmd+N`          |
+| Switch Conversation    | `Ctrl+K Ctrl+S`        | `Cmd+K Cmd+S`          |
+| Rename Conversation    | `Ctrl+K Ctrl+R`        | `Cmd+K Cmd+R`          |
+| Clear Chat View        | `Ctrl+K Ctrl+L`        | `Cmd+K Cmd+L`          |
+| Cancel current request | `Esc`                  | `Esc`                  |
+| Cancel queue + current | `Esc Esc` (within 1 s) | `Esc Esc` (within 1 s) |
 
 These chord bindings are gated on the chat being focused (a `when` clause
 on the `vscode-shell.chatFocused` context key).

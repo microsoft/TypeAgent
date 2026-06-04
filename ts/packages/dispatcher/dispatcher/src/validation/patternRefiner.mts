@@ -1,12 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
     CollisionDetectionResult,
     PatternValidationResult,
     RefinementResult,
 } from "./types.mjs";
+import {
+    runQueryWithTimeout,
+    DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
+} from "./queryWithTimeout.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:validation:refiner");
@@ -41,6 +44,8 @@ Return a JSON array of refined patterns:
 export interface PatternRefinerConfig {
     model?: string;
     maxIterations?: number;
+    /** Hard timeout for each refinement LLM call (ms). */
+    timeoutMs?: number;
 }
 
 export class PatternRefiner {
@@ -50,6 +55,7 @@ export class PatternRefiner {
         this.config = {
             model: config?.model ?? "claude-sonnet-4-20250514",
             maxIterations: config?.maxIterations ?? 2,
+            timeoutMs: config?.timeoutMs ?? DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
         };
     }
 
@@ -126,20 +132,11 @@ export class PatternRefiner {
                 originalPatterns.map((p, i) => `${i + 1}. "${p}"`).join("\n"),
             );
 
-        const queryInstance = query({
+        const responseText = await runQueryWithTimeout(
             prompt,
-            options: { model: this.config.model },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
-        }
+            { model: this.config.model },
+            this.config.timeoutMs,
+        );
 
         return this.parseRefinements(responseText, originalPatterns);
     }

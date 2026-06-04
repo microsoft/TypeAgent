@@ -16,8 +16,21 @@
 
 /**
  * Write a progress message to stdout using the Copilot CLI hook progress protocol.
- * The message appears as a transient info entry in the CLI timeline.
+ * The message appears as an info entry in the CLI timeline.
+ *
+ * Pass `{ temporary: true }` for status updates (e.g. "Connecting...") that
+ * should be replaced by the next temporary message rather than accumulate.
+ * Persistent messages (the default) stack up under the current turn.
  */
-export function emitProgress(message: string): void {
-    process.stdout.write(JSON.stringify({ type: "progress", message }) + "\n");
+export function emitProgress(
+    message: string,
+    options?: { temporary?: boolean },
+): void {
+    process.stdout.write(
+        JSON.stringify({
+            type: "progress",
+            message,
+            ...(options?.temporary ? { temporary: true } : {}),
+        }) + "\n",
+    );
 }
