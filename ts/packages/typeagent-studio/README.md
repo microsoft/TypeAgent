@@ -105,7 +105,7 @@ Packaging report export behavior for `Save packaging health report`:
 
 Diagnostics bundle behavior for `Save onboarding diagnostics bundle`:
 
-- Writes a single markdown file containing onboarding summary, packaging health report, and resolved install artifact path.
+- Writes a single markdown file containing onboarding summary, onboarding health snapshot, packaging health report, and resolved install artifact path.
 - Includes active onboarding settings snapshot (auto-open policy, default sandbox id, install health gate policy).
 - Uses `unresolved` artifact metadata when path resolution is unavailable for the active session.
 

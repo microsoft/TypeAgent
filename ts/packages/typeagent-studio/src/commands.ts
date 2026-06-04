@@ -1065,6 +1065,7 @@ async function getOnboardingDiagnosticsBundle(
     runtime: StudioRuntime,
 ): Promise<string> {
     const summary = await getOnboardingSummary(runtime);
+    const healthSnapshot = await getOnboardingHealthSnapshot(runtime);
     const healthReport = await getPackagingHealthReport(runtime);
 
     let artifactPath: string | undefined;
@@ -1076,6 +1077,7 @@ async function getOnboardingDiagnosticsBundle(
 
     return formatOnboardingDiagnosticsBundle({
         summary,
+        healthSnapshot,
         healthReport,
         artifactPath,
         settings: getOnboardingSettingsSnapshot(),

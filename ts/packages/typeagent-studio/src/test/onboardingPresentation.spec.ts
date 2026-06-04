@@ -162,6 +162,7 @@ test("formatOnboardingHealthSnapshotMarkdown formats health as markdown", () => 
 test("formatOnboardingDiagnosticsBundle includes metadata summary and report", () => {
     const bundle = formatOnboardingDiagnosticsBundle({
         summary: "# Summary\n\nTest summary",
+        healthSnapshot: "Health snapshot text",
         healthReport: "# Health\n\nNo findings.",
         artifactPath: "C:/repo/packages/agents/demo",
         settings: {
@@ -180,6 +181,8 @@ test("formatOnboardingDiagnosticsBundle includes metadata summary and report", (
     assert.match(bundle, /Default sandbox id: studio-qa/);
     assert.match(bundle, /Install health gate policy: warn/);
     assert.match(bundle, /## Onboarding Summary/);
+    assert.match(bundle, /## Onboarding Health Snapshot/);
+    assert.match(bundle, /Health snapshot text/);
     assert.match(bundle, /## Packaging Health Report/);
 });
 

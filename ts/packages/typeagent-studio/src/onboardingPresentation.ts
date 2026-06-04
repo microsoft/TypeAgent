@@ -179,6 +179,7 @@ export function formatOnboardingHealthSnapshotMarkdown(
 
 export function formatOnboardingDiagnosticsBundle(args: {
     summary: string;
+    healthSnapshot?: string;
     healthReport: string;
     artifactPath?: string;
     settings?: OnboardingSettingsSnapshot;
@@ -207,6 +208,12 @@ export function formatOnboardingDiagnosticsBundle(args: {
     lines.push("");
     lines.push(args.summary);
     lines.push("");
+    if (args.healthSnapshot) {
+        lines.push("## Onboarding Health Snapshot");
+        lines.push("");
+        lines.push(args.healthSnapshot);
+        lines.push("");
+    }
     lines.push("## Packaging Health Report");
     lines.push("");
     lines.push(args.healthReport);
