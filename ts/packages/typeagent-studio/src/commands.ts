@@ -254,6 +254,30 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.savePackagingHealthReport",
+            withErrors(async () => {
+                const report = await getPackagingHealthReport(runtime);
+                const targetUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file("packaging-health-report.md"),
+                    filters: {
+                        Markdown: ["md"],
+                    },
+                    title: "Save Packaging Health Report",
+                });
+                if (!targetUri) {
+                    return;
+                }
+
+                await fs.writeFile(targetUri.fsPath, report, "utf-8");
+                void vscode.window.showInformationMessage(
+                    `Saved packaging health report to ${targetUri.fsPath}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.clearOnboardingSession",
             withErrors(async () => {
                 if (!(await confirmSessionClear())) {

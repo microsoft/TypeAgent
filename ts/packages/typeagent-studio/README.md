@@ -34,6 +34,7 @@ Current command palette surface:
 - TypeAgent Studio: Open install artifact path
 - TypeAgent Studio: Check packaging health gate
 - TypeAgent Studio: Copy packaging health report
+- TypeAgent Studio: Save packaging health report
 - TypeAgent Studio: Clear onboarding session
 - TypeAgent Studio: Run onboarding phase
 - TypeAgent Studio: Advance onboarding phase
@@ -91,6 +92,10 @@ Diagnostics sharing behavior for `Copy packaging health report`:
 
 - Copies the same markdown report used by the open-report flow.
 - Useful for posting health findings directly into issues, PR comments, or chat threads.
+
+Packaging report export behavior for `Save packaging health report`:
+
+- Saves the same markdown report to disk for attachments and archival.
 
 Diagnostics bundle behavior for `Save onboarding diagnostics bundle`:
 

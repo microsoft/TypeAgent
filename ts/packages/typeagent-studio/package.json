@@ -119,6 +119,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.savePackagingHealthReport",
+        "title": "Save packaging health report",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.clearOnboardingSession",
         "title": "Clear active onboarding session",
         "category": "TypeAgent Studio"
@@ -242,6 +247,7 @@
     "onCommand:typeagent-studio.enforcePackagingHealthGate",
     "onCommand:typeagent-studio.openPackagingHealthReport",
     "onCommand:typeagent-studio.copyPackagingHealthReport",
+    "onCommand:typeagent-studio.savePackagingHealthReport",
     "onCommand:typeagent-studio.clearOnboardingSession",
     "onCommand:typeagent-studio.runOnboardingPhase",
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",
