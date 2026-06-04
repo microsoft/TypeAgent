@@ -235,8 +235,7 @@ async function getCopilotClient(
         // this, resolve the platform-specific native binary from the
         // bundled @github/copilot-<platform> package and pass it as
         // cliPath so the SDK spawns it directly (no node needed).
-        const cliPath = findBundledNativeCli();
-        debug(`Using copilot CLI at: ${cliPath ?? "(SDK default)"}`);
+        const cliPath = await findBundledNativeCli();
 
         // Isolate the CLI from the user's ~/.claude/settings.json.
         // The Copilot CLI binary internally uses the Anthropic API and
