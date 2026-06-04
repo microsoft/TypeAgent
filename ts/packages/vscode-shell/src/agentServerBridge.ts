@@ -34,6 +34,22 @@ export type {
 } from "./bridge/messages.js";
 
 /**
+ * Escape characters that are unsafe in raw HTML so untrusted strings
+ * (conversation names, session ids, error messages) can be embedded in
+ * the inline `conversationNotification` / `overwriteActionBubble` HTML
+ * payloads without enabling markup injection. Mirrors
+ * packages/shell/src/renderer/src/htmlUtil.ts.
+ */
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+/**
  * Manages the RPC connection to the agent server from the extension host
  * and bridges messages to/from webview panels.
  */
@@ -1449,29 +1465,66 @@ export class AgentServerBridge {
             },
             handleShellAction: (requestId, data) =>
                 this.handleShellAction(requestId, data),
+            handleManageConversation: (requestId, data) =>
+                this.handleManageConversation(requestId, data),
         });
     }
 
     /**
-     * Overwrite the action bubble's body for `requestId` with an error
+     * Overwrite the action bubble's body for `requestId` with a display
      * message. Used when the bridge detects that the user-visible outcome
      * differs from the optimistic message returned by the action handler
      * (e.g. "create" colliding with an existing name, "delete" of the
-     * current conversation).
+     * current conversation), and for non-switching `manage-conversation`
+     * results that should appear inline in the same conversation.
+     *
+     * `body` accepts either a plain string (rendered as text by chat-ui)
+     * or a TypedDisplayContent object for html/markdown rendering with
+     * an optional `kind` (info/warning/error) used by chat-ui styling.
      */
     private overwriteActionBubble(
         requestId: any,
-        markdown: string,
+        body:
+            | string
+            | {
+                  type: "html" | "markdown" | "text";
+                  content: string;
+                  kind?: "info" | "warning" | "error" | "success";
+              },
         source: string = "code.code-vscode-shell",
     ): void {
         this.broadcastToWebviews({
             type: "setDisplay",
             requestId: clientIdOf(requestId),
             message: {
-                message: markdown,
+                message: body as any,
                 source,
                 requestId,
             } as any,
+        });
+    }
+
+    /**
+     * Push a fresh agent-style notification bubble into the currently
+     * displayed conversation. Used by `manage-conversation` handlers
+     * for operations that switch sessions (new / switch / next / prev)
+     * — the user's own request bubble belongs to the OLD conversation
+     * and is wiped by `chatPanel.clear()` on sessionChanged, so result
+     * messaging needs to land in whatever conversation is now showing.
+     *
+     * `content` is treated as already-escaped HTML. Callers MUST escape
+     * any conversation names/ids via `escapeHtml()` before passing them
+     * through, exactly as the Electron Shell's `addNotificationMessage`
+     * path expects.
+     */
+    private displayConversationNotification(
+        content: string,
+        kind: "info" | "warning" | "error" | "success" = "info",
+    ): void {
+        this.broadcastToWebviews({
+            type: "conversationNotification",
+            content,
+            kind,
         });
     }
 
@@ -1689,6 +1742,471 @@ export class AgentServerBridge {
             `Deleted conversation "${match.name}".`,
         );
         this.onStatusChanged?.();
+    }
+
+    // ── manage-conversation (system.conversation) ─────────────────
+    //
+    // Routed from the system agent's `executeConversationAction` (NL like
+    // "list my conversations") and from the @conversation slash commands
+    // (`@conversation new/list/info/switch/prev/next/rename/delete`). Both
+    // dispatch the same payload via `clientIO.takeAction(requestId,
+    // "manage-conversation", payload)`. See:
+    //   ts/docs/architecture/agentServerConversations.md
+    //   ts/packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts
+    //
+    // Non-switching subcommands (list/info/rename/delete) write their
+    // result back into the user's request bubble via overwriteActionBubble.
+    // Switching subcommands (new/switch/prev/next) push a fresh agent
+    // bubble via displayConversationNotification AFTER the switch — the
+    // request bubble lives in the OLD conversation which `chatPanel.clear()`
+    // wipes on sessionChanged.
+    private async handleManageConversation(
+        requestId: any,
+        payload: any,
+    ): Promise<void> {
+        if (!payload || typeof payload !== "object") return;
+        const p = payload as {
+            subcommand?: string;
+            name?: string;
+            newName?: string;
+        };
+
+        if (!this.connection) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: "Not connected to agent server.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+
+        try {
+            switch (p.subcommand) {
+                case "new":
+                    await this.manageNewConversation(requestId, p.name);
+                    break;
+                case "list":
+                    await this.manageListConversations(requestId);
+                    break;
+                case "info":
+                    this.manageConversationInfo(requestId);
+                    break;
+                case "switch":
+                    await this.manageSwitchConversation(requestId, p.name);
+                    break;
+                case "next":
+                case "prev":
+                    await this.manageCycleConversation(requestId, p.subcommand);
+                    break;
+                case "rename":
+                    await this.manageRenameConversation(
+                        requestId,
+                        p.name,
+                        p.newName,
+                    );
+                    break;
+                case "delete":
+                    await this.manageDeleteConversation(requestId, p.name);
+                    break;
+                default:
+                    this.overwriteActionBubble(
+                        requestId,
+                        {
+                            type: "html",
+                            content: `Unknown manage-conversation subcommand: <b>${escapeHtml(
+                                String(p.subcommand ?? ""),
+                            )}</b>`,
+                            kind: "warning",
+                        },
+                        "conversation",
+                    );
+            }
+        } catch (e: any) {
+            const msg = e?.message ?? String(e);
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `❌ ${escapeHtml(msg)}`,
+                    kind: "error",
+                },
+                "conversation",
+            );
+        }
+    }
+
+    private async manageNewConversation(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
+        if (!this.connection) return;
+        // Generate a default name when one isn't provided so NL like
+        // "create a new conversation" succeeds end-to-end without a
+        // second prompt. Mirrors the Electron Shell's default-name
+        // format in packages/shell/src/renderer/src/main.ts.
+        let chosen = name?.trim();
+        if (!chosen) {
+            const d = new Date();
+            const pad = (n: number) => n.toString().padStart(2, "0");
+            chosen = `Conversation ${d.getFullYear()}-${pad(
+                d.getMonth() + 1,
+            )}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        // Collision check (case-insensitive) so the user gets a clear
+        // error rather than a silent server reject. Picks the existing
+        // conversation for them — switching to it instead of failing.
+        const sessions = await this.connection.listSessions();
+        const existing = sessions.find(
+            (s) => s.name.toLowerCase() === chosen!.toLowerCase(),
+        );
+        if (existing) {
+            await this.joinSpecificSession(existing.sessionId, existing.name);
+            this.displayConversationNotification(
+                `A conversation named <b>${escapeHtml(
+                    existing.name,
+                )}</b> already exists — switched to it.`,
+                "warning",
+            );
+            return;
+        }
+
+        const info = await this.connection.createSession(chosen);
+        await this.joinSpecificSession(info.sessionId, chosen);
+        this.displayConversationNotification(
+            `✅ Created and switched to conversation <b>${escapeHtml(chosen)}</b>`,
+        );
+    }
+
+    private async manageListConversations(requestId: any): Promise<void> {
+        if (!this.connection) return;
+        const sessions = await this.connection.listSessions();
+        const currentId = this.session?.sessionId;
+        let html: string;
+        if (sessions.length === 0) {
+            html = "No conversations found.";
+        } else {
+            const rows = sessions.map((s) => {
+                const isCurrent = currentId && s.sessionId === currentId;
+                const marker = isCurrent ? " ← <b>current</b>" : "";
+                const date = new Date(s.createdAt).toLocaleDateString();
+                return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(
+                    s.sessionId,
+                )}) — ${s.clientCount} client(s), created ${escapeHtml(
+                    date,
+                )}${marker}`;
+            });
+            html = `<b>Conversations (${sessions.length})</b><br>${rows.join("<br>")}`;
+        }
+        this.overwriteActionBubble(
+            requestId,
+            { type: "html", content: html, kind: "info" },
+            "conversation",
+        );
+    }
+
+    private manageConversationInfo(requestId: any): void {
+        const session = this.session;
+        const html = session
+            ? `Current conversation: <b>${escapeHtml(
+                  this.getDisplayName(),
+              )}</b> (${escapeHtml(session.sessionId)})`
+            : "No active conversation.";
+        this.overwriteActionBubble(
+            requestId,
+            { type: "html", content: html, kind: "info" },
+            "conversation",
+        );
+    }
+
+    private async manageSwitchConversation(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
+        if (!this.connection) return;
+        const trimmed = name?.trim();
+        if (!trimmed) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: "A conversation name is required to switch.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        const sessions = await this.connection.listSessions();
+        const match = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (!match) {
+            // Mirror the Electron Shell's @conversation switch semantics:
+            // error on no match rather than create-on-miss. (The code agent's
+            // `code.code-vscode-shell` schema has its own create-on-switch
+            // behavior — that path remains unchanged.)
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `No conversation named <b>${escapeHtml(
+                        trimmed,
+                    )}</b> found.`,
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        if (match.sessionId === this.session?.sessionId) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `Already on conversation <b>${escapeHtml(
+                        match.name,
+                    )}</b>.`,
+                    kind: "info",
+                },
+                "conversation",
+            );
+            return;
+        }
+        await this.joinSpecificSession(match.sessionId, match.name);
+        this.displayConversationNotification(
+            `✅ Switched to conversation <b>${escapeHtml(match.name)}</b>`,
+        );
+    }
+
+    private async manageCycleConversation(
+        requestId: any,
+        direction: "next" | "prev",
+    ): Promise<void> {
+        if (!this.connection) return;
+        const sessions = await this.connection.listSessions();
+        if (sessions.length === 0) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: "No conversations to switch to.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        const currentId = this.session?.sessionId;
+        const curIdx = currentId
+            ? sessions.findIndex((s) => s.sessionId === currentId)
+            : -1;
+        const delta = direction === "next" ? 1 : -1;
+        const nextIdx =
+            curIdx === -1
+                ? 0
+                : (curIdx + delta + sessions.length) % sessions.length;
+        const target = sessions[nextIdx];
+        if (target.sessionId === currentId) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content:
+                        "Only one conversation is available — nothing to switch to.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        await this.joinSpecificSession(target.sessionId, target.name);
+        this.displayConversationNotification(
+            `✅ Switched to conversation <b>${escapeHtml(target.name)}</b>`,
+        );
+    }
+
+    private async manageRenameConversation(
+        requestId: any,
+        name: string | undefined,
+        newName: string | undefined,
+    ): Promise<void> {
+        if (!this.connection) return;
+        const trimmedNew = newName?.trim();
+        if (!trimmedNew) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content:
+                        "A new name is required to rename the conversation.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+
+        // Resolve target conversation. `name` empty/missing → rename current.
+        let targetId: string;
+        let isCurrent: boolean;
+        if (name && name.trim()) {
+            const trimmedName = name.trim();
+            const sessions = await this.connection.listSessions();
+            const match = sessions.find(
+                (s) => s.name.toLowerCase() === trimmedName.toLowerCase(),
+            );
+            if (!match) {
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: `No conversation named <b>${escapeHtml(
+                            trimmedName,
+                        )}</b> found.`,
+                        kind: "warning",
+                    },
+                    "conversation",
+                );
+                return;
+            }
+            targetId = match.sessionId;
+            isCurrent = targetId === this.session?.sessionId;
+        } else {
+            if (!this.session) {
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: "No active conversation to rename.",
+                        kind: "warning",
+                    },
+                    "conversation",
+                );
+                return;
+            }
+            targetId = this.session.sessionId;
+            isCurrent = true;
+        }
+
+        // Collision check excluding the target itself.
+        const allSessions = await this.connection.listSessions();
+        const collision = allSessions.find(
+            (s) =>
+                s.sessionId !== targetId &&
+                s.name.toLowerCase() === trimmedNew.toLowerCase(),
+        );
+        if (collision) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `A conversation named <b>${escapeHtml(
+                        trimmedNew,
+                    )}</b> already exists.`,
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+
+        await this.connection.renameSession(targetId, trimmedNew);
+
+        // If we renamed the current session, refresh the status bar /
+        // panel title so the new name shows immediately. (The connection's
+        // renameSession doesn't push a sessionName change back to us.)
+        if (isCurrent && this.session) {
+            this.nameOverride = trimmedNew;
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId: this.session.sessionId,
+                sessionName: this.getDisplayName(),
+            });
+            this.onStatusChanged?.();
+        }
+
+        this.overwriteActionBubble(
+            requestId,
+            {
+                type: "html",
+                content: `✅ Renamed conversation to <b>${escapeHtml(
+                    trimmedNew,
+                )}</b>`,
+                kind: "info",
+            },
+            "conversation",
+        );
+    }
+
+    private async manageDeleteConversation(
+        requestId: any,
+        name?: string,
+    ): Promise<void> {
+        if (!this.connection) return;
+        const trimmed = name?.trim();
+        if (!trimmed) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: "A conversation name is required to delete.",
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        const sessions = await this.connection.listSessions();
+        const match = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (!match) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `Conversation <b>${escapeHtml(
+                        trimmed,
+                    )}</b> not found.`,
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        if (match.sessionId === this.session?.sessionId) {
+            this.overwriteActionBubble(
+                requestId,
+                {
+                    type: "html",
+                    content: `Cannot delete the currently active conversation <b>${escapeHtml(
+                        match.name,
+                    )}</b>. Switch to a different conversation first.`,
+                    kind: "warning",
+                },
+                "conversation",
+            );
+            return;
+        }
+        await this.connection.deleteSession(match.sessionId);
+        // Notify the extension status bar / shared list (deleted session
+        // changes the available targets for switch/quick-pick UIs).
+        this.onStatusChanged?.();
+        this.overwriteActionBubble(
+            requestId,
+            {
+                type: "html",
+                content: `🗑️ Deleted conversation <b>${escapeHtml(match.name)}</b>`,
+                kind: "info",
+            },
+            "conversation",
+        );
     }
 
     public notifyDemoState(
