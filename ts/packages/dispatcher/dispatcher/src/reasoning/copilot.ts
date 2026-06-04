@@ -18,6 +18,7 @@ import {
 import registerDebug from "debug";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
@@ -172,11 +173,10 @@ function getRepoRoot(): string {
  */
 function findBundledNativeCli(): string | undefined {
     const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
+    const require = createRequire(import.meta.url);
     try {
         // 1. Resolve @github/copilot-sdk (our direct dependency)
-        const sdkEntry = fileURLToPath(
-            import.meta.resolve("@github/copilot-sdk"),
-        );
+        const sdkEntry = require.resolve("@github/copilot-sdk");
         // sdkEntry is like: .../@github/copilot-sdk/dist/index.js
         // Navigate to the @github/ directory that contains copilot-sdk
         const githubDir = path.resolve(path.dirname(sdkEntry), "../..");
