@@ -140,6 +140,43 @@ export function formatOnboardingHealthSnapshot(
     ].join("\n");
 }
 
+export function formatOnboardingHealthSnapshotMarkdown(
+    state: OnboardingState,
+    packagingGate:
+        | {
+              status: "pass" | "warn" | "fail" | "unavailable";
+              summary: string;
+          }
+        | undefined,
+): string {
+    const completeCount = ONBOARDING_PHASE_ORDER.filter(
+        (phase) => state.phases[phase]?.status === "complete",
+    ).length;
+    const staleCount = ONBOARDING_PHASE_ORDER.filter(
+        (phase) => state.phases[phase]?.status === "stale",
+    ).length;
+    const pendingCount = ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
+    const installedSandboxes =
+        state.installedSandboxIds && state.installedSandboxIds.length > 0
+            ? state.installedSandboxIds.join(", ")
+            : "none";
+    const packagingSummary = packagingGate
+        ? `${packagingGate.status}: ${packagingGate.summary}`
+        : "unavailable: No install artifact path resolved for active session.";
+
+    return [
+        "# TypeAgent Studio Onboarding Health Snapshot",
+        "",
+        `- Session: ${state.sessionId}`,
+        `- Agent: ${state.agentName}`,
+        `- Current phase: ${state.currentPhase}`,
+        `- Phase counts: complete=${completeCount}, stale=${staleCount}, pending=${pendingCount}`,
+        `- Installed sandboxes: ${installedSandboxes}`,
+        `- Packaging gate: ${packagingSummary}`,
+        "",
+    ].join("\n");
+}
+
 export function formatOnboardingDiagnosticsBundle(args: {
     summary: string;
     healthReport: string;

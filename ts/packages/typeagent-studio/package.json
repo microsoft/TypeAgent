@@ -169,6 +169,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.openOnboardingHealthSnapshot",
+        "title": "Open onboarding health snapshot",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.showOnboardingSettingsSnapshot",
         "title": "Show onboarding settings snapshot",
         "category": "TypeAgent Studio"
@@ -265,6 +270,7 @@
     "onCommand:typeagent-studio.showOnboardingSnapshot",
     "onCommand:typeagent-studio.showOnboardingHealthSnapshot",
     "onCommand:typeagent-studio.copyOnboardingHealthSnapshot",
+    "onCommand:typeagent-studio.openOnboardingHealthSnapshot",
     "onCommand:typeagent-studio.showOnboardingSettingsSnapshot",
     "onCommand:typeagent-studio.copyOnboardingSettingsSnapshot",
     "onCommand:typeagent-studio.openOnboardingSettingsSnapshot",

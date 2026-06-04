@@ -10,6 +10,7 @@ import {
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
+    formatOnboardingHealthSnapshotMarkdown,
     formatOnboardingSettingsSnapshotMarkdown,
     formatOnboardingSettingsSnapshot,
     formatOnboardingSummary,
@@ -144,6 +145,18 @@ test("formatOnboardingHealthSnapshot includes phase counts and gate summary", ()
 test("formatOnboardingHealthSnapshot shows unavailable gate fallback", () => {
     const snapshot = formatOnboardingHealthSnapshot(createState(), undefined);
     assert.match(snapshot, /Packaging gate: unavailable:/);
+});
+
+test("formatOnboardingHealthSnapshotMarkdown formats health as markdown", () => {
+    const snapshot = formatOnboardingHealthSnapshotMarkdown(createState(), {
+        status: "warn",
+        summary: "2 warning findings for agent calendar-enterprise.",
+    });
+
+    assert.match(snapshot, /# TypeAgent Studio Onboarding Health Snapshot/);
+    assert.match(snapshot, /Session: session-1/);
+    assert.match(snapshot, /Phase counts: complete=1, stale=1, pending=5/);
+    assert.match(snapshot, /Packaging gate: warn: 2 warning findings/);
 });
 
 test("formatOnboardingDiagnosticsBundle includes metadata summary and report", () => {

@@ -7,6 +7,7 @@ import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
 import {
     formatOnboardingDiagnosticsBundle,
+    formatOnboardingHealthSnapshotMarkdown,
     formatOnboardingHealthSnapshot,
     formatOnboardingSettingsSnapshotMarkdown,
     formatOnboardingSettingsSnapshot,
@@ -464,6 +465,22 @@ export function registerStudioCommands(
                 void vscode.window.showInformationMessage(
                     "Copied onboarding health snapshot to clipboard.",
                 );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.openOnboardingHealthSnapshot",
+            withErrors(async () => {
+                const content = await getOnboardingHealthSnapshotMarkdown(runtime);
+                const doc = await vscode.workspace.openTextDocument({
+                    language: "markdown",
+                    content,
+                });
+                await vscode.window.showTextDocument(doc, {
+                    preview: false,
+                });
             }),
         ),
     );
@@ -987,6 +1004,26 @@ async function getOnboardingHealthSnapshot(
     }
 
     return formatOnboardingHealthSnapshot(state, gate);
+}
+
+async function getOnboardingHealthSnapshotMarkdown(
+    runtime: StudioRuntime,
+): Promise<string> {
+    const state = await runtime.getActiveOnboardingSession();
+    let gate:
+        | Awaited<
+              ReturnType<
+                  StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
+              >
+          >
+        | undefined;
+    try {
+        gate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    } catch {
+        gate = undefined;
+    }
+
+    return formatOnboardingHealthSnapshotMarkdown(state, gate);
 }
 
 async function getOnboardingDiagnosticsBundle(
