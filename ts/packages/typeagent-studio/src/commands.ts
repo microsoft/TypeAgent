@@ -166,6 +166,20 @@ export function registerStudioCommands(
 
     context.subscriptions.push(
         vscode.commands.registerCommand(
+            "typeagent-studio.copyInstallArtifactPath",
+            withErrors(async () => {
+                const artifactPath =
+                    await runtime.resolveInstallArtifactPathForActiveSession();
+                await vscode.env.clipboard.writeText(artifactPath);
+                void vscode.window.showInformationMessage(
+                    "Copied resolved install artifact path to clipboard.",
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
             "typeagent-studio.checkPackagingHealthGate",
             withErrors(async () => {
                 const gate =

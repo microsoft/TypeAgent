@@ -84,6 +84,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.copyInstallArtifactPath",
+        "title": "Copy install artifact path",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.checkPackagingHealthGate",
         "title": "Check packaging health gate",
         "category": "TypeAgent Studio"
@@ -201,6 +206,7 @@
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
     "onCommand:typeagent-studio.resolveInstallArtifactPath",
+    "onCommand:typeagent-studio.copyInstallArtifactPath",
     "onCommand:typeagent-studio.checkPackagingHealthGate",
     "onCommand:typeagent-studio.enforcePackagingHealthGate",
     "onCommand:typeagent-studio.openPackagingHealthReport",
