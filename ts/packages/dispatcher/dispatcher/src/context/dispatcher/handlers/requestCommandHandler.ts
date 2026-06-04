@@ -58,29 +58,37 @@ async function runConfiguredReasoning(
     context: ActionContext<CommandHandlerContext>,
     options?: { fallbackContext?: ReasoningFallbackContext },
 ): Promise<void> {
-    const engine =
-        context.sessionContext.agentContext.session.getConfig().execution
-            .reasoning;
-    switch (engine) {
-        case "copilot":
-            await executeCopilotReasoning(request, context, {
-                engine: "copilot",
-            });
-            return;
-        case "claude":
-            await executeClaudeReasoning(request, context, {
-                engine: "claude",
-                ...(options?.fallbackContext
-                    ? { fallbackContext: options.fallbackContext }
-                    : {}),
-            });
-            return;
-        case "none":
-            throw new Error(
-                "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
-            );
-        default:
-            throw new Error(`Unknown reasoning engine: ${engine}`);
+    const systemContext = context.sessionContext.agentContext;
+    const engine = systemContext.session.getConfig().execution.reasoning;
+    const reasoningIcons: Record<string, string> = {
+        claude: "🧠",
+        copilot: "✨",
+    };
+    systemContext.reasoningSourceIcon = reasoningIcons[engine] ?? undefined;
+    try {
+        switch (engine) {
+            case "copilot":
+                await executeCopilotReasoning(request, context, {
+                    engine: "copilot",
+                });
+                return;
+            case "claude":
+                await executeClaudeReasoning(request, context, {
+                    engine: "claude",
+                    ...(options?.fallbackContext
+                        ? { fallbackContext: options.fallbackContext }
+                        : {}),
+                });
+                return;
+            case "none":
+                throw new Error(
+                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
+                );
+            default:
+                throw new Error(`Unknown reasoning engine: ${engine}`);
+        }
+    } finally {
+        systemContext.reasoningSourceIcon = undefined;
     }
 }
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";

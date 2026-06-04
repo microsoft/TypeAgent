@@ -144,11 +144,15 @@ export class MessageContainer {
     private get sourceIcon() {
         // use agent icon for agents, user Initial for users
         if (this.classNameSuffix === "agent") {
+            // Per-message sourceIcon (e.g. reasoning engine icon) takes
+            // priority over the global agents map.
+            if (this._sourceIcon !== undefined) {
+                return this._sourceIcon;
+            }
             const baseName = this.source.split(".")[0];
             return (
                 this.agents.get(this.source) ??
                 this.agents.get(baseName) ??
-                this._sourceIcon ??
                 "❔"
             );
         }
