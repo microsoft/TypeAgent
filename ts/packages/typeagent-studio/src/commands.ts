@@ -480,6 +480,10 @@ export function registerStudioCommands(
                         void vscode.window.showInformationMessage(
                             `Reconciled phases: ${rerunResult.rerunPhases.join(", ")}. Current phase: ${rerunResult.state.currentPhase}.`,
                         );
+
+                        if (rerunResult.rerunPhases.includes("Packaging")) {
+                            await showPackagingHealthGateStatus(runtime);
+                        }
                     }
                 }
             }),
