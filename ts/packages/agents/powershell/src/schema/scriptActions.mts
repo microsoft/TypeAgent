@@ -55,6 +55,11 @@ export type CreatePowerShellFlow = {
         }[];
         // PowerShell cmdlets the script uses
         allowedCmdlets: string[];
+        // PowerShell modules to import for the script's cmdlets (e.g.
+        // ["NetTCPIP"] for Get-NetTCPConnection). Include every module required
+        // by allowedCmdlets — use the same list that made testPowerShellFlow
+        // pass, or the flow will fail at invocation with "not recognized".
+        allowedModules?: string[];
     };
 };
 
@@ -68,6 +73,8 @@ export type EditPowerShellFlow = {
         script: string;
         // Updated list of PowerShell cmdlets the script uses
         allowedCmdlets: string[];
+        // Updated list of PowerShell modules to import (optional; preserved if omitted)
+        allowedModules?: string[];
     };
 };
 

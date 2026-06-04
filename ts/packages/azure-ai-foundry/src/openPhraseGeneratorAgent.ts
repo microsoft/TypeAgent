@@ -4,12 +4,6 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { bingWithGrounding } from "./index.js";
 import * as agents from "./agents.js";
-import {
-    Agent,
-    MessageContentUnion,
-    ThreadMessage,
-    ToolUtility,
-} from "@azure/ai-agents";
 //import registerDebug from "debug";
 
 //const debug = registerDebug("typeagent:azure-ai-foundry:aliasKeywordExtractor");
@@ -31,18 +25,15 @@ export type SearchResult = {
 export async function ensureOpenPhraseGeneratorAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
-): Promise<Agent | undefined> {
+): Promise<string> {
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
-    return await agents.ensureAgent(
-        groundingConfig.openPhraseGeneratorAgentId!,
-        project,
-        {
-            model: "gpt-4.1",
-            name: "TypeAgent_OpenPhraseGenerator",
-            description: "Auto created Phrase Generator Agent",
-            temperature: 0.01,
-            instructions: `
+    return await agents.ensureAgent(project, {
+        model: "gpt-4.1",
+        name: "TypeAgent-OpenPhraseGenerator",
+        description: "Auto created Phrase Generator Agent",
+        temperature: 0.01,
+        instructions: `
 There is a system that uses the command "Open" to open URLs in the browser.  You generate terms that can be cached such that when the user says "open apple" it goes to "https://apple.com".  You generate alternate terms/keywords/phrases/descriptions a user could use to invoke the same site. 
 
 You are provided a domain that you generate open phrases for by doing a Bing search for 'site:domain' where the domain is the one provided.
@@ -70,15 +61,8 @@ type SearchResult = {
   openPhrases: string[];
 }         
             `,
-            tools: [
-                ToolUtility.createBingGroundingTool([
-                    {
-                        connectionId: groundingConfig.connectionId!,
-                    },
-                ]).definition,
-            ],
-        },
-    );
+        tools: [agents.bingGroundingTool(groundingConfig.connectionId!)],
+    });
 }
 
 /**
@@ -92,92 +76,27 @@ export async function createOpenPhrasesForDomain(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<openPhrases | undefined | null> {
-    const agent = await ensureOpenPhraseGeneratorAgent(
+    const agentName = await ensureOpenPhraseGeneratorAgent(
         groundingConfig,
         project,
     );
-    let inCompleteReason;
-    let retVal: openPhrases | undefined | null;
 
-    if (!agent) {
+    if (!agentName) {
         throw new Error(
             "No agent found for extracting web site aliases. Please check your configuration.",
         );
     }
 
     try {
-        // create the thread
-        const thread = await project.agents.threads.create();
+        const result = await agents.runAgent(project, agentName, domain);
 
-        // add the request to the thread
-        await project.agents.messages.create(thread.id, "user", domain);
-
-        // Create run
-        const run = await project.agents.runs.createAndPoll(
-            thread.id,
-            agent.id,
-            {
-                pollingOptions: {
-                    intervalInMs: 1000,
-                },
-                onResponse: (response): void => {
-                    console.debug(
-                        `Received response with status: ${response.status}`,
-                    );
-
-                    const pb: any = response.parsedBody;
-                    if (pb?.incomplete_details?.reason) {
-                        inCompleteReason = pb.incomplete_details.reason;
-                        console.warn(
-                            `Run incomplete due to: ${inCompleteReason}`,
-                        );
-                    }
-                },
-            },
-        );
-
-        const msgs: ThreadMessage[] = [];
-        if (run.status === "completed") {
-            if (run.completedAt) {
-                // Retrieve messages
-                const messages = await project.agents.messages.list(thread.id, {
-                    order: "asc",
-                });
-
-                // accumulate assistant messages
-                for await (const m of messages) {
-                    if (m.role === "assistant") {
-                        // TODO: handle multi-modal content
-                        const content: MessageContentUnion | undefined =
-                            m.content.find(
-                                (c) => c.type === "text" && "text" in c,
-                            );
-                        if (content) {
-                            msgs.push(m);
-                            let txt: string = (content as any).text
-                                .value as string;
-                            txt = txt
-                                .replaceAll("```json", "")
-                                .replaceAll("```", "");
-                            retVal = JSON.parse(txt) as openPhrases;
-                        }
-                    }
-                }
-            }
+        if (result.contentFiltered) {
+            return null;
         }
 
-        // delete the thread we just created since we are currently one and done
-        project.agents.threads.delete(thread.id);
+        return agents.parseJsonResponse<openPhrases>(result.text);
     } catch (e) {
         console.error(`Error resolving URL with search: ${e}`);
-
-        if (inCompleteReason === "content_filter") {
-            retVal = null;
-        } else {
-            retVal = undefined;
-        }
+        return undefined;
     }
-
-    // return assistant messages
-    return retVal;
 }

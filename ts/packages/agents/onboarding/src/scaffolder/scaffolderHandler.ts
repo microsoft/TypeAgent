@@ -21,6 +21,7 @@ import {
 } from "../lib/workspace.js";
 import type { ApiSurface } from "../discovery/discoveryHandler.js";
 import { buildCliHandler } from "./cliHandlerTemplate.js";
+import { loadTemplate } from "./templateLoader.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -690,39 +691,10 @@ async function buildHandler(
 }
 
 function buildSchemaGrammarHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    return {};
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    // TODO: implement action handlers
-    return createActionResultFromTextDisplay(
-        \`Executing \${action.actionName} — not yet implemented.\`,
-    );
-}
-`;
+    return loadTemplate("schemaGrammarHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 // Map of TypeAgent workspace packages to their location relative to the
@@ -874,7 +846,7 @@ const PLUGIN_TEMPLATES: Record<
             "WebSocket bridge (bidirectional RPC, used by Excel, VS Code agents)",
         defaultSubdir: "src",
         nextSteps:
-            "Start the bridge with `new WebSocketBridge(port).start()` and connect your plugin.",
+            'Bind on an OS-assigned port via `await <PascalName>Bridge.start()` (replace `<PascalName>` with your agent name), then publish the bound `.port` from your handler with `context.registerPort("default", bridge.port)` so external clients can discover it.',
         files: (name) => ({
             [`${name}Bridge.ts`]: buildWebSocketBridgeTemplate(name),
         }),
@@ -893,161 +865,40 @@ const PLUGIN_TEMPLATES: Record<
 };
 
 function buildRestClientTemplate(name: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// REST client bridge for ${name}.
-// Calls the target API and returns results to the TypeAgent handler.
-
-export class ${toPascalCase(name)}Bridge {
-    constructor(private readonly baseUrl: string, private readonly apiKey?: string) {}
-
-    async executeCommand(actionName: string, parameters: Record<string, unknown>): Promise<unknown> {
-        // TODO: map actionName to HTTP endpoint and method
-        throw new Error(\`Not implemented: \${actionName}\`);
-    }
-
-    private get headers(): Record<string, string> {
-        const h: Record<string, string> = { "Content-Type": "application/json" };
-        if (this.apiKey) h["Authorization"] = \`Bearer \${this.apiKey}\`;
-        return h;
-    }
-}
-`;
+    const pascalName = toPascalCase(name);
+    return loadTemplate("restClientTemplate.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildWebSocketBridgeTemplate(name: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// WebSocket bridge for ${name}.
-// Manages a WebSocket connection to the host application plugin.
-// Pattern matches the Excel/VS Code agent bridge implementations.
-
-import { WebSocketServer, WebSocket } from "ws";
-
-type BridgeCommand = {
-    id: string;
-    actionName: string;
-    parameters: Record<string, unknown>;
-};
-
-type BridgeResponse = {
-    id: string;
-    success: boolean;
-    result?: unknown;
-    error?: string;
-};
-
-export class ${toPascalCase(name)}Bridge {
-    private wss: WebSocketServer | undefined;
-    private client: WebSocket | undefined;
-    private pending = new Map<string, (response: BridgeResponse) => void>();
-
-    constructor(private readonly port: number) {}
-
-    start(): void {
-        this.wss = new WebSocketServer({ port: this.port });
-        this.wss.on("connection", (ws) => {
-            this.client = ws;
-            ws.on("message", (data) => {
-                const response = JSON.parse(data.toString()) as BridgeResponse;
-                this.pending.get(response.id)?.(response);
-                this.pending.delete(response.id);
-            });
-        });
-    }
-
-    async sendCommand(actionName: string, parameters: Record<string, unknown>): Promise<unknown> {
-        if (!this.client) throw new Error("No client connected");
-        const id = \`cmd-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
-        return new Promise((resolve, reject) => {
-            this.pending.set(id, (res) => {
-                if (res.success) resolve(res.result);
-                else reject(new Error(res.error));
-            });
-            this.client!.send(JSON.stringify({ id, actionName, parameters } satisfies BridgeCommand));
-        });
-    }
-}
-`;
+    const pascalName = toPascalCase(name);
+    return loadTemplate("websocketBridgeTemplate.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildOfficeAddinHtml(name: string): string {
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8" />
-    <title>${toPascalCase(name)} TypeAgent Add-in</title>
-    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script src="taskpane.js" type="module"></script>
-</head>
-<body>
-    <h2>${toPascalCase(name)} TypeAgent</h2>
-    <div id="status">Connecting...</div>
-</body>
-</html>
-`;
+    const pascalName = toPascalCase(name);
+    return loadTemplate("officeAddinHtml.template", {
+        AgentName: pascalName,
+    });
 }
 
 function buildOfficeAddinTs(name: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Office.js task pane add-in for ${name} TypeAgent integration.
-// Connects to the TypeAgent bridge via WebSocket and forwards commands
-// to the Office.js API.
-
-const BRIDGE_PORT = 5678;
-
-Office.onReady(async () => {
-    document.getElementById("status")!.textContent = "Connecting to TypeAgent...";
-    const ws = new WebSocket(\`ws://localhost:\${BRIDGE_PORT}\`);
-
-    ws.onopen = () => {
-        document.getElementById("status")!.textContent = "Connected";
-        ws.send(JSON.stringify({ type: "hello", addinName: "${name}" }));
-    };
-
-    ws.onmessage = async (event) => {
-        const command = JSON.parse(event.data);
-        try {
-            const result = await executeCommand(command.actionName, command.parameters);
-            ws.send(JSON.stringify({ id: command.id, success: true, result }));
-        } catch (err: any) {
-            ws.send(JSON.stringify({ id: command.id, success: false, error: err?.message ?? String(err) }));
-        }
-    };
-});
-
-async function executeCommand(actionName: string, parameters: Record<string, unknown>): Promise<unknown> {
-    // TODO: map actionName to Office.js API calls
-    throw new Error(\`Not implemented: \${actionName}\`);
-}
-`;
+    return loadTemplate("officeAddinTs.template", {
+        agentName: name,
+        BRIDGE_PORT: "5678",
+    });
 }
 
 function buildOfficeManifestXml(name: string): string {
     const pascal = toPascalCase(name);
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-           xsi:type="TaskPaneApp">
-  <Id><!-- Replace with a new GUID --></Id>
-  <Version>1.0.0.0</Version>
-  <ProviderName>Microsoft</ProviderName>
-  <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="${pascal} TypeAgent" />
-  <Description DefaultValue="${pascal} integration for TypeAgent" />
-  <Hosts>
-    <Host Name="Workbook" />
-  </Hosts>
-  <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
-  </DefaultSettings>
-  <Permissions>ReadWriteDocument</Permissions>
-</OfficeApp>
-`;
+    return loadTemplate("officeManifestXml.template", {
+        AgentName: pascal,
+    });
 }
 
 async function writeFile(filePath: string, content: string): Promise<void> {
@@ -1081,554 +932,63 @@ async function handleListPatterns(): Promise<ActionResult> {
 // ─── Pattern-specific handler builders ───────────────────────────────────────
 
 function buildExternalApiHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: external-api — REST/OAuth cloud API bridge.
-// Implement ${pascalName}Client with your API's authentication and endpoints.
-
-import {
-    ActionContext,
-    AppAgent,
-    SessionContext,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-// ---- API client --------------------------------------------------------
-
-class ${pascalName}Client {
-    private token: string | undefined;
-
-    /** Authenticate and store the access token. */
-    async authenticate(): Promise<void> {
-        // TODO: implement OAuth flow or API key loading.
-        // Store token in: ~/.typeagent/profiles/<profile>/${name}/token.json
-        throw new Error("authenticate() not yet implemented");
-    }
-
-    async callApi(endpoint: string, params: Record<string, unknown>): Promise<unknown> {
-        if (!this.token) await this.authenticate();
-        // TODO: implement HTTP call using this.token
-        throw new Error(\`callApi(\${endpoint}) not yet implemented\`);
-    }
-}
-
-// ---- Agent lifecycle ---------------------------------------------------
-
-type Context = { client: ${pascalName}Client };
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        updateAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<Context> {
-    return { client: new ${pascalName}Client() };
-}
-
-async function updateAgentContext(
-    _enable: boolean,
-    _context: SessionContext<Context>,
-    _schemaName: string,
-): Promise<void> {
-    // Optionally authenticate eagerly when the agent is enabled.
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<Context>,
-): Promise<ActionResult> {
-    const { client } = context.sessionContext.agentContext;
-    // TODO: map each action to a client.callApi() call.
-    return createActionResultFromTextDisplay(
-        \`Executing \${action.actionName} — not yet implemented.\`,
-    );
-}
-`;
+    return loadTemplate("externalApiHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildLlmStreamingHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: llm-streaming — LLM-injected agent with streaming responses.
-// Runs inside the dispatcher process (injected: true in manifest).
-// Uses aiclient + typechat; streams partial results via streamingActionContext.
-
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    return {};
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    switch (action.actionName) {
-        case "generateResponse": {
-            // TODO: call your LLM and stream chunks via:
-            //   context.streamingActionContext?.appendDisplay(chunk)
-            return createActionResultFromMarkdownDisplay(
-                "Streaming response not yet implemented.",
-            );
-        }
-        default:
-            return createActionResultFromMarkdownDisplay(
-                \`Unknown action: \${(action as any).actionName}\`,
-            );
-    }
-}
-`;
+    return loadTemplate("llmStreamingHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildSubAgentOrchestratorHandler(
     name: string,
     pascalName: string,
 ): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: sub-agent-orchestrator — root agent routing to N typed sub-schemas.
-// Add one executeXxxAction() per sub-schema group defined in subActionManifests.
-// The root executeAction routes by action name (each group owns disjoint names).
-
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    return {};
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    // TODO: route to sub-schema handlers, e.g.:
-    // if (isGroupOneAction(action)) return executeGroupOneAction(action, context);
-    // if (isGroupTwoAction(action)) return executeGroupTwoAction(action, context);
-    return createActionResultFromTextDisplay(
-        \`Executing \${action.actionName} — not yet implemented.\`,
-    );
-}
-
-// ---- Sub-schema handlers (one per subActionManifests group) ------------
-
-// async function executeGroupOneAction(
-//     action: TypeAgentAction<GroupOneActions>,
-//     context: ActionContext<unknown>,
-// ): Promise<ActionResult> { ... }
-`;
+    return loadTemplate("subAgentOrchestratorHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildWebSocketBridgeHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: websocket-bridge — bidirectional RPC to a host-side plugin.
-// The agent owns a WebSocketServer; the host plugin connects as the client.
-// Commands flow TypeAgent → WebSocket → plugin → response.
-
-import {
-    ActionContext,
-    AppAgent,
-    SessionContext,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { WebSocketServer, WebSocket } from "ws";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-const BRIDGE_PORT = 5678; // TODO: choose an unused port
-
-// ---- WebSocket bridge --------------------------------------------------
-
-type BridgeRequest = { id: string; actionName: string; parameters: unknown };
-type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: string };
-
-class ${pascalName}Bridge {
-    private wss: WebSocketServer | undefined;
-    private client: WebSocket | undefined;
-    private pending = new Map<string, (r: BridgeResponse) => void>();
-
-    start(): void {
-        this.wss = new WebSocketServer({ port: BRIDGE_PORT });
-        this.wss.on("connection", (ws) => {
-            this.client = ws;
-            ws.on("message", (data) => {
-                const response = JSON.parse(data.toString()) as BridgeResponse;
-                this.pending.get(response.id)?.(response);
-                this.pending.delete(response.id);
-            });
-            ws.on("close", () => { this.client = undefined; });
-        });
-    }
-
-    async stop(): Promise<void> {
-        return new Promise((resolve) => this.wss?.close(() => resolve()));
-    }
-
-    async send(actionName: string, parameters: unknown): Promise<unknown> {
-        if (!this.client) {
-            throw new Error("No host plugin connected on port " + BRIDGE_PORT);
-        }
-        const id = \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
-        return new Promise((resolve, reject) => {
-            this.pending.set(id, (res) =>
-                res.success ? resolve(res.result) : reject(new Error(res.error)),
-            );
-            this.client!.send(
-                JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
-            );
-        });
-    }
-
-    get connected(): boolean { return this.client !== undefined; }
-}
-
-// ---- Agent lifecycle ---------------------------------------------------
-
-type Context = { bridge: ${pascalName}Bridge };
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        updateAgentContext,
-        closeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<Context> {
-    const bridge = new ${pascalName}Bridge();
-    bridge.start();
-    return { bridge };
-}
-
-async function updateAgentContext(
-    _enable: boolean,
-    _context: SessionContext<Context>,
-    _schemaName: string,
-): Promise<void> {}
-
-async function closeAgentContext(context: SessionContext<Context>): Promise<void> {
-    await context.agentContext.bridge.stop();
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    context: ActionContext<Context>,
-): Promise<ActionResult> {
-    const { bridge } = context.sessionContext.agentContext;
-    if (!bridge.connected) {
-        return {
-            error: \`Host plugin not connected. Make sure the ${name} plugin is running on port \${BRIDGE_PORT}.\`,
-        };
-    }
-    try {
-        const result = await bridge.send(action.actionName, action.parameters);
-        return createActionResultFromTextDisplay(JSON.stringify(result, null, 2));
-    } catch (err: any) {
-        return { error: err?.message ?? String(err) };
-    }
-}
-`;
+    const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_BRIDGE_PORT`;
+    return loadTemplate("websocketBridgeHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+        PORT_ENV: portEnv,
+    });
 }
 
 function buildStateMachineHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: state-machine — multi-phase disk-persisted workflow.
-// State is stored in ~/.typeagent/${name}/<workflowId>/state.json.
-// Each phase must be approved before the next begins.
-
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-import fs from "fs/promises";
-import path from "path";
-import os from "os";
-
-const STATE_ROOT = path.join(os.homedir(), ".typeagent", "${name}");
-
-// ---- State types -------------------------------------------------------
-
-type PhaseStatus = "pending" | "in-progress" | "approved";
-
-type WorkflowState = {
-    workflowId: string;
-    currentPhase: string;
-    phases: Record<string, { status: PhaseStatus; updatedAt: string }>;
-    config: Record<string, unknown>;
-    createdAt: string;
-    updatedAt: string;
-};
-
-// ---- State I/O ---------------------------------------------------------
-
-async function loadState(workflowId: string): Promise<WorkflowState | undefined> {
-    const statePath = path.join(STATE_ROOT, workflowId, "state.json");
-    try {
-        return JSON.parse(await fs.readFile(statePath, "utf-8")) as WorkflowState;
-    } catch {
-        return undefined;
-    }
-}
-
-async function saveState(state: WorkflowState): Promise<void> {
-    const stateDir = path.join(STATE_ROOT, state.workflowId);
-    await fs.mkdir(stateDir, { recursive: true });
-    state.updatedAt = new Date().toISOString();
-    await fs.writeFile(
-        path.join(stateDir, "state.json"),
-        JSON.stringify(state, null, 2),
-        "utf-8",
-    );
-}
-
-// ---- Agent lifecycle ---------------------------------------------------
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    await fs.mkdir(STATE_ROOT, { recursive: true });
-    return {};
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    _context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    // TODO: map actions to phase handlers, e.g.:
-    // case "startWorkflow":  return handleStart(action.parameters.workflowId);
-    // case "runPhaseOne":    return handlePhaseOne(action.parameters.workflowId);
-    // case "approvePhase":   return handleApprove(action.parameters.workflowId, action.parameters.phase);
-    // case "getStatus":      return handleStatus(action.parameters.workflowId);
-    return createActionResultFromMarkdownDisplay(
-        \`Executing \${action.actionName} — not yet implemented.\`,
-    );
-}
-`;
+    return loadTemplate("stateMachineHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildNativePlatformHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: native-platform — OS/device APIs via child_process or SDK.
-// No cloud dependency. Handle platform differences in executeCommand().
-
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-const execAsync = promisify(exec);
-const platform = process.platform; // "win32" | "darwin" | "linux"
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    return {};
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    _context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    try {
-        const output = await executeCommand(
-            action.actionName,
-            action.parameters as Record<string, unknown>,
-        );
-        return createActionResultFromTextDisplay(output ?? "Done.");
-    } catch (err: any) {
-        return { error: err?.message ?? String(err) };
-    }
-}
-
-/**
- * Map a typed action to a platform-specific shell command or SDK call.
- * Add one case per action defined in ${pascalName}Actions.
- */
-async function executeCommand(
-    actionName: string,
-    parameters: Record<string, unknown>,
-): Promise<string> {
-    switch (actionName) {
-        // TODO: add cases for each action. Example:
-        // case "openFile": {
-        //     const cmd = platform === "win32" ? \`start "" "\${parameters.path}"\`
-        //               : platform === "darwin" ? \`open "\${parameters.path}"\`
-        //               : \`xdg-open "\${parameters.path}"\`;
-        //     return (await execAsync(cmd)).stdout;
-        // }
-        default:
-            throw new Error(\`Not implemented: \${actionName}\`);
-    }
-}
-`;
+    return loadTemplate("nativePlatformHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+    });
 }
 
 function buildViewUiHandler(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: view-ui — web view renderer with IPC handler.
-// Opens a local HTTP server serving site/ and communicates via display APIs.
-// The actual UX lives in the site/ directory.
-
-import {
-    ActionContext,
-    AppAgent,
-    SessionContext,
-    TypeAgentAction,
-    ActionResult,
-} from "@typeagent/agent-sdk";
-import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-const VIEW_PORT = 3456; // TODO: choose an unused port
-
-export function instantiate(): AppAgent {
-    return {
-        initializeAgentContext,
-        updateAgentContext,
-        closeAgentContext,
-        executeAction,
-    };
-}
-
-async function initializeAgentContext(): Promise<unknown> {
-    // TODO: start the local HTTP server that serves site/
-    return {};
-}
-
-async function updateAgentContext(
-    enable: boolean,
-    context: SessionContext<unknown>,
-    _schemaName: string,
-): Promise<void> {
-    if (enable) {
-        await context.agentIO.openLocalView(
-            context.requestId,
-            VIEW_PORT,
-        );
-    } else {
-        await context.agentIO.closeLocalView(
-            context.requestId,
-            VIEW_PORT,
-        );
-    }
-}
-
-async function closeAgentContext(_context: SessionContext<unknown>): Promise<void> {
-    // TODO: stop the local HTTP server
-}
-
-async function executeAction(
-    action: TypeAgentAction<${pascalName}Actions>,
-    _context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    // Push state changes to the view via HTML display updates.
-    return createActionResultFromHtmlDisplay(
-        \`<p>Executing \${action.actionName} — not yet implemented.</p>\`,
-    );
-}
-`;
+    const portEnv = `${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_VIEW_PORT`;
+    return loadTemplate("viewUiHandler.ts", {
+        agentName: name,
+        AgentName: pascalName,
+        PORT_ENV: portEnv,
+    });
 }
 
 function buildCommandHandlerTemplate(name: string, pascalName: string): string {
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Pattern: command-handler — direct dispatch via a handlers map.
-// Suited for settings-style agents with a small number of well-known commands.
-
-import { AppAgent, ActionResult } from "@typeagent/agent-sdk";
-import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
-
-export function instantiate(): AppAgent {
-    return getCommandInterface(handlers);
-}
-
-// ---- Handlers ----------------------------------------------------------
-// Add one entry per action name defined in ${pascalName}Actions.
-
-const handlers: Record<string, (params: unknown) => Promise<ActionResult>> = {
-    // exampleAction: async (params) => {
-    //     return createActionResultFromTextDisplay("Done.");
-    // },
-};
-
-function getCommandInterface(
-    handlerMap: Record<string, (params: unknown) => Promise<ActionResult>>,
-): AppAgent {
-    return {
-        async executeAction(action: any): Promise<ActionResult> {
-            const handler = handlerMap[action.actionName];
-            if (!handler) {
-                return { error: \`Unknown action: \${action.actionName}\` };
-            }
-            return handler(action.parameters);
-        },
-    };
-}
-`;
+    return loadTemplate("commandHandlerTemplate.ts", {
+        AgentName: pascalName,
+    });
 }

@@ -551,7 +551,6 @@ export class HtmlToMdConvertor {
             case "h6":
             case "span":
             case "code":
-            case "code":
             case "blockquote":
                 this.appendInnerText(element);
                 break;

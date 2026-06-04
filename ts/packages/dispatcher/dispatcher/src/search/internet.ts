@@ -10,24 +10,18 @@ import {
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { AIProjectClient } from "@azure/ai-projects";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
-import { DefaultAzureCredential } from "@azure/identity";
-import {
-    DoneEvent,
-    ErrorEvent,
-    MessageContentUnion,
-    MessageDeltaChunk,
-    MessageDeltaTextContent,
-    MessageDeltaTextUrlCitationAnnotation,
-    MessageStreamEvent,
-    MessageTextContent,
-    MessageTextUrlCitationAnnotation,
-    RunStreamEvent,
-    ThreadMessage,
-} from "@azure/ai-agents";
-import { bingWithGrounding } from "azure-ai-foundry";
+import { agents, bingWithGrounding } from "azure-ai-foundry";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+
+/**
+ * The accumulated answer from a Grounding with Bing lookup: the answer text and
+ * the url citations that back it.
+ */
+type GroundingAnswer = {
+    text: string;
+    citations: agents.UrlCitation[];
+};
 
 function urlToHtml(url: string, title?: string | undefined): string {
     return `<a href="${url}" target="_blank">${title ? title : url}</a>`;
@@ -37,60 +31,37 @@ function capitalize(str: string): string {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function answerToHtml(answer: ThreadMessage): string {
+function answerToHtml(answer: GroundingAnswer): string {
     let html = "<p><div>";
 
-    const content: MessageContentUnion | undefined = answer.content.find(
-        (c) => c.type === "text" && "text" in c,
-    );
-
-    if (content) {
-        let refCount = 0;
-        const textContent: MessageTextContent = content as MessageTextContent;
-        let annotations = "";
-        let text = textContent.text.value.replaceAll("\n", "<br/>");
-        textContent.text.annotations.forEach((a) => {
-            switch (a.type) {
-                case "url_citation":
-                    const citation: MessageTextUrlCitationAnnotation =
-                        a as MessageTextUrlCitationAnnotation;
-                    annotations += urlToHtml(
-                        citation.urlCitation.url,
-                        `${++refCount}. ${citation.urlCitation.title}`,
-                    );
-                    annotations += "<br/>";
-
-                    if (citation.text) {
-                        text = text.replaceAll(
-                            citation.text!,
-                            ` <sup>[${urlToHtml(citation.urlCitation.url, `${refCount}`)}]</sup>`,
-                        );
-                    }
-
-                    break;
-                default:
-                    console.warn(`Unsupported citation type: ${a.type}.`);
-                // TODO: other annotation types
-            }
-        });
-
-        if (annotations.length > 0) {
-            annotations = `<br /><div class=\"references\">References:<br/>${annotations}`;
-        }
-
-        html += "</div><div>";
-        html += `${text}<br/>${annotations}`;
-        html += "</div>";
+    let annotations = "";
+    let refCount = 0;
+    for (const citation of answer.citations) {
+        annotations += urlToHtml(
+            citation.url,
+            `${++refCount}. ${citation.title}`,
+        );
+        annotations += "<br/>";
     }
+
+    if (annotations.length > 0) {
+        annotations = `<br /><div class=\"references\">References:<br/>${annotations}`;
+    }
+
+    const text = answer.text.replaceAll("\n", "<br/>");
+
+    html += "</div><div>";
+    html += `${text}<br/>${annotations}`;
+    html += "</div>";
 
     html += "</div>";
     return html;
 }
 
-function answersToHtml(messages: ThreadMessage[]): string {
+function answersToHtml(answers: GroundingAnswer[]): string {
     let html = "";
-    for (const m of messages) {
-        html += answerToHtml(m);
+    for (const a of answers) {
+        html += answerToHtml(a);
     }
     return html;
 }
@@ -219,36 +190,21 @@ export async function getLookupSettings(
 }
 
 async function createActionResultWithMessage(
-    messages: ThreadMessage[],
+    answers: GroundingAnswer[],
     settings: LookupSettings,
 ): Promise<ActionResult> {
     let historyText = "";
     let linkEntities: Entity[] = [];
     let refCount = 0;
-    for (const message of messages) {
-        for (const content of message.content) {
-            const textContent = content as MessageTextContent;
+    for (const answer of answers) {
+        historyText += `${answer.text}\n`;
 
-            if (textContent) {
-                historyText += `${textContent.text.value}\n`;
-
-                for (const a of textContent.text.annotations) {
-                    switch (a.type) {
-                        case "url_citation":
-                            const url = a as MessageTextUrlCitationAnnotation;
-                            historyText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
-                            linkEntities.push({
-                                type: ["link", "url", "website"],
-                                name: `Reference #${++refCount} - ${url.urlCitation.title} - ${url.urlCitation.url}`,
-                            });
-                            break;
-                        default:
-                            console.warn(
-                                `Unsupported citation type: ${a.type}.`,
-                            );
-                    }
-                }
-            }
+        for (const citation of answer.citations) {
+            historyText += `Reference: ${citation.title} - ${citation.url}`;
+            linkEntities.push({
+                type: ["link", "url", "website"],
+                name: `Reference #${++refCount} - ${citation.title} - ${citation.url}`,
+            });
         }
     }
 
@@ -274,120 +230,79 @@ async function createActionResultWithMessage(
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
+
+const groundingAgentName = "TypeAgent-BingGroundingAgent";
+
+/**
+ * Ensures the Grounding with Bing prompt agent exists and returns its name.
+ */
+async function ensureGroundingAgent(
+    project: ReturnType<typeof agents.getProject>,
+    config: bingWithGrounding.ApiSettings,
+): Promise<string> {
+    return agents.ensureAgent(project, {
+        model: "gpt-4.1",
+        name: groundingAgentName,
+        description:
+            "Answers user questions using Grounding with Bing and cites its sources.",
+        temperature: 0.0,
+        instructions:
+            "You are a research assistant. Use Grounding with Bing to answer the user's question as accurately as possible. " +
+            "Prefer the sites the user provides when they are relevant. Always cite your sources.",
+        tools: [agents.bingGroundingTool(config.connectionId!)],
+    });
+}
+
 export async function runGroundingLookup(
     question: string,
     lookups: string[],
     sites: string[] | undefined,
     context: ActionContext<any>,
-): Promise<ThreadMessage[]> {
+): Promise<GroundingAnswer[]> {
     if (!groundingConfig) {
         groundingConfig = bingWithGrounding.apiSettingsFromEnv();
     }
 
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
+    const project = agents.getProject(groundingConfig.endpoint!);
 
-    const agent = await project.agents.getAgent(groundingConfig.agent!);
-
-    if (!agent) {
+    let agentName: string;
+    try {
+        agentName = await ensureGroundingAgent(project, groundingConfig);
+    } catch (error) {
         displayError(
-            "No agent found for Bing with Grounding. Please check your configuration.",
+            `No agent available for Grounding with Bing. Please check your configuration. ${error}`,
             context,
         );
         return [];
     }
 
-    const thread = await project.agents.threads.create();
+    const input = `Here is my question: '${question}'.\nHere are the internet search terms: ${lookups.join(
+        ",",
+    )}\nHere are the sites I want to search: ${sites?.join("|")}`;
 
-    // the question that needs answering
-    await project.agents.messages.create(
-        thread.id,
-        "user",
-        `Here is my question: '${question}.\nHere are the internet search terms: ${lookups.join(",")}\nHere are the sites I want to search: ${sites?.join("|")}`,
-    );
-
-    // Create run
     try {
-        let run = await project.agents.runs
-            .create(thread.id, agent.id)
-            .stream();
-        for await (const eventMsg of run) {
-            switch (eventMsg.event) {
-                case RunStreamEvent.ThreadRunCreated:
-                    context.actionIO.setDisplay({ type: "html", content: "" });
-                    break;
-                case RunStreamEvent.ThreadRunCompleted:
-                    break;
-                case MessageStreamEvent.ThreadMessageDelta:
-                    const messageDelta = eventMsg.data as MessageDeltaChunk;
-                    messageDelta.delta.content.forEach((contentPart) => {
-                        if (contentPart.type === "text") {
-                            const textContent =
-                                contentPart as MessageDeltaTextContent;
-                            let textValue = textContent.text?.value || "";
+        context.actionIO.setDisplay({ type: "html", content: "" });
 
-                            if (textContent.text?.annotations) {
-                                textContent.text?.annotations.forEach((a) => {
-                                    if (a) {
-                                        switch (a.type) {
-                                            case "url_citation":
-                                                const annotation =
-                                                    a as MessageDeltaTextUrlCitationAnnotation;
-                                                textValue = `[${urlToHtml((annotation as any).url_citation, `${annotation.index + 1}`)}]`;
-                                                break;
-                                            default:
-                                                console.warn(
-                                                    `Unsupported citation type: ${a.type}.`,
-                                                );
-                                            // TODO: other annotation types
-                                        }
-                                    }
-                                });
-                            }
+        const result = await agents.runAgentStreaming(
+            project,
+            agentName,
+            input,
+            (delta) => {
+                context.actionIO.appendDisplay({
+                    type: "html",
+                    content: `${delta.replaceAll("\n", "<br/>")}`,
+                });
+            },
+        );
 
-                            context.actionIO.appendDisplay({
-                                type: "html",
-                                content: `${textValue.replaceAll("\n", "<br/>")}`,
-                            });
-                        }
-                    });
-                    break;
-                case ErrorEvent.Error:
-                    break;
-                case DoneEvent.Done:
-                    break;
-            }
+        if (result.contentFiltered || !result.text) {
+            return [];
         }
 
-        // Retrieve messages
-        const messages = await project.agents.messages.list(thread.id, {
-            order: "asc",
-        });
-
-        // accumulate assistant messages
-        const msgs: ThreadMessage[] = [];
-        for await (const m of messages) {
-            if (m.role === "assistant") {
-                // TODO: handle multi-modal content
-                const content: MessageContentUnion | undefined = m.content.find(
-                    (c) => c.type === "text" && "text" in c,
-                );
-                if (content) {
-                    msgs.push(m);
-                }
-            }
-        }
-
-        // delete the thread we just created since we are currently one and done
-        project.agents.threads.delete(thread.id);
-
-        // return assistant messages
-        return msgs;
+        return [{ text: result.text, citations: result.citations }];
     } catch (error) {
         displayError(
-            `Error creating run: ${error}. Check for model throttling or content filtering.`,
+            `Error running Grounding with Bing: ${error}. Check for model throttling or content filtering.`,
             context,
         );
 

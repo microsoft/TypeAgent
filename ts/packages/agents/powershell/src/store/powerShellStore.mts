@@ -167,6 +167,7 @@ export class PowerShellStore {
         actionName: string,
         newScript: string,
         newCmdlets: string[],
+        newModules?: string[],
     ): Promise<void> {
         this.ensureInitialized();
         const entry = this.index.flows[actionName];
@@ -175,10 +176,13 @@ export class PowerShellStore {
         // Update the script file
         await this.storage.write(entry.scriptPath, newScript);
 
-        // Update the flow definition's sandbox cmdlets
+        // Update the flow definition's sandbox cmdlets (and modules if provided)
         const json = await this.storage.read(entry.flowPath, "utf8");
         const flow = JSON.parse(json) as PowerShellFlowDefinition;
         flow.sandbox.allowedCmdlets = newCmdlets;
+        if (newModules !== undefined) {
+            flow.sandbox.allowedModules = newModules;
+        }
         await this.storage.write(entry.flowPath, JSON.stringify(flow, null, 2));
 
         entry.updated = new Date().toISOString();

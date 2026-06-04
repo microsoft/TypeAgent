@@ -3,6 +3,7 @@
 
 import {
     type AppAgent,
+    type AppAction,
     type SessionContext,
     type ActionContext,
     type ActionResult,
@@ -298,6 +299,9 @@ async function handlePowerShellFlowAction(
             const scriptParams = (params.scriptParameters as any[]) ?? [];
             const grammarPats = (params.grammarPatterns as any[]) ?? [];
             const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
+            const allowedModules = (params.allowedModules as string[]) ?? [
+                "Microsoft.PowerShell.Management",
+            ];
 
             // Validate grammar patterns before saving
             if (
@@ -380,7 +384,7 @@ async function handlePowerShellFlowAction(
                 sandbox: {
                     allowedCmdlets,
                     allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-                    allowedModules: ["Microsoft.PowerShell.Management"],
+                    allowedModules,
                     maxExecutionTime: 30,
                     networkAccess: false,
                 },
@@ -426,12 +430,16 @@ async function handlePowerShellFlowAction(
             const newCmdlets =
                 (action.parameters?.allowedCmdlets as string[]) ??
                 existingFlow.sandbox.allowedCmdlets;
+            const newModules =
+                (action.parameters?.allowedModules as string[]) ??
+                existingFlow.sandbox.allowedModules;
 
             // Update the script and sandbox policy while preserving everything else
             await flowStore.updateFlowScript(
                 editFlowName,
                 newScript,
                 newCmdlets,
+                newModules,
             );
             return createActionResultFromTextDisplay(
                 `Updated PowerShell flow '${editFlowName}'`,
@@ -1019,6 +1027,18 @@ const handlers: CommandHandlerTable = {
     },
 };
 
+// Built-in management actions in the root "powershell" schema. Everything else
+// in that schema is a dynamic, user-created flow.
+const POWERSHELL_BUILTIN_ACTIONS = new Set([
+    "listPowerShellFlows",
+    "deletePowerShellFlow",
+    "executePowerShellFlow",
+    "createPowerShellFlow",
+    "editPowerShellFlow",
+    "importPowerShellFlow",
+    "testPowerShellFlow",
+]);
+
 export function instantiate(): AppAgent {
     let agentContext: PowerShellAgentContext = {};
 
@@ -1068,6 +1088,23 @@ export function instantiate(): AppAgent {
                 },
                 context,
             );
+        },
+
+        async validateWildcardMatch(
+            action: AppAction,
+            _context: SessionContext,
+        ): Promise<boolean> {
+            // Only dynamic flow actions live in the root "powershell" schema;
+            // sub-schema (powershell.powershell-*) static actions and built-in
+            // management actions are always valid. A root flow action is valid
+            // only if its flow still exists — this rejects stale cached
+            // constructions that point to a deleted flow instead of letting them
+            // resolve to a now-missing action.
+            if (action.schemaName !== "powershell") return true;
+            if (POWERSHELL_BUILTIN_ACTIONS.has(action.actionName)) return true;
+            const store = agentContext.store;
+            if (!store) return true;
+            return (await store.getFlow(action.actionName)) !== null;
         },
 
         async getDynamicSchema(

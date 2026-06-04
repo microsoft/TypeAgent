@@ -388,3 +388,10 @@ of it.
   reduces duplication within a single IR; orthogonal to this decision.
 - ir-v0.1.md §8.1 notes (post-v1) - the DSL layer that would handle the
   authoring-friction side of this trade-off.
+- [0010-copilot-task-family.md](0010-copilot-task-family.md) §4 -
+  schema-guided design for `copilot.invoke` relies on the Option 1'
+  drift check to reject non-object IR `outputSchema`s at IR
+  validation time.
+- [0011-task-context-schema-awareness.md](0011-task-context-schema-awareness.md)
+  exposes the IR-declared schemas this decision makes authoritative
+  to task implementers via `TaskContext`.
