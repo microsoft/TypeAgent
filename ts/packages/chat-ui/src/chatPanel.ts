@@ -3518,9 +3518,7 @@ class AgentMessageContainer {
                     `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
             );
         } else {
-            leftLines.push(
-                `${actionLabel} Tokens: <b>not reported</b>`,
-            );
+            leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
         }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {
