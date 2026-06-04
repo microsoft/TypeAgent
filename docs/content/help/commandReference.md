@@ -646,7 +646,7 @@ Usage: `@debug`
 
 ## @dispatcher reason - Reason about a request
 
-Usage: `@dispatcher reason [--model <engine>] <request>`
+Usage: `@dispatcher reason [--engine <engine>] <request>`
 
 ### Arguments:
 
@@ -654,11 +654,11 @@ Usage: `@dispatcher reason [--model <engine>] <request>`
 
 ### Flags:
 
-- --model &lt;engine&gt; : Reasoning engine to use: claude, copilot, or none. If omitted, uses the configured default from `@config execution reasoning`.
+- --engine &lt;engine&gt; : Reasoning engine to use: claude, copilot, or none. If omitted, uses the configured default from `@config execution reasoning`.
 
 ## @dispatcher reasoning - Reason about a request
 
-Usage: `@dispatcher reasoning [--model <engine>] <request>`  
+Usage: `@dispatcher reasoning [--engine <engine>] <request>`  
 Alias for `@dispatcher reason`. See above.
 
 ## @display - Send text to display
