@@ -48,8 +48,7 @@ export class ReasonCommandHandler implements CommandHandler {
             claude: "🧠",
             copilot: "✨",
         };
-        systemContext.reasoningSourceIcon =
-            reasoningIcons[engine] ?? undefined;
+        systemContext.reasoningSourceIcon = reasoningIcons[engine] ?? undefined;
 
         try {
             // Route to the appropriate reasoning engine

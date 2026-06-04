@@ -1317,7 +1317,7 @@ export class ChatView {
             const reqKey =
                 typeof msg.requestId === "string"
                     ? msg.requestId
-                    : (msg.requestId as any)?.clientRequestId ?? "";
+                    : ((msg.requestId as any)?.clientRequestId ?? "");
             const next = (this.stepCounterByRequest.get(reqKey) ?? 0) + 1;
             this.stepCounterByRequest.set(reqKey, next);
             msg = { ...msg, actionIndex: next };

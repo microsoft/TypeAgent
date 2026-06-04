@@ -171,8 +171,7 @@ function getRepoRoot(): string {
  * among the real copilot package's siblings.
  */
 function findBundledNativeCli(): string | undefined {
-    const binaryName =
-        process.platform === "win32" ? "copilot.exe" : "copilot";
+    const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
     try {
         // 1. Resolve @github/copilot-sdk (our direct dependency)
         const sdkEntry = fileURLToPath(
@@ -767,9 +766,7 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(
-                            event.data.content,
-                        ),
+                        content: formatThinkingDisplay(event.data.content),
                     },
                     displayMode,
                 );
@@ -997,9 +994,7 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(
-                                currentReasoning,
-                            ),
+                            content: formatThinkingDisplay(currentReasoning),
                         },
                         "temporary",
                     );
@@ -1021,9 +1016,7 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(
-                                event.data.content,
-                            ),
+                            content: formatThinkingDisplay(event.data.content),
                         },
                         displayMode,
                     );

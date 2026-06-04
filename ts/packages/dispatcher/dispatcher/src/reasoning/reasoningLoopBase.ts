@@ -197,7 +197,10 @@ export async function processReasoningSession(
                         content: [{ type: "text", text: event.text }],
                     });
                     config.onThinking?.(event.text);
-                    display.appendStep(formatThinkingDisplay(event.text), "html");
+                    display.appendStep(
+                        formatThinkingDisplay(event.text),
+                        "html",
+                    );
                     break;
 
                 case "text":
