@@ -133,3 +133,27 @@ export function formatOnboardingHealthSnapshot(
         `Packaging gate: ${packagingSummary}`,
     ].join("\n");
 }
+
+export function formatOnboardingDiagnosticsBundle(args: {
+    summary: string;
+    healthReport: string;
+    artifactPath?: string;
+    generatedAt?: number;
+}): string {
+    const timestamp = new Date(args.generatedAt ?? Date.now()).toISOString();
+    const lines: string[] = [];
+    lines.push("# TypeAgent Studio Onboarding Diagnostics Bundle");
+    lines.push("");
+    lines.push(`- Generated at: ${timestamp}`);
+    lines.push(`- Artifact path: ${args.artifactPath ?? "unresolved"}`);
+    lines.push("");
+    lines.push("## Onboarding Summary");
+    lines.push("");
+    lines.push(args.summary);
+    lines.push("");
+    lines.push("## Packaging Health Report");
+    lines.push("");
+    lines.push(args.healthReport);
+    lines.push("");
+    return lines.join("\n");
+}

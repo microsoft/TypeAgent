@@ -43,6 +43,7 @@ Current command palette surface:
 - TypeAgent Studio: Open onboarding summary
 - TypeAgent Studio: Copy onboarding summary
 - TypeAgent Studio: Save onboarding summary
+- TypeAgent Studio: Save onboarding diagnostics bundle
 - TypeAgent Studio: Toggle auto-open summary after batch run
 - TypeAgent Studio: Cycle install health gate policy
 - TypeAgent Studio: Set install health gate policy
@@ -81,6 +82,11 @@ Diagnostics sharing behavior for `Copy packaging health report`:
 
 - Copies the same markdown report used by the open-report flow.
 - Useful for posting health findings directly into issues, PR comments, or chat threads.
+
+Diagnostics bundle behavior for `Save onboarding diagnostics bundle`:
+
+- Writes a single markdown file containing onboarding summary, packaging health report, and resolved install artifact path.
+- Uses `unresolved` artifact metadata when path resolution is unavailable for the active session.
 
 ## Settings
 

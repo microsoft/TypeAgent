@@ -8,6 +8,7 @@ import {
     type OnboardingState,
 } from "@typeagent/core/onboardingBridge";
 import {
+    formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
@@ -140,4 +141,29 @@ test("formatOnboardingHealthSnapshot includes phase counts and gate summary", ()
 test("formatOnboardingHealthSnapshot shows unavailable gate fallback", () => {
     const snapshot = formatOnboardingHealthSnapshot(createState(), undefined);
     assert.match(snapshot, /Packaging gate: unavailable:/);
+});
+
+test("formatOnboardingDiagnosticsBundle includes metadata summary and report", () => {
+    const bundle = formatOnboardingDiagnosticsBundle({
+        summary: "# Summary\n\nTest summary",
+        healthReport: "# Health\n\nNo findings.",
+        artifactPath: "C:/repo/packages/agents/demo",
+        generatedAt: 0,
+    });
+
+    assert.match(bundle, /# TypeAgent Studio Onboarding Diagnostics Bundle/);
+    assert.match(bundle, /Generated at: 1970-01-01T00:00:00.000Z/);
+    assert.match(bundle, /Artifact path: C:\/repo\/packages\/agents\/demo/);
+    assert.match(bundle, /## Onboarding Summary/);
+    assert.match(bundle, /## Packaging Health Report/);
+});
+
+test("formatOnboardingDiagnosticsBundle shows unresolved artifact fallback", () => {
+    const bundle = formatOnboardingDiagnosticsBundle({
+        summary: "summary",
+        healthReport: "report",
+        generatedAt: 0,
+    });
+
+    assert.match(bundle, /Artifact path: unresolved/);
 });

@@ -6,6 +6,7 @@ import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
 import {
+    formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
@@ -449,6 +450,46 @@ export function registerStudioCommands(
                 await fs.writeFile(targetUri.fsPath, summary, "utf-8");
                 void vscode.window.showInformationMessage(
                     `Saved onboarding summary to ${targetUri.fsPath}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.saveOnboardingDiagnosticsBundle",
+            withErrors(async () => {
+                const summary = await getOnboardingSummary(runtime);
+                const healthReport = await getPackagingHealthReport(runtime);
+
+                let artifactPath: string | undefined;
+                try {
+                    artifactPath =
+                        await runtime.resolveInstallArtifactPathForActiveSession();
+                } catch {
+                    artifactPath = undefined;
+                }
+
+                const content = formatOnboardingDiagnosticsBundle({
+                    summary,
+                    healthReport,
+                    artifactPath,
+                });
+
+                const targetUri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file("onboarding-diagnostics.md"),
+                    filters: {
+                        Markdown: ["md"],
+                    },
+                    title: "Save Onboarding Diagnostics Bundle",
+                });
+                if (!targetUri) {
+                    return;
+                }
+
+                await fs.writeFile(targetUri.fsPath, content, "utf-8");
+                void vscode.window.showInformationMessage(
+                    `Saved onboarding diagnostics bundle to ${targetUri.fsPath}.`,
                 );
             }),
         ),
