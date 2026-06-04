@@ -6,6 +6,7 @@ import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
 import {
+    formatOnboardingHealthSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
 } from "./onboardingPresentation.js";
@@ -374,6 +375,34 @@ export function registerStudioCommands(
 
                 void vscode.window.showInformationMessage(
                     `Session ${state.sessionId}: current=${state.currentPhase}, complete=${completeCount}, stale=${staleCount}.`,
+                );
+            }),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.showOnboardingHealthSnapshot",
+            withErrors(async () => {
+                const state = await runtime.getActiveOnboardingSession();
+                let gate:
+                    | Awaited<
+                          ReturnType<
+                              StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
+                          >
+                      >
+                    | undefined;
+                try {
+                    gate =
+                        await runtime.evaluatePackagingHealthGateForActiveSession();
+                } catch {
+                    gate = undefined;
+                }
+
+                const snapshot = formatOnboardingHealthSnapshot(state, gate);
+                void vscode.window.showInformationMessage(
+                    snapshot,
+                    { modal: true },
                 );
             }),
         ),

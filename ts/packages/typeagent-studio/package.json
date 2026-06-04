@@ -124,6 +124,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.showOnboardingHealthSnapshot",
+        "title": "Show onboarding health snapshot",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.restoreOnboardingPhase",
         "title": "Restore onboarding phase",
         "category": "TypeAgent Studio"
@@ -180,6 +185,7 @@
     "onCommand:typeagent-studio.runRemainingOnboardingPhases",
     "onCommand:typeagent-studio.advanceOnboardingPhase",
     "onCommand:typeagent-studio.showOnboardingSnapshot",
+    "onCommand:typeagent-studio.showOnboardingHealthSnapshot",
     "onCommand:typeagent-studio.restoreOnboardingPhase",
     "onCommand:typeagent-studio.rerunStaleOnboardingPhases",
     "onCommand:typeagent-studio.openOnboardingSummary",

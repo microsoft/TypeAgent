@@ -101,3 +101,35 @@ export function getAdvanceTargetPhase(
         (phase) => (phases[phase]?.status ?? "pending") !== "complete",
     );
 }
+
+export function formatOnboardingHealthSnapshot(
+    state: OnboardingState,
+    packagingGate:
+        | {
+              status: "pass" | "warn" | "fail" | "unavailable";
+              summary: string;
+          }
+        | undefined,
+): string {
+    const completeCount = ONBOARDING_PHASE_ORDER.filter(
+        (phase) => state.phases[phase]?.status === "complete",
+    ).length;
+    const staleCount = ONBOARDING_PHASE_ORDER.filter(
+        (phase) => state.phases[phase]?.status === "stale",
+    ).length;
+    const pendingCount = ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
+    const installedSandboxes =
+        state.installedSandboxIds && state.installedSandboxIds.length > 0
+            ? state.installedSandboxIds.join(", ")
+            : "none";
+    const packagingSummary = packagingGate
+        ? `${packagingGate.status}: ${packagingGate.summary}`
+        : "unavailable: No install artifact path resolved for active session.";
+
+    return [
+        `Session ${state.sessionId} (${state.agentName})`,
+        `Phase ${state.currentPhase} | complete=${completeCount} stale=${staleCount} pending=${pendingCount}`,
+        `Installed sandboxes: ${installedSandboxes}`,
+        `Packaging gate: ${packagingSummary}`,
+    ].join("\n");
+}

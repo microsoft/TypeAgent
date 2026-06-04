@@ -8,6 +8,7 @@ import {
     type OnboardingState,
 } from "@typeagent/core/onboardingBridge";
 import {
+    formatOnboardingHealthSnapshot,
     formatOnboardingSummary,
     getAdvanceTargetPhase,
     getDefaultPhaseInputs,
@@ -119,4 +120,24 @@ test("getAdvanceTargetPhase returns undefined when all phases complete", () => {
         state.phases,
     );
     assert.equal(target, undefined);
+});
+
+test("formatOnboardingHealthSnapshot includes phase counts and gate summary", () => {
+    const snapshot = formatOnboardingHealthSnapshot(createState(), {
+        status: "warn",
+        summary: "2 warning findings for agent calendar-enterprise.",
+    });
+
+    assert.match(snapshot, /Session session-1 \(calendar-enterprise\)/);
+    assert.match(snapshot, /complete=1 stale=1 pending=5/);
+    assert.match(snapshot, /Installed sandboxes: studio-default/);
+    assert.match(
+        snapshot,
+        /Packaging gate: warn: 2 warning findings for agent calendar-enterprise\./,
+    );
+});
+
+test("formatOnboardingHealthSnapshot shows unavailable gate fallback", () => {
+    const snapshot = formatOnboardingHealthSnapshot(createState(), undefined);
+    assert.match(snapshot, /Packaging gate: unavailable:/);
 });
