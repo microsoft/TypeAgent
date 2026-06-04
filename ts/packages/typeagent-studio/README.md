@@ -29,6 +29,7 @@ Current command palette surface:
 - TypeAgent Studio: Start onboarding session
 - TypeAgent Studio: Ask TypeAgent about this...
 - TypeAgent Studio: Install latest onboarding session to sandbox
+- TypeAgent Studio: Check packaging health gate
 - TypeAgent Studio: Clear onboarding session
 - TypeAgent Studio: Run onboarding phase
 - TypeAgent Studio: Advance onboarding phase
@@ -48,6 +49,12 @@ Install behavior for `Install latest onboarding session to sandbox`:
 - Loads the resolved local artifact path into the sandbox before marking the session installed.
 - Runs the packaging health gate (F1.4) before install when artifact path maps to `packages/agents/<agent>`.
 - Blocks on health errors by default, with an explicit "Install anyway" confirmation path.
+- Offers a manual artifact picker fallback when auto-resolution cannot locate a local generated artifact.
+
+Restore behavior for `Restore onboarding phase`:
+
+- Marks downstream completed phases stale (per onboarding bridge semantics).
+- Prompts to re-run stale downstream phases immediately for reconciliation.
 
 ## Settings
 
