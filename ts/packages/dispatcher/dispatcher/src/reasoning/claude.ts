@@ -82,8 +82,7 @@ function getClaudeCodeJsCliPath(): string {
     const require = createRequire(import.meta.url);
     const sdkEntry = require.resolve("@anthropic-ai/claude-agent-sdk");
     const sdkDir = path.dirname(sdkEntry);
-    const cliPath = path.join(sdkDir, "assistant.mjs");
-    debug(
+    const cliPath = path.resolve(sdkDir, "..", "assistant.mjs");
         `[claude-cli] sdkEntry=${sdkEntry} sdkDir=${sdkDir} cliPath=${cliPath} exists=${fs.existsSync(cliPath)}`,
     );
     return cliPath;
