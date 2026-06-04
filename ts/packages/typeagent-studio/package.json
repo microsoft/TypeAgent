@@ -41,6 +41,11 @@
           "default": "studio-default",
           "description": "Default sandbox id used by Studio install commands."
         },
+        "typeagentStudio.onboarding.diagnosticsDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-diagnostics.md",
+          "description": "Default file name suggested by Save onboarding diagnostics bundle."
+        },
         "typeagentStudio.onboarding.installHealthGatePolicy": {
           "type": "string",
           "enum": [

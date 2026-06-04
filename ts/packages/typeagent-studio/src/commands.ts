@@ -458,9 +458,10 @@ export function registerStudioCommands(
             "typeagent-studio.saveOnboardingDiagnosticsBundle",
             withErrors(async () => {
                 const content = await getOnboardingDiagnosticsBundle(runtime);
+                const defaultFileName = getDiagnosticsDefaultFileName();
 
                 const targetUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file("onboarding-diagnostics.md"),
+                    defaultUri: vscode.Uri.file(defaultFileName),
                     filters: {
                         Markdown: ["md"],
                     },
@@ -772,6 +773,22 @@ function getDefaultSandboxId(): string {
         .get<string>("defaultSandboxId", "studio-default")
         .trim();
     return configured.length > 0 ? configured : "studio-default";
+}
+
+function getDiagnosticsDefaultFileName(): string {
+    const configured = vscode.workspace
+        .getConfiguration("typeagentStudio.onboarding")
+        .get<string>(
+            "diagnosticsDefaultFileName",
+            "onboarding-diagnostics.md",
+        )
+        .trim();
+    if (configured.length === 0) {
+        return "onboarding-diagnostics.md";
+    }
+    return configured.toLowerCase().endsWith(".md")
+        ? configured
+        : `${configured}.md`;
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";
