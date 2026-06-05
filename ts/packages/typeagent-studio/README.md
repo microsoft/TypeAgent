@@ -43,6 +43,28 @@ Current command palette surface:
 - TypeAgent Studio: Toggle auto-open summary after batch run
 - TypeAgent Studio: Cycle install health gate policy
 - TypeAgent Studio: Set install health gate policy
+- TypeAgent Studio: Start sandbox
+- TypeAgent Studio: Stop sandbox
+- TypeAgent Studio: Restart sandbox
+- TypeAgent Studio: Refresh sandboxes
+
+## Sandboxes view
+
+The **TypeAgent Studio** activity-bar container hosts a **Sandboxes** tree view
+backed by the in-memory sandbox manager and event stream from
+`@typeagent/core`:
+
+- Top-level rows list running sandboxes (id, state, agent count); a placeholder
+  row is shown when none are running.
+- Expanding a sandbox lists its loaded agents with a per-agent health badge.
+- The view title offers **Start sandbox** and **Refresh**; running sandbox rows
+  offer inline **Restart** and **Stop**, and stopped rows offer inline **Start**.
+- The tree refreshes automatically on sandbox lifecycle events
+  (start/stop/restart, agent load/unload).
+
+Tree structuring and labelling live in the vscode-free
+`sandboxTreePresentation.ts` module so they can be unit-tested without the
+editor host; `sandboxTreeProvider.ts` is a thin `TreeDataProvider` adapter.
 
 Install behavior for `Install latest onboarding session to sandbox`:
 

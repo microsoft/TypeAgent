@@ -15,14 +15,24 @@ import {
 } from "@typeagent/core/onboardingBridge";
 import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
 import { InProcessEventStream } from "@typeagent/core/events";
+import type { StudioEventType } from "@typeagent/core/events";
 import {
     InMemorySandboxManager,
     type SandboxManager,
+    type SandboxStatus,
 } from "@typeagent/core/sandbox";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
+
+const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
+    "sandbox.start",
+    "sandbox.stop",
+    "sandbox.restart",
+    "sandbox.agent.loaded",
+    "sandbox.agent.unloaded",
+];
 
 export type PackagingHealthGateStatus =
     | "pass"
@@ -84,12 +94,27 @@ export interface StudioRuntime {
     restorePhaseOnActiveSession(
         phase: OnboardingPhaseName,
     ): Promise<RestorePhaseResult>;
-    checkPackagingHealthGate(artifactPath: string): Promise<PackagingHealthGateResult>;
+    checkPackagingHealthGate(
+        artifactPath: string,
+    ): Promise<PackagingHealthGateResult>;
     listPhases(): readonly OnboardingPhaseName[];
     routeConversation(prompt: string): {
         target: "onboarding" | "schemaAuthor";
         reason: string;
     };
+    listSandboxes(): Promise<SandboxStatus[]>;
+    startSandbox(options?: {
+        id?: string;
+        agents?: string[];
+    }): Promise<SandboxStatus>;
+    stopSandbox(id: string): Promise<void>;
+    restartSandbox(id: string): Promise<void>;
+    /**
+     * Subscribe to sandbox lifecycle changes (start/stop/restart, agent
+     * load/unload). The listener is invoked after each such event so a UI can
+     * refresh. Returns a disposable to stop listening.
+     */
+    onSandboxChanged(listener: () => void): { dispose(): void };
 }
 
 export interface StudioWorkspaceState {
@@ -120,7 +145,8 @@ export function createStudioRuntimeCore(
         options.sandbox ?? new InMemorySandboxManager({ emitter: events });
     const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
     const evaluatePackagingHealthGate =
-        options.evaluatePackagingHealthGate ?? defaultEvaluatePackagingHealthGate;
+        options.evaluatePackagingHealthGate ??
+        defaultEvaluatePackagingHealthGate;
 
     const profileDir = path.join(
         context.globalStorageFsPath,
@@ -170,7 +196,9 @@ export function createStudioRuntimeCore(
         ) {
             const sessionId = getRequiredSessionId(context);
             if (!(await pathExists(artifactPath))) {
-                throw new Error(`Artifact path does not exist: ${artifactPath}`);
+                throw new Error(
+                    `Artifact path does not exist: ${artifactPath}`,
+                );
             }
 
             return installResolvedArtifact(
@@ -184,14 +212,20 @@ export function createStudioRuntimeCore(
         },
         async resolveInstallArtifactPathForActiveSession() {
             const sessionId = getRequiredSessionId(context);
-            return resolveArtifactPathForSession(onboarding, sessionId, context);
+            return resolveArtifactPathForSession(
+                onboarding,
+                sessionId,
+                context,
+            );
         },
         async evaluatePackagingHealthGateForActiveSession() {
-            const artifactPath = await this.resolveInstallArtifactPathForActiveSession();
+            const artifactPath =
+                await this.resolveInstallArtifactPathForActiveSession();
             return evaluatePackagingHealthGate(artifactPath);
         },
         async enforcePackagingHealthGateForActiveSession() {
-            const gate = await this.evaluatePackagingHealthGateForActiveSession();
+            const gate =
+                await this.evaluatePackagingHealthGateForActiveSession();
             if (gate.status === "fail") {
                 throw new Error(`Health gate failed: ${gate.summary}`);
             }
@@ -293,6 +327,35 @@ export function createStudioRuntimeCore(
                 target: routed.target,
                 reason: routed.reason,
             };
+        },
+        async listSandboxes() {
+            return sandbox.list();
+        },
+        async startSandbox(startOptions = {}) {
+            const id = startOptions.id ?? DEFAULT_SANDBOX_ID;
+            await sandbox.start({
+                id,
+                mode: "inmemory",
+                profileDir: path.join(
+                    context.globalStorageFsPath,
+                    "profiles",
+                    id,
+                ),
+                agents: startOptions.agents ?? [],
+            });
+            return sandbox.status(id);
+        },
+        async stopSandbox(id) {
+            await sandbox.stop(id);
+        },
+        async restartSandbox(id) {
+            await sandbox.restart(id);
+        },
+        onSandboxChanged(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: { types: SANDBOX_LIFECYCLE_EVENT_TYPES },
+            });
+            return { dispose: () => subscription.unsubscribe() };
         },
     };
 }
@@ -459,8 +522,22 @@ function collectArtifactCandidates(
 
     for (const root of context.workspaceFolderFsPaths ?? []) {
         push(path.join(root, "packages", "agents", state.agentName));
-        push(path.join(root, "packages", "agents", state.agentName.toLowerCase()));
-        push(path.join(root, "packages", "agents", stripAgentSuffix(state.agentName)));
+        push(
+            path.join(
+                root,
+                "packages",
+                "agents",
+                state.agentName.toLowerCase(),
+            ),
+        );
+        push(
+            path.join(
+                root,
+                "packages",
+                "agents",
+                stripAgentSuffix(state.agentName),
+            ),
+        );
     }
 
     return dedupe(out);
@@ -481,7 +558,9 @@ async function pathExists(filePath: string): Promise<boolean> {
     }
 }
 
-async function resolveCandidatePath(candidate: string): Promise<string | undefined> {
+async function resolveCandidatePath(
+    candidate: string,
+): Promise<string | undefined> {
     if (candidate.endsWith("scaffolded-to.txt")) {
         try {
             const txt = (await fs.readFile(candidate, "utf-8")).trim();

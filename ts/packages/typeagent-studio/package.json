@@ -167,10 +167,83 @@
         "command": "typeagent-studio.setInstallHealthGatePolicy",
         "title": "Set install health gate policy",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.startSandbox",
+        "title": "Start sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "typeagent-studio.stopSandbox",
+        "title": "Stop sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "typeagent-studio.restartSandbox",
+        "title": "Restart sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "typeagent-studio.refreshSandboxes",
+        "title": "Refresh sandboxes",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "typeagentStudio",
+          "title": "TypeAgent Studio",
+          "icon": "$(beaker)"
+        }
+      ]
+    },
+    "views": {
+      "typeagentStudio": [
+        {
+          "id": "typeagentStudioSandboxes",
+          "name": "Sandboxes"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "typeagent-studio.startSandbox",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.refreshSandboxes",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "typeagent-studio.restartSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.stopSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@2"
+        },
+        {
+          "command": "typeagent-studio.startSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.stopped",
+          "group": "inline@1"
+        }
+      ]
+    }
   },
   "activationEvents": [
+    "onView:typeagentStudioSandboxes",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
@@ -188,7 +261,11 @@
     "onCommand:typeagent-studio.rerunStaleOnboardingPhases",
     "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
     "onCommand:typeagent-studio.cycleInstallHealthGatePolicy",
-    "onCommand:typeagent-studio.setInstallHealthGatePolicy"
+    "onCommand:typeagent-studio.setInstallHealthGatePolicy",
+    "onCommand:typeagent-studio.startSandbox",
+    "onCommand:typeagent-studio.stopSandbox",
+    "onCommand:typeagent-studio.restartSandbox",
+    "onCommand:typeagent-studio.refreshSandboxes"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",
