@@ -174,6 +174,67 @@ function buildLiteralGlobalRegex(
 interface PendingWildcardChar {
     start: number;
     transition: NFATransition;
+    // Identifier of the placeholder written into the wildcard's slot
+    // when the deferred capture started.  Resolved against the captured
+    // string when the wildcard finalizes (literal/accept/number).  When
+    // undefined, no slot was written (no slotIndex on the transition).
+    placeholderId?: number | undefined;
+}
+
+/**
+ * Placeholder marker for a deferred wildcard capture.  Written into the
+ * wildcard's slot at the moment the wildcard transition fires; propagated
+ * unchanged by `evaluateExpression` through value expressions, nested-rule
+ * writeToParent epsilons, and parent value evaluations.  At post-match
+ * time the whole result tree is walked and each placeholder is replaced
+ * with its resolved value (the captured string, or a type-converted form).
+ *
+ * Mirrors canonical's `valueId` substitution model — necessary because a
+ * deferred-capture wildcard sitting at the END of a nested rule's body is
+ * still unresolved when the rule's writeToParent fires; evaluating
+ * eagerly would write `undefined` into the parent slot.  Placeholders let
+ * the value travel up through the env chain and get patched in once the
+ * wildcard's actual span is known.
+ */
+const WILDCARD_PLACEHOLDER_TAG = "__nfaWildcardPlaceholder__";
+function makePlaceholder(id: number): any {
+    return { [WILDCARD_PLACEHOLDER_TAG]: id };
+}
+function isPlaceholder(v: any): v is { [WILDCARD_PLACEHOLDER_TAG]: number } {
+    return (
+        v !== null &&
+        typeof v === "object" &&
+        WILDCARD_PLACEHOLDER_TAG in v
+    );
+}
+
+/**
+ * Walk a value tree and substitute any wildcard placeholders using the
+ * provided resolutions map.  Non-objects pass through.  Arrays and plain
+ * objects are recursed.  Returns a new tree (does not mutate the input).
+ *
+ * Returns the value unchanged when `resolutions` is empty (the common
+ * case — no deferred wildcards were involved in this match).
+ */
+function substitutePlaceholders(
+    value: any,
+    resolutions: Map<number, any> | undefined,
+): any {
+    if (resolutions === undefined || resolutions.size === 0) return value;
+    if (value === null || value === undefined) return value;
+    if (typeof value !== "object") return value;
+    if (isPlaceholder(value)) {
+        const id = value[WILDCARD_PLACEHOLDER_TAG];
+        return resolutions.has(id) ? resolutions.get(id) : value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((v) => substitutePlaceholders(v, resolutions));
+    }
+    const out: Record<string, any> = {};
+    for (const k of Object.keys(value)) {
+        out[k] = substitutePlaceholders(value[k], resolutions);
+    }
+    return out;
 }
 
 interface SpacingStackFrame {
@@ -208,6 +269,13 @@ export interface NFACharThreadState {
     // Stack of saved (cur, parent, atFirst) frames — pushed on enterRule,
     // popped on exitRule / writeToParent / popEnvironment.
     spacingStack?: SpacingStackFrame[] | undefined;
+    // Resolved values for any wildcard placeholders this thread has
+    // committed to (id → captured value, possibly type-converted).
+    // Populated when a pending wildcard finalizes; consulted at result
+    // time to substitute placeholders out of the action value tree.
+    placeholderResolutions?: Map<number, any> | undefined;
+    // Monotonic counter for fresh placeholder ids in this thread.
+    nextPlaceholderId?: number | undefined;
 }
 
 function makeInitialThread(nfa: NFA): NFACharThreadState {
@@ -418,6 +486,8 @@ function epsilonClosureChar(
                 parentSpacingMode: newParentSpacingMode,
                 atFirstPart: newAtFirstPart,
                 spacingStack: newSpacingStack,
+                placeholderResolutions: state.placeholderResolutions,
+                nextPlaceholderId: state.nextPlaceholderId,
             });
         }
     }
@@ -473,6 +543,8 @@ function tryStickyNumber(
         parentSpacingMode: state.parentSpacingMode,
         atFirstPart: false,
         spacingStack: state.spacingStack,
+        placeholderResolutions: state.placeholderResolutions,
+        nextPlaceholderId: state.nextPlaceholderId,
     };
 }
 
@@ -519,6 +591,11 @@ function tryNumberWithPendingWildcard(
         // Finalize the pending wildcard.
         const fin = finalizeWildcardCapture(state, pending.transition, trimmed);
         if (!fin.ok) continue;
+        const finalized = recordPlaceholderResolution(
+            state,
+            pending,
+            fin.resolvedValue,
+        );
 
         // Write the number into its slot.
         let env = fin.environment;
@@ -559,6 +636,8 @@ function tryNumberWithPendingWildcard(
             parentSpacingMode: state.parentSpacingMode,
             atFirstPart: false,
             spacingStack: state.spacingStack,
+            placeholderResolutions: finalized.placeholderResolutions,
+            nextPlaceholderId: state.nextPlaceholderId,
         };
     }
     return undefined;
@@ -632,7 +711,12 @@ function tryLiteralMatch(
                 continue;
             }
 
-            return advanceThread(state, trans, newCharPos, fin.environment, {
+            const finalized = recordPlaceholderResolution(
+                state,
+                pending,
+                fin.resolvedValue,
+            );
+            return advanceThread(finalized, trans, newCharPos, fin.environment, {
                 clearPendingWildcard: true,
                 wildcardCharsConsumed: wildcardEnd - pending.start,
             });
@@ -714,11 +798,31 @@ function tryLiteralMatch(
  * `ok: true` with the new env to attach (cloned for thread isolation when
  * a slot was written; otherwise the existing env unchanged).
  */
+/**
+ * Stash the resolved value for a pending wildcard's placeholder so the
+ * post-match substitute pass can replace it in the result tree.  Returns
+ * a thread state with the resolution recorded (the original thread is
+ * not mutated).  When the pending wildcard had no placeholder (e.g. no
+ * slot index on the transition), returns the state unchanged.
+ */
+function recordPlaceholderResolution(
+    state: NFACharThreadState,
+    pending: PendingWildcardChar,
+    resolvedValue: any,
+): NFACharThreadState {
+    if (pending.placeholderId === undefined) return state;
+    const next = new Map<number, any>(state.placeholderResolutions ?? []);
+    next.set(pending.placeholderId, resolvedValue);
+    return { ...state, placeholderResolutions: next };
+}
+
 function finalizeWildcardCapture(
     state: NFACharThreadState,
     wildcardTrans: NFATransition,
     captured: string,
-): { ok: true; environment: Environment | undefined } | { ok: false } {
+):
+    | { ok: true; environment: Environment | undefined; resolvedValue: SlotValue }
+    | { ok: false } {
     let slotValue: SlotValue = captured;
 
     if (wildcardTrans.typeName) {
@@ -747,12 +851,24 @@ function finalizeWildcardCapture(
         }
     }
 
+    // Slot may already hold a placeholder written at wildcard entry; the
+    // caller is responsible for recording the resolution in the thread's
+    // placeholderResolutions map so the placeholder is substituted out at
+    // result time.  When the wildcard has no slot index OR the thread has
+    // no env (rare), there's nothing to write; just report the value.
     if (
         wildcardTrans.slotIndex === undefined ||
         state.environment === undefined
     ) {
-        return { ok: true, environment: state.environment };
+        return {
+            ok: true,
+            environment: state.environment,
+            resolvedValue: slotValue,
+        };
     }
+    // Overwrite the placeholder in the slot with the resolved value too.
+    // This keeps eager-read code paths (anything that consumes the slot
+    // before result-time substitution) working with the real value.
     const newEnv = cloneEnvironment(state.environment);
     setSlotValue(
         newEnv,
@@ -760,7 +876,7 @@ function finalizeWildcardCapture(
         slotValue,
         wildcardTrans.appendToSlot ?? false,
     );
-    return { ok: true, environment: newEnv };
+    return { ok: true, environment: newEnv, resolvedValue: slotValue };
 }
 
 function advanceThread(
@@ -801,6 +917,8 @@ function advanceThread(
         parentSpacingMode: state.parentSpacingMode,
         atFirstPart: false,
         spacingStack: state.spacingStack,
+        placeholderResolutions: state.placeholderResolutions,
+        nextPlaceholderId: state.nextPlaceholderId,
     };
 }
 
@@ -872,19 +990,41 @@ function expandThread(
                 if (numResult) out.push(numResult);
                 continue;
             }
-            // Defer capture: record start position.  Type validation /
-            // conversion happens at finalize time (next fixed text or
-            // accept).  Spacing mode propagates from this transition.
+            // Defer capture: record start position.  When the wildcard
+            // has a slot, write a placeholder into it NOW so that any
+            // intervening writeToParent epsilon (an `... -> wc` value
+            // expression) carries the placeholder through the parent
+            // value tree.  At finalize time we add the captured value
+            // to the thread's resolution map; the placeholder is
+            // substituted out of the final result tree at the end.
+            let pendingEnv = state.environment;
+            let placeholderId: number | undefined;
+            if (trans.slotIndex !== undefined && state.environment) {
+                placeholderId = state.nextPlaceholderId ?? 0;
+                pendingEnv = cloneEnvironment(state.environment);
+                setSlotValue(
+                    pendingEnv,
+                    trans.slotIndex,
+                    makePlaceholder(placeholderId) as SlotValue,
+                    trans.appendToSlot ?? false,
+                );
+            }
             const newState: NFACharThreadState = {
                 ...state,
                 stateId: trans.to,
                 path: [...state.path, trans.to],
+                environment: pendingEnv,
                 pendingWildcard: {
                     start: state.charPos,
                     transition: trans,
+                    placeholderId,
                 },
                 currentSpacingMode: state.currentSpacingMode,
                 atFirstPart: false,
+                nextPlaceholderId:
+                    placeholderId !== undefined
+                        ? placeholderId + 1
+                        : state.nextPlaceholderId,
             };
             out.push(newState);
             continue;
@@ -912,6 +1052,7 @@ function tryAccept(
 
     const ruleSpacing = state.currentSpacingMode;
 
+    let acceptResolutions = state.placeholderResolutions;
     if (state.pendingWildcard) {
         const pending = state.pendingWildcard;
         const captured = request.substring(pending.start, request.length);
@@ -925,6 +1066,10 @@ function tryAccept(
         if (!fin.ok) return undefined;
         environment = fin.environment;
         charPos = request.length;
+        if (pending.placeholderId !== undefined) {
+            acceptResolutions = new Map(state.placeholderResolutions ?? []);
+            acceptResolutions.set(pending.placeholderId, fin.resolvedValue);
+        }
     }
 
     if (charPos < request.length) {
@@ -950,6 +1095,7 @@ function tryAccept(
         charPos,
         environment,
         pendingWildcard: undefined,
+        placeholderResolutions: acceptResolutions,
     };
 }
 
@@ -994,6 +1140,10 @@ export function matchNFACharBased(
                         env,
                     );
                 }
+                evaluatedActionValue = substitutePlaceholders(
+                    evaluatedActionValue,
+                    accepted.placeholderResolutions,
+                );
                 accepting.push({
                     matched: true,
                     fixedStringPartCount: accepted.fixedStringPartCount,
