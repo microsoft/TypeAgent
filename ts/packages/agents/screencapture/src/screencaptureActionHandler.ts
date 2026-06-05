@@ -5,6 +5,7 @@ import {
     ActionContext,
     ActionResult,
     ActionResultSuccess,
+    ActionTokenUsage,
     AppAgent,
     DisplayType,
     DynamicDisplay,
@@ -342,6 +343,30 @@ export async function runInstall(
 }
 
 async function executeAction(
+    action: TypeAgentAction<ScreencaptureAction | ScreencaptureActivity>,
+    context: ActionContext<ScreencaptureActionContext>,
+): Promise<ActionResult> {
+    // Per-request token-usage accumulator. The only model usage reachable
+    // from executeAction is text embeddings (windowMatcher.matchWindow ->
+    // aiclient TextEmbeddingModel), and aiclient's embedding API exposes no
+    // usage stats or completionCallback, so embedding tokens aren't
+    // obtainable here without a cross-package refactor. We still report an
+    // all-zero value on success so the agent participates in the dispatcher's
+    // "Action Tokens" contract (all-zero => ran but reported no tokens;
+    // undefined => not reported). Error results carry no tokenUsage.
+    const tokenUsage: ActionTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    const result = await dispatchAction(action, context);
+    if (result.error === undefined) {
+        result.tokenUsage = tokenUsage;
+    }
+    return result;
+}
+
+async function dispatchAction(
     action: TypeAgentAction<ScreencaptureAction | ScreencaptureActivity>,
     context: ActionContext<ScreencaptureActionContext>,
 ): Promise<ActionResult> {

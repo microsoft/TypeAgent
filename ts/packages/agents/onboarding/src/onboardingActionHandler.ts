@@ -6,6 +6,7 @@ import {
     AppAgent,
     TypeAgentAction,
     ActionResult,
+    ActionTokenUsage,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -31,6 +32,7 @@ import {
     loadState,
     listIntegrations,
 } from "./lib/workspace.js";
+import { runWithTokenUsage } from "./lib/llm.js";
 
 type AllActions =
     | OnboardingActions
@@ -49,6 +51,28 @@ export function instantiate(): AppAgent {
 }
 
 async function executeAction(
+    action: TypeAgentAction<AllActions>,
+    context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    // Per-request LLM token accumulator. Every ChatModel created via
+    // lib/llm.ts reports its usage here while the dispatch runs inside
+    // runWithTokenUsage's async context. Reported on success results so the
+    // dispatcher can surface "Action Tokens"; left off error results.
+    const tokenUsage: ActionTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    const result = await runWithTokenUsage(tokenUsage, () =>
+        dispatchAction(action, context),
+    );
+    if (result.error === undefined) {
+        result.tokenUsage = tokenUsage;
+    }
+    return result;
+}
+
+async function dispatchAction(
     action: TypeAgentAction<AllActions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {

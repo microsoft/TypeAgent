@@ -124,6 +124,22 @@ async function executeMontageAction(
 ) {
     const agentContext = context.sessionContext.agentContext;
     const lastActiveMontage = getActiveMontage(agentContext);
+
+    // Per-request LLM token usage accumulator reported back to the dispatcher.
+    // The montage agent makes NO chat-completion calls; its only model usage is
+    // text-embeddings (fuzzy montage-title matching via createSemanticMap, and
+    // knowpro image search inside findRequestedImages). The aiclient
+    // TextEmbeddingModel API does not surface token usage — generateEmbedding
+    // returns only the vector and there is no completionCallback — so there is
+    // nothing reasonable to hook without a fragile aiclient/typeagent refactor.
+    // We therefore report all-zero usage ("action ran; no obtainable LLM
+    // completion usage") rather than leaving it undefined.
+    const tokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+
     const result = await handleMontageAction(action, context);
     const currentActiveMontage = getActiveMontage(agentContext);
     if (lastActiveMontage !== currentActiveMontage) {
@@ -132,6 +148,10 @@ async function executeMontageAction(
     }
 
     if (result.error === undefined) {
+        // Attach the (all-zero) usage to the success result so the dispatcher
+        // records that the montage action ran. See the note above.
+        result.tokenUsage = tokenUsage;
+
         let activityName = "edit";
         let verb = "Editing";
 

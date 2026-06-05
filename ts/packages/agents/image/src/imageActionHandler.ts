@@ -7,6 +7,7 @@ import {
     AppAgent,
     ActionResult,
     ActionResultSuccess,
+    ActionTokenUsage,
 } from "@typeagent/agent-sdk";
 import { downloadImage, getMimeType } from "typechat-utils";
 import {
@@ -35,13 +36,30 @@ async function executePhotoAction(
     action: AppAction,
     context: ActionContext<ImageActionContext>,
 ) {
-    let result = await handlePhotoAction(action as ImageAction, context);
+    // Per-request token-usage accumulator. The aiclient image-generation
+    // API (createImageModel -> generateImage / editImage) does not surface
+    // any token/usage stats and the ImageModel has no completionCallback,
+    // so usage isn't available without a cross-package aiclient refactor.
+    // Report all-zero on success so the agent still participates in the
+    // token-reporting contract ("ran, reported no tokens") rather than
+    // leaving tokenUsage undefined ("not reported").
+    const tokenUsage: ActionTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    let result = await handlePhotoAction(
+        action as ImageAction,
+        context,
+        tokenUsage,
+    );
     return result;
 }
 
 async function handlePhotoAction(
     action: ImageAction,
     photoContext: ActionContext<ImageActionContext>,
+    tokenUsage: ActionTokenUsage,
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
@@ -102,7 +120,9 @@ async function handlePhotoAction(
                     urls.push(i.image_url);
                     captions.push(i.revised_prompt);
                 });
-                result = createCarouselForImages(urls, captions);
+                const carousel = createCarouselForImages(urls, captions);
+                carousel.tokenUsage = tokenUsage;
+                result = carousel;
 
                 // save the generated image in the session store and add the image to the knowledge store
                 const id = randomUUID();
@@ -137,7 +157,11 @@ async function handlePhotoAction(
             break;
         case "editImageAction": {
             const editAction = action as EditImageAction;
-            result = await handleEditImage(editAction, photoContext);
+            result = await handleEditImage(
+                editAction,
+                photoContext,
+                tokenUsage,
+            );
             break;
         }
         default:
@@ -149,6 +173,7 @@ async function handlePhotoAction(
 async function handleEditImage(
     editAction: EditImageAction,
     photoContext: ActionContext<ImageActionContext>,
+    tokenUsage: ActionTokenUsage,
 ): Promise<ActionResult> {
     const { editPrompt, sourceImage } = editAction.parameters;
     if (!sourceImage) {
@@ -249,6 +274,7 @@ async function handleEditImage(
     });
 
     const result = createCarouselForImages(urls, captions);
+    result.tokenUsage = tokenUsage;
 
     // Persist the edited image in the session store, mirroring createImageAction.
     const id = randomUUID();
