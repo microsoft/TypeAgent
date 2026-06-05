@@ -17,7 +17,7 @@
 
 import path from "node:path";
 import type { Dirent } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { grammarFromJson, registerBuiltInEntities } from "action-grammar";
 import {
     scanGrammarCollisions,
@@ -88,6 +88,7 @@ export function createRepoGrammarScanner(
         const inputs: SchemaInput[] = [];
         const skipped: GrammarScanSkip[] = [];
         const seen = new Set<string>();
+        const fileBySchema = new Map<string, string>();
 
         for (const agent of agents) {
             const packageDir = path.join(repoRoot, "packages", "agents", agent);
@@ -107,6 +108,10 @@ export function createRepoGrammarScanner(
                         JSON.parse(await readFile(file, "utf8")),
                     );
                     inputs.push({ schemaName, agentName: agent, grammar });
+                    fileBySchema.set(
+                        schemaName,
+                        await resolveGrammarSource(file),
+                    );
                 } catch (err) {
                     skipped.push({
                         schemaName,
@@ -130,12 +135,19 @@ export function createRepoGrammarScanner(
         return {
             scanned: Object.keys(result.schemas),
             skipped,
-            collisions: Object.values(result.collisions).map(mapRecord),
+            collisions: Object.values(result.collisions).map((record) =>
+                mapRecord(record, fileBySchema),
+            ),
         };
     };
 }
 
-function mapRecord(record: CollisionRecord): GrammarToolCollisionLike {
+function mapRecord(
+    record: CollisionRecord,
+    fileBySchema: ReadonlyMap<string, string>,
+): GrammarToolCollisionLike {
+    const fileA = fileBySchema.get(record.schemaA);
+    const fileB = fileBySchema.get(record.schemaB);
     return {
         schemaA: record.schemaA,
         schemaB: record.schemaB,
@@ -146,7 +158,30 @@ function mapRecord(record: CollisionRecord): GrammarToolCollisionLike {
         ...(record.rulePatternB !== undefined
             ? { rulePatternB: record.rulePatternB }
             : {}),
+        ...(fileA !== undefined ? { fileA } : {}),
+        ...(fileB !== undefined ? { fileB } : {}),
     };
+}
+
+/**
+ * Prefer the human-authored `.agr` grammar source over the compiled
+ * `.ag.json` artifact when one sits at the conventional `src/` location, so
+ * navigation lands on editable grammar rather than generated JSON. Falls back
+ * to the compiled file when no source is found.
+ */
+async function resolveGrammarSource(agJsonFile: string): Promise<string> {
+    const candidate = agJsonFile
+        .replace(`${path.sep}dist${path.sep}`, `${path.sep}src${path.sep}`)
+        .replace(/\.ag\.json$/i, ".agr");
+    if (candidate !== agJsonFile) {
+        try {
+            await access(candidate);
+            return candidate;
+        } catch {
+            // fall through to the compiled artifact
+        }
+    }
+    return agJsonFile;
 }
 
 /**

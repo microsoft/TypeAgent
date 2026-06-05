@@ -62,6 +62,10 @@ export interface GrammarToolCollisionLike {
     witnessText: string;
     rulePatternA?: string;
     rulePatternB?: string;
+    /** Absolute path to schema A's grammar source, for navigation. */
+    fileA?: string;
+    /** Absolute path to schema B's grammar source, for navigation. */
+    fileB?: string;
 }
 
 export interface CollisionServiceOptions {

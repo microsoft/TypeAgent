@@ -175,7 +175,8 @@ the `InProcessCollisionService` and `collision.detected` event stream from
   `replay`) as the description.
 - Expanding a collision reveals its participants (agent action types with the
   contributing file and line) and any exemplar utterances that witness the
-  overlap.
+  overlap. Clicking a participant opens its grammar source (the authored
+  `.agr` when present, otherwise the compiled `.ag.json`).
 - Reported collisions also appear in the Event Log; the view title offers
   **Scan grammars for collisions**, **Refresh**, and **Clear**.
 

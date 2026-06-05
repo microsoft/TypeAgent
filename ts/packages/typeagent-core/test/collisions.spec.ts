@@ -85,11 +85,43 @@ describe("InProcessCollisionService", () => {
         expect(e.sandboxId).toBe("sbx");
     });
 
+    it("carries grammar source files onto participants", () => {
+        const svc = new InProcessCollisionService({ now: () => 300 });
+        const e = svc.fromGrammarTools({
+            schemaA: "calendar",
+            schemaB: "email",
+            witnessText: "schedule a meeting",
+            fileA: "/repo/packages/agents/calendar/src/calendarSchema.agr",
+            fileB: "/repo/packages/agents/email/src/emailSchema.agr",
+        });
+
+        expect(e.participants[0].file).toBe(
+            "/repo/packages/agents/calendar/src/calendarSchema.agr",
+        );
+        expect(e.participants[1].file).toBe(
+            "/repo/packages/agents/email/src/emailSchema.agr",
+        );
+    });
+
+    it("falls back to a grammar placeholder when no source file is given", () => {
+        const svc = new InProcessCollisionService({ now: () => 300 });
+        const e = svc.fromGrammarTools({
+            schemaA: "calendar",
+            schemaB: "email",
+            witnessText: "schedule a meeting",
+        });
+
+        expect(e.participants[0].file).toBe("<grammar>");
+        expect(e.participants[1].file).toBe("<grammar>");
+    });
+
     it("list filters by agent/kind/time", () => {
         const svc = new InProcessCollisionService({ now: () => 100 });
         svc.fromDispatcher({
             kind: "static",
-            candidates: [{ schemaName: "calendar", actionName: "scheduleEvent" }],
+            candidates: [
+                { schemaName: "calendar", actionName: "scheduleEvent" },
+            ],
             timestamp: 100,
         });
         svc.fromDispatcher({
@@ -107,7 +139,9 @@ describe("InProcessCollisionService", () => {
         const svc = new InProcessCollisionService({ now: () => 100 });
         svc.fromDispatcher({
             kind: "static",
-            candidates: [{ schemaName: "calendar", actionName: "scheduleEvent" }],
+            candidates: [
+                { schemaName: "calendar", actionName: "scheduleEvent" },
+            ],
         });
         svc.fromDispatcher({
             kind: "fuzzy",

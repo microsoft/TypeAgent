@@ -36,6 +36,8 @@ export interface CollisionRow {
     /** Codicon id (no `$()` wrapper) for the tree item. */
     icon: string;
     hasChildren: boolean;
+    /** Absolute path the row opens when activated (navigable rows only). */
+    openPath?: string;
 }
 
 const KIND_ICON: Record<CollisionKind, string> = {
@@ -124,6 +126,7 @@ export function buildCollisionChildRows(entry: CollisionEntry): CollisionRow[] {
         contextValue: "studioCollisionParticipant",
         icon: "symbol-class",
         hasChildren: false,
+        ...(isNavigablePath(p.file) ? { openPath: p.file } : {}),
     }));
 
     for (const [index, utterance] of (
@@ -141,4 +144,13 @@ export function buildCollisionChildRows(entry: CollisionEntry): CollisionRow[] {
     }
 
     return rows;
+}
+
+/**
+ * A participant `file` is navigable when it is a concrete path rather than one
+ * of the placeholder markers (`<unknown>`, `<grammar>`) used when no source
+ * location is available.
+ */
+function isNavigablePath(file: string): boolean {
+    return file.length > 0 && !file.startsWith("<");
 }

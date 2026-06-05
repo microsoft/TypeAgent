@@ -70,6 +70,13 @@ export class CollisionsTreeProvider
         item.tooltip = row.tooltip;
         item.contextValue = row.contextValue;
         item.iconPath = new vscode.ThemeIcon(row.icon);
+        if (row.openPath !== undefined) {
+            item.command = {
+                command: "vscode.open",
+                title: "Open Grammar Source",
+                arguments: [vscode.Uri.file(row.openPath)],
+            };
+        }
         return item;
     }
 

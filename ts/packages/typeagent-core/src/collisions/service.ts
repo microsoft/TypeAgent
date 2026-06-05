@@ -97,12 +97,12 @@ export class InProcessCollisionService implements CollisionService {
                 makeParticipant(
                     collision.schemaA,
                     collision.schemaA,
-                    collision.rulePatternA ?? "<grammar>",
+                    collision.fileA ?? "<grammar>",
                 ),
                 makeParticipant(
                     collision.schemaB,
                     collision.schemaB,
-                    collision.rulePatternB ?? "<grammar>",
+                    collision.fileB ?? "<grammar>",
                 ),
             ],
             exemplarUtterances: [collision.witnessText],
@@ -155,7 +155,10 @@ function matchesFilter(
     if (filter.sandboxId && event.sandboxId !== filter.sandboxId) {
         return false;
     }
-    if (filter.detectionPoint && event.detectionPoint !== filter.detectionPoint) {
+    if (
+        filter.detectionPoint &&
+        event.detectionPoint !== filter.detectionPoint
+    ) {
         return false;
     }
     if (filter.kind && event.kind !== filter.kind) {

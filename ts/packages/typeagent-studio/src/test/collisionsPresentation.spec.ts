@@ -114,3 +114,28 @@ test("buildCollisionChildRows lists participants then exemplars", () => {
     assert.equal(rows[2].id, "collision:2:exemplar:0");
     assert.equal(rows[2].label, "play the song");
 });
+
+test("participant rows expose openPath for navigable source files", () => {
+    const rows = buildCollisionChildRows(entry(4, collision()));
+    assert.equal(rows[0].openPath, "player.agr");
+    assert.equal(rows[1].openPath, "music.agr");
+});
+
+test("participant rows omit openPath for placeholder source files", () => {
+    const rows = buildCollisionChildRows(
+        entry(
+            5,
+            collision({
+                participants: [
+                    {
+                        agent: "player",
+                        actionType: "player.play",
+                        file: "<grammar>",
+                        range: [1, 1],
+                    },
+                ],
+            }),
+        ),
+    );
+    assert.equal(rows[0].openPath, undefined);
+});
