@@ -7,6 +7,7 @@ import type { SandboxStatus } from "@typeagent/core/sandbox";
 import {
     buildSandboxAgentNodes,
     buildSandboxRootNodes,
+    formatHashFingerprint,
     formatHealth,
     formatSandboxState,
 } from "../sandboxTreePresentation.js";
@@ -118,9 +119,9 @@ test("buildSandboxAgentNodes maps agents sorted by name", () => {
     );
     assert.equal(nodes[0].kind, "agent");
     assert.equal(nodes[0].agentName, "calendar");
-    assert.equal(nodes[0].description, "healthy");
+    assert.equal(nodes[0].description, "healthy \u00b7 s1");
     assert.equal(nodes[0].contextValue, "sandboxAgent");
-    assert.equal(nodes[1].description, "warning");
+    assert.equal(nodes[1].description, "warning \u00b7 s2");
 });
 
 test("formatSandboxState covers every state literal", () => {
@@ -136,4 +137,33 @@ test("formatHealth maps known statuses and defaults unknown", () => {
     assert.equal(formatHealth("warning"), "warning");
     assert.equal(formatHealth("error"), "error");
     assert.equal(formatHealth("unknown"), "unknown");
+});
+
+test("formatHashFingerprint truncates real hashes and omits sentinels", () => {
+    assert.equal(
+        formatHashFingerprint(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ),
+        "0123456789ab",
+    );
+    assert.equal(formatHashFingerprint("short"), "short");
+    assert.equal(formatHashFingerprint("none"), undefined);
+    assert.equal(formatHashFingerprint("stub"), undefined);
+    assert.equal(formatHashFingerprint(""), undefined);
+});
+
+test("agent node omits the fingerprint when the schema hash is a sentinel", () => {
+    const nodes = buildSandboxAgentNodes(
+        createSandbox({
+            agents: [
+                {
+                    name: "ghost",
+                    schemaHash: "none",
+                    grammarHash: "none",
+                    health: "unknown",
+                },
+            ],
+        }),
+    );
+    assert.equal(nodes[0].description, "unknown");
 });

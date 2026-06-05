@@ -109,11 +109,13 @@ function toAgentNode(
     sandboxId: string,
     agent: SandboxAgentInfo,
 ): SandboxTreeNode {
+    const fingerprint = formatHashFingerprint(agent.schemaHash);
+    const health = formatHealth(agent.health);
     return {
         kind: "agent",
         id: `agent:${sandboxId}:${agent.name}`,
         label: agent.name,
-        description: formatHealth(agent.health),
+        description: fingerprint ? `${health} \u00b7 ${fingerprint}` : health,
         tooltip: buildAgentTooltip(agent),
         contextValue: "sandboxAgent",
         sandboxId,
@@ -174,8 +176,8 @@ function buildAgentTooltip(agent: SandboxAgentInfo): string {
     const lines = [
         `Agent: ${agent.name}`,
         `Health: ${formatHealth(agent.health)}`,
-        `Schema: ${agent.schemaHash}`,
-        `Grammar: ${agent.grammarHash}`,
+        `Schema: ${formatHashFull(agent.schemaHash)}`,
+        `Grammar: ${formatHashFull(agent.grammarHash)}`,
     ];
     if (agent.sourcePath) {
         lines.push(`Source: ${agent.sourcePath}`);
@@ -184,4 +186,31 @@ function buildAgentTooltip(agent: SandboxAgentInfo): string {
         lines.push(`Loaded: ${new Date(agent.loadedAt).toISOString()}`);
     }
     return lines.join("\n");
+}
+
+/**
+ * Short, glanceable fingerprint for a content hash, shown next to health in the
+ * agent row. Returns `undefined` for the sentinel/empty values used when an
+ * agent has no schema/grammar on disk, so callers can omit the suffix.
+ */
+export function formatHashFingerprint(hash: string): string | undefined {
+    if (!isRealHash(hash)) {
+        return undefined;
+    }
+    return hash.length > 12 ? hash.slice(0, 12) : hash;
+}
+
+/** Tooltip rendering of a hash: full value, or a readable sentinel label. */
+function formatHashFull(hash: string): string {
+    if (hash === "none") {
+        return "(none on disk)";
+    }
+    if (hash === "stub" || hash.trim().length === 0) {
+        return "(unavailable)";
+    }
+    return hash;
+}
+
+function isRealHash(hash: string): boolean {
+    return hash !== "none" && hash !== "stub" && hash.trim().length > 0;
 }
