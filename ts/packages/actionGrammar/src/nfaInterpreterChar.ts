@@ -96,9 +96,9 @@ function buildLiteralStickyRegex(
     displayText: string,
     spacingMode: CompiledSpacingMode | undefined,
     isLeading: boolean,
-    nested: boolean,
+    leadingMode: CompiledSpacingMode | undefined,
 ): { sticky: RegExp; leadingIsRequired: boolean; leadingIsAuto: boolean } {
-    const cacheKey = `${displayText}|${spacingMode ?? "auto"}|${isLeading ? "L" : "I"}|${nested ? "N" : "O"}`;
+    const cacheKey = `${displayText}|${spacingMode ?? "auto"}|${isLeading ? "L" : "I"}|${leadingMode ?? "auto"}`;
     const cached = literalMatchRegexCache.get(cacheKey);
     if (cached) return cached;
 
@@ -107,15 +107,14 @@ function buildLiteralStickyRegex(
     let leadingIsAuto = false;
 
     if (isLeading) {
-        // Rule-leading position: canonical's `[\s\p{P}]*?` prefix.  When
-        // this is the OUTERMOST rule's first literal, none-mode forbids
-        // leading separator; for nested rules entered from a non-none
-        // parent, leading separator IS allowed (the parent governs).
-        const isOutermost = !nested;
+        // Rule-leading position: separator at a rule's first part follows
+        // canonical's `buildStringPartRegExpStr` — `[\s\p{P}]*?` for every
+        // mode EXCEPT `none`, which forbids any leading separator.  The
+        // mode here is `leadingMode` (canonical's `leadingSpacingMode`):
+        // parent's mode for the first part of a nested rule, otherwise
+        // the rule's own mode.
         leadingSep =
-            spacingMode === "none" && isOutermost
-                ? ""
-                : `[${SEPARATOR_CLASS_STR}]*?`;
+            leadingMode === "none" ? "" : `[${SEPARATOR_CLASS_STR}]*?`;
     } else {
     switch (spacingMode) {
         case "none":
@@ -177,6 +176,12 @@ interface PendingWildcardChar {
     transition: NFATransition;
 }
 
+interface SpacingStackFrame {
+    cur: CompiledSpacingMode | undefined;
+    parent: CompiledSpacingMode | undefined;
+    atFirst: boolean;
+}
+
 export interface NFACharThreadState {
     stateId: number;
     charPos: number;
@@ -193,6 +198,16 @@ export interface NFACharThreadState {
     // transition's `spacingMode`).  Used at accept time to reject trailing
     // content under `none` mode and to trim wildcard captures.
     currentSpacingMode?: CompiledSpacingMode | undefined;
+    // Parent rule's effective leading mode at the time we entered the
+    // current rule (canonical's `leadingSpacingMode` snapshot).  Consulted
+    // at the rule's first-part position; ignored elsewhere.
+    parentSpacingMode?: CompiledSpacingMode | undefined;
+    // True between rule entry (enterRule epsilon) and the first non-epsilon
+    // transition fired since.  Mirrors canonical's `partIndex === 0` check.
+    atFirstPart?: boolean | undefined;
+    // Stack of saved (cur, parent, atFirst) frames — pushed on enterRule,
+    // popped on exitRule / writeToParent / popEnvironment.
+    spacingStack?: SpacingStackFrame[] | undefined;
 }
 
 function makeInitialThread(nfa: NFA): NFACharThreadState {
@@ -283,11 +298,21 @@ function epsilonClosureChar(
             let newEnvironment = currentEnvironment;
             let newSlotMap = currentSlotMap;
             let newActionValue = currentActionValue;
-            // After popping a nested rule's env, the prior rule's spacing
-            // mode is unknown to the matcher.  Reset to undefined so that
-            // subsequent boundary checks (tryAccept's trailing check) don't
-            // mistakenly use the inner rule's mode for the outer context.
             let newCurrentSpacingMode = state.currentSpacingMode;
+            let newParentSpacingMode = state.parentSpacingMode;
+            let newAtFirstPart = state.atFirstPart;
+            let newSpacingStack = state.spacingStack;
+
+            const isExit =
+                trans.exitRule ||
+                (trans.writeToParent &&
+                    trans.valueToWrite &&
+                    currentEnvironment &&
+                    currentEnvironment.parent &&
+                    currentEnvironment.parentSlotIndex !== undefined) ||
+                (trans.popEnvironment &&
+                    currentEnvironment &&
+                    currentEnvironment.parent);
 
             if (
                 trans.writeToParent &&
@@ -319,7 +344,6 @@ function epsilonClosureChar(
                 if (newEnvironment?.actionValue !== undefined) {
                     newActionValue = newEnvironment.actionValue;
                 }
-                newCurrentSpacingMode = undefined;
             } else if (
                 trans.popEnvironment &&
                 currentEnvironment &&
@@ -332,7 +356,50 @@ function epsilonClosureChar(
                 if (newEnvironment?.actionValue !== undefined) {
                     newActionValue = newEnvironment.actionValue;
                 }
-                newCurrentSpacingMode = undefined;
+            }
+
+            if (isExit) {
+                // Pop the spacing-mode stack to restore the parent rule's
+                // modes.  Canonical's ParentMatchState saves
+                // `partIndex: state.partIndex + 1` — after restoration,
+                // the parent has moved PAST the nested-ref position, so
+                // it's no longer at first part regardless of what the
+                // frame recorded.
+                if (newSpacingStack && newSpacingStack.length > 0) {
+                    const top = newSpacingStack[newSpacingStack.length - 1];
+                    newCurrentSpacingMode = top.cur;
+                    newParentSpacingMode = top.parent;
+                    newAtFirstPart = false;
+                    newSpacingStack = newSpacingStack.slice(0, -1);
+                } else {
+                    newCurrentSpacingMode = undefined;
+                    newParentSpacingMode = undefined;
+                    newAtFirstPart = false;
+                }
+            } else if (trans.enterRuleSet) {
+                // Push current frame; set the new rule's modes.  The
+                // child's leadingSpacingMode (canonical) is the parent's
+                // effective leading mode at the time of entry: parent's
+                // own saved leading IF the parent is itself a nested
+                // rule sitting at its first part, otherwise the parent's
+                // own current mode.
+                const parentIsNested =
+                    (state.spacingStack?.length ?? 0) >= 2;
+                const effectiveLeading =
+                    state.atFirstPart && parentIsNested
+                        ? state.parentSpacingMode
+                        : state.currentSpacingMode;
+                const frame: SpacingStackFrame = {
+                    cur: state.currentSpacingMode,
+                    parent: state.parentSpacingMode,
+                    atFirst: state.atFirstPart ?? false,
+                };
+                newSpacingStack = newSpacingStack
+                    ? [...newSpacingStack, frame]
+                    : [frame];
+                newCurrentSpacingMode = trans.enterRule;
+                newParentSpacingMode = effectiveLeading;
+                newAtFirstPart = true;
             }
 
             queue.push({
@@ -348,6 +415,9 @@ function epsilonClosureChar(
                 slotMap: newSlotMap,
                 pendingWildcard: state.pendingWildcard,
                 currentSpacingMode: newCurrentSpacingMode,
+                parentSpacingMode: newParentSpacingMode,
+                atFirstPart: newAtFirstPart,
+                spacingStack: newSpacingStack,
             });
         }
     }
@@ -364,9 +434,9 @@ function tryStickyNumber(
     state: NFACharThreadState,
     trans: NFATransition,
 ): NFACharThreadState | undefined {
-    // Wildcard transitions don't carry spacingMode from the compiler;
-    // fall back to the thread's most-recent rule mode.
-    const spacingMode = trans.spacingMode ?? state.currentSpacingMode;
+    // Use the runtime spacing-stack mode rather than the compiler-inherited
+    // transition mode (see comment in tryLiteralMatch).
+    const spacingMode = state.currentSpacingMode;
     const re = spacingMode === "none" ? STICKY_NUMBER_NOSEP_RE : STICKY_NUMBER_RE;
     re.lastIndex = state.charPos;
     const m = re.exec(request);
@@ -399,7 +469,10 @@ function tryStickyNumber(
         environment: newEnv,
         slotMap: state.slotMap,
         pendingWildcard: undefined,
-        currentSpacingMode: spacingMode ?? state.currentSpacingMode,
+        currentSpacingMode: state.currentSpacingMode,
+        parentSpacingMode: state.parentSpacingMode,
+        atFirstPart: false,
+        spacingStack: state.spacingStack,
     };
 }
 
@@ -422,7 +495,7 @@ function tryNumberWithPendingWildcard(
     trans: NFATransition,
 ): NFACharThreadState | undefined {
     const pending = state.pendingWildcard!;
-    const spacingMode = trans.spacingMode ?? state.currentSpacingMode;
+    const spacingMode = state.currentSpacingMode;
     const re =
         spacingMode === "none" ? GLOBAL_NUMBER_NOSEP_RE : GLOBAL_NUMBER_RE;
     re.lastIndex = state.charPos;
@@ -482,7 +555,10 @@ function tryNumberWithPendingWildcard(
             environment: env,
             slotMap: state.slotMap,
             pendingWildcard: undefined,
-            currentSpacingMode: spacingMode ?? state.currentSpacingMode,
+            currentSpacingMode: state.currentSpacingMode,
+            parentSpacingMode: state.parentSpacingMode,
+            atFirstPart: false,
+            spacingStack: state.spacingStack,
         };
     }
     return undefined;
@@ -502,7 +578,11 @@ function tryLiteralMatch(
     candidate: string,
     longerWildcardSpawn: NFACharThreadState[],
 ): NFACharThreadState | undefined {
-    const spacingMode = trans.spacingMode;
+    // Use the runtime spacing-stack mode rather than the compiler-inherited
+    // transition spacingMode.  The stack reflects the rule's TRUE mode at
+    // runtime (compiler inheritance fuses parent's mode into child's
+    // transitions, which breaks Cluster B parent-child nesting cases).
+    const spacingMode = state.currentSpacingMode;
     const pending = state.pendingWildcard;
 
     if (pending !== undefined) {
@@ -560,25 +640,23 @@ function tryLiteralMatch(
     }
 
     // No pending wildcard: sticky match at exact charPos.
-    // "Leading" position = this thread hasn't consumed anything yet (the
-    // canonical's `[\s\p{P}]*?` prefix applies regardless of mode).
-    const isLeading =
-        state.charPos === 0 &&
-        state.fixedStringPartCount === 0 &&
-        state.checkedWildcardCount === 0 &&
-        state.uncheckedWildcardCount === 0;
-    // "nested" = there's a parent rule env above the current one.  For
-    // nested rules entered from a non-none parent, leading whitespace at
-    // the rule's first literal IS allowed even when the rule's own mode
-    // is `none` (the parent governs the outer boundary).
-    const nested =
-        state.environment !== undefined &&
-        state.environment.parent !== undefined;
+    // "Leading" position = the first part of the current rule (canonical's
+    // `partIndex === 0`).  Tracked via thread.atFirstPart, set on rule
+    // entry and cleared after the first literal/wildcard advances.
+    const isLeading = state.atFirstPart === true;
+    // Effective leading mode: for a nested rule's first part, canonical's
+    // `leadingSpacingMode(state)` returns the parent's snapshot; for a
+    // top-level (or non-first) part it returns the rule's own mode.
+    // "nested" = the current rule is itself a nested rule (has a parent
+    // rule on the spacing stack BEYOND the top-level entry frame).
+    const nested = (state.spacingStack?.length ?? 0) >= 2;
+    const leadingMode =
+        isLeading && nested ? state.parentSpacingMode : spacingMode;
     const { sticky, leadingIsAuto } = buildLiteralStickyRegex(
         candidate,
         spacingMode,
         isLeading,
-        nested,
+        leadingMode,
     );
     sticky.lastIndex = state.charPos;
     const m = sticky.exec(request);
@@ -586,6 +664,24 @@ function tryLiteralMatch(
     const newCharPos = state.charPos + m[0].length;
     if (!isBoundarySatisfied(request, newCharPos, spacingMode)) {
         return undefined;
+    }
+    // When entering a child rule from a parent in `required` mode at a
+    // non-start position, the inter-rule boundary must contain at least
+    // one separator char.  Canonical enforces this post-match via
+    // `isBoundarySatisfied(request, parentIndex, "required")` after
+    // entering the child.  We mirror that here: if the parent's saved
+    // mode is `required`, the charPos was non-zero, and the leading
+    // regex consumed zero separator chars, reject.
+    if (
+        isLeading &&
+        nested &&
+        state.parentSpacingMode === "required" &&
+        state.charPos > 0
+    ) {
+        const consumedSepLen = m[0].length - candidate.length;
+        if (consumedSepLen === 0) {
+            return undefined;
+        }
     }
     // In auto mode at non-zero charPos: required-sep check between prev char
     // and the first literal char.
@@ -701,7 +797,10 @@ function advanceThread(
         pendingWildcard: opts.clearPendingWildcard
             ? undefined
             : state.pendingWildcard,
-        currentSpacingMode: trans.spacingMode ?? state.currentSpacingMode,
+        currentSpacingMode: state.currentSpacingMode,
+        parentSpacingMode: state.parentSpacingMode,
+        atFirstPart: false,
+        spacingStack: state.spacingStack,
     };
 }
 
@@ -784,8 +883,8 @@ function expandThread(
                     start: state.charPos,
                     transition: trans,
                 },
-                currentSpacingMode:
-                    trans.spacingMode ?? state.currentSpacingMode,
+                currentSpacingMode: state.currentSpacingMode,
+                atFirstPart: false,
             };
             out.push(newState);
             continue;
@@ -831,13 +930,16 @@ function tryAccept(
     if (charPos < request.length) {
         const tail = request.substring(charPos);
         // Only reject trailing chars under none-mode when we're at the
-        // OUTERMOST rule (env has no parent).  For a nested none-rule
-        // inside a non-none parent, trailing separator chars are governed
-        // by the parent's mode; rejection of outer trailing whitespace
-        // for top-level none happens in `matchGrammarWithNFA` post-match.
+        // OUTERMOST rule (no nested context remaining on the spacing
+        // stack).  For a nested none-rule inside a non-none parent,
+        // trailing separator chars are governed by the parent's mode;
+        // rejection of outer trailing whitespace for top-level none
+        // happens in `matchGrammarWithNFA` post-match.
+        const stackDepth = state.spacingStack?.length ?? 0;
         const atOutermost =
-            state.environment === undefined ||
-            state.environment.parent === undefined;
+            stackDepth <= 1 &&
+            (state.environment === undefined ||
+                state.environment.parent === undefined);
         if (ruleSpacing === "none" && atOutermost) return undefined;
         if (!/^[\s\p{P}]*$/u.test(tail)) return undefined;
         charPos = request.length;

@@ -81,6 +81,16 @@ export interface NFATransition {
     // Used when exiting rules like (<Item>)? where the parent doesn't capture the result
     popEnvironment?: boolean | undefined;
 
+    // Spacing-mode stack support (char-based matcher, Cluster B).
+    // `enterRule` marks an epsilon entering a rule (top-level or nested ref);
+    // value is the rule's own spacingMode.  The char interpreter pushes the
+    // current (cur, parent, atFirstPart) onto a stack and sets the new mode.
+    // `exitRule` marks the corresponding outgoing epsilon; the char
+    // interpreter pops to restore the parent rule's modes.
+    enterRule?: import("./grammarTypes.js").CompiledSpacingMode | undefined;
+    enterRuleSet?: boolean | undefined;
+    exitRule?: boolean | undefined;
+
     // Target state
     to: number;
 }
@@ -256,6 +266,44 @@ export class NFABuilder {
 
     addEpsilonTransition(from: number, to: number): void {
         this.addTransition(from, to, "epsilon");
+    }
+
+    /**
+     * Add an epsilon transition that marks entry to a rule.  Used by the
+     * char-based matcher's spacing-mode stack (Cluster B).  Token matcher
+     * treats it as a plain epsilon.
+     */
+    addEpsilonEnterRule(
+        from: number,
+        to: number,
+        spacingMode: import("./grammarTypes.js").CompiledSpacingMode | undefined,
+    ): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        state.transitions.push({
+            type: "epsilon",
+            to,
+            enterRule: spacingMode,
+            enterRuleSet: true,
+        });
+    }
+
+    /**
+     * Add an epsilon transition that marks exit from a rule.  Char-based
+     * matcher pops its spacing-mode stack; token matcher ignores.
+     */
+    addEpsilonExitRule(from: number, to: number): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        state.transitions.push({
+            type: "epsilon",
+            to,
+            exitRule: true,
+        });
     }
 
     /**
