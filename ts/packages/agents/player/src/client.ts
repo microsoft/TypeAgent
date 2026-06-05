@@ -51,7 +51,7 @@ import {
     addTracksToPlaylist,
     getRecommendationsFromTrackCollection,
     getRecentlyPlayed,
-    limitMax,
+    searchLimitMax,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -449,7 +449,7 @@ export async function searchTracks(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -465,7 +465,7 @@ export async function searchForPlaylists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
