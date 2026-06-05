@@ -144,9 +144,12 @@ export function getTypeChatLanguageModel(tokenUsage?: ActionTokenUsage) {
         loadConfigSync();
         // No explicit settings => initialize from the standard TypeChat env
         // variables, matching the previous createLanguageModel(process.env).
-        languageModel = openai.createChatModel(undefined, undefined, undefined, [
-            "player",
-        ]);
+        languageModel = openai.createChatModel(
+            undefined,
+            undefined,
+            undefined,
+            ["player"],
+        );
     }
     // The model is a shared singleton, so bind usage capture to the current
     // request's accumulator on each call (and clear it when none is given).

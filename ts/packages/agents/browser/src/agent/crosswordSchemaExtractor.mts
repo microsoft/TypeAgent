@@ -61,9 +61,12 @@ function createModel() {
         undefined,
         "GPT_5_MINI",
     );
-    const model = ai.createChatModel(apiSettings, { temperature: 1 }, undefined, [
-        "crossword",
-    ]);
+    const model = ai.createChatModel(
+        apiSettings,
+        { temperature: 1 },
+        undefined,
+        ["crossword"],
+    );
     hookModelTokenUsage(model);
     return model;
 }

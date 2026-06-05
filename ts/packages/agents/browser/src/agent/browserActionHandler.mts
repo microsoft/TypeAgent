@@ -142,10 +142,7 @@ import {
 } from "./lookupAndAnswerSchema.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
-import {
-    hookModelTokenUsage,
-    runWithTokenUsage,
-} from "./tokenUsage.mjs";
+import { hookModelTokenUsage, runWithTokenUsage } from "./tokenUsage.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
