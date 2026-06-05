@@ -3,3 +3,4 @@
 
 export * from "./types.js";
 export * from "./inMemorySandboxManager.js";
+export * from "./repoAgentLoader.js";

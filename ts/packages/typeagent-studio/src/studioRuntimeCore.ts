@@ -17,6 +17,7 @@ import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
 import { InProcessEventStream } from "@typeagent/core/events";
 import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
 import {
+    createRepoAgentLoader,
     InMemorySandboxManager,
     type SandboxManager,
     type SandboxStatus,
@@ -165,8 +166,14 @@ export function createStudioRuntimeCore(
     options: CreateStudioRuntimeOptions = {},
 ): StudioRuntime {
     const events = new InProcessEventStream();
+    const repoRoot =
+        context.workspaceFolderFsPaths?.[0] ?? context.globalStorageFsPath;
     const sandbox =
-        options.sandbox ?? new InMemorySandboxManager({ emitter: events });
+        options.sandbox ??
+        new InMemorySandboxManager({
+            emitter: events,
+            agentLoader: createRepoAgentLoader({ repoRoot }),
+        });
     const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
     const evaluatePackagingHealthGate =
         options.evaluatePackagingHealthGate ??
@@ -181,9 +188,7 @@ export function createStudioRuntimeCore(
     const corpus =
         options.corpus ??
         new FileCorpusService({
-            repoRoot:
-                context.workspaceFolderFsPaths?.[0] ??
-                context.globalStorageFsPath,
+            repoRoot,
             profileDir: path.join(context.globalStorageFsPath, "corpus"),
         });
 

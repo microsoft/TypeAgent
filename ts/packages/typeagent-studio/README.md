@@ -64,6 +64,13 @@ backed by the in-memory sandbox manager and event stream from
 - The tree refreshes automatically on sandbox lifecycle events
   (start/stop/restart, agent load/unload).
 
+Loaded agents are resolved by a filesystem-backed loader
+(`createRepoAgentLoader` in `@typeagent/core`) that reads the agent's source
+under `packages/agents/<name>`, computes real SHA-256 content hashes for its
+schema and grammar files, and derives the health badge from the same
+`FileHealthService` rules used elsewhere (agents missing on disk report
+`unknown` health and a `none` hash sentinel).
+
 Tree structuring and labelling live in the vscode-free
 `sandboxTreePresentation.ts` module so they can be unit-tested without the
 editor host; `sandboxTreeProvider.ts` is a thin `TreeDataProvider` adapter.

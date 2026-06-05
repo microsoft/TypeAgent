@@ -383,9 +383,18 @@ function collectManifestRefs(manifest: AgentManifest): ManifestSchemaRef[] {
 }
 
 async function computeSchemaHash(files: string[]): Promise<string | undefined> {
+    return hashFileContents(files);
+}
+
+/**
+ * Deterministic content hash over a set of files. Files are sorted by path so
+ * the result is independent of discovery order; returns `undefined` for an
+ * empty set so callers can distinguish "no files" from "empty files".
+ */
+export async function hashFileContents(files: string[]): Promise<string | undefined> {
     if (files.length === 0) return undefined;
     const h = createHash("sha256");
-    for (const file of files.sort()) {
+    for (const file of files.slice().sort()) {
         h.update(await fs.readFile(file, "utf8"));
     }
     return h.digest("hex");
