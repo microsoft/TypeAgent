@@ -59,7 +59,8 @@ backed by the in-memory sandbox manager and event stream from
   row is shown when none are running.
 - Expanding a sandbox lists its loaded agents with a per-agent health badge.
 - The view title offers **Start sandbox** and **Refresh**; running sandbox rows
-  offer inline **Restart** and **Stop**, and stopped rows offer inline **Start**.
+  offer inline **Restart**, **Stop**, and **Load agent**, stopped rows offer
+  inline **Start**, and each agent row offers inline **Unload agent**.
 - The tree refreshes automatically on sandbox lifecycle events
   (start/stop/restart, agent load/unload).
 

@@ -85,6 +85,64 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.loadAgent",
+            async (node?: SandboxTreeNode) => {
+                const id = await resolveSandboxId(runtime, node);
+                if (!id) {
+                    return;
+                }
+                const agentRef = await vscode.window.showInputBox({
+                    title: `Load agent into '${id}'`,
+                    prompt: "Agent reference (name, module specifier, or path)",
+                    placeHolder: "e.g. player",
+                    ignoreFocusOut: true,
+                    validateInput: (value) =>
+                        value.trim().length === 0
+                            ? "Enter an agent reference."
+                            : undefined,
+                });
+                if (!agentRef) {
+                    return;
+                }
+                try {
+                    const status = await runtime.loadSandboxAgent(
+                        id,
+                        agentRef.trim(),
+                    );
+                    vscode.window.showInformationMessage(
+                        `Loaded agent into '${status.id}' (${status.agents.length} loaded).`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to load agent: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.unloadAgent",
+            async (node?: SandboxTreeNode) => {
+                const id = node?.sandboxId;
+                const agentName = node?.agentName;
+                if (!id || !agentName) {
+                    vscode.window.showInformationMessage(
+                        "Select an agent in the Sandboxes view to unload it.",
+                    );
+                    return;
+                }
+                try {
+                    await runtime.unloadSandboxAgent(id, agentName);
+                    vscode.window.showInformationMessage(
+                        `Unloaded agent '${agentName}' from '${id}'.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to unload agent: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
 
     const corpusTree = new CorpusTreeProvider(runtime);

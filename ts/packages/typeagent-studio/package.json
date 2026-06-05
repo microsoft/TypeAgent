@@ -193,6 +193,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "typeagent-studio.loadAgent",
+        "title": "Load agent",
+        "category": "TypeAgent Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "typeagent-studio.unloadAgent",
+        "title": "Unload agent",
+        "category": "TypeAgent Studio",
+        "icon": "$(trash)"
+      },
+      {
         "command": "typeagent-studio.refreshCorpora",
         "title": "Refresh corpora",
         "category": "TypeAgent Studio",
@@ -287,8 +299,18 @@
           "group": "inline@2"
         },
         {
+          "command": "typeagent-studio.loadAgent",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@0"
+        },
+        {
           "command": "typeagent-studio.startSandbox",
           "when": "view == typeagentStudioSandboxes && viewItem == sandbox.stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.unloadAgent",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandboxAgent",
           "group": "inline@1"
         }
       ]
@@ -320,6 +342,8 @@
     "onCommand:typeagent-studio.startSandbox",
     "onCommand:typeagent-studio.stopSandbox",
     "onCommand:typeagent-studio.restartSandbox",
+    "onCommand:typeagent-studio.loadAgent",
+    "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
     "onCommand:typeagent-studio.refreshEvents",

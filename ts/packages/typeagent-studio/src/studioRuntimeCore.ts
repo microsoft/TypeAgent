@@ -115,6 +115,13 @@ export interface StudioRuntime {
     stopSandbox(id: string): Promise<void>;
     restartSandbox(id: string): Promise<void>;
     /**
+     * Load an agent into a running sandbox. `agentRef` is a path or module
+     * reference; the loader derives the agent name. Returns the updated status.
+     */
+    loadSandboxAgent(id: string, agentRef: string): Promise<SandboxStatus>;
+    /** Unload a named agent from a sandbox. Returns the updated status. */
+    unloadSandboxAgent(id: string, agentName: string): Promise<SandboxStatus>;
+    /**
      * Subscribe to sandbox lifecycle changes (start/stop/restart, agent
      * load/unload). The listener is invoked after each such event so a UI can
      * refresh. Returns a disposable to stop listening.
@@ -376,6 +383,14 @@ export function createStudioRuntimeCore(
         },
         async restartSandbox(id) {
             await sandbox.restart(id);
+        },
+        async loadSandboxAgent(id, agentRef) {
+            await sandbox.loadAgent(id, agentRef);
+            return sandbox.status(id);
+        },
+        async unloadSandboxAgent(id, agentName) {
+            await sandbox.unloadAgent(id, agentName);
+            return sandbox.status(id);
         },
         onSandboxChanged(listener) {
             const subscription = events.subscribe(() => listener(), {

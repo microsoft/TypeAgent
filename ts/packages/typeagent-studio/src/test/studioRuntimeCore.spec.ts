@@ -95,7 +95,10 @@ test("runRemainingPhasesOnActiveSession completes pipeline in order", async () =
     for (const phase of runtime.listPhases()) {
         assert.equal(result.state.phases[phase]?.status, "complete");
     }
-    assert.deepEqual(await runtime.getPhaseStatusOnActiveSession("Testing"), "complete");
+    assert.deepEqual(
+        await runtime.getPhaseStatusOnActiveSession("Testing"),
+        "complete",
+    );
 });
 
 test("restorePhaseOnActiveSession marks downstream phases stale after ancestor rerun", async () => {
@@ -321,9 +324,12 @@ test("resolveInstallArtifactPathForActiveSession prefers packaging artifact outp
     const workspaceRoot = await fs.mkdtemp(
         path.join(os.tmpdir(), "typeagent-studio-resolve-workspace-"),
     );
-    await fs.mkdir(path.join(workspaceRoot, "packages", "agents", "service-desk"), {
-        recursive: true,
-    });
+    await fs.mkdir(
+        path.join(workspaceRoot, "packages", "agents", "service-desk"),
+        {
+            recursive: true,
+        },
+    );
 
     const { context } = createContext([workspaceRoot]);
     const runtime = createStudioRuntimeCore(context, {
@@ -500,7 +506,8 @@ test("resolveInstallArtifactPathForActiveSession and checkPackagingHealthGate", 
     assert.equal(gate.status, "warn");
     assert.equal(gate.findings.length, 1);
 
-    const activeGate = await runtime.evaluatePackagingHealthGateForActiveSession();
+    const activeGate =
+        await runtime.evaluatePackagingHealthGateForActiveSession();
     assert.equal(activeGate.status, "warn");
     assert.equal(activeGate.findings.length, 1);
 });
@@ -566,4 +573,43 @@ test("clearActiveOnboardingSession removes the current session binding", async (
         () => runtime.getActiveOnboardingSession(),
         /No onboarding session found/,
     );
+});
+
+test("loadSandboxAgent loads an agent and emits a lifecycle event", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    let changes = 0;
+    const changeSub = runtime.onSandboxChanged(() => {
+        changes++;
+    });
+    const loadedAgents: string[] = [];
+    const anySub = runtime.onAnyEvent((event) => {
+        if (event.type === "sandbox.agent.loaded" && event.affectedAgent) {
+            loadedAgents.push(event.affectedAgent);
+        }
+    });
+
+    const started = await runtime.startSandbox();
+    const status = await runtime.loadSandboxAgent(started.id, "player");
+
+    assert.ok(status.agents.some((agent) => agent.name === "player"));
+    assert.ok(loadedAgents.includes("player"));
+    assert.ok(changes >= 2);
+
+    changeSub.dispose();
+    anySub.dispose();
+});
+
+test("unloadSandboxAgent removes a loaded agent", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    const started = await runtime.startSandbox();
+    await runtime.loadSandboxAgent(started.id, "calendar");
+    const afterLoad = await runtime.listSandboxes();
+    assert.ok(afterLoad[0].agents.some((agent) => agent.name === "calendar"));
+
+    const status = await runtime.unloadSandboxAgent(started.id, "calendar");
+    assert.ok(!status.agents.some((agent) => agent.name === "calendar"));
 });
