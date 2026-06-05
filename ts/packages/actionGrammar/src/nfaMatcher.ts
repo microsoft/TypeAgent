@@ -223,14 +223,14 @@ export function matchGrammarWithNFA(
             result.ruleIndex !== undefined
                 ? _grammar.alternatives[result.ruleIndex]
                 : undefined;
-        // spacing=none + outer whitespace: reject (matches token-path
-        // post-match check).
-        if (matchedRule?.spacingMode === "none") {
-            const hasOuter =
-                request.length !== request.trim().length &&
-                request.trim().length > 0;
-            if (hasOuter) return [];
-        }
+        // No `spacing=none` outer-whitespace post-check here: the char
+        // matcher's leading regex (none → empty separator) already
+        // rejects leading whitespace at charPos=0, and `tryAccept`
+        // already rejects unconsumed trailing whitespace at the
+        // outermost rule.  A coarse `request.trim()` check would also
+        // mis-reject grammars whose literals END with an escape-space
+        // segment (the match span legitimately consumed the trailing
+        // space).  Cluster D fix.
         const hasExplicitValue = matchedRule?.value !== undefined;
         const actionObject = hasExplicitValue
             ? result.actionValue
