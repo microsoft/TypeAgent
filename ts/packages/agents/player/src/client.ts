@@ -25,7 +25,7 @@ import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
 import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
-import { TypeChatLanguageModel, createLanguageModel } from "typechat";
+import { openai, ChatModelWithStreaming } from "aiclient";
 import {
     AlbumTrackCollection,
     ITrackCollection,
@@ -51,7 +51,7 @@ import {
     addTracksToPlaylist,
     getRecommendationsFromTrackCollection,
     getRecentlyPlayed,
-    limitMax,
+    searchLimitMax,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -71,6 +71,7 @@ import {
     DisplayContent,
     Storage,
     ActionResult,
+    ActionTokenUsage,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -126,12 +127,42 @@ function createNotFoundActionResult(kind: string, queryString?: string) {
     return createErrorActionResult(message);
 }
 
-let languageModel: TypeChatLanguageModel | undefined;
-export function getTypeChatLanguageModel() {
+let languageModel: ChatModelWithStreaming | undefined;
+// Returns the chat model used for LLM-backed track filtering.
+//
+// Uses an aiclient model (openai.createChatModel) instead of typechat's
+// createLanguageModel: the bare TypeChatLanguageModel returned by
+// createLanguageModel does not surface token usage (its complete() only
+// yields the response text), whereas the aiclient model exposes
+// completionCallback, which receives the raw response (including usage).
+//
+// When a tokenUsage accumulator is supplied, the model's completionCallback
+// is (re)bound to add each completion's usage into it so the caller can
+// report token consumption on its ActionResult.
+export function getTypeChatLanguageModel(tokenUsage?: ActionTokenUsage) {
     if (languageModel === undefined) {
         loadConfigSync();
-        languageModel = createLanguageModel(process.env);
+        // No explicit settings => initialize from the standard TypeChat env
+        // variables, matching the previous createLanguageModel(process.env).
+        languageModel = openai.createChatModel(
+            undefined,
+            undefined,
+            undefined,
+            ["player"],
+        );
     }
+    // The model is a shared singleton, so bind usage capture to the current
+    // request's accumulator on each call (and clear it when none is given).
+    languageModel.completionCallback = tokenUsage
+        ? (_request, response) => {
+              const usage = response?.usage;
+              if (usage) {
+                  tokenUsage.prompt_tokens += usage.prompt_tokens ?? 0;
+                  tokenUsage.completion_tokens += usage.completion_tokens ?? 0;
+                  tokenUsage.total_tokens += usage.total_tokens ?? 0;
+              }
+          }
+        : undefined;
     return languageModel;
 }
 
@@ -449,7 +480,7 @@ export async function searchTracks(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -465,7 +496,7 @@ export async function searchForPlaylists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -852,29 +883,21 @@ async function playPlaylistAction(
         }
     }
     if (playlist) {
-        const playlistResponse = await getPlaylistTracks(
+        const tracks = await getPlaylistTracks(
             clientContext.service,
             playlist.id,
         );
-        if (playlistResponse) {
-            const collection = new PlaylistTrackCollection(
-                playlist,
-                playlistResponse.items.map((item) => item.track!),
-            );
-            let actionResult = await playTrackCollection(
-                collection,
-                clientContext,
-            );
+        const collection = new PlaylistTrackCollection(playlist, tracks);
+        let actionResult = await playTrackCollection(collection, clientContext);
 
-            // add the playlist as an entity
-            actionResult.entities.push({
-                name: playlist.name,
-                type: ["playlist"],
-                uniqueId: playlist.id,
-            });
+        // add the playlist as an entity
+        actionResult.entities.push({
+            name: playlist.name,
+            type: ["playlist"],
+            uniqueId: playlist.id,
+        });
 
-            return actionResult;
-        }
+        return actionResult;
     }
     return createNotFoundActionResult(`playlist ${playlistName}`);
 }
@@ -961,6 +984,9 @@ export async function handleCall(
     clientContext: IClientContext,
     actionIO: ActionIO,
     instanceStorage?: Storage,
+    // Per-request accumulator the LLM-backed paths (e.g. track filtering)
+    // pass to getTypeChatLanguageModel so consumed tokens are attributed here.
+    tokenUsage?: ActionTokenUsage,
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "playRandom":
@@ -1147,22 +1173,17 @@ export async function handleCall(
                 }
             }
             if (playlist) {
-                const playlistResponse = await getPlaylistTracks(
+                const tracks = await getPlaylistTracks(
                     clientContext.service,
                     playlist.id,
                 );
-                if (playlistResponse) {
-                    const collection = new PlaylistTrackCollection(
-                        playlist,
-                        playlistResponse.items.map((item) => item.track!),
-                    );
-                    console.log(chalk.magentaBright("Playlist:"));
-                    await updateTrackListAndPrint(collection, clientContext);
-                    return htmlTrackNames(
-                        collection,
-                        `Playlist: ${playlist.name}`,
-                    );
-                }
+                const collection = new PlaylistTrackCollection(
+                    playlist,
+                    tracks,
+                );
+                console.log(chalk.magentaBright("Playlist:"));
+                await updateTrackListAndPrint(collection, clientContext);
+                return htmlTrackNames(collection, `Playlist: ${playlist.name}`);
             }
             return createNotFoundActionResult(`Playlist ${playlistName}`);
         }
@@ -1197,26 +1218,21 @@ export async function handleCall(
                         clientContext.userData!.data,
                     );
 
-                    const playlistResponse = await getPlaylistTracks(
+                    const tracks = await getPlaylistTracks(
                         clientContext.service,
                         playlist.id,
                     );
 
-                    if (playlistResponse) {
-                        const collection = new PlaylistTrackCollection(
-                            playlist,
-                            playlistResponse.items.map((item) => item.track!),
-                        );
-                        console.log(chalk.magentaBright("Playlist:"));
-                        await updateTrackListAndPrint(
-                            collection,
-                            clientContext,
-                        );
-                        return htmlTrackNames(
-                            collection,
-                            `Playlist: ${playlist.name}`,
-                        );
-                    }
+                    const collection = new PlaylistTrackCollection(
+                        playlist,
+                        tracks,
+                    );
+                    console.log(chalk.magentaBright("Playlist:"));
+                    await updateTrackListAndPrint(collection, clientContext);
+                    return htmlTrackNames(
+                        collection,
+                        `Playlist: ${playlist.name}`,
+                    );
                 } else {
                     return createErrorActionResult("No playlist found");
                 }
@@ -1323,7 +1339,7 @@ export async function handleCall(
 
                     const tracks = await applyFilterExpr(
                         clientContext,
-                        getTypeChatLanguageModel(),
+                        getTypeChatLanguageModel(tokenUsage),
                         parseResult.ast,
                         trackList,
                         negate,
@@ -1379,7 +1395,6 @@ export async function handleCall(
                 name,
             );
 
-            console.log(resultMessage);
             return createActionResultFromTextDisplay(resultMessage);
         }
         case "deletePlaylist": {

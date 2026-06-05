@@ -12,6 +12,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import path from "path";
 import fs from "fs";
 import { openai as ai } from "aiclient";
+import { hookModelTokenUsage } from "../tokenUsage.mjs";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
@@ -171,6 +172,7 @@ export class SchemaDiscoveryAgent<T extends object> {
             undefined,
             ["schemaDiscovery"],
         );
+        hookModelTokenUsage(this.model);
         const validator = createTypeScriptJsonValidator<T>(
             this.defaultSchema,
             "PageDescription",

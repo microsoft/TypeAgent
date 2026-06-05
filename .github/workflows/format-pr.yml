@@ -1,0 +1,130 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Automatically format files changed in a pull request and commit the fixes
+# back to the PR branch.  Formatting runs only on changed files (see
+# ts/tools/scripts/prettier-changed.mjs) so it stays fast.
+#
+# Pull requests from forks cannot be pushed to with the workflow token, so
+# they are not auto-fixed; instead a check-only job fails with guidance.
+
+name: format-pr
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "ts/**"
+      - ".github/workflows/format-pr.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Auto-format and commit for same-repo (non-fork) pull requests.
+  format:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # The secrets context cannot be used directly in step `if` conditions,
+      # so expose whether the app credentials are configured as a string.
+      HAS_APP_CREDS: ${{ secrets.DEPENDABOT_APP_ID != '' }}
+    steps:
+      - name: Setup Git LF
+        run: git config --global core.autocrlf false
+
+      # Mint a short-lived, repo-scoped installation token from the
+      # typeagent-bot GitHub App when its secrets are configured.  Pushing
+      # with this token re-triggers the normal PR checks on the formatted
+      # commit.  When the secrets are absent the step is skipped and the
+      # workflow falls back to the default GITHUB_TOKEN (the formatting
+      # commit still lands, but checks are not re-triggered).
+      - name: Generate app token
+        id: app-token
+        if: env.HAS_APP_CREDS == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DEPENDABOT_APP_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ts
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+
+      - name: Format changed files
+        working-directory: ts
+        run: node tools/scripts/prettier-changed.mjs --base origin/${{ github.base_ref }} --write
+
+      - name: Commit formatting fixes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: apply prettier formatting"
+          commit_user_name: typeagent-bot
+          commit_user_email: typeagent-bot[bot]@users.noreply.github.com
+          commit_author: "typeagent-bot <typeagent-bot[bot]@users.noreply.github.com>"
+
+  # Fork pull requests cannot be auto-fixed (the workflow token is read-only
+  # on forks).  Verify formatting and fail with instructions if needed.
+  format-check-fork:
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Setup Git LF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ts
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+
+      - name: Check formatting of changed files
+        working-directory: ts
+        run: |
+          if ! node tools/scripts/prettier-changed.mjs --base origin/${{ github.base_ref }}; then
+            echo "::error::Some changed files are not formatted. Run 'pnpm prettier:changed:fix' in ts/ and push the result."
+            exit 1
+          fi

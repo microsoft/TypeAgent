@@ -539,35 +539,58 @@ export class CalendarActionHandlerV3 implements AppAgent {
             );
         }
 
+        // Per-request token-usage accumulator. Calendar's only model usage is
+        // text embeddings (via graph-utils' calendarDataIndex). aiclient's
+        // TextEmbeddingModel exposes no usage/completionCallback and discards
+        // API usage internally, so embedding tokens aren't observable here.
+        // Report an all-zero accumulator on success so the agent participates
+        // in the token-usage contract (all-zero = ran but no reportable LLM
+        // usage; undefined = not reported).
+        const tokenUsage = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
+
+        let result: ActionResult | undefined;
         switch (calendarAction.actionName) {
             case "scheduleEvent":
-                return await this.handleScheduleEvent(
+                result = await this.handleScheduleEvent(
                     calendarAction,
                     context,
                     provider,
                 );
+                break;
             case "findEvents":
-                return await this.handleFindEvents(
+                result = await this.handleFindEvents(
                     calendarAction,
                     context,
                     provider,
                 );
+                break;
             case "addParticipant":
-                return await this.handleAddParticipant(
+                result = await this.handleAddParticipant(
                     calendarAction,
                     context,
                     provider,
                 );
+                break;
             case "findTodaysEvents":
-                return await this.handleFindTodaysEvents(context, provider);
+                result = await this.handleFindTodaysEvents(context, provider);
+                break;
             case "findThisWeeksEvents":
-                return await this.handleFindThisWeeksEvents(context, provider);
+                result = await this.handleFindThisWeeksEvents(
+                    context,
+                    provider,
+                );
+                break;
             case "removeEvent":
-                return await this.handleRemoveEvent(
+                result = await this.handleRemoveEvent(
                     calendarAction,
                     context,
                     provider,
                 );
+                break;
             default:
                 console.log(
                     chalk.red(
@@ -578,6 +601,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                     `Unknown action: ${(calendarAction as any).actionName}`,
                 );
         }
+
+        // Attach usage to success results only; error/undefined carry none.
+        if (result !== undefined && result.error === undefined) {
+            result.tokenUsage = tokenUsage;
+        }
+        return result;
     }
 
     private async handleScheduleEvent(

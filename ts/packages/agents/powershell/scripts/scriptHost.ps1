@@ -135,8 +135,42 @@ try {
         }
     }
 
+    # Auto-resolve the source module for each allowed cmdlet and ensure it is imported.
+    $resolvedModules = [System.Collections.Generic.List[string]]::new()
+    foreach ($m in $AllowedModules) {
+        if ($m -and -not $resolvedModules.Contains($m)) {
+            $resolvedModules.Add($m)
+        }
+    }
+    foreach ($cmdletName in $allowedCmdlets) {
+        try {
+            # Include Function so CDXML-backed commands resolve too — many
+            # built-in networking/storage "cmdlets" (Get-NetTCPConnection in
+            # NetTCPIP, Get-NetAdapter, etc.) are CDXML functions, not compiled
+            # cmdlets, and would otherwise resolve to nothing and skip their module.
+            $resolvedCmd = Get-Command $cmdletName -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($resolvedCmd -and $resolvedCmd.ModuleName -and
+                -not $resolvedModules.Contains($resolvedCmd.ModuleName)) {
+                $resolvedModules.Add($resolvedCmd.ModuleName)
+            }
+        } catch {
+            # Cmdlet not resolvable in the host; the removal/whitelist step will
+            # surface it as unavailable at execution time.
+        }
+    }
+    $AllowedModules = $resolvedModules.ToArray()
+
     # Create session state with default cmdlets
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+
+    # Disable module auto-loading. With auto-loading off, only explicitly imported modules
+    # (allowedModules + auto-resolved) are available, so the whitelist holds.
+    # Explicit ImportPSModule calls are unaffected, so CDXML flows still work.
+    $iss.Variables.Add(
+        (New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry(
+            'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
+    )
 
     # Import allowed modules into the session state
     # This makes module cmdlets (like Get-NetTCPConnection from NetTCPIP) available
@@ -150,10 +184,21 @@ try {
         }
     }
 
+    # Microsoft.PowerShell.Core cmdlets are never stripped. CDXML commands (the
+    # Net*/Storage*/Defender* families, e.g. Get-NetTCPConnection) invoke CIM
+    # operations through Core cmdlets at runtime; removing Core makes them
+    # silently return empty results instead of erroring.
+    $coreCmdletNames = @(
+        Get-Command -Module 'Microsoft.PowerShell.Core' -CommandType Cmdlet -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name
+    )
+
     # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
     $commandsToRemove = @()
     foreach ($cmd in $iss.Commands) {
-        if ($cmd.CommandType -eq 'Cmdlet' -and $cmd.Name -notin $allowedCmdlets) {
+        if ($cmd.CommandType -eq 'Cmdlet' -and
+            $cmd.Name -notin $allowedCmdlets -and
+            $cmd.Name -notin $coreCmdletNames) {
             $commandsToRemove += $cmd
         }
     }

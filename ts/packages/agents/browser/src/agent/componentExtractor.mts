@@ -4,6 +4,7 @@
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
+import { hookModelTokenUsage } from "./tokenUsage.mjs";
 
 export type HtmlFragments = {
     frameId: string;
@@ -38,6 +39,7 @@ export async function extractPageComponent(
         undefined,
         ["componentExtraction"],
     );
+    hookModelTokenUsage(model);
 
     // Wrap schema in export type for TypeChat compatibility
     const fullSchema = schema.startsWith("export")
