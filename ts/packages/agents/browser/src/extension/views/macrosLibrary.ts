@@ -194,7 +194,10 @@ class MacroIndexApp {
         } catch (error) {
             console.error("Error loading macros:", error);
             this.state.error = "Failed to load macros. Please try again.";
-            const container = document.getElementById("actionsContainer")!;
+            // Reuse the container captured above. The previous code referenced
+            // a non-existent "actionsContainer" element, which made the catch
+            // handler throw a second exception ("Cannot set properties of null")
+            // and left the loading spinner displayed forever.
             showErrorState(container, this.state.error);
         } finally {
             this.state.loading = false;

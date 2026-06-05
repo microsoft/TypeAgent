@@ -705,12 +705,10 @@ async function handleCreateWebFlowFromRecording(
 
 async function handleGetWebFlowsForDomain(
     action: GetWebFlowsForDomain,
-    ctx: DiscoveryActionHandlerContext,
+    sessionContext: SessionContext<BrowserActionContext>,
+    entities: EntityCollector,
 ): Promise<DiscoveryActionResult> {
-    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error("WebFlowStore not available");
-    }
+    const webFlowStore = await getWebFlowStore(sessionContext);
 
     const flows = await webFlowStore.listForDomainWithDetails(
         action.parameters.domain,
@@ -718,7 +716,7 @@ async function handleGetWebFlowsForDomain(
 
     return {
         displayText: `Found ${flows.length} actions`,
-        entities: ctx.entities.getEntities(),
+        entities: entities.getEntities(),
         data: {
             actions: flows.map((f) => ({
                 name: f.name,
@@ -734,18 +732,16 @@ async function handleGetWebFlowsForDomain(
 
 async function handleGetAllWebFlows(
     action: GetAllWebFlows,
-    ctx: DiscoveryActionHandlerContext,
+    sessionContext: SessionContext<BrowserActionContext>,
+    entities: EntityCollector,
 ): Promise<DiscoveryActionResult> {
-    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error("WebFlowStore not available");
-    }
+    const webFlowStore = await getWebFlowStore(sessionContext);
 
     const flows = await webFlowStore.listAllWithDetails();
 
     return {
         displayText: `Found ${flows.length} actions`,
-        entities: ctx.entities.getEntities(),
+        entities: entities.getEntities(),
         data: {
             actions: flows.map((f) => ({
                 name: f.name,
@@ -761,25 +757,23 @@ async function handleGetAllWebFlows(
 
 async function handleDeleteWebFlow(
     action: DeleteWebFlow,
-    ctx: DiscoveryActionHandlerContext,
+    sessionContext: SessionContext<BrowserActionContext>,
+    entities: EntityCollector,
 ): Promise<DiscoveryActionResult> {
-    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error("WebFlowStore not available");
-    }
+    const webFlowStore = await getWebFlowStore(sessionContext);
 
     const deleted = await webFlowStore.delete(action.parameters.name);
 
     if (deleted) {
         debug(`Deleted webFlow: ${action.parameters.name}`);
-        sendWebFlowRefreshToClient(ctx.sessionContext);
+        sendWebFlowRefreshToClient(sessionContext);
     }
 
     return {
         displayText: deleted
             ? "Action deleted successfully"
             : "Action not found",
-        entities: ctx.entities.getEntities(),
+        entities: entities.getEntities(),
         data: {
             success: deleted,
             name: action.parameters.name,
@@ -1351,6 +1345,54 @@ export async function handleSchemaDiscoveryAction(
     progressCallback?: (message: string) => void,
     actionIO?: ProgressActionIO,
 ) {
+    // Create entity collector up front; some handlers below need it before
+    // we know whether a full discovery context (browser + LLM) is required.
+    const entityCollector = new EntityCollector();
+
+    // Store-only operations don't need a connected browser session or the
+    // discovery LLM translator. Dispatch them first so the macros library
+    // (and similar pure-store queries) can succeed even when no browser
+    // page is active. This mirrors how the chat-side `listWebFlows`
+    // handler in webFlows/actionHandler.mts operates.
+    switch (action.actionName) {
+        case "getAllWebFlows": {
+            const r = await handleGetAllWebFlows(
+                action,
+                context,
+                entityCollector,
+            );
+            return {
+                displayText: r.displayText,
+                data: r.data,
+                entities: r.entities,
+            };
+        }
+        case "getWebFlowsForDomain": {
+            const r = await handleGetWebFlowsForDomain(
+                action,
+                context,
+                entityCollector,
+            );
+            return {
+                displayText: r.displayText,
+                data: r.data,
+                entities: r.entities,
+            };
+        }
+        case "deleteWebFlow": {
+            const r = await handleDeleteWebFlow(
+                action,
+                context,
+                entityCollector,
+            );
+            return {
+                displayText: r.displayText,
+                data: r.data,
+                entities: r.entities,
+            };
+        }
+    }
+
     if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
     }
@@ -1358,8 +1400,6 @@ export async function handleSchemaDiscoveryAction(
     const browser: BrowserControl = context.agentContext.browserControl;
     const agent = await createDiscoveryPageTranslator("GPT_5_2");
 
-    // Create entity collector and action context
-    const entityCollector = new EntityCollector();
     const discoveryContext: DiscoveryActionHandlerContext = {
         browser,
         agent,
@@ -1399,15 +1439,6 @@ export async function handleSchemaDiscoveryAction(
                 action,
                 discoveryContext,
             );
-            break;
-        case "getWebFlowsForDomain":
-            result = await handleGetWebFlowsForDomain(action, discoveryContext);
-            break;
-        case "getAllWebFlows":
-            result = await handleGetAllWebFlows(action, discoveryContext);
-            break;
-        case "deleteWebFlow":
-            result = await handleDeleteWebFlow(action, discoveryContext);
             break;
         case "inferActions":
             result = await handleInferActions(action, discoveryContext);
