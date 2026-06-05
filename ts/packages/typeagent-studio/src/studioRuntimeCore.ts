@@ -46,6 +46,12 @@ import {
     type ReplaySummary,
     type VersionSpec,
 } from "@typeagent/core/replay";
+import {
+    InProcessCollisionService,
+    type CollisionFilter,
+    type CollisionService,
+} from "@typeagent/core/collisions";
+import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
@@ -189,6 +195,18 @@ export interface StudioRuntime {
      * and summary.
      */
     replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult>;
+    /**
+     * Report a detected schema/grammar collision. Stores it and emits a
+     * `collision.detected` event (visible in the Event Log and the Collisions
+     * view). Returns the stored event.
+     */
+    reportCollision(event: CollisionDetectedEvent): CollisionDetectedEvent;
+    /** List stored collisions, newest-first, optionally filtered. */
+    listCollisions(filter?: CollisionFilter): Promise<CollisionDetectedEvent[]>;
+    /** Remove stored collisions matching the filter (all when omitted). */
+    clearCollisions(filter?: CollisionFilter): Promise<number>;
+    /** Subscribe to collision detections as they are emitted. */
+    onCollisionDetected(listener: () => void): { dispose(): void };
 }
 
 export interface StudioWorkspaceState {
@@ -213,6 +231,7 @@ export interface CreateStudioRuntimeOptions {
      * deterministic identity replay over each entry's captured `expectedAction`.
      */
     replayResolver?: ReplayActionResolver;
+    collisions?: CollisionService;
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
@@ -278,6 +297,13 @@ export function createStudioRuntimeCore(
             repoRoot,
             profileDir: path.join(context.globalStorageFsPath, "corpus"),
             feedbackProvider: (agent) => feedback.toCorpusEntries(agent),
+        });
+
+    const collisions =
+        options.collisions ??
+        new InProcessCollisionService({
+            emitter: events,
+            defaultSandboxId: DEFAULT_SANDBOX_ID,
         });
 
     return {
@@ -542,6 +568,24 @@ export function createStudioRuntimeCore(
             }
             const summary = await handle.summary;
             return { runId: handle.runId, summary, rows };
+        },
+        reportCollision(event) {
+            return collisions.report(event);
+        },
+        async listCollisions(filter) {
+            return collisions
+                .list(filter)
+                .slice()
+                .sort((a, b) => b.ts - a.ts);
+        },
+        async clearCollisions(filter) {
+            return collisions.clear(filter);
+        },
+        onCollisionDetected(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: { types: ["collision.detected"] },
+            });
+            return { dispose: () => subscription.unsubscribe() };
         },
     };
 }

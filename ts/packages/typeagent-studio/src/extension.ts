@@ -20,6 +20,10 @@ import {
     replayHasDifferences,
 } from "./replayPresentation.js";
 import {
+    COLLISIONS_VIEW_ID,
+    CollisionsTreeProvider,
+} from "./collisionsTreeProvider.js";
+import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
 } from "./studioStatusBar.js";
@@ -262,6 +266,20 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
+        ),
+    );
+
+    const collisions = new CollisionsTreeProvider(runtime);
+    context.subscriptions.push(
+        collisions,
+        vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
+        vscode.commands.registerCommand(
+            "typeagent-studio.refreshCollisions",
+            () => collisions.refresh(),
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.clearCollisions",
+            () => collisions.clear(),
         ),
     );
 

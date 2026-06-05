@@ -238,6 +238,18 @@
         "title": "Clear event log",
         "category": "TypeAgent Studio",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "typeagent-studio.refreshCollisions",
+        "title": "Refresh collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.clearCollisions",
+        "title": "Clear collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -262,6 +274,10 @@
         {
           "id": "typeagentStudioEvents",
           "name": "Event Log"
+        },
+        {
+          "id": "typeagentStudioCollisions",
+          "name": "Collisions"
         }
       ]
     },
@@ -307,6 +323,16 @@
           "command": "typeagent-studio.clearEvents",
           "when": "view == typeagentStudioEvents",
           "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.refreshCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.clearCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -343,6 +369,7 @@
     "onView:typeagentStudioSandboxes",
     "onView:typeagentStudioCorpora",
     "onView:typeagentStudioEvents",
+    "onView:typeagentStudioCollisions",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
@@ -371,7 +398,9 @@
     "onCommand:typeagent-studio.recordFeedback",
     "onCommand:typeagent-studio.replayCorpus",
     "onCommand:typeagent-studio.refreshEvents",
-    "onCommand:typeagent-studio.clearEvents"
+    "onCommand:typeagent-studio.clearEvents",
+    "onCommand:typeagent-studio.refreshCollisions",
+    "onCommand:typeagent-studio.clearCollisions"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

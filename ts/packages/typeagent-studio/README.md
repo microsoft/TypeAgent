@@ -163,6 +163,27 @@ Summarization lives in the vscode-free `eventLogPresentation.ts` module
 (unit-tested); `eventLogTreeProvider.ts` is a thin `TreeDataProvider` adapter
 that owns the bounded newest-first ring.
 
+## Collisions view
+
+The **TypeAgent Studio** container also hosts a **Collisions** view backed by
+the `InProcessCollisionService` and `collision.detected` event stream from
+`@typeagent/core`:
+
+- Lists detected schema/grammar collisions newest-first (capped at 200), each
+  labelled by kind (`overlap`/`shadow`/`ambiguity`) and a compact participant
+  summary, with the detection point (`load`, `schema-edit`, `grammar-edit`,
+  `replay`) as the description.
+- Expanding a collision reveals its participants (agent action types with the
+  contributing file and line) and any exemplar utterances that witness the
+  overlap.
+- Reported collisions also appear in the Event Log; the view title offers
+  **Refresh** and **Clear**.
+
+Collisions are reported through `runtime.reportCollision(...)` (the core service
+also provides `fromDispatcher`/`fromGrammarTools` mappers). Row formatting lives
+in the vscode-free `collisionsPresentation.ts` module (unit-tested);
+`collisionsTreeProvider.ts` is a thin `TreeDataProvider` adapter.
+
 Install behavior for `Install latest onboarding session to sandbox`:
 
 - Prefers explicit artifact paths emitted by onboarding `Scaffolder`/`Packaging` phase outputs.

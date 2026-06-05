@@ -20,6 +20,7 @@ import type {
     CorpusService,
 } from "@typeagent/core/corpus";
 import type { ReplayActionResolver } from "@typeagent/core/replay";
+import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
 
 function createContext(workspaceFolderFsPaths: string[] = []) {
@@ -740,4 +741,60 @@ test("replayCorpus uses an injected resolver and emits replay events", async () 
     assert.equal(result.summary.equalCount, 0);
     assert.equal(rowEvents, 2);
     assert.equal(summaryEvents, 1);
+});
+
+function makeCollision(
+    overrides: Partial<CollisionDetectedEvent> = {},
+): CollisionDetectedEvent {
+    return {
+        schemaVersion: 1,
+        type: "collision.detected",
+        ts: 1,
+        sandboxId: "studio-default",
+        kind: "overlap",
+        detectionPoint: "grammar-edit",
+        participants: [],
+        ...overrides,
+    };
+}
+
+test("reportCollision stores, emits an event, and lists newest-first", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    let detections = 0;
+    const sub = runtime.onCollisionDetected(() => {
+        detections += 1;
+    });
+
+    runtime.reportCollision(makeCollision({ ts: 10, kind: "overlap" }));
+    runtime.reportCollision(makeCollision({ ts: 20, kind: "shadow" }));
+    sub.dispose();
+
+    assert.equal(detections, 2);
+    const list = await runtime.listCollisions();
+    assert.equal(list.length, 2);
+    assert.equal(list[0].kind, "shadow");
+    assert.equal(list[1].kind, "overlap");
+
+    const collisionEvents = (await runtime.queryRecentEvents()).filter(
+        (event) => event.type === "collision.detected",
+    );
+    assert.equal(collisionEvents.length, 2);
+});
+
+test("listCollisions honors filters and clearCollisions empties the store", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    runtime.reportCollision(makeCollision({ kind: "overlap" }));
+    runtime.reportCollision(makeCollision({ kind: "ambiguity" }));
+
+    const ambiguities = await runtime.listCollisions({ kind: "ambiguity" });
+    assert.equal(ambiguities.length, 1);
+    assert.equal(ambiguities[0].kind, "ambiguity");
+
+    const removed = await runtime.clearCollisions();
+    assert.equal(removed, 2);
+    assert.equal((await runtime.listCollisions()).length, 0);
 });
