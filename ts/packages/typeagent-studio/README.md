@@ -112,6 +112,26 @@ Input shaping (trimming, blank omission, rating/category choices) lives in the
 vscode-free `feedbackInputPresentation.ts` module (unit-tested); the command in
 `extension.ts` is a thin VS Code wrapper.
 
+## Replay & compare
+
+The Corpora view title also offers **Replay corpus** (F4.1):
+
+- Pick a loaded agent; the runtime replays its federated corpus through the
+  `replayCorpus()` engine from `@typeagent/core`, evaluating each utterance
+  against versions A and B and producing an `ActionDelta` per row.
+- Each row is classified as **equal**, **changed**, **new match**, or **lost
+  match**; the run emits `replay.row`/`replay.summary` events that appear live
+  in the Event Log, and a summary headline is shown when it finishes.
+- When the run finds differences, the result offers a quick pick of the rows
+  (icon, utterance, per-version cache state, and latency).
+
+The engine is deterministic and dependency-injected: corpus access and the
+per-version action resolver are supplied by the caller. The default resolver
+does an identity replay over each entry's captured `expectedAction` (an
+all-equal baseline) until a real per-version build/dispatch is wired in. Row and
+summary formatting lives in the vscode-free `replayPresentation.ts` module
+(unit-tested); the engine lives in `@typeagent/core/replay`.
+
 ## Health status bar
 
 A status-bar item summarizes agent health across running sandboxes:

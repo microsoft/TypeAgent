@@ -15,6 +15,11 @@ import {
     buildFeedbackRecordInput,
 } from "./feedbackInputPresentation.js";
 import {
+    buildReplayRowViews,
+    formatReplaySummaryLine,
+    replayHasDifferences,
+} from "./replayPresentation.js";
+import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
 } from "./studioStatusBar.js";
@@ -257,6 +262,61 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
+        ),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.replayCorpus",
+            async () => {
+                const agents = await runtime.listCorpusAgents();
+                if (agents.length === 0) {
+                    vscode.window.showInformationMessage(
+                        "No agents have a corpus to replay. Load an agent into a sandbox first.",
+                    );
+                    return;
+                }
+                const agent =
+                    agents.length === 1
+                        ? agents[0]
+                        : await vscode.window.showQuickPick(agents, {
+                              title: "Replay corpus",
+                              placeHolder: "Select an agent to replay",
+                          });
+                if (!agent) {
+                    return;
+                }
+                try {
+                    const result = await runtime.replayCorpus({ agent });
+                    const line = formatReplaySummaryLine(result.summary);
+                    if (result.rows.length === 0) {
+                        vscode.window.showInformationMessage(
+                            `Replay complete — ${line}`,
+                        );
+                        return;
+                    }
+                    const action = replayHasDifferences(result.summary)
+                        ? "View differences"
+                        : "View rows";
+                    const choice = await vscode.window.showInformationMessage(
+                        `Replay complete — ${line}`,
+                        action,
+                    );
+                    if (choice === action) {
+                        await vscode.window.showQuickPick(
+                            buildReplayRowViews(result.rows),
+                            {
+                                title: `Replay rows — ${agent}`,
+                                matchOnDetail: true,
+                            },
+                        );
+                    }
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to replay corpus: ${describeError(error)}`,
+                    );
+                }
+            },
         ),
     );
 

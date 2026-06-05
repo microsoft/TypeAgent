@@ -14,6 +14,12 @@ import type {
     SandboxManager,
     SandboxStatus,
 } from "@typeagent/core/sandbox";
+import type {
+    CorpusEntry,
+    CorpusFilter,
+    CorpusService,
+} from "@typeagent/core/corpus";
+import type { ReplayActionResolver } from "@typeagent/core/replay";
 import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
 
 function createContext(workspaceFolderFsPaths: string[] = []) {
@@ -646,4 +652,92 @@ test("recordFeedback emits an event and federates into the agent corpus", async 
     );
     assert.equal(feedbackEntries.length, 1);
     assert.equal(feedbackEntries[0].utterance, "play some jazz");
+});
+
+class StubCorpusService implements CorpusService {
+    constructor(private readonly entries: CorpusEntry[]) {}
+    async list(_agent: string, _filter?: CorpusFilter): Promise<CorpusEntry[]> {
+        return this.entries;
+    }
+    async *load(): AsyncIterable<CorpusEntry> {
+        for (const entry of this.entries) {
+            yield entry;
+        }
+    }
+    async append(): Promise<string> {
+        throw new Error("not implemented");
+    }
+    async promote(): Promise<number> {
+        throw new Error("not implemented");
+    }
+    async exportJsonl(): Promise<number> {
+        throw new Error("not implemented");
+    }
+    async addExternalSource(): Promise<void> {}
+    async removeExternalSource(): Promise<void> {}
+    async listExternalSources() {
+        return [];
+    }
+}
+
+function corpusEntry(id: string, expectedAction?: unknown): CorpusEntry {
+    return {
+        id,
+        utterance: `utterance ${id}`,
+        agent: "player",
+        source: "in-repo",
+        provenance: { sourceUri: `mem://${id}` },
+        ...(expectedAction !== undefined ? { expectedAction } : {}),
+    };
+}
+
+test("replayCorpus returns an all-equal baseline with the identity resolver", async () => {
+    const { context } = createContext();
+    const corpus = new StubCorpusService([
+        corpusEntry("a", { action: "play" }),
+        corpusEntry("b"),
+    ]);
+    const runtime = createStudioRuntimeCore(context, { corpus });
+
+    const result = await runtime.replayCorpus({ agent: "player" });
+    assert.equal(result.rows.length, 2);
+    assert.equal(result.summary.corpusSize, 2);
+    assert.equal(result.summary.rowCount, 2);
+    assert.equal(result.summary.equalCount, 2);
+    assert.equal(result.summary.changedCount, 0);
+});
+
+test("replayCorpus uses an injected resolver and emits replay events", async () => {
+    const { context } = createContext();
+    const corpus = new StubCorpusService([corpusEntry("a"), corpusEntry("b")]);
+    const resolver: ReplayActionResolver = {
+        resolve(entry, _version, side) {
+            return {
+                action: { value: side === "A" ? entry.id : `${entry.id}!` },
+                cacheState: "hit",
+            };
+        },
+    };
+    const runtime = createStudioRuntimeCore(context, {
+        corpus,
+        replayResolver: resolver,
+    });
+
+    let rowEvents = 0;
+    let summaryEvents = 0;
+    const sub = runtime.onAnyEvent((event) => {
+        if (event.type === "replay.row") {
+            rowEvents += 1;
+        } else if (event.type === "replay.summary") {
+            summaryEvents += 1;
+        }
+    });
+
+    const result = await runtime.replayCorpus({ agent: "player" });
+    sub.dispose();
+
+    assert.equal(result.summary.changedCount, 2);
+    assert.equal(result.summary.equalCount, 0);
+    assert.equal(rowEvents, 2);
+    assert.equal(summaryEvents, 1);
 });

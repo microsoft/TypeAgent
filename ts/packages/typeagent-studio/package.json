@@ -217,6 +217,12 @@
         "icon": "$(feedback)"
       },
       {
+        "command": "typeagent-studio.replayCorpus",
+        "title": "Replay corpus",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-rerun)"
+      },
+      {
         "command": "typeagent-studio.focusSandboxes",
         "title": "Focus Sandboxes view",
         "category": "TypeAgent Studio"
@@ -286,6 +292,11 @@
           "command": "typeagent-studio.recordFeedback",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.replayCorpus",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@3"
         },
         {
           "command": "typeagent-studio.refreshEvents",
@@ -358,6 +369,7 @@
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
     "onCommand:typeagent-studio.recordFeedback",
+    "onCommand:typeagent-studio.replayCorpus",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents"
   ],

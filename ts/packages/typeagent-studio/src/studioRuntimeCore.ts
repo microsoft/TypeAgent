@@ -25,6 +25,7 @@ import {
 import {
     FileCorpusService,
     type CorpusEntry,
+    type CorpusFilter,
     type CorpusService,
 } from "@typeagent/core/corpus";
 import {
@@ -36,6 +37,15 @@ import {
     type FeedbackRow,
     type FeedbackService,
 } from "@typeagent/core/feedback";
+import {
+    replayCorpus,
+    type ActionDelta,
+    type ReplayActionResolver,
+    type ReplayAgentResolution,
+    type ReplayMissPolicy,
+    type ReplaySummary,
+    type VersionSpec,
+} from "@typeagent/core/replay";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
@@ -61,6 +71,22 @@ export interface PackagingHealthGateResult {
     findings: HealthFinding[];
     artifactPath: string;
     checkedAgent?: string;
+}
+
+/** Request shape for {@link StudioRuntime.replayCorpus}. Versions and miss
+ *  policy default to a deterministic working-tree self-compare. */
+export interface StudioReplayRequest {
+    agent: string;
+    corpus?: CorpusFilter;
+    versionA?: VersionSpec;
+    versionB?: VersionSpec;
+    missPolicy?: ReplayMissPolicy;
+}
+
+export interface StudioReplayResult {
+    runId: string;
+    summary: ReplaySummary;
+    rows: ActionDelta[];
 }
 
 export interface StudioRuntime {
@@ -156,6 +182,13 @@ export interface StudioRuntime {
     recordFeedback(input: FeedbackRecordInput): Promise<void>;
     /** List recorded feedback rows, optionally filtered. */
     listFeedback(filter?: FeedbackFilter): Promise<FeedbackRow[]>;
+    /**
+     * Replay an agent's corpus through the F4.1 compare engine, evaluating each
+     * utterance against versions A and B. Emits `replay.row`/`replay.summary`
+     * events (visible in the Event Log) and resolves with the collected rows
+     * and summary.
+     */
+    replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult>;
 }
 
 export interface StudioWorkspaceState {
@@ -174,10 +207,39 @@ export interface CreateStudioRuntimeOptions {
     sandbox?: SandboxManager;
     corpus?: CorpusService;
     feedback?: FeedbackService & FeedbackCorpusProjector;
+    /**
+     * Resolver that evaluates one utterance against one agent version. Injected
+     * so a real per-version build/dispatch can replace the default, which does a
+     * deterministic identity replay over each entry's captured `expectedAction`.
+     */
+    replayResolver?: ReplayActionResolver;
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
 }
+
+/** Deterministic default resolver: surfaces each entry's captured
+ *  `expectedAction` (and feedback) identically for both versions, so an
+ *  un-parameterized replay reports an all-equal baseline. */
+const identityReplayResolver: ReplayActionResolver = {
+    resolve(entry): ReplayAgentResolution {
+        if (entry.expectedAction !== undefined) {
+            return {
+                action: entry.expectedAction,
+                cacheState: "hit",
+                ...(entry.feedback !== undefined
+                    ? { feedback: entry.feedback }
+                    : {}),
+            };
+        }
+        return {
+            cacheState: "needs-explanation",
+            ...(entry.feedback !== undefined
+                ? { feedback: entry.feedback }
+                : {}),
+        };
+    },
+};
 
 export function createStudioRuntimeCore(
     context: StudioRuntimeContext,
@@ -458,6 +520,28 @@ export function createStudioRuntimeCore(
         },
         async listFeedback(filter) {
             return feedback.list(filter);
+        },
+        async replayCorpus(request) {
+            const replayOptions = {
+                agent: request.agent,
+                corpus: request.corpus ?? {},
+                versionA: request.versionA ?? { kind: "workingTree" },
+                versionB: request.versionB ?? { kind: "workingTree" },
+                missPolicy: request.missPolicy ?? "needs-explanation",
+            } satisfies Parameters<typeof replayCorpus>[0];
+
+            const handle = replayCorpus(replayOptions, {
+                corpus: { list: (agent, filter) => corpus.list(agent, filter) },
+                resolver: options.replayResolver ?? identityReplayResolver,
+                emitter: events,
+            });
+
+            const rows: ActionDelta[] = [];
+            for await (const row of handle.rows) {
+                rows.push(row);
+            }
+            const summary = await handle.summary;
+            return { runId: handle.runId, summary, rows };
         },
     };
 }
