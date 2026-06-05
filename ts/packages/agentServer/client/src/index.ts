@@ -3,6 +3,7 @@
 
 export {
     connectAgentServer,
+    createAgentServerConnection,
     AgentServerConnection,
     ConversationDispatcher,
     connectDispatcher,

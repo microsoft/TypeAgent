@@ -417,7 +417,15 @@ jobs:
         working-directory: ts
         run: |
           node tools/scripts/repo-policy-check.mjs --fix || true
-          pnpm run build
+          # Use `rebuild` (fluid-build --rebuild), not `build`, so the
+          # verification matches the clean-checkout CI build_ts job.
+          # fluid-build's incremental cache and tsc's .tsbuildinfo are
+          # keyed off the package's own sources + declared dep specs in
+          # package.json; an in-range transitive dep upgrade doesn't
+          # bust the cache, so a breaking .d.ts change in a dep can
+          # pass the incremental build here while still failing CI's
+          # fresh build.
+          pnpm run rebuild
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
         env:
           DEBUG_DEMB: true

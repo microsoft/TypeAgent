@@ -56,12 +56,18 @@ export type LatLong = {
 export function exifGPSTagToLatLong(
     exifLat:
         | XmpTag
-        | TypedTag<[[number, number], [number, number], [number, number]]>
+        | TypedTag<
+              [[number, number], [number, number], [number, number]],
+              [number | null, number | null, number | null]
+          >
         | undefined,
     exifLatRef: XmpTag | StringArrayTag | undefined,
     exifLong:
         | XmpTag
-        | TypedTag<[[number, number], [number, number], [number, number]]>
+        | TypedTag<
+              [[number, number], [number, number], [number, number]],
+              [number | null, number | null, number | null]
+          >
         | undefined,
     exifLongRef: XmpTag | StringArrayTag | undefined,
 ): LatLong | undefined {

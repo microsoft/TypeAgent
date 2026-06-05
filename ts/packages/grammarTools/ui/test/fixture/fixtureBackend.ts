@@ -10,7 +10,7 @@ import type {
     GrammarDiff,
     GrammarSnapshot,
 } from "grammar-tools-core";
-import type { GrammarBackend } from "../backend.js";
+import type { GrammarBackend } from "../../src/backend.js";
 
 // ---------------------------------------------------------------------------
 // Canned data (derived from the player agent grammar)

@@ -65,10 +65,12 @@ export class MSGraphEmailProvider
 
     async getUser(): Promise<EmailUser> {
         const user = await this.client.getUserAsync();
+        const photoUrl = await this.client.getUserPhotoAsync();
         return {
             id: user.id,
             displayName: user.displayName || undefined,
             email: user.mail || user.userPrincipalName || undefined,
+            photoUrl,
         };
     }
 

@@ -29,7 +29,7 @@
     "tsc": "tsc -b src test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
     "@typeagent/agent-sdk": "workspace:*",
     "@types/html-to-text": "^9.0.4",
     "browser-typeagent": "workspace:*",

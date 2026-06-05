@@ -247,7 +247,6 @@ export class GtTraceTimeline extends LitElement {
             .summary-bar {
                 padding: 6px 8px;
                 font-size: 0.9em;
-                border-top: 1px solid var(--vscode-panel-border, #80808059);
                 color: var(--vscode-descriptionForeground, #9d9d9d);
             }
         `,
@@ -302,7 +301,10 @@ export class GtTraceTimeline extends LitElement {
     private _repeatPolicy: RepeatPolicy = "exhaustive";
 
     @state()
-    private _pathFilter: "all" | "success" | "failure" = "all";
+    private _showSuccessPath: boolean = true;
+
+    @state()
+    private _showFailurePath: boolean = true;
 
     private _initialized = false;
 
@@ -403,10 +405,8 @@ export class GtTraceTimeline extends LitElement {
                 ({ event, index }) =>
                     !hidden.has(index) &&
                     !this._hiddenKinds.has(event.kind as EventKindFilter) &&
-                    (this._pathFilter === "all" ||
-                        (this._pathFilter === "success"
-                            ? onSuccessPath.has(index)
-                            : !onSuccessPath.has(index))),
+                    (this._showSuccessPath || !onSuccessPath.has(index)) &&
+                    (this._showFailurePath || onSuccessPath.has(index)),
             );
     }
 
@@ -726,6 +726,29 @@ export class GtTraceTimeline extends LitElement {
                 : nothing}
             ${this._trace
                 ? html`
+                      <div class="summary-bar">
+                          ${this._trace.events.length} events,
+                          ${this._trace.events.filter(
+                              (e) => e.kind === "ruleEntered",
+                          ).length}
+                          rules entered,
+                          ${this._trace.events.filter(
+                              (e) => e.kind === "backtrack",
+                          ).length}
+                          backtracks, result:
+                          <strong>${this._trace.result}</strong>
+                          ${this._trace.matchValue !== undefined
+                              ? html`, value:
+                                    <code
+                                        >${JSON.stringify(
+                                            this._trace.matchValue,
+                                            null,
+                                            2,
+                                        )}</code
+                                    >`
+                              : nothing}
+                      </div>
+
                       <div class="filter-bar">
                           ${allKinds.map(
                               (kind) => html`
@@ -748,28 +771,35 @@ export class GtTraceTimeline extends LitElement {
                               `,
                           )}
                           <span class="filter-separator"></span>
-                          ${(
-                              [
-                                  ["all", "All"],
-                                  ["success", "\u2713 Success path"],
-                                  ["failure", "\u2717 Failure path"],
-                              ] as const
-                          ).map(
-                              ([value, label]) => html`
-                                  <button
-                                      class="filter-btn ${this._pathFilter ===
-                                      value
-                                          ? "active"
-                                          : ""}"
-                                      aria-pressed=${this._pathFilter === value}
-                                      @click=${() => {
-                                          this._pathFilter = value;
-                                      }}
-                                  >
-                                      ${label}
-                                  </button>
-                              `,
-                          )}
+                          <button
+                              class="filter-btn ${this._showSuccessPath
+                                  ? "active"
+                                  : ""}"
+                              aria-pressed=${this._showSuccessPath}
+                              @click=${() => {
+                                  this._showSuccessPath =
+                                      !this._showSuccessPath;
+                              }}
+                          >
+                              <span style="color: #4ec9b0">✓</span>
+                              Success path
+                          </button>
+                          <button
+                              class="filter-btn ${this._showFailurePath
+                                  ? "active"
+                                  : ""}"
+                              aria-pressed=${this._showFailurePath}
+                              @click=${() => {
+                                  this._showFailurePath =
+                                      !this._showFailurePath;
+                              }}
+                          >
+                              <span
+                                  style="color: var(--vscode-errorForeground, #f48771)"
+                                  >✗</span
+                              >
+                              Failure path
+                          </button>
                       </div>
 
                       <table>
@@ -924,29 +954,6 @@ export class GtTraceTimeline extends LitElement {
                               )}
                           </tbody>
                       </table>
-
-                      <div class="summary-bar">
-                          ${this._trace.events.length} events,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "ruleEntered",
-                          ).length}
-                          rules entered,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "backtrack",
-                          ).length}
-                          backtracks, result:
-                          <strong>${this._trace.result}</strong>
-                          ${this._trace.matchValue !== undefined
-                              ? html`, value:
-                                    <code
-                                        >${JSON.stringify(
-                                            this._trace.matchValue,
-                                            null,
-                                            2,
-                                        )}</code
-                                    >`
-                              : nothing}
-                      </div>
                   `
                 : !this._loading && !this._error
                   ? html`<div class="empty-state">

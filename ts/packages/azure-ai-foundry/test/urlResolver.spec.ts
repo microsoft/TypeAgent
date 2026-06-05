@@ -42,7 +42,11 @@ describe("urlResolver", () => {
                 bingWithGrounding.apiSettingsFromEnv(),
             );
 
-            expect(resolved).toBe("https://www.microsoft.com/en-us/");
+            expect(
+                resolved?.some((url) =>
+                    /^https:\/\/(www\.)?microsoft\.com\b/.test(url),
+                ),
+            ).toBe(true);
         },
     );
 

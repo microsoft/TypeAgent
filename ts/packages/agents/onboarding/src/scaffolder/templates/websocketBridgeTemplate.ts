@@ -1,0 +1,202 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// WebSocket bridge for __agentName__.
+// Manages a WebSocket connection to the host application plugin.
+// Pattern matches the Excel/VS Code agent bridge implementations.
+//
+// Port allocation: the bridge binds on an OS-assigned ephemeral port
+// (port=0) by default. Read the actual bound port from `.port` after
+// `start()` resolves and register it with the dispatcher via
+// `context.registerPort("default", bridge.port)` from your handler so
+// external clients can discover it through the agent-server's
+// discovery channel. Pass a fixed port to `start(port)` when debugging
+// or when a host plugin expects a known address.
+
+import { WebSocketServer, WebSocket } from "ws";
+import { AddressInfo } from "net";
+
+type BridgeCommand = {
+    id: string;
+    actionName: string;
+    parameters: Record<string, unknown>;
+};
+
+type BridgeResponse = {
+    id: string;
+    success: boolean;
+    result?: unknown;
+    error?: string;
+};
+
+export class __AgentName__Bridge {
+    private clients = new Map<string, WebSocket>();
+    private nextClientId = 0;
+    private pending = new Map<
+        string,
+        {
+            resolve: (result: unknown) => void;
+            reject: (err: Error) => void;
+        }
+    >();
+
+    // Construction is private — use {@link __AgentName__Bridge.start} so
+    // callers always get a bridge that is guaranteed to be bound before
+    // they read {@link port} or pass it to the registrar.
+    private constructor(
+        private readonly server: WebSocketServer,
+        public readonly port: number,
+    ) {
+        this.server.on("connection", (ws) => {
+            const id = `c-${++this.nextClientId}`;
+            this.clients.set(id, ws);
+            ws.on("message", (data) => {
+                try {
+                    const response = JSON.parse(
+                        data.toString(),
+                    ) as BridgeResponse;
+                    const entry = this.pending.get(response.id);
+                    if (entry) {
+                        this.pending.delete(response.id);
+                        if (response.success) entry.resolve(response.result);
+                        else entry.reject(new Error(response.error));
+                    }
+                } catch {
+                    // Ignore malformed payloads.
+                }
+            });
+            // Reject any pending commands routed through the bridge when
+            // the last connected client drops; without this, in-flight
+            // callers hang until the bridge is closed.
+            const onDisconnect = () => {
+                this.clients.delete(id);
+                if (this.clients.size === 0 && this.pending.size > 0) {
+                    const err = new Error(
+                        "Host plugin disconnected before responding.",
+                    );
+                    for (const entry of this.pending.values()) {
+                        entry.reject(err);
+                    }
+                    this.pending.clear();
+                }
+            };
+            ws.on("close", onDisconnect);
+            ws.on("error", onDisconnect);
+        });
+    }
+
+    /**
+     * Bind a new bridge on `port`. Pass 0 (default) to let the OS pick
+     * a free ephemeral port; read the actual bound port from
+     * {@link port} after the returned promise resolves. Rejects on bind
+     * failure (EADDRINUSE under a fixed-port override) so callers see
+     * the problem instead of having it swallowed by a late error
+     * handler.
+     */
+    public static start(port: number = 0): Promise<__AgentName__Bridge> {
+        return new Promise((resolve, reject) => {
+            const server = new WebSocketServer({ port });
+            let settled = false;
+            const onError = (e: Error) => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("listening", onListening);
+                reject(e);
+            };
+            const onListening = () => {
+                if (settled) return;
+                settled = true;
+                server.removeListener("error", onError);
+                const addr = server.address() as AddressInfo | null;
+                if (!addr || typeof addr === "string") {
+                    server.close();
+                    reject(
+                        new Error(
+                            "ws server.address() did not return AddressInfo",
+                        ),
+                    );
+                    return;
+                }
+                // Re-attach a permanent error handler so post-listen
+                // errors are surfaced rather than crashing the process.
+                server.on("error", (err) => {
+                    console.error(
+                        `[__agentName__Bridge] post-listen server error: ${err.message}`,
+                    );
+                });
+                resolve(new __AgentName__Bridge(server, addr.port));
+            };
+            server.once("error", onError);
+            server.once("listening", onListening);
+        });
+    }
+
+    /**
+     * Close all client connections and the underlying server. Pending
+     * `sendCommand` promises are rejected so callers never hang on a
+     * closed bridge. Resolves when the server has fully released its
+     * port — important for a rapid restart cycle, where a synchronous
+     * return would race the new bind into EADDRINUSE.
+     */
+    public close(): Promise<void> {
+        const closedError = new Error(
+            "__AgentName__Bridge closed before response was received.",
+        );
+        for (const entry of this.pending.values()) {
+            entry.reject(closedError);
+        }
+        this.pending.clear();
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) c.close();
+        }
+        this.clients.clear();
+        return new Promise((resolve) => this.server.close(() => resolve()));
+    }
+
+    public get connected(): boolean {
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) return true;
+        }
+        return false;
+    }
+
+    public async sendCommand(
+        actionName: string,
+        parameters: Record<string, unknown>,
+    ): Promise<unknown> {
+        // Use the first OPEN client (single-plugin pattern). Adapt
+        // this selection if you need fan-out or per-session client
+        // targeting.
+        let target: WebSocket | undefined;
+        for (const c of this.clients.values()) {
+            if (c.readyState === WebSocket.OPEN) {
+                target = c;
+                break;
+            }
+        }
+        if (!target) {
+            throw new Error("No client connected to the __agentName__ bridge.");
+        }
+        const id = `cmd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return new Promise((resolve, reject) => {
+            this.pending.set(id, { resolve, reject });
+            target!.send(
+                JSON.stringify({
+                    id,
+                    actionName,
+                    parameters,
+                } satisfies BridgeCommand),
+                (err) => {
+                    // ws.send errors surface here; without this, a send
+                    // failure (socket closed between readyState check and
+                    // send) would leak the pending entry and hang the
+                    // caller.
+                    if (err) {
+                        this.pending.delete(id);
+                        reject(err);
+                    }
+                },
+            );
+        });
+    }
+}

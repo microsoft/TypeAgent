@@ -6,6 +6,9 @@ import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
     IAgentMessage,
     PendingInteractionRequest,
+    QueuedRequest,
+    QueueCancelReason,
+    QueueSnapshot,
     RequestId,
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
@@ -30,8 +33,52 @@ export interface BridgeClientIOContext {
      * cancellation silently regresses.
      */
     rememberServerRequestId(clientId: string, serverId: string): void;
+    /**
+     * Reverse lookup populated alongside `rememberServerRequestId`. The
+     * dispatcher's queue-lifecycle ClientIO events carry the canonical
+     * server requestId, but chat-ui keys bubbles by clientRequestId — so
+     * the bridge resolves server → client here before forwarding to the
+     * webview. Returns undefined for peer-originated requests this bridge
+     * never saw a setUserRequest for.
+     */
+    lookupClientRequestId(serverId: string): string | undefined;
+    /**
+     * Reverse of `lookupClientRequestId`. Used to attach the canonical
+     * server UUID as a companion `aliasRequestId` on commandComplete
+     * broadcasts so the webview can dedupe cancellation rendering even
+     * when other paths (e.g. queueRequestCancelled) arrive keyed by the
+     * server UUID instead of the client rid.
+     */
+    lookupServerRequestId?(clientId: string): string | undefined;
+    /**
+     * Remove the cross-ref entry for `serverId` (and its client alias)
+     * from both maps. Called when a request reaches a terminal state
+     * (cancelled / completed-and-no-longer-in-queue) so peer-originated
+     * entries — which don't go through this bridge's own sendCommand
+     * `finally` cleanup — don't leak forever as the seeding from
+     * `requestQueued` / `requestStarted` / `queueStateChanged`
+     * accumulates them.
+     */
+    forgetRequestId?(serverId: string): void;
+    /**
+     * Remove every cross-ref entry whose server id is NOT in
+     * `liveServerIds`. Used after `queueStateChanged` to reclaim
+     * entries for requests that quietly completed (no per-request
+     * "done" event fires on this ClientIO, so the snapshot diff is
+     * the only generic completion signal we have).
+     */
+    sweepRequestIds?(liveServerIds: Set<string>): void;
     /** Handle a "vscode-shell-action" routed from the code agent. */
     handleShellAction(requestId: RequestId, data: unknown): Promise<void>;
+    /**
+     * Handle a "manage-conversation" client action emitted by the system
+     * agent (for both `@conversation` slash commands and natural-language
+     * requests). Payload shape is the same as the Shell/CLI handlers.
+     */
+    handleManageConversation(
+        requestId: RequestId,
+        payload: unknown,
+    ): Promise<void>;
 }
 
 /**
@@ -144,13 +191,35 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             source: string,
             seq?: number,
         ) => {
+            const clientId = clientIdOf(notificationId);
+            // For commandComplete, also attach the canonical server UUID
+            // (when known) so the webview's cancellation dedupe can mark
+            // both id forms at once — avoids a double "⚠ Cancelled" when
+            // queueRequestCancelled fires keyed by serverId and this
+            // notify path fires keyed by clientId.
+            let aliasRequestId: string | undefined;
+            if (event === "commandComplete") {
+                if (
+                    typeof notificationId === "object" &&
+                    notificationId !== null &&
+                    typeof (notificationId as { requestId?: unknown })
+                        .requestId === "string"
+                ) {
+                    const serverId = (notificationId as { requestId: string })
+                        .requestId;
+                    if (serverId !== clientId) aliasRequestId = serverId;
+                } else if (clientId) {
+                    aliasRequestId = ctx.lookupServerRequestId?.(clientId);
+                }
+            }
             ctx.broadcast({
                 type: "notify",
                 event,
                 data,
                 source,
                 seq,
-                requestId: clientIdOf(notificationId),
+                requestId: clientId,
+                aliasRequestId,
             });
         },
         requestChoice: () => {},
@@ -164,8 +233,106 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                         `Shell action failed: ${e?.message ?? String(e)}`,
                     );
                 });
+            } else if (action === "manage-conversation") {
+                ctx.handleManageConversation(requestId, data).catch(
+                    (e: any) => {
+                        vscode.window.showErrorMessage(
+                            `Conversation action failed: ${e?.message ?? String(e)}`,
+                        );
+                    },
+                );
             }
         },
         shutdown: () => {},
+
+        // Queue lifecycle push events. Forwarded straight to the webview
+        // so the chat-ui can mirror state and dedupe the cancellation
+        // affordance between `commandComplete` (local awaitCommand path)
+        // and `requestCancelled` (server broadcast / peer cancel path).
+        //
+        // QueuedRequest entries carry BOTH the server requestId and the
+        // (best-effort) clientRequestId — use them to seed the bridge's
+        // cross-ref maps so cancellation that lands before setUserRequest
+        // has fired (e.g. a queued-never-started item) can still resolve
+        // the client↔server id pairing. Without this seed, queueRequest-
+        // Cancelled broadcasts arrive with no clientRequestId alias, the
+        // webview's dedupe key mismatches commandComplete's, and the
+        // bubble paints "⚠ Cancelled" twice.
+        requestQueued: (entry: QueuedRequest, version: number) => {
+            const clientRequestId =
+                typeof entry.clientRequestId === "string"
+                    ? entry.clientRequestId
+                    : ctx.lookupClientRequestId(entry.requestId);
+            if (clientRequestId) {
+                ctx.rememberServerRequestId(clientRequestId, entry.requestId);
+            }
+            ctx.broadcast({
+                type: "queueRequestQueued",
+                entry,
+                version,
+                clientRequestId,
+            });
+        },
+        requestStarted: (entry: QueuedRequest, version: number) => {
+            const clientRequestId =
+                typeof entry.clientRequestId === "string"
+                    ? entry.clientRequestId
+                    : ctx.lookupClientRequestId(entry.requestId);
+            if (clientRequestId) {
+                ctx.rememberServerRequestId(clientRequestId, entry.requestId);
+            }
+            ctx.broadcast({
+                type: "queueRequestStarted",
+                entry,
+                version,
+                clientRequestId,
+            });
+        },
+        requestCancelled: (
+            requestId: string,
+            reason: QueueCancelReason,
+            version: number,
+        ) => {
+            const clientRequestId = ctx.lookupClientRequestId(requestId);
+            ctx.broadcast({
+                type: "queueRequestCancelled",
+                requestId,
+                reason,
+                version,
+                clientRequestId,
+            });
+            // Reclaim the cross-ref entry — the request is terminal. For
+            // peer-originated requests this is the only cleanup path
+            // (their sendCommand ran in a different bridge process).
+            ctx.forgetRequestId?.(requestId);
+        },
+        queueStateChanged: (snapshot: QueueSnapshot) => {
+            const live = new Set<string>();
+            if (snapshot.running) live.add(snapshot.running.requestId);
+            for (const entry of snapshot.queued) live.add(entry.requestId);
+            // Seed the cross-ref from every entry the snapshot carries so
+            // a cancellation arriving for any of them resolves to its
+            // client rid (and the webview dedupes correctly). Same
+            // rationale as requestQueued / requestStarted.
+            const seedEntry = (entry: QueuedRequest | null) => {
+                if (!entry) return;
+                const cid =
+                    typeof entry.clientRequestId === "string"
+                        ? entry.clientRequestId
+                        : undefined;
+                if (cid) ctx.rememberServerRequestId(cid, entry.requestId);
+            };
+            seedEntry(snapshot.running);
+            for (const entry of snapshot.queued) seedEntry(entry);
+            // Sweep entries for requests that quietly completed (no per-
+            // request "done" event fires on this ClientIO surface). The
+            // queue snapshot is authoritative; anything not in it is
+            // either terminal or never existed on this dispatcher.
+            ctx.sweepRequestIds?.(live);
+            ctx.broadcast({
+                type: "queueStateChanged",
+                snapshot,
+            });
+        },
     };
 }

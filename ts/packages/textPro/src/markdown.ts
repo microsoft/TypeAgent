@@ -339,9 +339,6 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
             case "heading":
                 this.onHeading(token as md.Tokens.Heading);
                 break;
-            case "image":
-                this.onImage(token as md.Tokens.Image);
-                break;
             case "link":
                 this.onLink(token as md.Tokens.Link);
                 break;

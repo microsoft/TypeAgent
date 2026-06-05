@@ -307,6 +307,15 @@ export function setContent(
         // vanilla, sanitized HTML only
         contentElm.insertAdjacentHTML("beforeend", contentHtml);
 
+        // Auto-scroll thinking blocks to the bottom so streaming text
+        // stays visible as new content arrives.
+        const thinkingPres = contentElm.querySelectorAll(
+            "details.reasoning-thinking pre",
+        );
+        for (const pre of thinkingPres) {
+            pre.scrollTop = pre.scrollHeight;
+        }
+
         // Add click handlers for all links to open in browser tabs
         const allLinks = contentElm.querySelectorAll("a[href]");
         allLinks.forEach((link) => {

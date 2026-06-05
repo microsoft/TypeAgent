@@ -7,7 +7,11 @@ future extensions.
 Related: [0002-cfg-ddg-separation.md](0002-cfg-ddg-separation.md) (C2, C3, C4, C5),
 [../future/block-scope.md](../future/block-scope.md)
 (blocks remain post-v1 for the multi-statement try and the regional
-grouping cases that bound outputs alone don't address).
+grouping cases that bound outputs alone don't address),
+[0010-copilot-task-family.md](0010-copilot-task-family.md) (the
+deferred `copilot.session.fork` pattern carries session/event IDs
+across nodes through the `bind`/`$from "scope"` mechanism this
+decision establishes).
 
 ## 1. The proposal
 
