@@ -47,6 +47,7 @@ Current command palette surface:
 - TypeAgent Studio: Stop sandbox
 - TypeAgent Studio: Restart sandbox
 - TypeAgent Studio: Refresh sandboxes
+- TypeAgent Studio: Refresh corpora
 
 ## Sandboxes view
 
@@ -65,6 +66,26 @@ backed by the in-memory sandbox manager and event stream from
 Tree structuring and labelling live in the vscode-free
 `sandboxTreePresentation.ts` module so they can be unit-tested without the
 editor host; `sandboxTreeProvider.ts` is a thin `TreeDataProvider` adapter.
+
+## Corpora view
+
+The same **TypeAgent Studio** container hosts a **Corpora** tree view backed by
+the `FileCorpusService` federation from `@typeagent/core`:
+
+- Top-level rows list agents that currently have a corpus view — derived from
+  the union of agents loaded across running sandboxes; a placeholder row is
+  shown when none are loaded.
+- Expanding an agent groups its federated entries by source (in-repo, captures,
+  external, feedback), each with an entry count; only sources with entries are
+  shown.
+- Expanding a source lists its entries by utterance, with a feedback badge when
+  the entry has recorded feedback.
+- The view title offers **Refresh**; the tree also refreshes automatically when
+  sandbox agents are loaded or unloaded.
+
+Grouping and labelling live in the vscode-free `corpusTreePresentation.ts`
+module (unit-tested); `corpusTreeProvider.ts` is a thin `TreeDataProvider`
+adapter.
 
 Install behavior for `Install latest onboarding session to sandbox`:
 

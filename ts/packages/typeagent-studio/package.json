@@ -191,6 +191,12 @@
         "title": "Refresh sandboxes",
         "category": "TypeAgent Studio",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.refreshCorpora",
+        "title": "Refresh corpora",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -207,6 +213,10 @@
         {
           "id": "typeagentStudioSandboxes",
           "name": "Sandboxes"
+        },
+        {
+          "id": "typeagentStudioCorpora",
+          "name": "Corpora"
         }
       ]
     },
@@ -221,6 +231,11 @@
           "command": "typeagent-studio.refreshSandboxes",
           "when": "view == typeagentStudioSandboxes",
           "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.refreshCorpora",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -244,6 +259,7 @@
   },
   "activationEvents": [
     "onView:typeagentStudioSandboxes",
+    "onView:typeagentStudioCorpora",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
@@ -265,7 +281,8 @@
     "onCommand:typeagent-studio.startSandbox",
     "onCommand:typeagent-studio.stopSandbox",
     "onCommand:typeagent-studio.restartSandbox",
-    "onCommand:typeagent-studio.refreshSandboxes"
+    "onCommand:typeagent-studio.refreshSandboxes",
+    "onCommand:typeagent-studio.refreshCorpora"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

@@ -21,6 +21,11 @@ import {
     type SandboxManager,
     type SandboxStatus,
 } from "@typeagent/core/sandbox";
+import {
+    FileCorpusService,
+    type CorpusEntry,
+    type CorpusService,
+} from "@typeagent/core/corpus";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
@@ -115,6 +120,13 @@ export interface StudioRuntime {
      * refresh. Returns a disposable to stop listening.
      */
     onSandboxChanged(listener: () => void): { dispose(): void };
+    /**
+     * Agents that currently have a federated corpus view, derived from the
+     * union of agents loaded across running sandboxes.
+     */
+    listCorpusAgents(): Promise<string[]>;
+    /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
+    listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
 }
 
 export interface StudioWorkspaceState {
@@ -131,6 +143,7 @@ export interface StudioRuntimeContext {
 export interface CreateStudioRuntimeOptions {
     onboarding?: InMemoryOnboardingBridge;
     sandbox?: SandboxManager;
+    corpus?: CorpusService;
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
@@ -153,6 +166,15 @@ export function createStudioRuntimeCore(
         "profiles",
         DEFAULT_SANDBOX_ID,
     );
+
+    const corpus =
+        options.corpus ??
+        new FileCorpusService({
+            repoRoot:
+                context.workspaceFolderFsPaths?.[0] ??
+                context.globalStorageFsPath,
+            profileDir: path.join(context.globalStorageFsPath, "corpus"),
+        });
 
     return {
         async startOnboarding(seed) {
@@ -356,6 +378,19 @@ export function createStudioRuntimeCore(
                 filter: { types: SANDBOX_LIFECYCLE_EVENT_TYPES },
             });
             return { dispose: () => subscription.unsubscribe() };
+        },
+        async listCorpusAgents() {
+            const sandboxes = await sandbox.list();
+            const agents = new Set<string>();
+            for (const status of sandboxes) {
+                for (const agent of status.agents) {
+                    agents.add(agent.name);
+                }
+            }
+            return [...agents].sort((a, b) => a.localeCompare(b));
+        },
+        async listCorpusEntries(agent) {
+            return corpus.list(agent);
         },
     };
 }
