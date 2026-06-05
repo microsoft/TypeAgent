@@ -159,11 +159,18 @@ function buildLiteralGlobalRegex(
             leadingSep = "";
             break;
         case "required":
-            leadingSep = `[${SEPARATOR_CLASS_STR}]+`;
-            break;
         case "optional":
         case undefined:
         default:
+            // Wildcard-scan path: the leading separator before a keyword that
+            // FOLLOWS a wildcard is always lazy `[\s\p{P}]*?`, even in
+            // `required` mode — the wildcard capture itself provides the
+            // required boundary, so a separate separator char is not demanded.
+            // Mirrors canonical `buildStringPartRegExpStr` (the leading prefix
+            // is always `*?`; required-ness applies only at internal
+            // multi-segment boundaries).  This lets `$(x) ,done` match
+            // "hello,done" and `$(x) .` match "hello." where the punct is the
+            // keyword's own first char rather than a discrete separator.
             leadingSep = `[${SEPARATOR_CLASS_STR}]*?`;
             break;
     }
