@@ -37,7 +37,24 @@ export async function getAllWebFlows(): Promise<any[]> {
     const response = await sendToServiceWorker<any>({
         type: "getAllWebFlows",
     });
-    return response?.actions || response || [];
+    // The service worker returns an error envelope ({ success: false, error })
+    // when the agent RPC fails (e.g. transport disconnect, no browser session).
+    // Treat that as a hard failure so the caller can surface it to the user
+    // rather than silently rendering an empty / broken macro list.
+    if (
+        response &&
+        typeof response === "object" &&
+        response.success === false
+    ) {
+        throw new Error(response.error || "Failed to fetch macros");
+    }
+    if (Array.isArray(response?.actions)) {
+        return response.actions;
+    }
+    if (Array.isArray(response)) {
+        return response;
+    }
+    throw new Error("Unexpected getAllWebFlows response");
 }
 
 export async function deleteWebFlow(
