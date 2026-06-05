@@ -64,6 +64,7 @@ import type {
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
+import { iconX } from "./icons.js";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -1591,9 +1592,17 @@ export class ChatPanel {
     }
 
     /**
-     * Stamp / clear a "queued" or "running" pill on the user bubble.
-     * No-op if the bubble doesn't exist. When `status === "queued"`
-     * with `onCancel`, renders an `×` button that invokes it on click.
+     * Stamp / clear the status rail on the user bubble. The rail is a slim
+     * strip across the top of the bubble carrying a de-emphasized,
+     * state-tinted label ("running" / "queued") on the left and any
+     * controls on the right. No-op if the bubble doesn't exist. When
+     * `status === "queued"` with `onCancel`, an icon remove button is
+     * rendered that invokes it on click.
+     *
+     * The rail lives at the top so it never collides with the
+     * hover-revealed metrics strip that slides out of the bubble's bottom
+     * edge, and the roadrunner ("explained") icon now sits inside the
+     * content corner rather than this rail.
      */
     public setUserBubbleQueueStatus(
         requestId: string,
@@ -1605,81 +1614,56 @@ export class ChatPanel {
         const bodyDiv =
             container.querySelector<HTMLElement>(".chat-message-user");
         if (!bodyDiv) return;
-        let chip = bodyDiv.querySelector<HTMLDivElement>(
-            ":scope > .chat-queue-status-chip",
+        let rail = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-message-status-rail",
         );
         if (status === null) {
-            chip?.remove();
+            rail?.remove();
             return;
         }
-        if (!chip) {
-            chip = document.createElement("div");
-            chip.className = "chat-queue-status-chip";
-            chip.style.display = "inline-flex";
-            chip.style.alignItems = "center";
-            chip.style.gap = "4px";
-            // VS Code webview font sits low in the line-box; +1px bottom
-            // padding visually centers the lowercase label text.
-            chip.style.padding = "2px 6px 3px 6px";
-            // Matches Electron chip insets (messageContainer.ts:363-365).
-            chip.style.marginLeft = "4px";
-            chip.style.marginTop = "4px";
-            chip.style.marginBottom = "2px";
-            chip.style.fontSize = "11px";
-            chip.style.lineHeight = "1";
-            chip.style.borderRadius = "8px";
-            chip.style.opacity = "0.85";
-            chip.style.boxSizing = "border-box";
-            bodyDiv.insertBefore(chip, bodyDiv.firstChild);
+        if (!rail) {
+            rail = document.createElement("div");
+            rail.className = "chat-message-status-rail";
+            bodyDiv.insertBefore(rail, bodyDiv.firstChild);
         }
-        chip.replaceChildren();
-        chip.dataset.status = status;
+        rail.dataset.status = status;
+        rail.replaceChildren();
+
+        // De-emphasized, state-tinted label: a spinner while running, a
+        // small dot while queued, followed by the status word.
+        const state = document.createElement("span");
+        state.className = "chat-status-state";
+        state.dataset.status = status;
+        const indicator = document.createElement("span");
+        indicator.className =
+            status === "running" ? "chat-status-spinner" : "chat-status-dot";
+        indicator.setAttribute("aria-hidden", "true");
         const label = document.createElement("span");
         label.textContent = status;
-        chip.appendChild(label);
-        if (status === "queued") {
-            // Alpha-tinted yellow reads on both light and dark themes.
-            chip.style.background =
-                "var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.18))";
-            chip.style.color =
-                "var(--vscode-inputValidation-warningForeground, rgba(120, 80, 0, 0.95))";
-            if (onCancel) {
-                const btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = "chat-queue-cancel-button";
-                btn.title = "Cancel this queued request";
-                btn.setAttribute("aria-label", "Cancel queued request");
-                btn.textContent = "×";
-                btn.style.display = "inline-flex";
-                btn.style.alignItems = "center";
-                btn.style.justifyContent = "center";
-                btn.style.padding = "0";
-                btn.style.margin = "0";
-                btn.style.border = "none";
-                btn.style.background = "transparent";
-                btn.style.color = "inherit";
-                btn.style.cursor = "pointer";
-                btn.style.fontSize = "0.7em";
-                btn.style.lineHeight = "1";
-                btn.style.fontFamily = "inherit";
-                // Reset VS Code webview's UA button defaults that would
-                // otherwise inflate chip height.
-                btn.style.minHeight = "0";
-                btn.style.minWidth = "0";
-                btn.style.height = "auto";
-                btn.style.boxSizing = "border-box";
-                btn.addEventListener("click", (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onCancel();
-                });
-                chip.appendChild(btn);
-            }
-        } else {
-            chip.style.background =
-                "var(--vscode-inputValidation-infoBackground, rgba(0, 150, 255, 0.18))";
-            chip.style.color =
-                "var(--vscode-inputValidation-infoForeground, rgba(0, 80, 140, 0.95))";
+        state.append(indicator, label);
+        rail.appendChild(state);
+
+        // Controls trail on the right.
+        const controls = document.createElement("span");
+        controls.className = "chat-status-rail-controls";
+        rail.appendChild(controls);
+
+        // Only the queued state currently has a wired action: remove the
+        // request from the queue (cancel before it starts).
+        if (status === "queued" && onCancel) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "chat-action-button danger chat-queue-cancel-button";
+            btn.dataset.action = "remove-from-queue";
+            btn.title = "Remove from queue";
+            btn.setAttribute("aria-label", "Remove queued request");
+            btn.appendChild(iconX());
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
+            });
+            controls.appendChild(btn);
         }
     }
 
@@ -2421,9 +2405,22 @@ export class ChatPanel {
         container
             .querySelectorAll(".chat-message-explained-icon")
             .forEach((n) => n.remove());
-        container.classList.add("chat-message-explained");
-        container.setAttribute("data-expl", message);
-        container.appendChild(iconRoadrunner(color));
+        // Anchor the roadrunner inside the content bubble (top-right corner)
+        // so it sits with the command text instead of floating in the
+        // container's corner where it collided with the avatar / actions.
+        // The hover tooltip is hosted on the bubble body (which doesn't clip
+        // overflow), while the icon itself is positioned within the content.
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        const content = container.querySelector<HTMLElement>(
+            ".chat-message-content",
+        );
+        const tooltipHost = bodyDiv ?? container;
+        const iconHost = content ?? container;
+        iconHost.classList.add("chat-message-explained-host");
+        tooltipHost.classList.add("chat-message-explained");
+        tooltipHost.setAttribute("data-expl", message);
+        iconHost.appendChild(iconRoadrunner(color));
     }
 
     /**

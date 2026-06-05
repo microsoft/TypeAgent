@@ -1,0 +1,737 @@
+<!doctype html>
+<!--
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License.
+
+  MOCKUP / SCRATCH FILE — not shipped.
+
+  Round 2: more creative options, evolving the well-liked "Option 3" (status
+  + controls on a slim bar) by moving it to the TOP so it never collides with
+  the hover-revealed metrics strip that slides out of the BOTTOM edge.
+
+  Every option shows:
+    • where the roadrunner ("explained") icon lives
+    • the running state (spinner + Stop)
+    • the queued state (Play "run now" + × remove)
+    • a faux metrics strip on hover (the real one anchors to bottom: top:100%)
+      so you can confirm the status controls and metrics never overlap.
+
+  Hover a bubble to reveal hover-only chrome + the bottom metrics strip.
+  Use the theme toggle (top-right) to preview light / dark.
+-->
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Chat status affordances — round 2</title>
+        <style>
+            :root {
+                --bg: #f3f3f3;
+                --panel: #ffffff;
+                --user-bubble: lavender;
+                --user-metrics: #e2e0ec;
+                --agent-bubble: #d6f3ff;
+                --text: #1f1f1f;
+                --muted: #6b6b6b;
+                --shadow: rgba(0, 0, 0, 0.1);
+                --hairline: rgba(0, 0, 0, 0.08);
+
+                --icon-size: 24px;
+
+                --queued-bg: rgba(255, 200, 0, 0.18);
+                --queued-fg: rgba(120, 80, 0, 0.95);
+                --queued-solid: #e9a800;
+                --running-bg: rgba(0, 150, 255, 0.18);
+                --running-fg: rgba(0, 80, 140, 0.95);
+                --running-solid: #1f8fff;
+                --danger-fg: #c0392b;
+                --danger-bg: rgba(192, 57, 43, 0.14);
+                --road-fg: #2e8b57; /* roadrunner "cached ok" green */
+            }
+
+            [data-theme="dark"] {
+                --bg: #1e1e1e;
+                --panel: #252526;
+                --user-bubble: #3a3a5a;
+                --user-metrics: #2c2c44;
+                --agent-bubble: #20384a;
+                --text: #e6e6e6;
+                --muted: #a0a0a0;
+                --shadow: rgba(0, 0, 0, 0.4);
+                --hairline: rgba(255, 255, 255, 0.1);
+                --queued-fg: rgba(255, 215, 120, 0.95);
+                --running-fg: rgba(120, 200, 255, 0.95);
+                --danger-fg: #ff8a80;
+                --road-fg: #5fd79b;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                padding: 32px 32px 100px;
+                background: var(--bg);
+                color: var(--text);
+                font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            h1 {
+                font-size: 20px;
+                margin: 0 0 4px;
+            }
+            .subtitle {
+                color: var(--muted);
+                margin: 0 0 28px;
+                max-width: 760px;
+            }
+            code {
+                background: color-mix(in srgb, var(--muted) 18%, transparent);
+                padding: 1px 5px;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            .theme-toggle {
+                position: fixed;
+                top: 16px;
+                right: 16px;
+                z-index: 100;
+                border: 1px solid var(--muted);
+                background: var(--panel);
+                color: var(--text);
+                border-radius: 6px;
+                padding: 6px 12px;
+                cursor: pointer;
+                font: inherit;
+            }
+            .option {
+                background: var(--panel);
+                border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+                border-radius: 12px;
+                padding: 20px 24px 30px;
+                margin-bottom: 22px;
+                box-shadow: 0 1px 3px var(--shadow);
+                max-width: 780px;
+            }
+            .option h2 {
+                font-size: 15px;
+                margin: 0 0 4px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .option h2 .tag {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--running-fg);
+                background: var(--running-bg);
+                border-radius: 10px;
+                padding: 2px 8px;
+            }
+            .option .desc {
+                color: var(--muted);
+                margin: 0 0 20px;
+                font-size: 13px;
+                max-width: 680px;
+            }
+
+            /* ----- chat scaffolding (mirrors chat-ui) ----- */
+            .stage {
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+                align-items: flex-end;
+                /* give absolute hover chrome room to breathe */
+                padding-top: 8px;
+            }
+            .ct {
+                width: 72%;
+                align-self: flex-end;
+                position: relative;
+            }
+            .bubble {
+                position: relative;
+                background: var(--user-bubble);
+                border-radius: 8px;
+                margin-right: 30px;
+            }
+            .content {
+                padding: 6px 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px var(--shadow);
+                word-wrap: break-word;
+                position: relative;
+                background: var(--user-bubble);
+            }
+            .avatar {
+                position: absolute;
+                right: -30px;
+                top: 0;
+                width: 26px;
+                height: 26px;
+                border-radius: 50%;
+                background: #6c63ff;
+                color: #fff;
+                display: grid;
+                place-items: center;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            /* faux metrics strip — proves bottom edge is reserved for metrics */
+            .metrics {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                width: 100%;
+                background: var(--user-metrics);
+                border-radius: 0 0 8px 8px;
+                font-size: 10px;
+                text-align: right;
+                padding: 3px 10px;
+                color: var(--muted);
+                box-shadow: 0 2px 8px var(--shadow);
+                z-index: 5;
+            }
+            .ct:hover .metrics {
+                display: block;
+            }
+            .ct:hover .content {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+
+            /* ----- unified icon button ----- */
+            .icon-btn {
+                width: var(--icon-size);
+                height: var(--icon-size);
+                border: none;
+                background: transparent;
+                color: var(--muted);
+                border-radius: 6px;
+                display: inline-grid;
+                place-items: center;
+                cursor: pointer;
+                padding: 0;
+                transition: background 0.12s ease, color 0.12s ease;
+            }
+            .icon-btn:hover {
+                background: color-mix(in srgb, var(--muted) 22%, transparent);
+                color: var(--text);
+            }
+            .icon-btn.danger:hover {
+                background: var(--danger-bg);
+                color: var(--danger-fg);
+            }
+            .icon-btn.road {
+                color: var(--road-fg);
+            }
+            .icon-btn svg {
+                width: 15px;
+                height: 15px;
+                display: block;
+            }
+
+            /* ----- status header rail (Option A) ----- */
+            .header-rail {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 2px 6px 2px 8px;
+                border-radius: 8px 8px 0 0;
+                border-bottom: 1px solid var(--hairline);
+                background: var(--user-bubble);
+                position: relative;
+                z-index: 2;
+            }
+            .bubble.has-header .content {
+                border-top-left-radius: 0;
+                border-top-right-radius: 0;
+                box-shadow: 0 2px 8px var(--shadow);
+            }
+            .state-label {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            .state-label.queued {
+                color: var(--queued-fg);
+            }
+            .state-label.running {
+                color: var(--running-fg);
+            }
+            .spacer {
+                flex: 1;
+            }
+
+            /* tinted band variant (Option D) */
+            .header-rail.tint-queued {
+                background: var(--queued-bg);
+            }
+            .header-rail.tint-running {
+                background: var(--running-bg);
+            }
+
+            /* ----- floating hover toolbar (Option B) ----- */
+            .float-bar {
+                position: absolute;
+                top: -14px;
+                right: 8px;
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                background: var(--panel);
+                border: 1px solid var(--hairline);
+                border-radius: 8px;
+                box-shadow: 0 2px 10px var(--shadow);
+                opacity: 0;
+                transform: translateY(4px);
+                transition: opacity 0.12s ease, transform 0.12s ease;
+                z-index: 8;
+            }
+            .ct:hover .float-bar {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            /* persistent inline state badge for the floating-bar option */
+            .inline-state {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                font-weight: 600;
+                margin-right: 6px;
+            }
+            .inline-state.queued {
+                color: var(--queued-fg);
+            }
+            .inline-state.running {
+                color: var(--running-fg);
+            }
+
+            /* ----- left accent bar (Option C) ----- */
+            .ct.accent .content {
+                border-left: 4px solid transparent;
+            }
+            .ct.accent .content.running {
+                border-left-color: var(--running-solid);
+                animation: accentPulse 1.3s ease-in-out infinite;
+            }
+            .ct.accent .content.queued {
+                border-left-color: var(--queued-solid);
+            }
+            @keyframes accentPulse {
+                0%,
+                100% {
+                    border-left-color: var(--running-solid);
+                }
+                50% {
+                    border-left-color: color-mix(
+                        in srgb,
+                        var(--running-solid) 35%,
+                        transparent
+                    );
+                }
+            }
+            /* compact top-right hover cluster; roadrunner persists, rest fade in */
+            .corner-cluster {
+                position: absolute;
+                top: 4px;
+                right: 6px;
+                display: inline-flex;
+                align-items: center;
+                gap: 1px;
+                padding: 1px 2px;
+                border-radius: 7px;
+                background: color-mix(in srgb, var(--user-bubble) 80%, var(--panel));
+                z-index: 3;
+            }
+            .corner-cluster .extra {
+                opacity: 0;
+                transition: opacity 0.12s ease;
+            }
+            .ct:hover .corner-cluster .extra {
+                opacity: 1;
+            }
+            .corner-cluster .icon-btn {
+                width: 22px;
+                height: 22px;
+            }
+
+            /* spinner + pulse */
+            .spinner {
+                width: 11px;
+                height: 11px;
+                border: 2px solid currentColor;
+                border-right-color: transparent;
+                border-radius: 50%;
+                animation: spin 0.7s linear infinite;
+                flex: none;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            .pulse-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: currentColor;
+                animation: pulse 1.1s ease-in-out infinite;
+                flex: none;
+            }
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 0.35;
+                    transform: scale(0.85);
+                }
+                50% {
+                    opacity: 1;
+                    transform: scale(1.15);
+                }
+            }
+
+            .cmd {
+                font-family: var(--vscode-editor-font-family, Consolas, monospace);
+                font-size: 13px;
+            }
+            .legend {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 18px;
+                margin-top: 18px;
+                font-size: 12px;
+                color: var(--muted);
+                border-top: 1px dashed var(--hairline);
+                padding-top: 12px;
+            }
+            .legend span {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .legend .icon-btn {
+                cursor: default;
+            }
+            .note {
+                font-size: 12px;
+                color: var(--muted);
+                margin-top: 14px;
+                font-style: italic;
+            }
+        </style>
+    </head>
+    <body data-theme="light">
+        <button class="theme-toggle" onclick="toggleTheme()">
+            Toggle light / dark
+        </button>
+
+        <h1>Status affordances — round 2 (top-anchored + roadrunner placed)</h1>
+        <p class="subtitle">
+            Evolving the footer idea you liked: the real metrics tooltip slides
+            out of the bubble's <strong>bottom</strong> edge on hover, so these
+            put status + controls along the <strong>top</strong> instead. Every
+            option shows the roadrunner placement, and each bubble reveals a
+            faux metrics strip on hover so you can confirm there's no collision.
+            Implemented in <code>chat-ui</code> once you pick.
+        </p>
+
+        <!-- shared icon defs -->
+        <svg style="display: none" aria-hidden="true">
+            <defs>
+                <g id="i-play"><path d="M5 3.5v9l8-4.5z" fill="currentColor" /></g>
+                <g id="i-stop">
+                    <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" />
+                </g>
+                <g id="i-x" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M4 4l8 8M12 4l-8 8" />
+                </g>
+                <g id="i-trash" fill="none" stroke="currentColor" stroke-width="1.6"
+                   stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 4.5h10M12 4.5l-.7 8.2a1.2 1.2 0 0 1-1.2 1.1H5.9a1.2 1.2 0 0 1-1.2-1.1L4 4.5M6.4 4.5V3.3a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v1.2M6.6 7v4M9.4 7v4" />
+                </g>
+                <!-- roadrunner stand-in (running bird glyph) -->
+                <g id="i-bird" fill="currentColor">
+                    <path d="M1.6 9.6c2.1-.3 3.4-1.5 4-2.9.3 1 1.1 1.7 2.1 1.9-.2 1.5-1.4 2.8-3.2 3.1.8.5 1.7.7 2.8.5L8.9 14.5H6.2l-1.1-1.7c-1.7-.2-3.2-1.4-3.5-3.2zM9.3 4.9c.65 0 1.18.53 1.18 1.18S9.95 7.24 9.3 7.24 8.12 6.71 8.12 6.06 8.65 4.9 9.3 4.9zM11 5.7l3.8-1.1-1.1 2.4 1.3 1.3-2.7.3z" />
+                </g>
+            </defs>
+        </svg>
+
+        <!-- ============ OPTION A ============ -->
+        <section class="option">
+            <h2>Option A — Header rail <span class="tag">Option 3, moved up</span></h2>
+            <p class="desc">
+                The exact bar you liked, relocated to a slim header strip
+                integrated into the top of the bubble (rounded top corners,
+                hairline divider). Roadrunner sits at the far left of the rail;
+                state label + spinner next to it; controls trail on the right
+                just inside the avatar. The bubble's bottom edge stays 100% free
+                for the hover metrics strip.
+            </p>
+
+            <div class="stage">
+                <!-- running -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="bubble has-header">
+                        <div class="header-rail">
+                            <button class="icon-btn road" title="Explained — cached translation (green = OK)">
+                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                            </button>
+                            <span class="state-label running"><span class="spinner"></span>running</span>
+                            <span class="spacer"></span>
+                            <button class="icon-btn danger" title="Cancel">
+                                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+                            </button>
+                            <button class="icon-btn danger" title="Move to trash">
+                                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+                            </button>
+                        </div>
+                        <div class="content">
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+                </div>
+
+                <!-- queued -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="bubble has-header">
+                        <div class="header-rail">
+                            <button class="icon-btn road" title="Explained — cached translation">
+                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                            </button>
+                            <span class="state-label queued"><span class="pulse-dot"></span>queued · #2</span>
+                            <span class="spacer"></span>
+                            <button class="icon-btn" title="Run now">
+                                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+                            </button>
+                            <button class="icon-btn danger" title="Remove from queue">
+                                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+                            </button>
+                        </div>
+                        <div class="content">
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">queued · waiting on 1 request</div>
+                </div>
+            </div>
+            <p class="note">Hover either bubble — metrics slide out the bottom, header stays put. No overlap.</p>
+        </section>
+
+        <!-- ============ OPTION B ============ -->
+        <section class="option">
+            <h2>Option B — Floating hover toolbar</h2>
+            <p class="desc">
+                Zero permanent vertical chrome. A small floating toolbar
+                straddles the top edge on hover (Slack/Notion style) holding
+                every action in one consistent icon row — roadrunner, run/stop,
+                trash. The state stays legible at all times via a tiny inline
+                badge prefixed in the content. When idle + explained, only the
+                roadrunner persists.
+            </p>
+
+            <div class="stage">
+                <!-- running -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="float-bar">
+                        <button class="icon-btn road" title="Explained — cached translation">
+                            <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                        </button>
+                        <button class="icon-btn danger" title="Cancel">
+                            <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+                        </button>
+                        <button class="icon-btn danger" title="Move to trash">
+                            <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+                        </button>
+                    </div>
+                    <div class="bubble">
+                        <div class="content">
+                            <span class="inline-state running"><span class="spinner"></span>running</span>
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+                </div>
+
+                <!-- queued -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="float-bar">
+                        <button class="icon-btn road" title="Explained — cached translation">
+                            <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                        </button>
+                        <button class="icon-btn" title="Run now">
+                            <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+                        </button>
+                        <button class="icon-btn danger" title="Remove from queue">
+                            <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+                        </button>
+                        <button class="icon-btn danger" title="Move to trash">
+                            <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+                        </button>
+                    </div>
+                    <div class="bubble">
+                        <div class="content">
+                            <span class="inline-state queued"><span class="pulse-dot"></span>queued · #2</span>
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">queued · waiting on 1 request</div>
+                </div>
+            </div>
+            <p class="note">Hover to raise the toolbar. It floats above the top edge, clear of the bottom metrics strip.</p>
+        </section>
+
+        <!-- ============ OPTION C ============ -->
+        <section class="option">
+            <h2>Option C — Left accent bar + corner cluster</h2>
+            <p class="desc">
+                No header band at all. State is carried by a colored accent
+                stripe on the bubble's left edge — blue pulses while running,
+                amber for queued — plus a tiny inline badge. All actions live in
+                a compact top-right corner cluster: the roadrunner is always
+                visible there, and run/stop + trash fade in on hover. Lightest
+                footprint of the four; the bubble keeps its normal shape.
+            </p>
+
+            <div class="stage">
+                <!-- running -->
+                <div class="ct accent">
+                    <div class="avatar">R</div>
+                    <div class="bubble">
+                        <div class="content running">
+                            <span class="corner-cluster">
+                                <button class="icon-btn road" title="Explained — cached translation">
+                                    <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                                </button>
+                                <button class="icon-btn danger extra" title="Cancel">
+                                    <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+                                </button>
+                                <button class="icon-btn danger extra" title="Move to trash">
+                                    <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+                                </button>
+                            </span>
+                            <span class="inline-state running"><span class="spinner"></span>running</span>
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+                </div>
+
+                <!-- queued -->
+                <div class="ct accent">
+                    <div class="avatar">R</div>
+                    <div class="bubble">
+                        <div class="content queued">
+                            <span class="corner-cluster">
+                                <button class="icon-btn road" title="Explained — cached translation">
+                                    <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                                </button>
+                                <button class="icon-btn extra" title="Run now">
+                                    <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+                                </button>
+                                <button class="icon-btn danger extra" title="Remove from queue">
+                                    <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+                                </button>
+                            </span>
+                            <span class="inline-state queued"><span class="pulse-dot"></span>queued · #2</span>
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">queued · waiting on 1 request</div>
+                </div>
+            </div>
+            <p class="note">Roadrunner always visible top-right; run/stop + trash fade in on hover. Left stripe = state.</p>
+        </section>
+
+        <!-- ============ OPTION D ============ -->
+        <section class="option">
+            <h2>Option D — Tinted state band</h2>
+            <p class="desc">
+                Same top rail as Option A, but the band is tinted by state
+                (amber = queued, blue = running) so the status reads at a glance
+                without leaning on the small label — like a colored subject line.
+                The tint fades to the normal bubble once the request is idle
+                (leaving just a quiet roadrunner). Most glanceable; slightly more
+                visual weight.
+            </p>
+
+            <div class="stage">
+                <!-- running -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="bubble has-header">
+                        <div class="header-rail tint-running">
+                            <button class="icon-btn road" title="Explained — cached translation">
+                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                            </button>
+                            <span class="state-label running"><span class="spinner"></span>running</span>
+                            <span class="spacer"></span>
+                            <button class="icon-btn danger" title="Cancel">
+                                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+                            </button>
+                            <button class="icon-btn danger" title="Move to trash">
+                                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+                            </button>
+                        </div>
+                        <div class="content">
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+                </div>
+
+                <!-- queued -->
+                <div class="ct">
+                    <div class="avatar">R</div>
+                    <div class="bubble has-header">
+                        <div class="header-rail tint-queued">
+                            <button class="icon-btn road" title="Explained — cached translation">
+                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+                            </button>
+                            <span class="state-label queued"><span class="pulse-dot"></span>queued · #2</span>
+                            <span class="spacer"></span>
+                            <button class="icon-btn" title="Run now">
+                                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+                            </button>
+                            <button class="icon-btn danger" title="Remove from queue">
+                                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+                            </button>
+                        </div>
+                        <div class="content">
+                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
+                        </div>
+                    </div>
+                    <div class="metrics">queued · waiting on 1 request</div>
+                </div>
+            </div>
+            <p class="note">Color carries the state; the band collapses to a plain roadrunner corner when idle.</p>
+        </section>
+
+        <div class="legend">
+            <span><button class="icon-btn road"><svg viewBox="0 0 16 16"><use href="#i-bird"/></svg></button> roadrunner — explained / cached</span>
+            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-play"/></svg></button> run now</span>
+            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-stop"/></svg></button> cancel running</span>
+            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-x"/></svg></button> remove from queue</span>
+            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-trash"/></svg></button> trash</span>
+        </div>
+
+        <script>
+            function toggleTheme() {
+                const b = document.body;
+                b.dataset.theme = b.dataset.theme === "light" ? "dark" : "light";
+            }
+        </script>
+    </body>
+</html>
