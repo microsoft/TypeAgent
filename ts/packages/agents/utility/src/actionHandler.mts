@@ -192,8 +192,10 @@ async function handleWebSearch(
 ) {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
     const html = await getPageContent(url, agentContext, signal);
+    // historyText carries the full results for downstream flow steps;
+    // displayContent stays brief so the CLI isn't flooded with the page.
     return createActionResultFromTextDisplay(
-        `Search results for "${searchQuery}":\n\n${html}`,
+        `Fetched ${html.length} chars of search results for "${searchQuery}"`,
         `Search results for "${searchQuery}":\n\n${html}`,
     );
 }
@@ -211,8 +213,10 @@ async function handleWebFetch(
             : `https://${url}`;
     const normalized = withScheme.replace(/ /g, "-");
     const html = await getPageContent(normalized, agentContext, signal);
+    // historyText carries the full content for downstream flow steps;
+    // displayContent stays brief so the CLI isn't flooded with the page.
     return createActionResultFromTextDisplay(
-        `Content from ${normalized}:\n\n${html}`,
+        `Fetched ${html.length} chars from ${normalized}`,
         `Content from ${normalized}:\n\n${html}`,
     );
 }
