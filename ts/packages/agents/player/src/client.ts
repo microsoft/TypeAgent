@@ -1361,7 +1361,6 @@ export async function handleCall(
                 name,
             );
 
-            console.log(resultMessage);
             return createActionResultFromTextDisplay(resultMessage);
         }
         case "deletePlaylist": {

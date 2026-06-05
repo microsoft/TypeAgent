@@ -2,52 +2,52 @@
 // Licensed under the MIT License.
 
 import {
-    ActionContext,
-    AppAction,
-    TypeAgentAction,
-    DisplayAppendMode,
-} from "@typeagent/agent-sdk";
-import {
-    CommandHandlerContext,
-    getCommandResult,
-} from "../context/commandHandlerContext.js";
-import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
-import {
     createSdkMcpServer,
     Options,
     query,
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
-import registerDebug from "debug";
-import { createRequire } from "node:module";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { z } from "zod/v4";
-import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
-    composeActionSchema,
-    createActionSchemaJsonValidator,
-} from "../translation/actionSchemaJsonTranslator.js";
-import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
-import { Entity } from "@typeagent/agent-sdk";
-import { TypeAgentJsonValidator } from "typechat-utils";
-import { executeAction } from "../execute/actionHandlers.js";
+    ActionContext,
+    AppAction,
+    DisplayAppendMode,
+    Entity,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
+import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import {
     ConversationMessage,
     ConversationMessageMeta,
 } from "conversation-memory";
+import registerDebug from "debug";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { TypeAgentJsonValidator } from "typechat-utils";
+import { z } from "zod/v4";
+import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
+import {
+    CommandHandlerContext,
+    getCommandResult,
+} from "../context/commandHandlerContext.js";
+import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import { nullClientIO } from "../context/interactiveIO.js";
-import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
-import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
-import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
-import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
+import { executeAction } from "../execute/actionHandlers.js";
+import {
+    composeActionSchema,
+    createActionSchemaJsonValidator,
+} from "../translation/actionSchemaJsonTranslator.js";
+import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
     formatParams as sharedFormatParams,
-    formatToolResultDisplay as sharedFormatToolResultDisplay,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
+    formatToolResultDisplay as sharedFormatToolResultDisplay,
 } from "./reasoningLoopBase.js";
+import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
+import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
