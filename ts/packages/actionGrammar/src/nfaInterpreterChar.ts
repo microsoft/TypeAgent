@@ -113,31 +113,30 @@ function buildLiteralStickyRegex(
         // mode here is `leadingMode` (canonical's `leadingSpacingMode`):
         // parent's mode for the first part of a nested rule, otherwise
         // the rule's own mode.
-        leadingSep =
-            leadingMode === "none" ? "" : `[${SEPARATOR_CLASS_STR}]*?`;
+        leadingSep = leadingMode === "none" ? "" : `[${SEPARATOR_CLASS_STR}]*?`;
     } else {
-    switch (spacingMode) {
-        case "none":
-            leadingSep = "";
-            break;
-        case "required":
-            leadingSep = `[${SEPARATOR_CLASS_STR}]+`;
-            leadingIsRequired = true;
-            break;
-        case "optional":
-            leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
-            break;
-        case undefined:
-            // auto — caller must adjust at call time based on prev char.
-            // We default to the optional pattern; auto-mode required-sep is
-            // enforced separately when prev-char check rejects.
-            leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
-            leadingIsAuto = true;
-            break;
-        default:
-            leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
-            break;
-    }
+        switch (spacingMode) {
+            case "none":
+                leadingSep = "";
+                break;
+            case "required":
+                leadingSep = `[${SEPARATOR_CLASS_STR}]+`;
+                leadingIsRequired = true;
+                break;
+            case "optional":
+                leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
+                break;
+            case undefined:
+                // auto — caller must adjust at call time based on prev char.
+                // We default to the optional pattern; auto-mode required-sep is
+                // enforced separately when prev-char check rejects.
+                leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
+                leadingIsAuto = true;
+                break;
+            default:
+                leadingSep = `[${SEPARATOR_CLASS_STR}]*`;
+                break;
+        }
     }
 
     const pattern = `${leadingSep}${escapeRegex(displayText)}`;
@@ -201,11 +200,7 @@ function makePlaceholder(id: number): any {
     return { [WILDCARD_PLACEHOLDER_TAG]: id };
 }
 function isPlaceholder(v: any): v is { [WILDCARD_PLACEHOLDER_TAG]: number } {
-    return (
-        v !== null &&
-        typeof v === "object" &&
-        WILDCARD_PLACEHOLDER_TAG in v
-    );
+    return v !== null && typeof v === "object" && WILDCARD_PLACEHOLDER_TAG in v;
 }
 
 /**
@@ -276,6 +271,24 @@ export interface NFACharThreadState {
     placeholderResolutions?: Map<number, any> | undefined;
     // Monotonic counter for fresh placeholder ids in this thread.
     nextPlaceholderId?: number | undefined;
+}
+
+/**
+ * Configuration-dedup key for a thread: the tuple that fully determines a
+ * thread's future behavior under NFA simulation — `(state, charPos,
+ * priority counts, pending-wildcard start)`.  Two threads sharing this key
+ * have identical successors and identical acceptance, so processing one is
+ * equivalent to processing the other.  Used both for per-round dedup and
+ * for the cross-round global visited set (the must-advance guard's
+ * NFA-simulation equivalent — see matchNFACharBased).
+ *
+ * NOTE: environment / actionValue are intentionally omitted, matching the
+ * single-best-result contract the matcher already relies on (the first
+ * thread to reach a configuration wins).
+ */
+function threadDedupKey(t: NFACharThreadState): string {
+    const pw = t.pendingWildcard ? `pw${t.pendingWildcard.start}` : "";
+    return `${t.stateId}-${t.charPos}-${t.fixedStringPartCount}-${t.checkedWildcardCount}-${t.uncheckedWildcardCount}-${pw}`;
 }
 
 function makeInitialThread(nfa: NFA): NFACharThreadState {
@@ -451,8 +464,7 @@ function epsilonClosureChar(
                 // own saved leading IF the parent is itself a nested
                 // rule sitting at its first part, otherwise the parent's
                 // own current mode.
-                const parentIsNested =
-                    (state.spacingStack?.length ?? 0) >= 2;
+                const parentIsNested = (state.spacingStack?.length ?? 0) >= 2;
                 const effectiveLeading =
                     state.atFirstPart && parentIsNested
                         ? state.parentSpacingMode
@@ -507,12 +519,14 @@ function tryStickyNumber(
     // Use the runtime spacing-stack mode rather than the compiler-inherited
     // transition mode (see comment in tryLiteralMatch).
     const spacingMode = state.currentSpacingMode;
-    const re = spacingMode === "none" ? STICKY_NUMBER_NOSEP_RE : STICKY_NUMBER_RE;
+    const re =
+        spacingMode === "none" ? STICKY_NUMBER_NOSEP_RE : STICKY_NUMBER_RE;
     re.lastIndex = state.charPos;
     const m = re.exec(request);
     if (m === null) return undefined;
     const newCharPos = state.charPos + m[0].length;
-    if (!isBoundarySatisfied(request, newCharPos, spacingMode)) return undefined;
+    if (!isBoundarySatisfied(request, newCharPos, spacingMode))
+        return undefined;
     const n = Number(m[1]);
     if (Number.isNaN(n)) return undefined;
 
@@ -716,10 +730,16 @@ function tryLiteralMatch(
                 pending,
                 fin.resolvedValue,
             );
-            return advanceThread(finalized, trans, newCharPos, fin.environment, {
-                clearPendingWildcard: true,
-                wildcardCharsConsumed: wildcardEnd - pending.start,
-            });
+            return advanceThread(
+                finalized,
+                trans,
+                newCharPos,
+                fin.environment,
+                {
+                    clearPendingWildcard: true,
+                    wildcardCharsConsumed: wildcardEnd - pending.start,
+                },
+            );
         }
     }
 
@@ -821,7 +841,11 @@ function finalizeWildcardCapture(
     wildcardTrans: NFATransition,
     captured: string,
 ):
-    | { ok: true; environment: Environment | undefined; resolvedValue: SlotValue }
+    | {
+          ok: true;
+          environment: Environment | undefined;
+          resolvedValue: SlotValue;
+      }
     | { ok: false } {
     let slotValue: SlotValue = captured;
 
@@ -1118,6 +1142,17 @@ export function matchNFACharBased(
     // Work queue of threads ready to expand at their current charPos.
     let frontier = initial;
 
+    // Cross-round global visited set (must-advance guard, NFA-simulation
+    // form).  A thread configuration (threadDedupKey) is processed at most
+    // once across the whole match.  Without this, a nullable repeat on
+    // input that doesn't advance charPos (e.g. `(($(w))?)*` on "") would
+    // regenerate the same configurations every round and spin until the
+    // iteration cap (~50k rounds, ~130s).  Seeding with the initial
+    // frontier's keys prevents those configurations from being re-enqueued
+    // when the epsilon loop cycles back to them.
+    const globalSeen = new Set<string>();
+    for (const t of initial) globalSeen.add(threadDedupKey(t));
+
     // Bound the iteration to avoid runaway loops while we stabilize the
     // matcher.  Each iteration either advances charPos or terminates
     // threads, so total work is O(|states| * |request| * fanout).
@@ -1168,14 +1203,17 @@ export function matchNFACharBased(
             }
         }
 
-        // Dedup frontier by (stateId, charPos, priority, pendingWildcard).
-        const seen = new Set<string>();
+        // Dedup the next frontier against the cross-round global visited
+        // set.  A configuration already processed in any prior round (or
+        // earlier in this round) is dropped — its successors and accepts
+        // were already accounted for.  This subsumes per-round dedup and
+        // guarantees termination in O(|states| * |request| * counts)
+        // rounds instead of spinning to the iteration cap.
         const deduped: NFACharThreadState[] = [];
         for (const t of next) {
-            const pw = t.pendingWildcard ? `pw${t.pendingWildcard.start}` : "";
-            const key = `${t.stateId}-${t.charPos}-${t.fixedStringPartCount}-${t.checkedWildcardCount}-${t.uncheckedWildcardCount}-${pw}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
+            const key = threadDedupKey(t);
+            if (globalSeen.has(key)) continue;
+            globalSeen.add(key);
             deduped.push(t);
         }
 
