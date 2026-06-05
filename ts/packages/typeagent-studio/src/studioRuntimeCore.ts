@@ -15,7 +15,7 @@ import {
 } from "@typeagent/core/onboardingBridge";
 import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
 import { InProcessEventStream } from "@typeagent/core/events";
-import type { StudioEventType } from "@typeagent/core/events";
+import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
 import {
     InMemorySandboxManager,
     type SandboxManager,
@@ -127,6 +127,10 @@ export interface StudioRuntime {
     listCorpusAgents(): Promise<string[]>;
     /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
+    /** Most recent events from the structured event stream, oldest-first. */
+    queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
+    /** Subscribe to every event as it is emitted. Returns a disposable. */
+    onAnyEvent(listener: (event: StudioEvent) => void): { dispose(): void };
 }
 
 export interface StudioWorkspaceState {
@@ -391,6 +395,17 @@ export function createStudioRuntimeCore(
         },
         async listCorpusEntries(agent) {
             return corpus.list(agent);
+        },
+        async queryRecentEvents(limit = 200) {
+            const all: StudioEvent[] = [];
+            for await (const event of events.query()) {
+                all.push(event);
+            }
+            return all.slice(-limit);
+        },
+        onAnyEvent(listener) {
+            const subscription = events.subscribe(listener);
+            return { dispose: () => subscription.unsubscribe() };
         },
     };
 }

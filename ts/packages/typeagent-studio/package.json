@@ -202,6 +202,18 @@
         "command": "typeagent-studio.focusSandboxes",
         "title": "Focus Sandboxes view",
         "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.refreshEvents",
+        "title": "Refresh event log",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.clearEvents",
+        "title": "Clear event log",
+        "category": "TypeAgent Studio",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -222,6 +234,10 @@
         {
           "id": "typeagentStudioCorpora",
           "name": "Corpora"
+        },
+        {
+          "id": "typeagentStudioEvents",
+          "name": "Event Log"
         }
       ]
     },
@@ -247,6 +263,16 @@
           "command": "typeagent-studio.refreshCorpora",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.refreshEvents",
+          "when": "view == typeagentStudioEvents",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.clearEvents",
+          "when": "view == typeagentStudioEvents",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -272,6 +298,7 @@
     "onStartupFinished",
     "onView:typeagentStudioSandboxes",
     "onView:typeagentStudioCorpora",
+    "onView:typeagentStudioEvents",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
@@ -294,7 +321,9 @@
     "onCommand:typeagent-studio.stopSandbox",
     "onCommand:typeagent-studio.restartSandbox",
     "onCommand:typeagent-studio.refreshSandboxes",
-    "onCommand:typeagent-studio.refreshCorpora"
+    "onCommand:typeagent-studio.refreshCorpora",
+    "onCommand:typeagent-studio.refreshEvents",
+    "onCommand:typeagent-studio.clearEvents"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

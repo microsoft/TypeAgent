@@ -101,6 +101,23 @@ A status-bar item summarizes agent health across running sandboxes:
 The aggregation lives in the vscode-free `healthStatusPresentation.ts` module
 (unit-tested); `studioStatusBar.ts` is a thin `StatusBarItem` adapter.
 
+## Event Log view
+
+The **TypeAgent Studio** container also hosts an **Event Log** view backed by
+the structured event stream (`InProcessEventStream`) from `@typeagent/core`:
+
+- Shows recent events newest-first (capped at 200), each summarized to a single
+  line with a per-type icon, a UTC `HH:MM:SS` timestamp, and the agent when
+  present; a tooltip carries the type, full timestamp, sandbox, and correlation
+  ids.
+- Seeds from the stream's ring buffer on activation and appends live as events
+  are emitted.
+- The view title offers **Refresh** and **Clear**.
+
+Summarization lives in the vscode-free `eventLogPresentation.ts` module
+(unit-tested); `eventLogTreeProvider.ts` is a thin `TreeDataProvider` adapter
+that owns the bounded newest-first ring.
+
 Install behavior for `Install latest onboarding session to sandbox`:
 
 - Prefers explicit artifact paths emitted by onboarding `Scaffolder`/`Packaging` phase outputs.

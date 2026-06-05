@@ -12,6 +12,10 @@ import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
 } from "./studioStatusBar.js";
+import {
+    EVENT_LOG_VIEW_ID,
+    EventLogTreeProvider,
+} from "./eventLogTreeProvider.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
@@ -97,6 +101,18 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBar,
         vscode.commands.registerCommand(STUDIO_STATUS_BAR_COMMAND, () =>
             vscode.commands.executeCommand(`${SANDBOX_VIEW_ID}.focus`),
+        ),
+    );
+
+    const eventLog = new EventLogTreeProvider(runtime);
+    context.subscriptions.push(
+        eventLog,
+        vscode.window.registerTreeDataProvider(EVENT_LOG_VIEW_ID, eventLog),
+        vscode.commands.registerCommand("typeagent-studio.refreshEvents", () =>
+            eventLog.refresh(),
+        ),
+        vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
+            eventLog.clear(),
         ),
     );
 
