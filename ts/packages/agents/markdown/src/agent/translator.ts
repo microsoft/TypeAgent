@@ -49,6 +49,14 @@ export class MarkdownAgent<T extends object> {
     schema: string;
     model: ChatModelWithStreaming;
     translator: TypeChatJsonTranslator<T>;
+    // Optional accumulator the caller sets before issuing a request so the
+    // LLM token usage reported by the model can be attributed back to the
+    // dispatcher's "Action Tokens". Left undefined => usage is not tracked.
+    tokenUsage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+    };
 
     constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
@@ -60,6 +68,23 @@ export class MarkdownAgent<T extends object> {
         this.model = ai.createChatModel(apiSettings, undefined, undefined, [
             "markdown",
         ]);
+
+        // Capture per-call token usage reported by the model. Both the
+        // TypeChat translate() path and the direct model.complete() path
+        // invoke this callback. Compose with any existing callback so we
+        // don't clobber one set elsewhere.
+        const previousCompletionCallback = this.model.completionCallback;
+        this.model.completionCallback = (request, response) => {
+            previousCompletionCallback?.(request, response);
+            const usage = (response as any)?.usage;
+            if (usage && this.tokenUsage) {
+                this.tokenUsage.prompt_tokens += usage.prompt_tokens ?? 0;
+                this.tokenUsage.completion_tokens +=
+                    usage.completion_tokens ?? 0;
+                this.tokenUsage.total_tokens += usage.total_tokens ?? 0;
+            }
+        };
+
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,

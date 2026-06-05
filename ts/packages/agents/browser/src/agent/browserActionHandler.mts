@@ -5,6 +5,8 @@ import {
     ActionContext,
     ActionIO,
     ActionResult,
+    ActionResultSuccess,
+    ActionTokenUsage,
     AppAgent,
     AppAgentEvent,
     AppAgentInitSettings,
@@ -140,6 +142,10 @@ import {
 } from "./lookupAndAnswerSchema.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
+import {
+    hookModelTokenUsage,
+    runWithTokenUsage,
+} from "./tokenUsage.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
@@ -1810,7 +1816,44 @@ async function changeSearchProvider(
     }
 }
 
+// Public entry point registered as the agent's executeAction. Establishes a
+// per-request LLM token accumulator that is propagated (via AsyncLocalStorage)
+// to every LLM call site reached while handling the action, then attaches the
+// accumulated total to the returned ActionResult so the dispatcher can surface
+// it as "Action Tokens". The actual dispatch logic lives in the *Impl below.
 async function executeBrowserAction(
+    action:
+        | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
+        | TypeAgentAction<BrowserActions, "browser">
+        | TypeAgentAction<ExternalBrowserActions, "browser.external">
+        | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
+
+    context: ActionContext<BrowserActionContext>,
+) {
+    const tokenUsage: ActionTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    const result = await runWithTokenUsage(tokenUsage, () =>
+        executeBrowserActionImpl(action, context),
+    );
+    // Only attribute usage when an LLM was actually invoked. Non-LLM actions
+    // and not-yet-instrumented paths stay "not reported" (undefined) rather
+    // than falsely claiming zero tokens.
+    if (
+        result !== undefined &&
+        (result as { error?: unknown }).error === undefined &&
+        tokenUsage.total_tokens > 0
+    ) {
+        (result as ActionResultSuccess).tokenUsage = tokenUsage;
+    }
+    return result;
+}
+
+async function executeBrowserActionImpl(
     action:
         | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
@@ -2332,6 +2375,7 @@ async function summarizeSearchResults(
     const model = openai.createJsonChatModel("GPT_35_TURBO", [
         "SearchPageSummary",
     ]);
+    hookModelTokenUsage(model);
     const answerResult = await summarize(
         model,
         pageContents,
@@ -2400,6 +2444,7 @@ async function lookup(
     const model = openai.createJsonChatModel("GPT_35_TURBO", [
         "InternetLookupAnswerGenerator",
     ]); // TODO: GPT_5_MINI/NANO?
+    hookModelTokenUsage(model);
     const answerResult = await generateAnswer(
         action.parameters.originalRequest,
         content,

@@ -26,6 +26,7 @@ import { openai } from "aiclient";
 import {
     ActionContext,
     ActionResult,
+    ActionTokenUsage,
     AppAgent,
     AppAgentEvent,
     ReadinessReport,
@@ -549,17 +550,27 @@ async function executeEmailAction(
         await emailProvider.login();
     }
 
-    let result = await handleEmailAction(action, context);
+    // Accumulates the LLM token usage consumed while handling this action so
+    // it can be reported back to the dispatcher as "Action Tokens".
+    const tokenUsage: ActionTokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    let result = await handleEmailAction(action, context, tokenUsage);
     if (result) {
         // If handler already built an ActionResultSuccess, return it directly
-        if (typeof result === "object") return result;
-        return createActionResult(result);
+        const actionResult =
+            typeof result === "object" ? result : createActionResult(result);
+        actionResult.tokenUsage = tokenUsage;
+        return actionResult;
     }
 }
 
 async function handleEmailAction(
     action: EmailAction,
     context: ActionContext<EmailActionContext>,
+    tokenUsage: ActionTokenUsage,
 ): Promise<ActionResultSuccess | string | undefined> {
     const { emailProvider } = context.sessionContext.agentContext;
     if (!emailProvider) {
@@ -600,15 +611,28 @@ async function handleEmailAction(
             if (action.parameters.genContent.generateBody) {
                 let query = action.parameters.genContent.bodySearchQuery;
                 if (query) {
+                    const chatModel = openai.createChatModel(
+                        "GPT_35_TURBO",
+                        undefined,
+                        undefined,
+                        ["emailActionHandler"],
+                    );
+                    // Accumulate the LLM token usage reported by the model so
+                    // the agent can attribute it to this request.
+                    chatModel.completionCallback = (_params, data) => {
+                        const usage = (data as any)?.usage;
+                        if (usage) {
+                            tokenUsage.prompt_tokens +=
+                                usage.prompt_tokens ?? 0;
+                            tokenUsage.completion_tokens +=
+                                usage.completion_tokens ?? 0;
+                            tokenUsage.total_tokens += usage.total_tokens ?? 0;
+                        }
+                    };
                     let result = await generateNotes(
                         query,
                         4096,
-                        openai.createChatModel(
-                            "GPT_35_TURBO",
-                            undefined,
-                            undefined,
-                            ["emailActionHandler"],
-                        ),
+                        chatModel,
                         undefined,
                     );
 

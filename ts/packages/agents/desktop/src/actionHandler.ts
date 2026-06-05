@@ -166,8 +166,24 @@ async function executeDesktopAction(
     action: AppAction,
     context: ActionContext<DesktopActionContext>,
 ) {
+    // Per-request token-usage accumulator. The only model calls reachable
+    // from here are text-embedding lookups (programNameIndex app-name
+    // matching). aiclient's TextEmbeddingModel doesn't expose token usage
+    // (no completionCallback; the API's usage is discarded internally), so
+    // this stays all-zero. Reporting it instead of leaving it undefined
+    // signals the agent ran but consumed no reportable LLM tokens.
+    const tokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
     try {
-        return await runAction(action, context);
+        const result = await runAction(action, context);
+        // Attach usage to success results only; error results carry none.
+        if (result.error === undefined) {
+            result.tokenUsage = tokenUsage;
+        }
+        return result;
     } catch (e) {
         if (e instanceof AutoShellMissingError) {
             return offerAutoShellBuild(context, e, action);

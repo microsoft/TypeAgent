@@ -33,7 +33,20 @@ async function executeVideoAction(
     action: AppAction,
     context: ActionContext<VideoActionContext>,
 ) {
+    // The video-generation API (openai.createVideoModel) only submits an async
+    // job and exposes no token/usage stats, and VideoModel has no
+    // completionCallback. Report all-zero usage so the agent participates in
+    // the token-usage contract: all-zero => ran but no LLM tokens reported
+    // (distinct from undefined => not reported).
+    const tokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
     let result = await handleVideoAction(action as VideoAction, context);
+    if (result !== undefined && result.error === undefined) {
+        result.tokenUsage = tokenUsage;
+    }
     return result;
 }
 
