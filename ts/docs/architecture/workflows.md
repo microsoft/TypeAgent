@@ -29,6 +29,8 @@ trade one-time LLM reasoning for unlimited fast reuse.
 
 ### Three-phase lifecycle
 
+![lifecycle](./images/workflow_capture_run_repair.svg)
+
 The user-facing model is simple:
 
 | Phase       | What happens                                                                                                                          |
@@ -62,40 +64,24 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 | **Script host**     | A sandboxed execution environment for scripts (PowerShell constrained runspace, Node.js `new Function()` sandbox).                 |
 | **Self-repair**     | Fallback to LLM reasoning when a workflow execution fails, with context about the failure to guide correction.                     |
 
-### Three workflow types
+### Workflow types
 
-```
-                        +-----------------+
-   User Request ------->| Grammar Matcher |
-                        +--------+--------+
-                                 |
-              +------------------+------------------+
-              |                  |                  |
-     +--------v-------+ +-------v--------+ +-------v--------+
-     |   PowerShell   | |    WebFlow     | |   TaskFlow     |
-     |   (PS Script)  | | (TypeScript)   | | (TypeScript)   |
-     +--------+-------+ +-------+--------+ +-------+--------+
-              |                  |                  |
-     +--------v-------+ +-------v--------+ +-------v--------+
-     | Constrained    | | Node.js        | | Node.js        |
-     | PS Runspace    | | Function()     | | Function()     |
-     |                | | sandbox        | | + ScriptAPI    |
-     +----------------+ +----------------+ +----------------+
-```
+![types](./images/workflow_types_architecture.svg)
 
-| Aspect        | PowerShell                              | WebFlow                                           | TaskFlow                                           |
-| ------------- | --------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| **Domain**    | OS / filesystem / processes             | Web page interaction                              | Cross-agent workflows                              |
-| **Language**  | PowerShell                              | TypeScript                                        | TypeScript                                         |
-| **Sandbox**   | Constrained runspace + cmdlet whitelist | Frozen API + blocked identifiers (server-side)    | `new Function()` + frozen API + blocked globals    |
-| **Execution** | `scriptHost.ps1` via child process      | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` |
-| **Scope**     | System-wide                             | Per-site or global                                | Any agent combination                              |
-| **Platform**  | Windows only                            | Any (browser required)                            | Any                                                |
+| Aspect        | PowerShell                              | WebFlow                                           | TaskFlow                                           | ExcelFlow                                        | ...            |
+| ------------- | --------------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | -------------- |
+| **Domain**    | OS / filesystem / processes             | Web page interaction                              | Cross-agent workflows                              | Excel / spreadsheet automation                   | _User-defined_ |
+| **Language**  | PowerShell                              | TypeScript                                        | TypeScript                                         | TypeScript                                       | —              |
+| **Sandbox**   | Constrained runspace + cmdlet whitelist | Frozen API + blocked identifiers (server-side)    | `new Function()` + frozen API + blocked globals    | `new Function()` + OfficeJS bridge               | —              |
+| **Execution** | `scriptHost.ps1` via child process      | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` | `new Function()` in Node.js with OfficeJS bridge | —              |
+| **Scope**     | System-wide                             | Per-site or global                                | Any agent combination                              | Per-workbook or global                           | —              |
+| **Platform**  | Windows only                            | Any (browser required)                            | Any                                                | Any (Excel required)                             | Any            |
+|  |
 
-> **Design trade-off — why three separate workflow types instead of one?**
+> **Design trade-off — why separate workflow types instead of one?**
 >
 > We could have a single unified workflow format that handles all domains.
-> We chose three types because:
+> We chose separate types because:
 >
 > 1. **Sandbox requirements differ** — PowerShell needs OS-level isolation
 >    (constrained runspace); browser scripts need DOM access prevention;
@@ -105,25 +91,16 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 > 3. **Execution substrates differ** — PowerShell runs in a child process;
 >    WebFlows proxy to the browser; TaskFlows call the dispatcher.
 >
-> The cost is three parallel implementations of storage, dynamic schema,
-> and grammar generation. See [Design principles](#design-principles) for
-> the full list of architectural invariants.
+> We derive common building blocks to handle storage, dynamic schema,
+> and grammar generation.
 
 ---
 
 ## Common lifecycle
 
-All three workflow types share a five-phase lifecycle:
+All workflow types share a five-phase lifecycle:
 
-```
-  +-----------+     +----------+     +----------+     +-----------+
-  |  Capture  |---->| Persist  |---->| Register |---->|  Execute  |
-  +-----------+     +----------+     +----------+     +-----------+
-       ^                                                    |
-       |              +----------+                          |
-       +--------------| Feedback |<-------------------------+
-                      +----------+
-```
+![types](./images/capture_persist_register_execute.svg)
 
 ### Phase 1 — Capture
 
