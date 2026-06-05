@@ -76,7 +76,7 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 | **Execution** | `scriptHost.ps1` via child process      | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` | `new Function()` in Node.js with OfficeJS bridge | —              |
 | **Scope**     | System-wide                             | Per-site or global                                | Any agent combination                              | Per-workbook or global                           | —              |
 | **Platform**  | Windows only                            | Any (browser required)                            | Any                                                | Any (Excel required)                             | Any            |
-|  |
+|               |
 
 > **Design trade-off — why separate workflow types instead of one?**
 >
