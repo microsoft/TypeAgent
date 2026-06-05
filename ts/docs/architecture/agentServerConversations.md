@@ -239,6 +239,28 @@ When connected to the agentServer, the Shell exposes `/conversation` commands in
 
 `@conversation` is accepted as an alias for `/conversation`.
 
+On startup, the Shell first tries to restore the last conversation it had open (`userSettings.conversation.lastConversationId`); if that conversation no longer exists on the server (deleted, server data wiped, etc.), it falls back to find-or-create a conversation named `"Shell"`. See `packages/shell/src/main/instance.ts`.
+
+### VS Code Shell
+
+The VS Code extension (`packages/vscode-shell`) runs in **connected mode only** — it always talks to a separately-launched agentServer. It is a webview-based chat client with a **sidebar** view plus zero-to-many **tab panels**, each of which holds its own `AgentServerBridge` and may be on a different conversation.
+
+| Surface        | Default landing conversation                                                                                                                             | Restored across reloads?                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Sidebar        | Find-or-create a conversation named **`"VS Code"`** (mirroring CLI's `"CLI"` and Shell's `"Shell"`).                                                     | Yes — `globalState["sidebar.lastSessionId"]`.                                                                                             |
+| Each tab panel | A **fresh ephemeral** conversation named `cli-ephemeral-vscode-<n>-<ts>`. Ephemerals are swept by the server on startup if they outlive an unclean exit. | The exact ephemeral is restored if the panel state is rehydrated and the conversation still exists; otherwise a new ephemeral is created. |
+
+The sidebar's restore wins over the `"VS Code"` find-or-create whenever the saved id still resolves on the server. The find-or-create only fires on fresh installs, or when the saved conversation has been deleted out from under the extension. Find-or-create races (two VS Code windows opening simultaneously) are handled by re-listing on `createSession` rejection and adopting the winner.
+
+Both `@conversation` slash commands and natural-language phrases ("create a new conversation", "list my conversations", etc.) are routed through the same `manage-conversation` `ClientIO.takeAction` flow as the Shell and CLI. The VS Code shell renders:
+
+- Non-switching results (`list`, `info`, `rename`, `delete`, error messages) in place via `overwriteActionBubble` — they replace the request's own agent-bubble in the current conversation.
+- Switching results (`new`, `switch`, `prev`, `next`) via a separate `conversationNotification` webview message that lands **after** the session switch completes. This is necessary because `sessionChanged` triggers `chatPanel.clear()` in the webview, wiping any bubble written in the OLD conversation before the switch.
+
+All HTML interpolated into either path is escaped via a local `escapeHtml()` (matching `shell/src/renderer/src/htmlUtil.ts`) so conversation names, session ids, and server-error messages cannot inject markup.
+
+See `packages/vscode-shell/src/agentServerBridge.ts` (`handleManageConversation`, `connectImpl`) and `packages/vscode-shell/src/extension.ts` for the implementation.
+
 ---
 
 ## Natural Language Conversation Management
@@ -256,13 +278,18 @@ where `payload` has the shape:
 { subcommand: "list" }
 { subcommand: "info" }
 { subcommand: "switch"; name: string }
+{ subcommand: "prev" }
+{ subcommand: "next" }
 { subcommand: "delete"; name: string }
 { subcommand: "rename"; name?: string; newName: string }
 ```
+
+See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
 
 Each client handles `"manage-conversation"` using its own conversation management API:
 
 - **CLI** — `enhancedConsole.ts` calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands.
 - **Shell** — `main.ts` calls the corresponding `ClientAPI` method (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge.
+- **VS Code Shell** — `agentServerBridge.handleManageConversation` invokes the legacy `LegacyAgentServerConnection` (`listSessions`/`createSession`/`renameSession`/`deleteSession`) directly. Renders results inline via `overwriteActionBubble` for non-switching subcommands, and via the post-switch `conversationNotification` webview message for switching subcommands (`new`/`switch`/`prev`/`next`).
 
 See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#conversations) for the full list of supported phrases.

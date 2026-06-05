@@ -44,6 +44,8 @@
     "postinstall:better-sqlite3-node-copy": "node ./tools/scripts/copy-better-sqlite3-node.js",
     "postinstall:better-sqlite3-node-restore": "node ./tools/scripts/restore-better-sqlite3-node.js",
     "prettier": "prettier --check .",
+    "prettier:changed": "node tools/scripts/prettier-changed.mjs",
+    "prettier:changed:fix": "node tools/scripts/prettier-changed.mjs --write",
     "prettier:fix": "prettier --write .",
     "rebuild": "fluid-build . -t build --rebuild",
     "regen": "pnpm -C packages/cli run regen",

@@ -51,7 +51,7 @@ import {
     addTracksToPlaylist,
     getRecommendationsFromTrackCollection,
     getRecentlyPlayed,
-    limitMax,
+    searchLimitMax,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -477,7 +477,7 @@ export async function searchTracks(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -493,7 +493,7 @@ export async function searchForPlaylists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: limitMax,
+        limit: searchLimitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -880,29 +880,21 @@ async function playPlaylistAction(
         }
     }
     if (playlist) {
-        const playlistResponse = await getPlaylistTracks(
+        const tracks = await getPlaylistTracks(
             clientContext.service,
             playlist.id,
         );
-        if (playlistResponse) {
-            const collection = new PlaylistTrackCollection(
-                playlist,
-                playlistResponse.items.map((item) => item.track!),
-            );
-            let actionResult = await playTrackCollection(
-                collection,
-                clientContext,
-            );
+        const collection = new PlaylistTrackCollection(playlist, tracks);
+        let actionResult = await playTrackCollection(collection, clientContext);
 
-            // add the playlist as an entity
-            actionResult.entities.push({
-                name: playlist.name,
-                type: ["playlist"],
-                uniqueId: playlist.id,
-            });
+        // add the playlist as an entity
+        actionResult.entities.push({
+            name: playlist.name,
+            type: ["playlist"],
+            uniqueId: playlist.id,
+        });
 
-            return actionResult;
-        }
+        return actionResult;
     }
     return createNotFoundActionResult(`playlist ${playlistName}`);
 }
@@ -1178,22 +1170,17 @@ export async function handleCall(
                 }
             }
             if (playlist) {
-                const playlistResponse = await getPlaylistTracks(
+                const tracks = await getPlaylistTracks(
                     clientContext.service,
                     playlist.id,
                 );
-                if (playlistResponse) {
-                    const collection = new PlaylistTrackCollection(
-                        playlist,
-                        playlistResponse.items.map((item) => item.track!),
-                    );
-                    console.log(chalk.magentaBright("Playlist:"));
-                    await updateTrackListAndPrint(collection, clientContext);
-                    return htmlTrackNames(
-                        collection,
-                        `Playlist: ${playlist.name}`,
-                    );
-                }
+                const collection = new PlaylistTrackCollection(
+                    playlist,
+                    tracks,
+                );
+                console.log(chalk.magentaBright("Playlist:"));
+                await updateTrackListAndPrint(collection, clientContext);
+                return htmlTrackNames(collection, `Playlist: ${playlist.name}`);
             }
             return createNotFoundActionResult(`Playlist ${playlistName}`);
         }
@@ -1228,26 +1215,21 @@ export async function handleCall(
                         clientContext.userData!.data,
                     );
 
-                    const playlistResponse = await getPlaylistTracks(
+                    const tracks = await getPlaylistTracks(
                         clientContext.service,
                         playlist.id,
                     );
 
-                    if (playlistResponse) {
-                        const collection = new PlaylistTrackCollection(
-                            playlist,
-                            playlistResponse.items.map((item) => item.track!),
-                        );
-                        console.log(chalk.magentaBright("Playlist:"));
-                        await updateTrackListAndPrint(
-                            collection,
-                            clientContext,
-                        );
-                        return htmlTrackNames(
-                            collection,
-                            `Playlist: ${playlist.name}`,
-                        );
-                    }
+                    const collection = new PlaylistTrackCollection(
+                        playlist,
+                        tracks,
+                    );
+                    console.log(chalk.magentaBright("Playlist:"));
+                    await updateTrackListAndPrint(collection, clientContext);
+                    return htmlTrackNames(
+                        collection,
+                        `Playlist: ${playlist.name}`,
+                    );
                 } else {
                     return createErrorActionResult("No playlist found");
                 }

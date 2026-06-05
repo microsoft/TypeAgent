@@ -588,6 +588,17 @@ window.addEventListener("message", (event) => {
             chatPanel.setHistoryLoading(msg.loading);
             if (!msg.loading) chatPanel.setEnabled(isConnected);
             break;
+        case "conversationNotification":
+            // Conversation-management feedback. We add a fresh agent
+            // bubble rather than reusing the user request's bubble
+            // because for switch/new/prev/next the request belongs to
+            // the OLD conversation and `chatPanel.clear()` ran on
+            // sessionChanged before this message arrived.
+            chatPanel.addAgentMessage(
+                { type: "html", content: msg.content, kind: msg.kind },
+                "conversation",
+            );
+            break;
         case "pcState":
             chatPanel.applyPcState(msg.state);
             break;

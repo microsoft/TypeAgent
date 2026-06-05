@@ -8,8 +8,12 @@ import { createFetchError } from "./utils.js";
 const debugSpotifyRest = registerDebug("typeagent:spotify:rest");
 const debugSpotifyRestVerbose = registerDebug("typeagent:spotify-verbose:rest");
 
-/** Maximum number of items per Spotify API request */
+// Default page size. Most paginated Spotify endpoints accept up to 50.
 export const limitMax = 50;
+
+// /v1/search silently caps `limit` at 10 (undocumented; >10 returns 400
+// "Invalid limit"). Other paginated endpoints still accept limitMax.
+export const searchLimitMax = 10;
 
 export async function search(
     query: SpotifyApi.SearchForItemParameterObject,
@@ -652,7 +656,8 @@ export async function addTracksToPlaylist(
 ) {
     return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
         service,
-        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+        // /tracks was deprecated 2024-11-27 and now 403s; /items is the replacement.
+        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/items`,
         { uris: trackUris },
     );
 }
@@ -660,11 +665,28 @@ export async function addTracksToPlaylist(
 export async function getPlaylistTracks(
     service: SpotifyService,
     playlistId: string,
-) {
-    return fetchGet<SpotifyApi.PlaylistTrackResponse>(
+): Promise<SpotifyApi.TrackObjectFull[]> {
+    // /tracks was deprecated 2024-11-27 (returns 403); use /items instead. Each
+    // entry's payload lives under `.item` and may be a track or an episode —
+    // keep only tracks so callers get a clean TrackObjectFull[].
+    type PlaylistItem = {
+        item?: SpotifyApi.TrackObjectFull & { type?: string };
+    };
+    const response = await fetchGet<{ items: PlaylistItem[] }>(
         service,
-        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/items`,
     );
+    const tracks: SpotifyApi.TrackObjectFull[] = [];
+    for (const entry of response.items ?? []) {
+        const payload = entry.item;
+        if (
+            payload &&
+            (payload.type === undefined || payload.type === "track")
+        ) {
+            tracks.push(payload);
+        }
+    }
+    return tracks;
 }
 
 export async function deletePlaylist(
@@ -693,7 +715,7 @@ export async function createPlaylist(
     }
     return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
         service,
-        `https://api.spotify.com/v1/playlists/${playlistResponse.id}/tracks`,
+        `https://api.spotify.com/v1/playlists/${playlistResponse.id}/items`,
         { uris },
     );
 }
