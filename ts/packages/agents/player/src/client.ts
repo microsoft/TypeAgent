@@ -852,29 +852,21 @@ async function playPlaylistAction(
         }
     }
     if (playlist) {
-        const playlistResponse = await getPlaylistTracks(
+        const tracks = await getPlaylistTracks(
             clientContext.service,
             playlist.id,
         );
-        if (playlistResponse) {
-            const collection = new PlaylistTrackCollection(
-                playlist,
-                playlistResponse.items.map((item) => item.track!),
-            );
-            let actionResult = await playTrackCollection(
-                collection,
-                clientContext,
-            );
+        const collection = new PlaylistTrackCollection(playlist, tracks);
+        let actionResult = await playTrackCollection(collection, clientContext);
 
-            // add the playlist as an entity
-            actionResult.entities.push({
-                name: playlist.name,
-                type: ["playlist"],
-                uniqueId: playlist.id,
-            });
+        // add the playlist as an entity
+        actionResult.entities.push({
+            name: playlist.name,
+            type: ["playlist"],
+            uniqueId: playlist.id,
+        });
 
-            return actionResult;
-        }
+        return actionResult;
     }
     return createNotFoundActionResult(`playlist ${playlistName}`);
 }
@@ -1147,22 +1139,17 @@ export async function handleCall(
                 }
             }
             if (playlist) {
-                const playlistResponse = await getPlaylistTracks(
+                const tracks = await getPlaylistTracks(
                     clientContext.service,
                     playlist.id,
                 );
-                if (playlistResponse) {
-                    const collection = new PlaylistTrackCollection(
-                        playlist,
-                        playlistResponse.items.map((item) => item.track!),
-                    );
-                    console.log(chalk.magentaBright("Playlist:"));
-                    await updateTrackListAndPrint(collection, clientContext);
-                    return htmlTrackNames(
-                        collection,
-                        `Playlist: ${playlist.name}`,
-                    );
-                }
+                const collection = new PlaylistTrackCollection(
+                    playlist,
+                    tracks,
+                );
+                console.log(chalk.magentaBright("Playlist:"));
+                await updateTrackListAndPrint(collection, clientContext);
+                return htmlTrackNames(collection, `Playlist: ${playlist.name}`);
             }
             return createNotFoundActionResult(`Playlist ${playlistName}`);
         }
@@ -1197,26 +1184,21 @@ export async function handleCall(
                         clientContext.userData!.data,
                     );
 
-                    const playlistResponse = await getPlaylistTracks(
+                    const tracks = await getPlaylistTracks(
                         clientContext.service,
                         playlist.id,
                     );
 
-                    if (playlistResponse) {
-                        const collection = new PlaylistTrackCollection(
-                            playlist,
-                            playlistResponse.items.map((item) => item.track!),
-                        );
-                        console.log(chalk.magentaBright("Playlist:"));
-                        await updateTrackListAndPrint(
-                            collection,
-                            clientContext,
-                        );
-                        return htmlTrackNames(
-                            collection,
-                            `Playlist: ${playlist.name}`,
-                        );
-                    }
+                    const collection = new PlaylistTrackCollection(
+                        playlist,
+                        tracks,
+                    );
+                    console.log(chalk.magentaBright("Playlist:"));
+                    await updateTrackListAndPrint(collection, clientContext);
+                    return htmlTrackNames(
+                        collection,
+                        `Playlist: ${playlist.name}`,
+                    );
                 } else {
                     return createErrorActionResult("No playlist found");
                 }

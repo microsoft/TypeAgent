@@ -665,39 +665,28 @@ export async function addTracksToPlaylist(
 export async function getPlaylistTracks(
     service: SpotifyService,
     playlistId: string,
-) {
-    // /tracks was deprecated 2024-11-27 (returns 403); /items is the replacement
-    // but renames `items[].track` to `items[].item` (with an `item.type`
-    // discriminator). Normalize back to the legacy shape and drop non-track
-    // items (e.g. episodes) so callers can keep using PlaylistTrackResponse.
-    const response = await fetchGet<SpotifyApi.PlaylistTrackResponse>(
+): Promise<SpotifyApi.TrackObjectFull[]> {
+    // /tracks was deprecated 2024-11-27 (returns 403); use /items instead. Each
+    // entry's payload lives under `.item` and may be a track or an episode —
+    // keep only tracks so callers get a clean TrackObjectFull[].
+    type PlaylistItem = {
+        item?: SpotifyApi.TrackObjectFull & { type?: string };
+    };
+    const response = await fetchGet<{ items: PlaylistItem[] }>(
         service,
         `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/items`,
     );
-    if (response?.items) {
-        const normalized: SpotifyApi.PlaylistTrackObject[] = [];
-        for (const raw of response.items as unknown[]) {
-            const item = raw as Partial<SpotifyApi.PlaylistTrackObject> & {
-                item?: SpotifyApi.TrackObjectFull & { type?: string };
-            };
-            if (item.track) {
-                normalized.push(item as SpotifyApi.PlaylistTrackObject);
-                continue;
-            }
-            const payload = item.item;
-            if (
-                payload &&
-                (payload.type === undefined || payload.type === "track")
-            ) {
-                normalized.push({
-                    ...item,
-                    track: payload,
-                } as SpotifyApi.PlaylistTrackObject);
-            }
+    const tracks: SpotifyApi.TrackObjectFull[] = [];
+    for (const entry of response.items ?? []) {
+        const payload = entry.item;
+        if (
+            payload &&
+            (payload.type === undefined || payload.type === "track")
+        ) {
+            tracks.push(payload);
         }
-        response.items = normalized;
     }
-    return response;
+    return tracks;
 }
 
 export async function deletePlaylist(
