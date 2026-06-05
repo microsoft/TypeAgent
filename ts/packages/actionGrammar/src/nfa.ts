@@ -276,7 +276,9 @@ export class NFABuilder {
     addEpsilonEnterRule(
         from: number,
         to: number,
-        spacingMode: import("./grammarTypes.js").CompiledSpacingMode | undefined,
+        spacingMode:
+            | import("./grammarTypes.js").CompiledSpacingMode
+            | undefined,
     ): void {
         const state = this.states[from];
         if (!state) {
