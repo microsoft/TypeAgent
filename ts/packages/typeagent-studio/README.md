@@ -95,6 +95,23 @@ Grouping and labelling live in the vscode-free `corpusTreePresentation.ts`
 module (unit-tested); `corpusTreeProvider.ts` is a thin `TreeDataProvider`
 adapter.
 
+## Feedback capture
+
+The Corpora view title also offers **Record feedback**:
+
+- A guided flow collects a thumbs up/down rating, the utterance the feedback is
+  about, an optional agent, an optional category (for negative ratings), and an
+  optional comment.
+- Recording emits a `feedback.recorded` event — visible live in the Event Log —
+  and caches the feedback row in `@typeagent/core`'s `CoreFeedbackService`.
+- Feedback that includes an utterance federates into the Corpora view under the
+  agent's `feedback` source, so corrective examples show up alongside in-repo
+  and capture corpora.
+
+Input shaping (trimming, blank omission, rating/category choices) lives in the
+vscode-free `feedbackInputPresentation.ts` module (unit-tested); the command in
+`extension.ts` is a thin VS Code wrapper.
+
 ## Health status bar
 
 A status-bar item summarizes agent health across running sandboxes:

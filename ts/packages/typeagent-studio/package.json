@@ -211,6 +211,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "typeagent-studio.recordFeedback",
+        "title": "Record feedback",
+        "category": "TypeAgent Studio",
+        "icon": "$(feedback)"
+      },
+      {
         "command": "typeagent-studio.focusSandboxes",
         "title": "Focus Sandboxes view",
         "category": "TypeAgent Studio"
@@ -275,6 +281,11 @@
           "command": "typeagent-studio.refreshCorpora",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.recordFeedback",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@2"
         },
         {
           "command": "typeagent-studio.refreshEvents",
@@ -346,6 +357,7 @@
     "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
+    "onCommand:typeagent-studio.recordFeedback",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents"
   ],
@@ -359,8 +371,8 @@
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "mkdirp": "^3.0.1",
-    "rimraf": "^6.0.1"
-    ,"tsx": "^4.21.0"
+    "rimraf": "^6.0.1",
+    "tsx": "^4.21.0"
   },
   "engines": {
     "vscode": "^1.90.0"

@@ -27,6 +27,15 @@ import {
     type CorpusEntry,
     type CorpusService,
 } from "@typeagent/core/corpus";
+import {
+    CoreFeedbackService,
+    InMemoryFeedbackBackend,
+    type FeedbackCorpusProjector,
+    type FeedbackFilter,
+    type FeedbackRecordInput,
+    type FeedbackRow,
+    type FeedbackService,
+} from "@typeagent/core/feedback";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
@@ -139,6 +148,14 @@ export interface StudioRuntime {
     queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
     /** Subscribe to every event as it is emitted. Returns a disposable. */
     onAnyEvent(listener: (event: StudioEvent) => void): { dispose(): void };
+    /**
+     * Record a thumbs-up/down feedback row. Emits a `feedback.recorded` event
+     * and (when an utterance is supplied) surfaces the row in the agent's
+     * federated corpus under the `feedback` source.
+     */
+    recordFeedback(input: FeedbackRecordInput): Promise<void>;
+    /** List recorded feedback rows, optionally filtered. */
+    listFeedback(filter?: FeedbackFilter): Promise<FeedbackRow[]>;
 }
 
 export interface StudioWorkspaceState {
@@ -156,6 +173,7 @@ export interface CreateStudioRuntimeOptions {
     onboarding?: InMemoryOnboardingBridge;
     sandbox?: SandboxManager;
     corpus?: CorpusService;
+    feedback?: FeedbackService & FeedbackCorpusProjector;
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
@@ -185,11 +203,19 @@ export function createStudioRuntimeCore(
         DEFAULT_SANDBOX_ID,
     );
 
+    const feedback =
+        options.feedback ??
+        new CoreFeedbackService({
+            backend: new InMemoryFeedbackBackend(),
+            emitter: events,
+        });
+
     const corpus =
         options.corpus ??
         new FileCorpusService({
             repoRoot,
             profileDir: path.join(context.globalStorageFsPath, "corpus"),
+            feedbackProvider: (agent) => feedback.toCorpusEntries(agent),
         });
 
     return {
@@ -426,6 +452,12 @@ export function createStudioRuntimeCore(
         onAnyEvent(listener) {
             const subscription = events.subscribe(listener);
             return { dispose: () => subscription.unsubscribe() };
+        },
+        async recordFeedback(input) {
+            await feedback.record(input);
+        },
+        async listFeedback(filter) {
+            return feedback.list(filter);
         },
     };
 }

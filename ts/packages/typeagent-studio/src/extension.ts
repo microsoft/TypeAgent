@@ -2,12 +2,18 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import { randomUUID } from "node:crypto";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
+import {
+    FEEDBACK_CATEGORY_CHOICES,
+    FEEDBACK_RATING_CHOICES,
+    buildFeedbackRecordInput,
+} from "./feedbackInputPresentation.js";
 import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
@@ -151,6 +157,86 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.recordFeedback",
+            async () => {
+                const rating = await vscode.window.showQuickPick(
+                    FEEDBACK_RATING_CHOICES.map((choice) => ({
+                        label: choice.label,
+                        value: choice.value,
+                    })),
+                    {
+                        title: "Record feedback",
+                        placeHolder: "How was the response?",
+                    },
+                );
+                if (!rating) {
+                    return;
+                }
+                const utterance = await vscode.window.showInputBox({
+                    title: "Record feedback",
+                    prompt: "Utterance this feedback is about",
+                    placeHolder: "e.g. play some jazz",
+                    ignoreFocusOut: true,
+                });
+                if (utterance === undefined) {
+                    return;
+                }
+                const agent = await vscode.window.showInputBox({
+                    title: "Record feedback",
+                    prompt: "Agent (optional)",
+                    placeHolder: "e.g. player",
+                    ignoreFocusOut: true,
+                });
+                if (agent === undefined) {
+                    return;
+                }
+                let category;
+                if (rating.value === "down") {
+                    const categoryPick = await vscode.window.showQuickPick(
+                        FEEDBACK_CATEGORY_CHOICES.map((choice) => ({
+                            label: choice.label,
+                            value: choice.value,
+                        })),
+                        {
+                            title: "Record feedback",
+                            placeHolder: "What went wrong? (optional)",
+                        },
+                    );
+                    category = categoryPick?.value;
+                }
+                const comment = await vscode.window.showInputBox({
+                    title: "Record feedback",
+                    prompt: "Comment (optional)",
+                    ignoreFocusOut: true,
+                });
+                if (comment === undefined) {
+                    return;
+                }
+                try {
+                    await runtime.recordFeedback(
+                        buildFeedbackRecordInput({
+                            requestId: randomUUID(),
+                            rating: rating.value,
+                            agent,
+                            utterance,
+                            comment,
+                            category,
+                        }),
+                    );
+                    corpusTree.refresh();
+                    vscode.window.showInformationMessage(
+                        rating.value === "up"
+                            ? "Recorded positive feedback."
+                            : "Recorded negative feedback.",
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to record feedback: ${describeError(error)}`,
+                    );
+                }
+            },
         ),
     );
 

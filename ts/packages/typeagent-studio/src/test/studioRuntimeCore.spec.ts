@@ -613,3 +613,37 @@ test("unloadSandboxAgent removes a loaded agent", async () => {
     const status = await runtime.unloadSandboxAgent(started.id, "calendar");
     assert.ok(!status.agents.some((agent) => agent.name === "calendar"));
 });
+
+test("recordFeedback emits an event and federates into the agent corpus", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    let recordedCount = 0;
+    const sub = runtime.onAnyEvent((event) => {
+        if (event.type === "feedback.recorded") {
+            recordedCount += 1;
+        }
+    });
+
+    await runtime.recordFeedback({
+        requestId: "req-1",
+        rating: "down",
+        agent: "player",
+        utterance: "play some jazz",
+        category: "bad-response",
+    });
+    sub.dispose();
+
+    assert.equal(recordedCount, 1);
+
+    const rows = await runtime.listFeedback({ agent: "player" });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].rating, "down");
+
+    const entries = await runtime.listCorpusEntries("player");
+    const feedbackEntries = entries.filter(
+        (entry) => entry.source === "feedback",
+    );
+    assert.equal(feedbackEntries.length, 1);
+    assert.equal(feedbackEntries[0].utterance, "play some jazz");
+});
