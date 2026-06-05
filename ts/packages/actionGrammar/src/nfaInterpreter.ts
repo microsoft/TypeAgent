@@ -762,9 +762,11 @@ function tryTransition(
                         if (!validator.validate(token)) {
                             return undefined; // Validation failed
                         }
-                    } else if (!isBuiltInWildcardType) {
-                        return undefined; // No validator for custom entity type
                     }
+                    // Unknown typeName (no validator) is treated as a
+                    // wildcard with no constraints — matches canonical
+                    // behavior for user-defined type aliases that aren't
+                    // registered as entities.
                     // Try converter if available
                     const converter = globalEntityRegistry.getConverter(
                         trans.typeName,
