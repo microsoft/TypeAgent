@@ -27,6 +27,16 @@ export interface CollisionService {
     report(event: CollisionDetectedEvent): CollisionDetectedEvent;
     list(filter?: CollisionFilter): CollisionDetectedEvent[];
     clear(filter?: CollisionFilter): number;
+    /** Map + store a dispatcher collision record. */
+    fromDispatcher(
+        event: DispatcherCollisionEventLike,
+        opts?: DispatcherCollisionMapOptions,
+    ): CollisionDetectedEvent;
+    /** Map + store a grammar-tools collision record. */
+    fromGrammarTools(
+        collision: GrammarToolCollisionLike,
+        opts?: GrammarCollisionMapOptions,
+    ): CollisionDetectedEvent;
 }
 
 /** Minimal shape derived from dispatcher collision telemetry in main. */

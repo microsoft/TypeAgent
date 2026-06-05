@@ -798,3 +798,89 @@ test("listCollisions honors filters and clearCollisions empties the store", asyn
     assert.equal(removed, 2);
     assert.equal((await runtime.listCollisions()).length, 0);
 });
+
+test("scanGrammarCollisions reports detected overlaps as grammar-edit collisions", async () => {
+    const { context } = createContext();
+    let received: string[] | undefined;
+    const runtime = createStudioRuntimeCore(context, {
+        collisionScanner: async ({ agents }) => {
+            received = agents;
+            return {
+                scanned: ["music", "player"],
+                skipped: [{ schemaName: "list", reason: "no-grammar" }],
+                collisions: [
+                    {
+                        schemaA: "music",
+                        schemaB: "player",
+                        witnessText: "play it",
+                        rulePatternA: "play $(x)",
+                        rulePatternB: "play $(y)",
+                    },
+                ],
+            };
+        },
+    });
+
+    const result = await runtime.scanGrammarCollisions({
+        agents: ["player", "music"],
+    });
+
+    assert.deepEqual(received, ["player", "music"]);
+    assert.equal(result.collisionCount, 1);
+    assert.deepEqual(result.scanned, ["music", "player"]);
+    assert.equal(result.skipped.length, 1);
+
+    const list = await runtime.listCollisions();
+    assert.equal(list.length, 1);
+    assert.equal(list[0].kind, "overlap");
+    assert.equal(list[0].detectionPoint, "grammar-edit");
+    assert.deepEqual(list[0].exemplarUtterances, ["play it"]);
+    assert.equal(list[0].participants.length, 2);
+});
+
+test("scanGrammarCollisions replaces prior grammar-edit collisions by default", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        collisionScanner: async () => ({
+            scanned: ["a"],
+            skipped: [],
+            collisions: [{ schemaA: "a", schemaB: "b", witnessText: "w" }],
+        }),
+    });
+
+    await runtime.scanGrammarCollisions({ agents: ["a", "b"] });
+    await runtime.scanGrammarCollisions({ agents: ["a", "b"] });
+
+    assert.equal((await runtime.listCollisions()).length, 1);
+});
+
+test("scanGrammarCollisions with replace=false accumulates collisions", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context, {
+        collisionScanner: async () => ({
+            scanned: ["a"],
+            skipped: [],
+            collisions: [{ schemaA: "a", schemaB: "b", witnessText: "w" }],
+        }),
+    });
+
+    await runtime.scanGrammarCollisions({ agents: ["a", "b"], replace: false });
+    await runtime.scanGrammarCollisions({ agents: ["a", "b"], replace: false });
+
+    assert.equal((await runtime.listCollisions()).length, 2);
+});
+
+test("scanGrammarCollisions defaults to agents loaded across sandboxes", async () => {
+    const { context } = createContext();
+    let received: string[] | undefined;
+    const runtime = createStudioRuntimeCore(context, {
+        collisionScanner: async ({ agents }) => {
+            received = agents;
+            return { scanned: [], skipped: [], collisions: [] };
+        },
+    });
+
+    await runtime.scanGrammarCollisions();
+
+    assert.deepEqual(received, []);
+});

@@ -19,6 +19,7 @@
     "./feedback": "./dist/feedback/index.js",
     "./health": "./dist/health/index.js",
     "./collisions": "./dist/collisions/index.js",
+    "./collisionScanner": "./dist/collisions/scanner.js",
     "./replay": "./dist/replay/index.js",
     "./onboardingBridge": "./dist/onboardingBridge/index.js"
   },
@@ -34,7 +35,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "debug": "^4.4.0"
+    "action-grammar": "workspace:*",
+    "debug": "^4.4.0",
+    "grammar-tools-core": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

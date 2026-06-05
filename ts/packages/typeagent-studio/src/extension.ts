@@ -281,6 +281,38 @@ export function activate(context: vscode.ExtensionContext): void {
             "typeagent-studio.clearCollisions",
             () => collisions.clear(),
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.scanCollisions",
+            async () => {
+                try {
+                    const result = await vscode.window.withProgress(
+                        {
+                            location: { viewId: COLLISIONS_VIEW_ID },
+                            title: "Scanning grammars for collisions...",
+                        },
+                        () => runtime.scanGrammarCollisions(),
+                    );
+                    await collisions.reloadFromRuntime();
+                    if (result.scanned.length === 0) {
+                        vscode.window.showWarningMessage(
+                            "No compiled grammars found to scan. Load agents into a sandbox and build their grammars first.",
+                        );
+                        return;
+                    }
+                    const skippedSuffix =
+                        result.skipped.length > 0
+                            ? `, ${result.skipped.length} skipped`
+                            : "";
+                    vscode.window.showInformationMessage(
+                        `Scanned ${result.scanned.length} grammar(s): ${result.collisionCount} collision(s) found${skippedSuffix}.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Collision scan failed: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
 
     context.subscriptions.push(

@@ -51,6 +51,11 @@ import {
     type CollisionFilter,
     type CollisionService,
 } from "@typeagent/core/collisions";
+import {
+    createRepoGrammarScanner,
+    type GrammarCollisionScanner,
+    type GrammarScanSkip,
+} from "@typeagent/core/collisionScanner";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
@@ -93,6 +98,30 @@ export interface StudioReplayResult {
     runId: string;
     summary: ReplaySummary;
     rows: ActionDelta[];
+}
+
+export interface StudioCollisionScanRequest {
+    /**
+     * Agent package names to scan. Defaults to every agent currently loaded
+     * across running sandboxes.
+     */
+    agents?: string[];
+    /** Sandbox id recorded on reported collisions. Defaults to the studio sandbox. */
+    sandboxId?: string;
+    /**
+     * When true (default), clears prior `grammar-edit` collisions before
+     * reporting the fresh scan so the view reflects the current grammars.
+     */
+    replace?: boolean;
+}
+
+export interface StudioCollisionScanResult {
+    /** Schema names that compiled and participated in the scan. */
+    scanned: string[];
+    /** Agents/schemas skipped, with reasons. */
+    skipped: GrammarScanSkip[];
+    /** Number of collisions reported into the store. */
+    collisionCount: number;
 }
 
 export interface StudioRuntime {
@@ -207,6 +236,14 @@ export interface StudioRuntime {
     clearCollisions(filter?: CollisionFilter): Promise<number>;
     /** Subscribe to collision detections as they are emitted. */
     onCollisionDetected(listener: () => void): { dispose(): void };
+    /**
+     * Scan agents' compiled grammars for real cross-schema collisions via the
+     * NFA overlap engine, reporting each into the collision store (and Event
+     * Log). Replaces prior `grammar-edit` collisions unless `replace` is false.
+     */
+    scanGrammarCollisions(
+        request?: StudioCollisionScanRequest,
+    ): Promise<StudioCollisionScanResult>;
 }
 
 export interface StudioWorkspaceState {
@@ -232,6 +269,11 @@ export interface CreateStudioRuntimeOptions {
      */
     replayResolver?: ReplayActionResolver;
     collisions?: CollisionService;
+    /**
+     * Scans agents' compiled grammars for collisions. Injected so tests can
+     * substitute a deterministic stub for the default filesystem/NFA scanner.
+     */
+    collisionScanner?: GrammarCollisionScanner;
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
@@ -305,6 +347,9 @@ export function createStudioRuntimeCore(
             emitter: events,
             defaultSandboxId: DEFAULT_SANDBOX_ID,
         });
+
+    const collisionScanner =
+        options.collisionScanner ?? createRepoGrammarScanner({ repoRoot });
 
     return {
         async startOnboarding(seed) {
@@ -586,6 +631,37 @@ export function createStudioRuntimeCore(
                 filter: { types: ["collision.detected"] },
             });
             return { dispose: () => subscription.unsubscribe() };
+        },
+        async scanGrammarCollisions(request = {}) {
+            const sandboxId = request.sandboxId ?? DEFAULT_SANDBOX_ID;
+            let agents = request.agents;
+            if (agents === undefined) {
+                const loaded = new Set<string>();
+                for (const status of await sandbox.list()) {
+                    for (const agent of status.agents) {
+                        loaded.add(agent.name);
+                    }
+                }
+                agents = [...loaded].sort((a, b) => a.localeCompare(b));
+            }
+
+            const report = await collisionScanner({ agents });
+
+            if (request.replace !== false) {
+                collisions.clear({ detectionPoint: "grammar-edit" });
+            }
+            for (const collision of report.collisions) {
+                collisions.fromGrammarTools(collision, {
+                    sandboxId,
+                    detectionPoint: "grammar-edit",
+                });
+            }
+
+            return {
+                scanned: report.scanned,
+                skipped: report.skipped,
+                collisionCount: report.collisions.length,
+            };
         },
     };
 }

@@ -250,6 +250,12 @@
         "title": "Clear collisions",
         "category": "TypeAgent Studio",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "typeagent-studio.scanCollisions",
+        "title": "Scan grammars for collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(search)"
       }
     ],
     "viewsContainers": {
@@ -325,14 +331,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "typeagent-studio.refreshCollisions",
+          "command": "typeagent-studio.scanCollisions",
           "when": "view == typeagentStudioCollisions",
           "group": "navigation@1"
         },
         {
-          "command": "typeagent-studio.clearCollisions",
+          "command": "typeagent-studio.refreshCollisions",
           "when": "view == typeagentStudioCollisions",
           "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.clearCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -400,7 +411,8 @@
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents",
     "onCommand:typeagent-studio.refreshCollisions",
-    "onCommand:typeagent-studio.clearCollisions"
+    "onCommand:typeagent-studio.clearCollisions",
+    "onCommand:typeagent-studio.scanCollisions"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

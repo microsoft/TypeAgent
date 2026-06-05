@@ -45,6 +45,12 @@ export class CollisionsTreeProvider
         this.emitter.fire(undefined);
     }
 
+    /** Re-read collisions from the runtime (e.g. after a scan that may have
+     *  cleared prior entries without emitting). */
+    async reloadFromRuntime(): Promise<void> {
+        await this.reload();
+    }
+
     async clear(): Promise<void> {
         await this.runtime.clearCollisions();
         this.entries = [];

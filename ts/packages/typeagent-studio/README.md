@@ -177,12 +177,21 @@ the `InProcessCollisionService` and `collision.detected` event stream from
   contributing file and line) and any exemplar utterances that witness the
   overlap.
 - Reported collisions also appear in the Event Log; the view title offers
-  **Refresh** and **Clear**.
+  **Scan grammars for collisions**, **Refresh**, and **Clear**.
 
-Collisions are reported through `runtime.reportCollision(...)` (the core service
-also provides `fromDispatcher`/`fromGrammarTools` mappers). Row formatting lives
-in the vscode-free `collisionsPresentation.ts` module (unit-tested);
-`collisionsTreeProvider.ts` is a thin `TreeDataProvider` adapter.
+**Scan grammars for collisions** runs the real NFA overlap engine
+(`grammar-tools-core`) over the compiled grammars (`*.ag.json`) of the agents
+loaded across running sandboxes: it compiles each grammar, intersects every
+cross-schema pair, and reports each detected overlap (with a witness utterance
+and the contributing rule patterns) into the store. Each scan replaces the
+prior `grammar-edit` collisions so the view tracks the current grammars.
+
+Collisions are reported through `runtime.reportCollision(...)` and
+`runtime.scanGrammarCollisions(...)` (the core service also provides
+`fromDispatcher`/`fromGrammarTools` mappers). Row formatting lives in the
+vscode-free `collisionsPresentation.ts` module (unit-tested);
+`collisionsTreeProvider.ts` is a thin `TreeDataProvider` adapter; the
+filesystem/NFA scan lives in `@typeagent/core/collisionScanner`.
 
 Install behavior for `Install latest onboarding session to sandbox`:
 
