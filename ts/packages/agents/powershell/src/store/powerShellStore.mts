@@ -409,7 +409,7 @@ export class PowerShellStore {
             "            isAlias: boolean;",
             "        }[];",
             "        allowedCmdlets: string[];",
-            "        // Modules to import for the script's cmdlets (e.g. [\"NetTCPIP\"]",
+            '        // Modules to import for the script\'s cmdlets (e.g. ["NetTCPIP"]',
             "        // for Get-NetTCPConnection). Include every module required by",
             "        // allowedCmdlets, matching the list that made testPowerShellFlow pass.",
             "        allowedModules?: string[];",
