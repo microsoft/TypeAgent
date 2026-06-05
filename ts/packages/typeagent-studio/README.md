@@ -87,6 +87,20 @@ Grouping and labelling live in the vscode-free `corpusTreePresentation.ts`
 module (unit-tested); `corpusTreeProvider.ts` is a thin `TreeDataProvider`
 adapter.
 
+## Health status bar
+
+A status-bar item summarizes agent health across running sandboxes:
+
+- Aggregates the per-agent `health` of every agent loaded into a running
+  sandbox into a single worst-case badge (error > warning > unknown > healthy).
+- Shows a neutral "no agents" state when nothing is loaded, and colors the item
+  with the editor's warning/error status-bar background for those levels.
+- Updates automatically on sandbox lifecycle events; clicking it focuses the
+  Sandboxes view.
+
+The aggregation lives in the vscode-free `healthStatusPresentation.ts` module
+(unit-tested); `studioStatusBar.ts` is a thin `StatusBarItem` adapter.
+
 Install behavior for `Install latest onboarding session to sandbox`:
 
 - Prefers explicit artifact paths emitted by onboarding `Scaffolder`/`Packaging` phase outputs.

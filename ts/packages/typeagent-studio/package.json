@@ -197,6 +197,11 @@
         "title": "Refresh corpora",
         "category": "TypeAgent Studio",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.focusSandboxes",
+        "title": "Focus Sandboxes view",
+        "category": "TypeAgent Studio"
       }
     ],
     "viewsContainers": {
@@ -221,6 +226,12 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "typeagent-studio.focusSandboxes",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "typeagent-studio.startSandbox",
@@ -258,6 +269,7 @@
     }
   },
   "activationEvents": [
+    "onStartupFinished",
     "onView:typeagentStudioSandboxes",
     "onView:typeagentStudioCorpora",
     "onCommand:typeagent-studio.hello",

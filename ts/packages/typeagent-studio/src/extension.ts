@@ -8,6 +8,10 @@ import { createStudioRuntime } from "./studioRuntime.js";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
+import {
+    STUDIO_STATUS_BAR_COMMAND,
+    StudioStatusBar,
+} from "./studioStatusBar.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
@@ -85,6 +89,14 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),
+        ),
+    );
+
+    const statusBar = new StudioStatusBar(runtime);
+    context.subscriptions.push(
+        statusBar,
+        vscode.commands.registerCommand(STUDIO_STATUS_BAR_COMMAND, () =>
+            vscode.commands.executeCommand(`${SANDBOX_VIEW_ID}.focus`),
         ),
     );
 
