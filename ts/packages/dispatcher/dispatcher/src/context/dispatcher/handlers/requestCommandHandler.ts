@@ -109,6 +109,18 @@ import {
 const debugExplain = registerDebug("typeagent:explain");
 const debugRequest = registerDebug("typeagent:request");
 
+// True when every action in the request targets the built-in chat agent
+// (`generateResponse` / `showImageFile`). These actions have their parameters
+// generated during translation and make no LLM call when executed, so the
+// translation token usage represents the chat agent's generation cost.
+function isChatAgentOnlyRequest(requestAction: RequestAction): boolean {
+    const actions = requestAction.actions;
+    return (
+        actions.length > 0 &&
+        actions.every(({ action }) => action.schemaName === "chat")
+    );
+}
+
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
     usedTranslators: Map<string, TypeAgentTranslator>,
@@ -485,6 +497,23 @@ export class RequestCommandHandler implements CommandHandler {
 
             if (tokenUsage) {
                 ensureCommandResult(systemContext).tokenUsage = tokenUsage;
+
+                // The chat agent produces its output (the answer text for
+                // `generateResponse`, the file list for `showImageFile`) as
+                // action parameters during translation; it makes no LLM call
+                // at action-execution time, so it cannot self-report
+                // `ActionResult.tokenUsage` the way other agents do. When a
+                // request resolves solely to chat-agent actions, the
+                // translation usage *is* the agent's generation cost, so mirror
+                // it into `actionTokenUsage` ("Action Tokens" on the agent
+                // bubble) in addition to the user bubble's "Translation
+                // Tokens". The chat agent reports no usage of its own, so this
+                // is not double-counted by the executeActions accumulation.
+                if (isChatAgentOnlyRequest(requestAction)) {
+                    ensureCommandResult(systemContext).actionTokenUsage = {
+                        ...tokenUsage,
+                    };
+                }
             }
 
             // If translation produced unknown or clarification actions,
