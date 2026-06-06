@@ -1191,10 +1191,10 @@ export class ChatPanel {
                 // current text with the previous command. (Previously gated
                 // on empty input, which forced users to clear first.)
                 e.preventDefault();
-                this.navigateHistory(-1);
+                this.navigateHistory(1);
             } else if (e.key === "ArrowDown") {
                 e.preventDefault();
-                this.navigateHistory(1);
+                this.navigateHistory(-1);
             }
         });
 
