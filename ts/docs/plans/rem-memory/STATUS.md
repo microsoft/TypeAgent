@@ -12,13 +12,13 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **37/37 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **39/39 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
 - **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
 - This session added **set-intersection recall** ("books that are also movies"),
   made **extraction failures observable** (the feeder no longer silently swallows
-  empty/failed extractions), and added **fuzzy (typo-tolerant) lexical recall**.
-  See §4.
+  empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**, and
+  added **multi-entity OR-query splitting**. See §4.
 
 ---
 
@@ -148,6 +148,21 @@ near matching:
   helper tests).
 - SECURITY unchanged: matching stays in JS over a fixed-query result set.
 
+### (d) Multi-entity OR-query splitting — `recall.ts`
+
+A query naming several entities ("anything on Empire in Black and Gold **or**
+Children of Ruin?") collapsed into one keyword bag, so no single relation could
+match every keyword and both entities scored poorly. Added clause splitting:
+
+- `splitOrClauses(query)` — splits on the whole word "or" and tokenizes each
+  clause independently (a query with no "or" yields a single clause).
+- `recall()` now scores each relation against its **best-matching** clause and
+  unions the hits, so each named entity surfaces on its own merits. The
+  type-aggregation path runs per clause and dedupes by synthetic relation id.
+- 2 new unit tests in `test/ingestRecall.spec.ts` (end-to-end OR recall + the
+  `splitOrClauses` helper).
+- SECURITY unchanged: matching stays in JS over a fixed-query result set.
+
 ---
 
 ## 4b. Changes From The Prior Session
@@ -212,14 +227,10 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-1. **Multi-entity OR queries** still miss (e.g. "Empire of Black and Gold _or_
-   Children of Ruin") — fuzzy matching now handles single-word typos, but
-   multi-entity retrieval and alias linking remain. Consider embedding-based
-   recall or splitting OR queries.
-2. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
+1. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
    are stored but not surfaced into the answer context. Consider including entity
    facets in recall results.
-3. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
+2. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
    prompt and/or only pass high-confidence facts.
 
 ### Deferred (todo #14)

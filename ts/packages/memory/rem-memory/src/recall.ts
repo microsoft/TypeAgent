@@ -109,6 +109,26 @@ export function hasIntersectionCue(query: string): boolean {
     return /\b(?:also|both)\b/i.test(query);
 }
 
+/**
+ * Split a query into independent "OR" clauses on the word "or", returning the
+ * tokenized keywords for each non-empty clause.
+ *
+ * Multi-entity OR queries ("anything on Empire in Black and Gold or Children
+ * of Ruin?") otherwise collapse into one keyword bag, so a single relation can
+ * never match every keyword and both entities score poorly. Scoring each
+ * relation against the *best* clause lets each named entity surface on its own.
+ * A query with no "or" yields a single clause (its full keyword list).
+ */
+export function splitOrClauses(query: string): string[][] {
+    const clauses = query
+        .split(/\b(?:or)\b/i)
+        .map((clause) => tokenize(clause))
+        .filter((keywords) => keywords.length > 0);
+    // Fall back to the whole-query tokenization when splitting yields nothing
+    // (e.g. the query was only stopwords, or was literally "or").
+    return clauses.length > 0 ? clauses : [tokenize(query)];
+}
+
 /** Default minimum edit similarity for a fuzzy (typo-tolerant) word match. */
 export const DEFAULT_FUZZY_THRESHOLD = 0.8;
 
@@ -226,7 +246,10 @@ export class Recall {
         const lexicalWeight = options.lexicalWeight ?? 1;
         const fuzzyThreshold =
             options.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD;
-        const keywords = tokenize(query);
+        // Independent "OR" clauses are scored separately and unioned so each
+        // named entity can surface on its own (see splitOrClauses).
+        const clauses = splitOrClauses(query);
+        const anyKeywords = clauses.some((c) => c.length > 0);
 
         const rows = this.fetchRelations();
         const scored: { result: RecallResult; score: number }[] = [];
@@ -234,14 +257,21 @@ export class Recall {
         for (const row of rows) {
             const haystack =
                 `${row.subjectName} ${row.predicate.replace(/_/g, " ")} ${row.objectName}`.toLowerCase();
-            const lexical = fuzzyLexicalScore(
-                keywords,
-                haystack,
-                fuzzyThreshold,
-            );
+            // A relation matches as well as its best-matching OR clause.
+            let lexical = 0;
+            for (const keywords of clauses) {
+                const clauseScore = fuzzyLexicalScore(
+                    keywords,
+                    haystack,
+                    fuzzyThreshold,
+                );
+                if (clauseScore > lexical) {
+                    lexical = clauseScore;
+                }
+            }
 
             // When the caller supplied keywords, require at least one hit.
-            if (keywords.length > 0 && lexical === 0) {
+            if (anyKeywords && lexical === 0) {
                 continue;
             }
 
@@ -270,13 +300,21 @@ export class Recall {
         // (e.g. "books" -> type "book"), surface matching entities as synthetic
         // "is_a" facts so list/aggregate questions can be answered. Multi-type
         // queries union by default, but intersect when the query carries an
-        // explicit cue ("books that are also movies").
+        // explicit cue ("books that are also movies"). Run per OR clause and
+        // union, deduping by synthetic relation id.
         const intersectionCue = hasIntersectionCue(query);
-        for (const result of this.recallEntitiesByType(
-            keywords,
-            intersectionCue,
-        )) {
-            scored.push({ result, score: lexicalWeight + 1 });
+        const seenIsA = new Set<string>();
+        for (const keywords of clauses) {
+            for (const result of this.recallEntitiesByType(
+                keywords,
+                intersectionCue,
+            )) {
+                if (seenIsA.has(result.relation.id)) {
+                    continue;
+                }
+                seenIsA.add(result.relation.id);
+                scored.push({ result, score: lexicalWeight + 1 });
+            }
         }
 
         scored.sort((a, b) => b.score - a.score);

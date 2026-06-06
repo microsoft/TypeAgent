@@ -10,6 +10,7 @@ import {
     editSimilarity,
     fuzzyLexicalScore,
     levenshtein,
+    splitOrClauses,
 } from "../src/recall.js";
 
 function makeMemory(): {
@@ -246,6 +247,53 @@ describe("RemMemory ingest + recall", () => {
         const wrote = hits.find((h) => h.relation.predicate === "wrote");
         expect(wrote).toBeUndefined();
     });
+
+    test("multi-entity OR query surfaces facts about each named entity", async () => {
+        const { memory } = makeMemory();
+        await memory.ingestObservation({
+            feeder: "test",
+            tier: TrustTier.ExtractorInferred,
+            timestamp: t0,
+            entities: [
+                { name: "Adrian Tchaikovsky", types: ["author"] },
+                { name: "Empire in Black and Gold", types: ["book"] },
+                { name: "Children of Ruin", types: ["book"] },
+                { name: "Frank Herbert", types: ["author"] },
+                { name: "Dune", types: ["book"] },
+            ],
+            relations: [
+                {
+                    subject: "Adrian Tchaikovsky",
+                    predicate: "wrote",
+                    object: "Empire in Black and Gold",
+                },
+                {
+                    subject: "Adrian Tchaikovsky",
+                    predicate: "wrote",
+                    object: "Children of Ruin",
+                },
+                {
+                    subject: "Frank Herbert",
+                    predicate: "wrote",
+                    object: "Dune",
+                },
+            ],
+        });
+
+        // A flat keyword bag can't match both titles against one relation; OR
+        // splitting scores each clause independently and unions the hits.
+        const hits = memory.recall(
+            "anything on Empire in Black and Gold or Children of Ruin?",
+            { now: t0 },
+        );
+        const objects = hits
+            .filter((h) => h.relation.predicate === "wrote")
+            .map((h) => h.object.name);
+        expect(objects).toContain("Empire in Black and Gold");
+        expect(objects).toContain("Children of Ruin");
+        // The unrelated book is not pulled in by the OR query.
+        expect(objects).not.toContain("Dune");
+    });
 });
 
 describe("fuzzy matching helpers", () => {
@@ -286,5 +334,22 @@ describe("fuzzy matching helpers", () => {
         expect(fuzzyLexicalScore(["empyre"], haystack, 1)).toBe(0);
         // Exact substring still counts at threshold 1.
         expect(fuzzyLexicalScore(["gold"], haystack, 1)).toBe(1);
+    });
+
+    test("splitOrClauses tokenizes each OR clause independently", () => {
+        expect(
+            splitOrClauses("Empire in Black and Gold or Children of Ruin"),
+        ).toEqual([
+            ["empire", "black", "gold"],
+            ["children", "ruin"],
+        ]);
+        // No "or" -> a single clause with the whole keyword list.
+        expect(splitOrClauses("what did Tchaikovsky write")).toEqual([
+            ["tchaikovsky", "write"],
+        ]);
+        // "or" is matched as a whole word, not inside other words.
+        expect(splitOrClauses("oracle history")).toEqual([
+            ["oracle", "history"],
+        ]);
     });
 });
