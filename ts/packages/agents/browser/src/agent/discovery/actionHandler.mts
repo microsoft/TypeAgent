@@ -559,12 +559,7 @@ async function handleRegisterSiteSchema(
         ctx.sessionContext.agentContext,
     ).getPageUrl();
 
-    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error(
-            "WebFlowStore not available - please ensure TypeAgent server is running",
-        );
-    }
+    const webFlowStore = await getWebFlowStore(ctx.sessionContext);
 
     debug("Building schema from WebFlowStore");
     const domain = new URL(url!).hostname;
@@ -633,10 +628,7 @@ async function handleCreateWebFlowFromRecording(
     action: CreateWebFlowFromRecording,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error("WebFlowStore not available");
-    }
+    const webFlowStore = await getWebFlowStore(ctx.sessionContext);
 
     const rawSteps = JSON.parse(action.parameters.recordedSteps || "[]");
     const url = action.parameters.startUrl;
