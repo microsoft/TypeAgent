@@ -1,0 +1,46 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-workbench sub-manifest actions
+// (open file, open folder, create folder, build tasks, integrated terminal).
+
+import { CodeWorkbenchActions } from "./workbenchCommandActionsSchema.ts";
+
+<Start> : CodeWorkbenchActions = <workbenchOpenFile>
+  | <workbenchOpenFolder>
+  | <workbenchCreateFolderUnder>
+  | <workbenchCreateFolder>
+  | <workbenchBuildRelatedTaskInFolder>
+  | <workbenchBuildRelatedTask>
+  | <openInIntegratedTerminalInFolder>
+  | <openInIntegratedTerminal>;
+
+<BuildTask> = 'build' -> "build"
+  | 'rebuild' -> "rebuild"
+  | 'clean' -> "clean";
+
+// "open file foo.ts" / "open the file main.ts"
+<workbenchOpenFile> = <Polite> 'open' ('the')? 'file' $(fileName:wildcard) -> { actionName: "workbenchOpenFile", parameters: { fileName: fileName } };
+
+// "open folder src" / "open the folder packages"
+<workbenchOpenFolder> = <Polite> ('open' | 'show' | 'reveal') ('the')? 'folder' $(folderName:wildcard) -> { actionName: "workbenchOpenFolder", parameters: { folderName: folderName } };
+
+// "create a folder tests under src/utils"
+<workbenchCreateFolderUnder> = <Polite> ('create' | 'make' | 'add') ('a')? ('new')? 'folder' $(folderName:wildcard) ('under' | 'in') $(relativeTo:wildcard) -> { actionName: "workbenchCreateFolderFromExplorer", parameters: { folderName: folderName, relativeTo: relativeTo } };
+
+// "create a folder tests"
+<workbenchCreateFolder> = <Polite> ('create' | 'make' | 'add') ('a')? ('new')? 'folder' ('called' | 'named')? $(folderName:wildcard) -> { actionName: "workbenchCreateFolderFromExplorer", parameters: { folderName: folderName } };
+
+// "build the dispatcher folder" / "rebuild the cache project"
+<workbenchBuildRelatedTaskInFolder> = <Polite> $(task:<BuildTask>) ('the')? $(folderName:wildcard) ('folder' | 'project' | 'package') -> { actionName: "workbenchBuildRelatedTask", parameters: { task: task, folderName: folderName } };
+
+// "build the workspace" / "rebuild"
+<workbenchBuildRelatedTask> = <Polite> $(task:<BuildTask>) ('the')? ('workspace' | 'root' | 'project')? -> { actionName: "workbenchBuildRelatedTask", parameters: { task: task } };
+
+// "open the integrated terminal in src"
+<openInIntegratedTerminalInFolder> = <Polite> ('open' | 'show') ('the')? ('integrated')? 'terminal' 'in' $(folderName:wildcard) -> { actionName: "openInIntegratedTerminal", parameters: { folderName: folderName } };
+
+// "open the integrated terminal"
+<openInIntegratedTerminal> = <Polite> ('open' | 'show') ('the')? ('integrated')? 'terminal' -> { actionName: "openInIntegratedTerminal", parameters: {} };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

@@ -1,0 +1,39 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-vscode-shell sub-manifest actions
+// (TypeAgent Shell conversation management in VS Code).
+
+import { VSCodeConversationActions } from "./vscodeConversationActionsSchema.ts";
+
+<Start> : VSCodeConversationActions = <newConversationNamed>
+  | <newConversation>
+  | <renameConversation>
+  | <switchConversationNamed>
+  | <switchConversation>
+  | <deleteConversationNamed>
+  | <deleteConversation>;
+
+// "new conversation called X" / "start a new conversation named X"
+<newConversationNamed> = <Polite> ('start' | 'create' | 'open' | 'begin')? ('a')? 'new' ('chat' | 'conversation' | 'tab') ('called' | 'named') $(name:wildcard) -> { actionName: "newConversation", parameters: { name: name } };
+
+// "new conversation" / "start a new chat"
+<newConversation> = <Polite> ('start' | 'create' | 'open' | 'begin')? ('a')? 'new' ('chat' | 'conversation' | 'tab') -> { actionName: "newConversation", parameters: {} };
+
+// "rename this conversation to X" / "rename the conversation to X"
+<renameConversation> = <Polite> 'rename' ('this' | 'the' | 'current') ('chat' | 'conversation' | 'tab') 'to' $(newName:wildcard) -> { actionName: "renameConversation", parameters: { newName: newName } };
+
+// "switch to the X conversation" / "switch conversation to X"
+<switchConversationNamed> = <Polite> ('switch' | 'go') 'to' ('the')? $(name:wildcard) ('chat' | 'conversation') -> { actionName: "switchConversation", parameters: { name: name } }
+  | <Polite> 'switch' ('chat' | 'conversation' | 'tab') 'to' $(name:wildcard) -> { actionName: "switchConversation", parameters: { name: name } };
+
+// "switch conversation" (no name — UI prompts)
+<switchConversation> = <Polite> 'switch' ('chat' | 'conversation' | 'tab') -> { actionName: "switchConversation", parameters: {} };
+
+// "delete the X conversation"
+<deleteConversationNamed> = <Polite> ('delete' | 'remove') ('the')? $(name:wildcard) ('chat' | 'conversation') -> { actionName: "deleteConversation", parameters: { name: name } };
+
+// "delete a conversation" (no name — UI prompts)
+<deleteConversation> = <Polite> ('delete' | 'remove') ('a' | 'the')? ('chat' | 'conversation' | 'tab') -> { actionName: "deleteConversation", parameters: {} };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

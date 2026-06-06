@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { describeForEachMatcher } from "./testUtils.js";
+import { describeForEachMatcher, expectMatchResults } from "./testUtils.js";
 
 describeForEachMatcher(
     "Grammar Matcher - Groups and Recursion",
-    (testMatchGrammar) => {
+    (testMatchGrammar, variant) => {
         describe("Repeat GroupExpr", () => {
             it("()* - zero matches", () => {
                 const g = `<Start> = hello (world)* -> true;`;
@@ -246,6 +246,17 @@ describeForEachMatcher(
             // timeout would catch a regression).  Multiple distinct parse
             // trees are expected for ambiguous inputs - we assert
             // termination AND produce a small, exact set of parse trees.
+            //
+            // Parse-count semantics differ by variant.  The canonical
+            // `grammar` matcher enumerates every distinct parse tree, so it
+            // returns the full multiset below.  The NFA/DFA matchers are
+            // reachability simulations that dedup paths reaching the same
+            // (state, charPos) — they return the single best parse (see
+            // expectMatchResults / testUtils.ts "NFA/DFA return the best
+            // match only").  expectMatchResults applies the right assertion
+            // per variant: exact-multiset for `grammar`, single-result
+            // membership for `nfa`/`dfa`.  Either way the key property —
+            // termination with a bounded, non-empty parse set — holds.
             // Expected parse counts (one `true` per distinct parse):
             //   ((foo)?)*  on ""    -> 2 (zero-iters; one ε-iter)
             //   ((foo)?)*  on "foo" -> 2 (one iter consuming "foo"; one
@@ -259,18 +270,20 @@ describeForEachMatcher(
             it("((X)?)* on empty input has exactly 2 parses", () => {
                 const g = `<Start> = ((foo)?)* -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
-                expect(testMatchGrammar(grammar, "")).toStrictEqual([
-                    true,
-                    true,
-                ]);
+                expectMatchResults(
+                    testMatchGrammar(grammar, ""),
+                    [true, true],
+                    variant,
+                );
             });
             it("((X)?)* on 'foo' has exactly 2 parses", () => {
                 const g = `<Start> = ((foo)?)* -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
-                expect(testMatchGrammar(grammar, "foo")).toStrictEqual([
-                    true,
-                    true,
-                ]);
+                expectMatchResults(
+                    testMatchGrammar(grammar, "foo"),
+                    [true, true],
+                    variant,
+                );
             });
             it("((X)?)+ on empty input has exactly 1 parse", () => {
                 const g = `<Start> = ((foo)?)+ -> true;`;
@@ -283,10 +296,11 @@ describeForEachMatcher(
                     <X> = (foo)?;
                 `;
                 const grammar = loadGrammarRules("test.grammar", g);
-                expect(testMatchGrammar(grammar, "")).toStrictEqual([
-                    true,
-                    true,
-                ]);
+                expectMatchResults(
+                    testMatchGrammar(grammar, ""),
+                    [true, true],
+                    variant,
+                );
             });
 
             // Wildcard interaction: wildcards always advance index >= 1,
@@ -300,11 +314,13 @@ describeForEachMatcher(
                 const grammar = loadGrammarRules("test.grammar", g);
                 // Body is fully nullable via the skipped optional.
                 // Must-advance guard short-circuits after the single
-                // ε-iteration: zero-iters + one ε-iter = 2 parses.
-                expect(testMatchGrammar(grammar, "")).toStrictEqual([
-                    true,
-                    true,
-                ]);
+                // ε-iteration: zero-iters + one ε-iter = 2 parses
+                // (canonical); NFA/DFA dedup to the single best.
+                expectMatchResults(
+                    testMatchGrammar(grammar, ""),
+                    [true, true],
+                    variant,
+                );
             });
             it("(($(w))?)* on non-empty input terminates", () => {
                 const g = `<Start> = (($(w))?)* -> true;`;
