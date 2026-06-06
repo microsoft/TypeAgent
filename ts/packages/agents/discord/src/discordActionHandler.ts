@@ -285,11 +285,14 @@ function needsGuild(actionName: string): boolean {
 // token and fold the rest back into the user intent.
 function splitChannelToken(raw: string): { channel: string; rest: string } {
     const trimmed = raw.trim();
-    const match = trimmed.match(/^(#?\S+)(?:\s+(.*))?$/);
-    if (!match) {
+    const spaceIdx = trimmed.search(/\s/);
+    if (spaceIdx === -1) {
         return { channel: trimmed, rest: "" };
     }
-    return { channel: match[1], rest: match[2]?.trim() ?? "" };
+    return {
+        channel: trimmed.slice(0, spaceIdx),
+        rest: trimmed.slice(spaceIdx + 1).trim(),
+    };
 }
 
 async function craftMessageContent(
