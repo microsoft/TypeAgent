@@ -12,6 +12,7 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import { ChatModel, openai } from "aiclient";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -28,6 +29,7 @@ interface DiscordAgentContext {
     channelList: DiscordChannel[]; // raw channel data for display
     channelsLastFetched: number;
     pollHandle: ReturnType<typeof setInterval> | undefined;
+    craftMessageModel: ChatModel | undefined;
 }
 
 interface DiscordChannel {
@@ -63,6 +65,7 @@ async function initializeAgentContext(): Promise<DiscordAgentContext> {
         channelList: [],
         channelsLastFetched: 0,
         pollHandle: undefined,
+        craftMessageModel: undefined,
     };
 }
 
@@ -267,6 +270,7 @@ async function resolveChannelId(
 
 const GUILD_REQUIRED_ACTIONS = new Set([
     "createMessage",
+    "craftMessage",
     "getChannelMessages",
     "listChannels",
     "refreshChannels",
@@ -275,6 +279,61 @@ const GUILD_REQUIRED_ACTIONS = new Set([
 
 function needsGuild(actionName: string): boolean {
     return GUILD_REQUIRED_ACTIONS.has(actionName);
+}
+
+// LLM occasionally returns extra words after the channel; keep the first
+// token and fold the rest back into the user intent.
+function splitChannelToken(raw: string): { channel: string; rest: string } {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^(#?\S+)(?:\s+(.*))?$/);
+    if (!match) {
+        return { channel: trimmed, rest: "" };
+    }
+    return { channel: match[1], rest: match[2]?.trim() ?? "" };
+}
+
+async function craftMessageContent(
+    intent: string,
+    channelName: string,
+    agentContext: DiscordAgentContext,
+): Promise<string> {
+    agentContext.craftMessageModel ??= openai.createChatModel(
+        undefined,
+        undefined,
+        undefined,
+        ["discord:craftMessage"],
+    );
+    const chatModel = agentContext.craftMessageModel;
+    const prompt = [
+        "You are drafting a Discord chat message on behalf of a user.",
+        `Target channel: #${channelName}`,
+        `User intent: ${intent}`,
+        "",
+        "Write the message body ONLY — no quotes, no preamble, no explanation,",
+        "no signature. Keep the tone natural and conversational, suitable for",
+        "a Discord channel. Length should fit the intent (usually 1-3 short",
+        "sentences). You may use plain Discord-friendly markdown and emoji",
+        "when it improves the message, but do not overdo it.",
+    ].join("\n");
+
+    const result = await chatModel.complete(prompt);
+    if (!result.success) {
+        throw new Error(`Failed to craft message: ${result.message}`);
+    }
+
+    let content = result.data.trim();
+    // Strip a single layer of wrapping quotes the model sometimes adds.
+    if (
+        (content.startsWith('"') && content.endsWith('"')) ||
+        (content.startsWith("'") && content.endsWith("'")) ||
+        (content.startsWith("“") && content.endsWith("”"))
+    ) {
+        content = content.slice(1, -1).trim();
+    }
+    if (!content) {
+        throw new Error("LLM returned empty content for the message.");
+    }
+    return content;
 }
 
 async function executeAction(
@@ -325,9 +384,12 @@ async function executeAction(
 
         switch (action.actionName) {
             case "createMessage": {
-                const { channel_id, content, tts, nonce } = action.parameters;
+                const { content, tts, nonce } = action.parameters;
+                const { channel } = splitChannelToken(
+                    action.parameters.channel_id,
+                );
                 const resolvedId = await resolveChannelId(
-                    channel_id,
+                    channel,
                     agentContext,
                     sessionContext,
                 );
@@ -340,7 +402,35 @@ async function executeAction(
                 );
                 const msg = (await response.json()) as { id: string };
                 return createActionResultFromTextDisplay(
-                    `Message sent! ID: ${msg.id} in #${channel_id}`,
+                    `Message sent! ID: ${msg.id} in #${channel.replace(/^#/, "")}`,
+                );
+            }
+            case "craftMessage": {
+                const { intent, tts } = action.parameters;
+                const { channel, rest } = splitChannelToken(
+                    action.parameters.channel_id,
+                );
+                const resolvedId = await resolveChannelId(
+                    channel,
+                    agentContext,
+                    sessionContext,
+                );
+                const channelName = channel.replace(/^#/, "");
+                const fullIntent = rest ? `${rest} ${intent}`.trim() : intent;
+                const content = await craftMessageContent(
+                    fullIntent,
+                    channelName,
+                    agentContext,
+                );
+                const body: Record<string, unknown> = { content };
+                if (tts !== undefined) body.tts = tts;
+                const response = await discordFetch(
+                    `/channels/${resolvedId}/messages`,
+                    { method: "POST", body: JSON.stringify(body) },
+                );
+                const msg = (await response.json()) as { id: string };
+                return createActionResultFromTextDisplay(
+                    `Crafted and sent to #${channelName} (ID: ${msg.id}):\n${content}`,
                 );
             }
             case "getChannelMessages": {

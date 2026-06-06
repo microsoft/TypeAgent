@@ -46,6 +46,36 @@
     }
 };
 
+// craftMessage
+<CraftMessage> = send a message (to|in) (the)? (channel)? $(channel_id:word) (that|to|about|asking|reminding|telling|inviting|announcing|welcoming|congratulating|wishing) $(intent:wildcard) -> {
+    actionName: "craftMessage",
+    parameters: {
+        channel_id,
+        intent
+    }
+}
+  | post a message (to|in) (the)? (channel)? $(channel_id:word) (that|to|about|asking|reminding|telling|inviting|announcing|welcoming|congratulating|wishing) $(intent:wildcard) -> {
+    actionName: "craftMessage",
+    parameters: {
+        channel_id,
+        intent
+    }
+}
+  | (please)? write a message (to|in) (the)? (channel)? $(channel_id:word) (that|to|about|asking|reminding|telling|inviting|announcing|welcoming|congratulating|wishing) $(intent:wildcard) -> {
+    actionName: "craftMessage",
+    parameters: {
+        channel_id,
+        intent
+    }
+}
+  | (can you)? create a (new)? message in (the)? (channel)? $(channel_id:word) (that|to|about|asking|reminding|telling|inviting|announcing|welcoming|congratulating|wishing) $(intent:wildcard) -> {
+    actionName: "craftMessage",
+    parameters: {
+        channel_id,
+        intent
+    }
+};
+
 // getChannelMessages
 <GetChannelMessages> = (can you)? show me (the)? (latest|recent)? messages from (the)? channel $(channel_id:wildcard) -> {
     actionName: "getChannelMessages",
@@ -1350,6 +1380,7 @@
 import { DiscordActions } from "./discordSchema.ts";
 
 <Start> : DiscordActions = <CreateMessage>
+  | <CraftMessage>
   | <GetChannelMessages>
   | <CreateGuild>
   | <GetGuild>
