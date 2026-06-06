@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { formatContext } from "../src/answer.js";
+import { filterByWeight, formatContext, SYSTEM_PROMPT } from "../src/answer.js";
 import { Entity, Facet, RecallResult, TrustTier } from "../src/model.js";
 
 function entity(id: string, name: string, facets: Facet[] = []): Entity {
@@ -71,5 +71,43 @@ describe("formatContext", () => {
 
         const occurrences = text.split("- Adrian Tchaikovsky:").length - 1;
         expect(occurrences).toBe(1);
+    });
+});
+
+describe("filterByWeight", () => {
+    const a = entity("e:1", "A");
+    const b = entity("e:2", "B");
+    const c = entity("e:3", "C");
+
+    test("drops results below the weight floor", () => {
+        const results = [
+            result(a, "wrote", b, 0.9),
+            result(a, "wrote", c, 0.2),
+        ];
+        const kept = filterByWeight(results, 0.5);
+        expect(kept).toHaveLength(1);
+        expect(kept[0].object.name).toBe("B");
+    });
+
+    test("a floor of 0 (or below) is a no-op", () => {
+        const results = [result(a, "wrote", b, 0.1)];
+        expect(filterByWeight(results, 0)).toBe(results);
+        expect(filterByWeight(results, -1)).toBe(results);
+    });
+
+    test("can filter everything out", () => {
+        const results = [result(a, "wrote", b, 0.1)];
+        expect(filterByWeight(results, 1)).toHaveLength(0);
+    });
+});
+
+describe("SYSTEM_PROMPT grounding", () => {
+    test("forbids introducing details not present in the facts", () => {
+        // Guards the anti-hallucination contract: answers must stay inside the
+        // recalled facts and never add names from general knowledge.
+        expect(SYSTEM_PROMPT).toContain("ONLY the facts");
+        expect(SYSTEM_PROMPT).toContain("verbatim");
+        expect(SYSTEM_PROMPT).toContain("Never introduce a name");
+        expect(SYSTEM_PROMPT).toContain("infer, combine, or extrapolate");
     });
 });

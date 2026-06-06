@@ -12,14 +12,15 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **43/43 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **47/47 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
 - **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
 - This session added **set-intersection recall** ("books that are also movies"),
   made **extraction failures observable** (the feeder no longer silently swallows
   empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**,
-  added **multi-entity OR-query splitting**, and now **surfaces entity facets**
-  into the answer context. See §4.
+  added **multi-entity OR-query splitting**, now **surfaces entity facets** into
+  the answer context, and **tightened answer grounding** (anti-hallucination
+  prompt + optional high-confidence filter). See §4.
 
 ---
 
@@ -179,6 +180,23 @@ could never be answered. Now:
 - New `test/answer.spec.ts` with 4 unit tests (empty, no-facets, with-facets,
   dedupe). `formatContext` is pure, so these run offline without the LLM.
 
+### (f) Tighten answer grounding — `answer.ts`
+
+Q7 hallucinated a co-host (added "Christina Warren" alongside Kevin Scott) —
+the model padded the answer with a name not in the recalled facts. Hardened the
+answer path on both levers from §6:
+
+- **Anti-hallucination prompt**: `SYSTEM_PROMPT` (now exported) instructs the
+  model to use only names/titles/values that appear **verbatim** in MEMORY
+  FACTS, never introduce a detail not present "even if it seems likely from
+  general knowledge", not infer/combine/extrapolate, and give partial answers
+  when only partial facts exist.
+- **High-confidence filter**: new `filterByWeight(results, minWeight)` + a
+  `RemAnswerOptions.minWeight` floor (default 0 = off) drops weak/stale facts
+  from the answer context before formatting, so they can't seed a hallucination.
+- 4 new unit tests in `test/answer.spec.ts` (3 `filterByWeight`, 1 prompt
+  grounding-contract guard).
+
 ---
 
 ## 4b. Changes From The Prior Session
@@ -243,8 +261,14 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-1. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
-   prompt and/or only pass high-confidence facts.
+_All of this session's recall/answer-quality items are addressed (see §4). What
+remains are eval re-runs to quantify the gains and the deferred integration
+work below._
+
+1. **Re-run the live eval** — the §5 table predates this session's six fixes
+   (intersection, fuzzy, OR-splitting, facet surfacing, grounding). Re-run the
+   curated Episode 53 set to measure the new score; several of the prior misses
+   (Q3 intersection, Q5 OR+typo, Q7 grounding, Q9 facet) should now improve.
 
 ### Deferred (todo #14)
 
