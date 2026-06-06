@@ -46,6 +46,9 @@ export function createDispatcherRpcServer(
         cancelCommand: async (...args) => {
             return dispatcher.cancelCommand(...args);
         },
+        promoteCommand: async (...args) => {
+            return dispatcher.promoteCommand(...args);
+        },
         getQueueSnapshot: async () => {
             return dispatcher.getQueueSnapshot();
         },

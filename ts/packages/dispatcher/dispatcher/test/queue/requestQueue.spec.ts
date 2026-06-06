@@ -217,6 +217,75 @@ describe("RequestQueue", () => {
         expect(queue.cancelQueued("does-not-exist", "user")).toBe(false);
     });
 
+    it("promote moves a queued entry to the front so it runs next", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+
+        const a = queue.submit({ text: "a", originatorConnectionId: "c1" });
+        queue.submit({ text: "b", originatorConnectionId: "c1" });
+        const c = queue.submit({ text: "c", originatorConnectionId: "c1" });
+
+        await flush();
+        // a is running; b, c queued in FIFO order.
+        expect(queue.getSnapshot().queued.map((e) => e.text)).toEqual([
+            "b",
+            "c",
+        ]);
+
+        const eventsBefore = events.length;
+        const promoted = queue.promote(c.requestId);
+        expect(promoted).toBe(true);
+
+        // c jumps ahead of b while a keeps running.
+        const snap = queue.getSnapshot();
+        expect(snap.running?.text).toBe("a");
+        expect(snap.queued.map((e) => e.text)).toEqual(["c", "b"]);
+
+        // A single queueStateChanged snapshot is broadcast for the reorder.
+        const newEvents = events.slice(eventsBefore);
+        expect(newEvents.map((e) => e.type)).toEqual(["snapshot"]);
+
+        // When a completes, the promoted entry (c) runs before b.
+        dispatcher.calls[0].resolve({});
+        await a.completion;
+        await flush();
+        expect(dispatcher.calls[1].command).toBe("c");
+    });
+
+    it("promote is a no-op (returns true) when the entry is already next", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+
+        queue.submit({ text: "a", originatorConnectionId: "c1" });
+        const b = queue.submit({ text: "b", originatorConnectionId: "c1" });
+        queue.submit({ text: "c", originatorConnectionId: "c1" });
+
+        await flush();
+        // a running; b is already at the front of the queue.
+        const eventsBefore = events.length;
+        expect(queue.promote(b.requestId)).toBe(true);
+
+        // No reorder, so no new broadcast and order is unchanged.
+        expect(events.length).toBe(eventsBefore);
+        expect(queue.getSnapshot().queued.map((e) => e.text)).toEqual([
+            "b",
+            "c",
+        ]);
+    });
+
+    it("promote returns false for the running entry and unknown ids", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+
+        const a = queue.submit({ text: "a", originatorConnectionId: "c1" });
+        queue.submit({ text: "b", originatorConnectionId: "c1" });
+
+        await flush();
+        // a is the running head — not promotable; b is queued.
+        expect(queue.promote(a.requestId)).toBe(false);
+        expect(queue.promote("does-not-exist")).toBe(false);
+    });
+
     it("running entry rejection continues the drain loop", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);

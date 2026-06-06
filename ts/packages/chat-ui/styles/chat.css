@@ -899,26 +899,31 @@ table.table-message td {
 }
 
 /* =========================================================================
-   Status rail (queued / running) — top of the user bubble
+   Status rail (queued / sent / working) — top of user & agent bubbles
    ========================================================================= */
 
-/* Slim strip across the top of the user bubble. Lives at the top so it
-   never collides with the hover-revealed metrics strip that slides out of
-   the bubble's bottom edge. Carries a de-emphasized state label on the
-   left and any controls on the right. */
+/* Slim strip across the top of a bubble. Lives at the top so it never
+   collides with the hover-revealed metrics strip that slides out of the
+   bubble's bottom edge. On the user bubble it carries the queue state
+   (queued/sent) + controls (jump / remove / trash); on the agent bubble it
+   carries the "working" state + a Stop button. Always present on the user's
+   own messages (when a hide hook is wired) so the hover trash is available
+   even when idle; the tint + divider only appear with a state. */
 .chat-message-status-rail {
   display: flex;
   align-items: center;
   gap: 6px;
   box-sizing: border-box;
-  min-height: 24px;
-  padding: 2px 4px 2px 10px;
+  min-height: 22px;
+  padding: 1px 4px 1px 10px;
   border-radius: 8px 8px 0 0;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.22);
 }
 
 /* A whisper of state color on the rail — just enough to sense the state
-   peripherally without a loud band. */
+   peripherally without a loud band — plus a divider from the content. */
+.chat-message-status-rail[data-status] {
+  border-bottom: 1px solid rgba(127, 127, 127, 0.22);
+}
 .chat-message-status-rail[data-status="running"] {
   background: rgba(31, 143, 255, 0.07);
 }
@@ -926,11 +931,27 @@ table.table-message td {
   background: rgba(233, 168, 0, 0.09);
 }
 
-/* Square off the top of the content when a rail is present so the two read
-   as one bubble. */
-.chat-message-user:has(> .chat-message-status-rail) .chat-message-content {
+/* Square off the top of the content only when the rail is showing a state,
+   so the two read as one bubble. An idle (trash-only) rail leaves the
+   content's rounded top intact. */
+.chat-message-user:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+/* Agent bubble carries the same rail while the request is "working". The
+   agent body has no avatar/trash, just the spinner label + Stop. */
+.chat-message-agent:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.chat-status-state-zone {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
 }
 
 /* De-emphasized state label: minor info, but with a hint of state color so
@@ -995,7 +1016,7 @@ table.table-message td {
 }
 
 /* Rail control buttons reuse the shared icon-button style at a slightly
-   smaller size, with a danger hover for the destructive remove action. */
+   smaller size, with a danger hover for the destructive actions. */
 .chat-message-status-rail .chat-action-button {
   width: 22px;
   height: 22px;
@@ -1004,9 +1025,21 @@ table.table-message td {
   width: 14px;
   height: 14px;
 }
-.chat-message-status-rail .chat-action-button.danger:hover {
+.chat-message-status-rail .chat-action-button.danger:hover,
+.chat-message-status-rail .chat-user-trash:hover {
   background: rgba(192, 57, 43, 0.14);
   color: #c0392b;
+}
+
+/* The trash is only meaningful on hover — keep it quiet until the user
+   mouses the bubble (or focuses it for keyboard access). */
+.chat-user-trash {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.chat-message-container-user:hover .chat-user-trash,
+.chat-user-trash:focus-visible {
+  opacity: 1;
 }
 
 /* =========================================================================

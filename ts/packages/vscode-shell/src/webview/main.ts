@@ -146,7 +146,15 @@ function applyQueueChip(
                       requestId: serverId,
                   })
             : undefined;
-    chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel);
+    const onPromote =
+        status === "queued"
+            ? () =>
+                  vscode.postMessage({
+                      type: "promoteCommand",
+                      requestId: serverId,
+                  })
+            : undefined;
+    chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel, onPromote);
     pendingQueueStatus.delete(targetRid);
 }
 

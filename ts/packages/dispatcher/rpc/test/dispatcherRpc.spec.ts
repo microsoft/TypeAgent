@@ -76,6 +76,10 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
             calls.push({ method: "cancelCommand", args });
             return { kind: "not_found" as const, requestId: args[0] };
         },
+        async promoteCommand(...args) {
+            calls.push({ method: "promoteCommand", args });
+            return false;
+        },
         cancelCommandByClientId(...args) {
             calls.push({ method: "cancelCommandByClientId", args });
         },
