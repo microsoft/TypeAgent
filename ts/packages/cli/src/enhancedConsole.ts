@@ -1664,6 +1664,15 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
+            // Hide the cursor for the duration of the redraw.  Each drawFixed()
+            // call positions the cursor and writes text, leaving the cursor at
+            // the end of the written region (e.g., the right edge of the top
+            // separator).  Without hiding, the cursor visibly jumps through
+            // every draw target before settling at the input position via
+            // moveCursorToFixed() below.  ANSI.showCursor at the end re-reveals
+            // it at the final, correct location.
+            stdout.write(ANSI.hideCursor);
+
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
