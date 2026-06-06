@@ -1387,13 +1387,17 @@ export class ChatPanel {
         this.sendButton.disabled = !this.textInput.textContent?.trim();
     }
 
+    private shouldAddToHistory(text: string) {
+        return !/^@exit(?:\s|$)/i.test(text.trim());
+    }
+
     private send(requestId?: string) {
         const text = this.textInput.textContent?.trim() ?? "";
         // Allow sending when there is text OR at least one pending image
         // attachment (image-only requests are valid — e.g. "what is this?").
         if (!text && this.pendingAttachments.length === 0) return;
 
-        if (text) {
+        if (text && this.shouldAddToHistory(text)) {
             this.commandHistory.unshift(text);
         }
         this.historyIndex = -1;
@@ -2324,7 +2328,11 @@ export class ChatPanel {
                         // user commands so it recalls prior-session input.
                         // Entries arrive oldest-first; unshift keeps the
                         // most recent command at index 0.
-                        if (entry.text && entry.text.trim()) {
+                        if (
+                            entry.text &&
+                            entry.text.trim() &&
+                            this.shouldAddToHistory(entry.text)
+                        ) {
                             this.commandHistory.unshift(entry.text);
                         }
                         break;
