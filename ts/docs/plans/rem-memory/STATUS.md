@@ -12,12 +12,13 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **31/31 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **37/37 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
 - **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
-- This session added **set-intersection recall** ("books that are also movies")
-  and made **extraction failures observable** (the feeder no longer silently
-  swallows empty/failed extractions). See §4.
+- This session added **set-intersection recall** ("books that are also movies"),
+  made **extraction failures observable** (the feeder no longer silently swallows
+  empty/failed extractions), and added **fuzzy (typo-tolerant) lexical recall**.
+  See §4.
 
 ---
 
@@ -128,6 +129,25 @@ the store empty with no signal. Made these cases observable:
 - 3 new unit tests in `test/knowledgeExtractionFeeder.spec.ts` (failure, empty,
   clean outcomes).
 
+### (c) Fuzzy (typo-tolerant) lexical recall — `recall.ts`
+
+Exact-substring matching missed misspelled queries (e.g. "Tchaikovski" → stored
+"Tchaikovsky"), so relation recall returned nothing. Added Levenshtein-based
+near matching:
+
+- `levenshtein(a, b)` — edit distance (rolling two-row DP, O(a·b) time,
+  O(b) space).
+- `editSimilarity(a, b)` — normalized `1 - distance / maxLen` in [0, 1].
+- `fuzzyLexicalScore(keywords, haystack, threshold)` — per keyword: an exact
+  substring still scores 1.0 (so "child" keeps matching "children"); otherwise
+  the best per-word edit similarity counts only if it clears `threshold`.
+- `recall()` now scores relations via `fuzzyLexicalScore` and accepts a new
+  `RecallOptions.fuzzyThreshold` (default `DEFAULT_FUZZY_THRESHOLD = 0.8`; set
+  to 1 to require exact matches).
+- 6 new unit tests in `test/ingestRecall.spec.ts` (2 end-to-end recall, 4 pure
+  helper tests).
+- SECURITY unchanged: matching stays in JS over a fixed-query result set.
+
 ---
 
 ## 4b. Changes From The Prior Session
@@ -192,9 +212,10 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-1. **Lexical recall is brittle** — misspellings ("Empire of Black and Gold") and
-   multi-entity OR queries miss. Consider fuzzy/alias matching or embedding-based
-   recall.
+1. **Multi-entity OR queries** still miss (e.g. "Empire of Black and Gold _or_
+   Children of Ruin") — fuzzy matching now handles single-word typos, but
+   multi-entity retrieval and alias linking remain. Consider embedding-based
+   recall or splitting OR queries.
 2. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
    are stored but not surfaced into the answer context. Consider including entity
    facets in recall results.

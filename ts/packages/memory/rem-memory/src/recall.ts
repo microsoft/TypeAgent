@@ -31,6 +31,12 @@ export type RecallOptions = {
     now?: number | undefined;
     /** Weight of lexical match vs. decay strength in the final score. */
     lexicalWeight?: number | undefined;
+    /**
+     * Minimum edit similarity in [0, 1] for a fuzzy (typo-tolerant) word match.
+     * Defaults to {@link DEFAULT_FUZZY_THRESHOLD}. Set to 1 to require exact
+     * substring matches only.
+     */
+    fuzzyThreshold?: number | undefined;
 };
 
 const STOPWORDS = new Set([
@@ -103,6 +109,94 @@ export function hasIntersectionCue(query: string): boolean {
     return /\b(?:also|both)\b/i.test(query);
 }
 
+/** Default minimum edit similarity for a fuzzy (typo-tolerant) word match. */
+export const DEFAULT_FUZZY_THRESHOLD = 0.8;
+
+/**
+ * Levenshtein edit distance between two strings. Pure, with O(a.length *
+ * b.length) time and O(b.length) space (rolling two-row DP).
+ */
+export function levenshtein(a: string, b: string): number {
+    if (a === b) {
+        return 0;
+    }
+    if (a.length === 0) {
+        return b.length;
+    }
+    if (b.length === 0) {
+        return a.length;
+    }
+    let prev = new Array<number>(b.length + 1);
+    for (let j = 0; j <= b.length; j++) {
+        prev[j] = j;
+    }
+    for (let i = 1; i <= a.length; i++) {
+        const curr = new Array<number>(b.length + 1);
+        curr[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            curr[j] = Math.min(
+                prev[j] + 1, // deletion
+                curr[j - 1] + 1, // insertion
+                prev[j - 1] + cost, // substitution
+            );
+        }
+        prev = curr;
+    }
+    return prev[b.length];
+}
+
+/**
+ * Normalized edit similarity in [0, 1]: 1 - distance / maxLength. 1.0 means
+ * identical; 0 means maximally different.
+ */
+export function editSimilarity(a: string, b: string): number {
+    const maxLen = Math.max(a.length, b.length);
+    if (maxLen === 0) {
+        return 1;
+    }
+    return 1 - levenshtein(a, b) / maxLen;
+}
+
+/**
+ * Score how well query keywords match a haystack string, tolerating typos.
+ * Each keyword contributes up to 1.0 to the returned sum:
+ *   - an exact substring hit contributes 1.0 (preserves prior behavior, so a
+ *     keyword like "child" still matches "children");
+ *   - otherwise the best per-word edit similarity, if it meets `threshold`,
+ *     contributes that similarity (e.g. "tchaikovski" ~ "tchaikovsky").
+ * A keyword that neither matches as a substring nor clears the threshold
+ * contributes nothing.
+ */
+export function fuzzyLexicalScore(
+    keywords: string[],
+    haystack: string,
+    threshold = DEFAULT_FUZZY_THRESHOLD,
+): number {
+    if (keywords.length === 0) {
+        return 0;
+    }
+    const words = haystack.split(/\s+/).filter((w) => w.length > 0);
+    let total = 0;
+    for (const keyword of keywords) {
+        if (haystack.includes(keyword)) {
+            total += 1;
+            continue;
+        }
+        let best = 0;
+        for (const word of words) {
+            const sim = editSimilarity(keyword, word);
+            if (sim > best) {
+                best = sim;
+            }
+        }
+        if (best >= threshold) {
+            total += best;
+        }
+    }
+    return total;
+}
+
 type RelationRow = {
     rel: string;
     subjectId: string;
@@ -130,6 +224,8 @@ export class Recall {
         const topK = options.topK ?? 10;
         const now = options.now ?? Date.now();
         const lexicalWeight = options.lexicalWeight ?? 1;
+        const fuzzyThreshold =
+            options.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD;
         const keywords = tokenize(query);
 
         const rows = this.fetchRelations();
@@ -138,10 +234,11 @@ export class Recall {
         for (const row of rows) {
             const haystack =
                 `${row.subjectName} ${row.predicate.replace(/_/g, " ")} ${row.objectName}`.toLowerCase();
-            const lexical =
-                keywords.length === 0
-                    ? 0
-                    : keywords.filter((k) => haystack.includes(k)).length;
+            const lexical = fuzzyLexicalScore(
+                keywords,
+                haystack,
+                fuzzyThreshold,
+            );
 
             // When the caller supplied keywords, require at least one hit.
             if (keywords.length > 0 && lexical === 0) {

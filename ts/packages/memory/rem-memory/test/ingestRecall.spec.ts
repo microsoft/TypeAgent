@@ -6,6 +6,11 @@ import { SignalStore } from "../src/signalStore.js";
 import { EntityResolver } from "../src/resolver.js";
 import { RemMemory } from "../src/ingest.js";
 import { Observation, RecallResult, TrustTier } from "../src/model.js";
+import {
+    editSimilarity,
+    fuzzyLexicalScore,
+    levenshtein,
+} from "../src/recall.js";
 
 function makeMemory(): {
     memory: RemMemory;
@@ -213,5 +218,73 @@ describe("RemMemory ingest + recall", () => {
             "Children of Time",
             "Dune",
         ]);
+    });
+
+    test("fuzzy recall tolerates a misspelled entity name", async () => {
+        const { memory } = makeMemory();
+        await memory.ingestObservation(observation(t0));
+
+        // "Tchaikovski" misspells the stored "Tchaikovsky" (one substitution);
+        // it is not a substring, so only fuzzy matching can recover the fact.
+        const hits = memory.recall("what did Tchaikovski write?", { now: t0 });
+        expect(hits.length).toBeGreaterThan(0);
+        const top = hits[0];
+        expect(top.relation.predicate).toBe("wrote");
+        expect(top.subject.name).toBe("Adrian Tchaikovsky");
+        expect(top.object.name).toBe("Children of Time");
+    });
+
+    test("a strict fuzzyThreshold of 1 rejects misspellings", async () => {
+        const { memory } = makeMemory();
+        await memory.ingestObservation(observation(t0));
+
+        // Pinning the threshold to exact matches drops the typo'd query.
+        const hits = memory.recall("what did Tchaikovski write?", {
+            now: t0,
+            fuzzyThreshold: 1,
+        });
+        const wrote = hits.find((h) => h.relation.predicate === "wrote");
+        expect(wrote).toBeUndefined();
+    });
+});
+
+describe("fuzzy matching helpers", () => {
+    test("levenshtein counts single edits", () => {
+        expect(levenshtein("gold", "gold")).toBe(0);
+        expect(levenshtein("gold", "golds")).toBe(1);
+        expect(levenshtein("tchaikovski", "tchaikovsky")).toBe(1);
+        expect(levenshtein("", "abc")).toBe(3);
+    });
+
+    test("editSimilarity is 1 for identical and scales with edits", () => {
+        expect(editSimilarity("gold", "gold")).toBe(1);
+        expect(editSimilarity("tchaikovski", "tchaikovsky")).toBeCloseTo(
+            0.909,
+            2,
+        );
+        // A single short-word edit stays below the default 0.8 threshold.
+        expect(editSimilarity("ruin", "rain")).toBeLessThan(0.8);
+        expect(editSimilarity("", "")).toBe(1);
+    });
+
+    test("fuzzyLexicalScore credits exact substrings and near-misses", () => {
+        const haystack = "empire in black and gold";
+        // Exact substring -> full credit.
+        expect(fuzzyLexicalScore(["gold"], haystack)).toBe(1);
+        // Single-typo word -> partial credit, above threshold but below 1.
+        const near = fuzzyLexicalScore(["empyre"], haystack);
+        expect(near).toBeGreaterThanOrEqual(0.8);
+        expect(near).toBeLessThan(1);
+        // Below threshold -> no credit.
+        expect(fuzzyLexicalScore(["zzzzzz"], haystack)).toBe(0);
+        // No keywords -> no credit.
+        expect(fuzzyLexicalScore([], haystack)).toBe(0);
+    });
+
+    test("fuzzyThreshold of 1 disables fuzzy credit", () => {
+        const haystack = "empire in black and gold";
+        expect(fuzzyLexicalScore(["empyre"], haystack, 1)).toBe(0);
+        // Exact substring still counts at threshold 1.
+        expect(fuzzyLexicalScore(["gold"], haystack, 1)).toBe(1);
     });
 });
