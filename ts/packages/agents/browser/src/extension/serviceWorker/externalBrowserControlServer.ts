@@ -31,6 +31,40 @@ async function ensureActiveTab() {
     }
     return targetTab;
 }
+
+/**
+ * Resolves once chrome.tabs.onUpdated fires status === "complete" for the
+ * given tabId, or after `timeout` ms. Always register this BEFORE issuing the
+ * navigation (chrome.tabs.update / chrome.tabs.create) so we don't miss the
+ * complete event for the new document. We deliberately don't early-resolve
+ * based on the tab's current status: that would race with chrome.tabs.update
+ * returning a Tab object that still reflects the previous page.
+ */
+function waitForTabComplete(
+    tabId: number,
+    timeout: number = 30000,
+): Promise<void> {
+    return new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            chrome.tabs.onUpdated.removeListener(handler);
+            clearTimeout(timer);
+            resolve();
+        };
+        const handler = (
+            updatedTabId: number,
+            changeInfo: chrome.tabs.TabChangeInfo,
+        ) => {
+            if (updatedTabId === tabId && changeInfo.status === "complete") {
+                finish();
+            }
+        };
+        const timer = setTimeout(finish, timeout);
+        chrome.tabs.onUpdated.addListener(handler);
+    });
+}
 export function createExternalBrowserServer(channel: RpcChannel) {
     const rpcMap = new Map<
         number,
@@ -76,35 +110,59 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                         sendOptions,
                     );
                 } catch (error: any) {
-                    // If the content script isn't loaded, inject it and retry
-                    const errMsg =
-                        typeof error === "string"
-                            ? error
-                            : (error?.message ?? "");
-                    if (
-                        errMsg.includes("Could not establish connection") ||
-                        errMsg.includes("Receiving end does not exist")
-                    ) {
+                    // If the content script isn't loaded, inject it and
+                    // retry with backoff. This still happens for SPA
+                    // navigations or scripted navigations that don't go
+                    // through openWebPage's onUpdated 'complete' gate.
+                    const isNoReceiver = (e: any) => {
+                        const m =
+                            typeof e === "string" ? e : (e?.message ?? "");
+                        return (
+                            m.includes("Could not establish connection") ||
+                            m.includes("Receiving end does not exist")
+                        );
+                    };
+                    if (isNoReceiver(error)) {
+                        let lastError: any = error;
                         try {
                             await injectContentScripts(tabId);
-                            // Small delay to let the content script initialize
-                            await new Promise((r) => setTimeout(r, 100));
-                            await chrome.tabs.sendMessage(
-                                tabId,
-                                { type: "rpc", message },
-                                sendOptions,
-                            );
-                            return;
-                        } catch (retryError) {
-                            console.error(
-                                "Error after injecting content script:",
-                                retryError,
-                            );
-                            if (cb) {
-                                cb(retryError as Error);
+                            // Backoff in multiples of 200 ms (200, 400,
+                            // 600, 800, 1000) to let the freshly-injected
+                            // content script finish initializing. Max
+                            // total wait ~3s before giving up.
+                            for (let attempt = 1; attempt <= 5; attempt++) {
+                                await new Promise((r) =>
+                                    setTimeout(r, 200 * attempt),
+                                );
+                                try {
+                                    await chrome.tabs.sendMessage(
+                                        tabId,
+                                        { type: "rpc", message },
+                                        sendOptions,
+                                    );
+                                    return;
+                                } catch (retryError: any) {
+                                    lastError = retryError;
+                                    // Stop retrying if the error is not
+                                    // a "no receiver" error — different
+                                    // class of failure won't be fixed by
+                                    // waiting longer.
+                                    if (!isNoReceiver(retryError)) {
+                                        break;
+                                    }
+                                }
                             }
-                            return;
+                        } catch (injectError) {
+                            lastError = injectError;
                         }
+                        console.error(
+                            "Error after injecting content script:",
+                            lastError,
+                        );
+                        if (cb) {
+                            cb(lastError as Error);
+                        }
+                        return;
                     }
                     console.error(
                         "Error sending message to content script:",
@@ -177,10 +235,21 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const resolvedUrl = resolveCustomProtocolUrl(url);
 
             const targetTab = await getActiveTab();
+            // Register the load-complete listener BEFORE issuing the
+            // navigation so we don't miss the event. Awaiting this lets
+            // subsequent RPC calls (awaitPageLoad, extractComponent, ...)
+            // land on the new page's content script instead of racing the
+            // unload of the old one.
             if (targetTab && !options?.newTab) {
-                await chrome.tabs.update(targetTab.id!, { url: resolvedUrl });
+                const tabId = targetTab.id!;
+                const ready = waitForTabComplete(tabId);
+                await chrome.tabs.update(tabId, { url: resolvedUrl });
+                await ready;
             } else {
-                await chrome.tabs.create({ url: resolvedUrl });
+                const created = await chrome.tabs.create({ url: resolvedUrl });
+                if (created.id !== undefined) {
+                    await waitForTabComplete(created.id);
+                }
             }
         },
         closeWebPage: async () => {
