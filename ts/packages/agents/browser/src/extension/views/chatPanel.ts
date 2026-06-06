@@ -344,6 +344,15 @@ function initialize() {
             dispatcherConnectionStatus(data) {
                 setConnectionStatus(data.connected);
             },
+            // ---- Queue lifecycle (forwarded from the service worker) ----
+            // Chat panel does not render queue chips yet; these handlers
+            // exist so the typed RPC contract is satisfied and so the
+            // panel can opt into chip UX later without touching the
+            // service worker.
+            dispatcherRequestQueued(_data) {},
+            dispatcherRequestStarted(_data) {},
+            dispatcherRequestCancelled(_data) {},
+            dispatcherQueueStateChanged(_data) {},
             injectCommand(data) {
                 chatPanel.injectCommand(data.command);
             },
@@ -607,9 +616,14 @@ function handleUserMessage(
         }
     }
 
-    chatPanel.setEnabled(false);
-    chatPanel.showStatus("Processing...");
-
+    // Don't disable the input here — the chat panel's send() already
+    // swapped the send button for the stop button via setProcessing(),
+    // and we want the user to be able to queue another command while
+    // this one is in flight. The dispatcher will queue concurrent
+    // requests server-side. We just need to be sure that when the
+    // request completes we only flip back to the send button if THIS
+    // request is still the most recent in-flight one (otherwise a
+    // newer submission's stop button would disappear prematurely).
     rpc.invoke("chatPanelProcessCommand", {
         command: text,
         clientRequestId: requestId,
@@ -630,8 +644,9 @@ function handleUserMessage(
             // Add contextual follow-up buttons based on the command
             addContextualFollowUps(text);
 
-            chatPanel.setEnabled(true);
-            chatPanel.focus();
+            if (chatPanel.getActiveRequestId() === requestId) {
+                chatPanel.setIdle();
+            }
         })
         .catch((err: any) => {
             chatPanel.addAgentMessage(
@@ -642,8 +657,9 @@ function handleUserMessage(
                 },
                 "system",
             );
-            chatPanel.setEnabled(true);
-            chatPanel.focus();
+            if (chatPanel.getActiveRequestId() === requestId) {
+                chatPanel.setIdle();
+            }
         });
 }
 
