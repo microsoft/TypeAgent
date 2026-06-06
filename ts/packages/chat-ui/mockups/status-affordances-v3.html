@@ -18,589 +18,698 @@
   strip and confirm there's no collision. Theme toggle is top-right.
 -->
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Chat status affordances — round 3</title>
-        <style>
-            :root {
-                --bg: #f3f3f3;
-                --panel: #ffffff;
-                --user-bubble: lavender;
-                --user-metrics: #e2e0ec;
-                --text: #1f1f1f;
-                --muted: #6b6b6b;
-                --faint: #9a9a9a;
-                --shadow: rgba(0, 0, 0, 0.1);
-                --hairline: rgba(0, 0, 0, 0.08);
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat status affordances — round 3</title>
+    <style>
+      :root {
+        --bg: #f3f3f3;
+        --panel: #ffffff;
+        --user-bubble: lavender;
+        --user-metrics: #e2e0ec;
+        --text: #1f1f1f;
+        --muted: #6b6b6b;
+        --faint: #9a9a9a;
+        --shadow: rgba(0, 0, 0, 0.1);
+        --hairline: rgba(0, 0, 0, 0.08);
 
-                --icon-size: 24px;
+        --icon-size: 24px;
 
-                --queued-solid: #e9a800;
-                --running-solid: #1f8fff;
-                --danger-fg: #c0392b;
-                --danger-bg: rgba(192, 57, 43, 0.14);
-                --road-fg: #2e8b57; /* roadrunner "cached ok" green */
-            }
-            [data-theme="dark"] {
-                --bg: #1e1e1e;
-                --panel: #252526;
-                --user-bubble: #3a3a5a;
-                --user-metrics: #2c2c44;
-                --text: #e6e6e6;
-                --muted: #a0a0a0;
-                --faint: #7d7d7d;
-                --shadow: rgba(0, 0, 0, 0.4);
-                --hairline: rgba(255, 255, 255, 0.1);
-                --danger-fg: #ff8a80;
-                --road-fg: #5fd79b;
-            }
+        --queued-solid: #e9a800;
+        --running-solid: #1f8fff;
+        --danger-fg: #c0392b;
+        --danger-bg: rgba(192, 57, 43, 0.14);
+        --road-fg: #2e8b57; /* roadrunner "cached ok" green */
+      }
+      [data-theme="dark"] {
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --user-bubble: #3a3a5a;
+        --user-metrics: #2c2c44;
+        --text: #e6e6e6;
+        --muted: #a0a0a0;
+        --faint: #7d7d7d;
+        --shadow: rgba(0, 0, 0, 0.4);
+        --hairline: rgba(255, 255, 255, 0.1);
+        --danger-fg: #ff8a80;
+        --road-fg: #5fd79b;
+      }
 
-            * {
-                box-sizing: border-box;
-            }
-            body {
-                margin: 0;
-                padding: 32px 32px 100px;
-                background: var(--bg);
-                color: var(--text);
-                font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-            h1 {
-                font-size: 20px;
-                margin: 0 0 4px;
-            }
-            .subtitle {
-                color: var(--muted);
-                margin: 0 0 28px;
-                max-width: 760px;
-            }
-            code {
-                background: color-mix(in srgb, var(--muted) 18%, transparent);
-                padding: 1px 5px;
-                border-radius: 4px;
-                font-size: 12px;
-            }
-            .theme-toggle {
-                position: fixed;
-                top: 16px;
-                right: 16px;
-                z-index: 100;
-                border: 1px solid var(--muted);
-                background: var(--panel);
-                color: var(--text);
-                border-radius: 6px;
-                padding: 6px 12px;
-                cursor: pointer;
-                font: inherit;
-            }
-            .option {
-                background: var(--panel);
-                border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
-                border-radius: 12px;
-                padding: 20px 24px 30px;
-                margin-bottom: 22px;
-                box-shadow: 0 1px 3px var(--shadow);
-                max-width: 780px;
-            }
-            .option h2 {
-                font-size: 15px;
-                margin: 0 0 4px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .option h2 .tag {
-                font-size: 11px;
-                font-weight: 600;
-                color: var(--muted);
-                background: color-mix(in srgb, var(--muted) 16%, transparent);
-                border-radius: 10px;
-                padding: 2px 8px;
-            }
-            .option .desc {
-                color: var(--muted);
-                margin: 0 0 20px;
-                font-size: 13px;
-                max-width: 690px;
-            }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 32px 100px;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 28px;
+        max-width: 760px;
+      }
+      code {
+        background: color-mix(in srgb, var(--muted) 18%, transparent);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .theme-toggle {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 100;
+        border: 1px solid var(--muted);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .option {
+        background: var(--panel);
+        border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+        border-radius: 12px;
+        padding: 20px 24px 30px;
+        margin-bottom: 22px;
+        box-shadow: 0 1px 3px var(--shadow);
+        max-width: 780px;
+      }
+      .option h2 {
+        font-size: 15px;
+        margin: 0 0 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .option h2 .tag {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--muted) 16%, transparent);
+        border-radius: 10px;
+        padding: 2px 8px;
+      }
+      .option .desc {
+        color: var(--muted);
+        margin: 0 0 20px;
+        font-size: 13px;
+        max-width: 690px;
+      }
 
-            /* ----- chat scaffolding (mirrors chat-ui) ----- */
-            .stage {
-                display: flex;
-                flex-direction: column;
-                gap: 14px;
-                align-items: flex-end;
-                padding-top: 8px;
-            }
-            .ct {
-                width: 72%;
-                align-self: flex-end;
-                position: relative;
-            }
-            .bubble {
-                position: relative;
-                background: var(--user-bubble);
-                border-radius: 8px;
-                margin-right: 30px;
-            }
-            .content {
-                padding: 6px 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px var(--shadow);
-                word-wrap: break-word;
-                position: relative;
-                background: var(--user-bubble);
-            }
-            .avatar {
-                position: absolute;
-                right: -30px;
-                top: 0;
-                width: 26px;
-                height: 26px;
-                border-radius: 50%;
-                background: #6c63ff;
-                color: #fff;
-                display: grid;
-                place-items: center;
-                font-size: 12px;
-                font-weight: 600;
-            }
+      /* ----- chat scaffolding (mirrors chat-ui) ----- */
+      .stage {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        align-items: flex-end;
+        padding-top: 8px;
+      }
+      .ct {
+        width: 72%;
+        align-self: flex-end;
+        position: relative;
+      }
+      .bubble {
+        position: relative;
+        background: var(--user-bubble);
+        border-radius: 8px;
+        margin-right: 30px;
+      }
+      .content {
+        padding: 6px 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px var(--shadow);
+        word-wrap: break-word;
+        position: relative;
+        background: var(--user-bubble);
+      }
+      .avatar {
+        position: absolute;
+        right: -30px;
+        top: 0;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #6c63ff;
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
 
-            /* faux metrics strip — proves bottom edge stays reserved */
-            .metrics {
-                display: none;
-                position: absolute;
-                top: 100%;
-                left: 0;
-                width: 100%;
-                background: var(--user-metrics);
-                border-radius: 0 0 8px 8px;
-                font-size: 10px;
-                text-align: right;
-                padding: 3px 10px;
-                color: var(--muted);
-                box-shadow: 0 2px 8px var(--shadow);
-                z-index: 5;
-            }
-            .ct:hover .metrics {
-                display: block;
-            }
-            .ct:hover .content {
-                border-bottom-left-radius: 0;
-                border-bottom-right-radius: 0;
-            }
+      /* faux metrics strip — proves bottom edge stays reserved */
+      .metrics {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        background: var(--user-metrics);
+        border-radius: 0 0 8px 8px;
+        font-size: 10px;
+        text-align: right;
+        padding: 3px 10px;
+        color: var(--muted);
+        box-shadow: 0 2px 8px var(--shadow);
+        z-index: 5;
+      }
+      .ct:hover .metrics {
+        display: block;
+      }
+      .ct:hover .content {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
 
-            /* ----- unified icon button (controls) ----- */
-            .icon-btn {
-                width: var(--icon-size);
-                height: var(--icon-size);
-                border: none;
-                background: transparent;
-                color: var(--muted);
-                border-radius: 6px;
-                display: inline-grid;
-                place-items: center;
-                cursor: pointer;
-                padding: 0;
-                transition: background 0.12s ease, color 0.12s ease;
-            }
-            .icon-btn:hover {
-                background: color-mix(in srgb, var(--muted) 22%, transparent);
-                color: var(--text);
-            }
-            .icon-btn.danger:hover {
-                background: var(--danger-bg);
-                color: var(--danger-fg);
-            }
-            .icon-btn svg {
-                width: 15px;
-                height: 15px;
-                display: block;
-            }
+      /* ----- unified icon button (controls) ----- */
+      .icon-btn {
+        width: var(--icon-size);
+        height: var(--icon-size);
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 6px;
+        display: inline-grid;
+        place-items: center;
+        cursor: pointer;
+        padding: 0;
+        transition:
+          background 0.12s ease,
+          color 0.12s ease;
+      }
+      .icon-btn:hover {
+        background: color-mix(in srgb, var(--muted) 22%, transparent);
+        color: var(--text);
+      }
+      .icon-btn.danger:hover {
+        background: var(--danger-bg);
+        color: var(--danger-fg);
+      }
+      .icon-btn svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
 
-            /* ----- top control rail ----- */
-            .rail {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                padding: 1px 5px 2px 10px;
-                border-radius: 8px 8px 0 0;
-                background: var(--user-bubble);
-                border-bottom: 1px solid var(--hairline);
-                position: relative;
-                z-index: 2;
-                min-height: 26px;
-            }
-            .bubble.has-rail .content {
-                border-top-left-radius: 0;
-                border-top-right-radius: 0;
-            }
-            .spacer {
-                flex: 1;
-            }
+      /* ----- top control rail ----- */
+      .rail {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 1px 5px 2px 10px;
+        border-radius: 8px 8px 0 0;
+        background: var(--user-bubble);
+        border-bottom: 1px solid var(--hairline);
+        position: relative;
+        z-index: 2;
+        min-height: 26px;
+      }
+      .bubble.has-rail .content {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+      .spacer {
+        flex: 1;
+      }
 
-            /* whisper tint variant — barely-there, just a hint of state */
-            .rail.tint-running {
-                background: color-mix(in srgb, var(--running-solid) 8%, var(--user-bubble));
-            }
-            .rail.tint-queued {
-                background: color-mix(in srgb, var(--queued-solid) 10%, var(--user-bubble));
-            }
+      /* whisper tint variant — barely-there, just a hint of state */
+      .rail.tint-running {
+        background: color-mix(
+          in srgb,
+          var(--running-solid) 8%,
+          var(--user-bubble)
+        );
+      }
+      .rail.tint-queued {
+        background: color-mix(
+          in srgb,
+          var(--queued-solid) 10%,
+          var(--user-bubble)
+        );
+      }
 
-            /* ----- DE-EMPHASIZED state (minor info, with a hint of color) ----- */
-            .state-muted {
-                display: inline-flex;
-                align-items: center;
-                gap: 5px;
-                font-size: 10.5px;
-                font-weight: 500;
-                color: var(--muted);
-                letter-spacing: 0.2px;
-                user-select: none;
-            }
-            /* A subtle state-matched tint: present enough to read at a glance,
+      /* ----- DE-EMPHASIZED state (minor info, with a hint of color) ----- */
+      .state-muted {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10.5px;
+        font-weight: 500;
+        color: var(--muted);
+        letter-spacing: 0.2px;
+        user-select: none;
+      }
+      /* A subtle state-matched tint: present enough to read at a glance,
                quiet enough to stay secondary to the command text. */
-            .state-muted.running {
-                color: color-mix(in srgb, var(--running-solid) 58%, var(--muted));
-            }
-            .state-muted.queued {
-                color: color-mix(in srgb, var(--queued-solid) 62%, var(--muted));
-            }
-            .spinner-sm {
-                width: 9px;
-                height: 9px;
-                border: 1.5px solid currentColor;
-                border-right-color: transparent;
-                border-radius: 50%;
-                animation: spin 0.7s linear infinite;
-                opacity: 0.85;
-                flex: none;
-            }
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-            .dot-sm {
-                width: 5px;
-                height: 5px;
-                border-radius: 50%;
-                background: currentColor;
-                opacity: 0.7;
-                flex: none;
-            }
+      .state-muted.running {
+        color: color-mix(in srgb, var(--running-solid) 58%, var(--muted));
+      }
+      .state-muted.queued {
+        color: color-mix(in srgb, var(--queued-solid) 62%, var(--muted));
+      }
+      .spinner-sm {
+        width: 9px;
+        height: 9px;
+        border: 1.5px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        opacity: 0.85;
+        flex: none;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .dot-sm {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.7;
+        flex: none;
+      }
 
-            /* tiny inline state badge placed before the text (variant 2) */
-            .state-inline {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                font-size: 10px;
-                color: var(--faint);
-                margin-right: 6px;
-                vertical-align: middle;
-            }
+      /* tiny inline state badge placed before the text (variant 2) */
+      .state-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        color: var(--faint);
+        margin-right: 6px;
+        vertical-align: middle;
+      }
 
-            /* ----- roadrunner kept IN the content bubble ----- */
-            .road {
-                color: var(--road-fg);
-                display: inline-flex;
-                align-items: center;
-            }
-            .road svg {
-                width: 18px;
-                height: 18px;
-                display: block;
-            }
-            /* corner placement: pinned to the content's own top-right */
-            .road-corner {
-                position: absolute;
-                top: 5px;
-                right: 8px;
-                line-height: 0;
-                cursor: help;
-            }
-            /* inline placement: trailing the command text */
-            .road-inline {
-                margin-left: 6px;
-                vertical-align: middle;
-                cursor: help;
-            }
-            .content.with-corner-road {
-                padding-right: 34px;
-            }
+      /* ----- roadrunner kept IN the content bubble ----- */
+      .road {
+        color: var(--road-fg);
+        display: inline-flex;
+        align-items: center;
+      }
+      .road svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+      }
+      /* corner placement: pinned to the content's own top-right */
+      .road-corner {
+        position: absolute;
+        top: 5px;
+        right: 8px;
+        line-height: 0;
+        cursor: help;
+      }
+      /* inline placement: trailing the command text */
+      .road-inline {
+        margin-left: 6px;
+        vertical-align: middle;
+        cursor: help;
+      }
+      .content.with-corner-road {
+        padding-right: 34px;
+      }
 
-            .cmd {
-                font-family: var(--vscode-editor-font-family, Consolas, monospace);
-                font-size: 13px;
-            }
-            .legend {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 18px;
-                margin-top: 18px;
-                font-size: 12px;
-                color: var(--muted);
-                border-top: 1px dashed var(--hairline);
-                padding-top: 12px;
-            }
-            .legend span {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .legend .icon-btn,
-            .legend .road {
-                cursor: default;
-            }
-            .note {
-                font-size: 12px;
-                color: var(--muted);
-                margin-top: 14px;
-                font-style: italic;
-            }
-        </style>
-    </head>
-    <body data-theme="light">
-        <button class="theme-toggle" onclick="toggleTheme()">
-            Toggle light / dark
-        </button>
+      .cmd {
+        font-family: var(--vscode-editor-font-family, Consolas, monospace);
+        font-size: 13px;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        margin-top: 18px;
+        font-size: 12px;
+        color: var(--muted);
+        border-top: 1px dashed var(--hairline);
+        padding-top: 12px;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .legend .icon-btn,
+      .legend .road {
+        cursor: default;
+      }
+      .note {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 14px;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body data-theme="light">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      Toggle light / dark
+    </button>
 
-        <h1>Status affordances — round 3 (quiet state · roadrunner in-bubble)</h1>
-        <p class="subtitle">
-            Refining the header-rail direction you liked. State is now
-            <strong>de-emphasized</strong> — small muted text, no loud color
-            band — and the <strong>roadrunner stays in the content bubble</strong>
-            with your text rather than sitting in the toolbar. The rail carries
-            only the action controls. Hover a bubble to confirm the bottom
-            metrics strip never collides. I'll wire the winner into
-            <code>chat-ui</code>.
-        </p>
+    <h1>Status affordances — round 3 (quiet state · roadrunner in-bubble)</h1>
+    <p class="subtitle">
+      Refining the header-rail direction you liked. State is now
+      <strong>de-emphasized</strong> — small muted text, no loud color band —
+      and the <strong>roadrunner stays in the content bubble</strong>
+      with your text rather than sitting in the toolbar. The rail carries only
+      the action controls. Hover a bubble to confirm the bottom metrics strip
+      never collides. I'll wire the winner into
+      <code>chat-ui</code>.
+    </p>
 
-        <svg style="display: none" aria-hidden="true">
-            <defs>
-                <g id="i-play"><path d="M5 3.5v9l8-4.5z" fill="currentColor" /></g>
-                <g id="i-stop">
-                    <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" />
-                </g>
-                <g id="i-x" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                    <path d="M4 4l8 8M12 4l-8 8" />
-                </g>
-                <g id="i-trash" fill="none" stroke="currentColor" stroke-width="1.6"
-                   stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 4.5h10M12 4.5l-.7 8.2a1.2 1.2 0 0 1-1.2 1.1H5.9a1.2 1.2 0 0 1-1.2-1.1L4 4.5M6.4 4.5V3.3a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v1.2M6.6 7v4M9.4 7v4" />
-                </g>
-                <g id="i-bird" fill="currentColor">
-                    <path d="M1.6 9.6c2.1-.3 3.4-1.5 4-2.9.3 1 1.1 1.7 2.1 1.9-.2 1.5-1.4 2.8-3.2 3.1.8.5 1.7.7 2.8.5L8.9 14.5H6.2l-1.1-1.7c-1.7-.2-3.2-1.4-3.5-3.2zM9.3 4.9c.65 0 1.18.53 1.18 1.18S9.95 7.24 9.3 7.24 8.12 6.71 8.12 6.06 8.65 4.9 9.3 4.9zM11 5.7l3.8-1.1-1.1 2.4 1.3 1.3-2.7.3z" />
-                </g>
-            </defs>
-        </svg>
+    <svg style="display: none" aria-hidden="true">
+      <defs>
+        <g id="i-play"><path d="M5 3.5v9l8-4.5z" fill="currentColor" /></g>
+        <g id="i-stop">
+          <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" />
+        </g>
+        <g
+          id="i-x"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+        >
+          <path d="M4 4l8 8M12 4l-8 8" />
+        </g>
+        <g
+          id="i-trash"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M3 4.5h10M12 4.5l-.7 8.2a1.2 1.2 0 0 1-1.2 1.1H5.9a1.2 1.2 0 0 1-1.2-1.1L4 4.5M6.4 4.5V3.3a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v1.2M6.6 7v4M9.4 7v4"
+          />
+        </g>
+        <g id="i-bird" fill="currentColor">
+          <path
+            d="M1.6 9.6c2.1-.3 3.4-1.5 4-2.9.3 1 1.1 1.7 2.1 1.9-.2 1.5-1.4 2.8-3.2 3.1.8.5 1.7.7 2.8.5L8.9 14.5H6.2l-1.1-1.7c-1.7-.2-3.2-1.4-3.5-3.2zM9.3 4.9c.65 0 1.18.53 1.18 1.18S9.95 7.24 9.3 7.24 8.12 6.71 8.12 6.06 8.65 4.9 9.3 4.9zM11 5.7l3.8-1.1-1.1 2.4 1.3 1.3-2.7.3z"
+          />
+        </g>
+      </defs>
+    </svg>
 
-        <!-- ============ OPTION 1 ============ -->
-        <section class="option">
-            <h2>Option 1 — Quiet rail · roadrunner in corner <span class="tag">recommended</span></h2>
-            <p class="desc">
-                Controls sit right-aligned on the top rail. State is a small
-                muted label on the left — spinner + "running", a dot + "queued ·
-                #2" — quiet enough to read as minor info. The roadrunner is
-                pinned to the top-right corner <em>inside</em> the content,
-                sitting with the command text where it belongs.
-            </p>
+    <!-- ============ OPTION 1 ============ -->
+    <section class="option">
+      <h2>
+        Option 1 — Quiet rail · roadrunner in corner
+        <span class="tag">recommended</span>
+      </h2>
+      <p class="desc">
+        Controls sit right-aligned on the top rail. State is a small muted label
+        on the left — spinner + "running", a dot + "queued · #2" — quiet enough
+        to read as minor info. The roadrunner is pinned to the top-right corner
+        <em>inside</em> the content, sitting with the command text where it
+        belongs.
+      </p>
 
-            <div class="stage">
-                <!-- running -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail">
-                            <span class="state-muted"><span class="spinner-sm"></span>running</span>
-                            <span class="spacer"></span>
-                            <button class="icon-btn danger" title="Cancel">
-                                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Move to trash">
-                                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
-                            </button>
-                        </div>
-                        <div class="content with-corner-road">
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-corner" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
-                </div>
-
-                <!-- queued -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail">
-                            <span class="state-muted"><span class="dot-sm"></span>queued · #2</span>
-                            <span class="spacer"></span>
-                            <button class="icon-btn" title="Run now">
-                                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Remove from queue">
-                                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
-                            </button>
-                        </div>
-                        <div class="content with-corner-road">
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-corner" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">queued · waiting on 1 request</div>
-                </div>
+      <div class="stage">
+        <!-- running -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail">
+              <span class="state-muted"
+                ><span class="spinner-sm"></span>running</span
+              >
+              <span class="spacer"></span>
+              <button class="icon-btn danger" title="Cancel">
+                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Move to trash">
+                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+              </button>
             </div>
-            <p class="note">Roadrunner lives in the bubble corner with the text; rail holds only controls + quiet state.</p>
-        </section>
-
-        <!-- ============ OPTION 2 ============ -->
-        <section class="option">
-            <h2>Option 2 — Controls-only rail · roadrunner inline with text</h2>
-            <p class="desc">
-                The rail is purely the control row (right-aligned), so the top
-                edge stays clean. State becomes a tiny muted prefix on the text
-                line itself, and the roadrunner trails directly <em>after</em>
-                the command text — maximally "with the user text". Best if you
-                want the rail to read unambiguously as actions only.
-            </p>
-
-            <div class="stage">
-                <!-- running -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail">
-                            <span class="spacer"></span>
-                            <button class="icon-btn danger" title="Cancel">
-                                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Move to trash">
-                                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
-                            </button>
-                        </div>
-                        <div class="content">
-                            <span class="state-inline"><span class="spinner-sm"></span>running</span>
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-inline" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
-                </div>
-
-                <!-- queued -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail">
-                            <span class="spacer"></span>
-                            <button class="icon-btn" title="Run now">
-                                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Remove from queue">
-                                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
-                            </button>
-                        </div>
-                        <div class="content">
-                            <span class="state-inline"><span class="dot-sm"></span>queued · #2</span>
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-inline" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">queued · waiting on 1 request</div>
-                </div>
+            <div class="content with-corner-road">
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-corner"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
             </div>
-            <p class="note">Rail = actions only. State is a faint inline prefix; roadrunner trails the text.</p>
-        </section>
-
-        <!-- ============ OPTION 3 ============ -->
-        <section class="option">
-            <h2>Option 3 — Whisper tint · roadrunner in corner</h2>
-            <p class="desc">
-                Like Option 1, but the rail carries an extremely subtle state
-                tint (a faint blue/amber wash, ~8–10%) — just enough to sense
-                the state peripherally without the loud band from before. State
-                label stays muted; roadrunner stays in the content corner. The
-                tint disappears entirely once the request goes idle.
-            </p>
-
-            <div class="stage">
-                <!-- running -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail tint-running">
-                            <span class="state-muted running"><span class="spinner-sm"></span>running</span>
-                            <span class="spacer"></span>
-                            <button class="icon-btn danger" title="Cancel">
-                                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Move to trash">
-                                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
-                            </button>
-                        </div>
-                        <div class="content with-corner-road">
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-corner" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
-                </div>
-
-                <!-- queued -->
-                <div class="ct">
-                    <div class="avatar">R</div>
-                    <div class="bubble has-rail">
-                        <div class="rail tint-queued">
-                            <span class="state-muted queued"><span class="dot-sm"></span>queued · #2</span>
-                            <span class="spacer"></span>
-                            <button class="icon-btn" title="Run now">
-                                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
-                            </button>
-                            <button class="icon-btn danger" title="Remove from queue">
-                                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
-                            </button>
-                        </div>
-                        <div class="content with-corner-road">
-                            <span class="cmd">@collision optimize validate --workdir D:\collisions2</span>
-                            <span class="road road-corner" title="Explained — cached translation">
-                                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="metrics">queued · waiting on 1 request</div>
-                </div>
-            </div>
-            <p class="note">A whisper of state color on the rail; everything else stays quiet. Roadrunner in corner.</p>
-        </section>
-
-        <div class="legend">
-            <span><span class="road"><svg viewBox="0 0 16 16"><use href="#i-bird"/></svg></span> roadrunner — explained / cached (in bubble)</span>
-            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-play"/></svg></button> run now</span>
-            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-stop"/></svg></button> cancel running</span>
-            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-x"/></svg></button> remove from queue</span>
-            <span><button class="icon-btn"><svg viewBox="0 0 16 16"><use href="#i-trash"/></svg></button> trash</span>
+          </div>
+          <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
         </div>
 
-        <script>
-            function toggleTheme() {
-                const b = document.body;
-                b.dataset.theme = b.dataset.theme === "light" ? "dark" : "light";
-            }
-        </script>
-    </body>
+        <!-- queued -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail">
+              <span class="state-muted"
+                ><span class="dot-sm"></span>queued · #2</span
+              >
+              <span class="spacer"></span>
+              <button class="icon-btn" title="Run now">
+                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Remove from queue">
+                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+              </button>
+            </div>
+            <div class="content with-corner-road">
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-corner"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
+            </div>
+          </div>
+          <div class="metrics">queued · waiting on 1 request</div>
+        </div>
+      </div>
+      <p class="note">
+        Roadrunner lives in the bubble corner with the text; rail holds only
+        controls + quiet state.
+      </p>
+    </section>
+
+    <!-- ============ OPTION 2 ============ -->
+    <section class="option">
+      <h2>Option 2 — Controls-only rail · roadrunner inline with text</h2>
+      <p class="desc">
+        The rail is purely the control row (right-aligned), so the top edge
+        stays clean. State becomes a tiny muted prefix on the text line itself,
+        and the roadrunner trails directly <em>after</em>
+        the command text — maximally "with the user text". Best if you want the
+        rail to read unambiguously as actions only.
+      </p>
+
+      <div class="stage">
+        <!-- running -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail">
+              <span class="spacer"></span>
+              <button class="icon-btn danger" title="Cancel">
+                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Move to trash">
+                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+              </button>
+            </div>
+            <div class="content">
+              <span class="state-inline"
+                ><span class="spinner-sm"></span>running</span
+              >
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-inline"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
+            </div>
+          </div>
+          <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+        </div>
+
+        <!-- queued -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail">
+              <span class="spacer"></span>
+              <button class="icon-btn" title="Run now">
+                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Remove from queue">
+                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+              </button>
+            </div>
+            <div class="content">
+              <span class="state-inline"
+                ><span class="dot-sm"></span>queued · #2</span
+              >
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-inline"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
+            </div>
+          </div>
+          <div class="metrics">queued · waiting on 1 request</div>
+        </div>
+      </div>
+      <p class="note">
+        Rail = actions only. State is a faint inline prefix; roadrunner trails
+        the text.
+      </p>
+    </section>
+
+    <!-- ============ OPTION 3 ============ -->
+    <section class="option">
+      <h2>Option 3 — Whisper tint · roadrunner in corner</h2>
+      <p class="desc">
+        Like Option 1, but the rail carries an extremely subtle state tint (a
+        faint blue/amber wash, ~8–10%) — just enough to sense the state
+        peripherally without the loud band from before. State label stays muted;
+        roadrunner stays in the content corner. The tint disappears entirely
+        once the request goes idle.
+      </p>
+
+      <div class="stage">
+        <!-- running -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail tint-running">
+              <span class="state-muted running"
+                ><span class="spinner-sm"></span>running</span
+              >
+              <span class="spacer"></span>
+              <button class="icon-btn danger" title="Cancel">
+                <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Move to trash">
+                <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+              </button>
+            </div>
+            <div class="content with-corner-road">
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-corner"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
+            </div>
+          </div>
+          <div class="metrics">elapsed 4.2s · 3 actions · 1,204 tokens</div>
+        </div>
+
+        <!-- queued -->
+        <div class="ct">
+          <div class="avatar">R</div>
+          <div class="bubble has-rail">
+            <div class="rail tint-queued">
+              <span class="state-muted queued"
+                ><span class="dot-sm"></span>queued · #2</span
+              >
+              <span class="spacer"></span>
+              <button class="icon-btn" title="Run now">
+                <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+              </button>
+              <button class="icon-btn danger" title="Remove from queue">
+                <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+              </button>
+            </div>
+            <div class="content with-corner-road">
+              <span class="cmd"
+                >@collision optimize validate --workdir D:\collisions2</span
+              >
+              <span
+                class="road road-corner"
+                title="Explained — cached translation"
+              >
+                <svg viewBox="0 0 16 16"><use href="#i-bird" /></svg>
+              </span>
+            </div>
+          </div>
+          <div class="metrics">queued · waiting on 1 request</div>
+        </div>
+      </div>
+      <p class="note">
+        A whisper of state color on the rail; everything else stays quiet.
+        Roadrunner in corner.
+      </p>
+    </section>
+
+    <div class="legend">
+      <span
+        ><span class="road"
+          ><svg viewBox="0 0 16 16"><use href="#i-bird" /></svg
+        ></span>
+        roadrunner — explained / cached (in bubble)</span
+      >
+      <span
+        ><button class="icon-btn">
+          <svg viewBox="0 0 16 16"><use href="#i-play" /></svg>
+        </button>
+        run now</span
+      >
+      <span
+        ><button class="icon-btn">
+          <svg viewBox="0 0 16 16"><use href="#i-stop" /></svg>
+        </button>
+        cancel running</span
+      >
+      <span
+        ><button class="icon-btn">
+          <svg viewBox="0 0 16 16"><use href="#i-x" /></svg>
+        </button>
+        remove from queue</span
+      >
+      <span
+        ><button class="icon-btn">
+          <svg viewBox="0 0 16 16"><use href="#i-trash" /></svg>
+        </button>
+        trash</span
+      >
+    </div>
+
+    <script>
+      function toggleTheme() {
+        const b = document.body;
+        b.dataset.theme = b.dataset.theme === "light" ? "dark" : "light";
+      }
+    </script>
+  </body>
 </html>

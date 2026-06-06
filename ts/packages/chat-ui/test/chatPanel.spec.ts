@@ -64,9 +64,9 @@ describe("user status rail — queue state", () => {
         const rail = userRail(root, "req-1");
         expect(rail).not.toBeNull();
         expect(rail!.dataset.status).toBe("queued");
-        expect(rail!.querySelector(".chat-status-state")!.textContent).toContain(
-            "queued",
-        );
+        expect(
+            rail!.querySelector(".chat-status-state")!.textContent,
+        ).toContain("queued");
 
         const jump = rail!.querySelector<HTMLButtonElement>(
             '[data-action="jump-queue"]',
@@ -87,18 +87,22 @@ describe("user status rail — queue state", () => {
         const { root, panel } = makePanel();
         panel.addUserMessage("hello", "req-1");
 
-        panel.setUserBubbleQueueStatus("req-1", "running", jest.fn(), jest.fn());
+        panel.setUserBubbleQueueStatus(
+            "req-1",
+            "running",
+            jest.fn(),
+            jest.fn(),
+        );
 
         const rail = userRail(root, "req-1");
         expect(rail).not.toBeNull();
         expect(rail!.dataset.status).toBe("running");
         // The wire status is "running" but the user-facing label reads "sent".
-        const stateText = rail!.querySelector(".chat-status-state")!.textContent;
+        const stateText =
+            rail!.querySelector(".chat-status-state")!.textContent;
         expect(stateText).toContain("sent");
         expect(stateText).not.toContain("running");
-        expect(
-            rail!.querySelector('[data-action="jump-queue"]'),
-        ).toBeNull();
+        expect(rail!.querySelector('[data-action="jump-queue"]')).toBeNull();
         expect(
             rail!.querySelector('[data-action="remove-from-queue"]'),
         ).toBeNull();
@@ -134,14 +138,20 @@ describe("agent running rail", () => {
         // No agent bubble yet → no agent rail.
         expect(agentRail(root)).toBeNull();
 
-        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+        panel.addAgentMessage(
+            "response",
+            "agent",
+            undefined,
+            undefined,
+            "req-1",
+        );
 
         const rail = agentRail(root);
         expect(rail).not.toBeNull();
         expect(rail!.dataset.status).toBe("running");
-        expect(rail!.querySelector(".chat-status-state")!.textContent).toContain(
-            "working",
-        );
+        expect(
+            rail!.querySelector(".chat-status-state")!.textContent,
+        ).toContain("working");
 
         const stop = rail!.querySelector<HTMLButtonElement>(
             '[data-action="stop"]',
@@ -155,7 +165,13 @@ describe("agent running rail", () => {
         const { root, panel } = makePanel({ onCancel: jest.fn() });
         panel.addUserMessage("hi", "req-1");
         panel.setProcessing("req-1");
-        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+        panel.addAgentMessage(
+            "response",
+            "agent",
+            undefined,
+            undefined,
+            "req-1",
+        );
         expect(agentRail(root)).not.toBeNull();
 
         panel.completeRequest("req-1");
@@ -166,7 +182,13 @@ describe("agent running rail", () => {
         const { root, panel } = makePanel({ onCancel: jest.fn() });
         panel.addUserMessage("hi", "req-1");
         panel.setProcessing("req-1");
-        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+        panel.addAgentMessage(
+            "response",
+            "agent",
+            undefined,
+            undefined,
+            "req-1",
+        );
         expect(agentRail(root)).not.toBeNull();
 
         panel.setIdle();

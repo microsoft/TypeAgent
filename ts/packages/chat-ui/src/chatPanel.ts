@@ -2714,7 +2714,11 @@ export class ChatPanel {
     public addChoicePrompt<T>(
         message: string,
         choices: ChoiceOption<T>[],
-        opts?: { defaultValue?: T; signal?: AbortSignal; showMessage?: boolean },
+        opts?: {
+            defaultValue?: T;
+            signal?: AbortSignal;
+            showMessage?: boolean;
+        },
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
             const signal = opts?.signal;
@@ -2755,8 +2759,7 @@ export class ChatPanel {
             const onAbort = () => {
                 cleanup();
                 reject(
-                    signal?.reason ??
-                        new DOMException("Aborted", "AbortError"),
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
             };
 
