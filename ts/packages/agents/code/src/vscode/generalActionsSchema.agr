@@ -1,0 +1,31 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-general sub-manifest actions
+// (command palette, goto file/line/symbol, user settings, keyboard shortcuts).
+
+import { CodeGeneralActions } from "./generalActionsSchema.ts";
+
+<Start> : CodeGeneralActions = <showCommandPalette>
+  | <showUserSettings>
+  | <showKeyboardShortcuts>
+  | <gotoFileOrLineOrSymbol>
+  | <gotoBare>;
+
+<GotoTarget> = 'file' -> "file"
+  | 'line' -> "line"
+  | 'symbol' -> "symbol";
+
+<showCommandPalette> = <Polite> ('show' | 'open') ('the')? 'command palette' -> { actionName: "showCommandPalette" };
+
+<showUserSettings> = <Polite> ('show' | 'open') ('the')? ('user')? 'settings' ('json')? -> { actionName: "showUserSettings" };
+
+<showKeyboardShortcuts> = <Polite> ('show' | 'open') ('the')? ('keyboard shortcuts' | 'keybindings' | 'key bindings') -> { actionName: "showKeyboardShortcuts" };
+
+// "go to file foo.ts" / "go to line 42" / "go to symbol parse"
+<gotoFileOrLineOrSymbol> = <Polite> ('go to' | 'goto' | 'jump to') $(goto:<GotoTarget>) $(ref:wildcard) -> { actionName: "gotoFileOrLineOrSymbol", parameters: { goto: goto, ref: ref } };
+
+// "go to file" with no target name
+<gotoBare> = <Polite> ('go to' | 'goto' | 'jump to') $(goto:<GotoTarget>) -> { actionName: "gotoFileOrLineOrSymbol", parameters: { goto: goto } };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

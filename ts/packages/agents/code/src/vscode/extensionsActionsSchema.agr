@@ -1,0 +1,35 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-extension sub-manifest actions
+// (check, install, enable, disable, show extensions; reload window).
+
+import { CodeWorkbenchExtensionActions } from "./extensionsActionsSchema.ts";
+
+<Start> : CodeWorkbenchExtensionActions = <reloadWindow>
+  | <showExtensions>
+  | <checkExtensionAvailable>
+  | <installExtension>
+  | <enableExtension>
+  | <disableExtension>;
+
+<reloadWindow> = <Polite> 'reload' ('the')? ('vscode')? 'window' -> { actionName: "reloadWindow" };
+
+<showExtensions> = <Polite> ('show' | 'open') ('the')? 'extensions' ('panel' | 'pane' | 'view' | 'sidebar')? -> { actionName: "showExtensions" };
+
+// "is the copilot extension available" / "check if copilot extension is available"
+<checkExtensionAvailable> = <Polite> ('is' | 'check' ('if')?) ('the')? $(filterByUserQuery:wildcard) 'extension' ('available' | 'installed') -> { actionName: "checkExtensionAvailable", parameters: { filterByUserQuery: filterByUserQuery } };
+
+// "install the copilot extension" / "install extension prettier"
+<installExtension> = <Polite> 'install' ('the')? $(extensionQuery:wildcard) 'extension' -> { actionName: "installExtension", parameters: { extensionQuery: extensionQuery } }
+  | <Polite> 'install extension' $(extensionQuery:wildcard) -> { actionName: "installExtension", parameters: { extensionQuery: extensionQuery } };
+
+// "enable the prettier extension" / "enable extension azure functions"
+<enableExtension> = <Polite> ('enable' | 'turn on' | 'activate') ('the')? $(extensionQuery:wildcard) 'extension' -> { actionName: "enableExtension", parameters: { extensionQuery: extensionQuery } }
+  | <Polite> ('enable' | 'turn on' | 'activate') 'extension' $(extensionQuery:wildcard) -> { actionName: "enableExtension", parameters: { extensionQuery: extensionQuery } };
+
+// "disable the prettier extension" / "disable extension azure functions"
+<disableExtension> = <Polite> ('disable' | 'turn off' | 'deactivate') ('the')? $(extensionQuery:wildcard) 'extension' -> { actionName: "disableExtension", parameters: { extensionQuery: extensionQuery } }
+  | <Polite> ('disable' | 'turn off' | 'deactivate') 'extension' $(extensionQuery:wildcard) -> { actionName: "disableExtension", parameters: { extensionQuery: extensionQuery } };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;
