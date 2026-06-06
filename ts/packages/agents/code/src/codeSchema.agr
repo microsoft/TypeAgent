@@ -1,33 +1,98 @@
-// Copyright (c) 2024 Code Grammar
-// Natural language interface for code editor actions
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code editor actions.
 
-import { CodeActions } from "./codeActionsSchema.ts";
+import { CodeActions, CodeActivity } from "./codeActionsSchema.ts";
 
-// Start rule - all available actions
-<Start> : CodeActions = <changeColorScheme> | <changeColorSchemeTo> | <splitEditor> | <splitEditorSimple> | <changeEditorLayout> | <newCodeFile> | <newMarkdownFile> | <newTextFile> | <launchVSCode>;
+// <Start> accepts both CodeActions (one-shot) and CodeActivity (long-running).
+// The grammar matcher only recognises a single <Start> entry point; mixing
+// both unions here lets <launchVSCode> (an Activity) coexist with the
+// regular CodeAction rules.
+<Start> : CodeActions | CodeActivity = <changeColorScheme>
+  | <changeColorSchemeTo>
+  | <splitEditor>
+  | <splitEditorSimple>
+  | <changeEditorLayout>
+  | <newCodeFile>
+  | <newMarkdownFile>
+  | <newTextFile>
+  | <launchVSCode>;
 
-// Main action rules
-<changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:string) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } };
+// Theme name sub-rule — maps user-friendly tokens to canonical TS ColorTheme
+// literals. ColorTheme members contain '+' which isn't a valid literal token
+// character in the grammar DSL, so the mapping happens here.
+<Theme> = 'monokai dimmed' -> "Monokai Dimmed"
+  | 'monokai' -> "Monokai"
+  | 'solarized dark' -> "Solarized Dark"
+  | 'solarized light' -> "Solarized Light"
+  | 'quiet light' -> "Quiet Light"
+  | 'kimbie dark' -> "Kimbie Dark"
+  | 'abyss' -> "Abyss"
+  | 'red' -> "Red"
+  | ('default high contrast light' | 'high contrast light' | 'high contrast') -> "Default High Contrast Light"
+  | ('default light' | 'light') -> "Default Light+"
+  | ('default dark' | 'dark') -> "Default Dark+";
 
-// Theme name AFTER 'to': "change my [vscode] color theme to Monokai", "set the editor theme to Solarized Dark"
-<changeColorSchemeTo> = <Polite> ('change' | 'switch' | 'set') ('my' | 'the')? ('vscode' | 'code' | 'editor')? ('color scheme' | 'color theme' | 'theme') 'to' $(theme:string) -> { actionName: "changeColorScheme", parameters: { theme: theme } };
+// Code file language sub-rule — maps user-friendly tokens to the canonical
+// TS CodeFileLanguage literals (TS uses camelCase 'javaScript'/'typeScript').
+<CodeLang> = 'html' -> "html"
+  | 'css' -> "css"
+  | 'json' -> "json"
+  | 'python' -> "python"
+  | ('javascript' | 'js') -> "javaScript"
+  | ('typescript' | 'ts') -> "typeScript";
 
-<splitEditor> = <Polite> 'split' ('the'? 'editor')? $(direction:string) ('and'? ('open' | 'put' | 'place'))? $(fileName:string) ('in' | 'on' | 'to') 'the'? $(editorPosition:string) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction, editorPosition: editorPosition, fileName: fileName } };
+// String-literal-union sub-rules. The grammar DSL allows $(name:<SubRule>)
+// but not $(name:(a|b|c)), so each union gets a sub-rule that echoes the
+// matched token as its canonical literal.
+<SplitDirection> = 'right' -> "right"
+  | 'left' -> "left"
+  | 'up' -> "up"
+  | 'down' -> "down";
 
-// Direction-only split for the active editor: "split the editor to the right", "split editor right"
-<splitEditorSimple> = <Polite> 'split' ('the')? 'editor' ('to' 'the'?)? $(direction:string) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction } };
+<EditorPos> = 'first' -> "first"
+  | 'last' -> "last"
+  | 'active' -> "active";
 
-<changeEditorLayout> = <Polite> ('change' | 'switch' | 'set' | 'go back') ('to' | 'the'? 'editor' 'to')? ('a'? | 'up')? $(columnCount:string) ('column' | 'pane') ('layout' | 'view' | 'mode')? -> { actionName: "changeEditorLayout", parameters: { columnCount: columnCount } };
+<LayoutCols> = 'single' -> "single"
+  | 'double' -> "double"
+  | 'three' -> "three";
 
-<newCodeFile> = <Polite> ('create' | 'make') ('a'? 'new')? $(language:string) 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newCodeFile", parameters: { fileName: fileName, language: language, content: content } };
+<LaunchMode> = 'last' -> "last"
+  | 'folder' -> "folder"
+  | 'workspace' -> "workspace";
 
-<newMarkdownFile> = <Polite> ('create' | 'make') ('a'? 'new')? ('markdown' | 'md') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newMarkdownFile", parameters: { fileName: fileName, content: content } };
+// "change my color theme to Monokai" / "set the editor theme to Solarized Dark"
+<changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('my' | 'the')? ('vscode' | 'code' | 'editor')? ('color scheme' | 'color theme' | 'theme') 'to' $(theme:<Theme>) -> { actionName: "changeColorScheme", parameters: { theme: theme } };
 
-<newTextFile> = <Polite> ('create' | 'make') ('a'? 'new')? ('text' | 'txt' | 'plain') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newTextFile", parameters: { fileName: fileName, content: content } };
+// "switch to the Monokai color scheme" (theme name before 'color scheme'/'theme')
+<changeColorSchemeTo> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:<Theme>) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } };
 
-<launchVSCode> = <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in' $(mode:string) 'mode')? ('at' | 'with' | 'for')? $(path:string)? -> { actionName: "launchVSCode", parameters: { path: path } };
+// Full split: "split the editor right and open utils.ts on the first side"
+<splitEditor> = <Polite> 'split' ('the')? 'editor' $(direction:<SplitDirection>) ('and')? ('open' | 'put' | 'place') $(fileName:string) ('in' | 'on' | 'to') ('the')? $(editorPosition:<EditorPos>) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction, editorPosition: editorPosition, fileName: fileName } };
 
-// Shared sub-rules
+// Direction-only split: "split editor right" / "split the editor to the right"
+<splitEditorSimple> = <Polite> 'split' ('the')? 'editor' ('to' ('the')?)? $(direction:<SplitDirection>) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction } };
+
+// Editor layout: "change to single column" / "switch to three pane view"
+<changeEditorLayout> = <Polite> ('change' | 'switch' | 'set' | 'go back') ('to')? ('the')? ('editor')? ('to')? ('a')? $(columnCount:<LayoutCols>) ('column' | 'pane') ('layout' | 'view' | 'mode')? -> { actionName: "changeEditorLayout", parameters: { columnCount: columnCount } };
+
+// Two branches so content stays a concrete string (TS NewCodeFileAction.content is required).
+<newCodeFile> = <Polite> ('create' | 'make') ('a')? ('new')? $(language:<CodeLang>) 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add' | 'containing') $(content:string) -> { actionName: "newCodeFile", parameters: { fileName: fileName, language: language, content: content } }
+  | <Polite> ('create' | 'make') ('a')? ('new')? $(language:<CodeLang>) 'file' ('called' | 'named')? $(fileName:string) -> { actionName: "newCodeFile", parameters: { fileName: fileName, language: language, content: "" } };
+
+// Two branches so content stays a concrete string (TS NewMarkdownFileAction.content is required).
+<newMarkdownFile> = <Polite> ('create' | 'make') ('a')? ('new')? ('markdown' | 'md') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add' | 'containing') $(content:string) -> { actionName: "newMarkdownFile", parameters: { fileName: fileName, content: content } }
+  | <Polite> ('create' | 'make') ('a')? ('new')? ('markdown' | 'md') 'file' ('called' | 'named')? $(fileName:string) -> { actionName: "newMarkdownFile", parameters: { fileName: fileName, content: "" } };
+
+// Two branches so content stays a concrete string (TS NewTextFileAction.content is required).
+<newTextFile> = <Polite> ('create' | 'make') ('a')? ('new')? ('text' | 'txt' | 'plain') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add' | 'containing') $(content:string) -> { actionName: "newTextFile", parameters: { fileName: fileName, content: content } }
+  | <Polite> ('create' | 'make') ('a')? ('new')? ('text' | 'txt' | 'plain') 'file' ('called' | 'named')? $(fileName:string) -> { actionName: "newTextFile", parameters: { fileName: fileName, content: "" } };
+
+// LaunchVSCodeAction is a CodeActivity. mode is required ("last" | "folder" |
+// "workspace"); path is optional. Two branches give mode-only vs mode+path forms.
+<launchVSCode> = <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in')? $(mode:<LaunchMode>) ('mode')? ('at' | 'with' | 'for')? $(path:string) -> { actionName: "launchVSCode", parameters: { mode: mode, path: path } }
+  | <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in')? $(mode:<LaunchMode>) ('mode')? -> { actionName: "launchVSCode", parameters: { mode: mode } };
+
 <Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;
-
-<DirectionSpec> = ('vertically' | 'vertical' | 'horizontally' | 'horizontal');

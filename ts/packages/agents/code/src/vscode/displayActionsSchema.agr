@@ -1,0 +1,53 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-display sub-manifest actions
+// (zoom, panels, markdown preview, zen mode, settings).
+
+import { CodeDisplayActions } from "./displayActionsSchema.ts";
+
+<Start> : CodeDisplayActions = <zoomIn>
+  | <zoomOut>
+  | <fontZoomReset>
+  | <showExplorer>
+  | <showSearch>
+  | <showSourceControl>
+  | <showOutputPanel>
+  | <toggleSearchDetails>
+  | <replaceInFiles>
+  | <openMarkdownPreviewToSide>
+  | <openMarkdownPreview>
+  | <zenMode>
+  | <closeEditor>
+  | <openSettings>;
+
+<zoomIn> = <Polite> 'zoom in' ('the')? ('editor')? -> { actionName: "zoomIn" };
+
+<zoomOut> = <Polite> 'zoom out' ('the')? ('editor')? -> { actionName: "zoomOut" };
+
+<fontZoomReset> = <Polite> ('reset' | 'restore') ('the')? ('font' | 'editor')? 'zoom' -> { actionName: "fontZoomReset" }
+  | <Polite> 'zoom' ('reset' | 'to default') -> { actionName: "fontZoomReset" };
+
+<showExplorer> = <Polite> ('show' | 'open' | 'reveal') ('the')? ('file')? ('explorer' | 'explorer pane' | 'explorer panel') -> { actionName: "showExplorer" };
+
+<showSearch> = <Polite> ('show' | 'open') ('the')? ('text')? ('search' | 'search and replace' | 'replace') ('pane' | 'panel' | 'window' | 'sidebar')? -> { actionName: "showSearch" };
+
+<showSourceControl> = <Polite> ('show' | 'open') ('the')? ('source control' | 'scm' | 'git' 'panel') -> { actionName: "showSourceControl" };
+
+<showOutputPanel> = <Polite> ('show' | 'open') ('the')? 'output' ('panel' | 'pane' | 'window')? -> { actionName: "showOutputPanel" };
+
+<toggleSearchDetails> = <Polite> 'toggle' ('the')? 'search details' -> { actionName: "toggleSearchDetails" };
+
+<replaceInFiles> = <Polite> 'replace in' ('the')? 'files' -> { actionName: "replaceInFiles" };
+
+<openMarkdownPreviewToSide> = <Polite> ('open' | 'show') ('the')? 'markdown preview' ('to' ('the')? 'side' | 'on' ('the')? 'side') -> { actionName: "openMarkdownPreviewToSide" };
+
+<openMarkdownPreview> = <Polite> ('open' | 'show') ('the')? 'markdown preview' -> { actionName: "openMarkdownPreview" };
+
+<zenMode> = <Polite> ('enter' | 'go' 'into' | 'toggle' | 'turn on')? ('zen mode' | 'distraction free mode') -> { actionName: "zenMode" };
+
+<closeEditor> = <Polite> 'close' ('the')? ('current' | 'active')? ('editor' | 'file' | 'tab') -> { actionName: "closeEditor" };
+
+<openSettings> = <Polite> ('open' | 'show') ('the')? ('vscode' | 'editor')? ('user')? 'settings' -> { actionName: "openSettings" };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;
