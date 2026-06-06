@@ -1,7 +1,7 @@
 {
   "emojiChar": "📜",
   "description": "Agent to create and execute PowerShell workflows",
-  "defaultEnabled": true,
+  "defaultEnabled": false,
   "errorReasoning": true,
   "schema": {
     "description": "Core flow management actions for creating, listing, and executing PowerShell scripts.",

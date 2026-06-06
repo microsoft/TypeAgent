@@ -1664,13 +1664,7 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
-            // Hide the cursor for the duration of the redraw.  Each drawFixed()
-            // call positions the cursor and writes text, leaving the cursor at
-            // the end of the written region (e.g., the right edge of the top
-            // separator).  Without hiding, the cursor visibly jumps through
-            // every draw target before settling at the input position via
-            // moveCursorToFixed() below.  ANSI.showCursor at the end re-reveals
-            // it at the final, correct location.
+            // Hide cursor to avoid flicker during writing
             stdout.write(ANSI.hideCursor);
 
             // Update scroll region if prompt height changed
@@ -1710,13 +1704,8 @@ async function questionWithCompletion(
             }
             // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
             // row 1 itself via \x1b[2K; when the input is long enough to wrap to
-            // additional visual rows, the terminal-driven wrap only writes from
-            // col 1 up to the overflow length on each continuation row, leaving
-            // the trailing columns populated with stale characters from
-            // previous frames (e.g., the bottom rule that used to occupy this
-            // row before inputRows grew, or a longer prior input that has since
-            // been shortened).  Clearing here removes that visual fluff while
-            // keeping the actual input string untouched.
+            // additional visual rows, the terminal-driven wrap can cause overflow
+            // populated with stale characters from previous frames.
             for (let r = 2; r <= inputRows; r++) {
                 layout.drawFixed(r, "");
             }
