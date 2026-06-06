@@ -1393,6 +1393,7 @@ export class ChatPanel {
      * (e.g. the startup greeting dispatched by the host), so they can be
      * recalled like typed commands. Prior-session replayed history is
      * deliberately excluded — see `replayHistory`.
+     * @param command - The command text to add to the back stack.
      */
     public addCommandToHistory(command: string) {
         const text = command?.trim();
