@@ -2704,11 +2704,17 @@ export class ChatPanel {
      * resolve with the chosen option's `value`. Generalizes askYesNo to an
      * arbitrary list with optional per-choice keyboard accelerators. Maps
      * directly from ClientIO.question / requestChoice.
+     *
+     * Set `opts.showMessage = false` to render only the choice buttons
+     * without the prompt text — used by hosts that already display the
+     * prompt separately (e.g. the shell renders the agent's `displayContent`
+     * for `createYesNoChoiceResult`, so repeating it on the card would
+     * duplicate the message).
      */
     public addChoicePrompt<T>(
         message: string,
         choices: ChoiceOption<T>[],
-        opts?: { defaultValue?: T; signal?: AbortSignal },
+        opts?: { defaultValue?: T; signal?: AbortSignal; showMessage?: boolean },
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
             const signal = opts?.signal;
@@ -2722,11 +2728,13 @@ export class ChatPanel {
             }
 
             const container = this.createAgentContainer("system", "");
-            container.setMessage(
-                { type: "text", content: message },
-                undefined,
-                undefined,
-            );
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
 
             const buttonDiv = document.createElement("div");
             buttonDiv.className = "chat-prompt-buttons choice-panel";
@@ -2783,15 +2791,27 @@ export class ChatPanel {
 
     /**
      * Show a Yes/No prompt and return the user's choice.
+     *
+     * Set `opts.showMessage = false` to render only the Yes/No buttons
+     * without the prompt text — used by hosts that already display the
+     * prompt separately (e.g. the shell renders the agent's `displayContent`
+     * for `createYesNoChoiceResult`, so repeating it here would duplicate
+     * the message).
      */
-    public askYesNo(message: string, defaultValue?: boolean): Promise<boolean> {
+    public askYesNo(
+        message: string,
+        defaultValue?: boolean,
+        opts?: { showMessage?: boolean },
+    ): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
             const container = this.createAgentContainer("system", "");
-            container.setMessage(
-                { type: "text", content: message },
-                undefined,
-                undefined,
-            );
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
 
             const buttonDiv = document.createElement("div");
             buttonDiv.className = "chat-prompt-buttons";
