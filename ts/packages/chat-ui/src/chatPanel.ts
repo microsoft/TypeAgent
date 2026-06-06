@@ -1387,8 +1387,18 @@ export class ChatPanel {
         this.sendButton.disabled = !this.textInput.textContent?.trim();
     }
 
-    private shouldAddToHistory(text: string) {
-        return !/^@exit(?:\s|$)/i.test(text.trim());
+    /**
+     * Push a command issued in the current session onto the up-arrow back
+     * stack. Used for commands that don't originate from the local input box
+     * (e.g. the startup greeting dispatched by the host), so they can be
+     * recalled like typed commands. Prior-session replayed history is
+     * deliberately excluded — see `replayHistory`.
+     */
+    public addCommandToHistory(command: string) {
+        const text = command?.trim();
+        if (!text) return;
+        this.commandHistory.unshift(text);
+        this.historyIndex = -1;
     }
 
     private send(requestId?: string) {
@@ -1397,7 +1407,7 @@ export class ChatPanel {
         // attachment (image-only requests are valid — e.g. "what is this?").
         if (!text && this.pendingAttachments.length === 0) return;
 
-        if (text && this.shouldAddToHistory(text)) {
+        if (text) {
             this.commandHistory.unshift(text);
         }
         this.historyIndex = -1;
@@ -2324,17 +2334,11 @@ export class ChatPanel {
                 switch (entry.kind) {
                     case "user":
                         this.addUserMessage(entry.text, entry.requestId);
-                        // Seed the up-arrow command history with replayed
-                        // user commands so it recalls prior-session input.
-                        // Entries arrive oldest-first; unshift keeps the
-                        // most recent command at index 0.
-                        if (
-                            entry.text &&
-                            entry.text.trim() &&
-                            this.shouldAddToHistory(entry.text)
-                        ) {
-                            this.commandHistory.unshift(entry.text);
-                        }
+                        // NOTE: replayed entries are prior-session history and
+                        // are intentionally NOT seeded into the up-arrow command
+                        // back stack. The back stack reflects only the current
+                        // session's commands (typed input plus the startup
+                        // greeting), matching the shell's historical behavior.
                         break;
                     case "agent-replace":
                         this.replaceAgentMessage(

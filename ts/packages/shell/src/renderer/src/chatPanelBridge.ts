@@ -523,6 +523,12 @@ export function createChatPanelClient(
                 // only render peer/replayed requests we haven't seen.
                 if (rid && !chatPanel.hasUserMessage(rid)) {
                     chatPanel.addUserMessage(command, rid);
+                    // Seed the up-arrow back stack with this current-session
+                    // command (e.g. the host-dispatched startup `@greeting`)
+                    // so it is recallable like a typed command. Locally typed
+                    // commands are seeded by ChatPanel.send() and skip this
+                    // branch because their bubble already exists.
+                    chatPanel.addCommandToHistory(command);
                 }
             });
         },
