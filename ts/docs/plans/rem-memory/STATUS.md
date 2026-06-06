@@ -14,13 +14,14 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 - **REM core** (`packages/memory/rem-memory`): complete, builds clean, **47/47 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
-- **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
+- **Latest live eval result: 39%** (3 correct, 1 partial, 5 incorrect over 9 curated Episode 53 questions), up from a 28% baseline (and from 0% originally).
 - This session added **set-intersection recall** ("books that are also movies"),
   made **extraction failures observable** (the feeder no longer silently swallows
   empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**,
   added **multi-entity OR-query splitting**, now **surfaces entity facets** into
-  the answer context, and **tightened answer grounding** (anti-hallucination
-  prompt + optional high-confidence filter). See §4.
+  the answer context, and **tuned answer grounding** (anti-hallucination prompt
+  that still allows reading/combining facts + optional high-confidence filter).
+  See §4. Remaining misses are upstream extraction-fidelity gaps (§6).
 
 ---
 
@@ -186,11 +187,12 @@ Q7 hallucinated a co-host (added "Christina Warren" alongside Kevin Scott) —
 the model padded the answer with a name not in the recalled facts. Hardened the
 answer path on both levers from §6:
 
-- **Anti-hallucination prompt**: `SYSTEM_PROMPT` (now exported) instructs the
-  model to use only names/titles/values that appear **verbatim** in MEMORY
-  FACTS, never introduce a detail not present "even if it seems likely from
-  general knowledge", not infer/combine/extrapolate, and give partial answers
-  when only partial facts exist.
+- **Anti-hallucination prompt**: `SYSTEM_PROMPT` (now exported) tells the model
+  to answer only from MEMORY FACTS and never add a name/entity/detail the facts
+  don't support, while still allowing it to **read, interpret, and combine** the
+  given facts (an earlier, stricter "verbatim / no-inference" wording regressed
+  the eval to 22% by making REM refuse answerable questions like "who is the
+  guest" — see §5).
 - **High-confidence filter**: new `filterByWeight(results, minWeight)` + a
   `RemAnswerOptions.minWeight` floor (default 0 = off) drops weak/stale facts
   from the answer context before formatting, so they can't seed a hallucination.
@@ -237,23 +239,26 @@ configured and extracts successfully.
 
 ## 5. Latest Eval Results (Episode 53, curated, 9 Q)
 
-**Overall: 28%** — correct 1, partial 3, incorrect 5.
+**Overall: 39%** — correct 3, partial 1, incorrect 5 (post-2026-06-06 fixes; up
+from 28% baseline, and recovered from a 22% regression caused by an over-strict
+grounding prompt — see §4(f)).
 
-| #   | Question                                                      | Grade       | Note                                                                                                     |
-| --- | ------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
-| 1   | List all books                                                | incorrect   | Returns 11 books (type path works); oracle had "NOT IN TRANSCRIPT" so graded against a strict reference. |
-| 2   | List all books and movies                                     | partial     | Both lists returned; some spurious + missing entries.                                                    |
-| 3   | List all books that are also movies                           | incorrect   | Needs **intersection**; type path returns a union → empty here.                                          |
-| 4   | Anything on the novel _Empire in Black and Gold_?             | partial     | Identified as a novel; missing author/year context.                                                      |
-| 5   | Anything on _Empire of Black and Gold_ or _Children of Ruin_? | incorrect   | Misspelled title + multi-entity retrieval missed.                                                        |
-| 6   | Name of the podcast?                                          | partial     | "Behind the Tech" (missing "with Kevin Scott").                                                          |
-| 7   | Who hosts the podcast?                                        | incorrect   | Hallucinated extra host (Christina Warren) alongside Kevin Scott.                                        |
-| 8   | Who is the guest?                                             | **correct** | Adrian Tchaikovsky.                                                                                      |
-| 9   | How long did Adrian write unsuccessfully?                     | incorrect   | Multi-hop / facet not recalled.                                                                          |
+| #   | Question                                                      | Grade       | Note                                                                                                         |
+| --- | ------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| 1   | List all books                                                | incorrect   | Type path returns a book list; oracle is "NOT IN TRANSCRIPT" so any list grades wrong (grading artifact).     |
+| 2   | List all books and movies                                     | **correct** | Union path lists both books and movies.                                                                       |
+| 3   | List all books that are also movies                           | incorrect   | Intersection returns empty — no extracted entity carries **both** `book` and `movie` types (extraction gap).  |
+| 4   | Anything on the novel _Empire in Black and Gold_?             | **correct** | "Novel by Adrian Tchaikovsky, 2008" — recovered by the softened grounding prompt.                            |
+| 5   | Anything on _Empire of Black and Gold_ or _Children of Ruin_? | incorrect   | OR-split **works** (retrieves Children of Ruin), but oracle is "NOT IN TRANSCRIPT" (grading artifact).        |
+| 6   | Name of the podcast?                                          | partial     | "Behind the Tech" (missing "with Kevin Scott").                                                              |
+| 7   | Who hosts the podcast?                                        | incorrect   | "Christina Warren and Kevin Scott" — extraction fidelity issue (a wrong host is stored), not grounding.       |
+| 8   | Who is the guest?                                             | **correct** | Adrian Tchaikovsky — recovered by the softened grounding prompt.                                             |
+| 9   | How long did Adrian write unsuccessfully?                     | incorrect   | The "7 years" facet was not captured at extraction time, so there is nothing to surface.                      |
 
-By difficulty: easy 38%, moderate 33%, hard 0%.
+By difficulty: easy 38%, moderate 67%, hard 0%.
 
-These remaining misses are **genuine REM v1 quality limitations, not bugs**.
+The remaining misses are **extraction/recall fidelity gaps or grading artifacts,
+not answer-path bugs** — see §6.
 
 ---
 
@@ -261,28 +266,29 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-_All of this session's recall/answer-quality items are addressed (see §4). What
-remains are eval re-runs to quantify the gains and the deferred integration
-work below._
+_This session's answer-path items are done and verified by a live re-run (§5,
+39%). What remains are upstream extraction-fidelity gaps and the deferred
+integration work below._
 
-1. **Re-run the live eval** — the §5 table predates this session's six fixes
-   (intersection, fuzzy, OR-splitting, facet surfacing, grounding). Re-run the
-   curated Episode 53 set to measure the new score; several of the prior misses
-   (Q3 intersection, Q5 OR+typo, Q7 grounding, Q9 facet) should now improve.
+1. **Extraction fidelity** — the clearest remaining quality losses are at
+   extraction time, not in recall/answer: Q7 stores a wrong host ("Christina
+   Warren"), Q3 never tags an entity as both `book` and `movie`, and Q9 drops
+   the "7 years unsuccessful" facet. Consider an extraction-quality pass
+   (better prompt, facet capture, host/role disambiguation).
 
 ### Deferred (todo #14)
 
-6. **KnowPro adapter** — `KnowProSystem implements MemorySystem` that loads the
+2. **KnowPro adapter** — `KnowProSystem implements MemorySystem` that loads the
    prebuilt `Episode_53_AdrianTchaikovsky_index_data.json` +
    `_index_embeddings.bin`, so the eval can run REM **vs** KnowPro head-to-head.
-7. **MCP tools** `rem_recall` / `rem_answer` in `commandServer.ts addTools()`
+3. **MCP tools** `rem_recall` / `rem_answer` in `commandServer.ts addTools()`
    (hollow until a populated `RemMemory` data source is wired up).
 
 ### Eval methodology
 
-8. Run with `--generate N` for a larger, auto-generated question set (not just
+4. Run with `--generate N` for a larger, auto-generated question set (not just
    the 9 curated) to get a more stable score.
-9. The oracle returns "NOT IN TRANSCRIPT" for "list all books" (Q1) which then
+5. The oracle returns "NOT IN TRANSCRIPT" for "list all books" (Q1) which then
    grades REM's real list as incorrect — revisit oracle handling of
    aggregation questions, or mark such questions as curated-with-answers.
 

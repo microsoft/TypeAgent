@@ -102,12 +102,15 @@ describe("filterByWeight", () => {
 });
 
 describe("SYSTEM_PROMPT grounding", () => {
-    test("forbids introducing details not present in the facts", () => {
+    test("answers only from the facts without adding unsupported details", () => {
         // Guards the anti-hallucination contract: answers must stay inside the
-        // recalled facts and never add names from general knowledge.
-        expect(SYSTEM_PROMPT).toContain("ONLY the facts");
-        expect(SYSTEM_PROMPT).toContain("verbatim");
-        expect(SYSTEM_PROMPT).toContain("Never introduce a name");
-        expect(SYSTEM_PROMPT).toContain("infer, combine, or extrapolate");
+        // recalled facts and never add names from general knowledge, while
+        // still allowing the model to read/combine the facts to answer.
+        expect(SYSTEM_PROMPT).toContain("ONLY the information in the MEMORY");
+        expect(SYSTEM_PROMPT).toContain("read, interpret, and combine");
+        expect(SYSTEM_PROMPT).toContain(
+            "do not add any name, entity, or detail",
+        );
+        expect(SYSTEM_PROMPT).toContain("speculate beyond");
     });
 });
