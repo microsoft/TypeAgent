@@ -1,0 +1,250 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { describe, it, expect, afterEach, jest } from "@jest/globals";
+import { ChatPanel } from "../src/chatPanel.js";
+import { iconStop, iconJumpQueue, iconX } from "../src/icons.js";
+
+// chat-ui is DOM-rendering; these tests run under jsdom (see jest.config.cjs)
+// and assert the DOM produced by the status-rail / roadrunner affordances.
+
+type HiddenHook = (
+    requestId: { requestId: string },
+    target: "user" | "agent",
+    hidden: boolean,
+) => void;
+
+function makePanel(opts?: {
+    onCancel?: (requestId: string) => void;
+    onFeedbackHidden?: HiddenHook;
+}) {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const panel = new ChatPanel(root, {
+        platformAdapter: { handleLinkClick() {} },
+        onCancel: opts?.onCancel,
+        onFeedbackHidden: opts?.onFeedbackHidden,
+    });
+    return { root, panel };
+}
+
+function userBubble(root: HTMLElement, requestId: string): HTMLElement {
+    const container = root.querySelector<HTMLElement>(
+        `[data-request-id="${requestId}"]`,
+    );
+    if (!container) throw new Error(`no user bubble for ${requestId}`);
+    return container;
+}
+
+function userRail(root: HTMLElement, requestId: string): HTMLElement | null {
+    return userBubble(root, requestId).querySelector<HTMLElement>(
+        ".chat-message-user > .chat-message-status-rail",
+    );
+}
+
+function agentRail(root: HTMLElement): HTMLElement | null {
+    return root.querySelector<HTMLElement>(
+        ".chat-message-agent > .chat-message-status-rail",
+    );
+}
+
+afterEach(() => {
+    document.body.replaceChildren();
+});
+
+describe("user status rail — queue state", () => {
+    it("queued: renders 'queued' label + jump + remove, wiring callbacks", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+
+        const onCancel = jest.fn();
+        const onPromote = jest.fn();
+        panel.setUserBubbleQueueStatus("req-1", "queued", onCancel, onPromote);
+
+        const rail = userRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.dataset.status).toBe("queued");
+        expect(rail!.querySelector(".chat-status-state")!.textContent).toContain(
+            "queued",
+        );
+
+        const jump = rail!.querySelector<HTMLButtonElement>(
+            '[data-action="jump-queue"]',
+        );
+        const remove = rail!.querySelector<HTMLButtonElement>(
+            '[data-action="remove-from-queue"]',
+        );
+        expect(jump).not.toBeNull();
+        expect(remove).not.toBeNull();
+
+        jump!.click();
+        expect(onPromote).toHaveBeenCalledTimes(1);
+        remove!.click();
+        expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("running: shows 'sent' label and no queue controls", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+
+        panel.setUserBubbleQueueStatus("req-1", "running", jest.fn(), jest.fn());
+
+        const rail = userRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.dataset.status).toBe("running");
+        // The wire status is "running" but the user-facing label reads "sent".
+        const stateText = rail!.querySelector(".chat-status-state")!.textContent;
+        expect(stateText).toContain("sent");
+        expect(stateText).not.toContain("running");
+        expect(
+            rail!.querySelector('[data-action="jump-queue"]'),
+        ).toBeNull();
+        expect(
+            rail!.querySelector('[data-action="remove-from-queue"]'),
+        ).toBeNull();
+    });
+
+    it("null: clears the state (rail removed when no trash is wired)", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "queued", jest.fn(), jest.fn());
+        expect(userRail(root, "req-1")).not.toBeNull();
+
+        panel.setUserBubbleQueueStatus("req-1", null);
+        expect(userRail(root, "req-1")).toBeNull();
+    });
+});
+
+describe("user status rail — trash affordance", () => {
+    it("renders a trash button when a hide hook is wired and hides on click", () => {
+        const onFeedbackHidden = jest.fn();
+        const { root, panel } = makePanel({ onFeedbackHidden });
+        panel.addUserMessage("hello", "req-1");
+
+        const rail = userRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        const trash = rail!.querySelector<HTMLButtonElement>(
+            '[data-action="trash-user"]',
+        );
+        expect(trash).not.toBeNull();
+
+        trash!.click();
+        expect(onFeedbackHidden).toHaveBeenCalledWith(
+            { requestId: "req-1" },
+            "user",
+            true,
+        );
+        expect(
+            userBubble(root, "req-1").classList.contains("chat-message-trashed"),
+        ).toBe(true);
+    });
+
+    it("keeps the trash button after queue state is cleared", () => {
+        const { root, panel } = makePanel({ onFeedbackHidden: jest.fn() });
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "queued", jest.fn(), jest.fn());
+        panel.setUserBubbleQueueStatus("req-1", null);
+
+        const rail = userRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.dataset.status).toBeUndefined();
+        expect(
+            rail!.querySelector('[data-action="trash-user"]'),
+        ).not.toBeNull();
+        // Queue controls must be gone even though the trash-bearing rail stays.
+        expect(rail!.querySelector('[data-action="jump-queue"]')).toBeNull();
+        expect(
+            rail!.querySelector('[data-action="remove-from-queue"]'),
+        ).toBeNull();
+    });
+});
+
+describe("agent running rail", () => {
+    it("stamps a 'working' rail + Stop once the agent bubble materializes", () => {
+        const onCancel = jest.fn();
+        const { root, panel } = makePanel({ onCancel });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+
+        // No agent bubble yet → no agent rail.
+        expect(agentRail(root)).toBeNull();
+
+        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+
+        const rail = agentRail(root);
+        expect(rail).not.toBeNull();
+        expect(rail!.dataset.status).toBe("running");
+        expect(rail!.querySelector(".chat-status-state")!.textContent).toContain(
+            "working",
+        );
+
+        const stop = rail!.querySelector<HTMLButtonElement>(
+            '[data-action="stop"]',
+        );
+        expect(stop).not.toBeNull();
+        stop!.click();
+        expect(onCancel).toHaveBeenCalledWith("req-1");
+    });
+
+    it("completeRequest removes the working rail", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+        expect(agentRail(root)).not.toBeNull();
+
+        panel.completeRequest("req-1");
+        expect(agentRail(root)).toBeNull();
+    });
+
+    it("setIdle removes the working rail", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage("response", "agent", undefined, undefined, "req-1");
+        expect(agentRail(root)).not.toBeNull();
+
+        panel.setIdle();
+        expect(agentRail(root)).toBeNull();
+    });
+});
+
+describe("roadrunner (explained) placement", () => {
+    it("anchors the icon inside the content and tooltip on the bubble body", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("what's on my calendar?", "req-1");
+
+        panel.notifyExplained("req-1", {
+            fromCache: "construction",
+            fromUser: false,
+            time: "12:00:00 PM",
+        });
+
+        const bubble = userBubble(root, "req-1");
+        const content = bubble.querySelector<HTMLElement>(
+            ".chat-message-content",
+        )!;
+        // Icon lives inside the content bubble (with the command text).
+        expect(content.classList.contains("chat-message-explained-host")).toBe(
+            true,
+        );
+        expect(
+            content.querySelector(".chat-message-explained-icon"),
+        ).not.toBeNull();
+
+        // Tooltip host is the bubble body (which doesn't clip overflow).
+        const body = bubble.querySelector<HTMLElement>(".chat-message-user")!;
+        expect(body.classList.contains("chat-message-explained")).toBe(true);
+        expect(body.getAttribute("data-expl")).toBeTruthy();
+    });
+});
+
+describe("icons", () => {
+    it("each affordance icon renders an <svg> inside an <i> wrapper", () => {
+        for (const make of [iconStop, iconJumpQueue, iconX]) {
+            const el = make();
+            expect(el.tagName).toBe("I");
+            expect(el.querySelector("svg")).not.toBeNull();
+        }
+    });
+});

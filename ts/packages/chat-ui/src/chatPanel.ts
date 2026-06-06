@@ -1735,13 +1735,18 @@ export class ChatPanel {
         const { rail, stateZone, controls } = parts;
 
         // Reset the state label and any prior queue controls, but leave the
-        // persistent trash button untouched.
+        // persistent trash button untouched. Iterate children explicitly
+        // rather than a `:scope >` selector list (more robust across DOM
+        // implementations).
         stateZone.replaceChildren();
-        controls
-            .querySelectorAll(
-                ":scope > .chat-queue-jump-button, :scope > .chat-queue-cancel-button",
-            )
-            .forEach((n) => n.remove());
+        for (const child of Array.from(controls.children)) {
+            if (
+                child.classList.contains("chat-queue-jump-button") ||
+                child.classList.contains("chat-queue-cancel-button")
+            ) {
+                child.remove();
+            }
+        }
 
         if (status === null) {
             delete rail.dataset.status;
@@ -1774,7 +1779,7 @@ export class ChatPanel {
         // right-most.
         if (status === "queued") {
             const trash = controls.querySelector<HTMLElement>(
-                ":scope > .chat-user-trash",
+                ".chat-user-trash",
             );
             if (onPromote) {
                 const jump = document.createElement("button");
