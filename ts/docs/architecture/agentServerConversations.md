@@ -261,6 +261,18 @@ All HTML interpolated into either path is escaped via a local `escapeHtml()` (ma
 
 See `packages/vscode-shell/src/agentServerBridge.ts` (`handleManageConversation`, `connectImpl`) and `packages/vscode-shell/src/extension.ts` for the implementation.
 
+### Browser Extension
+
+The browser extension (`packages/agents/browser/src/extension`) is a Chrome MV3 extension that runs in **connected mode only** — its service worker maintains a WebSocket to the agentServer. The chat panel surfaces the same `@conversation` slash commands and NL phrases as the Shell and CLI.
+
+The chat panel forwards the dispatcher's `manage-conversation` `takeAction` payload to the service worker via a `chatPanelManageConversation` invoke RPC. The service worker (`extension/serviceWorker/dispatcherConnection.ts`) implements all eight subcommands (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`, `delete`) against `AgentServerInvokeFunctions` and returns a rendered HTML message plus a `switched` flag.
+
+When `switched` is set, the chat panel clears its DOM and re-runs `loadSessionHistory()` (mirroring the Shell's `replayDisplayHistory` on `conversationChanged`), then renders the confirmation message so it lands after the replayed history. Live display events arriving during the replay are queued via a `runOrDefer` gate and flushed in order on completion.
+
+Switching follows the bind-new → leave-old → delete-old-channels ordering used by `agentServerClient.ts` and the CLI's `commands/connect.ts`: if the new join throws, the existing dispatcher and channels stay live so the user can retry. The chat panel joins with `filter: false` (matching Shell), so display events from peer clients (Shell or CLI joined to the same conversation) are also visible.
+
+See `packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts` (`bindToConversation`, `switchToConversationId`, `manageConversation`) and `packages/agents/browser/src/extension/views/chatPanel.ts` (`dispatcherTakeAction`, `runOrDefer`, `loadSessionHistory`) for the implementation.
+
 ---
 
 ## Natural Language Conversation Management
