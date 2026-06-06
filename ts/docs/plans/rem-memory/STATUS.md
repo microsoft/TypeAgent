@@ -12,13 +12,14 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **39/39 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **43/43 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
 - **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
 - This session added **set-intersection recall** ("books that are also movies"),
   made **extraction failures observable** (the feeder no longer silently swallows
-  empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**, and
-  added **multi-entity OR-query splitting**. See §4.
+  empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**,
+  added **multi-entity OR-query splitting**, and now **surfaces entity facets**
+  into the answer context. See §4.
 
 ---
 
@@ -163,6 +164,21 @@ match every keyword and both entities scored poorly. Added clause splitting:
   `splitOrClauses` helper).
 - SECURITY unchanged: matching stays in JS over a fixed-query result set.
 
+### (e) Surface entity facets into the answer context — `answer.ts`
+
+Facets (e.g. "unsuccessful writing: 7 years") are stored on entities and ride
+along on resolver-backed recall results, but `formatContext()` rendered only
+subject–predicate–object and dropped them, so attribute / multi-hop questions
+could never be answered. Now:
+
+- `formatContext()` appends an **`ENTITY DETAILS:`** section listing each
+  distinct recalled entity's facets (`name: value; ...`), deduped by entity id
+  so an entity appearing in several relations is listed once.
+- The section is omitted entirely when no recalled entity has facets (so
+  existing facet-free output is byte-for-byte unchanged).
+- New `test/answer.spec.ts` with 4 unit tests (empty, no-facets, with-facets,
+  dedupe). `formatContext` is pure, so these run offline without the LLM.
+
 ---
 
 ## 4b. Changes From The Prior Session
@@ -227,10 +243,7 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-1. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
-   are stored but not surfaced into the answer context. Consider including entity
-   facets in recall results.
-2. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
+1. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
    prompt and/or only pass high-confidence facts.
 
 ### Deferred (todo #14)

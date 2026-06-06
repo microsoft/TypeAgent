@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChatModel, openai } from "aiclient";
-import { RecallResult } from "./model.js";
+import { Facet, RecallResult } from "./model.js";
 import { RemMemory } from "./ingest.js";
 
 // REM's native, end-to-end answer path: recall the most relevant relations,
@@ -37,17 +37,43 @@ const SYSTEM_PROMPT = [
     "Be concise and do not invent information.",
 ].join(" ");
 
+/** Render an entity's facets as a compact "name: value; ..." string. */
+function formatFacets(facets: Facet[]): string {
+    return facets.map((f) => `${f.name}: ${f.value}`).join("; ");
+}
+
 /** Render recalled relations as a compact, numbered fact list. */
 export function formatContext(results: RecallResult[]): string {
     if (results.length === 0) {
         return "(no relevant facts in memory)";
     }
-    return results
-        .map((r, i) => {
-            const predicate = r.relation.predicate.replace(/_/g, " ");
-            return `${i + 1}. ${r.subject.name} — ${predicate} — ${r.object.name} (strength ${r.weight.toFixed(2)}, source ${r.tier})`;
-        })
-        .join("\n");
+    const relationLines = results.map((r, i) => {
+        const predicate = r.relation.predicate.replace(/_/g, " ");
+        return `${i + 1}. ${r.subject.name} — ${predicate} — ${r.object.name} (strength ${r.weight.toFixed(2)}, source ${r.tier})`;
+    });
+
+    // Surface entity facets (e.g. "unsuccessful writing: 7 years") once per
+    // distinct entity, so multi-hop / attribute questions can be answered.
+    // Facets ride on resolver-backed recall entities but were previously
+    // dropped here, never reaching the model.
+    const detailLines: string[] = [];
+    const seen = new Set<string>();
+    for (const r of results) {
+        for (const entity of [r.subject, r.object]) {
+            if (entity.facets.length === 0 || seen.has(entity.id)) {
+                continue;
+            }
+            seen.add(entity.id);
+            detailLines.push(
+                `- ${entity.name}: ${formatFacets(entity.facets)}`,
+            );
+        }
+    }
+
+    if (detailLines.length === 0) {
+        return relationLines.join("\n");
+    }
+    return `${relationLines.join("\n")}\n\nENTITY DETAILS:\n${detailLines.join("\n")}`;
 }
 
 /** Create the default chat model used for REM answers. */
