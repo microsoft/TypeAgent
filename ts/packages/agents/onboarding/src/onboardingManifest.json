@@ -1,7 +1,7 @@
 {
   "emojiChar": "🛠️",
   "description": "Agent for onboarding new applications and APIs into TypeAgent",
-  "defaultEnabled": false,
+  "defaultEnabled": true,
   "schema": {
     "description": "Top-level onboarding coordination: start, resume, and check status of integration onboarding workflows",
     "originalSchemaFile": "./onboardingSchema.ts",
