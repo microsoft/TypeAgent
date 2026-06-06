@@ -1699,6 +1699,18 @@ async function questionWithCompletion(
                     inputLine += chalk.dim(suggestion + counter);
                 }
             }
+            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
+            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
+            // additional visual rows, the terminal-driven wrap only writes from
+            // col 1 up to the overflow length on each continuation row, leaving
+            // the trailing columns populated with stale characters from
+            // previous frames (e.g., the bottom rule that used to occupy this
+            // row before inputRows grew, or a longer prior input that has since
+            // been shortened).  Clearing here removes that visual fluff while
+            // keeping the actual input string untouched.
+            for (let r = 2; r <= inputRows; r++) {
+                layout.drawFixed(r, "");
+            }
             layout.drawFixed(1, inputLine);
 
             // Bottom rule
