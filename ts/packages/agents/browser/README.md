@@ -28,6 +28,15 @@ To build the browser extension, run `pnpm run build` in this folder. For debug s
    - go back
    - etc.
 
+## Chat panel
+
+The extension's chat panel supports the same `@conversation` slash
+commands and natural-language conversation management as the Shell and
+CLI (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`,
+`delete`). Switching, creating, or moving between conversations clears
+the panel and replays the new conversation's history, so peer activity
+from a Shell or CLI joined to the same conversation is also visible.
+
 ## Architecture
 
 ### Agent WebSocket Server

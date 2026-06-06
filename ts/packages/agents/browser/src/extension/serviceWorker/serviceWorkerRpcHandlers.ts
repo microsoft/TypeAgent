@@ -12,6 +12,8 @@ import { screenshotCoordinator } from "./screenshotCoordinator";
 import {
     connectToDispatcher,
     isDispatcherConnected,
+    manageConversation,
+    awaitConversationOps,
 } from "./dispatcherConnection";
 import {
     startRecording,
@@ -225,6 +227,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async chatPanelProcessCommand(params: any) {
             try {
+                // Wait for any in-flight conversation switch to finish so the
+                // prompt is routed to the new dispatcher, not an old one
+                // whose channel is about to be torn down.
+                await awaitConversationOps();
                 const dispatcher = await connectToDispatcher();
                 const result = await awaitCommand(
                     dispatcher,
@@ -241,6 +247,11 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 );
                 return { error: error?.message || "Command failed" };
             }
+        },
+
+        async chatPanelManageConversation(params: any) {
+            await connectToDispatcher();
+            return manageConversation(params);
         },
 
         async chatPanelGetCompletions(params: any) {

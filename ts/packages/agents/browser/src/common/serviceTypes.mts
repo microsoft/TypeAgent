@@ -369,6 +369,23 @@ export type ChatPanelInvokeFunctions = {
         actionName: string;
         actionDescription: string;
     }): Promise<{ success: boolean; flowName?: string; error?: string }>;
+
+    // @conversation slash commands and NL conversation actions. Returns
+    // an HTML message the chat panel renders inline; `switched` signals
+    // that the active conversation changed and history should be reloaded.
+    chatPanelManageConversation(params: {
+        subcommand:
+            | "new"
+            | "list"
+            | "info"
+            | "switch"
+            | "prev"
+            | "next"
+            | "rename"
+            | "delete";
+        name?: string;
+        newName?: string;
+    }): Promise<{ kind: "ok" | "error"; html: string; switched?: boolean }>;
 };
 
 // =============================================
