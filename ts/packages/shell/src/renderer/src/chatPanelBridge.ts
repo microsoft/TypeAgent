@@ -679,7 +679,10 @@ export function createChatPanelClient(
                                 label,
                                 value: index,
                             })),
-                            { defaultValue: interaction.defaultId },
+                            {
+                                defaultValue: interaction.defaultId,
+                                signal: ac.signal,
+                            },
                         );
                         response = {
                             interactionId: interaction.interactionId,
@@ -715,6 +718,9 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort({ kind: "resolved-by-other" });
+                chatPanel.addSystemMessage(
+                    "Interaction answered by another client.",
+                );
             }
         },
         interactionCancelled: (interactionId) => {
@@ -722,6 +728,7 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort("cancelled");
+                chatPanel.addSystemMessage("Interaction cancelled.");
             }
         },
         takeAction: (_requestId, action, data) => {

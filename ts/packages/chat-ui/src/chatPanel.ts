@@ -2708,9 +2708,19 @@ export class ChatPanel {
     public addChoicePrompt<T>(
         message: string,
         choices: ChoiceOption<T>[],
-        opts?: { defaultValue?: T },
+        opts?: { defaultValue?: T; signal?: AbortSignal },
     ): Promise<T> {
-        return new Promise<T>((resolve) => {
+        return new Promise<T>((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
             const container = this.createAgentContainer("system", "");
             container.setMessage(
                 { type: "text", content: message },
@@ -2724,11 +2734,22 @@ export class ChatPanel {
             const cleanup = () => {
                 buttonDiv.remove();
                 document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
             };
 
             const choose = (value: T) => {
                 cleanup();
                 resolve(value);
+            };
+
+            // Allow the host to dismiss the prompt externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                reject(
+                    signal?.reason ??
+                        new DOMException("Aborted", "AbortError"),
+                );
             };
 
             const keyHandler = (e: KeyboardEvent) => {
@@ -2753,6 +2774,7 @@ export class ChatPanel {
                 buttonDiv.appendChild(btn);
             }
 
+            signal?.addEventListener("abort", onAbort, { once: true });
             document.addEventListener("keydown", keyHandler);
             container.appendElement(buttonDiv);
             this.scrollToBottom();
@@ -3355,10 +3377,14 @@ export class ChatPanel {
             return;
         }
         this.textInput.contentEditable = enabled ? "true" : "false";
-        this.sendButton.disabled = !enabled;
         if (enabled) {
+            // Reflect the current input contents rather than force-enabling:
+            // an empty input must keep Send disabled even once the dispatcher
+            // re-enables interaction.
+            this.updateSendButtonState();
             this.inputArea.classList.remove("chat-input-disabled");
         } else {
+            this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
             // No commands can be in flight when input is disabled (typically
             // because the dispatcher disconnected). Hide the stop button so
@@ -3514,10 +3540,11 @@ export class ChatPanel {
      */
     private setEnabledInternal(enabled: boolean) {
         this.textInput.contentEditable = enabled ? "true" : "false";
-        this.sendButton.disabled = !enabled;
         if (enabled) {
+            this.updateSendButtonState();
             this.inputArea.classList.remove("chat-input-disabled");
         } else {
+            this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
         }
     }

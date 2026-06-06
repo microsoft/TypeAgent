@@ -8,7 +8,7 @@ import { runTestCallback } from "./testHelper";
 test.describe.configure({ mode: "serial" });
 
 const inputSelector = "#phraseDiv";
-const toggleSelector = ".chat-input > .completion-toggle";
+const toggleSelector = ".chat-input .completion-toggle";
 
 /**
  * Types text character-by-character into the chat input to trigger
