@@ -69,6 +69,92 @@ let currentSpinner: EnhancedSpinner | null = null;
 // Wire up the debug interceptor's spinner access
 setSpinnerAccessor(() => currentSpinner);
 
+// ── Terminal lifecycle (alt screen buffer + exit cleanup) ─────────────────
+//
+// The interactive CLI runs inside the terminal's alternate screen buffer
+// (the same mode used by vim, less, htop, etc.).  All session output, the
+// scroll region, and the fixed prompt area live in the alt buffer; on
+// exit the terminal automatically restores whatever was on the main
+// buffer before the CLI started.
+//
+// This avoids the previous behavior where the CLI's scroll region, fixed
+// prompt frame, and in-flight async writes were left scattered across the
+// parent shell's terminal after exit (regardless of which exit path —
+// /exit, Ctrl+C, server disconnect, /shutdown, etc. — was taken).
+
+let altScreenActive = false;
+let exitHandlerRegistered = false;
+let pendingExitMessage: string | undefined;
+
+function isInteractiveTty(): boolean {
+    return Boolean(process.stdout.isTTY && process.stdin.isTTY);
+}
+
+function enterAltScreen(): void {
+    if (altScreenActive || !isInteractiveTty()) return;
+    altScreenActive = true;
+    // \x1b[?1049h — save cursor, switch to alt screen, clear it.
+    process.stdout.write("\x1b[?1049h");
+    if (!exitHandlerRegistered) {
+        exitHandlerRegistered = true;
+        // Fires on normal exit and on process.exit().  Synchronous: any
+        // writes here are flushed before the process actually exits.
+        process.on("exit", exitAltScreen);
+    }
+}
+
+function exitAltScreen(): void {
+    if (!altScreenActive) return;
+    altScreenActive = false;
+    try {
+        if (currentSpinner) {
+            try {
+                currentSpinner.stop();
+            } catch {
+                // ignore
+            }
+            currentSpinner = null;
+        }
+        if (terminalLayout?.isActive) {
+            try {
+                terminalLayout.cleanup();
+            } catch {
+                // ignore
+            }
+        }
+        // Reset scroll region, show cursor, leave alt screen (restores
+        // the main buffer to its pre-CLI state and pops the saved cursor).
+        process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
+        if (process.stdin.isTTY) {
+            try {
+                process.stdin.setRawMode(false);
+            } catch {
+                // ignore
+            }
+        }
+        if (pendingExitMessage) {
+            try {
+                process.stderr.write(pendingExitMessage + "\n");
+            } catch {
+                // ignore
+            }
+            pendingExitMessage = undefined;
+        }
+    } catch {
+        // Exit handlers must never throw.
+    }
+}
+
+/**
+ * Queue a message to be printed on the main terminal buffer immediately
+ * after the CLI exits its alternate screen.  Useful for explaining why
+ * the CLI exited (e.g., "Disconnected from dispatcher") without having
+ * the message lost when the alt buffer is torn down.
+ */
+export function setPendingExitMessage(message: string): void {
+    pendingExitMessage = message;
+}
+
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
@@ -2230,6 +2316,13 @@ export async function withEnhancedConsoleClientIO(
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
+
+    // Run the entire interactive session inside the terminal's alternate
+    // screen buffer.  The exit handler registered here restores the main
+    // buffer on every exit path (normal /exit, Ctrl+C, server disconnect,
+    // /shutdown, etc.), so the parent shell never sees the CLI's leftover
+    // scroll region, fixed prompt frame, or post-cleanup async writes.
+    enterAltScreen();
 
     try {
         const dispatcherRef: { current?: Dispatcher } = {};

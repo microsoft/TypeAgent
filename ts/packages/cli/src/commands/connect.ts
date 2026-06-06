@@ -12,6 +12,7 @@ import {
     withEnhancedConsoleClientIO,
     applyQueueSnapshot,
     clearRecentSubmissions,
+    setPendingExitMessage,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
@@ -191,7 +192,10 @@ export default class Connect extends Command {
             const url = `ws://localhost:${flags.port}`;
 
             const onDisconnect = () => {
-                console.error("Disconnected from dispatcher");
+                // Print on the restored main buffer (after the alt screen
+                // is torn down by the exit handler) so the user sees why
+                // the CLI exited rather than a blank shell prompt.
+                setPendingExitMessage("Disconnected from dispatcher");
                 process.exit(1);
             };
 
