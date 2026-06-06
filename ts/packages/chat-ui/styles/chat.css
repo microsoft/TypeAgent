@@ -905,10 +905,9 @@ table.table-message td {
 /* Slim strip across the top of a bubble. Lives at the top so it never
    collides with the hover-revealed metrics strip that slides out of the
    bubble's bottom edge. On the user bubble it carries the queue state
-   (queued/sent) + controls (jump / remove / trash); on the agent bubble it
-   carries the "working" state + a Stop button. Always present on the user's
-   own messages (when a hide hook is wired) so the hover trash is available
-   even when idle; the tint + divider only appear with a state. */
+   (queued/sent) + controls (jump / remove); on the agent bubble it carries
+   the "working" state + a Stop button. Created on demand and removed when
+   the state clears, so an idle bubble shows no empty title row. */
 .chat-message-status-rail {
   display: flex;
   align-items: center;
@@ -931,17 +930,16 @@ table.table-message td {
   background: rgba(233, 168, 0, 0.09);
 }
 
-/* Square off the top of the content only when the rail is showing a state,
-   so the two read as one bubble. An idle (trash-only) rail leaves the
-   content's rounded top intact. */
+/* Square off the top of the content so the rail and content read as one
+   bubble. The rail only exists while a state is showing. */
 .chat-message-user:has(> .chat-message-status-rail[data-status])
   .chat-message-content {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
 
-/* Agent bubble carries the same rail while the request is "working". The
-   agent body has no avatar/trash, just the spinner label + Stop. */
+/* Agent bubble carries the same rail while the request is "working":
+   just the spinner label + Stop. */
 .chat-message-agent:has(> .chat-message-status-rail[data-status])
   .chat-message-content {
   border-top-left-radius: 0;
@@ -1025,21 +1023,9 @@ table.table-message td {
   width: 14px;
   height: 14px;
 }
-.chat-message-status-rail .chat-action-button.danger:hover,
-.chat-message-status-rail .chat-user-trash:hover {
+.chat-message-status-rail .chat-action-button.danger:hover {
   background: rgba(192, 57, 43, 0.14);
   color: #c0392b;
-}
-
-/* The trash is only meaningful on hover — keep it quiet until the user
-   mouses the bubble (or focuses it for keyboard access). */
-.chat-user-trash {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.chat-message-container-user:hover .chat-user-trash,
-.chat-user-trash:focus-visible {
-  opacity: 1;
 }
 
 /* =========================================================================

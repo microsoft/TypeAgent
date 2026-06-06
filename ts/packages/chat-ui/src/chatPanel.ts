@@ -64,7 +64,7 @@ import type {
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import { iconX, iconJumpQueue, iconTrash, iconStop } from "./icons.js";
+import { iconX, iconJumpQueue, iconStop } from "./icons.js";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -1631,10 +1631,10 @@ export class ChatPanel {
     /**
      * Ensure the user bubble's status rail exists and return its zones.
      * The rail is a slim strip across the top of the bubble with a left
-     * "state" zone (queued/sent label) and a right "controls" zone. When a
-     * hide hook is wired, a persistent (hover-revealed) trash button is
-     * placed in the controls zone so any message can be hidden for
-     * screenshots/recordings. Returns `undefined` if the bubble is gone.
+     * "state" zone (queued/sent label) and a right "controls" zone. It is
+     * created on demand only when there's a queue state to show — there is
+     * no persistent/idle rail (an empty title row), matching the agent
+     * bubble. Returns `undefined` if the bubble is gone.
      */
     private ensureUserStatusRail(requestId: string):
         | {
@@ -1659,23 +1659,6 @@ export class ChatPanel {
             const controls = document.createElement("span");
             controls.className = "chat-status-rail-controls";
             rail.append(stateZone, controls);
-            // Persistent trash (hover-revealed) when the host wired a hide
-            // hook. Lets the user hide their own message for clean captures.
-            if (this.onFeedbackHidden) {
-                const trash = document.createElement("button");
-                trash.type = "button";
-                trash.className = "chat-action-button chat-user-trash";
-                trash.dataset.action = "trash-user";
-                trash.title = "Move to trash";
-                trash.setAttribute("aria-label", "Move message to trash");
-                trash.appendChild(iconTrash());
-                trash.addEventListener("click", (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.hideUserMessage(requestId);
-                });
-                controls.appendChild(trash);
-            }
             bodyDiv.insertBefore(rail, bodyDiv.firstChild);
         }
         const stateZone = rail.querySelector<HTMLElement>(
@@ -1685,25 +1668,6 @@ export class ChatPanel {
             ":scope > .chat-status-rail-controls",
         )!;
         return { rail, stateZone, controls };
-    }
-
-    /**
-     * Optimistically hide ("trash") a user message and notify the host's
-     * hide hook. The container collapses via the `chat-message-trashed`
-     * animation; on callback failure the state is reverted.
-     */
-    private hideUserMessage(requestId: string): void {
-        const hide = this.onFeedbackHidden;
-        if (!hide) return;
-        const container = this.userMessageById.get(requestId);
-        if (!container) return;
-        container.classList.add("chat-message-trashed");
-        try {
-            hide({ requestId }, "user", true);
-        } catch (e) {
-            container.classList.remove("chat-message-trashed");
-            console.error("onFeedbackHidden (user) callback failed", e);
-        }
     }
 
     /**
@@ -1718,11 +1682,12 @@ export class ChatPanel {
      * once the request is dispatched, cancelling its in-flight action
      * belongs on the agent message, not the user bubble.
      *
-     * The persistent trash button (when present) is preserved across calls.
-     * The rail lives at the top so it never collides with the
-     * hover-revealed metrics strip that slides out of the bubble's bottom
-     * edge, and the roadrunner ("explained") icon sits inside the content
-     * corner rather than this rail.
+     * The rail is created on demand and removed when the state clears, so an
+     * idle user bubble shows no empty title row (matching the agent bubble).
+     * It lives at the top so it never collides with the hover-revealed
+     * metrics strip that slides out of the bubble's bottom edge, and the
+     * roadrunner ("explained") icon sits inside the content corner rather
+     * than this rail.
      */
     public setUserBubbleQueueStatus(
         requestId: string,
@@ -1730,32 +1695,25 @@ export class ChatPanel {
         onCancel?: () => void,
         onPromote?: () => void,
     ): void {
+        // Nothing to do on a clear when no rail exists — avoids creating an
+        // empty rail just to remove it.
+        if (status === null) {
+            const container = this.userMessageById.get(requestId);
+            container
+                ?.querySelector(
+                    ".chat-message-user > .chat-message-status-rail",
+                )
+                ?.remove();
+            return;
+        }
+
         const parts = this.ensureUserStatusRail(requestId);
         if (!parts) return;
         const { rail, stateZone, controls } = parts;
 
-        // Reset the state label and any prior queue controls, but leave the
-        // persistent trash button untouched. Iterate children explicitly
-        // rather than a `:scope >` selector list (more robust across DOM
-        // implementations).
+        // Reset the state label and any prior queue controls.
         stateZone.replaceChildren();
-        for (const child of Array.from(controls.children)) {
-            if (
-                child.classList.contains("chat-queue-jump-button") ||
-                child.classList.contains("chat-queue-cancel-button")
-            ) {
-                child.remove();
-            }
-        }
-
-        if (status === null) {
-            delete rail.dataset.status;
-            // Drop the rail entirely if nothing (not even a trash) remains.
-            if (controls.childElementCount === 0) {
-                rail.remove();
-            }
-            return;
-        }
+        controls.replaceChildren();
 
         rail.dataset.status = status;
 
@@ -1774,13 +1732,8 @@ export class ChatPanel {
         state.append(indicator, label);
         stateZone.appendChild(state);
 
-        // Queued entries can be promoted ("run next") or removed. New
-        // controls go before the persistent trash so the trash stays
-        // right-most.
+        // Queued entries can be promoted ("run next") or removed.
         if (status === "queued") {
-            const trash = controls.querySelector<HTMLElement>(
-                ".chat-user-trash",
-            );
             if (onPromote) {
                 const jump = document.createElement("button");
                 jump.type = "button";
@@ -1794,7 +1747,7 @@ export class ChatPanel {
                     e.stopPropagation();
                     onPromote();
                 });
-                controls.insertBefore(jump, trash);
+                controls.appendChild(jump);
             }
             if (onCancel) {
                 const btn = document.createElement("button");
@@ -1810,7 +1763,7 @@ export class ChatPanel {
                     e.stopPropagation();
                     onCancel();
                 });
-                controls.insertBefore(btn, trash);
+                controls.appendChild(btn);
             }
         }
     }
@@ -1905,14 +1858,6 @@ export class ChatPanel {
             // without a requestId. Remote bubbles must NOT take over
             // thread routing — they belong to peers.
             this.currentUserThreadId = id;
-            // Create the (idle) status rail so the hover-revealed trash is
-            // available on the user's own messages — handy for hiding a
-            // message before a screenshot/recording. No-op unless the host
-            // wired a hide hook. Queue state is layered on later via
-            // setUserBubbleQueueStatus.
-            if (this.onFeedbackHidden) {
-                this.ensureUserStatusRail(id);
-            }
         }
     }
 

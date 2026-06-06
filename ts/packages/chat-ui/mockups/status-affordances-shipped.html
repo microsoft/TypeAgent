@@ -15,9 +15,10 @@
       ("stop" belongs on the agent action bubble, not the user bubble).
     • queued shows the state label + a "run next" jump-the-queue button + a
       Remove (×) button.
-    • a persistent trash button lives at the right of the rail (hover-revealed)
-      so any message can be hidden for screenshots/recordings.
-    • roadrunner moved into the content bubble's top-right corner.    \u2022 agent bubbles get the SAME rail while processing: a spinner + "working"
+    • the rail is created on demand and removed when the state clears, so an
+      idle user bubble shows no empty title row (matches the agent bubble).
+    • roadrunner moved into the content bubble's top-right corner.
+    • agent bubbles get the SAME rail while processing: a spinner + "working"
       label (agents may augment, e.g. "thinking" while reasoning) + a Stop
       button wired to the existing cancel path. Appears once the agent bubble
       is visible; clears on completion/cancel.
@@ -327,18 +328,9 @@
                 width: 14px;
                 height: 14px;
             }
-            .chat-message-status-rail .chat-action-button.danger:hover,
-            .chat-message-status-rail .chat-user-trash:hover {
+            .chat-message-status-rail .chat-action-button.danger:hover {
                 background: rgba(192, 57, 43, 0.14);
                 color: #c0392b;
-            }
-            .chat-user-trash {
-                opacity: 0;
-                transition: opacity 0.12s ease;
-            }
-            .chat-message-container-user:hover .chat-user-trash,
-            .chat-user-trash:focus-visible {
-                opacity: 1;
             }
 
             /* faux metrics strip (hover) */
@@ -384,8 +376,8 @@
             Exact classes + CSS that landed. Hover a bubble for the bottom
             metrics strip and the roadrunner tooltip. Note the semantics:
             <strong>sent</strong> is label-only, <strong>queued</strong> has a
-            "run next" jump button + Remove (×), and a hover-revealed
-            <strong>trash</strong> sits at the right of every rail.
+            "run next" jump button + Remove (×), and the rail is removed when
+            idle so there's no empty title row.
         </p>
 
         <svg style="display: none" aria-hidden="true">
@@ -399,7 +391,7 @@
         </svg>
 
         <div class="stage">
-            <p class="caption">sent — label only (no controls; trash on hover)</p>
+            <p class="caption">sent — label only (no controls)</p>
             <div class="chat-message-container-user">
                 <div class="chat-timestamp-user">robert · 3:20:23 PM</div>
                 <div class="user-icon">R</div>
@@ -411,19 +403,7 @@
                                 <span>sent</span>
                             </span>
                         </span>
-                        <span class="chat-status-rail-controls">
-                            <button class="chat-action-button chat-user-trash"
-                                    data-action="trash-user" title="Move to trash">
-                                <i><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-                                        stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                    <path d="M10 11v6" /><path d="M14 11v6" />
-                                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-                                </svg></i>
-                            </button>
-                        </span>
+                        <span class="chat-status-rail-controls"></span>
                     </div>
                     <div class="chat-message-content chat-message-explained-host">
                         <span class="chat-message-user-text">@collision optimize validate --workdir D:\collisions2</span>
@@ -438,7 +418,7 @@
                 </div>
             </div>
 
-            <p class="caption">queued — run next (»») + Remove (×) + trash on hover</p>
+            <p class="caption">queued — run next (»») + Remove (×)</p>
             <div class="chat-message-container-user">
                 <div class="chat-timestamp-user">robert · 3:20:25 PM</div>
                 <div class="user-icon">R</div>
@@ -467,17 +447,6 @@
                                     <line x1="18" y1="6" x2="6" y2="18" />
                                 </svg></i>
                             </button>
-                            <button class="chat-action-button chat-user-trash"
-                                    data-action="trash-user" title="Move to trash">
-                                <i><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-                                        stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                    <path d="M10 11v6" /><path d="M14 11v6" />
-                                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-                                </svg></i>
-                            </button>
                         </span>
                     </div>
                     <div class="chat-message-content chat-message-explained-host">
@@ -493,27 +462,11 @@
                 </div>
             </div>
 
-            <p class="caption">idle + explained — roadrunner + trash on hover</p>
+            <p class="caption">idle + explained — roadrunner only, no rail</p>
             <div class="chat-message-container-user">
                 <div class="chat-timestamp-user">robert · 3:20:30 PM</div>
                 <div class="user-icon">R</div>
                 <div class="chat-message-user chat-message-explained" data-expl="Translated by cache. Explained at 3:20:31 PM">
-                    <div class="chat-message-status-rail">
-                        <span class="chat-status-state-zone"></span>
-                        <span class="chat-status-rail-controls">
-                            <button class="chat-action-button chat-user-trash"
-                                    data-action="trash-user" title="Move to trash">
-                                <i><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-                                        stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                    <path d="M10 11v6" /><path d="M14 11v6" />
-                                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-                                </svg></i>
-                            </button>
-                        </span>
-                    </div>
                     <div class="chat-message-content chat-message-explained-host">
                         <span class="chat-message-user-text">what's on my calendar tomorrow?</span>
                         <i class="chat-message-explained-icon">

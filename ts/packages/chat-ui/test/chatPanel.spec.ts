@@ -104,7 +104,7 @@ describe("user status rail — queue state", () => {
         ).toBeNull();
     });
 
-    it("null: clears the state (rail removed when no trash is wired)", () => {
+    it("null: clears the state and removes the rail (no empty title row)", () => {
         const { root, panel } = makePanel();
         panel.addUserMessage("hello", "req-1");
         panel.setUserBubbleQueueStatus("req-1", "queued", jest.fn(), jest.fn());
@@ -113,49 +113,14 @@ describe("user status rail — queue state", () => {
         panel.setUserBubbleQueueStatus("req-1", null);
         expect(userRail(root, "req-1")).toBeNull();
     });
-});
 
-describe("user status rail — trash affordance", () => {
-    it("renders a trash button when a hide hook is wired and hides on click", () => {
+    it("no rail is rendered on an idle user bubble", () => {
         const onFeedbackHidden = jest.fn();
+        // Even with a hide hook wired (used for agent-bubble trash), the
+        // user bubble shows no rail until there's a queue state.
         const { root, panel } = makePanel({ onFeedbackHidden });
         panel.addUserMessage("hello", "req-1");
-
-        const rail = userRail(root, "req-1");
-        expect(rail).not.toBeNull();
-        const trash = rail!.querySelector<HTMLButtonElement>(
-            '[data-action="trash-user"]',
-        );
-        expect(trash).not.toBeNull();
-
-        trash!.click();
-        expect(onFeedbackHidden).toHaveBeenCalledWith(
-            { requestId: "req-1" },
-            "user",
-            true,
-        );
-        expect(
-            userBubble(root, "req-1").classList.contains("chat-message-trashed"),
-        ).toBe(true);
-    });
-
-    it("keeps the trash button after queue state is cleared", () => {
-        const { root, panel } = makePanel({ onFeedbackHidden: jest.fn() });
-        panel.addUserMessage("hello", "req-1");
-        panel.setUserBubbleQueueStatus("req-1", "queued", jest.fn(), jest.fn());
-        panel.setUserBubbleQueueStatus("req-1", null);
-
-        const rail = userRail(root, "req-1");
-        expect(rail).not.toBeNull();
-        expect(rail!.dataset.status).toBeUndefined();
-        expect(
-            rail!.querySelector('[data-action="trash-user"]'),
-        ).not.toBeNull();
-        // Queue controls must be gone even though the trash-bearing rail stays.
-        expect(rail!.querySelector('[data-action="jump-queue"]')).toBeNull();
-        expect(
-            rail!.querySelector('[data-action="remove-from-queue"]'),
-        ).toBeNull();
+        expect(userRail(root, "req-1")).toBeNull();
     });
 });
 
