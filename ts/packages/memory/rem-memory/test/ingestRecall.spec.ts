@@ -5,7 +5,7 @@ import { OxigraphStore } from "../src/oxigraphStore.js";
 import { SignalStore } from "../src/signalStore.js";
 import { EntityResolver } from "../src/resolver.js";
 import { RemMemory } from "../src/ingest.js";
-import { Observation, TrustTier } from "../src/model.js";
+import { Observation, RecallResult, TrustTier } from "../src/model.js";
 
 function makeMemory(): {
     memory: RemMemory;
@@ -176,5 +176,42 @@ describe("RemMemory ingest + recall", () => {
             .filter((h) => h.relation.predicate === "is_a")
             .map((h) => h.subject.name);
         expect(movies).toEqual(["Dune"]);
+    });
+
+    test("intersection recall lists entities matching all named types", async () => {
+        const { memory } = makeMemory();
+        await memory.ingestObservation({
+            feeder: "test",
+            tier: TrustTier.ExtractorInferred,
+            timestamp: t0,
+            entities: [
+                { name: "Children of Time", types: ["book"] },
+                { name: "Dune", types: ["book", "movie"] },
+                { name: "Blade Runner", types: ["movie"] },
+            ],
+            relations: [],
+        });
+
+        const isaNames = (hits: RecallResult[]) => [
+            ...new Set(
+                hits
+                    .filter((h) => h.relation.predicate === "is_a")
+                    .map((h) => h.subject.name),
+            ),
+        ];
+
+        // Explicit cue ("also") -> only entities that are BOTH book and movie.
+        const both = memory.recall("list all books that are also movies", {
+            now: t0,
+        });
+        expect(isaNames(both)).toEqual(["Dune"]);
+
+        // No cue -> "books and movies" unions both types.
+        const union = memory.recall("list all books and movies", { now: t0 });
+        expect(isaNames(union).sort()).toEqual([
+            "Blade Runner",
+            "Children of Time",
+            "Dune",
+        ]);
     });
 });

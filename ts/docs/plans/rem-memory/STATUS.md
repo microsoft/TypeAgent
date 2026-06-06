@@ -1,6 +1,6 @@
 # REM (Recall Engram Memory) — Status & Handoff
 
-_Last updated: 2026-06-05 • Branch: `dev/robgruen/rem-memory`_
+_Last updated: 2026-06-06 • Branch: `dev/robgruen/rem-memory`_
 
 REM is a standalone TypeAgent memory system: ingest text → extract entities &
 relations → store as RDF (Oxigraph) with SQLite-backed decay "signals" → recall
@@ -12,10 +12,12 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **27/27 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **31/31 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
 - **Latest live eval result: 28%** (1 correct, 3 partial, 5 incorrect over 9 curated Episode 53 questions), up from 0%.
-- Two notable fixes landed this session: a **type-aggregation recall path** and a **critical extraction-endpoint bug** (see §4).
+- This session added **set-intersection recall** ("books that are also movies")
+  and made **extraction failures observable** (the feeder no longer silently
+  swallows empty/failed extractions). See §4.
 
 ---
 
@@ -88,6 +90,48 @@ CLI commands:
 
 ## 4. Changes Landed This Session
 
+### (a) Set-intersection recall — `recall.ts`
+
+The type-aggregation path could only union types, so "books that are also
+movies" returned every book and every movie instead of their intersection.
+Added:
+
+- `hasIntersectionCue(query)` — detects an explicit set cue (`also` / `both`)
+  that distinguishes "books that are **also** movies" (intersect) from "books
+  **and** movies" (union).
+- `recallEntitiesByType(keywords, intersectionCue)` — now groups each entity's
+  declared types, records which stored types the query actually named, and:
+  - **UNION (default)**: surfaces every entity matching any named type.
+  - **INTERSECTION**: when the query names ≥2 stored types **and** carries the
+    cue, surfaces only entities carrying **all** named types.
+- Extracted the synthetic `is_a` builder into `makeIsAResult(...)` (no behaviour
+  change for the existing single-type path).
+- New unit test in `test/ingestRecall.spec.ts` ("intersection recall lists
+  entities matching all named types").
+- SECURITY unchanged: query text is still matched in JS against a fixed-query
+  result set; never interpolated into SPARQL.
+
+### (b) Surface extraction failures — `feeders/knowledgeExtractionFeeder.ts`
+
+The feeder previously swallowed `!result.success` and returned `[]`, so a
+misconfigured extractor (see prior session's endpoint bug) could silently leave
+the store empty with no signal. Made these cases observable:
+
+- `ExtractionStats { attempts, failures, empty }` + `newExtractionStats()`.
+- `observationsFromExtraction(result, input, timestamp, stats)` — pure mapper
+  (apart from mutating `stats` + debug logging) that records failures / empty
+  extractions and logs them via `debug` channel
+  **`rem-memory.extraction:error`**. Unit-testable without the LLM.
+- `KnowledgeExtractionFeeder.produce()` now delegates to it; new
+  `feeder.extractionStats` getter exposes the running counters (a rising
+  `failures`/`empty` count = silent-empty ingest).
+- 3 new unit tests in `test/knowledgeExtractionFeeder.spec.ts` (failure, empty,
+  clean outcomes).
+
+---
+
+## 4b. Changes From The Prior Session
+
 ### (a) Type-aggregation recall path — `recall.ts`
 
 Lexical recall alone can't answer "list all X" because entities are matched by
@@ -148,18 +192,14 @@ These remaining misses are **genuine REM v1 quality limitations, not bugs**.
 
 ### Recall & answer quality (REM v1 limitations)
 
-1. **Intersection queries** ("books that are also movies") — type path currently
-   unions. Add an AND-of-types mode when a query names ≥2 types.
-2. **Lexical recall is brittle** — misspellings ("Empire of Black and Gold") and
+1. **Lexical recall is brittle** — misspellings ("Empire of Black and Gold") and
    multi-entity OR queries miss. Consider fuzzy/alias matching or embedding-based
    recall.
-3. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
+2. **Multi-hop / facet answers** ("how long did he write unsuccessfully") — facets
    are stored but not surfaced into the answer context. Consider including entity
    facets in recall results.
-4. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
+3. **Answer grounding** — Q7 hallucinated a host. Tighten the answer system
    prompt and/or only pass high-confidence facts.
-5. **Surface extraction failures** — feeder swallows `!result.success`; add a
-   debug log / counter so silent-empty ingests can't recur unnoticed.
 
 ### Deferred (todo #14)
 

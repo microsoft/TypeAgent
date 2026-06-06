@@ -94,6 +94,15 @@ export function typeCandidates(token: string): string[] {
     return [...out];
 }
 
+/**
+ * Detect an explicit set-intersection cue in a raw query ("also" / "both"),
+ * which distinguishes "books that are also movies" (intersection) from
+ * "books and movies" (union). Without such a cue, multi-type queries union.
+ */
+export function hasIntersectionCue(query: string): boolean {
+    return /\b(?:also|both)\b/i.test(query);
+}
+
 type RelationRow = {
     rel: string;
     subjectId: string;
@@ -160,10 +169,16 @@ export class Recall {
             });
         }
 
-        // Type-aggregation path: when a query keyword names a known entity type
-        // (e.g. "books" -> type "book"), surface every entity of that type as a
-        // synthetic "is a" fact so list/aggregate questions can be answered.
-        for (const result of this.recallEntitiesByType(keywords)) {
+        // Type-aggregation path: when query keywords name known entity types
+        // (e.g. "books" -> type "book"), surface matching entities as synthetic
+        // "is_a" facts so list/aggregate questions can be answered. Multi-type
+        // queries union by default, but intersect when the query carries an
+        // explicit cue ("books that are also movies").
+        const intersectionCue = hasIntersectionCue(query);
+        for (const result of this.recallEntitiesByType(
+            keywords,
+            intersectionCue,
+        )) {
             scored.push({ result, score: lexicalWeight + 1 });
         }
 
@@ -197,11 +212,20 @@ export class Recall {
     }
 
     /**
-     * Return every entity whose declared type matches a query keyword, as a
-     * synthetic "is_a" relation. SECURITY: query text is matched in JS against
-     * a fixed-query result set; it is never interpolated into SPARQL.
+     * Return entities whose declared type(s) match query keywords, as synthetic
+     * "is_a" relations. Operates in two modes:
+     *  - UNION (default): every entity matching any named type is surfaced.
+     *  - INTERSECTION: when the query names >= 2 distinct stored types *and*
+     *    `intersectionCue` is set, only entities carrying ALL named types are
+     *    surfaced (e.g. "books that are also movies").
+     *
+     * SECURITY: query text is matched in JS against a fixed-query result set;
+     * it is never interpolated into SPARQL.
      */
-    private recallEntitiesByType(keywords: string[]): RecallResult[] {
+    private recallEntitiesByType(
+        keywords: string[],
+        intersectionCue: boolean,
+    ): RecallResult[] {
         if (keywords.length === 0) {
             return [];
         }
@@ -212,40 +236,84 @@ export class Recall {
             }
         }
 
-        const rows = this.fetchEntityTypes();
-        const results: RecallResult[] = [];
-        const seen = new Set<string>();
-        for (const row of rows) {
+        // Group each entity's declared types and record the distinct stored
+        // types the query actually named (with their original display form).
+        const byEntity = new Map<
+            string,
+            { name: string; types: Set<string> }
+        >();
+        const typeDisplay = new Map<string, string>();
+        const namedTypes = new Set<string>();
+        for (const row of this.fetchEntityTypes()) {
             const type = row.type.toLowerCase();
-            if (!candidates.has(type)) {
+            let rec = byEntity.get(row.entityId);
+            if (rec === undefined) {
+                rec = { name: row.name, types: new Set<string>() };
+                byEntity.set(row.entityId, rec);
+            }
+            rec.types.add(type);
+            if (candidates.has(type)) {
+                namedTypes.add(type);
+                typeDisplay.set(type, row.type);
+            }
+        }
+        if (namedTypes.size === 0) {
+            return [];
+        }
+
+        // Intersection only applies to multi-type queries with an explicit cue;
+        // otherwise multi-type queries (e.g. "books and movies") union.
+        const intersect = intersectionCue && namedTypes.size >= 2;
+
+        const results: RecallResult[] = [];
+        for (const [entityId, rec] of byEntity) {
+            const matched = [...namedTypes].filter((t) => rec.types.has(t));
+            if (matched.length === 0) {
                 continue;
             }
-            const key = `${row.entityId}|${type}`;
-            if (seen.has(key)) {
-                continue;
+            if (intersect && matched.length < namedTypes.size) {
+                continue; // entity is missing one of the named types
             }
-            seen.add(key);
-            const typeId = `urn:rem:type:${encodeURIComponent(type)}`;
-            results.push({
-                relation: {
-                    id: `${row.entityId}#isa#${encodeURIComponent(type)}`,
-                    subjectId: row.entityId,
-                    predicate: "is_a",
-                    objectId: typeId,
-                },
-                subject: this.entity(row.entityId, row.name),
-                object: {
-                    id: typeId,
-                    name: row.type,
-                    aliases: [row.type],
-                    types: [],
-                    facets: [],
-                },
-                tier: TrustTier.ExtractorInferred,
-                weight: 1,
-            });
+            for (const type of matched) {
+                results.push(
+                    this.makeIsAResult(
+                        entityId,
+                        rec.name,
+                        typeDisplay.get(type) ?? type,
+                        type,
+                    ),
+                );
+            }
         }
         return results;
+    }
+
+    /** Build a synthetic "is_a" recall result linking an entity to a type. */
+    private makeIsAResult(
+        entityId: string,
+        name: string,
+        typeDisplay: string,
+        typeLower: string,
+    ): RecallResult {
+        const typeId = `urn:rem:type:${encodeURIComponent(typeLower)}`;
+        return {
+            relation: {
+                id: `${entityId}#isa#${encodeURIComponent(typeLower)}`,
+                subjectId: entityId,
+                predicate: "is_a",
+                objectId: typeId,
+            },
+            subject: this.entity(entityId, name),
+            object: {
+                id: typeId,
+                name: typeDisplay,
+                aliases: [typeDisplay],
+                types: [],
+                facets: [],
+            },
+            tier: TrustTier.ExtractorInferred,
+            weight: 1,
+        };
     }
 
     private fetchEntityTypes(): EntityTypeRow[] {

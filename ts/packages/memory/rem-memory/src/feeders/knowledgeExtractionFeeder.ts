@@ -3,6 +3,7 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 import { ChatModel, openai } from "aiclient";
+import registerDebug from "debug";
 import {
     Facet,
     Observation,
@@ -21,6 +22,10 @@ import { Feeder, FeederInput } from "../feeder.js";
 // tagged with the ExtractorInferred trust tier.
 
 const FEEDER_NAME = "knowledge-extraction";
+
+// Surfaces extraction failures / empty extractions that were previously
+// swallowed. Enable with DEBUG=rem-memory.extraction:error
+const debugError = registerDebug("rem-memory.extraction:error");
 
 /** Create a chat model configured for knowledge extraction (no KnowPro dep). */
 function createExtractionModel(): ChatModel {
@@ -134,6 +139,64 @@ export function knowledgeToObservation(
     };
 }
 
+/** Cumulative counters describing extraction outcomes. */
+export type ExtractionStats = {
+    /** Total extraction attempts. */
+    attempts: number;
+    /** Attempts that failed after exhausting retries. */
+    failures: number;
+    /** Successful extractions that yielded no entities. */
+    empty: number;
+};
+
+/** A fresh, zeroed {@link ExtractionStats}. */
+export function newExtractionStats(): ExtractionStats {
+    return { attempts: 0, failures: 0, empty: 0 };
+}
+
+/** Minimal shape of an extraction result (mirrors typechat's `Result`). */
+export type ExtractionResult =
+    | { success: true; data: KnowledgeLike }
+    | { success: false; message: string };
+
+/**
+ * Map an extraction result to REM observations, recording outcome stats and
+ * surfacing failures / empty extractions via debug logging.
+ *
+ * The feeder historically swallowed `!result.success` and returned `[]`, so a
+ * misconfigured extractor could silently leave the store empty. This makes such
+ * cases observable (via {@link ExtractionStats} and
+ * `DEBUG=rem-memory.extraction:error`). Pure apart from mutating `stats` and
+ * emitting debug logs, so it is unit-testable without invoking the LLM.
+ */
+export function observationsFromExtraction(
+    result: ExtractionResult,
+    input: { source?: string | undefined },
+    timestamp: number,
+    stats: ExtractionStats,
+): Observation[] {
+    stats.attempts++;
+    const source = input.source ?? "<none>";
+    if (!result.success) {
+        stats.failures++;
+        debugError(
+            "extraction failed after retries (source=%s): %s",
+            source,
+            result.message,
+        );
+        return [];
+    }
+    const observation = knowledgeToObservation(result.data, {
+        source: input.source,
+        timestamp,
+    });
+    if (observation.entities.length === 0) {
+        stats.empty++;
+        debugError("extraction produced no entities (source=%s)", source);
+    }
+    return [observation];
+}
+
 /** Feeder wrapping KnowPro's knowledge extractor. */
 export class KnowledgeExtractionFeeder implements Feeder {
     readonly name = FEEDER_NAME;
@@ -141,10 +204,19 @@ export class KnowledgeExtractionFeeder implements Feeder {
 
     private readonly extractor: kpLib.KnowledgeExtractor;
     private readonly maxRetries: number;
+    private readonly stats = newExtractionStats();
 
     constructor(chatModel?: ChatModel, maxRetries = 3) {
         this.extractor = createExtractor(chatModel);
         this.maxRetries = maxRetries;
+    }
+
+    /**
+     * Cumulative extraction stats. A rising `failures` or `empty` count means
+     * ingest is silently producing nothing (e.g. a misconfigured endpoint).
+     */
+    get extractionStats(): Readonly<ExtractionStats> {
+        return this.stats;
     }
 
     async produce(input: FeederInput): Promise<Observation[]> {
@@ -153,13 +225,11 @@ export class KnowledgeExtractionFeeder implements Feeder {
             input.text,
             this.maxRetries,
         );
-        if (!result.success) {
-            return [];
-        }
-        const observation = knowledgeToObservation(result.data, {
-            source: input.source,
+        return observationsFromExtraction(
+            result,
+            { source: input.source },
             timestamp,
-        });
-        return [observation];
+            this.stats,
+        );
     }
 }

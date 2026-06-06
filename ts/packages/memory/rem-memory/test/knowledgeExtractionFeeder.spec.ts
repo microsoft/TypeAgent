@@ -4,6 +4,8 @@
 import {
     knowledgeToObservation,
     KnowledgeLike,
+    newExtractionStats,
+    observationsFromExtraction,
 } from "../src/feeders/knowledgeExtractionFeeder.js";
 import { TrustTier } from "../src/model.js";
 
@@ -88,5 +90,55 @@ describe("knowledgeToObservation", () => {
 
         const obs = knowledgeToObservation(knowledge, { timestamp: ts });
         expect(obs.relations).toHaveLength(0);
+    });
+});
+
+describe("observationsFromExtraction", () => {
+    const ts = 1_700_000_000_000;
+
+    test("records a failure and surfaces nothing when extraction fails", () => {
+        const stats = newExtractionStats();
+        const out = observationsFromExtraction(
+            { success: false, message: "400 BadRequest" },
+            { source: "doc:1" },
+            ts,
+            stats,
+        );
+        expect(out).toEqual([]);
+        expect(stats).toEqual({ attempts: 1, failures: 1, empty: 0 });
+    });
+
+    test("records an empty extraction that yields no entities", () => {
+        const stats = newExtractionStats();
+        const out = observationsFromExtraction(
+            { success: true, data: { entities: [], actions: [] } },
+            { source: "doc:1" },
+            ts,
+            stats,
+        );
+        expect(out).toHaveLength(1);
+        expect(out[0].entities).toHaveLength(0);
+        expect(stats).toEqual({ attempts: 1, failures: 0, empty: 1 });
+    });
+
+    test("counts a successful extraction with entities as a clean ingest", () => {
+        const stats = newExtractionStats();
+        const out = observationsFromExtraction(
+            {
+                success: true,
+                data: {
+                    entities: [
+                        { name: "Adrian Tchaikovsky", type: ["author"] },
+                    ],
+                    actions: [],
+                },
+            },
+            { source: "doc:1" },
+            ts,
+            stats,
+        );
+        expect(out).toHaveLength(1);
+        expect(out[0].entities).toHaveLength(1);
+        expect(stats).toEqual({ attempts: 1, failures: 0, empty: 0 });
     });
 });
