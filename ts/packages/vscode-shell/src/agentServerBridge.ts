@@ -1044,6 +1044,23 @@ export class AgentServerBridge {
                     );
                 }
                 break;
+            case "promoteCommand":
+                // "Jump the queue": move a queued request to the front so it
+                // runs next. Same client→server requestId translation as
+                // cancelCommand (the webview only knows its clientRequestId).
+                try {
+                    const mapped = this.clientToServerRequestId.get(
+                        msg.requestId,
+                    );
+                    const serverId = mapped ?? msg.requestId;
+                    void this.session?.dispatcher.promoteCommand(serverId);
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] promoteCommand failed:",
+                        e,
+                    );
+                }
+                break;
             case "cancelAllQueuedAndRunning":
                 // Double-Esc gesture from the webview: cancel every queued
                 // and running entry on this session. Mirrors the Electron
