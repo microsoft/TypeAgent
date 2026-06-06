@@ -1,0 +1,42 @@
+{
+  "name": "memory-eval",
+  "version": "0.0.1",
+  "private": true,
+  "description": "LLM-judge benchmark harness for evaluating the REM memory system (and, later, KnowPro).",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/memoryEval"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "bin": {
+    "memory-eval": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "eval": "node ./dist/main.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/config": "workspace:*",
+    "aiclient": "workspace:*",
+    "knowledge-processor": "workspace:*",
+    "rem-memory": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

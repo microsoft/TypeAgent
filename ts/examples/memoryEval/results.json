@@ -1,0 +1,95 @@
+{
+  "system": "REM",
+  "graded": [
+    {
+      "id": 1,
+      "question": "List all books",
+      "answer": "1. Brave New World\n2. The Circle\n3. Dune\n4. Profiles of the Future\n5. Iron Sunrise\n6. Children of Memory\n7. Children of Ruin\n8. Starship Troopers\n9. Dragonlance Chronicles\n10. Children of Time\n11. Empire in Black and Gold",
+      "correctAnswer": "NOT IN TRANSCRIPT",
+      "isCorrect": "incorrect",
+      "feedback": "The candidate answer lists several books, but the correct answer is not provided in the transcript.",
+      "difficulty": "easy",
+      "category": "entity"
+    },
+    {
+      "id": 1,
+      "question": "List all books and movies",
+      "answer": "Books:\n- Brave New World\n- The Circle\n- Dune\n- Profiles of the Future\n- Iron Sunrise\n- Children of Memory\n- Children of Ruin\n\nMovies:\n- WALL-E\n- Terminator movies\n- Cars\n- Starship Troopers",
+      "correctAnswer": "Books:\n- Shadows of the Apt series\n- Children of Time series\n- The Final Architecture Trilogy (including Lords of Uncreation)\n- Empire in Black and Gold\n- Dragonlance Chronicles\n- Profiles of the Future by Arthur C. Clarke\n- The Circle\n\nMovies:\n- Terminator\n- WALL-E",
+      "isCorrect": "partial",
+      "feedback": "The candidate answer includes some correct books and movies (e.g., 'The Circle', 'Profiles of the Future', 'WALL-E', 'Terminator'), but also includes incorrect entries (e.g., 'Brave New World', 'Dune', 'Iron Sunrise', 'Children of Memory', 'Children of Ruin', 'Cars', 'Starship Troopers'). It misses several correct entries from the reference answer.",
+      "difficulty": "moderate",
+      "category": "entity"
+    },
+    {
+      "id": 1,
+      "question": "List all books that are also movies",
+      "answer": "I don't have that in memory.",
+      "correctAnswer": "NOT IN TRANSCRIPT",
+      "isCorrect": "incorrect",
+      "feedback": "The candidate answer does not provide the information requested and the correct answer is non-trivial.",
+      "difficulty": "hard",
+      "category": "entity"
+    },
+    {
+      "id": 1,
+      "question": "Do we have anything on the novel empire in black and gold?",
+      "answer": "Empire in Black and Gold is a novel.",
+      "correctAnswer": "Empire in Black and Gold is Adrian Tchaikovsky's first novel, published in 2008.",
+      "isCorrect": "partial",
+      "feedback": "The answer correctly identifies that Empire in Black and Gold is a novel but lacks additional context such as the author and publication year.",
+      "difficulty": "moderate",
+      "category": "retrieval"
+    },
+    {
+      "id": 1,
+      "question": "Do we have anything on empire of black and gold or children of ruin?",
+      "answer": "I don't have that in memory.",
+      "correctAnswer": "NOT IN TRANSCRIPT",
+      "isCorrect": "incorrect",
+      "feedback": "The correct answer is non-trivial, and the candidate answer does not provide the required information.",
+      "difficulty": "hard",
+      "category": "retrieval"
+    },
+    {
+      "id": 1,
+      "question": "What is the name of the podcast?",
+      "answer": "The name of the podcast is \"Behind the Tech.\"",
+      "correctAnswer": "Behind the Tech with Kevin Scott.",
+      "isCorrect": "partial",
+      "feedback": "The answer is partially correct. It correctly identifies the name of the podcast as 'Behind the Tech' but omits the host's name, 'Kevin Scott'.",
+      "difficulty": "easy",
+      "category": "summary"
+    },
+    {
+      "id": 1,
+      "question": "Who hosts the podcast?",
+      "answer": "Christina Warren and Kevin Scott host the podcast.",
+      "correctAnswer": "Kevin Scott, Chief Technology Officer for Microsoft.",
+      "isCorrect": "incorrect",
+      "feedback": "The correct answer is Kevin Scott. The candidate answer incorrectly includes Christina Warren as a host.",
+      "difficulty": "easy",
+      "category": "attribution"
+    },
+    {
+      "id": 1,
+      "question": "Who is the guest in this episode?",
+      "answer": "Adrian Tchaikovsky is the guest in this episode.",
+      "correctAnswer": "Adrian Tchaikovsky.",
+      "isCorrect": "correct",
+      "feedback": "The answer is correct and matches the reference answer. It also provides extra context by confirming the guest is in this episode.",
+      "difficulty": "easy",
+      "category": "entity"
+    },
+    {
+      "id": 1,
+      "question": "How long did Adrian Tchaikovsky write unsuccessfully before finding success?",
+      "answer": "I don't have that in memory.",
+      "correctAnswer": "About 15 years, producing roughly a book a year.",
+      "isCorrect": "incorrect",
+      "feedback": "The answer does not provide the correct information and states it does not have the information in memory.",
+      "difficulty": "moderate",
+      "category": "outcomes"
+    }
+  ]
+}
