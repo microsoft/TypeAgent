@@ -2482,6 +2482,12 @@ export class ChatPanel {
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
+        // Reset the up-arrow back stack too — `@clear` resets the chat, which
+        // includes the command recall history seeded from prior-session
+        // replayed commands. After clearing, recall starts empty until the
+        // user issues new commands.
+        this.commandHistory = [];
+        this.historyIndex = -1;
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
