@@ -3779,9 +3779,18 @@ importers:
         specifier: ^14.1.0
         version: 14.1.1
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/markdown-it':
         specifier: ^14.1.2
         version: 14.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
+      jest-environment-jsdom:
+        specifier: ^29.7.0
+        version: 29.7.0
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
