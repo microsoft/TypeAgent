@@ -91,6 +91,83 @@ describe("knowledgeToObservation", () => {
         const obs = knowledgeToObservation(knowledge, { timestamp: ts });
         expect(obs.relations).toHaveLength(0);
     });
+
+    test("captures an action's subjectEntityFacet onto its subject entity", () => {
+        const knowledge: KnowledgeLike = {
+            entities: [
+                { name: "Adrian Tchaikovsky", type: ["author"] },
+                { name: "Children of Time", type: ["book"] },
+            ],
+            actions: [
+                {
+                    verbs: ["wrote"],
+                    subjectEntityName: "Adrian Tchaikovsky",
+                    objectEntityName: "Children of Time",
+                    subjectEntityFacet: {
+                        name: "unsuccessful writing",
+                        value: { amount: 7, units: "years" },
+                    },
+                },
+            ],
+        };
+
+        const obs = knowledgeToObservation(knowledge, { timestamp: ts });
+        const adrian = obs.entities.find(
+            (e) => e.name === "Adrian Tchaikovsky",
+        );
+        // The Quantity value is coerced to a scalar, like other facets.
+        expect(adrian?.facets).toEqual([
+            { name: "unsuccessful writing", value: "7 years" },
+        ]);
+    });
+
+    test("ignores a subjectEntityFacet whose subject is not a known entity", () => {
+        const knowledge: KnowledgeLike = {
+            entities: [{ name: "Alice", type: ["person"] }],
+            actions: [
+                {
+                    verbs: ["likes"],
+                    subjectEntityName: "Ghost",
+                    objectEntityName: "none",
+                    subjectEntityFacet: { name: "hobby", value: "chess" },
+                },
+            ],
+        };
+
+        const obs = knowledgeToObservation(knowledge, { timestamp: ts });
+        const alice = obs.entities.find((e) => e.name === "Alice");
+        expect(alice?.facets).toBeUndefined();
+    });
+
+    test("does not duplicate a facet already present on the entity", () => {
+        const knowledge: KnowledgeLike = {
+            entities: [
+                {
+                    name: "Adrian Tchaikovsky",
+                    type: ["author"],
+                    facets: [{ name: "Nationality", value: "British" }],
+                },
+            ],
+            actions: [
+                {
+                    verbs: ["is"],
+                    subjectEntityName: "Adrian Tchaikovsky",
+                    objectEntityName: "none",
+                    // Same facet name (different case) must not be added twice.
+                    subjectEntityFacet: {
+                        name: "nationality",
+                        value: "English",
+                    },
+                },
+            ],
+        };
+
+        const obs = knowledgeToObservation(knowledge, { timestamp: ts });
+        const adrian = obs.entities[0];
+        expect(adrian.facets).toEqual([
+            { name: "Nationality", value: "British" },
+        ]);
+    });
 });
 
 describe("observationsFromExtraction", () => {

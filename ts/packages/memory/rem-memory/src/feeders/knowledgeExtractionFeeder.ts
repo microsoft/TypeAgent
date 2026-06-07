@@ -57,6 +57,8 @@ export type KnowledgeLike = {
         verbs: string[];
         subjectEntityName: string | "none";
         objectEntityName: string | "none";
+        /** A facet the action implies about its subject (e.g. an interest). */
+        subjectEntityFacet?: { name: string; value: unknown } | undefined;
     }[];
     topics?: string[];
 };
@@ -91,6 +93,16 @@ function mapFacets(
     }));
 }
 
+/** Append a facet to an entity, skipping duplicates by case-insensitive name. */
+function addFacet(entity: ObservedEntity, facet: Facet): void {
+    const facets = entity.facets ?? [];
+    const name = facet.name.toLowerCase();
+    if (facets.some((f) => f.name.toLowerCase() === name)) {
+        return;
+    }
+    entity.facets = [...facets, facet];
+}
+
 /**
  * Pure mapping from a knowledge-extraction result to a single REM observation.
  * Exported so it can be unit-tested without invoking the extractor/LLM.
@@ -109,8 +121,29 @@ export function knowledgeToObservation(
         facets: mapFacets(e.facets),
     }));
 
-    // Build a set of valid entity names so relations only reference real entities.
-    const known = new Set(entities.map((e) => e.name));
+    // Index entities by name so relations only reference real entities and
+    // action-implied subject facets can be attached back to them.
+    const byName = new Map<string, ObservedEntity>();
+    for (const entity of entities) {
+        byName.set(entity.name, entity);
+    }
+    const known = new Set(byName.keys());
+
+    // Attach action-implied subject facets (e.g. "wrote unsuccessfully for 7
+    // years") to their subject entity. The knowledge schema surfaces these as
+    // `subjectEntityFacet`; REM previously dropped them, losing attribute /
+    // duration details that multi-hop questions depend on.
+    for (const action of knowledge.actions) {
+        const facet = action.subjectEntityFacet;
+        const entity = byName.get(action.subjectEntityName);
+        if (facet === undefined || entity === undefined) {
+            continue;
+        }
+        addFacet(entity, {
+            name: facet.name,
+            value: facetValueToScalar(facet.value),
+        });
+    }
 
     const relations: ObservedRelation[] = [];
     for (const action of knowledge.actions) {

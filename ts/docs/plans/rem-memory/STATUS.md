@@ -12,9 +12,9 @@ grounded only on recalled memory. A separate LLM-judge eval harness
 
 ## 1. Current State (TL;DR)
 
-- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **47/47 unit tests pass**, prettier clean.
+- **REM core** (`packages/memory/rem-memory`): complete, builds clean, **50/50 unit tests pass**, prettier clean.
 - **Eval harness** (`examples/memoryEval`): complete, builds clean, validated end-to-end live.
-- **Latest live eval result: 39%** (3 correct, 1 partial, 5 incorrect over 9 curated Episode 53 questions), up from a 28% baseline (and from 0% originally).
+- **Latest live eval result: 33–39%** (3 correct + 1 flaky over 9 curated Episode 53 questions; up from a 28% baseline, 0% originally). The 9-question set is noisy run-to-run — see §5.
 - This session added **set-intersection recall** ("books that are also movies"),
   made **extraction failures observable** (the feeder no longer silently swallows
   empty/failed extractions), added **fuzzy (typo-tolerant) lexical recall**,
@@ -199,6 +199,24 @@ answer path on both levers from §6:
 - 4 new unit tests in `test/answer.spec.ts` (3 `filterByWeight`, 1 prompt
   grounding-contract guard).
 
+### (g) Capture action-implied subject facets — `feeders/knowledgeExtractionFeeder.ts`
+
+The knowledge schema surfaces a per-action `subjectEntityFacet` (a facet implied
+by the action, e.g. an interest, duration, or outcome). The REM mapper dropped
+it, losing attribute/duration details that multi-hop questions (e.g. Q9 "how
+long did he write unsuccessfully") depend on. Now:
+
+- `knowledgeToObservation()` indexes entities by name and attaches each action's
+  `subjectEntityFacet` back onto its subject entity (Quantity values coerced to a
+  scalar like other facets), via a new `addFacet()` helper that dedupes by
+  case-insensitive facet name. Facets on unknown subjects are ignored.
+- 3 new unit tests in `test/knowledgeExtractionFeeder.spec.ts` (capture, unknown
+  subject, no-duplicate).
+- This is a strictly-additive fidelity fix: it only surfaces data the extractor
+  already produced. Whether it helps a given question still depends on the
+  (non-deterministic) extractor actually emitting the facet — see §5 on eval
+  variance.
+
 ---
 
 ## 4b. Changes From The Prior Session
@@ -239,9 +257,17 @@ configured and extracts successfully.
 
 ## 5. Latest Eval Results (Episode 53, curated, 9 Q)
 
-**Overall: 39%** — correct 3, partial 1, incorrect 5 (post-2026-06-06 fixes; up
+**Overall: 33–39%** — correct 3, with the 4th graded item (Q6 podcast name)
+flipping between partial and a refusal across runs (post-2026-06-06 fixes; up
 from 28% baseline, and recovered from a 22% regression caused by an over-strict
 grounding prompt — see §4(f)).
+
+> **Eval is noisy.** Two runs with the *same* softened prompt scored 39% then
+> 33%; the only graded delta was Q6 (podcast name) flaking partial→refusal, and
+> ingest time halved (351s→179s) between runs. Knowledge extraction is
+> LLM-driven and non-deterministic, so a 9-question curated set is not a stable
+> signal. Use the larger `--generate N` set (§6) to measure real movement. The
+> table below is the 39% run; the 33% run differed only at Q6.
 
 | #   | Question                                                      | Grade       | Note                                                                                                         |
 | --- | ------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
@@ -253,7 +279,7 @@ grounding prompt — see §4(f)).
 | 6   | Name of the podcast?                                          | partial     | "Behind the Tech" (missing "with Kevin Scott").                                                              |
 | 7   | Who hosts the podcast?                                        | incorrect   | "Christina Warren and Kevin Scott" — extraction fidelity issue (a wrong host is stored), not grounding.       |
 | 8   | Who is the guest?                                             | **correct** | Adrian Tchaikovsky — recovered by the softened grounding prompt.                                             |
-| 9   | How long did Adrian write unsuccessfully?                     | incorrect   | The "7 years" facet was not captured at extraction time, so there is nothing to surface.                      |
+| 9   | How long did Adrian write unsuccessfully?                     | incorrect   | The "7 years" detail only lands when the extractor emits it as a `subjectEntityFacet`; the mapper now keeps it (§4(g)) but the LLM emitted it inconsistently. |
 
 By difficulty: easy 38%, moderate 67%, hard 0%.
 
@@ -266,29 +292,34 @@ not answer-path bugs** — see §6.
 
 ### Recall & answer quality (REM v1 limitations)
 
-_This session's answer-path items are done and verified by a live re-run (§5,
-39%). What remains are upstream extraction-fidelity gaps and the deferred
-integration work below._
+_This session's answer-path items are done and verified by a live re-run (§5).
+What remains are eval-stability work and upstream extraction-fidelity gaps._
 
-1. **Extraction fidelity** — the clearest remaining quality losses are at
+1. **Stabilize the eval before chasing more points** — the 9-question curated
+   set swings 33–39% run-to-run on extractor non-determinism (§5), which is
+   larger than most single-fix deltas. Run `--generate N` (≥30 Q) and/or average
+   multiple runs so changes are measurable. Optionally lower extractor
+   temperature / seed it for repeatability.
+2. **Extraction fidelity** — the clearest remaining quality losses are at
    extraction time, not in recall/answer: Q7 stores a wrong host ("Christina
-   Warren"), Q3 never tags an entity as both `book` and `movie`, and Q9 drops
-   the "7 years unsuccessful" facet. Consider an extraction-quality pass
-   (better prompt, facet capture, host/role disambiguation).
+   Warren"), Q3 never tags an entity as both `book` and `movie`, and Q9's
+   "7 years" facet is emitted inconsistently. The mapper now keeps action-implied
+   subject facets (§4(g)); next is a prompt/extraction-quality pass for
+   consistent facet capture and host/role disambiguation.
 
 ### Deferred (todo #14)
 
-2. **KnowPro adapter** — `KnowProSystem implements MemorySystem` that loads the
+3. **KnowPro adapter** — `KnowProSystem implements MemorySystem` that loads the
    prebuilt `Episode_53_AdrianTchaikovsky_index_data.json` +
    `_index_embeddings.bin`, so the eval can run REM **vs** KnowPro head-to-head.
-3. **MCP tools** `rem_recall` / `rem_answer` in `commandServer.ts addTools()`
+4. **MCP tools** `rem_recall` / `rem_answer` in `commandServer.ts addTools()`
    (hollow until a populated `RemMemory` data source is wired up).
 
 ### Eval methodology
 
-4. Run with `--generate N` for a larger, auto-generated question set (not just
+5. Run with `--generate N` for a larger, auto-generated question set (not just
    the 9 curated) to get a more stable score.
-5. The oracle returns "NOT IN TRANSCRIPT" for "list all books" (Q1) which then
+6. The oracle returns "NOT IN TRANSCRIPT" for "list all books" (Q1) which then
    grades REM's real list as incorrect — revisit oracle handling of
    aggregation questions, or mark such questions as curated-with-answers.
 
