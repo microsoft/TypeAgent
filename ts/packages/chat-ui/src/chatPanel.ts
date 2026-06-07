@@ -1627,14 +1627,16 @@ export class ChatPanel {
             chip.style.marginTop = "4px";
             chip.style.marginBottom = "2px";
             chip.style.fontSize = "11px";
+            chip.style.fontWeight = "600";
             chip.style.lineHeight = "1";
             chip.style.borderRadius = "8px";
-            // Solid pill — `opacity` was previously 0.85 but that
-            // darkened the chip in dark VS Code themes where the
-            // backing `--vscode-inputValidation-*Background` variables
-            // are already deliberately subtle. The new state vars
-            // (`statusBarItem-warning*` / `button-*`) carry their own
-            // contrast, so let them speak.
+            // Solid pill — no opacity. We deliberately do NOT bind to
+            // VS Code theme variables here: `statusBarItem-warning*` /
+            // `button-*` resolve to deeply saturated, dark variants on
+            // most dark themes, which produced low-contrast chips
+            // against the dark user-bubble background. A fixed pastel
+            // palette with dark text reads cleanly on both light and
+            // dark themes without needing per-theme tuning.
             chip.style.opacity = "1";
             chip.style.boxSizing = "border-box";
             bodyDiv.insertBefore(chip, bodyDiv.firstChild);
@@ -1645,15 +1647,10 @@ export class ChatPanel {
         label.textContent = status;
         chip.appendChild(label);
         if (status === "queued") {
-            // VS Code's `statusBarItem-warningBackground` is designed
-            // for high-contrast pills on the status bar chrome; pairs
-            // with `statusBarItem-warningForeground` (typically white).
-            // Fallback for non-VS Code hosts (Electron Shell) is a
-            // saturated amber with white text.
-            chip.style.background =
-                "var(--vscode-statusBarItem-warningBackground, #cc8a3a)";
-            chip.style.color =
-                "var(--vscode-statusBarItem-warningForeground, #ffffff)";
+            // Pastel amber on dark slate text — high readability, soft
+            // enough not to compete with the bubble body.
+            chip.style.background = "#fbe3a7";
+            chip.style.color = "#5c3d05";
             if (onCancel) {
                 const btn = document.createElement("button");
                 btn.type = "button";
@@ -1687,13 +1684,10 @@ export class ChatPanel {
                 chip.appendChild(btn);
             }
         } else {
-            // `button-background` is the host's primary-action accent
-            // (clear blue/teal in VS Code Dark+); pairs with
-            // `button-foreground` for high-contrast white text. Better
-            // pop for an active-state pill than the subtle
-            // `inputValidation-info*` variables we used previously.
-            chip.style.background = "var(--vscode-button-background, #0e639c)";
-            chip.style.color = "var(--vscode-button-foreground, #ffffff)";
+            // Pastel sky-blue on deep navy text — clearly distinct
+            // from the queued amber, still soft and high contrast.
+            chip.style.background = "#bcdffb";
+            chip.style.color = "#0c3a5c";
         }
     }
 
