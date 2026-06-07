@@ -59,6 +59,17 @@ When you switch to a different conversation:
 - A `─── now ───` separator marks where new messages will appear.
 - A status message confirms which conversation you have joined: `Connected to conversation 'X'.`
 
+### Request queue affordances
+
+When you submit a request while one is already running, it is queued on the server and surfaced inline on the corresponding user bubble:
+
+- A small **"queued"** chip appears on each waiting bubble. Click the `×` on the chip to cancel that specific queued entry without affecting the running one.
+- The bubble for the currently-executing request shows a **"running"** chip.
+- **Esc** with focus in the input cancels the in-flight request (chat-ui's built-in stop affordance — equivalent to clicking the stop button on the input).
+- **Esc twice within 1 second** (from anywhere in the window) cancels every queued + running entry on the current conversation.
+
+These chips also appear for entries submitted by other clients connected to the same conversation, so you can see and cancel work driven by a peer Shell or CLI.
+
 ### Multi-client notifications
 
 If you have multiple clients connected (e.g., both a Shell and a CLI connected to the same conversation), you will see status messages when clients join or leave:
