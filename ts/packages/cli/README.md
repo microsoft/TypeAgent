@@ -181,9 +181,14 @@ While in connect mode, you can manage conversations interactively using `@conver
 
 | Command                          | Description                                                          |
 | -------------------------------- | -------------------------------------------------------------------- |
+| `@conversation`                  | Show the conversation command help (same as `@conversation help`).   |
+| `@conversation help`             | Show the conversation command help.                                  |
 | `@conversation new <name>`       | Create a new conversation. Prompts to switch to it after creation.   |
 | `@conversation switch <name>`    | Switch to an existing conversation by name (case-insensitive).       |
 | `@conversation list [<filter>]`  | List all conversations. The current conversation is marked with `▸`. |
+| `@conversation info`             | Show the current conversation's name and id.                         |
+| `@conversation next`             | Switch to the next conversation in the list (wraps around).          |
+| `@conversation prev`             | Switch to the previous conversation in the list (wraps around).      |
 | `@conversation rename <newName>` | Rename the current conversation.                                     |
 | `@conversation delete <name>`    | Delete a conversation by name (prompts for confirmation).            |
 

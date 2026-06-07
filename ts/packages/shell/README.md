@@ -36,15 +36,20 @@ When the Shell connects to the agent server, it automatically joins a conversati
 
 ### Conversation commands
 
-Use `/conversation` (or the `@conversation` alias) to manage conversations from the chat input:
+Use `/conversation` (or the `@conversation` alias) to manage conversations from the chat input. All three input styles route through the same dispatcher action, so you can also drive these via natural language (e.g., "list my conversations", "create a new conversation called notes"):
 
-| Command                            | Description               |
-| ---------------------------------- | ------------------------- |
-| `/conversation list`               | List all conversations    |
-| `/conversation new [name]`         | Create a new conversation |
-| `/conversation switch <id\|name>`  | Switch to a conversation  |
-| `/conversation rename <id> <name>` | Rename a conversation     |
-| `/conversation delete <id\|name>`  | Delete a conversation     |
+| Command                            | Description                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `/conversation`                    | Show the help screen (same as `/conversation help`)                           |
+| `/conversation help`               | Show the list of conversation commands                                        |
+| `/conversation list`               | List all conversations; the active one is marked with `← current`             |
+| `/conversation info`               | Show the active conversation's name and id                                    |
+| `/conversation new [name]`         | Create a new conversation and switch to it (auto-names when no name is given) |
+| `/conversation switch <id\|name>`  | Switch to a conversation by name (case-insensitive)                           |
+| `/conversation next`               | Switch to the next conversation in the server's list (wraps around)           |
+| `/conversation prev`               | Switch to the previous conversation in the server's list (wraps around)       |
+| `/conversation rename <id> <name>` | Rename a conversation (omit `<id>` to rename the active one)                  |
+| `/conversation delete <id\|name>`  | Delete a conversation (the server rejects deleting the active conversation)   |
 
 ### Switching conversations
 

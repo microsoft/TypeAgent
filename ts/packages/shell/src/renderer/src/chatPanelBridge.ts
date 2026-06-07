@@ -724,8 +724,8 @@ export function createChatPanelClient(
                 ac.abort("cancelled");
             }
         },
-        takeAction: (_requestId, action, data) => {
-            handleTakeAction(action, data);
+        takeAction: (requestId, action, data) => {
+            handleTakeAction(action, data, ridStr(requestId));
         },
         onUserFeedback: (entry) => {
             chatPanel.applyFeedback(entry);
@@ -775,7 +775,11 @@ export function createChatPanelClient(
         }
     }
 
-    function handleTakeAction(action: string, data: unknown) {
+    function handleTakeAction(
+        action: string,
+        data: unknown,
+        requestId: string | undefined,
+    ) {
         try {
             const d: any = data;
             switch (action) {
@@ -798,14 +802,11 @@ export function createChatPanelClient(
                     getClientAPI().openFolder(data as string);
                     break;
                 case "manage-conversation":
-                    void handleManageConversation(d).catch((e) =>
-                        chatPanel.showInline(
-                            {
-                                type: "html",
-                                content: `❌ ${e?.message ?? String(e)}`,
-                                kind: "warning",
-                            },
-                            "conversation",
+                    void handleManageConversation(d, requestId).catch((e) =>
+                        showConversationMessage(
+                            `❌ ${escapeHtml(e?.message ?? String(e))}`,
+                            requestId,
+                            "warning",
                         ),
                     );
                     break;
@@ -819,18 +820,92 @@ export function createChatPanelClient(
         }
     }
 
-    async function handleManageConversation(payload: {
-        subcommand: string;
-        name?: string;
-        newName?: string;
-    }) {
-        const api = getClientAPI();
-        const inline = (content: string, kind: "info" | "warning" = "info") =>
+    // Escape user-supplied text so it's safe to interpolate into HTML emitted
+    // into chat-ui bubbles.  Mirrors the renderer's old `escapeHtml` helper.
+    function escapeHtml(s: string): string {
+        return s.replace(
+            /[&<>"']/g,
+            (c) =>
+                ({
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#39;",
+                })[c] ?? c,
+        );
+    }
+
+    // Resolve a conversation argument to a list entry.  Tries exact id
+    // match first, then case-insensitive name match.  Returns undefined if
+    // neither matches — matches the CLI's `resolveByName` behavior so the
+    // documented `<id|name>` arg shape works in both clients.
+    function resolveConversation<
+        T extends { conversationId: string; name: string },
+    >(sessions: T[], idOrName: string): T | undefined {
+        return (
+            sessions.find((s) => s.conversationId === idOrName) ??
+            sessions.find(
+                (s) => s.name.toLowerCase() === idOrName.toLowerCase(),
+            )
+        );
+    }
+
+    // Render a single conversation message bubble.  Uses the request's
+    // existing thread when a requestId is supplied (so the response lands
+    // under the user's `@conversation` bubble); otherwise renders as a
+    // standalone bubble.  `kind` switches between an info bubble and an
+    // inline warning row for error/help-text surfaces.
+    function showConversationMessage(
+        html: string,
+        requestId: string | undefined,
+        kind: "info" | "warning" = "info",
+    ): void {
+        if (kind === "warning") {
             chatPanel.showInline(
-                { type: "html", content, kind },
+                { type: "html", content: html, kind: "warning" },
                 "conversation",
             );
+            return;
+        }
+        chatPanel.addAgentMessage(
+            { type: "html", content: html },
+            "conversation",
+            "❓",
+            undefined,
+            requestId,
+        );
+    }
+
+    async function handleManageConversation(
+        payload: {
+            subcommand: string;
+            name?: string;
+            newName?: string;
+        },
+        requestId: string | undefined,
+    ) {
+        const api = getClientAPI();
+        const showInfo = (html: string) =>
+            showConversationMessage(html, requestId, "info");
+        const showWarn = (html: string) =>
+            showConversationMessage(html, requestId, "warning");
+
         switch (payload.subcommand) {
+            case "help": {
+                const lines = [
+                    "<b>Conversation Commands</b>",
+                    "<code>/conversation list</code> — List all conversations",
+                    "<code>/conversation new [name]</code> — Create a new conversation",
+                    "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
+                    "<code>/conversation rename &lt;id&gt; &lt;name&gt;</code> — Rename a conversation",
+                    "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
+                    "",
+                    "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",
+                ];
+                showInfo(lines.join("<br>"));
+                break;
+            }
             case "new": {
                 let newName = payload.name;
                 if (!newName) {
@@ -842,76 +917,164 @@ export function createChatPanelClient(
                 const switchResult = await api.conversationSwitch(
                     created.conversationId,
                 );
-                inline(
+                showInfo(
                     switchResult.success
-                        ? `✅ Created and switched to conversation "<b>${created.name}</b>"`
-                        : `✅ Created conversation "<b>${created.name}</b>" but could not switch.`,
+                        ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
+                        : `✅ Created conversation "<b>${escapeHtml(created.name)}</b>" but could not switch: ${escapeHtml(switchResult.error ?? "unknown error")}`,
                 );
                 break;
             }
             case "list": {
                 const sessions = await api.conversationList();
-                const cur = await api.conversationGetCurrent();
-                inline(
-                    `<ul>${sessions
-                        .map(
-                            (s) =>
-                                `<li>${s.conversationId === cur?.conversationId ? "▶ " : ""}${s.name}</li>`,
-                        )
-                        .join("")}</ul>`,
+                const current = await api.conversationGetCurrent();
+                if (sessions.length === 0) {
+                    showInfo("No conversations found.");
+                    break;
+                }
+                const lines = sessions.map((s) => {
+                    const isCurrent =
+                        current && s.conversationId === current.conversationId;
+                    const marker = isCurrent ? " ← <b>current</b>" : "";
+                    const date = new Date(s.createdAt).toLocaleDateString();
+                    return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                });
+                showInfo(
+                    `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`,
                 );
+                break;
+            }
+            case "info": {
+                const cur = await api.conversationGetCurrent();
+                showInfo(
+                    cur
+                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
+                        : "No active conversation.",
+                );
+                break;
+            }
+            case "switch": {
+                if (!payload.name) {
+                    showWarn("A conversation name is required to switch.");
+                    break;
+                }
+                const sessions = await api.conversationList();
+                const match = resolveConversation(sessions, payload.name);
+                if (!match) {
+                    showWarn(
+                        `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
+                    );
+                    break;
+                }
+                const result = await api.conversationSwitch(
+                    match.conversationId,
+                );
+                if (!result.success) {
+                    showWarn(
+                        `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+                    );
+                } else {
+                    showInfo(
+                        `✅ Switched to conversation "<b>${escapeHtml(match.name)}</b>"`,
+                    );
+                }
+                break;
+            }
+            case "prev":
+            case "next": {
+                const sessions = await api.conversationList();
+                if (sessions.length === 0) {
+                    showWarn("No conversations to switch to.");
+                    break;
+                }
+                const cur = await api.conversationGetCurrent();
+                const curIdx = cur
+                    ? sessions.findIndex(
+                          (s) => s.conversationId === cur.conversationId,
+                      )
+                    : -1;
+                const delta = payload.subcommand === "next" ? 1 : -1;
+                const nextIdx =
+                    curIdx === -1
+                        ? 0
+                        : (curIdx + delta + sessions.length) % sessions.length;
+                const target = sessions[nextIdx];
+                if (target.conversationId === cur?.conversationId) {
+                    // Only one conversation — surface a warning so users in
+                    // self-hosted mode (single default conversation) don't
+                    // think the command silently failed.
+                    showWarn(
+                        "Only one conversation is available — nothing to switch to. Connect to the Agent Server to use multiple conversations.",
+                    );
+                    break;
+                }
+                const result = await api.conversationSwitch(
+                    target.conversationId,
+                );
+                if (!result.success) {
+                    showWarn(
+                        `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+                    );
+                } else {
+                    showInfo(
+                        `✅ Switched to conversation "<b>${escapeHtml(target.name)}</b>"`,
+                    );
+                }
                 break;
             }
             case "rename": {
                 if (!payload.newName) {
-                    inline("A new name is required to rename.", "warning");
+                    showWarn(
+                        "A new name is required to rename the conversation.",
+                    );
                     break;
                 }
-                const cur = await api.conversationGetCurrent();
-                let conversationId = cur?.conversationId;
+                let conversationId: string | undefined;
                 if (payload.name) {
                     const sessions = await api.conversationList();
-                    const match = sessions.find(
-                        (s) =>
-                            s.name.toLowerCase() ===
-                            payload.name!.toLowerCase(),
-                    );
-                    conversationId = match?.conversationId;
-                }
-                if (!conversationId) {
-                    inline("No conversation to rename.", "warning");
-                    break;
+                    const match = resolveConversation(sessions, payload.name);
+                    if (!match) {
+                        showWarn(
+                            `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
+                        );
+                        break;
+                    }
+                    conversationId = match.conversationId;
+                } else {
+                    const cur = await api.conversationGetCurrent();
+                    if (!cur) {
+                        showWarn("No active conversation to rename.");
+                        break;
+                    }
+                    conversationId = cur.conversationId;
                 }
                 await api.conversationRename(conversationId, payload.newName);
-                inline(
-                    `✅ Renamed conversation to "<b>${payload.newName}</b>"`,
+                showInfo(
+                    `✅ Renamed conversation to "<b>${escapeHtml(payload.newName)}</b>"`,
                 );
                 break;
             }
             case "delete": {
                 if (!payload.name) {
-                    inline("A conversation name is required.", "warning");
+                    showWarn("A conversation name is required to delete.");
                     break;
                 }
                 const sessions = await api.conversationList();
-                const match = sessions.find(
-                    (s) => s.name.toLowerCase() === payload.name!.toLowerCase(),
-                );
+                const match = resolveConversation(sessions, payload.name);
                 if (!match) {
-                    inline(
-                        `❌ Conversation "<b>${payload.name}</b>" not found.`,
-                        "warning",
+                    showWarn(
+                        `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
                     );
                     break;
                 }
                 await api.conversationDelete(match.conversationId);
-                inline(`🗑️ Deleted conversation "<b>${match.name}</b>"`);
+                showInfo(
+                    `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
+                );
                 break;
             }
             default:
-                inline(
-                    `Unknown manage-conversation subcommand: "<b>${payload.subcommand}</b>"`,
-                    "warning",
+                showWarn(
+                    `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
                 );
                 break;
         }
