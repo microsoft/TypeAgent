@@ -77,6 +77,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     calendar: "📅",
     chat: "💬",
     code: "⚛️",
+    conversation: "💬",
     desktop: "🪟",
     dispatcher: "🤖",
     email: "📩",
@@ -1628,7 +1629,13 @@ export class ChatPanel {
             chip.style.fontSize = "11px";
             chip.style.lineHeight = "1";
             chip.style.borderRadius = "8px";
-            chip.style.opacity = "0.85";
+            // Solid pill — `opacity` was previously 0.85 but that
+            // darkened the chip in dark VS Code themes where the
+            // backing `--vscode-inputValidation-*Background` variables
+            // are already deliberately subtle. The new state vars
+            // (`statusBarItem-warning*` / `button-*`) carry their own
+            // contrast, so let them speak.
+            chip.style.opacity = "1";
             chip.style.boxSizing = "border-box";
             bodyDiv.insertBefore(chip, bodyDiv.firstChild);
         }
@@ -1638,11 +1645,15 @@ export class ChatPanel {
         label.textContent = status;
         chip.appendChild(label);
         if (status === "queued") {
-            // Alpha-tinted yellow reads on both light and dark themes.
+            // VS Code's `statusBarItem-warningBackground` is designed
+            // for high-contrast pills on the status bar chrome; pairs
+            // with `statusBarItem-warningForeground` (typically white).
+            // Fallback for non-VS Code hosts (Electron Shell) is a
+            // saturated amber with white text.
             chip.style.background =
-                "var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.18))";
+                "var(--vscode-statusBarItem-warningBackground, #cc8a3a)";
             chip.style.color =
-                "var(--vscode-inputValidation-warningForeground, rgba(120, 80, 0, 0.95))";
+                "var(--vscode-statusBarItem-warningForeground, #ffffff)";
             if (onCancel) {
                 const btn = document.createElement("button");
                 btn.type = "button";
@@ -1676,10 +1687,13 @@ export class ChatPanel {
                 chip.appendChild(btn);
             }
         } else {
-            chip.style.background =
-                "var(--vscode-inputValidation-infoBackground, rgba(0, 150, 255, 0.18))";
-            chip.style.color =
-                "var(--vscode-inputValidation-infoForeground, rgba(0, 80, 140, 0.95))";
+            // `button-background` is the host's primary-action accent
+            // (clear blue/teal in VS Code Dark+); pairs with
+            // `button-foreground` for high-contrast white text. Better
+            // pop for an active-state pill than the subtle
+            // `inputValidation-info*` variables we used previously.
+            chip.style.background = "var(--vscode-button-background, #0e639c)";
+            chip.style.color = "var(--vscode-button-foreground, #ffffff)";
         }
     }
 

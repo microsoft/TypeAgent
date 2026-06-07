@@ -8,12 +8,15 @@
 // Renders the shared `chat-ui` ChatPanel; the only host-managed UI element
 // is the connection status ribbon at the top (#status-bar).
 
-import { ChatPanel, HistoryEntry } from "chat-ui";
+import {
+    ChatPanel,
+    HistoryEntry,
+    QueueChipController,
+    attachDoubleEscape,
+} from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
-import { QueueStateMirror } from "@typeagent/dispatcher-types";
-import type { QueuedRequest, QueueSnapshot } from "@typeagent/dispatcher-types";
 
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
@@ -83,116 +86,16 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 // Merging them would have `markCancelled` race ahead of
 // `claimCancelledRender` and suppress the affordance. Both wiped on
 // sessionChanged / clear.
-const queueMirror = new QueueStateMirror();
+const queueChips = new QueueChipController({
+    chatPanel,
+    cancelById: (serverId) =>
+        vscode.postMessage({ type: "cancelCommand", requestId: serverId }),
+});
 const cancelledRequests = new Set<string>();
 const cancelledRendered = new Set<string>();
 
-// Chips deferred until their bubble materializes. Keyed by targetRid
-// (clientRid for local, serverRid for remote-only). `serverId` is the
-// canonical id sent on user × click; needed because targetRid may BE
-// the serverId.
-const pendingQueueStatus = new Map<
-    string,
-    { status: "queued" | "running"; serverId: string }
->();
-
-/**
- * Resolve the chat-ui bubble key for a queue entry. Local entries use
- * clientRequestId; peer entries fall back to the canonical server UUID
- * (the key used by `addRemoteUserMessage`).
- */
-function chipTargetRid(
-    entry: QueuedRequest,
-    msgClientRequestId: string | undefined,
-): string {
-    return entry.clientRequestId ?? msgClientRequestId ?? entry.requestId;
-}
-
-/**
- * Materialize a peer-originated user bubble so a chip has something
- * to attach to. No-op when the bubble already exists or `entry.text`
- * is missing.
- */
-function materializeQueueBubbleIfMissing(
-    entry: QueuedRequest,
-    targetRid: string,
-): void {
-    if (chatPanel.hasUserMessage(targetRid)) return;
-    if (entry.text) {
-        chatPanel.addRemoteUserMessage(entry.text, targetRid);
-    }
-}
-
-/**
- * Stamp a chip on the bubble for `targetRid` if it exists; otherwise
- * stash for later application. The × button cancels via the canonical
- * server id (the bridge accepts this as serverId when no client→server
- * mapping matches).
- */
-function applyQueueChip(
-    targetRid: string,
-    serverId: string,
-    status: "queued" | "running",
-): void {
-    if (!chatPanel.hasUserMessage(targetRid)) {
-        pendingQueueStatus.set(targetRid, { status, serverId });
-        return;
-    }
-    const onCancel =
-        status === "queued"
-            ? () =>
-                  vscode.postMessage({
-                      type: "cancelCommand",
-                      requestId: serverId,
-                  })
-            : undefined;
-    chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel);
-    pendingQueueStatus.delete(targetRid);
-}
-
-/** Clear chip and any pending stash. */
-function clearQueueChip(targetRid: string): void {
-    pendingQueueStatus.delete(targetRid);
-    chatPanel.setUserBubbleQueueStatus(targetRid, null);
-}
-
-/**
- * Reapply chip state to match an authoritative snapshot. Snapshots are
- * the source of truth; fine-grained queue events are incremental hints.
- */
-function reconcileQueueChips(
-    prev: QueueSnapshot | undefined,
-    next: QueueSnapshot | undefined,
-): void {
-    const live = new Set<string>();
-    if (next?.running) {
-        const targetRid = chipTargetRid(next.running, undefined);
-        materializeQueueBubbleIfMissing(next.running, targetRid);
-        live.add(targetRid);
-        applyQueueChip(targetRid, next.running.requestId, "running");
-    }
-    for (const entry of next?.queued ?? []) {
-        const targetRid = chipTargetRid(entry, undefined);
-        materializeQueueBubbleIfMissing(entry, targetRid);
-        live.add(targetRid);
-        applyQueueChip(targetRid, entry.requestId, "queued");
-    }
-    const prevIds = new Set<string>();
-    if (prev?.running) prevIds.add(chipTargetRid(prev.running, undefined));
-    for (const e of prev?.queued ?? [])
-        prevIds.add(chipTargetRid(e, undefined));
-    for (const id of prevIds) {
-        if (live.has(id)) continue;
-        clearQueueChip(id);
-    }
-    for (const id of Array.from(pendingQueueStatus.keys())) {
-        if (!live.has(id)) pendingQueueStatus.delete(id);
-    }
-}
-
 /** Window (ms) for the double-Escape "cancel everything" gesture. */
 const DOUBLE_ESCAPE_WINDOW_MS = 1000;
-let lastEscapeTime = 0;
 
 /**
  * Flag a request as cancelled. Variadic because the bridge surfaces
@@ -450,8 +353,7 @@ window.addEventListener("message", (event) => {
             chatPanel.clear();
             cancelledRequests.clear();
             cancelledRendered.clear();
-            pendingQueueStatus.clear();
-            queueMirror.reset(undefined);
+            queueChips.reset();
             break;
         case "setDisplay":
             // Drop display updates that arrive AFTER cancellation —
@@ -482,10 +384,7 @@ window.addEventListener("message", (event) => {
             if (rid && !chatPanel.hasUserMessage(rid)) {
                 chatPanel.addRemoteUserMessage(msg.command, rid);
                 // Apply any chip status received before the bubble existed.
-                const pending = pendingQueueStatus.get(rid);
-                if (pending) {
-                    applyQueueChip(rid, pending.serverId, pending.status);
-                }
+                queueChips.flushPending(rid);
             }
             break;
         }
@@ -504,7 +403,7 @@ window.addEventListener("message", (event) => {
             chatPanel.clear();
             cancelledRequests.clear();
             cancelledRendered.clear();
-            pendingQueueStatus.clear();
+            queueChips.reset();
             break;
         case "notify": {
             const rid = msg.requestId;
@@ -524,8 +423,9 @@ window.addEventListener("message", (event) => {
                     result ? { ...result, cancelled } : undefined,
                 );
                 // Defensive chip clear (see direct `commandComplete` case).
-                clearQueueChip(rid);
-                if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
+                queueChips.clearQueueChip(rid);
+                if (msg.aliasRequestId)
+                    queueChips.clearQueueChip(msg.aliasRequestId);
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
@@ -557,8 +457,9 @@ window.addEventListener("message", (event) => {
                 // clearing here makes the running indicator disappear
                 // immediately on completion (and covers the case
                 // where no follow-up snapshot fires).
-                clearQueueChip(rid);
-                if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
+                queueChips.clearQueueChip(rid);
+                if (msg.aliasRequestId)
+                    queueChips.clearQueueChip(msg.aliasRequestId);
             }
             // Restore the send button (was swapped for the stop button
             // by send()/setProcessing). Done unconditionally so a
@@ -649,31 +550,14 @@ window.addEventListener("message", (event) => {
         // can't resurrect stale chips; `queueStateChanged` carries the
         // authoritative reconciliation.
         case "queueRequestQueued": {
-            const result = queueMirror.applyQueued(msg.entry, msg.version);
-            if (!result.admitted) break;
-            const targetRid = chipTargetRid(msg.entry, msg.clientRequestId);
-            materializeQueueBubbleIfMissing(msg.entry, targetRid);
-            applyQueueChip(targetRid, msg.entry.requestId, "queued");
+            queueChips.onRequestQueued(msg.entry, msg.version);
             break;
         }
         case "queueRequestStarted": {
-            const result = queueMirror.applyStarted(msg.entry, msg.version);
-            if (!result.admitted) break;
-            if (result.previousRunning) {
-                clearQueueChip(
-                    chipTargetRid(result.previousRunning, undefined),
-                );
-            }
-            const targetRid = chipTargetRid(msg.entry, msg.clientRequestId);
-            materializeQueueBubbleIfMissing(msg.entry, targetRid);
-            applyQueueChip(targetRid, msg.entry.requestId, "running");
+            queueChips.onRequestStarted(msg.entry, msg.version);
             break;
         }
         case "queueRequestCancelled": {
-            const mirrorResult = queueMirror.applyCancelled(
-                msg.requestId,
-                msg.version,
-            );
             // Mark BOTH the server UUID and (if resolved) the
             // clientRequestId so subsequent display messages keyed by
             // either form are recognised as cancelled. The bridge
@@ -683,22 +567,31 @@ window.addEventListener("message", (event) => {
             // request that arrived before setUserRequest populated the
             // reverse map.
             markCancelled(msg.requestId, msg.clientRequestId);
+            // Controller clears chips under both id forms it knows
+            // (server UUID + any pre-cancel matched entry's bubble key)
+            // even if the mirror dropped the event as stale, and
+            // surfaces the pre-apply entry on `matched` plus an
+            // `admitted` flag for affordance gating.
+            const cancelResult = queueChips.onRequestCancelled(
+                msg.requestId,
+                msg.version,
+            );
+            // Belt-and-suspenders: also clear the host-supplied
+            // clientRequestId in case it doesn't match the controller's
+            // chosen bubble key (e.g. when the entry's clientRequestId
+            // field never made it to this client).
+            if (msg.clientRequestId && msg.clientRequestId !== msg.requestId) {
+                queueChips.clearQueueChip(msg.clientRequestId);
+            }
             // Resolve which UI key to target. chat-ui keys bubbles by
             // clientRequestId (when known via the bridge's reverse map);
             // peer-originated requests fall back to the canonical server
             // id, which only has a matching bubble if a setUserRequest
             // already promoted it.
             const targetRid = msg.clientRequestId ?? msg.requestId;
-            // Clear chip and any pending stash even if the version was
-            // stale — the user's authoritative intent is "this is
-            // cancelled", and a leftover chip would be misleading.
-            clearQueueChip(targetRid);
-            if (msg.clientRequestId !== msg.requestId) {
-                clearQueueChip(msg.requestId);
-            }
             // Stale events don't get to paint the cancellation
             // affordance — that would conflict with a newer snapshot.
-            if (!mirrorResult.admitted) break;
+            if (!cancelResult.admitted) break;
             // Mirror the Electron shell guard
             // (chatView.ts:1089-1094: only notifyCancelled when
             // idToMessageGroup has the entry). For peer-originated
@@ -730,9 +623,7 @@ window.addEventListener("message", (event) => {
             break;
         }
         case "queueStateChanged": {
-            const result = queueMirror.applyQueueStateChanged(msg.snapshot);
-            if (!result.admitted) break;
-            reconcileQueueChips(result.previous, msg.snapshot);
+            queueChips.onQueueStateChanged(msg.snapshot);
             break;
         }
     }
@@ -741,55 +632,17 @@ window.addEventListener("message", (event) => {
 // Ask the extension host to connect
 vscode.postMessage({ type: "connect" });
 
-// Document-level Escape gesture — mirrors the Electron shell
-// (`packages/shell/src/renderer/src/chat/chatView.ts:404-422`):
-//   * Single Esc with an active request → cancel that request.
-//   * Two Esc presses within DOUBLE_ESCAPE_WINDOW_MS → cancel ALL
-//     queued + running entries on the session.
-// Chat-ui's own input-level handler (chatPanel.ts:712) takes care of
-// completion-popup dismissal and cancellation when the input is focused,
-// and calls `e.preventDefault()` when it consumes the keystroke. We
-// honor that flag here so the gesture isn't double-counted.
-document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (e.defaultPrevented) {
-        // chat-ui (or another in-iframe handler) already consumed this
-        // Escape — but we still update the double-Esc clock so a paired
-        // second press within the window can fire cancelAllQueuedAndRunning.
-        const now = Date.now();
-        const isDouble = now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
-        lastEscapeTime = now;
-        if (isDouble) {
-            lastEscapeTime = 0;
-            vscode.postMessage({ type: "cancelAllQueuedAndRunning" });
-        }
-        return;
-    }
-    const now = Date.now();
-    const isDouble = now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
-    lastEscapeTime = now;
-    // Prefer chat-ui's notion of "active" (drives the send/stop button
-    // toggle on this view). Fall back to the queue mirror's running
-    // entry so an Esc landing in the brief gap between commandComplete
-    // and the next requestStarted still cancels what's actually
-    // executing on the dispatcher. Also covers peer-originated requests
-    // we never tracked locally.
-    const activeId =
-        chatPanel.getActiveRequestId() ??
-        queueMirror.snapshot?.running?.requestId;
-    if (activeId) {
-        // Cancel just the running request on first Esc — uses the same
-        // path the chat-ui input handler would use when focused, so the
-        // bridge sees a uniform cancelCommand message.
-        e.preventDefault();
+// Document-level single-Esc + double-Esc cancel gesture. Logic lives
+// in chat-ui's `attachDoubleEscape`; the webview only supplies the
+// cancellation transport (postMessage to the extension host).
+attachDoubleEscape(chatPanel, queueChips, {
+    windowMs: DOUBLE_ESCAPE_WINDOW_MS,
+    onCancelActive: (activeId) => {
         vscode.postMessage({ type: "cancelCommand", requestId: activeId });
-    }
-    if (isDouble) {
-        // Reset so a third press doesn't immediately re-trigger.
-        lastEscapeTime = 0;
-        e.preventDefault();
+    },
+    onCancelAll: () => {
         vscode.postMessage({ type: "cancelAllQueuedAndRunning" });
-    }
+    },
 });
 
 // Report focus changes so the extension can drive a context key for keybindings.

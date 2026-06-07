@@ -3779,9 +3779,21 @@ importers:
         specifier: ^14.1.0
         version: 14.1.1
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/markdown-it':
         specifier: ^14.1.2
         version: 14.1.2
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1

@@ -52,3 +52,11 @@ export type {
 export { openSettingsPopup, openHelpPopup } from "./popups.js";
 
 export { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
+
+export {
+    QueueChipController,
+    type QueueChipChatPanel,
+    type QueueChipControllerOptions,
+    attachDoubleEscape,
+    type DoubleEscapeOptions,
+} from "./queueChipController.js";
