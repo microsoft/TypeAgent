@@ -918,15 +918,17 @@ table.table-message td {
   border-radius: 8px 8px 0 0;
 }
 
-/* Solid state-color block on the rail per design — no opacity, no
-   color-mix wash. Amber for queued, blue for running. Mid-saturation
-   so the bubble body still reads as the primary surface. The label
-   color below switches to white for contrast against the solid bg. */
+/* Mid-tone state-color block on the rail — sits between the original
+   pastel wash and a fully saturated solid. Amber for queued, blue for
+   running. No opacity, no color-mix; just a muted block so the rail
+   reads as a clear status indicator without competing with the bubble
+   body. The label color below uses dark text for contrast against the
+   lighter mid-tones. */
 .chat-message-status-rail[data-status="running"] {
-  background: #2480c4;
+  background: #70b0e0;
 }
 .chat-message-status-rail[data-status="queued"] {
-  background: #d99b1f;
+  background: #eabf63;
 }
 
 /* Square off the top of the content so the rail and content read as one
@@ -951,9 +953,10 @@ table.table-message td {
   min-width: 0;
 }
 
-/* State label sits on top of the solid state-color block. White text
-   gives clean contrast against both amber and blue rails. Outside a
-   stateful rail the default (gray) still applies. */
+/* State label sits on top of the mid-tone state-color block. Dark text
+   gives clean contrast against both amber and blue rails at these
+   lightnesses. Outside a stateful rail the default (gray) still
+   applies. */
 .chat-status-state {
   display: inline-flex;
   align-items: center;
@@ -966,7 +969,7 @@ table.table-message td {
 }
 .chat-status-state[data-status="running"],
 .chat-status-state[data-status="queued"] {
-  color: #ffffff;
+  color: #2c2c2c;
 }
 
 .chat-status-rail-controls {
@@ -1010,18 +1013,17 @@ table.table-message td {
   width: 14px;
   height: 14px;
 }
-/* On a stateful (solid-color) rail, the default gray icon color is
-   washed out — switch icons + hover affordances to white so they read
-   against the amber/blue block. */
+/* On a stateful (mid-tone) rail, switch icons + hover affordances to
+   dark so they read against the amber/blue block. */
 .chat-message-status-rail[data-status] .chat-action-button {
-  color: #ffffff;
+  color: #2c2c2c;
 }
 .chat-message-status-rail[data-status] .chat-action-button:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.12);
 }
-.chat-message-status-rail .chat-action-button.danger:hover {
-  background: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
+.chat-message-status-rail[data-status] .chat-action-button.danger:hover {
+  background: rgba(0, 0, 0, 0.18);
+  color: #2c2c2c;
 }
 
 /* =========================================================================

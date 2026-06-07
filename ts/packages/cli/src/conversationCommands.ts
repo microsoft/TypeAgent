@@ -128,7 +128,7 @@ async function handleNew(
         // Shell's auto-naming format in chatPanelBridge.ts.
         const dt = new Date();
         const pad = (n: number) => n.toString().padStart(2, "0");
-        name = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+        name = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
     }
     const created = await ctx.connection.createConversation(name);
     const switchNow = await confirmYesNo(`Switch to '${name}' now?`);

@@ -80,9 +80,9 @@ type NotificationEntry = {
 function ridStr(requestId: RequestId | string | undefined): string | undefined {
     if (requestId === undefined) return undefined;
     if (typeof requestId === "string") return requestId;
-    return (
-        (requestId.clientRequestId as string | undefined) ?? requestId.requestId
-    );
+    return typeof requestId.clientRequestId === "string"
+        ? requestId.clientRequestId
+        : requestId.requestId;
 }
 
 // Map dispatcher's CommandResult metrics to chat-ui's completeRequest shape.
@@ -306,11 +306,47 @@ export function createChatPanelClient(
         entry: QueuedRequest,
         msgClientRequestId: string | undefined,
     ): string {
-        return (
-            (entry.clientRequestId as string | undefined) ??
-            msgClientRequestId ??
-            entry.requestId
-        );
+        if (typeof entry.clientRequestId === "string") {
+            return entry.clientRequestId;
+        }
+        return msgClientRequestId ?? entry.requestId;
+    }
+
+    /**
+     * Flag a request as cancelled. Variadic because the bridge surfaces
+     * both client rid and server UUID; downstream payloads may key by
+     * either. Mirrors the helper in `vscode-shell/src/webview/main.ts`.
+     */
+    function markCancelled(...rids: Array<string | undefined>): void {
+        for (const rid of rids) {
+            if (rid) cancelledRequests.add(rid);
+        }
+    }
+
+    /** True if any prior event has flagged this request id as cancelled. */
+    function isCancelledRequest(rid: string | undefined): boolean {
+        return rid !== undefined && cancelledRequests.has(rid);
+    }
+
+    /**
+     * Idempotently claim the "⚠ Cancelled" affordance slot for a request.
+     * Variadic — every supplied id form (client rid, server UUID, alias)
+     * is added on every call so a later event that knows only one form
+     * still hits the dedupe. Returns true on first claim, false thereafter.
+     * Two-pass so `claim("X", "X")` doesn't have arg 1's add() trip arg 2.
+     */
+    function claimCancelledRender(...rids: Array<string | undefined>): boolean {
+        let alreadyClaimed = false;
+        let anyValid = false;
+        for (const rid of rids) {
+            if (!rid) continue;
+            anyValid = true;
+            if (cancelledRendered.has(rid)) alreadyClaimed = true;
+        }
+        for (const rid of rids) {
+            if (rid) cancelledRendered.add(rid);
+        }
+        return anyValid && !alreadyClaimed;
     }
 
     /**
@@ -627,16 +663,32 @@ export function createChatPanelClient(
                         undefined,
                         requestId,
                     );
-                    chatPanel.completeRequest(requestId, mapResult(result));
+                    const mapped = mapResult(result);
+                    // Dedupe the cancelled affordance: if the
+                    // queueRequestCancelled path already painted it, strip
+                    // the flag here so completeRequest doesn't double-stamp.
+                    const cancelled =
+                        mapped?.cancelled === true &&
+                        claimCancelledRender(requestId);
+                    chatPanel.completeRequest(
+                        requestId,
+                        mapped ? { ...mapped, cancelled } : undefined,
+                    );
                     // Defensive chip clear — the dispatcher should emit a
                     // queue lifecycle event that does this via reconcile,
                     // but if it doesn't (or arrives after this finishes)
                     // the chip would otherwise linger.
                     clearQueueChip(requestId);
                 } catch (e: any) {
-                    chatPanel.addSystemMessage(
-                        `Error: ${e?.message ?? String(e)}`,
-                    );
+                    // Drop awaitCommand rejection-from-cancel stragglers:
+                    // the "⚠ Cancelled" affordance is already on screen
+                    // from queueRequestCancelled. Mirrors the `error`
+                    // guard in vscode-shell/src/webview/main.ts.
+                    if (!isCancelledRequest(requestId)) {
+                        chatPanel.addSystemMessage(
+                            `Error: ${e?.message ?? String(e)}`,
+                        );
+                    }
                     clearQueueChip(requestId);
                 } finally {
                     chatPanel.setIdle();
@@ -694,13 +746,21 @@ export function createChatPanelClient(
         const now = Date.now();
         const isDouble = now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
         lastEscapeTime = now;
-        const activeId =
-            chatPanel.getActiveRequestId() ??
-            queueMirror.snapshot?.running?.requestId;
+        const activeClientId = chatPanel.getActiveRequestId();
+        const fallbackServerId = queueMirror.snapshot?.running?.requestId;
+        const activeId = activeClientId ?? fallbackServerId;
         if (activeId) {
             e.preventDefault();
             try {
-                dispatcher?.cancelCommandByClientId(activeId);
+                // If we know the chat-ui clientRequestId, use the
+                // clientId-keyed API (same path chat-ui's own Esc takes).
+                // Otherwise fall back to the server-id API so peer-
+                // originated running requests are still cancelled.
+                if (activeClientId !== undefined) {
+                    dispatcher?.cancelCommandByClientId(activeClientId);
+                } else {
+                    void dispatcher?.cancelCommand(activeId);
+                }
             } catch {
                 // Best-effort — channel may be gone (server killed).
             }
@@ -795,6 +855,7 @@ export function createChatPanelClient(
         },
         setDisplayInfo: (requestId, source, _actionIndex, action) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
                 chatPanel.setDisplayInfo(
                     source,
                     undefined,
@@ -805,6 +866,7 @@ export function createChatPanelClient(
         },
         setDisplay: (message) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(message.requestId))) return;
                 if (message.kind === "toast" || message.kind === "inline") {
                     chatPanel.showInline(message.message, message.source);
                     return;
@@ -819,6 +881,7 @@ export function createChatPanelClient(
         },
         appendDisplay: (message, mode) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(message.requestId))) return;
                 if (message.kind === "toast" || message.kind === "inline") {
                     chatPanel.showInline(message.message, message.source);
                     return;
@@ -1020,20 +1083,31 @@ export function createChatPanelClient(
             const result = queueMirror.applyQueued(entry, version);
             if (!result.admitted) return;
             const targetRid = chipTargetRid(entry, undefined);
-            materializeQueueBubbleIfMissing(entry, targetRid);
-            applyQueueChip(targetRid, entry.requestId, "queued");
+            // Mirror updates immediately so version watermarking stays
+            // consistent across replay, but defer DOM mutations until
+            // history replay has wiped + rebuilt `userMessageById`.
+            // Otherwise a bubble materialized here would be orphaned by
+            // replayHistory's `userMessageById.clear()` and later chip
+            // clears / cancellation routing would miss it.
+            afterReplay(() => {
+                materializeQueueBubbleIfMissing(entry, targetRid);
+                applyQueueChip(targetRid, entry.requestId, "queued");
+            });
         },
         requestStarted: (entry, version) => {
             const result = queueMirror.applyStarted(entry, version);
             if (!result.admitted) return;
-            if (result.previousRunning) {
-                clearQueueChip(
-                    chipTargetRid(result.previousRunning, undefined),
-                );
-            }
+            const previousRunningTarget = result.previousRunning
+                ? chipTargetRid(result.previousRunning, undefined)
+                : undefined;
             const targetRid = chipTargetRid(entry, undefined);
-            materializeQueueBubbleIfMissing(entry, targetRid);
-            applyQueueChip(targetRid, entry.requestId, "running");
+            afterReplay(() => {
+                if (previousRunningTarget) {
+                    clearQueueChip(previousRunningTarget);
+                }
+                materializeQueueBubbleIfMissing(entry, targetRid);
+                applyQueueChip(targetRid, entry.requestId, "running");
+            });
         },
         requestCancelled: (
             requestId: string,
@@ -1043,7 +1117,6 @@ export function createChatPanelClient(
             // Mark cancelled even if the mirror rejects (user-cancel
             // intent is authoritative — the cancel may have been issued
             // before our locally-buffered version watermark advanced).
-            cancelledRequests.add(requestId);
             // Find the chip's target rid from the snapshot we have NOW,
             // before applyCancelled mutates it.
             const snapBefore = queueMirror.snapshot;
@@ -1056,18 +1129,49 @@ export function createChatPanelClient(
                 );
                 if (queued) preTargetRid = chipTargetRid(queued, undefined);
             }
-            queueMirror.applyCancelled(requestId, version);
-            if (preTargetRid) {
-                clearQueueChip(preTargetRid);
-                if (preTargetRid !== requestId) clearQueueChip(requestId);
-            } else {
-                clearQueueChip(requestId);
-            }
+            // Mark BOTH the server UUID and (if resolved) the
+            // clientRequestId so subsequent display messages keyed by
+            // either form are recognised as cancelled. Doing this
+            // synchronously (not behind afterReplay) is intentional so
+            // late display-event guards see the flag immediately.
+            markCancelled(requestId, preTargetRid);
+            const result = queueMirror.applyCancelled(requestId, version);
+            const targetRid = preTargetRid ?? requestId;
+            afterReplay(() => {
+                // Clear chip even on stale versions — a lingering chip
+                // would contradict the user's authoritative cancel intent.
+                clearQueueChip(targetRid);
+                if (targetRid !== requestId) clearQueueChip(requestId);
+                // Stale events don't paint the cancellation affordance —
+                // a newer snapshot would already have moved on.
+                if (!result.admitted) return;
+                // Skip the affordance render when no user bubble is
+                // anchored (peer-originated queued items cancelled BEFORE
+                // this tab's setUserRequest fired). For our own requests,
+                // send() registers the user message before any cancel can
+                // land, so this passes.
+                if (!chatPanel.hasUserMessage(targetRid)) {
+                    if (chatPanel.getActiveRequestId() === targetRid) {
+                        chatPanel.setIdle();
+                    }
+                    return;
+                }
+                // Dedupe against any prior commandComplete/awaitCommand
+                // render. Pass BOTH id forms so a later event keyed by
+                // the OTHER id form still hits dedupe.
+                if (claimCancelledRender(requestId, preTargetRid)) {
+                    chatPanel.completeRequest(targetRid, { cancelled: true });
+                }
+                if (chatPanel.getActiveRequestId() === targetRid) {
+                    chatPanel.setIdle();
+                }
+            });
         },
         queueStateChanged: (snapshot) => {
             const result = queueMirror.applyQueueStateChanged(snapshot);
             if (!result.admitted) return;
-            reconcileQueueChips(result.previous, snapshot);
+            const previous = result.previous;
+            afterReplay(() => reconcileQueueChips(previous, snapshot));
         },
     };
 
@@ -1232,10 +1336,13 @@ export function createChatPanelClient(
                 const lines = [
                     "<b>Conversation Commands</b>",
                     "<code>/conversation list</code> — List all conversations",
-                    "<code>/conversation new [name]</code> — Create a new conversation",
+                    "<code>/conversation info</code> — Show the active conversation's name and id",
+                    "<code>/conversation new [name]</code> — Create a new conversation (auto-named when omitted)",
                     "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
-                    "<code>/conversation rename &lt;id&gt; &lt;name&gt;</code> — Rename a conversation",
-                    "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
+                    "<code>/conversation next</code> — Switch to the next conversation (wraps)",
+                    "<code>/conversation prev</code> — Switch to the previous conversation (wraps)",
+                    "<code>/conversation rename [id|name] &lt;newName&gt;</code> — Rename a conversation (omit id|name to rename the active one)",
+                    "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation (cannot delete the active one)",
                     "",
                     "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",
                 ];
@@ -1247,7 +1354,7 @@ export function createChatPanelClient(
                 if (!newName) {
                     const dt = new Date();
                     const pad = (n: number) => n.toString().padStart(2, "0");
-                    newName = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+                    newName = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
                 }
                 const created = await api.conversationCreate(newName);
                 const switchResult = await api.conversationSwitch(
@@ -1462,8 +1569,24 @@ export function createChatPanelClient(
     // --- Client ----------------------------------------------------------
     const client: Client = {
         clientIO,
-        dispatcherInitialized(d: Dispatcher, _snapshot, cutoffSeq): void {
+        dispatcherInitialized(
+            d: Dispatcher,
+            initialQueueSnapshot: QueueSnapshot | undefined,
+            cutoffSeq: number | undefined,
+        ): void {
             dispatcher = d;
+            // Seed the local queue mirror from the initial snapshot so
+            // (a) version watermarking starts at the right baseline and
+            // (b) the double-Esc gesture can see any in-flight peer
+            // requests before the next queue event arrives. Pure mirror
+            // state — DOM materialization happens inside afterReplay via
+            // reconcileQueueChips when replay completes.
+            if (initialQueueSnapshot) {
+                const prev = queueMirror.snapshot;
+                queueMirror.reset(initialQueueSnapshot);
+                const snapshot = initialQueueSnapshot;
+                afterReplay(() => reconcileQueueChips(prev, snapshot));
+            }
             void replayDisplayHistory(cutoffSeq);
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
@@ -1562,7 +1685,15 @@ export function createChatPanelClient(
             // finished. Finalize its metrics bubble — these requests never
             // flow through the renderer's onSend → completeRequest path.
             afterReplay(() => {
-                chatPanel.completeRequest(clientRequestId, mapResult(result));
+                const mapped = mapResult(result);
+                // Dedupe cancelled affordance against the queue cancel path.
+                const cancelled =
+                    mapped?.cancelled === true &&
+                    claimCancelledRender(clientRequestId);
+                chatPanel.completeRequest(
+                    clientRequestId,
+                    mapped ? { ...mapped, cancelled } : undefined,
+                );
                 clearQueueChip(clientRequestId);
             });
         },

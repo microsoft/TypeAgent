@@ -1337,7 +1337,7 @@ Likewise the MCP public tool name `typeagent-processCommand` exposed
 by `copilot-plugin/src/mcp/server.ts` is a public API contract identifier
 and remains unchanged.
 
-### 14.2 Per-bubble queue chips (chat-ui shared controller)
+### 14.2 Per-bubble queue chips (inline pattern in each host)
 
 **Status:** Shipped.
 
@@ -1353,126 +1353,125 @@ Escape handler was dropped. Functionally identical wiring was already
 present in the VS Code shell's `webview/main.ts`, which uses the same
 chat-ui `ChatPanel` APIs.
 
-The Electron Shell restoration first duplicated the VS Code wiring in
-`chatPanelBridge.ts`. The duplication (one `QueueStateMirror`, the
-same five chip helpers, the same four event handlers, the same
-double-Esc gesture) was then extracted into a shared chat-ui module
-so a single implementation lives next to the underlying primitives.
+The restoration ports the wiring pattern verbatim from
+`packages/vscode-shell/src/webview/main.ts` into
+`packages/shell/src/renderer/src/chatPanelBridge.ts` so the two hosts
+stay in lockstep. The shared chip surface (rail markup, state classes,
+hover styles, action buttons, color tokens) lives in
+`packages/chat-ui` — `ChatPanel.setUserBubbleQueueStatus(targetRid,
+status, onCancel?, onPromote?)` is the contract both hosts hit. The
+event-routing logic is intentionally duplicated as inline helpers
+inside each host so each renderer is self-contained; the duplication
+is small, scrutinised side-by-side, and avoids dragging a controller
+abstraction across the chat-ui boundary.
 
-**`packages/chat-ui/src/queueChipController.ts`** exports:
+**Shared helper set (present in both hosts, same semantics):**
 
-- `QueueChipController` — owns a per-renderer `QueueStateMirror`, a
-  deferred-chip stash, and the four event-folding helpers
-  (`onRequestQueued`, `onRequestStarted`, `onRequestCancelled`,
-  `onQueueStateChanged`). Hosts construct one per renderer (or per
-  chat session), route every queue `ClientIO` event through the
-  matching `on*` method, and supply a single
-  `cancelById(serverId)` callback that the `×` button on a queued
-  chip invokes when dismissed.
-- `attachDoubleEscape(chatPanel, controller, opts)` — wires the
-  document-level single-Esc + double-Esc gesture. Honors
-  `e.defaultPrevented` so chat-ui's own input-level Escape handler
-  (`chatPanel.ts`) stays primary — the gesture only updates the
-  double-Esc clock in that case so a paired second press still
-  fires `onCancelAll`.
-- `QueueChipChatPanel` — a minimal structural interface (`hasUserMessage`,
-  `addRemoteUserMessage`, `setUserBubbleQueueStatus`) that the
-  controller depends on, kept narrow so unit tests don't need a
-  full `ChatPanel`.
-
-**Controller responsibilities (the duplicated logic):**
-
-- `chipTargetRid(entry)` resolves the chat-ui bubble key:
-  `entry.clientRequestId` (narrowed from `unknown` via
-  `typeof === "string"`) for locally-originated entries (the id
-  chat-ui set on `addUserMessage`), `entry.requestId` for
-  peer-originated entries (the id used by `addRemoteUserMessage`),
-  with an optional host-supplied fallback in between.
-- `materializeQueueBubbleIfMissing(entry, targetRid)` creates a
-  peer bubble via `chatPanel.addRemoteUserMessage(entry.text, targetRid)`
+- `chipTargetRid(entry, msgClientRequestId?)` resolves the chat-ui
+  bubble key: `entry.clientRequestId` (when it's a string) for
+  locally-originated entries, `entry.requestId` for peer-originated
+  entries, with an optional message-level `clientRequestId` (from
+  `setUserRequest`) in between.
+- `materializeQueueBubbleIfMissing(entry, targetRid)` creates a peer
+  bubble via `chatPanel.addRemoteUserMessage(entry.text, targetRid)`
   when a queue event references a request the local renderer never
   saw (i.e. another client in a shared conversation).
 - `applyQueueChip(targetRid, serverId, status)` calls
-  `chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel?)`.
-  For `status === "queued"`, the `onCancel` callback invokes
-  `cancelById(serverId)` — the server UUID — because peer-origin
-  queued bubbles have only the server id. For `status === "running"`,
-  `onCancel` is omitted: cancellation flows through the stop button
-  / Esc gesture. When the bubble doesn't exist yet, the chip is
-  stashed in a `pending` map and reapplied on the next reconcile
-  or `flushPending(rid)` call.
+  `chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel?,
+onPromote?)`. The `×` button on a queued chip invokes the host's
+  cancel-by-server-id path; the jump-queue button on a queued chip
+  invokes the host's promote-by-server-id path. When the bubble
+  doesn't exist yet, the chip is stashed in a `pendingQueueStatus`
+  map and reapplied when `setUserRequest` later materializes it.
 - `clearQueueChip(targetRid)` clears both the chip and the pending
   stash.
-- `flushPending(targetRid)` lets hosts apply any deferred chip
-  immediately after they materialize a bubble (the bridge's
-  `setUserRequest` path calls this so a peer-originated
-  `requestQueued` that raced ahead of `setUserRequest` doesn't have
-  to wait for the next snapshot reconcile).
-- `reconcileQueueChips(prev, next)` is the snapshot-driven
-  reconciler: walks the new snapshot, re-applies chips for every
-  live entry, then clears chips on entries that the previous
-  snapshot had but the new one dropped. Snapshots are the source of
-  truth; the fine-grained events are incremental hints between
-  snapshots.
-- `reset()` clears the pending stash (emitting `null` chips on
-  any still-stashed bubble ids so a future materialization doesn't
-  show a stale pill) and resets the underlying mirror. Hosts call
-  this on session change / clear.
-- `onRequestCancelled(requestId, version)` returns `{admitted, matched?}`
-  where `matched` is the pre-apply queue entry (if any). Hosts that
-  paint a cancellation affordance (the VS Code shell's
-  "⚠ Cancelled" agent bubble) use `matched` to map server id ↔
-  chat-ui bubble key without re-reading the snapshot.
+- `reconcileQueueChips(prev, next)` is the snapshot-driven reconciler:
+  walks the new snapshot, re-applies chips for every live entry, then
+  clears chips on entries that the previous snapshot had but the new
+  one dropped. Snapshots are the source of truth; the fine-grained
+  events are incremental hints between snapshots.
+- `markCancelled`, `isCancelledRequest`, `claimCancelledRender` —
+  the cancelled-dedup helpers backed by the `cancelledRequests` /
+  `cancelledRendered` Sets. Both hosts use them to drop late
+  `setDisplay` / `appendDisplay` / `setDisplayInfo` / error
+  stragglers and to idempotently claim the "⚠ Cancelled" affordance
+  slot so a `commandComplete` and a `requestCancelled` arriving in
+  either order paint exactly one affordance. The dedup is variadic
+  (covers both `clientRequestId` and `requestId` aliases).
+
+**Electron-only helpers** (the bridge calls dispatcher RPC directly,
+so it wraps cancel/promote/cancel-all in named functions used by both
+the chip callbacks and the double-Esc gesture): `cancelByServerId`,
+`promoteByServerId`, `cancelAllQueuedAndRunning`, `resetQueueChipState`.
+The VS Code webview achieves the same behavior by posting
+`cancelCommand` / `promoteCommand` / `cancelAllQueuedAndRunning`
+messages to the extension host (`packages/vscode-shell/src/agentServerBridge.ts`),
+which translates the client→server id via `clientToServerRequestId`
+before calling the equivalent dispatcher methods.
+
+**Double-Escape gesture.** Both hosts attach a document-level keydown
+handler: single Esc cancels the currently-active request (chat-ui's
+`getActiveRequestId()` first → falls back to the queue mirror's
+running entry for peer requests we never tracked locally), two
+presses within `DOUBLE_ESCAPE_WINDOW_MS` (1000 ms) cancel every
+queued+running entry. The handler honors `e.defaultPrevented` so
+chat-ui's own input-level Esc handler (dismisses completion popups)
+stays primary — when chat-ui consumed the keystroke, the doc handler
+still updates the double-Esc clock so a paired second press fires
+the cancel-all sweep.
 
 **Wiring in each host:**
 
 - **Electron Shell — `packages/shell/src/renderer/src/chatPanelBridge.ts`.**
-  Constructs one `QueueChipController` immediately after the
-  `ChatPanel`, supplies `cancelById = dispatcher.cancelCommand`,
-  and replaces the four queue `ClientIO` handlers with one-line
-  `queueChips.on*(...)` delegations. `attachDoubleEscape` wires the
-  gesture with `onCancelActive: dispatcher.cancelCommandByClientId`
-  and `onCancelAll: cancelAllQueuedAndRunning` (which itself reads
-  `queueChips.snapshot`).
+  Constructs one `QueueStateMirror` immediately after the `ChatPanel`,
+  defines the helper set inline, routes the four queue `ClientIO`
+  handlers through `queueMirror.apply*` + helpers, and adds the
+  doc-level Esc listener. Mirror state updates happen synchronously
+  in every handler so version watermarking stays consistent, but the
+  DOM-mutating bodies of `requestQueued` / `requestStarted` /
+  `requestCancelled` / `queueStateChanged` are wrapped in
+  `afterReplay(...)` so a queue event that lands while history replay
+  is in flight doesn't materialize a live bubble that
+  `ChatPanel.replayHistory()` would then orphan when it clears
+  `userMessageById`. `dispatcherInitialized` similarly seeds the
+  mirror from `initialQueueSnapshot` immediately and defers the
+  matching `reconcileQueueChips` to `afterReplay`. The Electron
+  single-Esc fallback uses `dispatcher.cancelCommandByClientId` when
+  chat-ui knows the client id and `dispatcher.cancelCommand` when
+  only the mirror's server id is available.
 - **VS Code shell — `packages/vscode-shell/src/webview/main.ts`.**
-  Same pattern: constructs the controller with `cancelById =
-serverId => vscode.postMessage({type: "cancelCommand", requestId: serverId})`,
-  delegates each queue case to the matching `on*` method, and uses
-  `attachDoubleEscape` for the gesture. The webview's
-  cancelled-render dedup (`cancelledRequests` /
-  `cancelledRendered` / `claimCancelledRender` / `markCancelled`)
-  stays in the host because only VS Code paints the "⚠ Cancelled"
-  agent-bubble affordance — the controller surfaces what it needs
-  to via `onRequestCancelled`'s `matched` return.
+  Same helper set and same `QueueStateMirror`; the cancel/promote
+  paths post messages to the extension host
+  (`packages/vscode-shell/src/agentServerBridge.ts`) which translates
+  the client→server id via `clientToServerRequestId` and calls the
+  same dispatcher methods.
 
 **Bubble-key invariant.** The bubble key passed to
-`setUserBubbleQueueStatus` MUST equal the id chat-ui used when
-adding the bubble: `clientRequestId` for `addUserMessage`,
-`requestId` for `addRemoteUserMessage`. The bridge's
-`ClientIO.setUserRequest` routes peer/replayed requests through
-`addUserMessage(command, rid)` so peer keys land on the server id;
-local sends go through chat-ui's own `onSend` adapter which sets
-`clientRequestId` as the bubble key. `chipTargetRid` selects
-between these two by checking whether the queue entry has a
+`setUserBubbleQueueStatus` MUST equal the id chat-ui used when adding
+the bubble: `clientRequestId` for locally-sent `addUserMessage`
+calls, `requestId` for `addRemoteUserMessage`. `chipTargetRid`
+selects between these two by checking whether the queue entry has a
 string `clientRequestId`.
 
 **Multi-client behavior delta.** With chip wiring in place, both
 hosts now materialize peer-origin user bubbles via
-`addRemoteUserMessage` as soon as `requestQueued` fires for a
-remote client on the same conversation (matching the
-pre-unification Electron Shell). Before this restoration, the
-Electron Shell post-unification only learned about peer requests
-when their `setUserRequest` arrived — usually well after the queue
-event. The new ordering matches every other client.
+`addRemoteUserMessage` as soon as `requestQueued` fires for a remote
+client on the same conversation (matching the pre-unification
+Electron Shell). Before this restoration, the Electron Shell
+post-unification only learned about peer requests when their
+`setUserRequest` arrived — usually well after the queue event. The
+new ordering matches every other client.
 
 **Reference commits.** The original pre-unification implementation
 landed in commit `7660dcdb5` (server-side message queue + per-bubble
 chips + double-Esc), with subsequent refinements in `42c0e8cb3`
 (extracted `QueueStateMirror` to `@typeagent/dispatcher-types`),
 `b056d0ccf` (cancellation UI), and `ac8633f02` (`×` glyph cleanup).
-The Electron Shell parity restoration first duplicated the VS Code
-shell's pattern (commit `6c55e82e6`) before the duplication was
-extracted into `chat-ui/src/queueChipController.ts`.
+The Electron Shell parity restoration duplicated the VS Code shell's
+pattern (commit `6c55e82e6`); the chat-ui rail/Stop/jump-queue
+redesign that both hosts now consume landed via `e8e3699b1` (PR #2454,
+"UI Chat bubble tweaks"); the merge that wires the Electron Shell
+through the new chat-ui contract is `51ec3bf37`.
 
 ---
 
@@ -1513,22 +1512,22 @@ extracted into `chat-ui/src/queueChipController.ts`.
   `packages/api/src/webDispatcher.ts` (Web API server),
   `packages/cli/src/commands/test/translate.ts` (CLI test commands),
   `packages/dispatcher/dispatcher/test/**` (dispatcher tests).
-- Shared queue-chip controller used by both shell hosts:
-  `packages/chat-ui/src/queueChipController.ts` exports
-  `QueueChipController`, `attachDoubleEscape`, and the structural
-  `QueueChipChatPanel` interface. Hosts construct one controller per
-  renderer, delegate the four queue `ClientIO` events to its `on*`
-  methods, and wire the gesture via `attachDoubleEscape`.
+- Per-bubble queue chip rendering surface (shared by both shell hosts):
+  `packages/chat-ui/src/chatPanel.ts`'s
+  `setUserBubbleQueueStatus(targetRid, status, onCancel?, onPromote?)`
+  owns the rail markup, state label, action buttons, and stop-button
+  toggle on the agent bubble.
 - Shell renderer queue-chip wiring:
-  `packages/shell/src/renderer/src/chatPanelBridge.ts` (constructs
-  `QueueChipController` + calls `attachDoubleEscape`; supplies
-  `cancelById = dispatcher.cancelCommand`).
+  `packages/shell/src/renderer/src/chatPanelBridge.ts` (inline
+  helper set + `QueueStateMirror`; routes the four queue `ClientIO`
+  events; supplies `cancelByServerId = dispatcher.cancelCommand`
+  and `promoteByServerId = dispatcher.promoteCommand`; doc-level
+  Esc + double-Esc gesture).
 - VS Code shell queue-chip wiring:
-  `packages/vscode-shell/src/webview/main.ts` (same pattern; supplies
-  `cancelById` via `postMessage` to the extension host, plus host-side
-  `cancelledRequests` / `claimCancelledRender` for the "⚠ Cancelled"
-  affordance).
+  `packages/vscode-shell/src/webview/main.ts` (same inline pattern;
+  cancel/promote helpers post messages to the extension host, which
+  translates client→server id via `clientToServerRequestId` in
+  `packages/vscode-shell/src/agentServerBridge.ts`).
 - `packages/dispatcher/types/src/queueStateMirror.ts` —
   `QueueStateMirror` reusable client-side mirror with version
-  watermarking; owned per-controller by `QueueChipController` and
-  exposed via its `snapshot` getter.
+  watermarking; owned per-renderer by each host's inline helper set.
