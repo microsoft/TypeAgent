@@ -375,15 +375,42 @@ async function waitForAgentMessage(
             .all();
         const messageCount = locators.length;
         if (messageCount >= expectedMessageCount) {
-            // Chat view message are in reverse order, so the last one is in index 0
-            const lastLocator = locators[0];
-            const classNames = await lastLocator.getAttribute("class");
-            if (!classNames?.includes("history")) {
-                if (
-                    !waitForMessageCompletion ||
-                    (await isMessageCompleted(lastLocator))
-                ) {
-                    // If we are waiting for completion, check that first before getting the message content.
+            // Chat view messages are in reverse order, so the newest is at index 0.
+            if (waitForMessageCompletion) {
+                // Only the messages added since the caller's baseline snapshot
+                // (expectedMessageCount - 1 messages existed before the request)
+                // are candidates for the response. Scanning newest-first within
+                // that window makes the wait resilient to a trailing
+                // agent-initiated notification bubble — e.g. the calendar/email
+                // "Signed in as ..." silent-restore announcement that fires once
+                // per process when a new session re-initializes agents. That
+                // bubble can become the newest container but never carries
+                // completion metrics, so fixating on index 0 would hang.
+                // Bounding the scan to newly-added messages also guarantees we
+                // never return a stale, pre-existing message.
+                const newlyAdded = messageCount - expectedMessageCount + 1;
+                const candidateCount = Math.min(
+                    Math.max(newlyAdded, 1),
+                    messageCount,
+                );
+                for (let i = 0; i < candidateCount; i++) {
+                    const locator = locators[i];
+                    const classNames = await locator.getAttribute("class");
+                    if (classNames?.includes("history")) {
+                        continue;
+                    }
+                    if (!(await isMessageCompleted(locator))) {
+                        continue;
+                    }
+                    const message = await getAgentMessageFromContainer(locator);
+                    if (ignore.indexOf(message) === -1) {
+                        return message;
+                    }
+                }
+            } else {
+                const lastLocator = locators[0];
+                const classNames = await lastLocator.getAttribute("class");
+                if (!classNames?.includes("history")) {
                     const lastMessage =
                         await getAgentMessageFromContainer(lastLocator);
                     if (ignore.indexOf(lastMessage) === -1) {
@@ -402,17 +429,26 @@ async function waitForAgentMessage(
 }
 
 export async function clearMessages(page: Page): Promise<void> {
-    sendUserRequestFast("@clear", page);
+    const agentMessages = page.locator(".chat-message-container-agent");
     let attempts = 0;
     do {
         attempts++;
-        const locators = await page
-            .locator(".chat-message-container-agent")
-            .all();
-        if (locators.length === 0) {
-            return;
-        }
+        // Re-issue `@clear` each iteration: it's idempotent and wipes the
+        // whole transcript (including its own user bubble). Re-issuing makes
+        // the clear resilient to a late agent-initiated notification — e.g.
+        // the calendar/email "Signed in as ..." silent-restore announcement
+        // that fires once per process during startup and can re-populate the
+        // view just after an earlier clear landed.
+        sendUserRequestFast("@clear", page);
         await page.waitForTimeout(1000);
+        if ((await agentMessages.count()) === 0) {
+            // Settle briefly and re-check so a notification still in flight
+            // has a chance to surface before we declare the view clear.
+            await page.waitForTimeout(1000);
+            if ((await agentMessages.count()) === 0) {
+                return;
+            }
+        }
     } while (attempts < 30);
     throw new Error("Timeout waiting for clear to complete");
 }

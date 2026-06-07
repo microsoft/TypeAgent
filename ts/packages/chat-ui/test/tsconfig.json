@@ -13,8 +13,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "composite": true,
-    "types": ["node", "jest"]
+    "types": []
   },
   "include": ["./**/*.ts"],
-  "references": [{ "path": "../src" }]
+  "references": [{ "path": "../tsconfig.json" }]
 }
