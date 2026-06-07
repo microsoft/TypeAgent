@@ -2482,9 +2482,10 @@ export class ChatPanel {
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
-        // Reset the up-arrow back stack too — `@clear` means "reset the chat",
-        // including the recall history seeded from prior-session replayed
-        // commands. Hosts/tests can use `@clear` to start from an empty stack.
+        // Reset the up-arrow back stack too — `@clear` resets the chat, which
+        // includes the command recall history seeded from prior-session
+        // replayed commands. After clearing, recall starts empty until the
+        // user issues new commands.
         this.commandHistory = [];
         this.historyIndex = -1;
         if (this.statusContainer) {
