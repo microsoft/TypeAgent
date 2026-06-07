@@ -2275,6 +2275,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*

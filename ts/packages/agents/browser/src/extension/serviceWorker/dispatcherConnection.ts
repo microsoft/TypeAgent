@@ -186,6 +186,37 @@ function createChatPanelClientIO(): ClientIO {
         takeAction(requestId, action, data) {
             rpcSend?.("dispatcherTakeAction", { requestId, action, data });
         },
+
+        // ---- Queue lifecycle (opt-in per client) ----
+        //
+        // The browser extension does not yet render queue chips, but we
+        // still implement these handlers so the underlying ClientIO has
+        // them defined. The dispatcher broadcasts queue lifecycle events
+        // to every unfiltered client; clients that omit these methods are
+        // silently skipped via optional chaining
+        // (`cio.requestQueued?.(...)` in sharedDispatcher). When the
+        // browser and another queue-aware client (e.g. the VS Code
+        // extension) are connected to the same conversation, defining
+        // these methods here keeps the wire protocol symmetric and lets
+        // the chat panel side opt into chip UX later by handling these
+        // forwarded messages — without requiring another round-trip
+        // through the service worker.
+        requestQueued(entry, version) {
+            rpcSend?.("dispatcherRequestQueued", { entry, version });
+        },
+        requestStarted(entry, version) {
+            rpcSend?.("dispatcherRequestStarted", { entry, version });
+        },
+        requestCancelled(requestId, reason, version) {
+            rpcSend?.("dispatcherRequestCancelled", {
+                requestId,
+                reason,
+                version,
+            });
+        },
+        queueStateChanged(snapshot) {
+            rpcSend?.("dispatcherQueueStateChanged", { snapshot });
+        },
     };
 }
 
