@@ -1664,6 +1664,9 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
+            // Hide cursor to avoid flicker during writing
+            stdout.write(ANSI.hideCursor);
+
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
@@ -1698,6 +1701,13 @@ async function questionWithCompletion(
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
                     inputLine += chalk.dim(suggestion + counter);
                 }
+            }
+            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
+            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
+            // additional visual rows, the terminal-driven wrap can cause overflow
+            // populated with stale characters from previous frames.
+            for (let r = 2; r <= inputRows; r++) {
+                layout.drawFixed(r, "");
             }
             layout.drawFixed(1, inputLine);
 
