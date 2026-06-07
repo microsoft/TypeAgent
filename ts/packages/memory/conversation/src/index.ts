@@ -11,4 +11,5 @@ export * from "./emailMessage.js";
 export * from "./emailImport.js";
 export * from "./docMemory.js";
 export * from "./docImport.js";
+export * from "./aiSessionImport.js";
 export * from "./termParser.js";

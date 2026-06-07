@@ -1,0 +1,9 @@
+{"type":"session.start","data":{"sessionId":"test-copilot-session","version":1,"producer":"copilot-agent","copilotVersion":"0.47.0","vscodeVersion":"1.119.0","startTime":"2026-05-16T04:00:05.072Z"},"id":"s1","timestamp":"2026-05-16T04:00:05.072Z","parentId":null}
+{"type":"user.message","data":{"content":"Explain the repository structure of this workspace.","attachments":[]},"id":"e1","timestamp":"2026-05-16T04:00:10.000Z","parentId":"s1"}
+{"type":"assistant.turn_start","data":{"turnId":"turn1"},"id":"e2","timestamp":"2026-05-16T04:00:11.000Z","parentId":"e1"}
+{"type":"assistant.message","data":{"messageId":"am1","content":"Here is an overview of the workspace structure.","toolRequests":[{"toolCallId":"tc1","name":"semantic_search","arguments":"{}","type":"function"}],"reasoningText":"Let me search the codebase."},"id":"e3","timestamp":"2026-05-16T04:00:12.000Z","parentId":"e1"}
+{"type":"tool.execution_start","data":{"toolCallId":"tc1","name":"semantic_search"},"id":"e4","timestamp":"2026-05-16T04:00:13.000Z","parentId":"e3"}
+{"type":"tool.execution_complete","data":{"toolCallId":"tc1","name":"semantic_search","status":"success"},"id":"e5","timestamp":"2026-05-16T04:00:14.000Z","parentId":"e3"}
+{"type":"assistant.message","data":{"messageId":"am2","content":"","toolRequests":[{"toolCallId":"tc2","name":"read_file","arguments":"{}","type":"function"}],"reasoningText":"Now read the package file."},"id":"e6","timestamp":"2026-05-16T04:00:15.000Z","parentId":"e1"}
+{"type":"assistant.turn_end","data":{"turnId":"turn1"},"id":"e7","timestamp":"2026-05-16T04:00:16.000Z","parentId":"e1"}
+{"type":"user.message","data":{"content":"Thanks, that is helpful.","attachments":[]},"id":"e8","timestamp":"2026-05-16T04:00:20.000Z","parentId":"e7"}

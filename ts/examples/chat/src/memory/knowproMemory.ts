@@ -28,6 +28,7 @@ import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
+import { createKnowproAiSessionCommands } from "./knowproAiSession.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 import { Result } from "typechat";
@@ -35,6 +36,7 @@ import { conversation as knowLib } from "knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
 import { createKnowproAzureCommands } from "./knowproAzSearch.js";
+import { createKnowproDreamCommands } from "./knowproDream.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -96,6 +98,7 @@ export async function createKnowproCommands(
      * CREATE COMMANDS FOR DIFFERENT MEMORY TYPES
      */
     await createKnowproPodcastCommands(context, commands);
+    await createKnowproAiSessionCommands(context, commands);
     await createKnowproImageCommands(context, commands);
     await createKnowproEmailCommands(context, commands);
     await createKnowproConversationCommands(context, commands);
@@ -104,6 +107,7 @@ export async function createKnowproCommands(
     await createKnowproDocMemoryCommands(context, commands);
     await createKnowproKnowledgeCommands(context, commands);
     await createKnowproAzureCommands(context, commands);
+    await createKnowproDreamCommands(context, commands);
     // Diagnostic commands
     await createDiagnosticCommands(context, commands);
     /*

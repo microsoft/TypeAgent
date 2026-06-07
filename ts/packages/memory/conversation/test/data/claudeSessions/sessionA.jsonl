@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Explain the dispatcher in session A."}]},"uuid":"a-u1","timestamp":"2026-05-01T10:00:00.000Z","sessionId":"sessionA"}
+{"type":"ai-title","aiTitle":"Session A","sessionId":"sessionA"}
+{"type":"assistant","message":{"role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"The dispatcher routes typed actions to agents."}]},"uuid":"a-a1","timestamp":"2026-05-01T10:00:01.000Z"}
