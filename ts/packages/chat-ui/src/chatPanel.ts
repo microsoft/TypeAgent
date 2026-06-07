@@ -1387,19 +1387,8 @@ export class ChatPanel {
         this.sendButton.disabled = !this.textInput.textContent?.trim();
     }
 
-    /**
-     * Push a command issued in the current session onto the up-arrow back
-     * stack. Used for commands that don't originate from the local input box
-     * (e.g. the startup greeting dispatched by the host), so they can be
-     * recalled like typed commands. Prior-session replayed history is
-     * deliberately excluded — see `replayHistory`.
-     * @param command - The command text to add to the back stack.
-     */
-    public addCommandToHistory(command: string) {
-        const text = command?.trim();
-        if (!text) return;
-        this.commandHistory.unshift(text);
-        this.historyIndex = -1;
+    private shouldAddToHistory(text: string) {
+        return !/^@exit(?:\s|$)/i.test(text.trim());
     }
 
     private send(requestId?: string) {
@@ -1408,7 +1397,7 @@ export class ChatPanel {
         // attachment (image-only requests are valid — e.g. "what is this?").
         if (!text && this.pendingAttachments.length === 0) return;
 
-        if (text) {
+        if (text && this.shouldAddToHistory(text)) {
             this.commandHistory.unshift(text);
         }
         this.historyIndex = -1;
@@ -2335,11 +2324,17 @@ export class ChatPanel {
                 switch (entry.kind) {
                     case "user":
                         this.addUserMessage(entry.text, entry.requestId);
-                        // NOTE: replayed entries are prior-session history and
-                        // are intentionally NOT seeded into the up-arrow command
-                        // back stack. The back stack reflects only the current
-                        // session's commands (typed input plus the startup
-                        // greeting), matching the shell's historical behavior.
+                        // Seed the up-arrow command history with replayed
+                        // user commands so it recalls prior-session input.
+                        // Entries arrive oldest-first; unshift keeps the
+                        // most recent command at index 0.
+                        if (
+                            entry.text &&
+                            entry.text.trim() &&
+                            this.shouldAddToHistory(entry.text)
+                        ) {
+                            this.commandHistory.unshift(entry.text);
+                        }
                         break;
                     case "agent-replace":
                         this.replaceAgentMessage(
@@ -2487,6 +2482,11 @@ export class ChatPanel {
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
+        // Reset the up-arrow back stack too — `@clear` means "reset the chat",
+        // including the recall history seeded from prior-session replayed
+        // commands. Hosts/tests can use `@clear` to start from an empty stack.
+        this.commandHistory = [];
+        this.historyIndex = -1;
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
