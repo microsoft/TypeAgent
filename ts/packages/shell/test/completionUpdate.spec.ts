@@ -10,17 +10,19 @@ test.describe.configure({ mode: "serial" });
 const inputSelector = "#phraseDiv";
 
 /**
- * Enables the `typeagent:shell:partial` debug namespace at runtime via
- * the `__debug` factory exposed on globalThis by partial.ts.  Once
- * enabled, all `debug(...)` calls in the module produce console.debug
- * output that Playwright can intercept.
+ * Enables opt-in tracing in chat-ui's PartialCompletion by setting the
+ * `__partialCompletionTrace` flag it checks before emitting console.debug
+ * output.  Once enabled, every completion `requestUpdate()` logs either
+ * "content changed: ..." (an update was posted to the host) or "selection not
+ * at end" (the update was suppressed because the caret left the end of the
+ * input).  Playwright intercepts these messages to assert that each keystroke
+ * triggers exactly one update.
  */
 async function enablePartialDebug(page: Page) {
     await page.evaluate(() => {
-        const dbg = (window as any).__debug;
-        if (dbg && typeof dbg.enable === "function") {
-            dbg.enable("typeagent:shell:partial");
-        }
+        (
+            globalThis as { __partialCompletionTrace?: boolean }
+        ).__partialCompletionTrace = true;
     });
 }
 
@@ -44,21 +46,9 @@ test.describe("Partial completion update suppression", () => {
         await runTestCallback(async (mainWindow: Page) => {
             await enablePartialDebug(mainWindow);
 
-            const contentTrue = collectConsoleMessages(
+            const contentChanged = collectConsoleMessages(
                 mainWindow,
                 "content changed",
-            );
-            const updateEntries = collectConsoleMessages(
-                mainWindow,
-                "update entry:",
-            );
-            const updateSkipped = collectConsoleMessages(
-                mainWindow,
-                "update skipped:",
-            );
-            const updateHidden = collectConsoleMessages(
-                mainWindow,
-                "selection not at end",
             );
 
             const input = mainWindow.locator(inputSelector);
@@ -66,20 +56,14 @@ test.describe("Partial completion update suppression", () => {
 
             await mainWindow.keyboard.type("p", { delay: 0 });
 
+            // A single keystroke posts exactly one host update.
             await expect(async () => {
-                expect(contentTrue.length).toBe(1);
+                expect(contentChanged.length).toBe(1);
             }).toPass({ timeout: 2000 });
 
-            // Wait a beat for any straggling selectionchange echoes.
+            // Confirm no straggling echoes slip through after settling.
             await mainWindow.waitForTimeout(500);
-
-            // Every update() call must either be the content-change
-            // path, deduped by the previousInput guard, or hidden
-            // because selection moved away from the end.  No call
-            // may slip through to recompute direction.
-            expect(updateEntries.length).toBe(
-                contentTrue.length + updateSkipped.length + updateHidden.length,
-            );
+            expect(contentChanged.length).toBe(1);
 
             await mainWindow.keyboard.press("Escape");
         });
@@ -106,37 +90,19 @@ test.describe("Partial completion update suppression", () => {
             }).toPass({ timeout: 2000 });
 
             // Start collecting after the first keystroke has settled.
-            const contentTrue = collectConsoleMessages(
+            const contentChanged = collectConsoleMessages(
                 mainWindow,
                 "content changed",
-            );
-            const updateEntries = collectConsoleMessages(
-                mainWindow,
-                "update entry:",
-            );
-            const updateSkipped = collectConsoleMessages(
-                mainWindow,
-                "update skipped:",
-            );
-            const updateHidden = collectConsoleMessages(
-                mainWindow,
-                "selection not at end",
             );
 
             await mainWindow.keyboard.type("l", { delay: 0 });
 
             await expect(async () => {
-                expect(contentTrue.length).toBe(1);
+                expect(contentChanged.length).toBe(1);
             }).toPass({ timeout: 2000 });
 
-            // Wait a beat for any straggling selectionchange echoes.
             await mainWindow.waitForTimeout(500);
-
-            // Every update() call must either be the content-change
-            // path, deduped by the previousInput guard, or hidden.
-            expect(updateEntries.length).toBe(
-                contentTrue.length + updateSkipped.length + updateHidden.length,
-            );
+            expect(contentChanged.length).toBe(1);
 
             await mainWindow.keyboard.press("Escape");
         });
@@ -163,37 +129,19 @@ test.describe("Partial completion update suppression", () => {
             }).toPass({ timeout: 2000 });
 
             // Start collecting after the initial typing has settled.
-            const contentTrue = collectConsoleMessages(
+            const contentChanged = collectConsoleMessages(
                 mainWindow,
                 "content changed",
-            );
-            const updateEntries = collectConsoleMessages(
-                mainWindow,
-                "update entry:",
-            );
-            const updateSkipped = collectConsoleMessages(
-                mainWindow,
-                "update skipped:",
-            );
-            const updateHidden = collectConsoleMessages(
-                mainWindow,
-                "selection not at end",
             );
 
             await mainWindow.keyboard.press("Backspace");
 
             await expect(async () => {
-                expect(contentTrue.length).toBe(1);
+                expect(contentChanged.length).toBe(1);
             }).toPass({ timeout: 2000 });
 
-            // Wait a beat for any straggling selectionchange echoes.
             await mainWindow.waitForTimeout(500);
-
-            // Every update() call must either be the content-change
-            // path, deduped by the previousInput guard, or hidden.
-            expect(updateEntries.length).toBe(
-                contentTrue.length + updateSkipped.length + updateHidden.length,
-            );
+            expect(contentChanged.length).toBe(1);
 
             await mainWindow.keyboard.press("Escape");
         });

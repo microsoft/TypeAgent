@@ -242,6 +242,36 @@ export class RequestQueue {
     }
 
     /**
+     * Promote a queued (not running) entry to the front of the queue so it
+     * runs next, ahead of any other queued entries. Does NOT touch the
+     * currently-running head — the promoted entry runs when the head
+     * completes. Returns true if the entry was found (and moved, or already
+     * at the front); false for the running head or an unknown requestId.
+     */
+    promote(requestId: string): boolean {
+        const idx = this.tail.findIndex((e) => e.requestId === requestId);
+        if (idx < 0) {
+            return false;
+        }
+        if (idx === 0) {
+            // Already next; nothing to reorder or broadcast.
+            return true;
+        }
+        const [entry] = this.tail.splice(idx, 1);
+        this.tail.unshift(entry);
+        ++this.snapshotVersion;
+        this.safeBroadcast("queueStateChanged", () =>
+            this.broadcast.queueStateChanged(this.getSnapshot()),
+        );
+        this.log("requestQueue:promote", {
+            requestId: entry.requestId,
+            connectionId: entry.originatorConnectionId,
+            fromIndex: idx,
+        });
+        return true;
+    }
+
+    /**
      * Classify a cancel: `"queued"` if a queued entry was removed, `"running"`
      * if the requestId matches the head (caller owns the AbortController),
      * `"not_found"` otherwise.

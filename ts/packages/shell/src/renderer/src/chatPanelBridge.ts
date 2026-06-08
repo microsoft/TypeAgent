@@ -652,13 +652,22 @@ export function createChatPanelClient(
         },
         requestChoice: (requestId, choiceId, type, message, choices) => {
             void (async () => {
+                // The prompt text is already rendered as the agent's
+                // displayContent (emitActionResult appends it before
+                // requesting the choice), so suppress the card's duplicate
+                // copy and show just the buttons. See the option-2 TODO in
+                // agentSdk/src/helpers/actionHelpers.ts for the source-side
+                // dedup that would let every host drop this workaround.
                 if (type === "yesNo") {
-                    const yes = await chatPanel.askYesNo(message);
+                    const yes = await chatPanel.askYesNo(message, undefined, {
+                        showMessage: false,
+                    });
                     await dispatcher?.respondToChoice(choiceId, yes);
                 } else {
                     const index = await chatPanel.addChoicePrompt<number>(
                         message,
                         choices.map((label, i) => ({ label, value: i })),
+                        { showMessage: false },
                     );
                     await dispatcher?.respondToChoice(choiceId, [index]);
                 }
@@ -679,7 +688,10 @@ export function createChatPanelClient(
                                 label,
                                 value: index,
                             })),
-                            { defaultValue: interaction.defaultId },
+                            {
+                                defaultValue: interaction.defaultId,
+                                signal: ac.signal,
+                            },
                         );
                         response = {
                             interactionId: interaction.interactionId,
@@ -715,6 +727,9 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort({ kind: "resolved-by-other" });
+                chatPanel.addSystemMessage(
+                    "Interaction answered by another client.",
+                );
             }
         },
         interactionCancelled: (interactionId) => {
@@ -722,6 +737,7 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort("cancelled");
+                chatPanel.addSystemMessage("Interaction cancelled.");
             }
         },
         takeAction: (_requestId, action, data) => {

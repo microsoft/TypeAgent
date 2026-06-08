@@ -523,6 +523,10 @@ function createRuleSlotMap(rule: GrammarRule): Map<string, number> {
  */
 function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
     const typeMap = new Map<string, string>();
+    // Visited set guards against right-recursive / mutually-recursive
+    // grammars where a rule references itself transitively.  Without this,
+    // walking part.alternatives recurses forever (RangeError).
+    const visited = new WeakSet<GrammarRule>();
 
     function collectFromPart(part: GrammarPart): void {
         switch (part.type) {
@@ -542,6 +546,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 // RulesPart has nested rules
                 if (part.alternatives) {
                     for (const nestedRule of part.alternatives) {
+                        if (visited.has(nestedRule)) continue;
+                        visited.add(nestedRule);
                         for (const nestedPart of nestedRule.parts) {
                             collectFromPart(nestedPart);
                         }
@@ -666,7 +672,7 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             }
         }
 
-        builder.addEpsilonTransition(startState, ruleEntry);
+        builder.addEpsilonEnterRule(startState, ruleEntry, rule.spacingMode);
 
         // For optional/auto rules, collect split candidates (non-word-starting tokens
         // such as "'s", "'t", or CJK characters) so matchGrammarWithNFA can pre-split
@@ -1426,16 +1432,18 @@ function compileRulesPart(
             builder.getState(ruleEntry).actionValue = rule.value;
         }
 
-        builder.addEpsilonTransition(nestedEntry, ruleEntry);
+        builder.addEpsilonEnterRule(nestedEntry, ruleEntry, rule.spacingMode);
+        const ruleEnd = builder.createState(false);
         compileRuleFromState(
             builder,
             grammar,
             rule,
             ruleEntry,
-            nestedExit,
+            ruleEnd,
             checkedVariables,
             nestedOverride,
         );
+        builder.addEpsilonExitRule(ruleEnd, nestedExit);
     }
 
     // Connect exit
@@ -1580,7 +1588,7 @@ function compileRulesPartWithSlots(
             builder.setStateParentSlotIndex(ruleEntry, parentSlotIndex);
         }
 
-        builder.addEpsilonTransition(nestedEntry, ruleEntry);
+        builder.addEpsilonEnterRule(nestedEntry, ruleEntry, rule.spacingMode);
 
         // Create new context for the nested rule
         // IMPORTANT: Don't propagate parentSlotIndex - each rule level computes its own
@@ -1602,7 +1610,15 @@ function compileRulesPartWithSlots(
             completionPropertyPaths:
                 nestedCompletionPropertyPaths ??
                 context.completionPropertyPaths,
-            spacingMode: rule.spacingMode ?? context.spacingMode,
+            // Don't inherit parent's spacingMode — the runtime (char
+            // interpreter) tracks per-rule modes on a spacing stack via
+            // enterRule/exitRule markers.  Inheriting at compile time
+            // fuses parent's mode into the child's transitions (and, for
+            // `none`, fuses multi-token string parts), which contradicts
+            // the child's own mode at runtime.  Token-mode matcher
+            // tolerates the change because per-rule transitions still
+            // carry the correct mode for their boundary checks.
+            spacingMode: rule.spacingMode,
             splitCandidatesCollector: context.splitCandidatesCollector,
         };
 
@@ -1625,14 +1641,16 @@ function compileRulesPartWithSlots(
                 compiledValue,
             );
         } else {
+            const ruleEnd = builder.createState(false);
             compileRuleFromStateWithSlots(
                 builder,
                 grammar,
                 rule,
                 ruleEntry,
-                nestedExit,
+                ruleEnd,
                 nestedContext,
             );
+            builder.addEpsilonExitRule(ruleEnd, nestedExit);
         }
     }
 

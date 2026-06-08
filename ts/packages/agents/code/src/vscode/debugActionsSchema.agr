@@ -1,0 +1,58 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural language interface for code-debug sub-manifest actions
+// (debug panel, start/continue/stop debugging, step, breakpoints, hover).
+
+import { CodeDebugActions } from "./debugActionsSchema.ts";
+
+<Start> : CodeDebugActions = <showDebugPanel>
+  | <stopDebugging>
+  | <stepInto>
+  | <step>
+  | <startDebugging>
+  | <showHover>
+  | <setBreakpointAtFileLine>
+  | <setBreakpointAtLine>
+  | <removeBreakpointAtFileLine>
+  | <removeBreakpointAtLine>
+  | <toggleBreakpointAtLine>
+  | <removeAllBreakpoints>;
+
+<StepType> = 'into' -> "into"
+  | 'out' -> "out"
+  | 'over' -> "over";
+
+<showDebugPanel> = <Polite> ('show' | 'open') ('the')? 'debug' ('panel' | 'pane' | 'window' | 'view') -> { actionName: "showDebugPanel" };
+
+<startDebugging> = <Polite> ('start' | 'continue' | 'resume' | 'begin') 'debugging' -> { actionName: "startDebugging" }
+  | <Polite> ('debug' | 'continue' | 'resume') ('this' | 'the')? ('program' | 'app')? -> { actionName: "startDebugging" };
+
+<stopDebugging> = <Polite> ('stop' | 'end' | 'terminate' | 'quit') 'debugging' -> { actionName: "stopDebugging" };
+
+// "step into" / "step over" / "step out"
+<step> = <Polite> 'step' $(stepType:<StepType>) -> { actionName: "step", parameters: { stepType: stepType } };
+
+// "step in" alias for "step into"
+<stepInto> = <Polite> 'step in' -> { actionName: "step", parameters: { stepType: "into" } };
+
+<showHover> = <Polite> ('show' | 'display') ('the')? 'hover' -> { actionName: "showHover" };
+
+// "set a breakpoint at line 42 in main.ts"
+<setBreakpointAtFileLine> = <Polite> ('set' | 'add') ('a')? 'breakpoint' ('at' | 'on')? 'line' $(line:number) 'in' $(fileName:wildcard) -> { actionName: "setBreakpoint", parameters: { line: line, fileName: fileName } };
+
+// "set a breakpoint at line 42"
+<setBreakpointAtLine> = <Polite> ('set' | 'add') ('a')? 'breakpoint' ('at' | 'on')? 'line' $(line:number) -> { actionName: "setBreakpoint", parameters: { line: line } };
+
+// "remove the breakpoint at line 42 in main.ts"
+<removeBreakpointAtFileLine> = <Polite> ('remove' | 'delete' | 'clear') ('the')? 'breakpoint' ('at' | 'on')? 'line' $(line:number) 'in' $(fileName:wildcard) -> { actionName: "removeBreakpoint", parameters: { line: line, fileName: fileName } };
+
+// "remove the breakpoint at line 42"
+<removeBreakpointAtLine> = <Polite> ('remove' | 'delete' | 'clear') ('the')? 'breakpoint' ('at' | 'on')? 'line' $(line:number) -> { actionName: "removeBreakpoint", parameters: { line: line } };
+
+// "toggle the breakpoint at line 42"
+<toggleBreakpointAtLine> = <Polite> 'toggle' ('the')? 'breakpoint' ('at' | 'on')? 'line' $(line:number) -> { actionName: "toggleBreakpoint", parameters: { line: line } };
+
+<removeAllBreakpoints> = <Polite> ('remove' | 'delete' | 'clear') 'all' ('the')? 'breakpoints' -> { actionName: "removeAllBreakpoints" };
+
+<Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

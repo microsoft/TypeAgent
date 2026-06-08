@@ -43,7 +43,8 @@ export function testMatchGrammar(grammar: Grammar, request: string) {
 
 function testMatchGrammarNFA(grammar: Grammar, request: string): unknown[] {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
-    const results = matchGrammarWithNFA(grammar, nfa, request);
+    const charBased = process.env.TYPEAGENT_NFA_CHAR === "1";
+    const results = matchGrammarWithNFA(grammar, nfa, request, { charBased });
     return results.map((m) => m.match);
 }
 

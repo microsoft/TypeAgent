@@ -16,6 +16,7 @@ import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
 import { setChatPanelRpc } from "./dispatcherConnection";
 import { setContextMenuRpcSend } from "./contextMenu";
+import { clearRecordedActions } from "./storage";
 
 import {
     isWebAgentMessage,
@@ -104,6 +105,57 @@ function setupEventListeners(): void {
                     success: false,
                     error: "Handler not available",
                 });
+                return false;
+            }
+
+            // Recording lifecycle messages sent by the content script
+            // (recording/index.ts and recording/actions.ts) as plain
+            // chrome.runtime.sendMessage calls. These predate the RPC
+            // layer so they need explicit routing here — without it,
+            // every per-action save is silently dropped and recordings
+            // come back empty.
+            if (
+                message.type === "getRecordedActions" ||
+                message.type === "saveRecordedActions" ||
+                message.type === "recordingStopped"
+            ) {
+                if (serviceWorkerHandlers) {
+                    const handlers = serviceWorkerHandlers;
+                    const handler = (handlers as any)[message.type];
+                    if (handler) {
+                        handler(message)
+                            .then((result: any) => sendResponse(result))
+                            .catch((err: any) => {
+                                debugError(
+                                    `Recording handler ${message.type} failed:`,
+                                    err,
+                                );
+                                sendResponse(undefined);
+                            });
+                        return true; // async sendResponse
+                    }
+                }
+                sendResponse(undefined);
+                return false;
+            }
+
+            if (message.type === "clearRecordedActions") {
+                clearRecordedActions()
+                    .then(() => sendResponse({}))
+                    .catch((err: any) => {
+                        debugError("clearRecordedActions failed:", err);
+                        sendResponse({});
+                    });
+                return true; // async sendResponse
+            }
+
+            // SPA URL-change notifications from the recording observer.
+            // Currently informational only — the service worker has no
+            // additional handling beyond storage state already updated by
+            // the subsequent saveRecordedActions call. Ack to avoid the
+            // "message channel closed" warning in chromium.
+            if (message.type === "spaNavigationDetected") {
+                sendResponse({});
                 return false;
             }
         },

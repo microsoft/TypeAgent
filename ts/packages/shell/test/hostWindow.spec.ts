@@ -7,6 +7,7 @@ import {
     runTestCallback,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
+    clearMessages,
 } from "./testHelper";
 
 // Annotate entire file as serial.
@@ -153,6 +154,13 @@ test.describe("Shell interface tests", () => {
 
         // start the app
         await runTestCallback(async (mainWindow: Page) => {
+            // This serial suite shares a single session, so commands issued by
+            // earlier tests are persisted and replayed into the command back
+            // stack on startup (along with the startup greeting). Clear that
+            // history first so the back stack starts empty and contains only
+            // the commands issued by this test.
+            await clearMessages(mainWindow);
+
             // issue some commands
             const commands: string[] = ["@history", "@help", "@config agent"];
             for (let i = 0; i < commands.length; i++) {
@@ -161,9 +169,6 @@ test.describe("Shell interface tests", () => {
                     mainWindow,
                 );
             }
-
-            // add the mock greeting command that gets injected into the command back stack on startup
-            commands.splice(0, 0, "@greeting --mock");
 
             // get the input box
             const element = await getInputElementHandle(mainWindow);
