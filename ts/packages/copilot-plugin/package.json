@@ -15,14 +15,14 @@
     "build": "npm run tsc && npm run bundle",
     "bundle": "node scripts/bundle.mjs",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "install:global": "node scripts/install-plugin.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "register": "node scripts/install-plugin.mjs",
-    "install:global": "node scripts/install-plugin.mjs",
-    "uninstall:global": "copilot plugin uninstall typeagent && copilot plugin marketplace remove typeagent-local",
     "test:direct": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=direct node dist/hooks/hook-router.js",
     "test:mcp-redirect": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=mcp node dist/hooks/hook-router.js",
     "tsc": "tsc -b",
+    "uninstall:global": "copilot plugin uninstall typeagent && copilot plugin marketplace remove typeagent-local",
     "unregister": "copilot plugin uninstall typeagent"
   },
   "dependencies": {
