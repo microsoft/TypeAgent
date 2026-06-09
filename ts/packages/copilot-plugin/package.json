@@ -12,14 +12,17 @@
   "author": "Microsoft",
   "type": "module",
   "scripts": {
-    "build": "npm run tsc",
+    "build": "npm run tsc && npm run bundle",
+    "bundle": "node scripts/bundle.mjs",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "install:global": "node scripts/install-plugin.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "register": "node scripts/install-plugin.mjs",
     "test:direct": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=direct node dist/hooks/hook-router.js",
     "test:mcp-redirect": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=mcp node dist/hooks/hook-router.js",
     "tsc": "tsc -b",
+    "uninstall:global": "copilot plugin uninstall typeagent && copilot plugin marketplace remove typeagent-local",
     "unregister": "copilot plugin uninstall typeagent"
   },
   "dependencies": {
@@ -33,6 +36,7 @@
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^20.10.0",
+    "esbuild": "^0.25.0",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   }
