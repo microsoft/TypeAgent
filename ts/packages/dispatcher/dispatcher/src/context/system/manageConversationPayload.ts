@@ -16,7 +16,8 @@ export type ManageConversationPayload = {
         | "prev"
         | "next"
         | "rename"
-        | "delete";
+        | "delete"
+        | "help";
     name?: string;
     newName?: string;
 };

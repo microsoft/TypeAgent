@@ -15,7 +15,7 @@ import { screenshotCoordinator } from "./screenshotCoordinator";
 import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
 import { setChatPanelRpc } from "./dispatcherConnection";
-import { setContextMenuRpcSend } from "./contextMenu";
+import { setContextMenuRpcSend, initContextMenuSettings } from "./contextMenu";
 import { clearRecordedActions } from "./storage";
 
 import {
@@ -52,6 +52,7 @@ export async function initialize(): Promise<void> {
 
     // Initialize context menu
     initializeContextMenu();
+    initContextMenuSettings();
 
     // Set up RPC server for typed view communication
     const allHandlers = createAllHandlers();

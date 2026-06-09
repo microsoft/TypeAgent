@@ -918,16 +918,17 @@ table.table-message td {
   border-radius: 8px 8px 0 0;
 }
 
-/* A whisper of state color on the rail — just enough to sense the state
-   peripherally without a loud band — plus a divider from the content. */
-.chat-message-status-rail[data-status] {
-  border-bottom: 1px solid rgba(127, 127, 127, 0.22);
-}
+/* Mid-tone state-color block on the rail — sits between the original
+   pastel wash and a fully saturated solid. Amber for queued, blue for
+   running. No opacity, no color-mix; just a muted block so the rail
+   reads as a clear status indicator without competing with the bubble
+   body. The label color below uses dark text for contrast against the
+   lighter mid-tones. */
 .chat-message-status-rail[data-status="running"] {
-  background: rgba(31, 143, 255, 0.07);
+  background: #70b0e0;
 }
 .chat-message-status-rail[data-status="queued"] {
-  background: rgba(233, 168, 0, 0.09);
+  background: #eabf63;
 }
 
 /* Square off the top of the content so the rail and content read as one
@@ -952,34 +953,23 @@ table.table-message td {
   min-width: 0;
 }
 
-/* De-emphasized state label: minor info, but with a hint of state color so
-   it's not lost. A fallback solid color is declared first for webviews
-   without color-mix() support. */
+/* State label sits on top of the mid-tone state-color block. Dark text
+   gives clean contrast against both amber and blue rails at these
+   lightnesses. Outside a stateful rail the default (gray) still
+   applies. */
 .chat-status-state {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.2px;
   color: #7a7a7a;
   user-select: none;
 }
-.chat-status-state[data-status="running"] {
-  color: rgb(58, 122, 165);
-  color: color-mix(
-    in srgb,
-    var(--vscode-charts-blue, #1f8fff) 60%,
-    var(--vscode-descriptionForeground, #7a7a7a)
-  );
-}
+.chat-status-state[data-status="running"],
 .chat-status-state[data-status="queued"] {
-  color: rgb(150, 120, 40);
-  color: color-mix(
-    in srgb,
-    #e9a800 62%,
-    var(--vscode-descriptionForeground, #7a7a7a)
-  );
+  color: #2c2c2c;
 }
 
 .chat-status-rail-controls {
@@ -1023,9 +1013,17 @@ table.table-message td {
   width: 14px;
   height: 14px;
 }
-.chat-message-status-rail .chat-action-button.danger:hover {
-  background: rgba(192, 57, 43, 0.14);
-  color: #c0392b;
+/* On a stateful (mid-tone) rail, switch icons + hover affordances to
+   dark so they read against the amber/blue block. */
+.chat-message-status-rail[data-status] .chat-action-button {
+  color: #2c2c2c;
+}
+.chat-message-status-rail[data-status] .chat-action-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+.chat-message-status-rail[data-status] .chat-action-button.danger:hover {
+  background: rgba(0, 0, 0, 0.18);
+  color: #2c2c2c;
 }
 
 /* =========================================================================
