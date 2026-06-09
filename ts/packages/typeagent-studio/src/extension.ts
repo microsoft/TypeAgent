@@ -38,6 +38,17 @@ export function activate(context: vscode.ExtensionContext): void {
     registerStudioCommands(context, runtime);
 
     const sandboxTree = new SandboxTreeProvider(runtime);
+
+    // Replay the persisted sandbox set asynchronously so activation stays
+    // synchronous; the sandbox tree refreshes via the lifecycle event
+    // subscription as each sandbox comes back online.
+    runtime.restoreSandboxes().catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+            "[typeagent-studio] Failed to restore persisted sandboxes:",
+            err,
+        );
+    });
     context.subscriptions.push(
         sandboxTree,
         vscode.window.registerTreeDataProvider(SANDBOX_VIEW_ID, sandboxTree),

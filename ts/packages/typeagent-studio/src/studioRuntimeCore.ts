@@ -61,6 +61,12 @@ import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
+const PERSISTED_SANDBOXES_KEY = "studio.persistedSandboxes";
+
+interface PersistedSandbox {
+    id: string;
+    agents: string[];
+}
 
 const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
     "sandbox.start",
@@ -244,6 +250,14 @@ export interface StudioRuntime {
     scanGrammarCollisions(
         request?: StudioCollisionScanRequest,
     ): Promise<StudioCollisionScanResult>;
+    /**
+     * Re-create sandboxes (and their agent loadouts) from the workspace-scoped
+     * persisted snapshot written on every sandbox mutation. Safe to call
+     * multiple times — sandboxes that already exist are skipped, and per-
+     * sandbox restore failures are isolated so one bad entry can't block the
+     * rest. Intended to be invoked once at extension activation.
+     */
+    restoreSandboxes(): Promise<void>;
 }
 
 export interface StudioWorkspaceState {
@@ -350,6 +364,27 @@ export function createStudioRuntimeCore(
 
     const collisionScanner =
         options.collisionScanner ?? createRepoGrammarScanner({ repoRoot });
+
+    // Persistence for sandbox lifecycle. The in-memory sandbox manager has no
+    // durable storage of its own, so the studio runtime snapshots the live
+    // sandbox set into workspaceState after every mutation and replays it on
+    // demand via `restoreSandboxes()` (called once at activation).
+    let restoring = false;
+    const persistSandboxes = async (): Promise<void> => {
+        if (restoring) {
+            return;
+        }
+        const snapshot: PersistedSandbox[] = (await sandbox.list()).map(
+            (status) => ({
+                id: status.id,
+                agents: status.agents.map((a) => a.sourcePath ?? a.name),
+            }),
+        );
+        await context.workspaceState.update(
+            PERSISTED_SANDBOXES_KEY,
+            snapshot,
+        );
+    };
 
     return {
         async startOnboarding(seed) {
@@ -540,20 +575,25 @@ export function createStudioRuntimeCore(
                 ),
                 agents: startOptions.agents ?? [],
             });
+            await persistSandboxes();
             return sandbox.status(id);
         },
         async stopSandbox(id) {
             await sandbox.stop(id);
+            await persistSandboxes();
         },
         async restartSandbox(id) {
             await sandbox.restart(id);
+            await persistSandboxes();
         },
         async loadSandboxAgent(id, agentRef) {
             await sandbox.loadAgent(id, agentRef);
+            await persistSandboxes();
             return sandbox.status(id);
         },
         async unloadSandboxAgent(id, agentName) {
             await sandbox.unloadAgent(id, agentName);
+            await persistSandboxes();
             return sandbox.status(id);
         },
         onSandboxChanged(listener) {
@@ -662,6 +702,55 @@ export function createStudioRuntimeCore(
                 skipped: report.skipped,
                 collisionCount: report.collisions.length,
             };
+        },
+        async restoreSandboxes() {
+            const snapshot =
+                context.workspaceState.get<PersistedSandbox[]>(
+                    PERSISTED_SANDBOXES_KEY,
+                ) ?? [];
+            if (snapshot.length === 0) {
+                return;
+            }
+            // Don't write back to workspaceState while we replay; each call
+            // to `start()` / `loadAgent()` would otherwise trigger persist
+            // and clobber sandboxes we haven't yet restored.
+            restoring = true;
+            try {
+                const existing = new Set(
+                    (await sandbox.list()).map((s) => s.id),
+                );
+                for (const entry of snapshot) {
+                    if (existing.has(entry.id)) {
+                        continue;
+                    }
+                    try {
+                        await sandbox.start({
+                            id: entry.id,
+                            mode: "inmemory",
+                            profileDir: path.join(
+                                context.globalStorageFsPath,
+                                "profiles",
+                                entry.id,
+                            ),
+                            agents: entry.agents,
+                        });
+                    } catch (err) {
+                        // One sandbox failing to restore (e.g. an agent that
+                        // no longer resolves) shouldn't block the rest. Log
+                        // to the extension host console; the surviving
+                        // sandboxes still come back.
+                        // eslint-disable-next-line no-console
+                        console.warn(
+                            `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
+                            err,
+                        );
+                    }
+                }
+            } finally {
+                restoring = false;
+            }
+            // Re-snapshot to drop any sandboxes that failed to come back.
+            await persistSandboxes();
         },
     };
 }

@@ -81,6 +81,99 @@ class RecordingSandboxManager implements SandboxManager {
     }
 }
 
+test("persists sandbox set across runtime instances and replays it on restore", async () => {
+    const { context, store } = createContext();
+
+    // The base RecordingSandboxManager doesn't propagate cfg.agents into
+    // status, so we extend it to mirror the real manager's semantics: agents
+    // listed in cfg or added via loadAgent show up in status.agents.
+    class CapturingSandboxManager extends RecordingSandboxManager {
+        readonly started: SandboxConfig[] = [];
+        async start(cfg: SandboxConfig): Promise<SandboxHandle> {
+            this.started.push(cfg);
+            const handle = await super.start(cfg);
+            for (const ref of cfg.agents) {
+                await this.loadAgent(cfg.id, ref);
+            }
+            return handle;
+        }
+        async loadAgent(id: string, agentRef: string): Promise<void> {
+            await super.loadAgent(id, agentRef);
+            const status = await super.status(id);
+            status.agents.push({
+                name: agentRef,
+                sourcePath: agentRef,
+                schemaHash: "stub",
+                grammarHash: "stub",
+                health: "unknown",
+            });
+        }
+    }
+
+    const first = createStudioRuntimeCore(context, {
+        sandbox: new CapturingSandboxManager(),
+    });
+    await first.startSandbox({ id: "alpha", agents: ["agentA"] });
+    await first.startSandbox({ id: "beta" });
+    await first.loadSandboxAgent("beta", "agentB");
+
+    const persisted = store.get("studio.persistedSandboxes") as Array<{
+        id: string;
+        agents: string[];
+    }>;
+    assert.deepEqual(persisted.map((p) => p.id).sort(), ["alpha", "beta"]);
+    assert.deepEqual(
+        persisted.find((p) => p.id === "alpha")?.agents,
+        ["agentA"],
+    );
+    assert.deepEqual(
+        persisted.find((p) => p.id === "beta")?.agents,
+        ["agentB"],
+    );
+
+    const recorder = new CapturingSandboxManager();
+    const second = createStudioRuntimeCore(context, { sandbox: recorder });
+    assert.deepEqual(await second.listSandboxes(), []);
+
+    await second.restoreSandboxes();
+
+    const restored = (await second.listSandboxes()).map((s) => s.id).sort();
+    assert.deepEqual(restored, ["alpha", "beta"]);
+    const startedById = new Map(recorder.started.map((c) => [c.id, c.agents]));
+    assert.deepEqual(startedById.get("alpha"), ["agentA"]);
+    assert.deepEqual(startedById.get("beta"), ["agentB"]);
+});
+
+test("restoreSandboxes survives a per-sandbox failure and persists the surviving set", async () => {
+    const { context, store } = createContext();
+    await context.workspaceState.update("studio.persistedSandboxes", [
+        { id: "good", agents: [] },
+        { id: "bad", agents: [] },
+    ]);
+
+    class HostileSandboxManager extends RecordingSandboxManager {
+        async start(cfg: SandboxConfig): Promise<SandboxHandle> {
+            if (cfg.id === "bad") {
+                throw new Error("nope");
+            }
+            return super.start(cfg);
+        }
+    }
+
+    const runtime = createStudioRuntimeCore(context, {
+        sandbox: new HostileSandboxManager(),
+    });
+    await runtime.restoreSandboxes();
+
+    const live = (await runtime.listSandboxes()).map((s) => s.id);
+    assert.deepEqual(live, ["good"]);
+
+    const persisted = store.get("studio.persistedSandboxes") as Array<{
+        id: string;
+    }>;
+    assert.deepEqual(persisted.map((p) => p.id), ["good"]);
+});
+
 test("runRemainingPhasesOnActiveSession completes pipeline in order", async () => {
     let now = 100;
     const { context } = createContext();
