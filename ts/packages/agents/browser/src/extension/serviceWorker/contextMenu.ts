@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
+import {
+    connectToDispatcher,
+    awaitConversationOps,
+} from "./dispatcherConnection";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 
 // RPC send function — set after RPC server is created in index.ts
 let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
@@ -12,10 +17,68 @@ export function setContextMenuRpcSend(
     rpcSendFn = fn;
 }
 
+/**
+ * Cached "Open chat panel automatically" setting. Must be read
+ * synchronously from the context-menu click handler because
+ * `chrome.sidePanel.open()` requires an active user gesture and awaiting
+ * `chrome.storage.sync.get(...)` consumes that gesture.
+ *
+ * Defaults to `true` until the stored value has been loaded the first
+ * time. Refreshed on every `chrome.storage.sync` change so toggling the
+ * option in the extension's options page takes effect immediately.
+ */
+let autoOpenChatPanelCached = true;
+
+export function initContextMenuSettings(): void {
+    chrome.storage.sync
+        .get({ autoOpenChatPanel: true })
+        .then((stored) => {
+            autoOpenChatPanelCached = stored.autoOpenChatPanel !== false;
+        })
+        .catch((error) => {
+            console.warn(
+                "Failed to load autoOpenChatPanel setting; defaulting to open:",
+                error,
+            );
+        });
+
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace !== "sync") return;
+        if (changes.autoOpenChatPanel) {
+            autoOpenChatPanelCached =
+                changes.autoOpenChatPanel.newValue !== false;
+        }
+    });
+}
+
+/**
+ * Dispatch a command directly to the TypeAgent dispatcher without opening
+ * (or routing through) the chat panel UI. Used when the user has disabled
+ * "Open chat panel automatically for TypeAgent actions".
+ */
+async function dispatchCommandSilently(command: string): Promise<void> {
+    try {
+        await awaitConversationOps();
+        const dispatcher = await connectToDispatcher();
+        await awaitCommand(dispatcher, command, undefined, undefined);
+    } catch (error: any) {
+        console.error(
+            "Failed to dispatch context-menu command silently:",
+            error?.message || error,
+        );
+    }
+}
+
 async function openChatAndInjectCommand(
     tabId: number,
     command: string,
 ): Promise<void> {
+    if (!autoOpenChatPanelCached) {
+        await dispatchCommandSilently(command);
+        return;
+    }
+    // sidePanel.open() must be the first await in the user-gesture turn,
+    // so the cache lookup above must remain synchronous.
     await chrome.sidePanel.open({ tabId });
     await chrome.sidePanel.setOptions({
         tabId,
@@ -29,6 +92,9 @@ async function openChatAndInjectCommand(
 }
 
 async function openChatAndStartMacroAuthoring(tabId: number): Promise<void> {
+    // Macro authoring is an interactive UI flow (follow-up buttons,
+    // demonstration recording) that requires the chat panel. We always
+    // open the panel here regardless of the autoOpenChatPanel setting.
     await chrome.sidePanel.open({ tabId });
     await chrome.sidePanel.setOptions({
         tabId,
