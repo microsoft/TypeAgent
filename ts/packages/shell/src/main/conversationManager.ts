@@ -17,9 +17,22 @@ import type {
     ConversationSwitchResult,
 } from "../preload/electronTypes.js";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import {
+    manageConversation,
+    switchConversationSafe,
+    type ConversationActionResult,
+    type ManageConversationContext,
+    type ManageConversationPayload,
+} from "@typeagent/agent-server-client/conversation";
 import type { ClientIO, Dispatcher, QueueSnapshot } from "agent-dispatcher";
 import { debugShell } from "./debug.js";
 import { saveUserSettings } from "agent-dispatcher/helpers/userSettings";
+
+export type ConversationManageResult = {
+    html: string;
+    kind: "info" | "warning" | "error";
+    switched?: boolean;
+};
 
 export type ConversationManagerBackend = {
     listConversations(): Promise<ConversationInfo[]>;
@@ -32,6 +45,9 @@ export type ConversationManagerBackend = {
     getCurrentConversation(): Promise<
         { conversationId: string; name: string } | undefined
     >;
+    manageAction(
+        payload: ManageConversationPayload,
+    ): Promise<ConversationManageResult>;
 };
 
 /**
@@ -87,6 +103,12 @@ export function createLocalConversationBackend(): ConversationManagerBackend {
             return {
                 conversationId: defaultConversation.conversationId,
                 name: defaultConversation.name,
+            };
+        },
+        async manageAction(): Promise<ConversationManageResult> {
+            return {
+                html: "Conversation management is not supported in local mode. Connect to the Agent Server to use conversation management.",
+                kind: "warning",
             };
         },
     };
@@ -147,6 +169,16 @@ export function registerConversationIpcHandlers(
             debugShell("IPC: conversation-get-current");
             return backend.getCurrentConversation();
         },
+        "conversation-manage-action": async (
+            _event: Electron.IpcMainInvokeEvent,
+            payload: ManageConversationPayload,
+        ) => {
+            debugShell(
+                "IPC: conversation-manage-action subcommand=%s",
+                payload?.subcommand,
+            );
+            return backend.manageAction(payload);
+        },
     };
 
     for (const [channel, handler] of Object.entries(handlers)) {
@@ -179,6 +211,47 @@ export function createRemoteConversationBackend(
     let currentConversationId = initialConversationId;
     let currentName = initialName;
 
+    // Post-join bookkeeping shared between explicit switchConversation and
+    // the manage-conversation action surface.
+    const commitSwitch = (
+        newConversation: Awaited<
+            ReturnType<typeof connection.joinConversation>
+        >,
+    ): void => {
+        newConversation.dispatcher.close = async () => {
+            await connection.leaveConversation(newConversation.conversationId);
+        };
+        currentConversationId = newConversation.conversationId;
+        currentName = newConversation.name;
+        onDispatcherSwitch?.(newConversation.dispatcher);
+        sendConversationChanged(
+            currentConversationId,
+            currentName,
+            newConversation.queueSnapshot,
+        );
+    };
+
+    const persistLastId = (id: string): void => {
+        try {
+            saveUserSettings({ conversation: { lastConversationId: id } });
+        } catch (e: any) {
+            debugShell(
+                "Failed to persist lastConversationId on switch (ignoring): %s",
+                e.message,
+            );
+        }
+    };
+
+    const logLeaveOld = (oldId: string, err: unknown): void => {
+        if (err !== undefined) {
+            debugShell(
+                "Failed to leave old conversation %s (best-effort, ignoring): %s",
+                oldId,
+                (err as { message?: string })?.message ?? String(err),
+            );
+        }
+    };
+
     return {
         async listConversations(): Promise<ConversationInfo[]> {
             return connection.listConversations();
@@ -199,82 +272,30 @@ export function createRemoteConversationBackend(
                 };
             }
 
-            const oldConversationId = currentConversationId;
+            const result = await switchConversationSafe(
+                connection,
+                clientIO,
+                currentConversationId,
+                conversationId,
+                {
+                    onJoined: commitSwitch,
+                    onPersist: persistLastId,
+                    onLeftOld: logLeaveOld,
+                },
+            );
 
-            // Phase 1: join new conversation. If this fails we haven't left the old
-            // one, so fall through to the catch and report failure cleanly.
-            let newConversation: Awaited<
-                ReturnType<typeof connection.joinConversation>
-            >;
-            try {
-                newConversation = await connection.joinConversation(clientIO, {
-                    conversationId,
-                });
-            } catch (e: any) {
+            if (result.kind === "join-failed") {
+                const e = result.error as { message?: string } | undefined;
                 debugShell(
                     "Failed to join conversation %s: %s",
                     conversationId,
-                    e.message,
+                    e?.message ?? String(result.error),
                 );
                 return {
                     success: false,
-                    error: e.message ?? String(e),
+                    error: e?.message ?? String(result.error),
                 };
             }
-
-            // Override close so it doesn't close the shared WebSocket
-            newConversation.dispatcher.close = async () => {
-                await connection.leaveConversation(
-                    newConversation.conversationId,
-                );
-            };
-
-            // Phase 2: commit the switch. We are now joined to the new conversation,
-            // so tracked state must be updated regardless of what happens next.
-            currentConversationId = newConversation.conversationId;
-            currentName = newConversation.name;
-
-            // Persist the new current conversation so the next launch
-            // restores it. Best-effort: a failure here doesn't undo the
-            // switch.
-            try {
-                saveUserSettings({
-                    conversation: {
-                        lastConversationId: newConversation.conversationId,
-                    },
-                });
-            } catch (e: any) {
-                debugShell(
-                    "Failed to persist lastConversationId on switch (ignoring): %s",
-                    e.message,
-                );
-            }
-
-            // Best-effort leave of the old conversation — a failure here does not
-            // undo the switch; the client is already on the new conversation.
-            try {
-                await connection.leaveConversation(oldConversationId);
-            } catch (e: any) {
-                debugShell(
-                    "Failed to leave old conversation %s (best-effort, ignoring): %s",
-                    oldConversationId,
-                    e.message,
-                );
-            }
-
-            // Notify the shell that the dispatcher has changed so it can
-            // rebind its command-processing pipeline to the new instance.
-            onDispatcherSwitch?.(newConversation.dispatcher);
-
-            // History replay is handled renderer-side: sendConversationChanged
-            // triggers the bridge's conversationChanged handler, which clears
-            // the panel and replays the new conversation's structured display
-            // history via chatPanel.replayHistory() (grayed + "now" banner).
-            sendConversationChanged(
-                currentConversationId,
-                currentName,
-                newConversation.queueSnapshot,
-            );
 
             return {
                 success: true,
@@ -288,7 +309,6 @@ export function createRemoteConversationBackend(
             newName: string,
         ): Promise<void> {
             await connection.renameConversation(conversationId, newName);
-            // If the renamed conversation is the current one, update tracked name
             if (conversationId === currentConversationId) {
                 currentName = newName;
                 sendConversationChanged(currentConversationId, currentName);
@@ -312,5 +332,113 @@ export function createRemoteConversationBackend(
                 name: currentName,
             };
         },
+
+        async manageAction(
+            payload: ManageConversationPayload,
+        ): Promise<ConversationManageResult> {
+            const ctx: ManageConversationContext = {
+                currentConversationId,
+                currentConversationName: currentName,
+                onSwitched: (newConversation) => {
+                    commitSwitch(newConversation);
+                    // Rename's renameConversation hook isn't applicable here;
+                    // commitSwitch already handled the name update via the
+                    // newConversation payload.
+                },
+                onPersistSwitched: persistLastId,
+            };
+            const result = await manageConversation(
+                connection,
+                clientIO,
+                ctx,
+                payload,
+            );
+
+            // For rename of the current conversation, helper doesn't fire
+            // onSwitched (no switch happened), so push the name update.
+            if (
+                payload.subcommand === "rename" &&
+                result.kind === "ok" &&
+                result.conversation?.conversationId === currentConversationId
+            ) {
+                currentName = result.conversation.name;
+                sendConversationChanged(currentConversationId, currentName);
+            }
+
+            return renderConversationActionResult(result);
+        },
     };
+}
+
+function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => {
+        switch (c) {
+            case "&":
+                return "&amp;";
+            case "<":
+                return "&lt;";
+            case ">":
+                return "&gt;";
+            case '"':
+                return "&quot;";
+            default:
+                return "&#39;";
+        }
+    });
+}
+
+// Replace plain "<name>" runs in helper messages with bold-escaped HTML.
+function htmlizeMessage(message: string): string {
+    return message.replace(
+        /"([^"]+)"/g,
+        (_, name) => `"<b>${escapeHtml(name)}</b>"`,
+    );
+}
+
+function renderConversationActionResult(
+    result: ConversationActionResult,
+): ConversationManageResult {
+    switch (result.kind) {
+        case "ok":
+            return {
+                html: htmlizeMessage(result.message),
+                kind: "info",
+                ...(result.switched ? { switched: true } : {}),
+            };
+        case "warning":
+            return {
+                html: htmlizeMessage(result.message),
+                kind: "warning",
+            };
+        case "error":
+            return {
+                html: `❌ ${htmlizeMessage(result.message)}`,
+                kind: "error",
+            };
+        case "cancelled":
+            return { html: "Cancelled.", kind: "info" };
+        case "info":
+            return {
+                html:
+                    `<b>Current conversation:</b><br>` +
+                    `Name: ${escapeHtml(result.name)}<br>` +
+                    `<span style="font-family:monospace;font-size:smaller;">${escapeHtml(result.conversationId)}</span>`,
+                kind: "info",
+            };
+        case "list": {
+            if (result.conversations.length === 0) {
+                return { html: "<i>No conversations found.</i>", kind: "info" };
+            }
+            const items = result.conversations
+                .map((s) => {
+                    const cur =
+                        s.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    return `<li>${cur}${escapeHtml(s.name)}</li>`;
+                })
+                .join("");
+            return { html: `<ul>${items}</ul>`, kind: "info" };
+        }
+    }
 }

@@ -95,6 +95,15 @@ export interface ClientAPI {
     conversationGetCurrent(): Promise<
         { conversationId: string; name: string } | undefined
     >;
+    conversationManageAction(payload: {
+        subcommand: string;
+        name?: string;
+        newName?: string;
+    }): Promise<{
+        html: string;
+        kind: "info" | "warning" | "error";
+        switched?: boolean;
+    }>;
 }
 
 // Functions that are called from the main process to the renderer process.

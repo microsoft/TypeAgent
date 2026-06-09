@@ -840,97 +840,11 @@ export function createChatPanelClient(
         name?: string;
         newName?: string;
     }) {
-        const api = getClientAPI();
-        const inline = (content: string, kind: "info" | "warning" = "info") =>
-            chatPanel.showInline(
-                { type: "html", content, kind },
-                "conversation",
-            );
-        switch (payload.subcommand) {
-            case "new": {
-                let newName = payload.name;
-                if (!newName) {
-                    const dt = new Date();
-                    const pad = (n: number) => n.toString().padStart(2, "0");
-                    newName = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-                }
-                const created = await api.conversationCreate(newName);
-                const switchResult = await api.conversationSwitch(
-                    created.conversationId,
-                );
-                inline(
-                    switchResult.success
-                        ? `✅ Created and switched to conversation "<b>${created.name}</b>"`
-                        : `✅ Created conversation "<b>${created.name}</b>" but could not switch.`,
-                );
-                break;
-            }
-            case "list": {
-                const sessions = await api.conversationList();
-                const cur = await api.conversationGetCurrent();
-                inline(
-                    `<ul>${sessions
-                        .map(
-                            (s) =>
-                                `<li>${s.conversationId === cur?.conversationId ? "▶ " : ""}${s.name}</li>`,
-                        )
-                        .join("")}</ul>`,
-                );
-                break;
-            }
-            case "rename": {
-                if (!payload.newName) {
-                    inline("A new name is required to rename.", "warning");
-                    break;
-                }
-                const cur = await api.conversationGetCurrent();
-                let conversationId = cur?.conversationId;
-                if (payload.name) {
-                    const sessions = await api.conversationList();
-                    const match = sessions.find(
-                        (s) =>
-                            s.name.toLowerCase() ===
-                            payload.name!.toLowerCase(),
-                    );
-                    conversationId = match?.conversationId;
-                }
-                if (!conversationId) {
-                    inline("No conversation to rename.", "warning");
-                    break;
-                }
-                await api.conversationRename(conversationId, payload.newName);
-                inline(
-                    `✅ Renamed conversation to "<b>${payload.newName}</b>"`,
-                );
-                break;
-            }
-            case "delete": {
-                if (!payload.name) {
-                    inline("A conversation name is required.", "warning");
-                    break;
-                }
-                const sessions = await api.conversationList();
-                const match = sessions.find(
-                    (s) => s.name.toLowerCase() === payload.name!.toLowerCase(),
-                );
-                if (!match) {
-                    inline(
-                        `❌ Conversation "<b>${payload.name}</b>" not found.`,
-                        "warning",
-                    );
-                    break;
-                }
-                await api.conversationDelete(match.conversationId);
-                inline(`🗑️ Deleted conversation "<b>${match.name}</b>"`);
-                break;
-            }
-            default:
-                inline(
-                    `Unknown manage-conversation subcommand: "<b>${payload.subcommand}</b>"`,
-                    "warning",
-                );
-                break;
-        }
+        const result = await getClientAPI().conversationManageAction(payload);
+        chatPanel.showInline(
+            { type: "html", content: result.html, kind: result.kind },
+            "conversation",
+        );
     }
 
     // Fetch the dispatcher's structured display history and replay it into

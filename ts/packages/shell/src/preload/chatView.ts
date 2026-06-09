@@ -242,6 +242,13 @@ const api: ClientAPI = {
     conversationGetCurrent: () => {
         return ipcRenderer.invoke("conversation-get-current");
     },
+    conversationManageAction: (payload: {
+        subcommand: string;
+        name?: string;
+        newName?: string;
+    }) => {
+        return ipcRenderer.invoke("conversation-manage-action", payload);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

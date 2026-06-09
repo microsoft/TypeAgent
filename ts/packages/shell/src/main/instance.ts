@@ -58,6 +58,7 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import { joinNamedOrFallback } from "@typeagent/agent-server-client/conversation";
 import {
     loadUserSettings,
     saveUserSettings,
@@ -222,81 +223,32 @@ async function initializeDispatcher(
             conn: AgentServerConnection,
         ): Promise<void> {
             const SHELL_CONVERSATION_NAME = "Shell";
-            let conversation:
-                | Awaited<ReturnType<typeof conn.joinConversation>>
-                | undefined;
-
-            // First, try to restore the conversation we last had open. This
-            // keeps the shell on the user's working conversation across
-            // restarts instead of always snapping back to the default
-            // "Shell" conversation. Best-effort: if the saved id no longer
-            // exists (deleted, data wiped, etc.) we fall through to the
-            // find-or-create flow below.
             const savedConversationId = loadUserSettings().conversation
                 .lastConversationId as string | undefined;
-            if (savedConversationId) {
-                try {
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: savedConversationId,
-                    });
-                    debugShellInit(
-                        "Restored last conversation",
-                        savedConversationId,
-                    );
-                } catch (e: any) {
+
+            const result = await joinNamedOrFallback(conn, clientIO, {
+                ...(savedConversationId ? { savedConversationId } : {}),
+                defaultName: SHELL_CONVERSATION_NAME,
+                onSavedConversationUnavailable: (e) => {
                     debugShellInit(
                         "Failed to restore last conversation, falling back:",
                         savedConversationId,
-                        e.message,
+                        (e as { message?: string })?.message ?? String(e),
                     );
-                    conversation = undefined;
-                }
-            }
+                },
+            });
 
-            if (conversation === undefined) {
-                const existing = await conn.listConversations(
-                    SHELL_CONVERSATION_NAME,
-                );
-                const match = existing.find(
-                    (s) =>
-                        s.name.toLowerCase() ===
-                        SHELL_CONVERSATION_NAME.toLowerCase(),
-                );
-                const shellConversationId =
-                    match !== undefined
-                        ? match.conversationId
-                        : (
-                              await conn.createConversation(
-                                  SHELL_CONVERSATION_NAME,
-                              )
-                          ).conversationId;
-                try {
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: shellConversationId,
-                    });
-                } catch (e: any) {
-                    // The conversation may have been deleted between
-                    // listConversations and joinConversation (race
-                    // condition). Fall back to creating a fresh one.
-                    debugShellInit(
-                        "joinConversation failed for Shell conversation, creating new one:",
-                        e.message,
-                    );
-                    const fresh = await conn.createConversation(
-                        SHELL_CONVERSATION_NAME,
-                    );
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: fresh.conversationId,
-                    });
-                }
-            }
+            const conversation = result.conversation;
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
             initialQueueSnapshot = conversation.queueSnapshot;
-            // Persist the conversation we ended up on so the next launch
-            // restores it. Wrapped in try/catch because user-settings I/O
-            // shouldn't block startup if the disk write fails.
+            if (result.usedSavedId) {
+                debugShellInit(
+                    "Restored last conversation",
+                    conversation.conversationId,
+                );
+            }
             try {
                 saveUserSettings({
                     conversation: {
