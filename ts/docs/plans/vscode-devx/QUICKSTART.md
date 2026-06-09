@@ -1,7 +1,7 @@
 # TypeAgent Studio — Quickstart
 
-> A practical guide for reviewing what's currently built on
-> `dev/talzacc/typeagent_studio`. Updated as work progresses.
+> A practical guide for reviewing what's currently built. Updated as work
+> progresses.
 >
 > For the design overview see [`DESIGN.md`](./DESIGN.md). For deep references
 > see [`README.md`](./README.md) and the numbered planning docs in this
