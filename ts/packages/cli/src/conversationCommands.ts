@@ -35,6 +35,12 @@ export type ConversationCommandContext = {
 
 // ── Arg parsing ────────────────────────────────────────────────────────
 
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Parse the argument string, respecting double-quoted names.
+ * Returns the trimmed argument (without surrounding quotes).
+ */
 function parseNameArg(args: string): string {
     const trimmed = args.trim();
     if (
@@ -243,8 +249,14 @@ async function handleNewWithConfirm(
     name: string | undefined,
 ): Promise<void> {
     if (!name) {
-        console.log(chalk.yellow("Usage: @conversation new <name>"));
-        return;
+        // Auto-generate a timestamped name when called without an
+        // argument so natural-language requests like "create a new
+        // conversation" (which the dispatcher translates to `new` with
+        // no name) don't fall through to a usage error. Matches the
+        // Shell's auto-naming format in chatPanelBridge.ts.
+        const dt = new Date();
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        name = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
     }
     let created;
     try {
@@ -302,6 +314,11 @@ function printHelp(): void {
     const cmds: [string, string][] = [
         ["new <name>", "Create a new conversation"],
         ["switch <name>", "Switch to a conversation by name"],
+        ["next", "Switch to the next conversation in the list (wraps around)"],
+        [
+            "prev",
+            "Switch to the previous conversation in the list (wraps around)",
+        ],
         ["list [<filter>]", "List all conversations"],
         ["info", "Show info about the current conversation"],
         ["rename <newName>", "Rename the current conversation"],

@@ -170,6 +170,78 @@ Should show `typeagent` under the plugins section.
 
 ---
 
+## Install Globally (available in every `copilot` session)
+
+The `--plugin-dir` flag (and the `pnpm copilot` wrapper) only loads the plugin
+for that one launch. To make it available in **every** `copilot` session,
+regardless of which directory you start from, install it globally:
+
+```powershell
+cd D:\repos\TypeAgent\ts\packages\copilot-plugin
+pnpm run build       # tsc + esbuild bundle (produces a self-contained dist/)
+pnpm run register    # registers a local marketplace and installs the plugin
+```
+
+After this, plain `copilot` from any directory loads the plugin with a working
+MCP server — no `--plugin-dir`, no `pnpm copilot` needed. Verify with:
+
+```powershell
+copilot plugin list   # shows: typeagent@typeagent-local (v0.0.1)
+```
+
+To remove it everywhere:
+
+```powershell
+pnpm run uninstall:global
+```
+
+### How it works
+
+The current Copilot CLI (>= 1.0) does **not** accept a local path for
+`copilot plugin install` — only `plugin@marketplace`, `owner/repo`, repo
+subdirs, or git URLs. However, `copilot plugin marketplace add <path>` **does**
+accept a local path. So `pnpm run register` (`scripts/install-plugin.mjs`):
+
+1. Registers the `ts` workspace root as a local marketplace named
+   `typeagent-local`. The CLI discovers the marketplace manifest at
+   `ts/.github/plugin/marketplace.json`, whose plugin `source` points at
+   `./packages/copilot-plugin` (resolved relative to the marketplace root).
+2. Installs `typeagent@typeagent-local`, which **copies** the plugin dir into
+   `~/.copilot/installed-plugins/`.
+
+> The CLI searches several locations for the marketplace manifest, in order:
+> `marketplace.json` (root), `.plugin/marketplace.json`,
+> `.github/plugin/marketplace.json`, then `.claude-plugin/marketplace.json`.
+> We use `.github/plugin/` since the workspace already has a `.github` folder.
+
+### Why the build must bundle
+
+Installing copies the plugin directory into `~/.copilot/installed-plugins/`.
+Because this is a pnpm workspace, the plugin's runtime deps (the MCP SDK and the
+`workspace:*` packages) are symlinks/junctions into the central `.pnpm` store —
+the copy breaks them, and the MCP server crashes on launch with
+`ERR_MODULE_NOT_FOUND`. To fix this, `pnpm run build` runs an esbuild bundle
+step (`scripts/bundle.mjs`) that inlines every dependency into the hook and MCP
+entry points, so the copied `dist/` is self-contained and needs no
+`node_modules` at runtime.
+
+### Updating after a code change
+
+The global install is a **snapshot copy**, not a live reference. After editing
+the plugin, rebuild and refresh the global copy:
+
+```powershell
+pnpm run build       # re-bundle
+pnpm run register    # re-copies the fresh build (runs `copilot plugin update`)
+```
+
+> For rapid local development with live edits, prefer `pnpm copilot`
+> (`--plugin-dir`), which runs your working directory directly and skips the
+> build+refresh cycle. Use the global install for the "available everywhere"
+> workflow.
+
+---
+
 ## Integration Modes
 
 The plugin supports two modes, switchable at runtime:

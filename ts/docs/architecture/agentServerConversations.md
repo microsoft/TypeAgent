@@ -229,15 +229,19 @@ Conversation management only applies when the Shell is running in **connected mo
 When connected to the agentServer, the Shell exposes `/conversation` commands in the chat input:
 
 ```
+/conversation                   — Show conversation command help
+/conversation help              — Show conversation command help
 /conversation list              — List all conversations
 /conversation new [name]        — Create a new conversation
 /conversation switch <id|name>  — Switch to a conversation
 /conversation info              — Show current conversation info
+/conversation next              — Switch to the next conversation (wraps around)
+/conversation prev              — Switch to the previous conversation (wraps around)
 /conversation rename <id|name> <name>  — Rename a conversation
 /conversation delete <id|name>  — Delete a conversation
 ```
 
-`@conversation` is accepted as an alias for `/conversation`.
+`@conversation` is accepted as an alias for `/conversation`. Natural-language phrases ("list my conversations", "create a new conversation called notes", etc.) are translated by the `system.conversation` sub-agent into the same `manage-conversation` `ClientIO.takeAction` payload, so all three input styles share one client-side renderer (`packages/shell/src/renderer/src/chatPanelBridge.ts:handleManageConversation`).
 
 On startup, the Shell first tries to restore the last conversation it had open (`userSettings.conversation.lastConversationId`); if that conversation no longer exists on the server (deleted, server data wiped, etc.), it falls back to find-or-create a conversation named `"Shell"`. See `packages/shell/src/main/instance.ts`.
 
@@ -337,6 +341,7 @@ agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
 where `payload` has the shape:
 
 ```typescript
+{ subcommand: "help" }
 { subcommand: "new"; name?: string }
 { subcommand: "list" }
 { subcommand: "info" }
@@ -347,12 +352,12 @@ where `payload` has the shape:
 { subcommand: "rename"; name?: string; newName: string }
 ```
 
-See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
+`help` is dispatched when `@conversation` / `/conversation` is invoked with no subcommand (via the dispatcher's `defaultSubCommand: "help"`); there is intentionally no natural-language form for it. NL drops `help` from its `ConversationActionPayload` union and only emits `new`, `list`, `info`, `switch`, `prev`, `next`, `rename`, `delete`. See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
 
 Each client handles `"manage-conversation"` using its own conversation management API:
 
 - **CLI** — `enhancedConsole.ts` calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands.
-- **Shell** — `main.ts` calls the corresponding `ClientAPI` method (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge.
+- **Shell** — `chatPanelBridge.ts:handleManageConversation` renders results into the active `chat-ui` chat panel via `addAgentMessage` (info) or `showInline` (warnings/errors), and switches conversations via the corresponding `ClientAPI` methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge. All HTML interpolated into bubbles is escaped via a local `escapeHtml()`.
 - **VS Code Shell** — `agentServerBridge.handleManageConversation` invokes the legacy `LegacyAgentServerConnection` (`listSessions`/`createSession`/`renameSession`/`deleteSession`) directly. Renders results inline via `overwriteActionBubble` for non-switching subcommands, and via the post-switch `conversationNotification` webview message for switching subcommands (`new`/`switch`/`prev`/`next`).
 
 See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#conversations) for the full list of supported phrases.

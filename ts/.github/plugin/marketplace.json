@@ -1,0 +1,19 @@
+{
+  "name": "typeagent-local",
+  "owner": {
+    "name": "Microsoft",
+    "email": "typeagent@microsoft.com"
+  },
+  "metadata": {
+    "description": "Local marketplace for TypeAgent Copilot CLI plugins (dev build)",
+    "version": "0.0.1"
+  },
+  "plugins": [
+    {
+      "name": "typeagent",
+      "description": "TypeAgent integration for Copilot CLI - route action requests to TypeAgent agents for calendar, email, music, browser, and other domain-specific actions",
+      "version": "0.0.1",
+      "source": "./packages/copilot-plugin"
+    }
+  ]
+}
