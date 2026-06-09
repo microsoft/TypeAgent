@@ -23,6 +23,7 @@ interface ManifestSchemaRef {
     originalSchemaFile?: string;
     schemaFile?: string;
     grammarFile?: string;
+    injected?: boolean;
 }
 
 interface AgentManifest {
@@ -73,7 +74,15 @@ export async function discoverAgentFiles(
     const srcDir = path.join(packageDir, "src");
     const all = await walkFiles(srcDir);
 
-    const manifestFile = all.find((f) => /manifest\.json$/i.test(f));
+    // Prefer the package's declared entry points (the same exports the
+    // dispatcher resolves via npmAgentProvider). Fall back to filename
+    // heuristics when an export is missing or doesn't resolve to a real
+    // source file — this keeps discovery robust for partially-authored
+    // agents and for tests that don't author a full package.json.
+    const declared = await readDeclaredEntries(packageDir);
+
+    const manifestFile =
+        declared.manifestFile ?? all.find((f) => /manifest\.json$/i.test(f));
 
     const schemaFiles = all.filter(
         (f) => /schema/i.test(path.basename(f)) && /\.(ts|json)$/i.test(f),
@@ -81,9 +90,18 @@ export async function discoverAgentFiles(
     const grammarFiles = all.filter(
         (f) => /\.agr$/i.test(f) || /\.ag\.json$/i.test(f),
     );
-    const handlerFiles = all.filter((f) =>
-        /actionhandler/i.test(path.basename(f)),
-    );
+
+    let handlerFiles: string[];
+    if (declared.handlerFile !== undefined) {
+        handlerFiles = [declared.handlerFile];
+    } else {
+        // Permissive filename match — the rule that consumes these files
+        // (`handler.exports.instantiate`) inspects file contents, so
+        // over-matching is harmless.
+        handlerFiles = all.filter((f) =>
+            /handler[^/\\]*\.m?ts$/i.test(path.basename(f)),
+        );
+    }
 
     return {
         packageDir,
@@ -93,6 +111,110 @@ export async function discoverAgentFiles(
         grammarFiles,
         handlerFiles,
     };
+}
+
+interface DeclaredEntries {
+    manifestFile?: string;
+    handlerFile?: string;
+}
+
+/**
+ * Read the canonical manifest/handler entry points from the agent package's
+ * `package.json` exports. The dispatcher loads each agent via the
+ * `./agent/manifest` and `./agent/handlers` exports, so trusting them here
+ * matches the runtime contract exactly and side-steps filename guessing.
+ *
+ * The handler export points at a built `dist/.../X.js` (or `.mjs`); we map
+ * it back to the corresponding `src/.../X.ts` (or `.mts`) so the rule can
+ * inspect the source. Returns no entry when the export is absent or its
+ * source file cannot be located.
+ */
+async function readDeclaredEntries(
+    packageDir: string,
+): Promise<DeclaredEntries> {
+    let pkg: { exports?: Record<string, unknown> };
+    try {
+        pkg = JSON.parse(
+            await fs.readFile(path.join(packageDir, "package.json"), "utf8"),
+        );
+    } catch {
+        return {};
+    }
+
+    const exp = pkg.exports;
+    if (!exp || typeof exp !== "object") {
+        return {};
+    }
+
+    const result: DeclaredEntries = {};
+
+    const manifestRef = resolveExport(exp, "./agent/manifest");
+    if (manifestRef !== undefined) {
+        const abs = path.resolve(packageDir, manifestRef);
+        if (await exists(abs)) {
+            result.manifestFile = abs;
+        }
+    }
+
+    const handlerRef = resolveExport(exp, "./agent/handlers");
+    if (handlerRef !== undefined) {
+        const handlerSrc = await resolveHandlerSource(packageDir, handlerRef);
+        if (handlerSrc !== undefined) {
+            result.handlerFile = handlerSrc;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Pick the file path out of an `exports[key]` entry, accepting both the
+ * shorthand string form and the conditional-exports object form (taking
+ * `default`/`import`/`require` in that order).
+ */
+function resolveExport(
+    exp: Record<string, unknown>,
+    key: string,
+): string | undefined {
+    const entry = exp[key];
+    if (typeof entry === "string") {
+        return entry;
+    }
+    if (entry && typeof entry === "object") {
+        const obj = entry as Record<string, unknown>;
+        for (const cond of ["default", "import", "require"]) {
+            const v = obj[cond];
+            if (typeof v === "string") {
+                return v;
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Map a `./dist/.../X.{js,mjs}` handler export back to its `./src/.../X.{ts,mts}`
+ * source file. Tries the parallel `dist`→`src` rewrite first, then falls
+ * back to a basename match anywhere under `src/`.
+ */
+async function resolveHandlerSource(
+    packageDir: string,
+    distRef: string,
+): Promise<string | undefined> {
+    const normalized = distRef.replace(/^\.\//, "");
+    const parallel = normalized
+        .replace(/^dist[\\/]/, "src/")
+        .replace(/\.mjs$/i, ".mts")
+        .replace(/\.js$/i, ".ts");
+    const parallelAbs = path.resolve(packageDir, parallel);
+    if (await exists(parallelAbs)) {
+        return parallelAbs;
+    }
+
+    const baseTs = path.basename(parallel);
+    const candidates = await walkFiles(path.join(packageDir, "src"));
+    const hit = candidates.find((f) => path.basename(f) === baseTs);
+    return hit;
 }
 
 function createRules(): HealthRule[] {
@@ -227,6 +349,15 @@ function createRules(): HealthRule[] {
                     ctx.files.schemaFiles.length === 0 ||
                     ctx.files.grammarFiles.length > 0
                 ) {
+                    return [];
+                }
+                // Injected agents (e.g. chat) are invoked as a fallback rather
+                // than dispatched via grammar matching, so they're allowed to
+                // ship a schema with no grammar. The dispatcher signals this
+                // with `schema.injected: true` (and the same flag on any
+                // sub-action manifest).
+                const manifest = await readManifest(ctx);
+                if (manifest && manifestDeclaresInjected(manifest)) {
                     return [];
                 }
                 return [
@@ -440,6 +571,14 @@ function collectManifestRefs(manifest: AgentManifest): ManifestSchemaRef[] {
         }
     }
     return refs;
+}
+
+function manifestDeclaresInjected(manifest: AgentManifest): boolean {
+    if (manifest.schema?.injected) return true;
+    for (const sub of Object.values(manifest.subActionManifests ?? {})) {
+        if (sub.schema?.injected) return true;
+    }
+    return false;
 }
 
 async function computeSchemaHash(files: string[]): Promise<string | undefined> {

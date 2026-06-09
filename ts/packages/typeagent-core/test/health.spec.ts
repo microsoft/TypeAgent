@@ -89,11 +89,114 @@ describe("FileHealthService", () => {
         ]);
     });
 
+    it("uses package.json exports to locate the handler when present", async () => {
+        // Mirror real agents (e.g. browser, calendar) that use a non-standard
+        // handler filename declared via `exports["./agent/handlers"]`. The
+        // permissive filename heuristic would also pick this up, but the
+        // declared-entry path is what the dispatcher actually resolves, so
+        // we exercise it explicitly.
+        await createAgentScaffold(repoRoot, "exported");
+        const pkgDir = path.join(repoRoot, "packages", "agents", "exported");
+        // Remove the conventional handler so only the declared one exists.
+        await fs.rm(path.join(pkgDir, "src", "exportedActionHandler.ts"));
+        await write(
+            path.join(pkgDir, "src", "agent", "weirdName.ts"),
+            "export function instantiate() { return {}; }\n",
+        );
+        await write(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify(
+                {
+                    name: "exported",
+                    exports: {
+                        "./agent/manifest": "./src/exportedManifest.json",
+                        "./agent/handlers": "./dist/agent/weirdName.js",
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("exported");
+        expect(
+            findings.some((f) => f.ruleId === "handler.exports.instantiate"),
+        ).toBe(false);
+    });
+
+    it("does not warn about missing grammar when the manifest marks the schema as injected", async () => {
+        // Chat-style fallback agents declare `schema.injected: true` in their
+        // manifest because they're invoked when no grammar matches; warning
+        // about the missing grammar is a false positive for them.
+        await createAgentScaffold(repoRoot, "chatlike");
+        const src = path.join(repoRoot, "packages", "agents", "chatlike", "src");
+        // Drop the grammar so the rule has something to potentially warn about.
+        await fs.rm(path.join(src, "schema.agr"));
+        await write(
+            path.join(src, "chatlikeManifest.json"),
+            JSON.stringify(
+                {
+                    name: "chatlike",
+                    schema: {
+                        originalSchemaFile: "./schema.ts",
+                        schemaFile: "./schema.json",
+                        injected: true,
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("chatlike");
+        expect(
+            findings.some(
+                (f) => f.ruleId === "schema.actions.haveGrammar",
+            ),
+        ).toBe(false);
+    });
+
     it("returns no findings for a healthy minimal agent", async () => {
         await createAgentScaffold(repoRoot, "demo");
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("demo");
         expect(findings).toEqual([]);
+    });
+
+    it("recognizes handler files that don't follow the *ActionHandler.ts naming convention", async () => {
+        // Some bundled agents (player, scaffolder, list/chatResponse) name
+        // their handler files differently — e.g. `playerHandlers.ts`,
+        // `scaffolderHandler.ts`, `chatResponseHandler.ts`. Discovery must
+        // accept any `*Handler.ts` / `*Handlers.ts` / `*.mts` variant so the
+        // handler.exports.instantiate rule doesn't fire spuriously.
+        const variants: { agent: string; handlerFileName: string }[] = [
+            { agent: "playerlike", handlerFileName: "playerlikeHandlers.ts" },
+            { agent: "responder", handlerFileName: "chatResponseHandler.ts" },
+            { agent: "scaffolderlike", handlerFileName: "scaffolderHandler.ts" },
+            { agent: "browserlike", handlerFileName: "browserlikeActionHandler.mts" },
+            { agent: "calendarlike", handlerFileName: "calendarlikeActionHandlerV3.ts" },
+        ];
+
+        for (const { agent, handlerFileName } of variants) {
+            await createAgentScaffold(repoRoot, agent);
+            const src = path.join(repoRoot, "packages", "agents", agent, "src");
+            // Replace the default *ActionHandler.ts with the variant name.
+            await fs.rm(path.join(src, `${agent}ActionHandler.ts`));
+            await write(
+                path.join(src, handlerFileName),
+                "export function instantiate() { return {}; }\n",
+            );
+
+            const svc = new FileHealthService({ repoRoot });
+            const findings = await svc.check(agent);
+            expect(
+                findings.some(
+                    (f) => f.ruleId === "handler.exports.instantiate",
+                ),
+            ).toBe(false);
+        }
     });
 
     it("reports manifest.parses error for malformed manifest JSON", async () => {
