@@ -64,8 +64,14 @@ function saveLastConversationId(conversationId: string): void {
             CLI_STATE_FILE,
             JSON.stringify({ lastConversationId: conversationId }),
         );
-    } catch {
-        // Non-fatal: persistence failure should not block the conversation.
+    } catch (e: any) {
+        // Non-fatal but surface — silent failure leaves cli-state.json
+        // pointing at the previous conversation, so --resume restores
+        // the wrong one on next launch.
+        console.warn(
+            `Warning: failed to persist last conversation id (${e?.message ?? String(e)}). ` +
+                `Next --resume may restore a different conversation.`,
+        );
     }
 }
 
@@ -343,6 +349,7 @@ export default class Connect extends Command {
             let convCtx: ConversationCommandContext | undefined;
             if (connection !== undefined) {
                 const conn = connection;
+                // Pre-leave: rebind dispatcher + active id/name only.
                 const rebindAfterSwitch = async (
                     newConversation: ConversationDispatcher,
                 ) => {
@@ -357,10 +364,17 @@ export default class Connect extends Command {
                     setCliConnectionId(newConversation.connectionId);
                     clearRecentSubmissions();
                     applyQueueSnapshot(newConversation.queueSnapshot);
+                };
+                // Post-leave: history replay (UI output) only happens after
+                // the old conversation is left, so its lingering events
+                // can't render into the new conversation's replay block.
+                const replayAfterSwitch = async (
+                    newConversation: ConversationDispatcher,
+                ) => {
                     await replayDisplayHistory(
-                        activeDispatcher,
+                        newConversation.dispatcher,
                         clientIO,
-                        activeName,
+                        newConversation.name,
                     );
                 };
                 convCtx = {
@@ -369,6 +383,7 @@ export default class Connect extends Command {
                     getCurrentConversationId: () => activeConversationId,
                     getCurrentConversationName: () => activeName,
                     onSwitched: rebindAfterSwitch,
+                    onAfterSwitched: replayAfterSwitch,
                     ...(isEphemeral
                         ? {}
                         : {

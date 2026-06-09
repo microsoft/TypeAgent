@@ -21,7 +21,15 @@ export type ConversationCommandContext = {
     clientIO: ClientIO;
     getCurrentConversationId: () => string;
     getCurrentConversationName: () => string;
+    /** Pre-leave: rebind dispatcher and active id/name only. */
     onSwitched: (newConversation: ConversationDispatcher) => Promise<void>;
+    /**
+     * Post-leave: history replay and any UI output that must not race
+     * lingering events from the old conversation.
+     */
+    onAfterSwitched?: (
+        newConversation: ConversationDispatcher,
+    ) => Promise<void>;
     onPersistSwitched?: (conversationId: string) => void;
 };
 
@@ -250,15 +258,28 @@ async function handleNewWithConfirm(
         console.log(`Created conversation '${chalk.green(name)}'.`);
         return;
     }
+    let joined: ConversationDispatcher | undefined;
     const result = await switchConversationSafe(
         ctx.connection,
         ctx.clientIO,
         ctx.getCurrentConversationId(),
         created.conversationId,
         {
-            onJoined: ctx.onSwitched,
+            onJoined: async (c) => {
+                joined = c;
+                await ctx.onSwitched(c);
+            },
             ...(ctx.onPersistSwitched !== undefined
                 ? { onPersist: ctx.onPersistSwitched }
+                : {}),
+            ...(ctx.onAfterSwitched !== undefined
+                ? {
+                      onLeftOld: async () => {
+                          if (joined !== undefined) {
+                              await ctx.onAfterSwitched!(joined);
+                          }
+                      },
+                  }
                 : {}),
         },
     );
@@ -324,7 +345,11 @@ export async function handleConversationCommand(
     const mctx: ManageConversationContext = {
         currentConversationId: ctx.getCurrentConversationId(),
         currentConversationName: ctx.getCurrentConversationName(),
+        getCurrentConversationId: () => ctx.getCurrentConversationId(),
         onSwitched: ctx.onSwitched,
+        ...(ctx.onAfterSwitched !== undefined
+            ? { onAfterSwitched: ctx.onAfterSwitched }
+            : {}),
         ...(ctx.onPersistSwitched !== undefined
             ? { onPersistSwitched: ctx.onPersistSwitched }
             : {}),

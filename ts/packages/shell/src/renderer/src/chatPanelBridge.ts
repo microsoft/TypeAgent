@@ -44,6 +44,7 @@ import {
     SpeechToken,
     UserExpression,
 } from "../../preload/electronTypes";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import { defaultUserSettings } from "../../preload/shellSettingsType";
 import { getClientAPI } from "./main";
 import { setSpeechToken } from "./speechToken";
@@ -835,11 +836,9 @@ export function createChatPanelClient(
         }
     }
 
-    async function handleManageConversation(payload: {
-        subcommand: string;
-        name?: string;
-        newName?: string;
-    }) {
+    async function handleManageConversation(
+        payload: ManageConversationPayload,
+    ) {
         const result = await getClientAPI().conversationManageAction(payload);
         chatPanel.showInline(
             { type: "html", content: result.html, kind: result.kind },

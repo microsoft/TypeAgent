@@ -210,9 +210,23 @@ export function createRemoteConversationBackend(
 ): ConversationManagerBackend {
     let currentConversationId = initialConversationId;
     let currentName = initialName;
+    let pendingQueueSnapshot: QueueSnapshot | undefined;
 
-    // Post-join bookkeeping shared between explicit switchConversation and
-    // the manage-conversation action surface.
+    // Per-instance queue serializes switch-causing ops. Concurrent
+    // switches from the same start state would otherwise both join
+    // different targets and both leave the same old id, stranding
+    // server-side channels and racing UI broadcasts.
+    let switchQueue: Promise<unknown> = Promise.resolve();
+    const serializeSwitch = <T>(op: () => Promise<T>): Promise<T> => {
+        const next = switchQueue.then(op, op);
+        switchQueue = next.catch(() => undefined);
+        return next;
+    };
+
+    // Pre-leave: dispatcher rebind + state mutation only. Broadcasts are
+    // deferred to broadcastSwitched (after the old conversation is left)
+    // so the renderer's clear-and-replay never races with lingering
+    // events from the previous conversation.
     const commitSwitch = (
         newConversation: Awaited<
             ReturnType<typeof connection.joinConversation>
@@ -223,12 +237,18 @@ export function createRemoteConversationBackend(
         };
         currentConversationId = newConversation.conversationId;
         currentName = newConversation.name;
+        pendingQueueSnapshot = newConversation.queueSnapshot;
         onDispatcherSwitch?.(newConversation.dispatcher);
+    };
+
+    // Post-leave: safe to tell the renderer to clear + replay.
+    const broadcastSwitched = (): void => {
         sendConversationChanged(
             currentConversationId,
             currentName,
-            newConversation.queueSnapshot,
+            pendingQueueSnapshot,
         );
+        pendingQueueSnapshot = undefined;
     };
 
     const persistLastId = (id: string): void => {
@@ -264,44 +284,49 @@ export function createRemoteConversationBackend(
         async switchConversation(
             conversationId: string,
         ): Promise<ConversationSwitchResult> {
-            if (conversationId === currentConversationId) {
+            return serializeSwitch(async () => {
+                if (conversationId === currentConversationId) {
+                    return {
+                        success: true,
+                        conversationId: currentConversationId,
+                        name: currentName,
+                    };
+                }
+
+                const result = await switchConversationSafe(
+                    connection,
+                    clientIO,
+                    currentConversationId,
+                    conversationId,
+                    {
+                        onJoined: commitSwitch,
+                        onPersist: persistLastId,
+                        onLeftOld: (oldId, err) => {
+                            logLeaveOld(oldId, err);
+                            broadcastSwitched();
+                        },
+                    },
+                );
+
+                if (result.kind === "join-failed") {
+                    const e = result.error as { message?: string } | undefined;
+                    debugShell(
+                        "Failed to join conversation %s: %s",
+                        conversationId,
+                        e?.message ?? String(result.error),
+                    );
+                    return {
+                        success: false,
+                        error: e?.message ?? String(result.error),
+                    };
+                }
+
                 return {
                     success: true,
                     conversationId: currentConversationId,
                     name: currentName,
                 };
-            }
-
-            const result = await switchConversationSafe(
-                connection,
-                clientIO,
-                currentConversationId,
-                conversationId,
-                {
-                    onJoined: commitSwitch,
-                    onPersist: persistLastId,
-                    onLeftOld: logLeaveOld,
-                },
-            );
-
-            if (result.kind === "join-failed") {
-                const e = result.error as { message?: string } | undefined;
-                debugShell(
-                    "Failed to join conversation %s: %s",
-                    conversationId,
-                    e?.message ?? String(result.error),
-                );
-                return {
-                    success: false,
-                    error: e?.message ?? String(result.error),
-                };
-            }
-
-            return {
-                success: true,
-                conversationId: currentConversationId,
-                name: currentName,
-            };
+            });
         },
 
         async renameConversation(
@@ -336,36 +361,31 @@ export function createRemoteConversationBackend(
         async manageAction(
             payload: ManageConversationPayload,
         ): Promise<ConversationManageResult> {
-            const ctx: ManageConversationContext = {
-                currentConversationId,
-                currentConversationName: currentName,
-                onSwitched: (newConversation) => {
-                    commitSwitch(newConversation);
-                    // Rename's renameConversation hook isn't applicable here;
-                    // commitSwitch already handled the name update via the
-                    // newConversation payload.
-                },
-                onPersistSwitched: persistLastId,
-            };
-            const result = await manageConversation(
-                connection,
-                clientIO,
-                ctx,
-                payload,
-            );
+            return serializeSwitch(async () => {
+                const ctx: ManageConversationContext = {
+                    currentConversationId,
+                    currentConversationName: currentName,
+                    getCurrentConversationId: () => currentConversationId,
+                    onSwitched: commitSwitch,
+                    onAfterSwitched: () => broadcastSwitched(),
+                    onPersistSwitched: persistLastId,
+                    onCurrentConversationUpdated: (updated) => {
+                        currentName = updated.name;
+                        sendConversationChanged(
+                            currentConversationId,
+                            currentName,
+                        );
+                    },
+                };
+                const result = await manageConversation(
+                    connection,
+                    clientIO,
+                    ctx,
+                    payload,
+                );
 
-            // For rename of the current conversation, helper doesn't fire
-            // onSwitched (no switch happened), so push the name update.
-            if (
-                payload.subcommand === "rename" &&
-                result.kind === "ok" &&
-                result.conversation?.conversationId === currentConversationId
-            ) {
-                currentName = result.conversation.name;
-                sendConversationChanged(currentConversationId, currentName);
-            }
-
-            return renderConversationActionResult(result);
+                return renderConversationActionResult(result);
+            });
         },
     };
 }

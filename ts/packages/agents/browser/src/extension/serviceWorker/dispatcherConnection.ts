@@ -477,9 +477,11 @@ function escapeHtml(s: string): string {
 }
 
 // Bold-escape `"name"` segments in helper plain-text messages.
+// Non-greedy through the closing quote so names containing ampersands
+// or other escaped entities (which become `&amp;`, `&lt;`, …) still match.
 function htmlizeMessage(message: string): string {
     return escapeHtml(message).replace(
-        /&quot;([^&]+)&quot;/g,
+        /&quot;(.+?)&quot;/g,
         (_m, name: string) => `"<b>${name}</b>"`,
     );
 }
@@ -496,9 +498,9 @@ function err(html: string): ManageConversationResult {
 
 // Adapter exposing the module-level browser-extension RPC state as an
 // AgentServerConnection so the shared conversation helpers can drive it.
-// joinConversation reuses joinConversationDispatcher; leaveConversation
-// also drops the per-conversation channels so a future rebind to the
-// same id doesn't trip createChannel's duplicate-name guard.
+// Each call resolves the current module-level state at invocation time
+// so the helper sees post-reconnect transports instead of stale snapshots
+// captured at adapter construction.
 function makeConnectionAdapter(): AgentServerConnection {
     if (!serverRpc || !serverChannel || !dispatcherWs) {
         throw new Error("Not connected to agent server.");
@@ -506,9 +508,23 @@ function makeConnectionAdapter(): AgentServerConnection {
     if (dispatcherWs.readyState !== WebSocket.OPEN) {
         throw new Error("Agent server WebSocket is not open.");
     }
-    const rpc = serverRpc;
-    const channel = serverChannel;
-    const ws = dispatcherWs;
+    const requireFresh = (): {
+        rpc: NonNullable<typeof serverRpc>;
+        channel: NonNullable<typeof serverChannel>;
+        ws: NonNullable<typeof dispatcherWs>;
+    } => {
+        if (!serverRpc || !serverChannel || !dispatcherWs) {
+            throw new Error("Lost connection to agent server.");
+        }
+        if (dispatcherWs.readyState !== WebSocket.OPEN) {
+            throw new Error("Agent server WebSocket is not open.");
+        }
+        return {
+            rpc: serverRpc,
+            channel: serverChannel,
+            ws: dispatcherWs,
+        };
+    };
     const notSupported = async (op: string) => {
         throw new Error(`${op} not supported in browser extension adapter`);
     };
@@ -516,12 +532,15 @@ function makeConnectionAdapter(): AgentServerConnection {
         joinConversation: (
             _clientIO: ClientIO,
             options?: DispatcherConnectOptions,
-        ) =>
-            joinConversationDispatcher(
+        ) => {
+            const { ws } = requireFresh();
+            return joinConversationDispatcher(
                 { filter: false, clientType: "extension", ...(options ?? {}) },
                 ws,
-            ),
+            );
+        },
         leaveConversation: async (conversationId: string) => {
+            const { rpc, channel } = requireFresh();
             try {
                 await rpc.invoke("leaveConversation", conversationId);
             } finally {
@@ -529,14 +548,26 @@ function makeConnectionAdapter(): AgentServerConnection {
                 channel.deleteChannel(getClientIOChannelName(conversationId));
             }
         },
-        createConversation: (name: string) =>
-            rpc.invoke("createConversation", name),
-        listConversations: (name?: string) =>
-            rpc.invoke("listConversations", name),
-        renameConversation: (id: string, newName: string) =>
-            rpc.invoke("renameConversation", id, newName) as Promise<void>,
-        deleteConversation: (id: string) =>
-            rpc.invoke("deleteConversation", id) as Promise<void>,
+        createConversation: (name: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("createConversation", name);
+        },
+        listConversations: (name?: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("listConversations", name);
+        },
+        renameConversation: (id: string, newName: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke(
+                "renameConversation",
+                id,
+                newName,
+            ) as Promise<void>;
+        },
+        deleteConversation: (id: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("deleteConversation", id) as Promise<void>;
+        },
         shutdown: () => notSupported("shutdown"),
         close: () => notSupported("close"),
     };
@@ -594,27 +625,25 @@ async function doManageConversation(
     const ctx: ManageConversationContext = {
         currentConversationId: activeConversationId,
         currentConversationName: activeConversationName,
+        getCurrentConversationId: () => activeConversationId,
         onSwitched: (joined: ConversationDispatcher) => {
             dispatcher = joined.dispatcher;
             activeConversationId = joined.conversationId;
             activeConversationName = joined.name;
+        },
+        onCurrentConversationUpdated: (updated) => {
+            activeConversationName = updated.name;
         },
         joinOptions: { filter: false, clientType: "extension" },
         // Browser cycle matches its prior UX: newest-first with an error
         // when the current conversation is missing from the list.
         cycleOnCurrentNotInList: "error",
         confirmDestructive: rpcInvoke
-            ? async (_action, target) => {
-                  try {
-                      return (await rpcInvoke!("chatPanelAskYesNo", {
-                          message: `Delete conversation '${target.name}'?`,
-                          defaultValue: false,
-                      })) as boolean;
-                  } catch (e) {
-                      debugErr("yes/no confirm failed: %o", e);
-                      return false;
-                  }
-              }
+            ? async (_action, target) =>
+                  (await rpcInvoke!("chatPanelAskYesNo", {
+                      message: `Delete conversation '${target.name}'?`,
+                      defaultValue: false,
+                  })) as boolean
             : // No chat panel → refuse destructive ops rather than silently proceed.
               async () => false,
     };
@@ -636,17 +665,6 @@ function renderActionResult(
     switch (result.kind) {
         case "ok": {
             const switched = result.switched === true;
-            const conversation = result.conversation;
-            // Rename of the current conversation: update cached name so
-            // future @conversation info reflects the new name immediately.
-            if (
-                !switched &&
-                payload.subcommand === "rename" &&
-                conversation !== undefined &&
-                conversation.conversationId === activeConversationId
-            ) {
-                activeConversationName = conversation.name;
-            }
             const icon =
                 payload.subcommand === "new"
                     ? "✅"

@@ -8,6 +8,7 @@ import type {
     QueueSnapshot,
     CommandResult,
 } from "agent-dispatcher";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 
 export type { ShellUserSettings };
 
@@ -95,11 +96,7 @@ export interface ClientAPI {
     conversationGetCurrent(): Promise<
         { conversationId: string; name: string } | undefined
     >;
-    conversationManageAction(payload: {
-        subcommand: string;
-        name?: string;
-        newName?: string;
-    }): Promise<{
+    conversationManageAction(payload: ManageConversationPayload): Promise<{
         html: string;
         kind: "info" | "warning" | "error";
         switched?: boolean;
