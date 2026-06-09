@@ -112,6 +112,21 @@ export type ManageConversationContext = {
         Parameters<AgentServerConnection["joinConversation"]>[1] & object,
         "conversationId"
     >;
+    /**
+     * Ordering for `prev` / `next` cycle. Defaults to "newest-first"
+     * (matches the `list` ordering and the shell / browser behavior).
+     * Pass "server-order" to preserve the iteration order returned by
+     * the server (matches VS Code's existing `manageCycleConversation`).
+     */
+    cycleOrder?: "newest-first" | "server-order";
+    /**
+     * What to do when the current conversation isn't in the cycle list
+     * (e.g. it was just deleted). "wrap" picks index 0 of the configured
+     * `cycleOrder` (matches VS Code + shell). "error" returns an error
+     * result (matches the browser's `"Current conversation not found in
+     * list."` behavior). Defaults to "wrap".
+     */
+    cycleOnCurrentNotInList?: "wrap" | "error";
 };
 
 // ── Result discriminator ───────────────────────────────────────────────
@@ -371,9 +386,11 @@ export async function manageCycle(
     ctx: ManageConversationContext,
     direction: "prev" | "next",
 ): Promise<ConversationActionResult> {
-    const sorted = sortConversationsByCreatedDesc(
-        await connection.listConversations(),
-    );
+    const raw = await connection.listConversations();
+    const sorted =
+        ctx.cycleOrder === "server-order"
+            ? raw
+            : sortConversationsByCreatedDesc(raw);
     if (sorted.length === 0) {
         return warning("No conversations to switch to.");
     }
@@ -388,6 +405,9 @@ export async function manageCycle(
                   (c) => c.conversationId === ctx.currentConversationId,
               )
             : -1;
+    if (curIdx === -1 && ctx.cycleOnCurrentNotInList === "error") {
+        return error("Current conversation not found in list.");
+    }
     const delta = direction === "next" ? 1 : -1;
     const nextIdx =
         curIdx === -1 ? 0 : (curIdx + delta + sorted.length) % sorted.length;
@@ -468,6 +488,10 @@ export async function manageRename(
         );
     }
 
+    // Preserve the original `createdAt` / `clientCount` from the
+    // server-returned record so callers that re-render the list or
+    // re-sort by created time don't see empty / zero placeholders.
+    const original = all.find((c) => c.conversationId === targetId);
     return {
         kind: "ok",
         message:
@@ -477,8 +501,8 @@ export async function manageRename(
         conversation: {
             conversationId: targetId,
             name: trimmedNew,
-            clientCount: 0,
-            createdAt: "",
+            clientCount: original?.clientCount ?? 0,
+            createdAt: original?.createdAt ?? "",
         },
         // Surface whether the rename hit the current conversation so the
         // caller knows whether to refresh its title bar / status.

@@ -85,6 +85,16 @@ export type JoinNamedOrFallbackOptions = {
      * caller can log / clear stale state. Receives the original error.
      */
     onSavedConversationUnavailable?: (err: unknown) => void;
+    /**
+     * Optional gate on whether the saved-id failure should fall back to
+     * the named default. Defaults to "always fall back" — i.e. any
+     * error from saved-id join triggers the fallback path. Clients with
+     * stricter semantics (the CLI prompts the user and only falls back
+     * for "Conversation not found:" errors) should supply a predicate.
+     * Return false (or a Promise resolving to false) to abort with the
+     * original error.
+     */
+    shouldFallback?: (err: unknown) => boolean | Promise<boolean>;
 };
 
 /**
@@ -107,9 +117,10 @@ export type JoinNamedOrFallbackResult = {
  * the race where `listConversations` saw the default but
  * `joinConversation` failed because it was deleted in between.
  *
- * Mirrors the existing logic in CLI `connect.ts`, Electron shell
- * `restoreOrJoinShellConversation`, and the VS Code extension's
- * `connectImpl`. Persistence is the caller's responsibility — record
+ * By default any error from the saved-id join falls back to the named
+ * default; pass `shouldFallback` to gate this (e.g. the CLI prompts
+ * the user and only falls back for "Conversation not found:" errors).
+ * Persistence is the caller's responsibility — record
  * `result.conversation.conversationId` on success.
  */
 export async function joinNamedOrFallback(
@@ -126,6 +137,13 @@ export async function joinNamedOrFallback(
             return { conversation, usedSavedId: true };
         } catch (e: unknown) {
             options.onSavedConversationUnavailable?.(e);
+            const shouldFall =
+                options.shouldFallback === undefined
+                    ? true
+                    : await options.shouldFallback(e);
+            if (!shouldFall) {
+                throw e;
+            }
             // fall through to default
         }
     }
@@ -243,7 +261,21 @@ export async function switchConversationSafe(
     }
 
     if (hooks.onJoined) {
-        await hooks.onJoined(conversation);
+        try {
+            await hooks.onJoined(conversation);
+        } catch (e) {
+            // The caller's rebind failed — without this, the server
+            // would hold a joined channel for a conversation the client
+            // can't drive. Roll back by leaving the new conversation,
+            // then re-throw so the caller surfaces the failure (the
+            // user is still on `currentConversationId`).
+            await connection
+                .leaveConversation(conversation.conversationId)
+                .catch(() => {
+                    // best-effort cleanup
+                });
+            throw e;
+        }
     }
 
     if (hooks.onPersist) {
@@ -298,10 +330,24 @@ export async function createEphemeralConversation(
                   .slice(2, 10)}`;
     const name = `${namePrefix}-${uniqueSuffix}`;
     const created = await connection.createConversation(name);
-    const conversation = await connection.joinConversation(clientIO, {
-        ...joinOptions,
-        conversationId: created.conversationId,
-    });
+    let conversation: ConversationDispatcher;
+    try {
+        conversation = await connection.joinConversation(clientIO, {
+            ...joinOptions,
+            conversationId: created.conversationId,
+        });
+    } catch (e) {
+        // Don't leak the server-side conversation if join fails — the
+        // server's orphan sweeper only collects conversations whose
+        // names start with specific prefixes (e.g. "cli-ephemeral-"),
+        // so other callers would leak forever.
+        await connection
+            .deleteConversation(created.conversationId)
+            .catch(() => {
+                // best-effort cleanup
+            });
+        throw e;
+    }
     return {
         conversation,
         ephemeralConversationId: created.conversationId,

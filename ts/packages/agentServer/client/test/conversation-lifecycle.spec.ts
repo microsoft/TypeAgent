@@ -303,3 +303,217 @@ describe("validateConversationNameUnique", () => {
         ).toBeUndefined();
     });
 });
+
+describe("switchConversationSafe — rollback semantics", () => {
+    test("onJoined throw leaves the new conversation (rollback) and re-throws", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        await expect(
+            switchConversationSafe(conn, fakeClientIO, "a", "b", {
+                onJoined: async () => {
+                    throw new Error("rebind failed");
+                },
+            }),
+        ).rejects.toThrow(/rebind failed/);
+        // Rollback: leave the NEW conversation, never leave the OLD.
+        const leaves = conn.calls.filter(
+            (c) => c.method === "leaveConversation",
+        );
+        expect(leaves).toHaveLength(1);
+        expect(leaves[0].args[0]).toBe("b");
+    });
+
+    test("onJoined throw still surfaces if leave fails (best-effort)", async () => {
+        // Even if the rollback leave throws, the original error must
+        // be the one the caller sees.
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+            intercept: {
+                leaveConversation: () => {
+                    throw new Error("leave failed");
+                },
+            },
+        });
+        await expect(
+            switchConversationSafe(conn, fakeClientIO, "a", "b", {
+                onJoined: async () => {
+                    throw new Error("rebind failed");
+                },
+            }),
+        ).rejects.toThrow(/rebind failed/);
+    });
+});
+
+describe("createEphemeralConversation — leak prevention", () => {
+    test("deletes the freshly-created conversation if join fails", async () => {
+        const conn = makeStubConnection({
+            list: [],
+            intercept: {
+                joinConversation: () => {
+                    throw new Error("dispatcher init failed");
+                },
+            },
+        });
+        await expect(
+            createEphemeralConversation(conn, fakeClientIO, "vscode-ephemeral"),
+        ).rejects.toThrow(/dispatcher init failed/);
+        // Created → join failed → must clean up the orphaned conversation.
+        const deletes = conn.calls.filter(
+            (c) => c.method === "deleteConversation",
+        );
+        expect(deletes).toHaveLength(1);
+        expect(conn.state).toHaveLength(0);
+    });
+
+    test("create-then-join leak fix swallows delete failure", async () => {
+        // If both join AND the cleanup-delete fail, the original join
+        // error must still be the one re-thrown (delete is best-effort).
+        const conn = makeStubConnection({
+            list: [],
+            intercept: {
+                joinConversation: () => {
+                    throw new Error("join boom");
+                },
+                deleteConversation: () => {
+                    throw new Error("delete boom");
+                },
+            },
+        });
+        await expect(
+            createEphemeralConversation(conn, fakeClientIO, "tmp"),
+        ).rejects.toThrow(/join boom/);
+    });
+});
+
+describe("joinNamedOrFallback — shouldFallback gate", () => {
+    test("default behavior: any saved-id error falls back", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: (_io, options) => {
+                    if (options?.conversationId === "saved") {
+                        throw new Error("permission denied");
+                    }
+                    return undefined;
+                },
+            },
+        });
+        const result = await joinNamedOrFallback(conn, fakeClientIO, {
+            savedConversationId: "saved",
+            defaultName: "Shell",
+        });
+        expect(result.usedSavedId).toBe(false);
+        expect(result.conversation.conversationId).toBe("shell");
+    });
+
+    test("shouldFallback=false re-throws the saved-id error", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: (_io, options) => {
+                    if (options?.conversationId === "saved") {
+                        throw new Error("permission denied");
+                    }
+                    return undefined;
+                },
+            },
+        });
+        await expect(
+            joinNamedOrFallback(conn, fakeClientIO, {
+                savedConversationId: "saved",
+                defaultName: "Shell",
+                shouldFallback: () => false,
+            }),
+        ).rejects.toThrow(/permission denied/);
+        // Default join must NOT have been attempted.
+        expect(
+            conn.calls.filter(
+                (c) =>
+                    c.method === "joinConversation" &&
+                    (c.args[0] as any)?.conversationId === "shell",
+            ),
+        ).toHaveLength(0);
+    });
+
+    test("shouldFallback receives the original error and can branch on it", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: (_io, options) => {
+                    if (options?.conversationId === "saved") {
+                        throw new Error("Conversation not found: saved");
+                    }
+                    return undefined;
+                },
+            },
+        });
+        const result = await joinNamedOrFallback(conn, fakeClientIO, {
+            savedConversationId: "saved",
+            defaultName: "Shell",
+            shouldFallback: (err) =>
+                String((err as Error).message).startsWith(
+                    "Conversation not found:",
+                ),
+        });
+        expect(result.usedSavedId).toBe(false);
+    });
+});
+
+describe("joinOptions forwarding", () => {
+    // Critical for VS Code (clientType: "extension") and browser
+    // (filter: false, clientType: "extension"). A silent drop would
+    // mis-route every message.
+    test("joinNamedOrFallback forwards joinOptions to saved-id join", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+        });
+        await joinNamedOrFallback(conn, fakeClientIO, {
+            savedConversationId: "shell",
+            defaultName: "Shell",
+            joinOptions: { clientType: "extension" } as any,
+        });
+        const joinCall = conn.calls.find(
+            (c) => c.method === "joinConversation",
+        );
+        expect((joinCall?.args[0] as any).clientType).toBe("extension");
+    });
+
+    test("joinNamedOrFallback forwards joinOptions to default-name join", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+        });
+        await joinNamedOrFallback(conn, fakeClientIO, {
+            defaultName: "Shell",
+            joinOptions: { filter: false } as any,
+        });
+        const joinCall = conn.calls.find(
+            (c) => c.method === "joinConversation",
+        );
+        expect((joinCall?.args[0] as any).filter).toBe(false);
+    });
+
+    test("switchConversationSafe forwards joinOptions", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        await switchConversationSafe(conn, fakeClientIO, "a", "b", {}, {
+            clientType: "extension",
+        } as any);
+        const joinCall = conn.calls.find(
+            (c) => c.method === "joinConversation",
+        );
+        expect((joinCall?.args[0] as any).clientType).toBe("extension");
+    });
+
+    test("createEphemeralConversation forwards joinOptions", async () => {
+        const conn = makeStubConnection({ list: [] });
+        await createEphemeralConversation(conn, fakeClientIO, "tmp", {
+            clientType: "extension",
+        } as any);
+        const joinCall = conn.calls.find(
+            (c) => c.method === "joinConversation",
+        );
+        expect((joinCall?.args[0] as any).clientType).toBe("extension");
+    });
+});

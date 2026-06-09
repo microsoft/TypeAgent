@@ -401,4 +401,292 @@ describe("manageConversation (top-level dispatcher)", () => {
             expect(result.message).toMatch(/network down/);
         }
     });
+
+    test("rejects malformed payloads cleanly", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "A")] });
+        // rename: missing newName
+        const r1 = await manageConversation(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "a", currentConversationName: "A" }),
+            { subcommand: "rename", name: "A" },
+        );
+        expect(r1.kind).toBe("warning");
+        // switch: missing name
+        const r2 = await manageConversation(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "a" }),
+            { subcommand: "switch" },
+        );
+        expect(r2.kind).toBe("warning");
+        // delete: missing name
+        const r3 = await manageConversation(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "a" }),
+            { subcommand: "delete" },
+        );
+        expect(r3.kind).toBe("warning");
+    });
+
+    test("forwards ctx.joinOptions for every switching subcommand", async () => {
+        // new
+        {
+            const conn = makeStubConnection({ list: [] });
+            await manageConversation(
+                conn,
+                fakeClientIO,
+                ctx({
+                    joinOptions: { clientType: "extension" } as any,
+                }),
+                { subcommand: "new", name: "X" },
+            );
+            const join = conn.calls.find(
+                (c) => c.method === "joinConversation",
+            );
+            expect((join?.args[0] as any).clientType).toBe("extension");
+        }
+        // switch
+        {
+            const conn = makeStubConnection({
+                list: [makeInfo("a", "A"), makeInfo("b", "B")],
+            });
+            await manageConversation(
+                conn,
+                fakeClientIO,
+                ctx({
+                    currentConversationId: "a",
+                    joinOptions: { clientType: "extension" } as any,
+                }),
+                { subcommand: "switch", name: "B" },
+            );
+            const join = conn.calls.find(
+                (c) => c.method === "joinConversation",
+            );
+            expect((join?.args[0] as any).clientType).toBe("extension");
+        }
+        // next (cycle)
+        {
+            const conn = makeStubConnection({
+                list: [
+                    makeInfo("a", "A", "2026-01-01T00:00:00Z"),
+                    makeInfo("b", "B", "2026-02-01T00:00:00Z"),
+                ],
+            });
+            await manageConversation(
+                conn,
+                fakeClientIO,
+                ctx({
+                    currentConversationId: "a",
+                    joinOptions: { filter: false } as any,
+                }),
+                { subcommand: "next" },
+            );
+            const join = conn.calls.find(
+                (c) => c.method === "joinConversation",
+            );
+            expect((join?.args[0] as any).filter).toBe(false);
+        }
+    });
+});
+
+describe("manageNew — collision against current", () => {
+    test("user asks to create a name that IS the current — warns + already-on", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("cur", "Current")],
+        });
+        const result = await manageNew(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: "cur",
+                currentConversationName: "Current",
+            }),
+            "current",
+        );
+        // Already-on triggers `warning`; new conversation was not created.
+        expect(result.kind === "warning" || result.kind === "ok").toBe(true);
+        expect(
+            conn.calls.filter((c) => c.method === "createConversation"),
+        ).toHaveLength(0);
+    });
+});
+
+describe("manageRename — result fidelity", () => {
+    test("returned conversation preserves real createdAt + clientCount", async () => {
+        const conn = makeStubConnection({
+            list: [
+                {
+                    conversationId: "a",
+                    name: "Old",
+                    createdAt: "2026-05-15T10:00:00Z",
+                    clientCount: 7,
+                },
+            ],
+        });
+        const result = await manageRename(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                currentConversationName: "Old",
+            }),
+            undefined,
+            "New",
+        );
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok" && result.conversation) {
+            expect(result.conversation.createdAt).toBe("2026-05-15T10:00:00Z");
+            expect(result.conversation.clientCount).toBe(7);
+            // and the new Date parse works (no Invalid Date corruption)
+            expect(
+                isNaN(new Date(result.conversation.createdAt).getTime()),
+            ).toBe(false);
+        }
+    });
+
+    test("rename Foo → foo (same id, case change) is allowed even if a different conversation also named 'foo' would collide", async () => {
+        // The collision check excludes the targetId itself; case-only
+        // rename of the current conversation must succeed.
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Foo")],
+        });
+        const result = await manageRename(
+            conn,
+            ctx({ currentConversationId: "a", currentConversationName: "Foo" }),
+            "Foo",
+            "foo",
+        );
+        expect(result.kind).toBe("ok");
+        expect(conn.state[0].name).toBe("foo");
+    });
+});
+
+describe("manageDelete — confirmDestructive(true)", () => {
+    test("proceeds when async confirmDestructive returns true", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const result = await manageDelete(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                confirmDestructive: async (action, target) => {
+                    expect(action).toBe("delete");
+                    expect(target.conversationId).toBe("b");
+                    return true;
+                },
+            }),
+            "B",
+        );
+        expect(result.kind).toBe("ok");
+        expect(
+            conn.state.find((c) => c.conversationId === "b"),
+        ).toBeUndefined();
+    });
+});
+
+describe("manageCycle — sort + not-in-list options", () => {
+    test("cycleOrder='server-order' preserves server iteration order", async () => {
+        // Created order: a (oldest), b, c (newest).
+        // newest-first sort would give: c, b, a.
+        // server-order should give:    a, b, c → next from `a` is `b`.
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "A", "2026-01-01T00:00:00Z"),
+                makeInfo("b", "B", "2026-02-01T00:00:00Z"),
+                makeInfo("c", "C", "2026-03-01T00:00:00Z"),
+            ],
+        });
+        const result = await manageCycle(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: "a",
+                cycleOrder: "server-order",
+            }),
+            "next",
+        );
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.conversation?.conversationId).toBe("b");
+        }
+    });
+
+    test("default (newest-first) gives different target than server-order", async () => {
+        // Confirms the default actually differs from server-order so the
+        // option matters.
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "A", "2026-01-01T00:00:00Z"),
+                makeInfo("b", "B", "2026-02-01T00:00:00Z"),
+                makeInfo("c", "C", "2026-03-01T00:00:00Z"),
+            ],
+        });
+        const result = await manageCycle(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "a" }),
+            "next",
+        );
+        // newest-first sorted: c, b, a — currently on `a` (idx=2);
+        // next wraps to idx=0 → `c`.
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.conversation?.conversationId).toBe("c");
+        }
+    });
+
+    test("cycleOnCurrentNotInList='error' surfaces the inconsistency", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const result = await manageCycle(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: "ghost", // not in list
+                cycleOnCurrentNotInList: "error",
+            }),
+            "next",
+        );
+        expect(result.kind).toBe("error");
+    });
+
+    test("default (wrap) on current-not-in-list jumps to first", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "A", "2026-01-01T00:00:00Z"),
+                makeInfo("b", "B", "2026-02-01T00:00:00Z"),
+            ],
+        });
+        const result = await manageCycle(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "ghost" }),
+            "next",
+        );
+        // newest-first sort: b, a → idx=0 is `b`
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.conversation?.conversationId).toBe("b");
+        }
+    });
+});
+
+describe("manageNew — race recovery", () => {
+    test("retry list also misses → propagates create error", async () => {
+        // findOrCreateNamedConversation: list empty → create throws
+        // 'already exists' → retry list still empty → bubble up.
+        const conn = makeStubConnection({
+            list: [],
+            intercept: {
+                createConversation: () => {
+                    throw new Error("'Other' already exists");
+                },
+            },
+        });
+        const result = await manageNew(conn, fakeClientIO, ctx(), "Other");
+        expect(result.kind).toBe("error");
+    });
 });

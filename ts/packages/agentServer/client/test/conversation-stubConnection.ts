@@ -111,8 +111,12 @@ export function makeStubConnection(
             );
             if (override !== undefined) return override;
             if (name === undefined) return [...state];
+            // Match the real server's substring (includes) filter
+            // rather than exact match — the helpers re-filter
+            // client-side, but tests added later may rely on the
+            // server's substring semantics.
             const norm = name.trim().toLowerCase();
-            return state.filter((c) => c.name.toLowerCase() === norm);
+            return state.filter((c) => c.name.toLowerCase().includes(norm));
         },
 
         async createConversation(name: string) {
