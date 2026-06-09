@@ -132,15 +132,18 @@ Conversation management commands can also be invoked via natural language throug
 The dispatcher translates these requests into structured payloads and forwards them to the client via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where `payload` is one of:
 
 ```
+{ subcommand: "help" }
 { subcommand: "new";    name?: string }
 { subcommand: "list" }
 { subcommand: "info" }
 { subcommand: "switch"; name: string }
+{ subcommand: "prev" }
+{ subcommand: "next" }
 { subcommand: "rename"; name?: string; newName: string }
 { subcommand: "delete"; name: string }
 ```
 
-`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell calls the corresponding `ClientAPI` conversation methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over Electron IPC. This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection conversations in both clients.
+`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. `help` is dispatched by `@conversation` with no subcommand, and renders an inline help block in the client. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell (`packages/shell/src/renderer/src/chatPanelBridge.ts`) renders results into the active `chat-ui` chat panel via `ClientAPI` conversation methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`). This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection conversations in all clients.
 
 TypeAgent dispatcher settings, such as translator, explainer, etc., are stored in sessions, and sessions can be persisted across activation on a per user basis and restored when the app restarts. Use `@session <args>` command to do run operations. Additionally data such as construction store are saved in the sessions as well by default unless an explicit path are provided. The last cache file used is preserved thru reload.
 

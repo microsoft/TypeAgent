@@ -25,14 +25,22 @@ export type ConversationCommandContext = {
 // ── Name resolution ────────────────────────────────────────────────────
 
 /**
- * Resolve a conversation name to a single SessionInfo using
- * case-insensitive exact matching.
+ * Resolve a conversation by exact id, or by case-insensitive name.
+ * The id check is unambiguous (ids are UUIDs); name match is treated as
+ * an alternative and only consulted if the id doesn't match. This mirrors
+ * the Shell's `chatPanelBridge.handleManageConversation` resolver and
+ * makes both clients honor the `<id|name>` arg format documented in the
+ * help text.
  */
 async function resolveByName(
     connection: AgentServerConnection,
     name: string,
 ): Promise<ConversationInfo> {
     const all = await connection.listConversations();
+    const byId = all.find((s) => s.conversationId === name);
+    if (byId) {
+        return byId;
+    }
     const matches = all.filter(
         (s) => s.name.toLowerCase() === name.toLowerCase(),
     );
@@ -111,10 +119,16 @@ async function handleNew(
     ctx: ConversationCommandContext,
     args: string,
 ): Promise<void> {
-    const name = parseNameArg(args);
+    let name = parseNameArg(args);
     if (!name) {
-        console.log(chalk.yellow("Usage: @conversation new <name>"));
-        return;
+        // Auto-generate a timestamped name when called without an
+        // argument so natural-language requests like "create a new
+        // conversation" (which the dispatcher translates to `new` with
+        // no name) don't fall through to a usage error. Matches the
+        // Shell's auto-naming format in chatPanelBridge.ts.
+        const dt = new Date();
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        name = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
     }
     const created = await ctx.connection.createConversation(name);
     const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
@@ -286,6 +300,39 @@ async function handleDelete(
     console.log(`Deleted conversation '${chalk.green(target.name)}'.`);
 }
 
+async function handlePrevNext(
+    ctx: ConversationCommandContext,
+    direction: "prev" | "next",
+): Promise<void> {
+    const conversations = await ctx.connection.listConversations();
+    if (conversations.length === 0) {
+        console.log(chalk.yellow("No conversations to switch to."));
+        return;
+    }
+    // Use the server's natural ordering (insertion / creation ASC). The
+    // Shell's prev/next does the same, so `next` in both clients moves to
+    // the same neighbor.
+    const currentId = ctx.getCurrentConversationId();
+    const curIdx = conversations.findIndex(
+        (s) => s.conversationId === currentId,
+    );
+    const delta = direction === "next" ? 1 : -1;
+    const nextIdx =
+        curIdx === -1
+            ? 0
+            : (curIdx + delta + conversations.length) % conversations.length;
+    const target = conversations[nextIdx];
+    if (target.conversationId === currentId) {
+        console.log(
+            chalk.yellow(
+                "Only one conversation is available — nothing to switch to.",
+            ),
+        );
+        return;
+    }
+    await ctx.switchConversation(target.conversationId);
+}
+
 // ── Help text ──────────────────────────────────────────────────────────
 
 function printHelp(): void {
@@ -293,6 +340,11 @@ function printHelp(): void {
     const cmds: [string, string][] = [
         ["new <name>", "Create a new conversation"],
         ["switch <name>", "Switch to a conversation by name"],
+        ["next", "Switch to the next conversation in the list (wraps around)"],
+        [
+            "prev",
+            "Switch to the previous conversation in the list (wraps around)",
+        ],
         ["list [<filter>]", "List all conversations"],
         ["info", "Show info about the current conversation"],
         ["rename <newName>", "Rename the current conversation"],
@@ -318,6 +370,9 @@ const subcommands: Record<
     rename: handleRename,
     delete: handleDelete,
     info: handleInfo,
+    next: (ctx, _args) => handlePrevNext(ctx, "next"),
+    prev: (ctx, _args) => handlePrevNext(ctx, "prev"),
+    help: async (_ctx, _args) => printHelp(),
 };
 
 /**
@@ -347,7 +402,7 @@ export async function handleConversationCommand(
     if (!handler) {
         console.log(
             chalk.yellow(
-                `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
+                `Unknown subcommand '${sub}'. Available: new, switch, next, prev, list, info, rename, delete, help`,
             ),
         );
         return;
