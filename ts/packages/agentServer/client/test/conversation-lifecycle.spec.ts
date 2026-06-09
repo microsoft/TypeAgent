@@ -6,6 +6,7 @@ import {
     createEphemeralConversation,
     deleteEphemeralConversation,
     findOrCreateNamedConversation,
+    isConversationNotFoundError,
     joinNamedOrFallback,
     switchConversationSafe,
     validateConversationNameUnique,
@@ -116,11 +117,18 @@ describe("joinNamedOrFallback", () => {
 
     test("recovers when list saw default but join races a delete", async () => {
         // listConversations returned the entry; join throws because peer
-        // deleted it between the two calls. Helper must create-fresh +
-        // join again.
+        // deleted it between the two calls. Helper must re-list (now
+        // empty), create-fresh, and join again.
+        let listCalls = 0;
         const conn = makeStubConnection({
             list: [makeInfo("shell", "Shell")],
             intercept: {
+                listConversations: () => {
+                    listCalls++;
+                    // First list (lookup) sees the stale entry; the
+                    // recovery list reflects the peer's deletion.
+                    return listCalls === 1 ? [makeInfo("shell", "Shell")] : [];
+                },
                 joinConversation: (_io, options, callIndex) => {
                     if (
                         callIndex === 0 &&
@@ -138,6 +146,27 @@ describe("joinNamedOrFallback", () => {
         });
         expect(result.usedSavedId).toBe(false);
         expect(result.conversation.conversationId).toBe("fresh-shell");
+    });
+
+    test("does not recover from non-not-found join errors", async () => {
+        // Permission/transport failures must surface as-is, not get
+        // masked by a spurious re-create attempt.
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: () => {
+                    throw new Error("permission denied");
+                },
+            },
+        });
+        await expect(
+            joinNamedOrFallback(conn, fakeClientIO, {
+                defaultName: "Shell",
+            }),
+        ).rejects.toThrow("permission denied");
+        expect(
+            conn.calls.filter((c) => c.method === "createConversation"),
+        ).toHaveLength(0);
     });
 });
 
@@ -387,7 +416,56 @@ describe("createEphemeralConversation — leak prevention", () => {
 });
 
 describe("joinNamedOrFallback — shouldFallback gate", () => {
-    test("default behavior: any saved-id error falls back", async () => {
+    test("default behavior: not-found error falls back", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: (_io, options) => {
+                    if (options?.conversationId === "saved") {
+                        throw new Error("Conversation not found: saved");
+                    }
+                    return undefined;
+                },
+            },
+        });
+        const result = await joinNamedOrFallback(conn, fakeClientIO, {
+            savedConversationId: "saved",
+            defaultName: "Shell",
+        });
+        expect(result.usedSavedId).toBe(false);
+        expect(result.conversation.conversationId).toBe("shell");
+    });
+
+    test("default behavior: non-not-found saved-id error rethrows (no silent fallback)", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("shell", "Shell")],
+            intercept: {
+                joinConversation: (_io, options) => {
+                    if (options?.conversationId === "saved") {
+                        throw new Error("permission denied");
+                    }
+                    return undefined;
+                },
+            },
+        });
+        await expect(
+            joinNamedOrFallback(conn, fakeClientIO, {
+                savedConversationId: "saved",
+                defaultName: "Shell",
+            }),
+        ).rejects.toThrow(/permission denied/);
+        // Default join must NOT have been attempted — fall-through would
+        // silently land the user in the wrong conversation.
+        expect(
+            conn.calls.filter(
+                (c) =>
+                    c.method === "joinConversation" &&
+                    (c.args[0] as any)?.conversationId === "shell",
+            ),
+        ).toHaveLength(0);
+    });
+
+    test("shouldFallback override: always-true rescues non-not-found errors", async () => {
         const conn = makeStubConnection({
             list: [makeInfo("shell", "Shell")],
             intercept: {
@@ -402,6 +480,7 @@ describe("joinNamedOrFallback — shouldFallback gate", () => {
         const result = await joinNamedOrFallback(conn, fakeClientIO, {
             savedConversationId: "saved",
             defaultName: "Shell",
+            shouldFallback: () => true,
         });
         expect(result.usedSavedId).toBe(false);
         expect(result.conversation.conversationId).toBe("shell");
@@ -515,5 +594,61 @@ describe("joinOptions forwarding", () => {
             (c) => c.method === "joinConversation",
         );
         expect((joinCall?.args[0] as any).clientType).toBe("extension");
+    });
+});
+
+describe("isConversationNotFoundError", () => {
+    test("matches the server's not-found prefix", () => {
+        expect(
+            isConversationNotFoundError(
+                new Error("Conversation not found: abc"),
+            ),
+        ).toBe(true);
+    });
+    test("rejects unrelated errors", () => {
+        expect(
+            isConversationNotFoundError(new Error("permission denied")),
+        ).toBe(false);
+        expect(isConversationNotFoundError(undefined)).toBe(false);
+        expect(isConversationNotFoundError("string error")).toBe(false);
+    });
+});
+
+describe("findOrCreateNamedConversation — input normalization", () => {
+    test("trims whitespace before lookup and create", async () => {
+        // The server's list filter only does case-insensitive `includes`
+        // — it does NOT trim. The uniqueness check on create DOES trim.
+        // The helper must trim once at the boundary so both pre-checks
+        // and the create call see the same value.
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Shell")],
+        });
+        const result = await findOrCreateNamedConversation(conn, "  Shell  ");
+        expect(result.conversationId).toBe("a");
+        // The list filter must receive the trimmed name.
+        const listCall = conn.calls.find(
+            (c) => c.method === "listConversations",
+        );
+        expect(listCall?.args[0]).toBe("Shell");
+    });
+});
+
+describe("switchConversationSafe — onLeftOld throw is swallowed", () => {
+    test("a throwing onLeftOld does not turn a successful switch into a failure", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const result = await switchConversationSafe(
+            conn,
+            fakeClientIO,
+            "a",
+            "b",
+            {
+                onLeftOld: () => {
+                    throw new Error("hook exploded");
+                },
+            },
+        );
+        expect(result.kind).toBe("switched");
     });
 });

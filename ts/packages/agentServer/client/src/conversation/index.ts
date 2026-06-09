@@ -3,25 +3,15 @@
 
 /**
  * Shared conversation-lifecycle helpers for clients of the agent
- * server. Each existing client (CLI, Electron shell, VS Code
- * extension, browser extension) historically reinvented the same
- * find-or-create, restore-or-fallback, join-before-leave, and
- * manage-conversation logic on top of {@link AgentServerConnection};
- * these helpers consolidate that logic so the per-client code is
- * limited to its own UI.
- *
- * Import via the subpath export:
+ * server. Each client (CLI, Electron shell, VS Code, browser extension)
+ * historically reinvented the same find-or-create, restore-or-fallback,
+ * join-before-leave, and manage-conversation logic; these helpers
+ * consolidate it so per-client code is limited to its own UI.
  *
  *     import {
  *         manageConversation,
  *         findOrCreateNamedConversation,
  *     } from "@typeagent/agent-server-client/conversation";
- *
- * The helpers are UI-agnostic: they take the connection + a clientIO
- * and return structured results. Persistence, history replay, and
- * dispatcher rebinding stay in the caller via the hooks on
- * {@link ManageConversationContext} and
- * {@link SwitchConversationHooks}.
  */
 
 export {
@@ -40,6 +30,7 @@ export {
     createEphemeralConversation,
     deleteEphemeralConversation,
     validateConversationNameUnique,
+    isConversationNotFoundError,
     type JoinNamedOrFallbackOptions,
     type JoinNamedOrFallbackResult,
     type SwitchConversationHooks,
