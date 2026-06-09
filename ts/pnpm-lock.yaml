@@ -1534,6 +1534,9 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.21.0)
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
