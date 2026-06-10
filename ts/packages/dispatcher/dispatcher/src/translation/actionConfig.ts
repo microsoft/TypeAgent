@@ -60,9 +60,7 @@ function loadGrammarFile(grammarFile: string): GrammarContent {
         return { format: "ag", content };
     }
     if (grammarFile.endsWith(".agr")) {
-        // Raw grammar rule source — parsed at load time by the action-grammar
-        // compiler. Lets agents (notably the built-in dispatcher/system agent)
-        // ship a static grammar without an explicit .agr -> .ag.json build step.
+        // Raw grammar source; parsed at load time instead of via a build step.
         return { format: "agr", content };
     }
     throw new Error(`Unsupported grammar file extension: ${grammarFile}`);

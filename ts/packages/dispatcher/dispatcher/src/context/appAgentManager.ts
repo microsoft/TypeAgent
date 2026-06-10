@@ -157,10 +157,7 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
         return grammarFromJson(JSON.parse(grammarContent.content));
     }
     if (grammarContent.format === "agr") {
-        // Parse raw .agr text into a Grammar at load time. Errors are surfaced
-        // immediately because this path is only used for static (manifest-
-        // declared) grammar files; bad syntax should fail loudly during
-        // development rather than silently disable the rules.
+        // Parse raw .agr at load time; throw on errors so bad syntax fails loudly.
         const errors: string[] = [];
         const grammar = loadGrammarRulesNoThrow(
             `${actionConfig.schemaName}.agr`,
