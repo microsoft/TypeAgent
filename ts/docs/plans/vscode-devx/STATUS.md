@@ -58,9 +58,15 @@ Impact Report) is **not** closed:
 - Sandbox set persists across reload/restart (workspace-state snapshot).
 - Collisions view: "Skipped (N)" group surfacing each skipped schema's reason
   and owning agent; auto-scan (debounced) when the loaded agent set changes.
+- Collisions skips distinguish `no-grammar` (by design), `grammar-not-built`
+  (buildable — has `.agr` + an `agc` script; offers an inline "Build grammar"
+  action that runs `agc:all` as a VS Code task then re-scans), and grammar
+  source with no compile step (e.g. `email`, shown but not buildable).
 - Repo-root detection: finds the directory containing `packages/agents` by
   probing each workspace folder, its `ts/` subdir, and ancestors; warns clearly
   when none is found.
+- Investigated the player/crossword/workbench collision-scan compile errors —
+  root cause is an engine issue (see Known issues), not a per-agent defect.
 - Repo policy + CodeQL fixes for the two new packages (LICENSE, Trademarks,
   `crypto.randomUUID`, polynomial-regex removal).
 
@@ -72,24 +78,34 @@ Smallest → larger. Quality/bugfix items first, then the long pole.
    corpus when an agent has none.
 2. **Add external corpus from the Corpora view** — UI for
    `FileCorpusService.addExternalSource` (writes `<repoRoot>/.typeagent/studio.json`).
-3. **Investigate `code` agent's grammar discovery** — `code` ships
-   `dist/*.ag.json`; verify whether observed gaps were repo-root misdetection
-   (now fixed) vs. a real build/scanner-scope issue.
-4. **Investigate player/crossword grammar compile errors** — `unknown variable t`
-   / `__opt_v_0`. Classify as grammar generation vs. compiled-artifact
-   compatibility vs. scanner input assumption. (Engine/compiler quality, not UI.)
-5. **Per-schema `injected` health opt-out** — currently whole-agent; a single
+3. **Per-schema `injected` health opt-out** — currently whole-agent; a single
    injected sub-action wrongly silences the missing-grammar warning for the
    whole agent (`health/service.ts`). Low severity, latent today.
-6. **Split `studioRuntimeCore.ts`** into bounded runtime modules
+4. **Split `studioRuntimeCore.ts`** into bounded runtime modules
    (sandbox/corpus/collision/replay/onboarding) before webviews land — it is
    already a god/facade object.
-7. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+5. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
-8. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+6. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-9. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+7. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report contract.
+
+## Known issues
+
+- **Collision scan can't compile grammars that import the built-in
+  `Ordinal`/`Cardinal`** (affects `player`, `browser`'s `crossword`, `code`'s
+  `workbench`). The scan reports `compile-error: Cannot compile: unknown
+  variable t` (or `__opt_v_0`). Root cause: the `agc` optimizer inlines the
+  compound number rules (e.g. `$(t:<Tens>) (\-)? $(o:<OrdinalOnes>) -> t + o`
+  in `builtInEntities.agr`) and leaves a capture variable dangling in the
+  flattened rule, which `grammar-tools-core`'s re-compilation
+  (`action-grammar/environment.ts`) rejects. The grammar **source is valid** and
+  the **dispatcher consumes these grammars fine** (it uses the precompiled
+  dispatch tables rather than re-compiling the AST); a fresh `agc` rebuild does
+  **not** fix it. This is an engine-level issue for the action-grammar /
+  grammar-tools owners, not a per-agent grammar defect. The Skipped view
+  surfaces it honestly as a compile error.
 
 ## Build / test
 
@@ -100,11 +116,11 @@ pnpm i
 
 # Engine library (jest against dist/test/*.spec.js — build first):
 pnpm --filter "@typeagent/core" build
-pnpm --filter "@typeagent/core" test          # 123 tests
+pnpm --filter "@typeagent/core" test          # 124 tests
 
 # Extension (esbuild bundles core into dist/extension.js; tests via tsx/node:test):
 pnpm --filter typeagent-studio build
-pnpm --filter typeagent-studio test:local     # 104 tests
+pnpm --filter typeagent-studio test:local     # 107 tests
 
 # Package + install the VSIX into the local VS Code:
 cd packages/typeagent-studio
