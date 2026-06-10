@@ -69,18 +69,8 @@ let currentSpinner: EnhancedSpinner | null = null;
 // Wire up the debug interceptor's spinner access
 setSpinnerAccessor(() => currentSpinner);
 
-// ── Terminal lifecycle (alt screen buffer + exit cleanup) ─────────────────
-//
-// The interactive CLI runs inside the terminal's alternate screen buffer
-// (the same mode used by vim, less, htop, etc.).  All session output, the
-// scroll region, and the fixed prompt area live in the alt buffer; on
-// exit the terminal automatically restores whatever was on the main
-// buffer before the CLI started.
-//
-// This avoids the previous behavior where the CLI's scroll region, fixed
-// prompt frame, and in-flight async writes were left scattered across the
-// parent shell's terminal after exit (regardless of which exit path —
-// /exit, Ctrl+C, server disconnect, /shutdown, etc. — was taken).
+// Run the CLI inside the terminal's alternate screen buffer so the parent
+// shell is restored to its pre-CLI state on any exit path.
 
 let altScreenActive = false;
 let exitHandlerRegistered = false;
@@ -93,12 +83,10 @@ function isInteractiveTty(): boolean {
 function enterAltScreen(): void {
     if (altScreenActive || !isInteractiveTty()) return;
     altScreenActive = true;
-    // \x1b[?1049h — save cursor, switch to alt screen, clear it.
+    // Save cursor, switch to alt screen, clear it.
     process.stdout.write("\x1b[?1049h");
     if (!exitHandlerRegistered) {
         exitHandlerRegistered = true;
-        // Fires on normal exit and on process.exit().  Synchronous: any
-        // writes here are flushed before the process actually exits.
         process.on("exit", exitAltScreen);
     }
 }
@@ -122,8 +110,7 @@ function exitAltScreen(): void {
                 // ignore
             }
         }
-        // Reset scroll region, show cursor, leave alt screen (restores
-        // the main buffer to its pre-CLI state and pops the saved cursor).
+        // Reset scroll region, show cursor, leave alt screen.
         process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
         if (process.stdin.isTTY) {
             try {
@@ -146,10 +133,8 @@ function exitAltScreen(): void {
 }
 
 /**
- * Queue a message to be printed on the main terminal buffer immediately
- * after the CLI exits its alternate screen.  Useful for explaining why
- * the CLI exited (e.g., "Disconnected from dispatcher") without having
- * the message lost when the alt buffer is torn down.
+ * Queue a message to be printed on the main terminal buffer after the
+ * CLI exits the alternate screen (e.g., disconnect reasons).
  */
 export function setPendingExitMessage(message: string): void {
     pendingExitMessage = message;
@@ -1750,23 +1735,15 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
-            // Hide the cursor for the duration of the redraw.  Each drawFixed()
-            // call positions the cursor and writes text, leaving the cursor at
-            // the end of the written region (e.g., the right edge of the top
-            // separator).  Without hiding, the cursor visibly jumps through
-            // every draw target before settling at the input position via
-            // moveCursorToFixed() below.  ANSI.showCursor at the end re-reveals
-            // it at the final, correct location.
+            // Hide the cursor during redraw to avoid it visibly jumping
+            // through each drawFixed target; ANSI.showCursor below restores it.
             stdout.write(ANSI.hideCursor);
 
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
-            // drawFixed() clears each line before writing, so a separate
-            // clearFixed() pass is not needed and would cause visible
-            // flicker (blank frame between clear and redraw).  Only clear
-            // stale rows left over when the prompt shrinks (e.g. input
-            // un-wraps to fewer lines).
+            // drawFixed clears each line before writing; only clear stale
+            // rows when the prompt shrinks (input un-wraps to fewer lines).
             const prevTotal = prevInputRows + EXTRA_ROWS;
             if (totalRows < prevTotal) {
                 for (let r = totalRows; r < prevTotal; r++) {
@@ -1794,15 +1771,8 @@ async function questionWithCompletion(
                     inputLine += chalk.dim(suggestion + counter);
                 }
             }
-            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
-            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
-            // additional visual rows, the terminal-driven wrap only writes from
-            // col 1 up to the overflow length on each continuation row, leaving
-            // the trailing columns populated with stale characters from
-            // previous frames (e.g., the bottom rule that used to occupy this
-            // row before inputRows grew, or a longer prior input that has since
-            // been shortened).  Clearing here removes that visual fluff while
-            // keeping the actual input string untouched.
+            // Pre-clear wrap continuation rows; drawFixed only clears row 1,
+            // so terminal-driven wrap leaves stale chars in trailing columns.
             for (let r = 2; r <= inputRows; r++) {
                 layout.drawFixed(r, "");
             }
@@ -2317,11 +2287,8 @@ export async function withEnhancedConsoleClientIO(
     }
     usingEnhancedConsole = true;
 
-    // Run the entire interactive session inside the terminal's alternate
-    // screen buffer.  The exit handler registered here restores the main
-    // buffer on every exit path (normal /exit, Ctrl+C, server disconnect,
-    // /shutdown, etc.), so the parent shell never sees the CLI's leftover
-    // scroll region, fixed prompt frame, or post-cleanup async writes.
+    // Run the session in the terminal's alternate screen buffer so the
+    // parent shell is restored on any exit path.
     enterAltScreen();
 
     try {
