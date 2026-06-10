@@ -715,6 +715,34 @@ test("unloadSandboxAgent removes a loaded agent", async () => {
     assert.ok(!status.agents.some((agent) => agent.name === "calendar"));
 });
 
+test("refreshSandboxAgent reloads the agent in each sandbox where it is loaded", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    await runtime.startSandbox({ id: "a", agents: ["player"] });
+    await runtime.startSandbox({ id: "b", agents: ["player", "calendar"] });
+
+    let playerReloads = 0;
+    const sub = runtime.onAnyEvent((event) => {
+        if (
+            event.type === "sandbox.agent.loaded" &&
+            event.affectedAgent === "player"
+        ) {
+            playerReloads++;
+        }
+    });
+
+    const refreshed = await runtime.refreshSandboxAgent("player");
+    sub.dispose();
+
+    // player is loaded in both sandboxes → both reloaded, one event each.
+    assert.equal(refreshed, 2);
+    assert.equal(playerReloads, 2);
+
+    // An agent not loaded anywhere refreshes nothing.
+    assert.equal(await runtime.refreshSandboxAgent("nonexistent"), 0);
+});
+
 test("recordFeedback emits an event and federates into the agent corpus", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context);

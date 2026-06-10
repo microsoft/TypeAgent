@@ -211,6 +211,14 @@ export interface StudioRuntime {
     /** Unload a named agent from a sandbox. Returns the updated status. */
     unloadSandboxAgent(id: string, agentName: string): Promise<SandboxStatus>;
     /**
+     * Re-load a named agent in every sandbox where it is currently loaded,
+     * recomputing its health and schema/grammar hashes from disk. Used after
+     * building an agent's grammar so the (cached) health badge refreshes
+     * without a manual sandbox restart. Returns the number of sandboxes
+     * refreshed.
+     */
+    refreshSandboxAgent(agentName: string): Promise<number>;
+    /**
      * Subscribe to sandbox lifecycle changes (start/stop/restart, agent
      * load/unload). The listener is invoked after each such event so a UI can
      * refresh. Returns a disposable to stop listening.
@@ -628,6 +636,23 @@ export function createStudioRuntimeCore(
             await sandbox.unloadAgent(id, agentName);
             await persistSandboxes();
             return sandbox.status(id);
+        },
+        async refreshSandboxAgent(agentName) {
+            let refreshed = 0;
+            for (const status of await sandbox.list()) {
+                const loaded = status.agents.find((a) => a.name === agentName);
+                if (loaded !== undefined) {
+                    // Re-running loadAgent re-invokes the loader, recomputing
+                    // health/hashes and emitting `sandbox.agent.loaded` (which
+                    // refreshes the trees, status bar, and collision auto-scan).
+                    await sandbox.loadAgent(
+                        status.id,
+                        loaded.sourcePath ?? loaded.name,
+                    );
+                    refreshed += 1;
+                }
+            }
+            return refreshed;
         },
         onSandboxChanged(listener) {
             const subscription = events.subscribe(() => listener(), {

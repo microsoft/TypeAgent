@@ -490,6 +490,11 @@ export function activate(context: vscode.ExtensionContext): void {
                         },
                         () => runAgentBuildTask(packageName, script, repoRoot),
                     );
+                    // Reload the agent so its (cached) health badge and hashes
+                    // re-evaluate against the freshly built grammar; this also
+                    // emits sandbox.agent.loaded, which refreshes the trees and
+                    // triggers the collision auto-scan.
+                    await runtime.refreshSandboxAgent(agent);
                     const scan = await runCollisionScan();
                     const stillUnbuilt = scan.skipped.some(
                         (s) =>
