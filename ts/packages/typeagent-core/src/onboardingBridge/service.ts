@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
     ONBOARDING_PHASE_ORDER,
     OnboardingSessionNotFoundError,
@@ -50,8 +50,7 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
         this.now = opts.now ?? Date.now;
         this.createSessionId =
             opts.createSessionId ??
-            (() =>
-                `onb-${this.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+            (() => `onb-${this.now().toString(36)}-${randomUUID().slice(0, 8)}`);
         this.phaseRunner =
             opts.phaseRunner ??
             (async (_session, phase, inputs) => ({
@@ -247,10 +246,13 @@ function equalStringArrays(a: string[], b: string[]): boolean {
 }
 
 function inferAgentName(description: string): string {
-    const normalized = description
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+    let normalized = description.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    if (normalized.startsWith("-")) {
+        normalized = normalized.slice(1);
+    }
+    if (normalized.endsWith("-")) {
+        normalized = normalized.slice(0, -1);
+    }
     return normalized.length > 0 ? normalized.slice(0, 64) : "new-agent";
 }
 

@@ -27,7 +27,10 @@ const NO_FILES_HASH = "none";
  * an arbitrary directory/file path) to the agent's package name.
  */
 export function resolveAgentName(agentRef: string): string {
-    const normalized = agentRef.replace(/\\/g, "/").replace(/\/+$/, "");
+    let normalized = agentRef.replace(/\\/g, "/");
+    while (normalized.endsWith("/")) {
+        normalized = normalized.slice(0, -1);
+    }
     const marker = "packages/agents/";
     const markerAt = normalized.lastIndexOf(marker);
     if (markerAt >= 0) {
