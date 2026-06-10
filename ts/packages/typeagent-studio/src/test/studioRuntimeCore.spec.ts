@@ -702,6 +702,26 @@ test("loadSandboxAgent loads an agent and emits a lifecycle event", async () => 
     anySub.dispose();
 });
 
+test("startSandbox after restore mints a unique id instead of colliding with the restored default", async () => {
+    const { context, store } = createContext();
+    // Simulate a prior session whose default sandbox was persisted.
+    store.set("studio.persistedSandboxes", [
+        { id: "studio-default", agents: [] },
+    ]);
+    const runtime = createStudioRuntimeCore(context);
+
+    await runtime.restoreSandboxes();
+    assert.deepEqual(
+        (await runtime.listSandboxes()).map((s) => s.id),
+        ["studio-default"],
+    );
+
+    // The title-bar "+" (no id) must not collide with the restored default.
+    const added = await runtime.startSandbox();
+    assert.equal(added.id, "studio-default-2");
+    assert.equal((await runtime.listSandboxes()).length, 2);
+});
+
 test("startSandbox mints unique ids so multiple sandboxes can coexist", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context);

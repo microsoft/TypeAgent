@@ -72,23 +72,33 @@ Impact Report) is **not** closed:
 
 ## Next slice candidates
 
-Smallest → larger. Quality/bugfix items first, then the long pole.
+Smallest → larger.
 
-1. **Corpora empty-state guidance** — actionable child item to seed an in-repo
-   corpus when an agent has none.
-2. **Add external corpus from the Corpora view** — UI for
-   `FileCorpusService.addExternalSource` (writes `<repoRoot>/.typeagent/studio.json`).
-3. **Per-schema `injected` health opt-out** — currently whole-agent; a single
-   injected sub-action wrongly silences the missing-grammar warning for the
-   whole agent (`health/service.ts`). Low severity, latent today.
-4. **Split `studioRuntimeCore.ts`** into bounded runtime modules
+1. **Configurable agent search paths** (next follow-up PR). Add a
+   `typeagentStudio.agentSearchPaths: string[]` setting — directories that
+   contain agent subdirectories (peer to `packages/agents`), relative entries
+   resolved against the repo root. Generalize the single hardcoded
+   `packages/agents` assumption into an ordered list of agent roots threaded
+   through health (`discoverAgentFiles` / `FileHealthService`), the sandbox
+   loader (`createRepoAgentLoader`), and the collision scanner
+   (`createRepoGrammarScanner`), plus discovery (`listAvailableAgents`), so
+   agents outside `packages/agents` (e.g. a sibling `agents/` directory in a
+   submodule) fully load, report health, and participate in collisions. Keep
+   `packages/agents` + the registry config as implicit defaults; the setting is
+   additive and generic (no hardcoded paths).
+2. **Loader parity for registry entries** — the Load agent picker lists the
+   `defaultAgentProvider` registry keys, but the loader still resolves by
+   `packages/agents/<name>`, so keys whose folder differs (e.g. `localPlayer`,
+   `workflow`) load with `health: unknown`. Resolve registry entries by their
+   package `name` like the dispatcher does. (Folds naturally into item 1.)
+3. **Split `studioRuntimeCore.ts`** into bounded runtime modules
    (sandbox/corpus/collision/replay/onboarding) before webviews land — it is
    already a god/facade object.
-5. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+4. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
-6. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+5. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-7. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+6. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report contract.
 
 ## Known issues
