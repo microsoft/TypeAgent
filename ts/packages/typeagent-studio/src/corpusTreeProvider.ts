@@ -51,15 +51,10 @@ export class CorpusTreeProvider
         item.tooltip = node.tooltip;
         item.contextValue = node.contextValue;
         item.iconPath = iconForNode(node);
-        // The empty-state seed node is clickable: it creates and opens the
-        // agent's in-repo corpus file.
-        if (node.contextValue === "corpusAgentSeed" && node.agent) {
-            item.command = {
-                command: "typeagent-studio.seedInRepoCorpus",
-                title: "Seed in-repo corpus",
-                arguments: [node.agent],
-            };
-        }
+        // Note: the seed empty-state node intentionally has no click command —
+        // creating a file is done via its explicit inline action (with a
+        // confirmation) so a corpus file is never written just by selecting
+        // the row.
         return item;
     }
 

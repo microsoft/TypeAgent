@@ -311,6 +311,19 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!target) {
                     return;
                 }
+                // Explicit confirmation so a corpus file is never written
+                // without the user asking for it.
+                const confirm = await vscode.window.showInformationMessage(
+                    `Create an in-repo corpus file for '${target}'?`,
+                    {
+                        modal: true,
+                        detail: `This creates corpus/${target}.utterances.jsonl and opens it so you can add one labelled utterance (JSON) per line.`,
+                    },
+                    "Create",
+                );
+                if (confirm !== "Create") {
+                    return;
+                }
                 try {
                     const { path: filePath, created } =
                         await runtime.seedInRepoCorpus(target);
