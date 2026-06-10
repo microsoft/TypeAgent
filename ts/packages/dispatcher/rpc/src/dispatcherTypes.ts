@@ -15,38 +15,53 @@ import type {
     DispatcherStatus,
     ProcessCommandOptions,
     PendingInteractionResponse,
+    QueuedRequest,
     QueueSnapshot,
     RequestId,
-    SubmitResult,
     UserFeedbackCategory,
     UserFeedbackRating,
 } from "@typeagent/dispatcher-types";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 
-export type DispatcherInvokeFunctions = {
-    processCommand(
-        command: string,
-        clientRequestId?: unknown,
-        attachments?: string[],
-        options?: ProcessCommandOptions,
-        requestId?: string,
-    ): Promise<CommandResult | undefined>;
+/**
+ * Wire-side variant of `SubmitResult` used by the dispatcher RPC layer.
+ *
+ * The in-process `SubmitResult.ok:true` carries
+ * `completion: Promise<CommandResult | undefined>` — but promises cannot be
+ * serialized over RPC. So the server handler returns `WireSubmitResult`
+ * (success variant with no `completion`), and the RPC client wrapper
+ * synthesizes a fresh `completion` promise wired to `commandComplete` and
+ * `requestCancelled` ClientIO push events before handing the result back
+ * as the full `SubmitResult` to its caller.
+ *
+ * This type lives in the RPC layer only — callers of the `Dispatcher`
+ * interface never see `WireSubmitResult`; they always see `SubmitResult`
+ * with a real completion promise.
+ */
+export type WireSubmitResult =
+    | { ok: true; entry: QueuedRequest }
+    | { ok: false; error: "queue_full"; maxDepth: number }
+    | { ok: false; error: "server_stopping" };
 
+export type DispatcherInvokeFunctions = {
     submitCommand(
         command: string,
         attachments?: string[],
         options?: ProcessCommandOptions,
         clientRequestId?: unknown,
-    ): Promise<SubmitResult>;
+        requestId?: string,
+    ): Promise<WireSubmitResult>;
 
     interrupt(
         text: string,
         attachments?: string[],
         options?: ProcessCommandOptions,
         clientRequestId?: unknown,
-    ): Promise<SubmitResult>;
+    ): Promise<WireSubmitResult>;
 
     cancelCommand(requestId: string): Promise<CancelResult>;
+
+    promoteCommand(requestId: string): Promise<boolean>;
 
     getQueueSnapshot(): Promise<QueueSnapshot>;
 

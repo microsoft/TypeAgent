@@ -135,6 +135,8 @@ Lifecycle: the process starts when either feature is activated and shuts down on
 
 ```typescript
 // Startup
+import { awaitCommand } from "@typeagent/dispatcher-types";
+
 const client = getOrCreateSharedClient(); // shared with captions bot
 client.login(process.env.DISCORD_BOT_TOKEN);
 
@@ -158,7 +160,7 @@ client.on("messageCreate", async (message) => {
 
   // 6. Strip prefix, dispatch
   const userInput = message.content.slice(prefix.length).trim();
-  const result = await dispatcher.processCommand(userInput);
+  const result = await awaitCommand(dispatcher, userInput);
 
   // 7. Format and reply (respect 2000-char Discord limit)
   const text = formatActionResult(result);

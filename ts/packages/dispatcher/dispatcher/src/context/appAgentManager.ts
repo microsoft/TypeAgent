@@ -1421,8 +1421,20 @@ export class AppAgentManager implements ActionConfigProvider {
             }
         }
 
-        // Fallback: read grammar/dynamic.agr from instance storage
-        if (dynamicGrammar === undefined) {
+        // Fallback: read grammar/dynamic.agr from instance storage.
+        //
+        // Only for agents that do NOT implement getDynamicGrammar. An agent that
+        // implements the callback is authoritative about which of its schemas
+        // get dynamic grammar (e.g. PowerShell returns rules for the root
+        // "powershell" schema but undefined for its sub-schemas). Without this
+        // guard, the shared per-agent grammar/dynamic.agr would be loaded into
+        // every sub-schema too, so a flow's grammar would match under a
+        // sub-schema (e.g. powershell.powershell-files) where the flow's action
+        // schema does not exist — producing "Action schema not found".
+        if (
+            dynamicGrammar === undefined &&
+            appAgent.getDynamicGrammar === undefined
+        ) {
             const instanceStorage = sessionContext.instanceStorage;
             if (instanceStorage) {
                 try {
@@ -1831,6 +1843,17 @@ export class AppAgentManager implements ActionConfigProvider {
 
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
+
+        // Drop construction-cache entries whose schema hash no longer matches
+        // the reloaded schema (e.g. constructions for a deleted or edited flow),
+        // so a stale cached match can't resolve to a now-missing action.
+        try {
+            await context.agentCache.prune();
+        } catch (e) {
+            debugError(
+                `Failed to prune construction cache after reloading ${appAgentName}: ${e}`,
+            );
+        }
     }
 
     public setTraceNamespaces(namespaces: string) {

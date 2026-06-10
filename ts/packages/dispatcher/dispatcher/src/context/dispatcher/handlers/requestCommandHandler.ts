@@ -14,7 +14,7 @@ import {
 
 import {
     type CommandHandlerContext,
-    getCommandResult,
+    ensureCommandResult,
     getRequestId,
 } from "../../commandHandlerContext.js";
 import { CachedImageWithDetails } from "typechat-utils";
@@ -58,29 +58,37 @@ async function runConfiguredReasoning(
     context: ActionContext<CommandHandlerContext>,
     options?: { fallbackContext?: ReasoningFallbackContext },
 ): Promise<void> {
-    const engine =
-        context.sessionContext.agentContext.session.getConfig().execution
-            .reasoning;
-    switch (engine) {
-        case "copilot":
-            await executeCopilotReasoning(request, context, {
-                engine: "copilot",
-            });
-            return;
-        case "claude":
-            await executeClaudeReasoning(request, context, {
-                engine: "claude",
-                ...(options?.fallbackContext
-                    ? { fallbackContext: options.fallbackContext }
-                    : {}),
-            });
-            return;
-        case "none":
-            throw new Error(
-                "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
-            );
-        default:
-            throw new Error(`Unknown reasoning engine: ${engine}`);
+    const systemContext = context.sessionContext.agentContext;
+    const engine = systemContext.session.getConfig().execution.reasoning;
+    const reasoningIcons: Record<string, string> = {
+        claude: "🧠",
+        copilot: "✨",
+    };
+    systemContext.reasoningSourceIcon = reasoningIcons[engine] ?? undefined;
+    try {
+        switch (engine) {
+            case "copilot":
+                await executeCopilotReasoning(request, context, {
+                    engine: "copilot",
+                });
+                return;
+            case "claude":
+                await executeClaudeReasoning(request, context, {
+                    engine: "claude",
+                    ...(options?.fallbackContext
+                        ? { fallbackContext: options.fallbackContext }
+                        : {}),
+                });
+                return;
+            case "none":
+                throw new Error(
+                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
+                );
+            default:
+                throw new Error(`Unknown reasoning engine: ${engine}`);
+        }
+    } finally {
+        systemContext.reasoningSourceIcon = undefined;
     }
 }
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
@@ -93,10 +101,25 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayError,
+} from "@typeagent/agent-sdk/helpers/display";
 
 const debugExplain = registerDebug("typeagent:explain");
 const debugRequest = registerDebug("typeagent:request");
+
+// True when every action in the request targets the built-in chat agent
+// (`generateResponse` / `showImageFile`). These actions have their parameters
+// generated during translation and make no LLM call when executed, so the
+// translation token usage represents the chat agent's generation cost.
+function isChatAgentOnlyRequest(requestAction: RequestAction): boolean {
+    const actions = requestAction.actions;
+    return (
+        actions.length > 0 &&
+        actions.every(({ action }) => action.schemaName === "chat")
+    );
+}
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
@@ -473,9 +496,23 @@ export class RequestCommandHandler implements CommandHandler {
             const { requestAction, tokenUsage } = interpretResult;
 
             if (tokenUsage) {
-                const commandResult = getCommandResult(systemContext);
-                if (commandResult !== undefined) {
-                    commandResult.tokenUsage = tokenUsage;
+                ensureCommandResult(systemContext).tokenUsage = tokenUsage;
+
+                // The chat agent produces its output (the answer text for
+                // `generateResponse`, the file list for `showImageFile`) as
+                // action parameters during translation; it makes no LLM call
+                // at action-execution time, so it cannot self-report
+                // `ActionResult.tokenUsage` the way other agents do. When a
+                // request resolves solely to chat-agent actions, the
+                // translation usage *is* the agent's generation cost, so mirror
+                // it into `actionTokenUsage` ("Action Tokens" on the agent
+                // bubble) in addition to the user bubble's "Translation
+                // Tokens". The chat agent reports no usage of its own, so this
+                // is not double-counted by the executeActions accumulation.
+                if (isChatAgentOnlyRequest(requestAction)) {
+                    ensureCommandResult(systemContext).actionTokenUsage = {
+                        ...tokenUsage,
+                    };
                 }
             }
 
@@ -527,6 +564,7 @@ export class RequestCommandHandler implements CommandHandler {
                             }
                         },
                     );
+                    let errorReasoningResolved = false;
                     if (needsErrorReasoning) {
                         const { error, failedAction } = execResult;
                         const augmentedRequest =
@@ -553,11 +591,18 @@ export class RequestCommandHandler implements CommandHandler {
                                     },
                                 },
                             );
+                            errorReasoningResolved = true;
                         } catch (e: any) {
                             debugRequest(
                                 `Error-triggered reasoning failed, keeping original error: ${e.message}`,
                             );
                         }
+                    }
+                    // If error-triggered reasoning did not run (schema opted out)
+                    // or failed to resolve the failure, surface the original
+                    // action error instead of silently reporting success.
+                    if (!errorReasoningResolved) {
+                        displayError(execResult.error, context);
                     }
                 }
             }

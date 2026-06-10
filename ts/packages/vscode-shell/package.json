@@ -18,9 +18,11 @@
   "publisher": "typeagent",
   "main": "./dist/extension.js",
   "scripts": {
+    "build:ext:vscode": "npm run package",
     "clean": "rimraf --glob dist dist-pub *.vsix",
     "compile": "node esbuild.mjs",
     "deploy:local": "npm run package && code --install-extension dist-pub/vscode-shell.vsix --force",
+    "install:ext:vscode": "code --install-extension dist-pub/vscode-shell.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-shell.vsix",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
@@ -197,5 +199,20 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "icon": "media/icons/icon-80.png"
+  "icon": "media/icons/icon-80.png",
+  "fluidBuild": {
+    "tasks": {
+      "build:ext:vscode": {
+        "dependsOn": [
+          "^build",
+          "compile"
+        ]
+      },
+      "install:ext:vscode": {
+        "dependsOn": [
+          "build:ext:vscode"
+        ]
+      }
+    }
+  }
 }

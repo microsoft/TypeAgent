@@ -348,6 +348,37 @@ export function __testSetCurrentRequestId(id: string | undefined): void {
 export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
 }
+/**
+ * @internal Activate a TerminalLayout + stub PromptRenderer so tests can
+ * exercise inline-buffering / flush behavior without driving the readline UI.
+ * Returns a teardown function — call it in afterEach to restore module state.
+ */
+export function __testActivateTerminalLayout(promptRows: number = 1): {
+    teardown: () => void;
+    getInlineBuffer: () => string;
+    redrawCount: () => number;
+} {
+    const layout = new TerminalLayout();
+    layout.setup(promptRows);
+    terminalLayout = layout;
+    let redraws = 0;
+    const stub: PromptRenderer = {
+        redraw: () => {
+            redraws++;
+        },
+        rows: () => promptRows,
+    } as unknown as PromptRenderer;
+    activePromptRenderer = stub;
+    return {
+        teardown: () => {
+            layout.cleanup();
+            terminalLayout = null;
+            activePromptRenderer = null;
+        },
+        getInlineBuffer: () => (layout as any).inlineBuffer as string,
+        redrawCount: () => redraws,
+    };
+}
 
 /** Bootstrap CLI queue state from a snapshot, or pass `undefined` to clear. */
 export function applyQueueSnapshot(snapshot: QueueSnapshot | undefined): void {
@@ -1025,6 +1056,14 @@ export function createEnhancedClientIO(
                     if (completedId !== undefined) {
                         consumeSubmittedId(completedId);
                     }
+                    // Commit any buffered inline output: actionIO.appendDisplay
+                    // defaults to "inline" mode and the non-blocking submit path
+                    // has no spinner, so one-shot commands (e.g. @config agent)
+                    // would otherwise leave their only message in inlineBuffer.
+                    if (terminalLayout?.isActive) {
+                        terminalLayout.flushInline();
+                        activePromptRenderer?.redraw();
+                    }
                     break;
                 }
 
@@ -1270,6 +1309,12 @@ export function createEnhancedClientIO(
                     case "switch":
                         args = `switch "${payload.name}"`;
                         break;
+                    case "prev":
+                        args = "prev";
+                        break;
+                    case "next":
+                        args = "next";
+                        break;
                     case "delete":
                         args = `delete "${payload.name}"`;
                         break;
@@ -1277,6 +1322,11 @@ export function createEnhancedClientIO(
                         args = payload.name
                             ? `rename "${payload.name}" "${payload.newName}"`
                             : `rename "${payload.newName}"`;
+                        break;
+                    case "help":
+                        // Empty args makes handleConversationCommand call its
+                        // own printHelp().
+                        args = "";
                         break;
                     default:
                         console.error(
@@ -1625,6 +1675,9 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
+            // Hide cursor to avoid flicker during writing
+            stdout.write(ANSI.hideCursor);
+
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
@@ -1659,6 +1712,13 @@ async function questionWithCompletion(
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
                     inputLine += chalk.dim(suggestion + counter);
                 }
+            }
+            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
+            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
+            // additional visual rows, the terminal-driven wrap can cause overflow
+            // populated with stale characters from previous frames.
+            for (let r = 2; r <= inputRows; r++) {
+                layout.drawFixed(r, "");
             }
             layout.drawFixed(1, inputLine);
 
@@ -1877,19 +1937,10 @@ async function questionWithCompletion(
                 }
                 return;
             } else if (code === 13) {
-                // Enter - accept completion (if any) AND submit
-                if (
-                    filteredCompletions.length > 0 &&
-                    completionIndex < filteredCompletions.length
-                ) {
-                    const completion = filteredCompletions[completionIndex];
-                    input =
-                        completionPrefix +
-                        (filterStartIndex > completionPrefix.length
-                            ? " "
-                            : "") +
-                        completion;
-                }
+                // Enter - submit the input as typed. The inline completion is
+                // only a suggestion; use Tab to accept it. Enter must never
+                // mutate the input, otherwise typing `@config` and pressing
+                // Enter would submit `@config actions`.
                 if (controller) {
                     controller.accept();
                 }
@@ -2323,7 +2374,7 @@ export async function processCommandsEnhanced<T>(
     // Queue-mode Ctrl+C handler: the non-blocking submit path bypasses raw-mode,
     // so install a readline SIGINT handler that cancels the queue head.
     // Double-press-to-exit is preserved.
-    if (rl && getDispatcher()?.submitCommand) {
+    if (rl) {
         rl.on("SIGINT", () => {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
@@ -2418,12 +2469,11 @@ export async function processCommandsEnhanced<T>(
             const panel = getDebugPanel();
             panel?.reset();
 
-            // Non-blocking submit path: when the dispatcher exposes submitCommand,
-            // the call resolves on enqueue. Output/completion arrive via setDisplay,
-            // commandComplete, and queue lifecycle events.
+            // Non-blocking submit path: submitCommand resolves on enqueue.
+            // Output/completion arrive via setDisplay, commandComplete, and
+            // queue lifecycle events.
             const liveDispatcher = getDispatcher();
-            const submitCommand = liveDispatcher?.submitCommand;
-            if (typeof submitCommand === "function") {
+            if (liveDispatcher) {
                 isProcessing = true;
                 currentRequestId = undefined;
                 const clientRequestId = randomUUID();
@@ -2431,8 +2481,7 @@ export async function processCommandsEnhanced<T>(
                 try {
                     let result;
                     try {
-                        result = await submitCommand.call(
-                            liveDispatcher,
+                        result = await liveDispatcher.submitCommand(
                             request,
                             undefined,
                             undefined,
@@ -2488,7 +2537,9 @@ export async function processCommandsEnhanced<T>(
                 continue;
             }
 
-            // Legacy blocking path (no queueing)
+            // Legacy path used only when the caller supplied no dispatcher
+            // (e.g. tests). Routes the command through the caller-provided
+            // processCommand callback synchronously.
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner

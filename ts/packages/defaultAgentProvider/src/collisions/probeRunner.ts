@@ -20,7 +20,7 @@
 import { config as loadDotenv } from "dotenv";
 loadDotenv();
 
-import { createDispatcher } from "agent-dispatcher";
+import { awaitCommand, createDispatcher } from "agent-dispatcher";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
@@ -163,7 +163,7 @@ async function main() {
 
             captured = [];
             try {
-                await dispatcher.processCommand(cmd);
+                await awaitCommand(dispatcher, cmd);
             } catch (err) {
                 process.stdout.write(
                     `[ERROR for "${probe.phrase}"]: ${err instanceof Error ? err.message : String(err)}\n\n`,

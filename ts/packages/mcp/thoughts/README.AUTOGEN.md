@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=aae9d40efd703de5608ebd3bba7520e375e07311f52837e7034f8c36f2ccc4ad -->
+<!-- AUTOGEN:DOCS:HASH:sha256=66d2027b1dace774f42f23692a58077f989b50877f50983c21c5c58dc7636ef0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/thoughts — AI-generated documentation
@@ -84,6 +84,7 @@ By following these steps, you can effectively extend the functionality of the `@
 
 Workspace:
 
+- [@typeagent/config](../../../packages/config/README.md)
 - [aiclient](../../../packages/aiclient/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `@anthropic-ai/sdk`, `dotenv`, `microsoft-cognitiveservices-speech-sdk`
@@ -104,6 +105,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/thoughts docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/thoughts docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

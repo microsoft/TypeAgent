@@ -157,9 +157,17 @@ class ConversationDeleteCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationHelpCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Show conversation command help";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        dispatchManageConversation(context, { subcommand: "help" });
+    }
+}
+
 export function getConversationCommandHandlers(): CommandHandlerTable {
     return {
         description: "Conversation management commands",
+        defaultSubCommand: "help",
         commands: {
             new: new ConversationNewCommandHandler(),
             list: new ConversationListCommandHandler(),
@@ -169,6 +177,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             next: new ConversationNextCommandHandler(),
             rename: new ConversationRenameCommandHandler(),
             delete: new ConversationDeleteCommandHandler(),
+            help: new ConversationHelpCommandHandler(),
         },
     };
 }

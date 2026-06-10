@@ -4,7 +4,13 @@
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createDispatcherRpcClient } from "../src/dispatcherClient.js";
 import { createDispatcherRpcServer } from "../src/dispatcherServer.js";
-import type { Dispatcher } from "@typeagent/dispatcher-types";
+import type {
+    CommandResult,
+    Dispatcher,
+    QueuedRequest,
+    SubmitResult,
+} from "@typeagent/dispatcher-types";
+import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import type { PendingInteractionResponse } from "@typeagent/dispatcher-types";
 
 // ---------------------------------------------------------------------------
@@ -53,7 +59,6 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         get connectionId() {
             return undefined;
         },
-        processCommand: notImplemented("processCommand") as any,
         submitCommand: notImplemented("submitCommand") as any,
         interrupt: notImplemented("interrupt") as any,
         getQueueSnapshot: notImplemented("getQueueSnapshot") as any,
@@ -70,6 +75,10 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         async cancelCommand(...args) {
             calls.push({ method: "cancelCommand", args });
             return { kind: "not_found" as const, requestId: args[0] };
+        },
+        async promoteCommand(...args) {
+            calls.push({ method: "promoteCommand", args });
+            return false;
         },
         cancelCommandByClientId(...args) {
             calls.push({ method: "cancelCommandByClientId", args });
@@ -118,7 +127,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         // cancelInteraction returns void synchronously — not a Promise
         const result = client.cancelInteraction("id-42");
@@ -138,7 +147,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         client.cancelInteraction("abc");
         client.cancelInteraction("xyz");
@@ -153,7 +162,7 @@ describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
         // is not a Promise.
         const { serverChannel, clientChannel } = createChannelPair();
         createDispatcherRpcServer(makeStubDispatcher(), serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const ret = client.cancelInteraction("no-reply");
 
@@ -166,7 +175,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         await expect(
             client.respondToInteraction(makeResponse()),
@@ -183,7 +192,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
     it("returns a Promise (awaitable)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         createDispatcherRpcServer(makeStubDispatcher(), serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const ret = client.respondToInteraction(makeResponse());
 
@@ -199,7 +208,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         await expect(
             client.respondToInteraction(makeResponse()),
@@ -215,7 +224,7 @@ describe("dispatcher RPC — respondToInteraction (invoke / awaited)", () => {
             },
         });
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const response: PendingInteractionResponse = {
             interactionId: "interact-99",
@@ -234,7 +243,7 @@ describe("dispatcher RPC — cancelCommand (now returns CancelResult)", () => {
         const { serverChannel, clientChannel } = createChannelPair();
         const stub = makeStubDispatcher();
         createDispatcherRpcServer(stub, serverChannel);
-        const client = createDispatcherRpcClient(clientChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
 
         const result = await client.cancelCommand("req-1");
 
@@ -268,7 +277,9 @@ describe("dispatcher RPC — transport symmetry", () => {
         clientNotify = clientAdapter.notifyMessage;
 
         createDispatcherRpcServer(makeStubDispatcher(), serverAdapter.channel);
-        const client = createDispatcherRpcClient(clientAdapter.channel);
+        const { dispatcher: client } = createDispatcherRpcClient(
+            clientAdapter.channel,
+        );
 
         client.cancelInteraction("id-1");
         void client.cancelCommand("req-1");
@@ -312,7 +323,9 @@ describe("dispatcher RPC — transport symmetry", () => {
         clientNotify = clientAdapter.notifyMessage;
 
         createDispatcherRpcServer(makeStubDispatcher(), serverAdapter.channel);
-        const client = createDispatcherRpcClient(clientAdapter.channel);
+        const { dispatcher: client } = createDispatcherRpcClient(
+            clientAdapter.channel,
+        );
 
         await client.respondToInteraction(makeResponse());
 
@@ -324,5 +337,158 @@ describe("dispatcher RPC — transport symmetry", () => {
         // Server should have replied with invokeResult
         const resultMsg = sentMessages.find((m) => m.type === "invokeResult");
         expect(resultMsg).toBeDefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Completion-correlation map — covers the race between the submitCommand
+// RPC reply (which carries the queue ack) and the `commandComplete` /
+// `requestCancelled` ClientIO push events (which resolve / reject the
+// synthesized `completion` promise on the client side).
+//
+// The wire-side server returns only {ok, entry} (no `completion` — promises
+// can't cross RPC). The client wrapper synthesizes a fresh completion via
+// dispatcherClient.attachCompletion. These tests exercise the four states
+// of that machinery:
+//   - ack arrives first, then completion notification (the normal case)
+//   - completion notification arrives first, then ack (settledEarly path)
+//   - requestCancelled with reason "server_stopping" rejects via ServerStoppingError
+//   - close() drains outstanding pending awaiters so callers don't hang
+// ---------------------------------------------------------------------------
+
+function makeQueuedRequest(requestId: string): QueuedRequest {
+    return {
+        requestId,
+        originatorConnectionId: "test-conn",
+        text: "hello",
+        submittedAt: 1,
+        state: "succeeded",
+    };
+}
+
+/**
+ * Build a stub whose `submitCommand` resolves with a known requestId. If
+ * `gate` is provided, the stub awaits it before returning — the test can
+ * fire correlation events on the client side while the server is blocked.
+ */
+function stubWithSubmit(requestId: string, gate?: Promise<void>): Dispatcher {
+    return makeStubDispatcher({
+        submitCommand: (async () => {
+            if (gate !== undefined) await gate;
+            const result: SubmitResult = {
+                ok: true,
+                entry: {
+                    ...makeQueuedRequest(requestId),
+                    completion: Promise.resolve(undefined),
+                },
+            };
+            return result;
+        }) as Dispatcher["submitCommand"],
+    });
+}
+
+describe("dispatcher RPC — submitCommand completion correlation", () => {
+    it("resolves completion when commandComplete arrives after the ack", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        createDispatcherRpcServer(stubWithSubmit("rid-1"), serverChannel);
+        const { dispatcher: client, notifyCommandComplete } =
+            createDispatcherRpcClient(clientChannel);
+
+        const r = await client.submitCommand("hello");
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.entry.requestId).toBe("rid-1");
+
+        const result: CommandResult = {};
+        notifyCommandComplete("rid-1", result);
+
+        await expect(r.entry.completion).resolves.toEqual(result);
+    });
+
+    it("resolves completion when commandComplete arrives before the ack (settledEarly)", async () => {
+        // Hold the server's submitCommand handler so we can fire the
+        // correlation event while attachCompletion has not yet run on
+        // the client side.
+        let release!: () => void;
+        const gate = new Promise<void>((res) => {
+            release = res;
+        });
+        const { serverChannel, clientChannel } = createChannelPair();
+        createDispatcherRpcServer(stubWithSubmit("rid-2", gate), serverChannel);
+        const { dispatcher: client, notifyCommandComplete } =
+            createDispatcherRpcClient(clientChannel);
+
+        const submitP = client.submitCommand("hello");
+
+        // Server is blocked → ack not yet sent → no pending entry on the
+        // client → this lands in settledEarly.
+        const result: CommandResult = { lastError: "early" };
+        notifyCommandComplete("rid-2", result);
+
+        // Now let the server respond; hydrate will consume settledEarly.
+        release();
+        const r = await submitP;
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        await expect(r.entry.completion).resolves.toEqual(result);
+    });
+
+    it("rejects completion with ServerStoppingError on requestCancelled(server_stopping)", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        createDispatcherRpcServer(stubWithSubmit("rid-3"), serverChannel);
+        const { dispatcher: client, notifyRequestCancelled } =
+            createDispatcherRpcClient(clientChannel);
+
+        const r = await client.submitCommand("hello");
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+
+        notifyRequestCancelled("rid-3", "server_stopping");
+
+        await expect(r.entry.completion).rejects.toBeInstanceOf(
+            ServerStoppingError,
+        );
+    });
+
+    it("resolves completion with {cancelled:true} on non-server_stopping cancellation", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        createDispatcherRpcServer(stubWithSubmit("rid-4"), serverChannel);
+        const { dispatcher: client, notifyRequestCancelled } =
+            createDispatcherRpcClient(clientChannel);
+
+        const r = await client.submitCommand("hello");
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+
+        notifyRequestCancelled("rid-4", "user");
+
+        await expect(r.entry.completion).resolves.toEqual({ cancelled: true });
+    });
+
+    it("close() drains pending awaiters so they reject instead of hanging", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        const stub = makeStubDispatcher({
+            submitCommand: (async () => {
+                return {
+                    ok: true,
+                    entry: {
+                        ...makeQueuedRequest("rid-5"),
+                        completion: Promise.resolve(undefined),
+                    },
+                } as SubmitResult;
+            }) as Dispatcher["submitCommand"],
+            close: (async () => {}) as Dispatcher["close"],
+        });
+        createDispatcherRpcServer(stub, serverChannel);
+        const { dispatcher: client } = createDispatcherRpcClient(clientChannel);
+
+        const r = await client.submitCommand("hello");
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+
+        // No commandComplete fired → completion is pending.
+        await client.close();
+
+        await expect(r.entry.completion).rejects.toThrow(/Dispatcher closed/);
     });
 });

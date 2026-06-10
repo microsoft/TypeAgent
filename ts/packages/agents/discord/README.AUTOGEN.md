@@ -143,6 +143,6 @@ _7 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `efea70b1cce9f181f91a37badbbda26f7a295a0b` on `2026-05-15T20:36:12.535Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -16,7 +16,7 @@ import {
     serializeAuthenticationRecord,
 } from "@azure/identity";
 
-import { Client } from "@microsoft/microsoft-graph-client";
+import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { User } from "@microsoft/microsoft-graph-types";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import { useIdentityPlugin } from "@azure/identity";
@@ -58,6 +58,21 @@ export interface ErrorResponse {
     code: string;
     message: string;
 }
+
+// One-shot guard so a silent session restore on app launch is announced by
+// only the first agent (calendar or email) to succeed — both share this
+// in-process module, so the second agent skips the duplicate "signed in"
+// message while still warming its own Graph client. Process-scoped: resets
+// naturally on the next launch.
+let silentRestoreAnnounced = false;
+export function claimSilentRestoreAnnouncement(): boolean {
+    if (silentRestoreAnnounced) {
+        return false;
+    }
+    silentRestoreAnnounced = true;
+    return true;
+}
+
 export interface AppSettings {
     clientId: string;
     tenantId: string;
@@ -126,7 +141,11 @@ const DEFAULT_REDIRECT_PORT = 6893;
  * Uses `Number()` for strict conversion (rejects partial parses like "123abc").
  * Logs a warning and falls back to `defaultPort` when the value is absent or invalid.
  */
-function parseValidPort(raw: string | undefined, defaultPort: number): number {
+function parseValidPort(
+    raw: string | undefined,
+    defaultPort: number,
+    envName: string = "MSGRAPH_APP_REDIRECT_PORT",
+): number {
     if (raw === undefined) {
         return defaultPort;
     }
@@ -135,7 +154,7 @@ function parseValidPort(raw: string | undefined, defaultPort: number): number {
         return num;
     }
     debugGraphError(
-        `Invalid port value "${raw}" for MSGRAPH_APP_REDIRECT_PORT; using default port ${defaultPort}.`,
+        `Invalid port value "${raw}" for ${envName}; using default port ${defaultPort}.`,
     );
     return defaultPort;
 }
@@ -149,25 +168,27 @@ const invalidSettings: AppSettings = {
     redirectPort: DEFAULT_REDIRECT_PORT,
 };
 
-function loadMSGraphSettings(): AppSettings {
+function loadMSGraphSettings(envPrefix: string = "MSGRAPH_APP"): AppSettings {
     const authModeRaw = (
-        process.env["MSGRAPH_APP_AUTH_MODE"] ?? "browser"
+        process.env[`${envPrefix}_AUTH_MODE`] ?? "browser"
     ).toLowerCase();
     const authMode: "browser" | "device-code" =
         authModeRaw === "device-code" || authModeRaw === "devicecode"
             ? "device-code"
             : "browser";
+    const redirectPortEnv = `${envPrefix}_REDIRECT_PORT`;
     const redirectPort = parseValidPort(
-        process.env["MSGRAPH_APP_REDIRECT_PORT"],
+        process.env[redirectPortEnv],
         DEFAULT_REDIRECT_PORT,
+        redirectPortEnv,
     );
 
     const settings: AppSettings = {
-        clientId: process.env["MSGRAPH_APP_CLIENTID"] ?? "",
-        clientSecret: process.env["MSGRAPH_APP_CLIENTSECRET"] ?? "",
-        tenantId: process.env["MSGRAPH_APP_TENANTID"] ?? "",
-        username: process.env["MSGRAPH_APP_USERNAME"],
-        password: process.env["MSGRAPH_APP_PASSWD"],
+        clientId: process.env[`${envPrefix}_CLIENTID`] ?? "",
+        clientSecret: process.env[`${envPrefix}_CLIENTSECRET`] ?? "",
+        tenantId: process.env[`${envPrefix}_TENANTID`] ?? "",
+        username: process.env[`${envPrefix}_USERNAME`],
+        password: process.env[`${envPrefix}_PASSWD`],
         graphUserScopes: [
             "user.read",
             "mail.read",
@@ -198,6 +219,42 @@ function loadMSGraphSettings(): AppSettings {
  */
 export type DevicePromptCallback = SignInPromptCallback;
 
+/**
+ * Optional per-subclass overrides for the MS Graph auth plumbing.
+ *
+ * All fields default to the legacy single-app values used by
+ * CalendarClient / MailClient, so subclasses that don't pass options
+ * behave exactly as before. Subclasses targeting a different AAD app
+ * supply an `envPrefix` plus matching scopes and a distinct cache name
+ * so their tokens don't collide with the default cache.
+ */
+export interface GraphClientOptions {
+    /**
+     * Env var prefix used to look up clientId/tenantId/etc.
+     * E.g. `"MSGRAPH_OTHER_APP"` reads `MSGRAPH_OTHER_APP_CLIENTID`,
+     * `MSGRAPH_OTHER_APP_TENANTID`, etc. Default: `"MSGRAPH_APP"`.
+     */
+    envPrefix?: string;
+    /**
+     * Filename (under `~/.typeagent/`) for the persisted authentication
+     * record. Use a distinct value per AAD app to avoid clobbering the
+     * calendar/email cache. Default: `"tokencache.bin"`.
+     */
+    authRecordFile?: string;
+    /**
+     * Name passed to Azure Identity's `tokenCachePersistenceOptions`.
+     * Pair with `authRecordFile` to fully isolate per-app tokens.
+     * Default: `"typeagent-tokencache"`.
+     */
+    tokenCacheName?: string;
+    /**
+     * Scopes used when acquiring tokens. Pass a specific scope list
+     * for apps that don't have `.default` consent.
+     * Default: `"https://graph.microsoft.com/.default"`.
+     */
+    scopes?: string | string[];
+}
+
 export class GraphClient extends EventEmitter {
     /**
      * All live GraphClient instances. Used by logout() to broadcast a
@@ -210,23 +267,57 @@ export class GraphClient extends EventEmitter {
     private static _instances: Set<GraphClient> = new Set();
 
     private _userClient: Client | undefined = undefined;
-    private AUTH_RECORD_PATH: string = path.join(
-        path.join(os.homedir(), ".typeagent"),
-        "tokencache.bin",
-    );
+    private AUTH_RECORD_PATH: string;
 
     private _userEmailAddresses: Map<string, string> = new Map<
         string,
         string
     >();
 
-    private readonly MSGRAPH_AUTH_URL: string =
-        "https://graph.microsoft.com/.default";
+    private readonly MSGRAPH_AUTH_URL: string | string[];
+    private readonly _tokenCacheName: string;
+    private readonly _graphUserScopes: string[];
 
     private readonly _settings: AppSettings;
-    protected constructor(private readonly authCommand: string) {
+    protected constructor(
+        private readonly authCommand: string,
+        options: GraphClientOptions = {},
+    ) {
         super();
-        this._settings = loadMSGraphSettings();
+        this._settings = loadMSGraphSettings(options.envPrefix);
+
+        // Restrict authRecordFile to a plain basename so a subclass (now that
+        // GraphClient is publicly exported) can't escape ~/.typeagent via
+        // `..` segments or an absolute path.
+        const authRecordFile = options.authRecordFile ?? "tokencache.bin";
+        if (
+            path.isAbsolute(authRecordFile) ||
+            path.basename(authRecordFile) !== authRecordFile
+        ) {
+            throw new Error(
+                `Invalid authRecordFile "${authRecordFile}": must be a simple filename with no path separators`,
+            );
+        }
+        this.AUTH_RECORD_PATH = path.join(
+            path.join(os.homedir(), ".typeagent"),
+            authRecordFile,
+        );
+        this._tokenCacheName = options.tokenCacheName ?? "typeagent-tokencache";
+        this.MSGRAPH_AUTH_URL =
+            options.scopes ?? "https://graph.microsoft.com/.default";
+
+        // When a subclass supplies an explicit scope list, also use it for
+        // the Graph SDK middleware's automatic token fetches; otherwise the
+        // hard-coded `graphUserScopes` perms would still be requested even
+        // though the subclass tried to narrow them.
+        const overrideScopes = options.scopes
+            ? Array.isArray(options.scopes)
+                ? options.scopes
+                : [options.scopes]
+            : undefined;
+        this._graphUserScopes =
+            overrideScopes ?? this._settings.graphUserScopes;
+
         GraphClient._instances.add(this);
     }
 
@@ -246,7 +337,7 @@ export class GraphClient extends EventEmitter {
 
                     tokenCachePersistenceOptions: {
                         enabled: true,
-                        name: "typeagent-tokencache",
+                        name: this._tokenCacheName,
                     },
                 };
                 if (cb) {
@@ -326,7 +417,7 @@ export class GraphClient extends EventEmitter {
                     disableAutomaticAuthentication: cb === undefined,
                     tokenCachePersistenceOptions: {
                         enabled: true,
-                        name: "typeagent-tokencache",
+                        name: this._tokenCacheName,
                     },
                 };
 
@@ -442,7 +533,7 @@ export class GraphClient extends EventEmitter {
         const authProvider = new TokenCredentialAuthenticationProvider(
             credential,
             {
-                scopes: this._settings.graphUserScopes,
+                scopes: this._graphUserScopes,
             },
         );
 
@@ -555,6 +646,33 @@ export class GraphClient extends EventEmitter {
             .api("/me")
             .select(["displayName", "mail", "userPrincipalName"])
             .get();
+    }
+
+    /**
+     * Fetch the signed-in user's profile photo from MS Graph
+     * (`/me/photo/$value`) and return it as a base64 data URL suitable for
+     * use as a CSS background-image / <img> src. Returns undefined when the
+     * user has no photo set (Graph responds 404) or any error occurs, so
+     * callers can fall back to the letter-initial avatar.
+     */
+    public async getUserPhotoAsync(): Promise<string | undefined> {
+        try {
+            const client = await this.ensureClient();
+            const arrayBuffer: ArrayBuffer = await client
+                .api("/me/photo/$value")
+                .responseType(ResponseType.ARRAYBUFFER)
+                .get();
+            if (!arrayBuffer) {
+                return undefined;
+            }
+            const base64 = Buffer.from(arrayBuffer).toString("base64");
+            return `data:image/jpeg;base64,${base64}`;
+        } catch (error) {
+            // 404 = no photo set for the user; any other error is logged and
+            // treated the same (fall back to letter avatar).
+            debugGraphError(`Error fetching user photo: ${error}`);
+            return undefined;
+        }
     }
 
     public async getUserInfo(nameHint: string): Promise<any[]> {

@@ -219,7 +219,7 @@ The MCP server:
 
 1. Receives commands from the MCP client
 2. Connects to the TypeAgent dispatcher via WebSocket
-3. Forwards commands to the dispatcher's `processCommand` method
+3. Forwards commands to the dispatcher's `submitCommand` method (and awaits the resulting completion promise)
 4. Returns results back to the client
 
 ## Connection & Reconnection

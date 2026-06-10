@@ -348,7 +348,7 @@ await populateCache(...);
 │    --parameters '{"trackName":"..."}' \                            │
 │    --naturalLanguage 'play Bohemian Rhapsody by Queen'             │
 │                                                                    │
-│  Sends to: dispatcher.processCommand(actionCommand)                │
+│  Sends to: dispatcher.submitCommand(actionCommand)                 │
 └────────────────────────────┬───────────────────────────────────────┘
                              │
                              ↓

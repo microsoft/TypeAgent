@@ -43,6 +43,9 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          # Full history so the changed-files lint can diff against the base.
+          fetch-depth: 0
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -72,11 +75,19 @@ jobs:
         working-directory: ts
         run: |
           npm run build
+      # On pull requests only changed files are checked (fast); the
+      # format-pr workflow auto-fixes them.  Other events check the whole repo.
       - name: Lint
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
+        shell: bash
         run: |
-          npm run lint
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
+          else
+            npm run lint
+          fi
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts

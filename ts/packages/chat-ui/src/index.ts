@@ -33,3 +33,22 @@ export {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+
+export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
+
+export type {
+    SpeechState,
+    SpeechInputProvider,
+    TtsMetrics,
+    TtsProvider,
+    ImageCaptureProvider,
+    ChoiceOption,
+    SettingsField,
+    SettingsSection,
+    SettingsPanelSchema,
+    HelpPanelContent,
+} from "./providers.js";
+
+export { openSettingsPopup, openHelpPopup } from "./popups.js";
+
+export { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bc49f5ae1274985493d3ae94bd9e9a342cf931de7089330de29c206f80001f3e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1fb14e869cf1e5bdb6813c9f632ecf0aef7ddb2ac5b02c79cdadcc6a94c7f006 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowledge-processor — AI-generated documentation
@@ -64,6 +64,7 @@ By following these steps, you can effectively extend the `knowledge-processor` p
 
 Workspace:
 
+- [@typeagent/config](../../packages/config/README.md)
 - [aiclient](../../packages/aiclient/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
@@ -90,6 +91,6 @@ External: `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

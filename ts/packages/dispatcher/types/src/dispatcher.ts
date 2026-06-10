@@ -79,7 +79,14 @@ export type CommandResult = {
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
     metrics?: RequestMetrics;
+    // Token usage for translating the user's request into actions (the LLM
+    // "translation" step). Absent for @-commands and cached translations.
     tokenUsage?: CompletionUsageStats;
+    // Token usage accumulated across all executed actions/commands that
+    // self-reported via `ActionResult.tokenUsage`. `undefined` => no action
+    // reported usage (unknown). A present all-zero value => actions ran but
+    // made no LLM call.
+    actionTokenUsage?: CompletionUsageStats;
 };
 
 // Architecture: docs/architecture/completion.md — Data flow / Key types
@@ -164,35 +171,39 @@ export interface Dispatcher {
     readonly connectionId: ConnectionId | undefined;
 
     /**
-     * Process a single user request.
+     * Submit a request for queued execution.
      *
-     * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
-     * @param requestId an optional request id to track the command
-     * @param attachments encoded image attachments for the model
-     * @param options optional processing options
-     */
-    processCommand(
-        command: string,
-        clientRequestId?: unknown,
-        attachments?: string[],
-        options?: ProcessCommandOptions,
-        requestId?: string,
-    ): Promise<CommandResult | undefined>;
-
-    /**
-     * Submit a request for queued execution. Resolves once the request is
-     * accepted onto the server-side queue. Completion is observed via
-     * ClientIO push events (`requestStarted`, `queueStateChanged`, etc.) and
-     * the existing `commandComplete` notify.
+     * Resolves with a discriminated `SubmitResult`:
      *
-     * Failure modes (`queue_full`, `server_stopping`) are returned as data,
-     * not thrown — see `SubmitResult`.
+     * - On success, `{ok: true, entry}` where `entry` is a
+     *   `SubmittedRequest` — the server-assigned `QueuedRequest`
+     *   (use `entry.requestId` to key UI state, cancellation, etc.)
+     *   plus an `entry.completion` promise that resolves with the
+     *   eventual `CommandResult` (or `{cancelled: true}` when the
+     *   request is cancelled) and rejects with `ServerStoppingError`
+     *   if the server abandons the entry during shutdown.
+     *
+     * - On submit-time failure, `{ok: false, error: "queue_full" | "server_stopping"}`
+     *   with a typed `error` discriminant. Callers that need to preserve
+     *   the historical `processCommand` semantics convert these to thrown
+     *   `QueueFullError` / `ServerStoppingError` instances before awaiting
+     *   `entry.completion`.
+     *
+     * The drain loop, fan-out, and cancellation semantics are described in
+     * `docs/architecture/messageQueueing.md`.
+     *
+     * @param command user request to process. Requests that start with '@' are direct commands, otherwise treated as natural language.
+     * @param attachments encoded image attachments forwarded to the inner dispatcher.
+     * @param options optional processing options.
+     * @param clientRequestId opaque client-assigned id surfaced back on the entry; pair with `cancelCommandByClientId` for early cancel.
+     * @param requestId optional caller-supplied server-side request id. Defaults to a fresh UUID when omitted; useful for hosts (Shell main, VS) that pre-allocate ids to keep UI state in sync before the ack arrives.
      */
     submitCommand(
         command: string,
         attachments?: string[],
         options?: ProcessCommandOptions,
         clientRequestId?: unknown,
+        requestId?: string,
     ): Promise<SubmitResult>;
 
     /**
@@ -306,8 +317,8 @@ export interface Dispatcher {
      *
      * The returned `CancelResult` indicates whether the entry was cancelled
      * while queued (no work ran), while running (the AbortController was
-     * triggered; `processCommand` resolves with `{ cancelled: true }` at the
-     * next checkpoint), or whether the requestId was unknown.
+     * triggered; the entry's `completion` resolves with `{ cancelled: true }`
+     * at the next checkpoint), or whether the requestId was unknown.
      *
      * Never rejects under normal operation.
      *
@@ -317,12 +328,26 @@ export interface Dispatcher {
     cancelCommand(requestId: string): Promise<CancelResult>;
 
     /**
-     * Cancel an in-flight command using the client-assigned id that was passed
-     * as the second argument to processCommand().  This is the early-cancel
-     * path: the client can call this immediately after processCommand() returns
-     * without waiting for setUserRequest() to deliver the server-assigned UUID.
+     * Promote a queued command so it runs next, ahead of any other queued
+     * entries ("jump the queue"). Does not affect the currently-running
+     * request — the promoted entry runs when the running one finishes.
      *
-     * @param clientRequestId the same value passed to processCommand() as clientRequestId
+     * Resolves `true` if a matching queued entry was found (and moved, or was
+     * already next); `false` for the running entry or an unknown requestId.
+     * Never rejects under normal operation.
+     *
+     * @param requestId the requestId string of the queued command to promote
+     */
+    promoteCommand(requestId: string): Promise<boolean>;
+
+    /**
+     * Cancel an in-flight command using the client-assigned id that was passed
+     * as the `clientRequestId` argument to `submitCommand()`.  This is the
+     * early-cancel path: the client can call this immediately after
+     * `submitCommand()` returns without waiting for the server-assigned UUID
+     * to round-trip back via `entry.requestId`.
+     *
+     * @param clientRequestId the same value passed to submitCommand() as clientRequestId
      */
     cancelCommandByClientId(clientRequestId: unknown): void;
 

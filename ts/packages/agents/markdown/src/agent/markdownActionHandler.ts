@@ -514,6 +514,17 @@ async function handleMarkdownAction(
 ) {
     let result: ActionResult | undefined = undefined;
     const agent = await createMarkdownAgent("GPT_4o");
+
+    // Accumulates the LLM token usage consumed while handling this action so
+    // it can be reported back to the dispatcher as "Action Tokens". The agent
+    // accumulates into this via the model's completion callback.
+    const tokenUsage = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+    };
+    agent.tokenUsage = tokenUsage;
+
     const storage = actionContext.sessionContext.sessionStorage;
 
     switch (action.actionName) {
@@ -803,6 +814,13 @@ async function handleMarkdownAction(
             }
             break;
         }
+    }
+
+    // Attribute any LLM usage to the result. Action paths that made no LLM
+    // call (e.g. open/create document) report all-zero usage, which the
+    // dispatcher treats as "ran but no LLM call".
+    if (result !== undefined && result.error === undefined) {
+        result.tokenUsage = tokenUsage;
     }
     return result;
 }

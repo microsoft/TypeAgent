@@ -18,6 +18,7 @@ interface ExtensionSettings {
     autoDiscovery: boolean;
     autoDiscoveryMode: "scope" | "content";
     excludeSensitiveSites: boolean;
+    autoOpenChatPanel: boolean;
 }
 
 interface AIModelStatus {
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     autoDiscovery: true,
     autoDiscoveryMode: "content",
     excludeSensitiveSites: true,
+    autoOpenChatPanel: true,
 };
 
 class EnhancedOptionsPage {
@@ -136,6 +138,12 @@ class EnhancedOptionsPage {
             if (excludeSensitiveEl) {
                 excludeSensitiveEl.checked =
                     this.settings.excludeSensitiveSites;
+            }
+            const autoOpenChatPanelEl = document.getElementById(
+                "autoOpenChatPanel",
+            ) as HTMLInputElement | null;
+            if (autoOpenChatPanelEl) {
+                autoOpenChatPanelEl.checked = this.settings.autoOpenChatPanel;
             }
         } catch (error) {
             console.error("Error loading settings:", error);
@@ -287,6 +295,12 @@ class EnhancedOptionsPage {
         ) as HTMLInputElement | null;
         if (excludeSensitiveEl) {
             this.settings.excludeSensitiveSites = excludeSensitiveEl.checked;
+        }
+        const autoOpenChatPanelEl = document.getElementById(
+            "autoOpenChatPanel",
+        ) as HTMLInputElement | null;
+        if (autoOpenChatPanelEl) {
+            this.settings.autoOpenChatPanel = autoOpenChatPanelEl.checked;
         }
 
         try {

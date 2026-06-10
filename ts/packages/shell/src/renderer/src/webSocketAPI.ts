@@ -4,7 +4,10 @@
 import { Client, ClientAPI } from "../../preload/electronTypes.js";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
-import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
 
 const clientIOChannel = createChannelAdapter((message: any) =>
     globalThis.ws.send(
@@ -23,7 +26,13 @@ function registerClient(c: Client) {
 
     // Establish the clientIO RPC
     client = c;
-    createClientIORpcServer(client.clientIO, clientIOChannel.channel);
+    createClientIORpcServer(
+        wrapClientIOForCompletion(client.clientIO, {
+            notifyCommandComplete,
+            notifyRequestCancelled,
+        }),
+        clientIOChannel.channel,
+    );
 
     c.dispatcherInitialized(webDispatcher);
 }
@@ -39,12 +48,6 @@ export const webapi: ClientAPI = {
         return false;
     },
     openImageFile: () => {
-        // not supported on mobile
-    },
-    getChatHistory: async () => {
-        return undefined;
-    },
-    saveChatHistory: (_html: string, _seq: number) => {
         // not supported on mobile
     },
     saveSettings: () => {
@@ -112,7 +115,11 @@ const dispatcherChannel = createChannelAdapter((message: any) =>
     ),
 );
 
-const webDispatcher = createDispatcherRpcClient(dispatcherChannel.channel);
+const {
+    dispatcher: webDispatcher,
+    notifyCommandComplete,
+    notifyRequestCancelled,
+} = createDispatcherRpcClient(dispatcherChannel.channel);
 
 export async function createWebSocket(autoReconnect: boolean = true) {
     let url = window.location;

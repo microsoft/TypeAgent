@@ -64,6 +64,92 @@ interface RunCtx {
     wfCallStack: readonly string[];
 }
 
+async function runCancellableConcurrent<T>(
+    items: T[],
+    concurrency: number,
+    parentSignal: AbortSignal,
+    runItem: (item: T, signal: AbortSignal) => Promise<void>,
+): Promise<void> {
+    type ConcurrentResult = { ok: true } | { ok: false; error: unknown };
+
+    const abortController = new AbortController();
+    const abortSignal = abortController.signal;
+    const propagateParentAbort = () =>
+        abortController.abort(parentSignal.reason);
+
+    if (parentSignal.aborted) {
+        propagateParentAbort();
+    } else {
+        parentSignal.addEventListener("abort", propagateParentAbort, {
+            once: true,
+        });
+    }
+
+    try {
+        const queue = [...items];
+        const executing = new Set<Promise<ConcurrentResult>>();
+        let failed = false;
+        let firstError: unknown;
+
+        const recordFailure = (err: unknown) => {
+            if (!failed) {
+                failed = true;
+                firstError = err;
+                queue.length = 0;
+                if (!abortSignal.aborted) {
+                    abortController.abort(err);
+                }
+            }
+        };
+
+        while (queue.length > 0 || executing.size > 0) {
+            while (
+                !failed &&
+                queue.length > 0 &&
+                executing.size < concurrency
+            ) {
+                const item = queue.shift()!;
+                const promise = runItem(item, abortSignal)
+                    .then(
+                        () => ({ ok: true }) as ConcurrentResult,
+                        (err) => {
+                            recordFailure(err);
+                            return {
+                                ok: false,
+                                error: err,
+                            } as ConcurrentResult;
+                        },
+                    )
+                    .finally(() => {
+                        executing.delete(promise);
+                    });
+                executing.add(promise);
+            }
+
+            if (failed) {
+                await Promise.allSettled(executing);
+                throw firstError;
+            }
+
+            if (executing.size === 0) {
+                break;
+            }
+
+            const result = await Promise.race(executing);
+            if (!result.ok) {
+                await Promise.allSettled(executing);
+                throw result.error;
+            }
+        }
+
+        if (failed) {
+            throw firstError;
+        }
+    } finally {
+        parentSignal.removeEventListener("abort", propagateParentAbort);
+    }
+}
+
 // ---- Template resolution ----
 // Note: the error throws below (unknown namespace, unresolved reference,
 // path projection failures) should never fire when static validation is
@@ -313,7 +399,15 @@ export interface RunResult {
     runId: string;
     success: boolean;
     output?: unknown;
-    error?: { message: string; nodeId?: string | undefined };
+    error?: {
+        message: string;
+        nodeId?: string | undefined;
+        /**
+         * Structured error context attached by the failing task. Opaque to the
+         * engine; callers may log or serialize it for diagnostics.
+         */
+        data?: unknown;
+    };
 }
 
 // ---- Engine ----
@@ -540,17 +634,31 @@ export class WorkflowEngine {
 
             return { runId, success: true, output };
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            const nodeId = err instanceof TaskFailure ? err.nodeId : undefined;
+            const isTaskFailure = err instanceof TaskFailure;
+            const errorPayload: {
+                message: string;
+                nodeId?: string | undefined;
+                data?: unknown;
+            } = {
+                message: err instanceof Error ? err.message : String(err),
+                ...(isTaskFailure ? { nodeId: err.nodeId } : {}),
+                ...(isTaskFailure && err.taskError.data !== undefined
+                    ? { data: err.taskError.data }
+                    : {}),
+            };
 
             this.emit({
                 type: "runFailed",
                 runId,
-                error: { message },
+                error: errorPayload,
                 timestamp: Date.now(),
             });
 
-            return { runId, success: false, error: { message, nodeId } };
+            return {
+                runId,
+                success: false,
+                error: errorPayload,
+            };
         }
     }
 
@@ -873,9 +981,8 @@ export class WorkflowEngine {
                 scopePath: [...scopePath],
                 signal: taskSignal,
                 ...(constraints ? { constraints } : {}),
-                ...(node.outputSchema
-                    ? { outputSchema: node.outputSchema }
-                    : {}),
+                // The dispatching node's declared output schema.
+                outputSchema: node.outputSchema,
             };
 
             let result: TaskResult;
@@ -1389,11 +1496,10 @@ export class WorkflowEngine {
             const concurrency = node.maxConcurrency ?? branchNames.length;
             const results: Record<string, unknown> = {};
 
-            // Execute branches with concurrency limiting
-            const executing = new Set<Promise<void>>();
-            const branchQueue = [...branchNames];
-
-            const runBranch = async (bName: string) => {
+            const runBranch = async (
+                bName: string,
+                branchSignal: AbortSignal,
+            ) => {
                 const branch = node.branches[bName];
                 const branchInput = resolveTemplate(
                     branch.inputs,
@@ -1411,7 +1517,7 @@ export class WorkflowEngine {
                     branchScope,
                     branchScopePath,
                     runId,
-                    signal,
+                    branchSignal,
                     ctx,
                     policy,
                     approve,
@@ -1424,18 +1530,12 @@ export class WorkflowEngine {
                 );
             };
 
-            while (branchQueue.length > 0 || executing.size > 0) {
-                while (branchQueue.length > 0 && executing.size < concurrency) {
-                    const bName = branchQueue.shift()!;
-                    const p = runBranch(bName).then(() => {
-                        executing.delete(p);
-                    });
-                    executing.add(p);
-                }
-                if (executing.size > 0) {
-                    await Promise.race(executing);
-                }
-            }
+            await runCancellableConcurrent(
+                branchNames,
+                concurrency,
+                signal,
+                runBranch,
+            );
 
             if (node.bind) {
                 outerScope.bindings.set(node.bind, results);
@@ -1538,10 +1638,7 @@ export class WorkflowEngine {
             const concurrency = node.maxConcurrency ?? items.length;
             const results: unknown[] = new Array(items.length).fill(null);
 
-            const executing = new Set<Promise<void>>();
-            const indexQueue = items.map((_, i) => i);
-
-            const runItem = async (index: number) => {
+            const runItem = async (index: number, itemSignal: AbortSignal) => {
                 this.emit({
                     type: "forkMapIterationStarted",
                     runId,
@@ -1573,7 +1670,7 @@ export class WorkflowEngine {
                     itemScope,
                     itemScopePath,
                     runId,
-                    signal,
+                    itemSignal,
                     ctx,
                     policy,
                     approve,
@@ -1594,18 +1691,12 @@ export class WorkflowEngine {
                 });
             };
 
-            while (indexQueue.length > 0 || executing.size > 0) {
-                while (indexQueue.length > 0 && executing.size < concurrency) {
-                    const idx = indexQueue.shift()!;
-                    const p = runItem(idx).then(() => {
-                        executing.delete(p);
-                    });
-                    executing.add(p);
-                }
-                if (executing.size > 0) {
-                    await Promise.race(executing);
-                }
-            }
+            await runCancellableConcurrent(
+                items.map((_, i) => i),
+                concurrency,
+                signal,
+                runItem,
+            );
 
             if (node.bind) {
                 outerScope.bindings.set(node.bind, results);

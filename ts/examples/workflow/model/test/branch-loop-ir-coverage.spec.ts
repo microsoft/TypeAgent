@@ -170,14 +170,7 @@ describe("branch/loop IR positive coverage matrix", () => {
                 recover: {
                     kind: "task",
                     task: "noop",
-                    inputSchema: {
-                        type: "object",
-                        required: ["error", "trigger"],
-                        properties: {
-                            error: { type: "object" },
-                            trigger: { type: "object" },
-                        },
-                    },
+                    inputSchema: { type: "object" },
                     outputSchema: { type: "string" },
                     inputs: {},
                     bind: "picked",
@@ -406,14 +399,7 @@ describe("branch/loop IR positive coverage matrix", () => {
                 recover: {
                     kind: "task",
                     task: "noop",
-                    inputSchema: {
-                        type: "object",
-                        required: ["error", "trigger"],
-                        properties: {
-                            error: { type: "object" },
-                            trigger: { type: "object" },
-                        },
-                    },
+                    inputSchema: { type: "object" },
                     outputSchema: { type: "boolean" },
                     inputs: {},
                     bind: "out",

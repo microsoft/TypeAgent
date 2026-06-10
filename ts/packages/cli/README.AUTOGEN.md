@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=75cda9f02a3bb5535832f8ea571e58a7b84eb3dbeee3054a5810c6eb8f5351f0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cd656f1f0132dfd01cfe55093c1cd68c1ec9f0ae9f92fee18c049ac58f77be4d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -80,6 +80,7 @@ Workspace:
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
+- [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
@@ -98,6 +99,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { loadConfigSync } from "@typeagent/config";
 import dotenv from "dotenv";
 import {
     WorkflowIR,
@@ -23,14 +24,22 @@ import {
     allBuiltinTasks,
 } from "workflow-engine";
 
+// Load layered TypeAgent config (config.defaults.yaml + config.local.yaml + .env fallback)
+// before command parsing so runtime API settings are available to workflow tasks.
+loadConfigSync();
+
 const usage = `Usage:
-  workflow run <file.json> [--input <json>] [--env <file>] [--dry-run | --allow-all]   Run a workflow
+  workflow run <file.json> [--input <json>] [--env <file>] [--task-timeout-ms <ms>] [--dry-run | --allow-all]   Run a workflow
   workflow validate <file.json>                                                        Validate a workflow
   workflow list-tasks                                                                  List registered tasks
 
 Options:
   --env <file>  Load environment variables from the given dotenv file before
                 running. Can be specified multiple times.
+  --task-timeout-ms <ms>  
+                Global timeout in milliseconds for each task execution.
+                Defaults to 60000. Use 0 or Infinity to disable global
+                task timeout.
   --dry-run     Deny all side-effecting tasks (shell, network, file, LLM)
                 without prompting. Useful for testing workflow structure.
   --allow-all   Allow all tasks without prompting. Use for scripted/CI runs
@@ -68,6 +77,7 @@ async function cmdRun(
     file: string,
     inputJson?: string,
     mode?: "dry-run" | "allow-all",
+    taskTimeoutMs?: number,
 ): Promise<void> {
     const ir = loadIR(file);
     let input: Record<string, unknown> = {};
@@ -163,6 +173,7 @@ async function cmdRun(
         input,
         ...(policy ? { policy } : {}),
         ...(approve ? { approve } : {}),
+        ...(taskTimeoutMs !== undefined ? { taskTimeoutMs } : {}),
     };
     const result = await engine.run(ir, opts);
     if (result.success) {
@@ -177,6 +188,14 @@ async function cmdRun(
         console.error(
             `${prefix} Workflow failed${location}: ${result.error?.message ?? "unknown error"}`,
         );
+
+        // Log any structured context attached to the error.
+        if (result.error?.data !== undefined) {
+            console.error(
+                `${prefix} error data: ${JSON.stringify(result.error.data, null, 2)}`,
+            );
+        }
+
         process.exit(1);
     }
 }
@@ -312,6 +331,28 @@ function loadEnvFiles(argv: string[]): void {
     }
 }
 
+function parseTaskTimeoutMs(argv: string[]): number | undefined {
+    const idx = argv.indexOf("--task-timeout-ms");
+    if (idx < 0) {
+        return undefined;
+    }
+
+    const raw = argv[idx + 1];
+    if (!raw || raw.startsWith("--")) {
+        fail("--task-timeout-ms requires a numeric value argument");
+    }
+
+    if (raw === "Infinity") {
+        return Infinity;
+    }
+
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        fail("--task-timeout-ms must be a non-negative number (or Infinity)");
+    }
+    return parsed;
+}
+
 switch (command) {
     case "run": {
         const file = args[1];
@@ -330,7 +371,8 @@ switch (command) {
             : args.includes("--allow-all")
               ? "allow-all"
               : undefined;
-        await cmdRun(file, inputJson, mode);
+        const taskTimeoutMs = parseTaskTimeoutMs(args);
+        await cmdRun(file, inputJson, mode, taskTimeoutMs);
         break;
     }
     case "validate": {

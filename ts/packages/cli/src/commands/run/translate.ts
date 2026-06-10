@@ -9,6 +9,7 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 
 const CLI_CONVERSATION_NAME = "CLI";
 
@@ -84,7 +85,8 @@ export default class TranslateCommand extends Command {
                         conversationId,
                     },
                 );
-                await conversation.dispatcher.processCommand(
+                await awaitCommand(
+                    conversation.dispatcher,
                     `@dispatcher translate ${args.request}`,
                 );
             });

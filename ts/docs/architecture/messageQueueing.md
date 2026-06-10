@@ -18,9 +18,11 @@
 > **Superseded:** the original client-side queue design and its review
 > live in [`_deprecated/`](./_deprecated/) for historical context.
 
-**Status:** Draft — design landed.
+**Status:** Draft — design landed; §14.1 (unify `processCommand` +
+`submitCommand`) has now also shipped — `Dispatcher.processCommand` is
+removed and `submitCommand` is the single entry point.
 **Last Updated:** 2026-05-22 (editorial pass; removed forward-pointers to
-forthcoming steering doc).
+forthcoming steering doc). §14.1 marked Shipped on 2026-05-29.
 
 ---
 
@@ -58,10 +60,16 @@ queue snapshot on `joinConversation`, runs the no-clients grace
 timer, and (in v1.5) drives server-restart persistence. It owns no
 queue state — `Dispatcher` is the source of truth.
 
-The existing `Dispatcher.processCommand` contract is preserved
-(`Promise<CommandResult>`); we add `submitCommand` for ack-on-enqueue
-semantics plus `ClientIO` push events so every connected client sees
-the queue's lifecycle in real time.
+The original `Dispatcher.processCommand` contract has been folded into
+`Dispatcher.submitCommand` (see §14.1, **Shipped**): the unified entry
+returns `Promise<SubmitResult>` where the `ok:true` variant carries a
+`SubmittedRequest` — the queue ack (`entry`) with a `completion:
+Promise<CommandResult | undefined>` attached. Hosts that want to await
+completion `await r.entry.completion` after checking `r.ok`;
+ack-on-enqueue callers use `r.entry` and ignore `r.entry.completion`.
+Push events on `ClientIO` (`requestQueued`, `requestStarted`,
+`commandComplete`, `requestCancelled`) let every connected client
+follow the queue's lifecycle in real time.
 
 ---
 
@@ -124,47 +132,47 @@ _block on the lock_; clients see this as "the agent is busy."
 ## 3. The change on one screen
 
 ```
-BEFORE                                AFTER
-──────                                ─────
+BEFORE                                AFTER (§14.1 SHIPPED)
+──────                                ──────────────────────
 
-processCommand                        processCommand     submitCommand
-                                      (await-complete)   (ack-on-enqueue)
-       │                                     │                  │
-       ▼                                     └────────┬─────────┘
-SharedDispatcher                                      │  (1)
-       │                                              ▼
-       ▼                                       RequestQueue.submit
-Dispatcher.processCommand                             │
-       │                                              ▼
-       ▼                                       tail.push(entry); drain()    (2)
-commandLock (serializes here)                         │
-       │                                              ▼
-       ▼                                       drain loop (inside Dispatcher):
-agent.executeAction                              head = tail.shift()
-                                                 emits requestStarted via ClientIO
-                                                 processCommand(head, …)    (3)
-                                                      │
-                                                      ▼
-                                              commandLock — no contention
-                                                      │
-                                                      ▼
-                                              agent.executeAction
+processCommand                        submitCommand          (unified entry)
+                                          │  returns Promise<SubmitResult>
+       │                                  │  • ok:true → {entry: SubmittedRequest}
+       │                                  │      └─ entry.completion (submitter only)
+       ▼                                  │  • ok:false → typed failure
+SharedDispatcher                          ▼
+       │                              RequestQueue.submit
+       ▼                                  │
+Dispatcher.processCommand                 ▼
+       │                              tail.push(entry); drain()    (2)
+       ▼                                  │
+commandLock (serializes here)             ▼
+       │                              drain loop (inside Dispatcher):
+       ▼                                  head = tail.shift()
+agent.executeAction                       emits requestStarted via ClientIO
+                                          processCommand(head, …)    (3)
+                                              │
+                                              ▼
+                                          commandLock — no contention
+                                              │
+                                              ▼
+                                          agent.executeAction
 ```
 
-(1) `processCommand` and `submitCommand` are sibling first-class
-`Dispatcher` entries — both internally call `requestQueue.submit(...)`.
-They differ only in the return contract:
+(1) Hosts pick their await semantics from the unified result:
 
-- **`processCommand`** returns `Promise<CommandResult | undefined>` and
-  resolves when the request **finishes** (await-completion). Throws on
-  `queue_full` / `server_stopping`. **Used by Shell main + renderer and
-  every scripted CLI command path** (~14 callsites).
+- **Await-completion callers** (Shell main + renderer, scripted CLI
+  paths, MCP/VSCode/web bridges, benchmarks): check `r.ok`, then
+  `await r.entry.completion`. The
+  [`awaitCommand(dispatcher, text, …)`](../../packages/dispatcher/types/src/awaitCommand.ts)
+  utility from `@typeagent/dispatcher-types` packages this into a
+  one-liner that throws on submit failure for code that just wants the
+  old `Promise<CommandResult>` shape.
 
-- **`submitCommand`** returns `Promise<SubmitResult>` and resolves when
-  the request is **accepted onto the queue** (ack-on-enqueue), with
-  typed failure modes returned as data. **Used only by the CLI
-  interactive REPL** so the prompt becomes responsive immediately;
-  completion is observed via the `commandComplete` ClientIO push event.
+- **Ack-on-enqueue callers** (the CLI interactive REPL): check `r.ok`,
+  track `r.entry`, ignore `r.entry.completion`. The prompt becomes
+  responsive immediately; completion is observed via the
+  `commandComplete` `ClientIO` push event.
 
 `SharedDispatcher` wraps the host `ClientIO` so queue lifecycle events
 (`requestQueued`, `requestStarted`, `requestCancelled`,
@@ -174,7 +182,8 @@ the execution path.
 (2) Emits `requestQueued` through `ClientIO` at this point.
 
 (3) Original `processCommand` pipeline body (the in-dispatcher command
-runner, distinct from the `Dispatcher.processCommand` entry method).
+runner — an internal helper inside `command.ts`, unrelated to the
+removed `Dispatcher.processCommand` entry method).
 `commandLock` is kept as defense-in-depth (see §5.3); the drain loop
 guarantees no contention.
 
@@ -184,10 +193,12 @@ clients regardless of which entry point they use. `SharedDispatcher`
 adds nothing to the execution path — it only wraps the host `ClientIO`
 so lifecycle events reach every connected client.
 
-> **Wart.** The dual-entry shape is recognized debt — both methods
-> ultimately call `requestQueue.submit(...)` and differ only in how they
-> return. See §14.1 for the planned unification into a single `submit()`
-> that carries both an ack and the completion promise.
+> **Wart resolved.** The dual-entry shape called out here as recognized
+> debt has now been unified per §14.1 — `submitCommand` is the single
+> entry, returning both an ack and the completion promise. The
+> historical narrative in §§2–8 still describes the original two-entry
+> shape (preserved for design context); §14.1 records the shipped
+> migration.
 
 ---
 
@@ -578,9 +589,14 @@ shape to branch on.
 ```ts
 /** Outcome of `Dispatcher.submitCommand`. */
 export type SubmitResult =
-  | { ok: true; entry: QueuedRequest }
+  | { ok: true; entry: SubmittedRequest }
   | { ok: false; error: "queue_full"; maxDepth: number }
   | { ok: false; error: "server_stopping" };
+
+/** Queue ack with the completion promise the submitter owns. */
+export interface SubmittedRequest extends QueuedRequest {
+  completion: Promise<CommandResult | undefined>;
+}
 
 /** Outcome of `Dispatcher.cancelCommand`. */
 export type CancelResult =
@@ -1165,74 +1181,297 @@ event. See the deprecated docs for the earlier draft that had both.
 
 ### 14.1 Unify `processCommand` and `submitCommand` into one entry
 
-**Status:** tracked as a follow-up after this branch lands.
+**Status:** Shipped (2026-05-29).
 
-Today the Dispatcher exposes two sibling entry points that both call
-`requestQueue.submit(...)` and differ only in their return contract:
-
-| Entry            | Returns                                       | Failure delivery                                | Used by                                               |
-| ---------------- | --------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| `processCommand` | `Promise<CommandResult \| undefined>`         | Throws `QueueFullError` / `ServerStoppingError` | Shell main + renderer, ~13 scripted CLI command paths |
-| `submitCommand`  | `Promise<SubmitResult>` (discriminated union) | Typed `{ok:false, error}`                       | CLI interactive REPL only (ack-on-enqueue, no await)  |
-
-The duplication is real cognitive overhead — every code-review of the
-dispatcher trips on it. Unification is feasible without losing
-semantics by collapsing both into a single `submit()` that returns a
-discriminated result carrying **both** the ack and the completion
-promise:
+Originally this section tracked the unification as future work; it has
+since been implemented. `Dispatcher.processCommand` is removed; the
+unified entry point is `Dispatcher.submitCommand`, returning a
+discriminated result whose `ok:true` variant carries a
+`SubmittedRequest` — the queue ack with the completion promise
+attached:
 
 ```ts
 type SubmitResult =
-    | {
-          ok: true;
-          entry: QueuedRequest;
-          completion: Promise<CommandResult | undefined>;
-      }
+    | { ok: true; entry: SubmittedRequest }
     | { ok: false; error: "queue_full"; maxDepth: number }
     | { ok: false; error: "server_stopping" };
 
-submit(
+interface SubmittedRequest extends QueuedRequest {
+    completion: Promise<CommandResult | undefined>;
+}
+
+submitCommand(
     text: string,
     attachments?: string[],
     options?: ProcessCommandOptions,
     clientRequestId?: unknown,
+    requestId?: string,
 ): Promise<SubmitResult>;
 ```
 
-- **In-process** (local dispatcher, tests): the server returns
-  `entry.completion` directly.
-- **Across RPC**: the server returns only `{ok, entry}` over the wire
-  (as today); the RPC client wrapper attaches
-  `completion: waitForCommandComplete(entry.requestId)` — a promise
-  resolved by the existing `commandComplete` ClientIO push event via a
-  one-shot correlation map. No new server-side wire RPC required.
+- **In-process** (local dispatcher, tests): the dispatcher attaches
+  `entry.completion` from the queue's internal entry promise.
+- **Across RPC**: the server returns only `{ok, entry}` (a bare
+  `QueuedRequest`) over the wire; the RPC client wrapper attaches
+  `completion: waitForCommandComplete(entry.requestId)` onto the entry
+  — a promise resolved by the `commandComplete` `ClientIO` push event
+  via a per-client one-shot correlation map, and rejected on
+  `requestCancelled` with `reason: "server_stopping"`. No new
+  server-side wire RPC was required. `notifyCommandComplete` /
+  `notifyRequestCancelled` hooks are exposed from the RPC client
+  factory and wired into each host's `ClientIO`.
 
-**Caller migration shape:**
+**Caller migration shape (as shipped):**
 
-- Await-completion callers (today's `processCommand` users):
+- Await-completion callers (former `processCommand` users) use one of
+  two equivalent shapes:
+
+  - Direct `submitCommand` + `r.entry.completion` await — used by
+    Shell main (`processShellRequest`) and the renderer's chat-ui
+    `onSend` adapter (`chatPanelBridge.ts`), which both want to wrap
+    the completion promise with post-completion side effects (focus +
+    summary update, per-bubble completion handling).
+  - The `awaitCommand(dispatcher, text, attachments?, options?,
+clientRequestId?, requestId?)` utility in
+    `@typeagent/dispatcher-types` — used by scripted CLI command paths
+    (~13 callsites: `connect`, `run/{request,translate,explain}`,
+    `replay`, `test/translate`), the MCP server, copilot-plugin hooks,
+    web/MCP/VS Code bridges, the URI handler, command-executor, and
+    benchmark/agent recursive callers (onboarding,
+    `browser/benchmark/test-webflow-grammar.mts`). It is a thin
+    throw-on-submit-failure wrapper that returns
+    `Promise<CommandResult | undefined>`, matching the old
+    `processCommand` shape exactly.
+
   ```ts
-  const r = await dispatcher.submit(text, ...);
-  if (!r.ok) throw new Error(r.error);
-  return r.completion;
+  // Direct shape (Shell):
+  const r = await dispatcher.submitCommand(
+    text,
+    attachments,
+    options,
+    cid,
+    rid,
+  );
+  if (!r.ok) {
+    throw r.error === "queue_full"
+      ? new QueueFullError(r.maxDepth)
+      : new ServerStoppingError();
+  }
+  return r.entry.completion.then(postProcess);
+
+  // Utility shape (scripted CLI / MCP / bridges):
+  const result = await awaitCommand(dispatcher, text);
   ```
-- Ack-on-enqueue callers (today's `submitCommand` users): no change —
-  the existing `if (!r.ok) ...; trackId(r.entry)` shape applies directly.
 
-**Migration cost:**
+- Ack-on-enqueue callers (the CLI interactive REPL): no behaviour
+  change. Existing `if (!r.ok) ...; trackId(r.entry)` shape still
+  applies; `r.entry.completion` is simply ignored.
 
-- ~14 callsites: mechanical 1→3 line change each.
-- ~30 LOC completion-correlation helper in
-  `packages/dispatcher/rpc/src/dispatcherClient.ts` + tests.
-- Delete `Dispatcher.processCommand` (method + RPC pass-through +
+**Shipped changes:**
+
+- Removed `Dispatcher.processCommand` (method, RPC pass-through, and
   `dispatcherServer.ts` handler).
-- Rename `submitCommand` → `submit` (or keep the name).
-- Update the CLI REPL to drop its
-  `typeof submitCommand === "function"` feature-detect fallback.
+- Added `requestId?: string` as the 5th positional parameter on
+  `Dispatcher.submitCommand` (and the RPC pass-through), preserving the
+  shape former `processCommand` callers needed for Shell / VS Code
+  client-request-id forwarding.
+- Added `awaitCommand` utility in
+  `packages/dispatcher/types/src/awaitCommand.ts`, exported from
+  `@typeagent/dispatcher-types`. Signature:
+  `(dispatcher, command, attachments?, options?, clientRequestId?,
+requestId?)`.
+- Added a wire-vs-call-site type split: `SubmitResult` (whose
+  `entry: SubmittedRequest` carries `entry.completion`) is the
+  in-process / call-site type; the RPC wire payload (`WireSubmitResult`)
+  is the same `ok`/`error` shape but with the bare `QueuedRequest` as
+  `entry` (no `completion`). The RPC client synthesizes a fresh
+  `completion`, re-attaches it onto the entry, and returns the upgraded
+  `SubmittedRequest`-shaped result to the caller.
+- RPC client factory return type changed from `Dispatcher` to
+  `{ dispatcher, notifyCommandComplete, notifyRequestCancelled }`; the
+  5 RPC client construction sites (agent-server client, Shell
+  renderer + preload, VS Code webview, browser extension service
+  worker) were updated to wire these hooks into their host's
+  `ClientIO.notify` and `ClientIO.requestCancelled`.
+- `sharedDispatcher.notify` no longer skips the originator for
+  `commandComplete` — the originator now needs the push event to
+  resolve its correlation-map completion promise.
+- Dropped the CLI REPL's
+  `typeof submitCommand === "function"` feature-detect fallback (the
+  unconditional `submitCommand` path is now the only one for live
+  dispatchers; the caller-supplied legacy path is retained only as a
+  null-dispatcher test-stub branch).
+- `Dispatcher.interrupt` (already returning `SubmitResult`)
+  automatically inherits the `completion` promise via the same wire
+  split.
 
-**Why not in this branch:** scope. The Phase 1 mechanism (queue
-ownership, drain loop, fan-out, reconnect snapshot, cancel surface,
-client mirrors) is already broad; the unification deserves its own PR
-with its own review.
+**Pitfall: local short-circuits must explicitly fire `commandComplete`.**
+
+Any wrapper that intercepts `submitCommand` and returns a synthesized
+`{ok:true, entry}` (with `entry.completion`) _without_ routing through
+the in-dispatcher command pipeline (which is where `commandComplete` is
+normally emitted by `commandHandlerContext`) must explicitly fire
+`clientIO.notify(rid, "commandComplete", { result }, source)` for the
+synthesized `entry.requestId`. Otherwise an RPC client's
+completion promise — synthesized by `dispatcherClient.attachCompletion`
+from the `commandComplete` push event — will never resolve and any
+caller awaiting it (e.g. `awaitCommand`, the chat-ui pending bubble)
+will hang forever. The in-process `entry.completion = Promise.resolve(...)`
+the wrapper returns is stripped from `entry` by `dispatcherServer.toWire`
+and re-attached on the client side, so it is not a substitute. The Shell's
+`@shell run` / `@shell run interactive` short-circuit in
+`packages/shell/src/main/instance.ts` is the canonical example: it
+synthesizes a `QueuedRequest` with `state: "succeeded"` and a
+matching `RequestId`, then calls `clientIO.notify(rid,
+"commandComplete", { result: null }, "shell")` before returning. The
+RPC client's `settledEarly` correlation map absorbs the notify if it
+arrives ahead of the submit RPC reply.
+
+**Note.** The internal helpers named `processCommand` and
+`processCommandNoLock` inside
+`packages/dispatcher/dispatcher/src/command/command.ts` (the in-dispatcher
+command-pipeline body), and the unrelated `processCommand` parameter
+names in `interactiveApp` callbacks, are **not** the deleted
+`Dispatcher.processCommand` interface method and were left untouched.
+Likewise the MCP public tool name `typeagent-processCommand` exposed
+by `copilot-plugin/src/mcp/server.ts` is a public API contract identifier
+and remains unchanged.
+
+### 14.2 Per-bubble queue chips (inline pattern in each host)
+
+**Status:** Shipped.
+
+The pre-unification Electron Shell rendered a per-conversation queue
+chip on every user bubble (`messageGroup.ts` + `messageContainer.ts`
+own a `queue-status` element) plus a doc-level Escape handler with a
+double-Escape cancel-all gesture. When the Electron Shell renderer was
+migrated to the shared chat-ui `ChatPanel` (replacing the bespoke
+`ChatView`), the four `ClientIO` queue events
+(`requestQueued` / `requestStarted` / `requestCancelled` /
+`queueStateChanged`) became empty stubs in `chatPanelBridge.ts` and the
+Escape handler was dropped. Functionally identical wiring was already
+present in the VS Code shell's `webview/main.ts`, which uses the same
+chat-ui `ChatPanel` APIs.
+
+The restoration ports the wiring pattern verbatim from
+`packages/vscode-shell/src/webview/main.ts` into
+`packages/shell/src/renderer/src/chatPanelBridge.ts` so the two hosts
+stay in lockstep. The shared chip surface (rail markup, state classes,
+hover styles, action buttons, color tokens) lives in
+`packages/chat-ui` — `ChatPanel.setUserBubbleQueueStatus(targetRid,
+status, onCancel?, onPromote?)` is the contract both hosts hit. The
+event-routing logic is intentionally duplicated as inline helpers
+inside each host so each renderer is self-contained; the duplication
+is small, scrutinised side-by-side, and avoids dragging a controller
+abstraction across the chat-ui boundary.
+
+**Shared helper set (present in both hosts, same semantics):**
+
+- `chipTargetRid(entry, msgClientRequestId?)` resolves the chat-ui
+  bubble key: `entry.clientRequestId` (when it's a string) for
+  locally-originated entries, `entry.requestId` for peer-originated
+  entries, with an optional message-level `clientRequestId` (from
+  `setUserRequest`) in between.
+- `materializeQueueBubbleIfMissing(entry, targetRid)` creates a peer
+  bubble via `chatPanel.addRemoteUserMessage(entry.text, targetRid)`
+  when a queue event references a request the local renderer never
+  saw (i.e. another client in a shared conversation).
+- `applyQueueChip(targetRid, serverId, status)` calls
+  `chatPanel.setUserBubbleQueueStatus(targetRid, status, onCancel?,
+onPromote?)`. The `×` button on a queued chip invokes the host's
+  cancel-by-server-id path; the jump-queue button on a queued chip
+  invokes the host's promote-by-server-id path. When the bubble
+  doesn't exist yet, the chip is stashed in a `pendingQueueStatus`
+  map and reapplied when `setUserRequest` later materializes it.
+- `clearQueueChip(targetRid)` clears both the chip and the pending
+  stash.
+- `reconcileQueueChips(prev, next)` is the snapshot-driven reconciler:
+  walks the new snapshot, re-applies chips for every live entry, then
+  clears chips on entries that the previous snapshot had but the new
+  one dropped. Snapshots are the source of truth; the fine-grained
+  events are incremental hints between snapshots.
+- `markCancelled`, `isCancelledRequest`, `claimCancelledRender` —
+  the cancelled-dedup helpers backed by the `cancelledRequests` /
+  `cancelledRendered` Sets. Both hosts use them to drop late
+  `setDisplay` / `appendDisplay` / `setDisplayInfo` / error
+  stragglers and to idempotently claim the "⚠ Cancelled" affordance
+  slot so a `commandComplete` and a `requestCancelled` arriving in
+  either order paint exactly one affordance. The dedup is variadic
+  (covers both `clientRequestId` and `requestId` aliases).
+
+**Electron-only helpers** (the bridge calls dispatcher RPC directly,
+so it wraps cancel/promote/cancel-all in named functions used by both
+the chip callbacks and the double-Esc gesture): `cancelByServerId`,
+`promoteByServerId`, `cancelAllQueuedAndRunning`, `resetQueueChipState`.
+The VS Code webview achieves the same behavior by posting
+`cancelCommand` / `promoteCommand` / `cancelAllQueuedAndRunning`
+messages to the extension host (`packages/vscode-shell/src/agentServerBridge.ts`),
+which translates the client→server id via `clientToServerRequestId`
+before calling the equivalent dispatcher methods.
+
+**Double-Escape gesture.** Both hosts attach a document-level keydown
+handler: single Esc cancels the currently-active request (chat-ui's
+`getActiveRequestId()` first → falls back to the queue mirror's
+running entry for peer requests we never tracked locally), two
+presses within `DOUBLE_ESCAPE_WINDOW_MS` (1000 ms) cancel every
+queued+running entry. The handler honors `e.defaultPrevented` so
+chat-ui's own input-level Esc handler (dismisses completion popups)
+stays primary — when chat-ui consumed the keystroke, the doc handler
+still updates the double-Esc clock so a paired second press fires
+the cancel-all sweep.
+
+**Wiring in each host:**
+
+- **Electron Shell — `packages/shell/src/renderer/src/chatPanelBridge.ts`.**
+  Constructs one `QueueStateMirror` immediately after the `ChatPanel`,
+  defines the helper set inline, routes the four queue `ClientIO`
+  handlers through `queueMirror.apply*` + helpers, and adds the
+  doc-level Esc listener. Mirror state updates happen synchronously
+  in every handler so version watermarking stays consistent, but the
+  DOM-mutating bodies of `requestQueued` / `requestStarted` /
+  `requestCancelled` / `queueStateChanged` are wrapped in
+  `afterReplay(...)` so a queue event that lands while history replay
+  is in flight doesn't materialize a live bubble that
+  `ChatPanel.replayHistory()` would then orphan when it clears
+  `userMessageById`. `dispatcherInitialized` similarly seeds the
+  mirror from `initialQueueSnapshot` immediately and defers the
+  matching `reconcileQueueChips` to `afterReplay`. The Electron
+  single-Esc fallback uses `dispatcher.cancelCommandByClientId` when
+  chat-ui knows the client id and `dispatcher.cancelCommand` when
+  only the mirror's server id is available.
+- **VS Code shell — `packages/vscode-shell/src/webview/main.ts`.**
+  Same helper set and same `QueueStateMirror`; the cancel/promote
+  paths post messages to the extension host
+  (`packages/vscode-shell/src/agentServerBridge.ts`) which translates
+  the client→server id via `clientToServerRequestId` and calls the
+  same dispatcher methods.
+
+**Bubble-key invariant.** The bubble key passed to
+`setUserBubbleQueueStatus` MUST equal the id chat-ui used when adding
+the bubble: `clientRequestId` for locally-sent `addUserMessage`
+calls, `requestId` for `addRemoteUserMessage`. `chipTargetRid`
+selects between these two by checking whether the queue entry has a
+string `clientRequestId`.
+
+**Multi-client behavior delta.** With chip wiring in place, both
+hosts now materialize peer-origin user bubbles via
+`addRemoteUserMessage` as soon as `requestQueued` fires for a remote
+client on the same conversation (matching the pre-unification
+Electron Shell). Before this restoration, the Electron Shell
+post-unification only learned about peer requests when their
+`setUserRequest` arrived — usually well after the queue event. The
+new ordering matches every other client.
+
+**Reference commits.** The original pre-unification implementation
+landed in commit `7660dcdb5` (server-side message queue + per-bubble
+chips + double-Esc), with subsequent refinements in `42c0e8cb3`
+(extracted `QueueStateMirror` to `@typeagent/dispatcher-types`),
+`b056d0ccf` (cancellation UI), and `ac8633f02` (`×` glyph cleanup).
+The Electron Shell parity restoration duplicated the VS Code shell's
+pattern (commit `6c55e82e6`); the chat-ui rail/Stop/jump-queue
+redesign that both hosts now consume landed via `e8e3699b1` (PR #2454,
+"UI Chat bubble tweaks"); the merge that wires the Electron Shell
+through the new chat-ui contract is `51ec3bf37`.
 
 ---
 
@@ -1273,3 +1512,22 @@ with its own review.
   `packages/api/src/webDispatcher.ts` (Web API server),
   `packages/cli/src/commands/test/translate.ts` (CLI test commands),
   `packages/dispatcher/dispatcher/test/**` (dispatcher tests).
+- Per-bubble queue chip rendering surface (shared by both shell hosts):
+  `packages/chat-ui/src/chatPanel.ts`'s
+  `setUserBubbleQueueStatus(targetRid, status, onCancel?, onPromote?)`
+  owns the rail markup, state label, action buttons, and stop-button
+  toggle on the agent bubble.
+- Shell renderer queue-chip wiring:
+  `packages/shell/src/renderer/src/chatPanelBridge.ts` (inline
+  helper set + `QueueStateMirror`; routes the four queue `ClientIO`
+  events; supplies `cancelByServerId = dispatcher.cancelCommand`
+  and `promoteByServerId = dispatcher.promoteCommand`; doc-level
+  Esc + double-Esc gesture).
+- VS Code shell queue-chip wiring:
+  `packages/vscode-shell/src/webview/main.ts` (same inline pattern;
+  cancel/promote helpers post messages to the extension host, which
+  translates client→server id via `clientToServerRequestId` in
+  `packages/vscode-shell/src/agentServerBridge.ts`).
+- `packages/dispatcher/types/src/queueStateMirror.ts` —
+  `QueueStateMirror` reusable client-side mirror with version
+  watermarking; owned per-renderer by each host's inline helper set.

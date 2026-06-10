@@ -169,7 +169,7 @@ export function formatThinkingDisplay(thinkingText: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
     return [
-        `<details class="reasoning-thinking">`,
+        `<details class="reasoning-thinking" open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
@@ -197,12 +197,15 @@ export async function processReasoningSession(
                         content: [{ type: "text", text: event.text }],
                     });
                     config.onThinking?.(event.text);
-                    display.appendHtml(formatThinkingDisplay(event.text));
+                    display.appendStep(
+                        formatThinkingDisplay(event.text),
+                        "html",
+                    );
                     break;
 
                 case "text":
                     config.onText?.(event.text);
-                    display.appendMarkdown(event.text);
+                    display.appendStep(event.text, "markdown");
                     break;
 
                 case "tool_call":
@@ -211,17 +214,14 @@ export async function processReasoningSession(
                         event.args,
                     );
                     config.onToolCall?.(event.tool, event.args);
-                    display.appendInfo(
+                    display.appendStep(
                         formatToolCallDisplay(event.tool, event.args),
+                        "markdown",
                     );
                     break;
 
                 case "tool_result": {
-                    const isError =
-                        typeof event.result === "object" &&
-                        event.result !== null &&
-                        "isError" in event.result &&
-                        (event.result as { isError: boolean }).isError;
+                    const isError = event.isError;
                     const content =
                         typeof event.result === "string"
                             ? event.result
@@ -231,9 +231,9 @@ export async function processReasoningSession(
                         event.result,
                         isError,
                     );
-                    display.appendInfo(
+                    display.appendStep(
                         formatToolResultDisplay(content, isError),
-                        isError ? "warning" : "info",
+                        "markdown",
                     );
                     break;
                 }
@@ -275,4 +275,6 @@ export interface ReasoningDisplaySink {
     appendHtml(content: string): void;
     appendInfo(content: string, kind?: "info" | "warning"): void;
     appendTemporary(content: string): void;
+    /** Start a new display container/bubble for this content (used for inline reasoning steps). */
+    appendStep(content: string, type?: "markdown" | "html"): void;
 }

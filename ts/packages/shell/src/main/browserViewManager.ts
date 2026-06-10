@@ -7,6 +7,7 @@ import registerDebug from "debug";
 import { ShellWindow } from "./shellWindow.js";
 import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import { attachEditContextMenu } from "./contextMenu.js";
 import {
     detectNavigationType,
     getTabState,
@@ -388,6 +389,8 @@ export class BrowserViewManager {
         tabId: string,
     ): void {
         const webContents = webContentsView.webContents;
+
+        attachEditContextMenu(webContents);
 
         // If Google blocks sign-in, detect it and open in system browser.
         // Google shows "This browser or app may not be secure" — we detect

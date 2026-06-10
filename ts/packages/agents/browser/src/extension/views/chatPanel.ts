@@ -50,6 +50,33 @@ let bannerHideTimer: ReturnType<typeof setTimeout> | undefined;
 // RPC client for communicating with the service worker
 let rpc: ReturnType<typeof createChromeRpcClient>["rpc"];
 
+// Display-replay gate: queues live display events until history replay
+// completes so they render after history, not interleaved with it.
+// Initialized false so events arriving before the first loadSessionHistory
+// are queued; matches the Shell's pendingDisplayOps pattern.
+let replayDone = false;
+const pendingDisplayOps: Array<() => void> = [];
+
+function runOrDefer(op: () => void) {
+    if (replayDone) {
+        op();
+    } else {
+        pendingDisplayOps.push(op);
+    }
+}
+
+function flushPendingDisplayOps() {
+    replayDone = true;
+    const ops = pendingDisplayOps.splice(0);
+    for (const op of ops) {
+        try {
+            op();
+        } catch (e) {
+            console.error("pendingDisplayOps op threw:", e);
+        }
+    }
+}
+
 /**
  * Initialize the chat panel.
  */
@@ -111,155 +138,221 @@ function initialize() {
                 // No-op in extension
             },
             dispatcherSetDisplayInfo(data) {
-                chatPanel.setDisplayInfo(
-                    data.source,
-                    undefined,
-                    data.action,
-                    extractThreadId(data.requestId),
+                runOrDefer(() =>
+                    chatPanel.setDisplayInfo(
+                        data.source,
+                        undefined,
+                        data.action,
+                        extractThreadId(data.requestId),
+                    ),
                 );
             },
             dispatcherSetDisplay(data) {
-                const msg = data.message;
-                const tid = extractThreadId(msg.requestId);
-                if (msg.kind === "toast") {
-                    chatPanel.showToast(
+                runOrDefer(() => {
+                    const msg = data.message;
+                    const tid = extractThreadId(msg.requestId);
+                    if (msg.kind === "toast") {
+                        chatPanel.showToast(
+                            msg.message as DisplayContent,
+                            msg.source,
+                            msg.sourceIcon,
+                        );
+                        return;
+                    }
+                    if (msg.kind === "inline") {
+                        chatPanel.showInline(
+                            msg.message as DisplayContent,
+                            msg.source,
+                        );
+                        return;
+                    }
+                    chatPanel.replaceAgentMessage(
                         msg.message as DisplayContent,
                         msg.source,
                         msg.sourceIcon,
+                        tid,
                     );
-                    return;
-                }
-                if (msg.kind === "inline") {
-                    chatPanel.showInline(
-                        msg.message as DisplayContent,
-                        msg.source,
-                    );
-                    return;
-                }
-                chatPanel.replaceAgentMessage(
-                    msg.message as DisplayContent,
-                    msg.source,
-                    msg.sourceIcon,
-                    tid,
-                );
+                });
             },
             dispatcherAppendDisplay(data) {
-                const msg = data.message;
-                const tid = extractThreadId(msg.requestId);
-                if (msg.kind === "toast") {
-                    chatPanel.showToast(
+                runOrDefer(() => {
+                    const msg = data.message;
+                    const tid = extractThreadId(msg.requestId);
+                    if (msg.kind === "toast") {
+                        chatPanel.showToast(
+                            msg.message as DisplayContent,
+                            msg.source,
+                            msg.sourceIcon,
+                        );
+                        return;
+                    }
+                    if (msg.kind === "inline") {
+                        chatPanel.showInline(
+                            msg.message as DisplayContent,
+                            msg.source,
+                        );
+                        return;
+                    }
+                    chatPanel.addAgentMessage(
                         msg.message as DisplayContent,
                         msg.source,
                         msg.sourceIcon,
+                        data.mode as DisplayAppendMode,
+                        tid,
                     );
-                    return;
-                }
-                if (msg.kind === "inline") {
-                    chatPanel.showInline(
-                        msg.message as DisplayContent,
-                        msg.source,
-                    );
-                    return;
-                }
-                chatPanel.addAgentMessage(
-                    msg.message as DisplayContent,
-                    msg.source,
-                    msg.sourceIcon,
-                    data.mode as DisplayAppendMode,
-                    tid,
-                );
+                });
             },
             dispatcherSetDynamicDisplay(data) {
-                chatPanel.setDynamicDisplay(
-                    data.source,
-                    data.displayId,
-                    data.nextRefreshMs,
+                runOrDefer(() =>
+                    chatPanel.setDynamicDisplay(
+                        data.source,
+                        data.displayId,
+                        data.nextRefreshMs,
+                    ),
                 );
             },
             dispatcherNotify(data) {
-                switch (data.event) {
-                    case "explained":
-                        if (data.data?.error) {
+                runOrDefer(() => {
+                    switch (data.event) {
+                        case "explained":
+                            if (data.data?.error) {
+                                chatPanel.addAgentMessage(
+                                    {
+                                        type: "text",
+                                        content: data.data.error,
+                                        kind: "warning",
+                                    },
+                                    data.source,
+                                );
+                            }
+                            break;
+                        case "error":
                             chatPanel.addAgentMessage(
                                 {
                                     type: "text",
-                                    content: data.data.error,
+                                    content:
+                                        typeof data.data === "string"
+                                            ? data.data
+                                            : (data.data?.message ?? "Error"),
+                                    kind: "error",
+                                },
+                                data.source,
+                            );
+                            break;
+                        case "warning":
+                            chatPanel.addAgentMessage(
+                                {
+                                    type: "text",
+                                    content:
+                                        typeof data.data === "string"
+                                            ? data.data
+                                            : (data.data?.message ?? "Warning"),
                                     kind: "warning",
                                 },
                                 data.source,
                             );
+                            break;
+                        case "inline": {
+                            const content: DisplayContent =
+                                typeof data.data === "string"
+                                    ? {
+                                          type: "text",
+                                          content: data.data,
+                                          kind: "info",
+                                      }
+                                    : (data.data as DisplayContent);
+                            chatPanel.showInline(content, data.source);
+                            break;
                         }
-                        break;
-                    case "error":
-                        chatPanel.addAgentMessage(
-                            {
-                                type: "text",
-                                content:
-                                    typeof data.data === "string"
-                                        ? data.data
-                                        : (data.data?.message ?? "Error"),
-                                kind: "error",
-                            },
-                            data.source,
-                        );
-                        break;
-                    case "warning":
-                        chatPanel.addAgentMessage(
-                            {
-                                type: "text",
-                                content:
-                                    typeof data.data === "string"
-                                        ? data.data
-                                        : (data.data?.message ?? "Warning"),
-                                kind: "warning",
-                            },
-                            data.source,
-                        );
-                        break;
-                    case "inline": {
-                        const content: DisplayContent =
-                            typeof data.data === "string"
-                                ? {
-                                      type: "text",
-                                      content: data.data,
-                                      kind: "info",
-                                  }
-                                : (data.data as DisplayContent);
-                        chatPanel.showInline(content, data.source);
-                        break;
+                        case "toast": {
+                            const content: DisplayContent =
+                                typeof data.data === "string"
+                                    ? {
+                                          type: "text",
+                                          content: data.data,
+                                          kind: "info",
+                                      }
+                                    : (data.data as DisplayContent);
+                            chatPanel.showToast(content, data.source);
+                            break;
+                        }
+                        case "info":
+                            chatPanel.addAgentMessage(
+                                typeof data.data === "string"
+                                    ? {
+                                          type: "text",
+                                          content: data.data,
+                                          kind: "info",
+                                      }
+                                    : (data.data as DisplayContent),
+                                data.source,
+                            );
+                            break;
                     }
-                    case "toast": {
-                        const content: DisplayContent =
-                            typeof data.data === "string"
-                                ? {
-                                      type: "text",
-                                      content: data.data,
-                                      kind: "info",
-                                  }
-                                : (data.data as DisplayContent);
-                        chatPanel.showToast(content, data.source);
-                        break;
-                    }
-                    case "info":
-                        chatPanel.addAgentMessage(
-                            typeof data.data === "string"
-                                ? {
-                                      type: "text",
-                                      content: data.data,
-                                      kind: "info",
-                                  }
-                                : (data.data as DisplayContent),
-                            data.source,
-                        );
-                        break;
-                }
+                });
             },
-            dispatcherTakeAction(_data) {
-                // Not supported in extension chat panel
+            dispatcherTakeAction(data) {
+                // Forward `manage-conversation` (from @conversation slash
+                // commands or NL agent) to the service worker for handling.
+                if (data && data.action === "manage-conversation") {
+                    (
+                        rpc.invoke(
+                            "chatPanelManageConversation",
+                            data.data,
+                        ) as Promise<{
+                            kind: "ok" | "error";
+                            html: string;
+                            switched?: boolean;
+                        }>
+                    ).then(
+                        (res) => {
+                            const renderResult = () =>
+                                chatPanel.showInline(
+                                    {
+                                        type: "html",
+                                        content: res.html,
+                                        kind:
+                                            res.kind === "error"
+                                                ? "warning"
+                                                : "info",
+                                    },
+                                    "conversation",
+                                );
+                            if (res.switched) {
+                                chatPanel.clear();
+                                // Replay history then render confirmation
+                                // so it lands below any prior log.
+                                void loadSessionHistory().then(renderResult);
+                            } else {
+                                renderResult();
+                            }
+                        },
+                        (e: any) => {
+                            chatPanel.showInline(
+                                {
+                                    type: "text",
+                                    content: `Conversation command failed: ${e?.message ?? String(e)}`,
+                                    kind: "error",
+                                },
+                                "conversation",
+                            );
+                        },
+                    );
+                    return;
+                }
             },
             dispatcherConnectionStatus(data) {
                 setConnectionStatus(data.connected);
             },
+            // ---- Queue lifecycle (forwarded from the service worker) ----
+            // Chat panel does not render queue chips yet; these handlers
+            // exist so the typed RPC contract is satisfied and so the
+            // panel can opt into chip UX later without touching the
+            // service worker.
+            dispatcherRequestQueued(_data) {},
+            dispatcherRequestStarted(_data) {},
+            dispatcherRequestCancelled(_data) {},
+            dispatcherQueueStateChanged(_data) {},
             injectCommand(data) {
                 chatPanel.injectCommand(data.command);
             },
@@ -523,9 +616,14 @@ function handleUserMessage(
         }
     }
 
-    chatPanel.setEnabled(false);
-    chatPanel.showStatus("Processing...");
-
+    // Don't disable the input here — the chat panel's send() already
+    // swapped the send button for the stop button via setProcessing(),
+    // and we want the user to be able to queue another command while
+    // this one is in flight. The dispatcher will queue concurrent
+    // requests server-side. We just need to be sure that when the
+    // request completes we only flip back to the send button if THIS
+    // request is still the most recent in-flight one (otherwise a
+    // newer submission's stop button would disappear prematurely).
     rpc.invoke("chatPanelProcessCommand", {
         command: text,
         clientRequestId: requestId,
@@ -546,8 +644,9 @@ function handleUserMessage(
             // Add contextual follow-up buttons based on the command
             addContextualFollowUps(text);
 
-            chatPanel.setEnabled(true);
-            chatPanel.focus();
+            if (chatPanel.getActiveRequestId() === requestId) {
+                chatPanel.setIdle();
+            }
         })
         .catch((err: any) => {
             chatPanel.addAgentMessage(
@@ -558,8 +657,9 @@ function handleUserMessage(
                 },
                 "system",
             );
-            chatPanel.setEnabled(true);
-            chatPanel.focus();
+            if (chatPanel.getActiveRequestId() === requestId) {
+                chatPanel.setIdle();
+            }
         });
 }
 
@@ -657,19 +757,26 @@ function attemptConnect() {
             if (response?.connected) {
                 setConnectionStatus(true);
                 if (!historyLoaded) {
-                    historyLoaded = true;
                     await loadSessionHistory();
+                    historyLoaded = true;
+                } else {
+                    // Already loaded earlier; flush any events queued
+                    // since reconnect so they don't stay stuck.
+                    flushPendingDisplayOps();
                 }
             } else {
                 setConnectionStatus(false);
+                flushPendingDisplayOps();
             }
         })
         .catch(() => {
             setConnectionStatus(false);
+            flushPendingDisplayOps();
         });
 }
 
 async function loadSessionHistory() {
+    replayDone = false;
     try {
         const entries: any[] = (await rpc.invoke("chatPanelGetHistory")) as any;
         if (!entries || entries.length === 0) return;
@@ -699,6 +806,8 @@ async function loadSessionHistory() {
         chatPanel.resetHistoryAgent();
     } catch {
         // History loading is best-effort
+    } finally {
+        flushPendingDisplayOps();
     }
 }
 

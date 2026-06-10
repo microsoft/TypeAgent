@@ -436,6 +436,7 @@ Usage: `@config collision <point> detect on`, `@config collision <point> detect 
 Usage: `@config collision <point> strategy <name>`
 
 Allowed names depend on the point:
+
 - `static`: `warn`, `error`
 - `grammarMatch` / `llmSelect` / `fuzzy`: `first-match`, `score-rank`, `priority`, `user-clarify`
 
@@ -502,8 +503,7 @@ Usage: `@const load [<file>]`
 
 ### Arguments:
 
-- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
-
+- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)
 
 ## @const save - Save construction store to disk
 
@@ -511,8 +511,7 @@ Usage: `@const save [<file>]`
 
 ### Arguments:
 
-- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
-
+- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)
 
 ## @const auto on - Turn on construction auto save
 
@@ -541,8 +540,7 @@ Usage: `@const list [--id <number>] [-p|--part <string>] [-m|--match <string>] [
 - --builtin -b : List the construction in the built-in cache (default: false)
 - --match -m &lt;string&gt; : Filter to constructions that has the string in the match set
 - --part -p &lt;string&gt; : Filter to constructions that has the string match in the part name
-- --id &lt;number&gt; : Construction id to list  
-
+- --id &lt;number&gt; : Construction id to list
 
 ## @const import - Import constructions from test data
 
@@ -550,13 +548,11 @@ Usage: `@const import [-t|--extended] [<file>...]`
 
 ### Arguments:
 
-- &lt;file&gt; - (optional) Path to the construction file to import from. Load host specified test files if not specified. (type: string)  
-
+- &lt;file&gt; - (optional) Path to the construction file to import from. Load host specified test files if not specified. (type: string)
 
 ### Flags:
 
-- --extended -t : Load host specified extended test files if no file argument is specified (default: false)  
-
+- --extended -t : Load host specified extended test files if no file argument is specified (default: false)
 
 ## @const prune - Prune out of date construction from the cache
 
@@ -647,6 +643,31 @@ Usage: `@conversation delete <name>`
 ## @debug - Start node inspector
 
 Usage: `@debug`
+
+## @dispatcher reason - Reason about a request
+
+Usage: `@dispatcher reason [--engine <engine>] <request>`
+
+### Arguments:
+
+- &lt;request&gt; - Request to reason about (type: string)
+
+### Flags:
+
+- --engine &lt;engine&gt; : Reasoning engine to use: claude, copilot, or none. If omitted, uses the configured default from `@config execution reasoning`.
+
+## @dispatcher reasoning - Reason about a request
+
+Usage: `@dispatcher reasoning [--engine <engine>] <request>`  
+Alias for `@dispatcher reason`. See above.
+
+## @display - Send text to display
+
+Usage: `@display [--inline] [--type <string>] [--speak] <text>...`
+
+### Arguments:
+
+- &lt;text&gt; - text to display (type: string)
 
 ## @dispatcher request - Translate and explain a request
 
@@ -767,48 +788,68 @@ The `--json <path>` flag writes a `CollisionScanResult` to disk for offline post
 This is the proactive companion to runtime collision detection — see [Action Collision Detection](../../../ts/packages/dispatcher/dispatcher/README.md#action-collision-detection) in the dispatcher README.
 
 ## @feedback list - List recent user-feedback entries (most recent first)
+
 Usage: `@feedback list [--limit <number>] [--all]`
+
 ### Flags:
-  - --limit &lt;number&gt; : Maximum number of entries to show (default: 20)
-  - --all : Include every entry; otherwise only the latest rating per request is shown (default: false)
+
+- --limit &lt;number&gt; : Maximum number of entries to show (default: 20)
+- --all : Include every entry; otherwise only the latest rating per request is shown (default: false)
 
 ## @feedback top - Aggregate user feedback — counts by rating and category
+
 Usage: `@feedback top [--limit <number>]`
+
 ### Flags:
-  - --limit &lt;number&gt; : Top-N depth for the per-category breakdown (default: 10)
+
+- --limit &lt;number&gt; : Top-N depth for the per-category breakdown (default: 10)
 
 ## @feedback filter - Filter feedback by rating, category, and/or date range
+
 Usage: `@feedback filter [--rating <string>] [--category <string>] [--since <string>] [--until <string>] [--limit <number>] [--all]`
+
 ### Flags:
-  - --rating &lt;string&gt; : up | down | cleared
-  - --category &lt;string&gt; : wrong-agent | didnt-understand | bad-response | other
-  - --since &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/after this date
-  - --until &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/before this date
-  - --limit &lt;number&gt; : Maximum number of entries to show (default: 50)
-  - --all : Include every entry; otherwise only the latest rating per request (default: false)
+
+- --rating &lt;string&gt; : up | down | cleared
+- --category &lt;string&gt; : wrong-agent | didnt-understand | bad-response | other
+- --since &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/after this date
+- --until &lt;string&gt; : ISO date (YYYY-MM-DD) — entries on/before this date
+- --limit &lt;number&gt; : Maximum number of entries to show (default: 50)
+- --all : Include every entry; otherwise only the latest rating per request (default: false)
 
 ## @feedback export - Export user-feedback entries to a local file (JSON or JSONL)
+
 Usage: `@feedback export <file> [--format <string>] [--all]`
+
 ### Arguments:
-  - &lt;file&gt; - Destination path. Extension picks the format if `--format` is omitted: `.jsonl` → JSONL, anything else → JSON. (type: string)
+
+- &lt;file&gt; - Destination path. Extension picks the format if `--format` is omitted: `.jsonl` → JSONL, anything else → JSON. (type: string)
+
 ### Flags:
-  - --format &lt;string&gt; : `json` | `jsonl` (overrides the path extension)
-  - --all : Include every entry; otherwise only the latest rating per request (default: false)
+
+- --format &lt;string&gt; : `json` | `jsonl` (overrides the path extension)
+- --all : Include every entry; otherwise only the latest rating per request (default: false)
 
 ## @feedback count - Show the total number of feedback entries
+
 Usage: `@feedback count`
 
-## @history list - List history  
-Usage: `@history list`  
-   
-## @history clear - Clear the history  
-Usage: `@history clear`  
-   
-## @history delete - Delete a specific message from the chat history  
-Usage: `@history delete <index>`  
-### Arguments:  
-  - &lt;index&gt; - Chat history index to delete. (type: number)  
-   
+## @history list - List history
+
+Usage: `@history list`
+
+## @history clear - Clear the history
+
+Usage: `@history clear`
+
+## @history delete - Delete a specific message from the chat history
+
+Usage: `@history delete <index>`
+
+### Arguments:
+
+- &lt;index&gt; - Chat history index to delete. (type: number)
+
 ## @history entities list - Shows all of the entities currently in 'working memory.'
 
 Usage: `@history entities list`
@@ -826,8 +867,7 @@ Usage: `@history insert <messages>`
 
 ### Arguments:
 
-- &lt;messages&gt; - Chat history messages to insert (type: json)  
-
+- &lt;messages&gt; - Chat history messages to insert (type: json)
 
 ## @trace - Enable or disable trace namespaces
 
@@ -835,13 +875,11 @@ Usage: `@trace [-*|--clear] [<namespaces>...]`
 
 ### Arguments:
 
-- &lt;namespaces&gt; - (optional) Namespaces to enable (type: string)  
-
+- &lt;namespaces&gt; - (optional) Namespaces to enable (type: string)
 
 ### Flags:
 
-- --clear -\* : Clear all trace namespaces (default: false)  
-
+- --clear -\* : Clear all trace namespaces (default: false)
 
 ## @help - Show help
 
@@ -849,13 +887,11 @@ Usage: `@help [-a|--all] [<command>]`
 
 ### Arguments:
 
-- &lt;command&gt; - (optional) command to get help for (type: string)  
-
+- &lt;command&gt; - (optional) command to get help for (type: string)
 
 ### Flags:
 
-- --all -a : shows all commands (default: false)  
-
+- --all -a : shows all commands (default: false)
 
 ## @random online - Uses the LLM to generate random requests.
 
@@ -1055,33 +1091,44 @@ Usage: `@shell run interactive`
 
 Usage: `@shell break`
 
-## @shell topmost - Always keep the shell window on top of other windows  
-Usage: `@shell topmost`  
-  
-## @shell open - Show a new Web Content view  
-Usage: `@shell open <site>`  
-### Arguments:  
-  - &lt;site&gt; - Alias or URL for the site of the open. (type: string)  
-  
-## @shell close - Close the new Web Content view  
-Usage: `@shell close`  
-  
-## @shell localWhisper off - Turn off Local Whisper integration  
-Usage: `@shell localWhisper off`  
-  
-## @shell localWhisper on - Turn on Local Whisper integration.  
-Usage: `@shell localWhisper on`  
-  
-## @shell theme light - Set the theme to light  
-Usage: `@shell theme light`  
-  
-## @shell theme dark - Set the theme to dark  
-Usage: `@shell theme dark`  
+## @shell topmost - Always keep the shell window on top of other windows
+
+Usage: `@shell topmost`
+
+## @shell open - Show a new Web Content view
+
+Usage: `@shell open <site>`
+
+### Arguments:
+
+- &lt;site&gt; - Alias or URL for the site of the open. (type: string)
+
+## @shell close - Close the new Web Content view
+
+Usage: `@shell close`
+
+## @shell localWhisper off - Turn off Local Whisper integration
+
+Usage: `@shell localWhisper off`
+
+## @shell localWhisper on - Turn on Local Whisper integration.
+
+Usage: `@shell localWhisper on`
+
+## @shell theme light - Set the theme to light
+
+Usage: `@shell theme light`
+
+## @shell theme dark - Set the theme to dark
+
+Usage: `@shell theme dark`
 
 ## @shell trash restore - Restore agent messages from the trash (un-hide everything that was sent to the bin via the trash icon)
+
 Usage: `@shell trash restore`
 
 ## @shell trash flush - Permanently delete every message currently in the trash. They stay hidden and can no longer be restored
+
 Usage: `@shell trash flush`
 
 ## @uninstall - Uninstall an agent

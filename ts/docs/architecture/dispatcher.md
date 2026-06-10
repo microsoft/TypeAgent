@@ -107,12 +107,20 @@ hosts (shell, CLI, web).
 
 ```typescript
 interface Dispatcher {
-  processCommand(
+  submitCommand(
     command,
-    clientRequestId?,
     attachments?,
     options?,
-  ): Promise<CommandResult | undefined>;
+    clientRequestId?,
+    requestId?,
+  ): Promise<SubmitResult>;
+  interrupt(
+    command,
+    attachments?,
+    options?,
+    clientRequestId?,
+    requestId?,
+  ): Promise<SubmitResult>;
   getCommandCompletion(prefix, direction): Promise<CommandCompletionResult>;
   checkCache(request): Promise<CommandResult | undefined>;
   getDynamicDisplay(appAgentName, type, displayId): Promise<DynamicDisplay>;
@@ -124,6 +132,19 @@ interface Dispatcher {
   close(): Promise<void>;
 }
 ```
+
+`submitCommand` is the unified entry point for both ack-on-enqueue and
+await-completion callers. On success it returns `{ok:true, entry}` where
+`entry` is the queued request descriptor (a `SubmittedRequest`) with a
+`completion: Promise<CommandResult | undefined>` attached. Hosts that
+want to block on the result `await r.entry.completion` after checking
+`r.ok`; hosts that just want a queue ack ignore `r.entry.completion`.
+The `awaitCommand(dispatcher, …)` utility in
+`@typeagent/dispatcher-types` wraps this into a one-liner that returns
+`Promise<CommandResult | undefined>` and throws on submit failure for
+callers that want the classic shape. See
+[`messageQueueing.md`](./messageQueueing.md) §14.1 for the unification
+history and the wire/in-process split.
 
 ### `CommandHandlerContext`
 
@@ -160,14 +181,19 @@ web clients. Handles:
 
 ## Command processing pipeline
 
-Every user interaction enters through `processCommand()`, which acquires
-a command lock (ensuring serial execution), sets up request tracking, and
-delegates to the resolution → translation → execution pipeline.
+Every user interaction enters through `submitCommand()`. The request is
+enqueued on the per-conversation `RequestQueue`; when its turn arrives
+the drain loop invokes the in-dispatcher `processCommand` pipeline body
+(see [`messageQueueing.md`](./messageQueueing.md) §3 for the queue
+diagram). The pipeline body acquires the command lock (kept as
+defense-in-depth — the queue already serializes), sets up request
+tracking, and delegates to the resolution → translation → execution
+pipeline.
 
 ### 1. Command resolution
 
 ```
-processCommand(input)
+submitCommand(input) ──► RequestQueue ──► drain loop ──► processCommand pipeline
      │
      ▼
 normalizeCommand(input)          # Add "@" prefix if missing
@@ -667,36 +693,37 @@ The dispatcher registers two built-in agents via `inlineAgentProvider`:
 Handles `@`-prefixed system commands. The full set is registered in
 `systemHandlers` ([systemAgent.ts](../../packages/dispatcher/dispatcher/src/context/system/systemAgent.ts)):
 
-| Command         | Purpose                                                                                                                                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@action`       | Direct invocation of a typed action (bypasses NL translation).                                                                                                                                               |
-| `@clear`        | Clear the display.                                                                                                                                                                                           |
-| `@config`       | Session configuration — models, caching, agents, schema toggles, collision detection.                                                                                                                        |
-| `@const`        | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                            |
-| `@conversation` | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                   |
-| `@debug`        | Wait-for-debugger and other developer hooks.                                                                                                                                                                 |
-| `@display`      | Tweak how output is rendered.                                                                                                                                                                                |
-| `@env`          | Inspect environment variables and config-relevant runtime values.                                                                                                                                            |
-| `@exit`         | Exit the program.                                                                                                                                                                                            |
-| `@explain`      | Explanation of cached translations                                                                                                                                                                           |
-| `@feedback`     | Inspect and export user-feedback entries                                                                                                                                                                     |
-| `@grammar`      | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses). |
-| `@help`         | Inline help for any command.                                                                                                                                                                                 |
-| `@history`      | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                                                                                 |
-| `@index`        | Image / memory indexing controls.                                                                                                                                                                            |
-| `@install`      | Install an external app agent.                                                                                                                                                                               |
-| `@memory`       | Conversation-memory operations (RAG store maintenance).                                                                                                                                                      |
-| `@notify`       | Notification stream control.                                                                                                                                                                                 |
-| `@open`         | Open a file or folder via the host.                                                                                                                                                                          |
-| `@ports`        | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.                                                              |
-| `@random`       | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                                                                               |
-| `@run`          | Execute a script of dispatcher commands in sequence.                                                                                                                                                         |
-| `@session`      | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                                                                                           |
-| `@settings`     | User-level settings (theme, etc.).                                                                                                                                                                           |
-| `@shutdown`     | Shut down the agent server and exit.                                                                                                                                                                         |
-| `@token`        | Token-counter inspection.                                                                                                                                                                                    |
-| `@trace`        | Add a `debug` trace pattern.                                                                                                                                                                                 |
-| `@uninstall`    | Uninstall an external app agent.                                                                                                                                                                             |
+| Command                  | Purpose                                                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@action`                | Direct invocation of a typed action (bypasses NL translation).                                                                                                                                               |
+| `@clear`                 | Clear the display.                                                                                                                                                                                           |
+| `@config`                | Session configuration — models, caching, agents, schema toggles, collision detection.                                                                                                                        |
+| `@const`                 | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                            |
+| `@conversation`          | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                   |
+| `@debug`                 | Wait-for-debugger and other developer hooks.                                                                                                                                                                 |
+| `@display`               | Tweak how output is rendered.                                                                                                                                                                                |
+| `@env`                   | Inspect environment variables and config-relevant runtime values.                                                                                                                                            |
+| `@exit`                  | Exit the program.                                                                                                                                                                                            |
+| `@explain`               | Explanation of cached translations                                                                                                                                                                           |
+| `@feedback`              | Inspect and export user-feedback entries                                                                                                                                                                     |
+| `@grammar`               | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses). |
+| `@help`                  | Inline help for any command.                                                                                                                                                                                 |
+| `@history`               | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                                                                                 |
+| `@index`                 | Image / memory indexing controls.                                                                                                                                                                            |
+| `@install`               | Install an external app agent.                                                                                                                                                                               |
+| `@memory`                | Conversation-memory operations (RAG store maintenance).                                                                                                                                                      |
+| `@notify`                | Notification stream control.                                                                                                                                                                                 |
+| `@open`                  | Open a file or folder via the host.                                                                                                                                                                          |
+| `@ports`                 | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.                                                              |
+| `@random`                | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                                                                               |
+| `@reason` / `@reasoning` | Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override.                                                                                                                         |
+| `@run`                   | Execute a script of dispatcher commands in sequence.                                                                                                                                                         |
+| `@session`               | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                                                                                           |
+| `@settings`              | User-level settings (theme, etc.).                                                                                                                                                                           |
+| `@shutdown`              | Shut down the agent server and exit.                                                                                                                                                                         |
+| `@token`                 | Token-counter inspection.                                                                                                                                                                                    |
+| `@trace`                 | Add a `debug` trace pattern.                                                                                                                                                                                 |
+| `@uninstall`             | Uninstall an external app agent.                                                                                                                                                                             |
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.
@@ -803,7 +830,7 @@ the dispatcher in a separate process):
 ┌──────────────┐         RPC Channel          ┌───────────────────┐
 │  Shell/CLI   │ ◄━━━━━━━━━━━━━━━━━━━━━━━━━►  │  Dispatcher       │
 │              │                              │                   │
-│  Dispatcher  │  processCommand ──────────►  │  DispatcherServer │
+│  Dispatcher  │  submitCommand  ──────────►  │  DispatcherServer │
 │  Client      │  getCompletion  ──────────►  │                   │
 │              │                              │                   │
 │  ClientIO    │  ◄──────────── appendDisplay │  ClientIO Client  │
@@ -814,8 +841,13 @@ the dispatcher in a separate process):
 Two RPC pairs are involved:
 
 1. **Dispatcher RPC** — The shell calls dispatcher methods
-   (`processCommand`, `getCommandCompletion`, etc.) via
-   `DispatcherClient` → `DispatcherServer`.
+   (`submitCommand`, `getCommandCompletion`, etc.) via
+   `DispatcherClient` → `DispatcherServer`. The `submitCommand` wire
+   payload omits the `completion` promise (promises can't be
+   serialized); the RPC client synthesizes a fresh `completion`
+   wired to the host's `commandComplete` / `requestCancelled` push
+   events before handing the result to the caller — see
+   [`messageQueueing.md`](./messageQueueing.md) §14.1.
 2. **ClientIO RPC** — The dispatcher calls display methods
    (`appendDisplay`, `proposeAction`, etc.) via
    `ClientIOClient` → `ClientIOServer`.
@@ -831,8 +863,10 @@ A complete request lifecycle, from keystroke to result:
 
 ```
 1. User types "play Yesterday by the Beatles"
-2. Shell calls dispatcher.processCommand("play Yesterday by the Beatles")
-3. processCommand() acquires commandLock, creates AbortController
+2. Shell calls dispatcher.submitCommand("play Yesterday by the Beatles")
+3. submit returns {ok:true, entry} where entry is a SubmittedRequest carrying
+   entry.completion; queue drain dispatches the entry,
+   processCommand pipeline acquires commandLock, creates AbortController
 4. normalizeCommand() → "@dispatcher play Yesterday by the Beatles"
 5. resolveCommand() → no matching command → natural language request
 6. interpretRequest() entered
@@ -879,7 +913,7 @@ The dispatcher uses structured error handling at several levels:
   - `cancelCommand(requestId)` — cancel by the server-assigned UUID, available
     after `setUserRequest()` fires. Used by Escape/Ctrl+C once a request is running.
   - `cancelCommandByClientId(clientRequestId)` — cancel by the client-assigned
-    id passed as the second argument to `processCommand()`. This AbortController
+    id passed as the fourth argument to `submitCommand()`. This AbortController
     is created before the command lock is acquired, so it can abort a command
     that is queued behind another in-flight command before `setUserRequest()` fires.
 - **Unknown actions** — When no agent matches, the dispatcher displays

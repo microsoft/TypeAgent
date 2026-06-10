@@ -12,6 +12,8 @@ import { screenshotCoordinator } from "./screenshotCoordinator";
 import {
     connectToDispatcher,
     isDispatcherConnected,
+    manageConversation,
+    awaitConversationOps,
 } from "./dispatcherConnection";
 import {
     startRecording,
@@ -43,6 +45,7 @@ import {
     indexPageContent,
     shouldIndexPage,
 } from "./messageHandlers";
+import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { AllServiceWorkerInvokeFunctions } from "../../common/serviceTypes.mjs";
 
 /**
@@ -224,11 +227,17 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async chatPanelProcessCommand(params: any) {
             try {
+                // Wait for any in-flight conversation switch to finish so the
+                // prompt is routed to the new dispatcher, not an old one
+                // whose channel is about to be torn down.
+                await awaitConversationOps();
                 const dispatcher = await connectToDispatcher();
-                const result = await dispatcher.processCommand(
+                const result = await awaitCommand(
+                    dispatcher,
                     params.command,
-                    params.clientRequestId,
                     params.attachments,
+                    undefined,
+                    params.clientRequestId,
                 );
                 return { success: true, result };
             } catch (error: any) {
@@ -238,6 +247,11 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 );
                 return { error: error?.message || "Command failed" };
             }
+        },
+
+        async chatPanelManageConversation(params: any) {
+            await connectToDispatcher();
+            return manageConversation(params);
         },
 
         async chatPanelGetCompletions(params: any) {

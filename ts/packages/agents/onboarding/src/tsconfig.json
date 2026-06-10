@@ -6,6 +6,8 @@
     "outDir": "../dist"
   },
   "include": ["./**/*"],
+  "exclude": ["./scaffolder/templates/**/*"],
+  "references": [{ "path": "./scaffolder/templates" }],
   "ts-node": {
     "esm": true
   }

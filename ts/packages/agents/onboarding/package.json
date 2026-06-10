@@ -54,12 +54,15 @@
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.10",
     "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
-    "typescript": "~5.4.5"
+    "typescript": "~5.4.5",
+    "ws": "^8.21.0"
   },
   "engines": {
     "node": ">=22"
