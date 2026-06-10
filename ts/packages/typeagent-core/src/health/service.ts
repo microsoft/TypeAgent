@@ -97,10 +97,15 @@ export async function discoverAgentFiles(
     } else {
         // Permissive filename match — the rule that consumes these files
         // (`handler.exports.instantiate`) inspects file contents, so
-        // over-matching is harmless.
-        handlerFiles = all.filter((f) =>
-            /handler[^/\\]*\.m?ts$/i.test(path.basename(f)),
-        );
+        // over-matching is harmless. Uses plain string checks rather than a
+        // regex to avoid backtracking on adversarial file names.
+        handlerFiles = all.filter((f) => {
+            const base = path.basename(f).toLowerCase();
+            return (
+                base.includes("handler") &&
+                (base.endsWith(".ts") || base.endsWith(".mts"))
+            );
+        });
     }
 
     return {
