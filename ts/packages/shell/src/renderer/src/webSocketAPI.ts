@@ -104,6 +104,9 @@ export const webapi: ClientAPI = {
     conversationGetCurrent: async () => {
         return undefined;
     },
+    conversationManageAction: async () => {
+        throw new Error("Conversation management not supported on mobile");
+    },
 };
 
 const dispatcherChannel = createChannelAdapter((message: any) =>

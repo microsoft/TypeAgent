@@ -359,6 +359,174 @@ describe("manageDelete", () => {
         expect(result.kind).toBe("cancelled");
         expect(conn.state).toHaveLength(2);
     });
+
+    test("returns error when confirmDestructive throws (not cancelled)", async () => {
+        // A failing prompt is infrastructure failure, not user decline —
+        // it must surface as an error, never silently look like 'No'.
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const result = await manageDelete(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                confirmDestructive: async () => {
+                    throw new Error("prompt RPC failed");
+                },
+            }),
+            "B",
+        );
+        expect(result.kind).toBe("error");
+        if (result.kind === "error") {
+            expect(result.message).toMatch(/Confirmation prompt failed/);
+        }
+        // Conversation must not have been deleted.
+        expect(conn.state).toHaveLength(2);
+    });
+
+    test("idempotent on peer-already-deleted (Conversation not found)", async () => {
+        // Server raced our delete; the user wanted it gone and it is.
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+            intercept: {
+                deleteConversation: () => {
+                    throw new Error("Conversation not found: b");
+                },
+            },
+        });
+        const result = await manageDelete(
+            conn,
+            ctx({ currentConversationId: "a" }),
+            "B",
+        );
+        expect(result.kind).toBe("ok");
+    });
+
+    test("real server errors still surface as error", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+            intercept: {
+                deleteConversation: () => {
+                    throw new Error("permission denied");
+                },
+            },
+        });
+        const result = await manageDelete(
+            conn,
+            ctx({ currentConversationId: "a" }),
+            "B",
+        );
+        expect(result.kind).toBe("error");
+    });
+});
+
+describe("manageRename — onCurrentConversationUpdated hook", () => {
+    test("fires when renaming the current conversation", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Old")] });
+        const onCurrentConversationUpdated = jest.fn<(c: any) => void>();
+        const result = await manageRename(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                currentConversationName: "Old",
+                onCurrentConversationUpdated,
+            }),
+            undefined,
+            "New",
+        );
+        expect(result.kind).toBe("ok");
+        expect(onCurrentConversationUpdated).toHaveBeenCalledTimes(1);
+        const updated = onCurrentConversationUpdated.mock.calls[0][0] as any;
+        expect(updated.conversationId).toBe("a");
+        expect(updated.name).toBe("New");
+    });
+
+    test("does NOT fire when renaming a different conversation", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const onCurrentConversationUpdated = jest.fn<(c: any) => void>();
+        await manageRename(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                currentConversationName: "A",
+                onCurrentConversationUpdated,
+            }),
+            "B",
+            "C",
+        );
+        expect(onCurrentConversationUpdated).not.toHaveBeenCalled();
+    });
+
+    test("throwing hook does not fail the rename", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Old")] });
+        const result = await manageRename(
+            conn,
+            ctx({
+                currentConversationId: "a",
+                currentConversationName: "Old",
+                onCurrentConversationUpdated: () => {
+                    throw new Error("ui exploded");
+                },
+            }),
+            undefined,
+            "New",
+        );
+        expect(result.kind).toBe("ok");
+    });
+});
+
+describe("performSwitch — onAfterSwitched hook ordering", () => {
+    test("fires after the old conversation is left", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const calls: string[] = [];
+        const onSwitched = jest.fn<(c: any) => void>(() => {
+            calls.push("onSwitched");
+        });
+        const onAfterSwitched = jest.fn<(c: any, err: unknown) => void>(() => {
+            calls.push("onAfterSwitched");
+        });
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: "a",
+                currentConversationName: "A",
+                onSwitched,
+                onAfterSwitched,
+            }),
+            "B",
+        );
+        expect(result.kind).toBe("ok");
+        // Order: onSwitched (pre-leave rebind) → leave → onAfterSwitched.
+        expect(calls).toEqual(["onSwitched", "onAfterSwitched"]);
+        // Verify the leave happened between the two hooks.
+        const leaveIdx = conn.calls.findIndex(
+            (c) => c.method === "leaveConversation",
+        );
+        expect(leaveIdx).toBeGreaterThan(-1);
+    });
+
+    test("a throwing onAfterSwitched still returns ok", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "A"), makeInfo("b", "B")],
+        });
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: "a",
+                onAfterSwitched: () => {
+                    throw new Error("replay failed");
+                },
+            }),
+            "B",
+        );
+        expect(result.kind).toBe("ok");
+    });
 });
 
 describe("manageConversation (top-level dispatcher)", () => {
@@ -688,5 +856,105 @@ describe("manageNew — race recovery", () => {
         });
         const result = await manageNew(conn, fakeClientIO, ctx(), "Other");
         expect(result.kind).toBe("error");
+    });
+});
+
+describe("performSwitch — onAfterSwitched from no-current state", () => {
+    test("fires onAfterSwitched even when there was no prior conversation", async () => {
+        // First-time switch (e.g. manageNew before any conversation has
+        // been joined): switchConversationSafe doesn't fire onLeftOld
+        // because there's nothing to leave, but the caller's broadcast
+        // and replay hooks still need to run.
+        const conn = makeStubConnection({ list: [] });
+        const calls: string[] = [];
+        const onSwitched = jest.fn<(c: any) => void>(() => {
+            calls.push("onSwitched");
+        });
+        const onAfterSwitched = jest.fn<(c: any, err: unknown) => void>(() => {
+            calls.push("onAfterSwitched");
+        });
+        const result = await manageNew(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: undefined,
+                onSwitched,
+                onAfterSwitched,
+            }),
+            "Fresh",
+        );
+        expect(result.kind).toBe("ok");
+        expect(calls).toEqual(["onSwitched", "onAfterSwitched"]);
+        // No leaveConversation should have happened.
+        expect(
+            conn.calls.filter((c) => c.method === "leaveConversation"),
+        ).toHaveLength(0);
+    });
+
+    test("throwing onAfterSwitched in no-current case is swallowed", async () => {
+        const conn = makeStubConnection({ list: [] });
+        const result = await manageNew(
+            conn,
+            fakeClientIO,
+            ctx({
+                currentConversationId: undefined,
+                onAfterSwitched: () => {
+                    throw new Error("replay failed");
+                },
+            }),
+            "Fresh",
+        );
+        expect(result.kind).toBe("ok");
+    });
+});
+
+describe("manageRename — getCurrentConversationId re-check", () => {
+    test("skips onCurrentConversationUpdated when current changed mid-rename", async () => {
+        // Active conversation flips during the rename RPC; the hook
+        // must not fire for a conversation that's no longer current.
+        let liveCurrent = "a";
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Old"), makeInfo("b", "Other")],
+            intercept: {
+                renameConversation: () => {
+                    liveCurrent = "b"; // peer-driven switch during rename
+                    return undefined;
+                },
+            },
+        });
+        const onCurrentConversationUpdated = jest.fn<(c: any) => void>();
+        const result = await manageRename(
+            conn,
+            {
+                currentConversationId: "a",
+                currentConversationName: "Old",
+                getCurrentConversationId: () => liveCurrent,
+                onCurrentConversationUpdated,
+            },
+            undefined,
+            "New",
+        );
+        expect(result.kind).toBe("ok");
+        // Snapshot said current=a so isCurrent=true, but by hook time
+        // the live id is "b" — hook must be skipped to avoid a stale
+        // "current conversation updated" event.
+        expect(onCurrentConversationUpdated).not.toHaveBeenCalled();
+    });
+
+    test("fires onCurrentConversationUpdated when getter agrees with snapshot", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Old")] });
+        const onCurrentConversationUpdated = jest.fn<(c: any) => void>();
+        await manageRename(
+            conn,
+            {
+                currentConversationId: "a",
+                currentConversationName: "Old",
+                getCurrentConversationId: () => "a",
+                onCurrentConversationUpdated,
+            },
+            undefined,
+            "New",
+        );
+        expect(onCurrentConversationUpdated).toHaveBeenCalledTimes(1);
     });
 });

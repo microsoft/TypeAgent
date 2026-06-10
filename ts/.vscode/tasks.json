@@ -3,6 +3,16 @@
 	"tasks": [
     {
       "type": "shell",
+      "command": "pnpm --filter typeagent-studio build",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "label": "build typeagent-studio",
+      "detail": "Build the TypeAgent Studio VS Code extension"
+    },
+    {
+      "type": "shell",
       "command": "npm run build -- --vscode",
       "group": {
         "kind": "build",

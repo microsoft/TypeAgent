@@ -8,6 +8,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -17,6 +18,10 @@ import {
     type CommandHandlerContext,
     getRequestId,
 } from "../commandHandlerContext.js";
+import { setActivityContext } from "../../execute/activityContext.js";
+import { DispatcherActivityName } from "../dispatcher/dispatcherUtils.js";
+import { clearReasoningSession as clearClaudeReasoningSession } from "../../reasoning/claude.js";
+import { clearReasoningSession as clearCopilotReasoningSession } from "../../reasoning/copilot.js";
 
 import {
     getSystemTemplateCompletion,
@@ -63,6 +68,29 @@ import { getMemoryCommandHandlers } from "../memory.js";
 import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
 import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
+class ClearConsoleCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Clear the console";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.clientIO.clear(getRequestId(systemContext));
+    }
+}
+
+class ClearDeepCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Clear the console and wipe chat history, reasoning, activity, and persistent display log so nothing replays on rejoin";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.chatHistory.clear();
+        clearClaudeReasoningSession(systemContext);
+        clearCopilotReasoningSession(systemContext);
+        setActivityContext(DispatcherActivityName, null, systemContext);
+        systemContext.displayLog.clear();
+        systemContext.displayLog.saveQueued();
+        systemContext.clientIO.clear(getRequestId(systemContext));
+    }
+}
+
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
@@ -82,9 +110,9 @@ export const systemHandlers: CommandHandlerTable = {
         debug: new DebugCommandHandler(),
         clear: {
             description: "Clear the console",
-            async run(context: ActionContext<CommandHandlerContext>) {
-                const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO.clear(getRequestId(systemContext));
+            defaultSubCommand: new ClearConsoleCommandHandler(),
+            commands: {
+                deep: new ClearDeepCommandHandler(),
             },
         },
         run: new RunCommandScriptHandler(),

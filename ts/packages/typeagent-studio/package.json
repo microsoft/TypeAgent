@@ -1,0 +1,433 @@
+{
+  "name": "typeagent-studio",
+  "displayName": "TypeAgent Studio",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Developer experience for authoring, tuning, and validating TypeAgent agents (compare-and-replay, schema/grammar tuning, trace investigation).",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/typeagent-studio"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "clean": "rimraf --glob dist dist-pub *.vsix",
+    "compile": "node esbuild.mjs",
+    "deploy:local": "npm run package && code --install-extension dist-pub/typeagent-studio.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/typeagent-studio.vsix",
+    "test:local": "tsx --test src/test/*.spec.ts",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "typeagent-studio.hello",
+        "title": "Hello (skeleton)",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.startOnboardingSession",
+        "title": "Start onboarding session",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.ask",
+        "title": "Ask TypeAgent about this...",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.installToSandbox",
+        "title": "Install latest onboarding session to sandbox",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.resolveInstallArtifactPath",
+        "title": "Resolve install artifact path",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.checkPackagingHealthGate",
+        "title": "Check packaging health gate",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.enforcePackagingHealthGate",
+        "title": "Enforce packaging health gate",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.clearOnboardingSession",
+        "title": "Clear active onboarding session",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.runOnboardingPhase",
+        "title": "Run onboarding phase",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.advanceOnboardingPhase",
+        "title": "Advance onboarding phase",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.runRemainingOnboardingPhases",
+        "title": "Run remaining onboarding phases",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.showOnboardingSnapshot",
+        "title": "Show onboarding snapshot",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.exportOnboardingArtifact",
+        "title": "Export onboarding artifact...",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.restoreOnboardingPhase",
+        "title": "Restore onboarding phase",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.rerunStaleOnboardingPhases",
+        "title": "Rerun stale onboarding phases",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.toggleBatchRunSummaryAutoOpen",
+        "title": "Toggle auto-open summary after batch run",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.cycleInstallHealthGatePolicy",
+        "title": "Cycle install health gate policy",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.setInstallHealthGatePolicy",
+        "title": "Set install health gate policy",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.startSandbox",
+        "title": "Start sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "typeagent-studio.stopSandbox",
+        "title": "Stop sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "typeagent-studio.restartSandbox",
+        "title": "Restart sandbox",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "typeagent-studio.refreshSandboxes",
+        "title": "Refresh sandboxes",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.loadAgent",
+        "title": "Load agent",
+        "category": "TypeAgent Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "typeagent-studio.unloadAgent",
+        "title": "Unload agent",
+        "category": "TypeAgent Studio",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "typeagent-studio.refreshCorpora",
+        "title": "Refresh corpora",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.recordFeedback",
+        "title": "Record feedback",
+        "category": "TypeAgent Studio",
+        "icon": "$(feedback)"
+      },
+      {
+        "command": "typeagent-studio.replayCorpus",
+        "title": "Replay corpus",
+        "category": "TypeAgent Studio",
+        "icon": "$(debug-rerun)"
+      },
+      {
+        "command": "typeagent-studio.focusSandboxes",
+        "title": "Focus Sandboxes view",
+        "category": "TypeAgent Studio"
+      },
+      {
+        "command": "typeagent-studio.refreshEvents",
+        "title": "Refresh event log",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.clearEvents",
+        "title": "Clear event log",
+        "category": "TypeAgent Studio",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "typeagent-studio.refreshCollisions",
+        "title": "Refresh collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "typeagent-studio.clearCollisions",
+        "title": "Clear collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "typeagent-studio.scanCollisions",
+        "title": "Scan grammars for collisions",
+        "category": "TypeAgent Studio",
+        "icon": "$(search)"
+      }
+    ],
+    "configuration": {
+      "title": "TypeAgent Studio",
+      "properties": {
+        "typeagentStudio.onboarding.openSummaryAfterBatchRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
+        },
+        "typeagentStudio.onboarding.defaultSandboxId": {
+          "type": "string",
+          "default": "studio-default",
+          "description": "Default sandbox id used by Studio install commands."
+        },
+        "typeagentStudio.onboarding.diagnosticsDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-diagnostics.md",
+          "description": "Default file name suggested by Save onboarding diagnostics bundle."
+        },
+        "typeagentStudio.onboarding.settingsSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-settings.md",
+          "description": "Default file name suggested by Save onboarding settings snapshot."
+        },
+        "typeagentStudio.onboarding.packagingHealthReportDefaultFileName": {
+          "type": "string",
+          "default": "packaging-health-report.md",
+          "description": "Default file name suggested by Save packaging health report."
+        },
+        "typeagentStudio.onboarding.onboardingSummaryDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-summary.md",
+          "description": "Default file name suggested by Save onboarding summary."
+        },
+        "typeagentStudio.onboarding.onboardingHealthSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-health-snapshot.md",
+          "description": "Default file name suggested by Save onboarding health snapshot."
+        },
+        "typeagentStudio.onboarding.installHealthGatePolicy": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "warn"
+          ],
+          "default": "enforce",
+          "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "typeagent-studio.focusSandboxes",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "typeagent-studio.startSandbox",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.refreshSandboxes",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.refreshCorpora",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.recordFeedback",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.replayCorpus",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@3"
+        },
+        {
+          "command": "typeagent-studio.refreshEvents",
+          "when": "view == typeagentStudioEvents",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.clearEvents",
+          "when": "view == typeagentStudioEvents",
+          "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.scanCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typeagent-studio.refreshCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "typeagent-studio.clearCollisions",
+          "when": "view == typeagentStudioCollisions",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "typeagent-studio.restartSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.stopSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@2"
+        },
+        {
+          "command": "typeagent-studio.loadAgent",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.running",
+          "group": "inline@0"
+        },
+        {
+          "command": "typeagent-studio.startSandbox",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandbox.stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.unloadAgent",
+          "when": "view == typeagentStudioSandboxes && viewItem == sandboxAgent",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "views": {
+      "typeagentStudio": [
+        {
+          "id": "typeagentStudioSandboxes",
+          "name": "Sandboxes"
+        },
+        {
+          "id": "typeagentStudioCorpora",
+          "name": "Corpora"
+        },
+        {
+          "id": "typeagentStudioEvents",
+          "name": "Event Log"
+        },
+        {
+          "id": "typeagentStudioCollisions",
+          "name": "Collisions"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "typeagentStudio",
+          "title": "TypeAgent Studio",
+          "icon": "$(beaker)"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:typeagentStudioSandboxes",
+    "onView:typeagentStudioCorpora",
+    "onView:typeagentStudioEvents",
+    "onView:typeagentStudioCollisions",
+    "onCommand:typeagent-studio.hello",
+    "onCommand:typeagent-studio.startOnboardingSession",
+    "onCommand:typeagent-studio.ask",
+    "onCommand:typeagent-studio.installToSandbox",
+    "onCommand:typeagent-studio.resolveInstallArtifactPath",
+    "onCommand:typeagent-studio.checkPackagingHealthGate",
+    "onCommand:typeagent-studio.enforcePackagingHealthGate",
+    "onCommand:typeagent-studio.clearOnboardingSession",
+    "onCommand:typeagent-studio.runOnboardingPhase",
+    "onCommand:typeagent-studio.runRemainingOnboardingPhases",
+    "onCommand:typeagent-studio.advanceOnboardingPhase",
+    "onCommand:typeagent-studio.showOnboardingSnapshot",
+    "onCommand:typeagent-studio.exportOnboardingArtifact",
+    "onCommand:typeagent-studio.restoreOnboardingPhase",
+    "onCommand:typeagent-studio.rerunStaleOnboardingPhases",
+    "onCommand:typeagent-studio.toggleBatchRunSummaryAutoOpen",
+    "onCommand:typeagent-studio.cycleInstallHealthGatePolicy",
+    "onCommand:typeagent-studio.setInstallHealthGatePolicy",
+    "onCommand:typeagent-studio.startSandbox",
+    "onCommand:typeagent-studio.stopSandbox",
+    "onCommand:typeagent-studio.restartSandbox",
+    "onCommand:typeagent-studio.loadAgent",
+    "onCommand:typeagent-studio.unloadAgent",
+    "onCommand:typeagent-studio.refreshSandboxes",
+    "onCommand:typeagent-studio.refreshCorpora",
+    "onCommand:typeagent-studio.recordFeedback",
+    "onCommand:typeagent-studio.replayCorpus",
+    "onCommand:typeagent-studio.refreshEvents",
+    "onCommand:typeagent-studio.clearEvents",
+    "onCommand:typeagent-studio.refreshCollisions",
+    "onCommand:typeagent-studio.clearCollisions",
+    "onCommand:typeagent-studio.scanCollisions"
+  ],
+  "dependencies": {
+    "@typeagent/core": "workspace:*",
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.21.0"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  }
+}
