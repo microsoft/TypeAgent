@@ -130,7 +130,13 @@ describe("FileHealthService", () => {
         // manifest because they're invoked when no grammar matches; warning
         // about the missing grammar is a false positive for them.
         await createAgentScaffold(repoRoot, "chatlike");
-        const src = path.join(repoRoot, "packages", "agents", "chatlike", "src");
+        const src = path.join(
+            repoRoot,
+            "packages",
+            "agents",
+            "chatlike",
+            "src",
+        );
         // Drop the grammar so the rule has something to potentially warn about.
         await fs.rm(path.join(src, "schema.agr"));
         await write(
@@ -152,10 +158,45 @@ describe("FileHealthService", () => {
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("chatlike");
         expect(
-            findings.some(
-                (f) => f.ruleId === "schema.actions.haveGrammar",
-            ),
+            findings.some((f) => f.ruleId === "schema.actions.haveGrammar"),
         ).toBe(false);
+    });
+
+    it("still warns about missing grammar when only some schemas are injected", async () => {
+        // An injected sub-action must not silence the missing-grammar warning
+        // for a non-injected schema that legitimately needs a grammar.
+        await createAgentScaffold(repoRoot, "mixed");
+        const src = path.join(repoRoot, "packages", "agents", "mixed", "src");
+        await fs.rm(path.join(src, "schema.agr"));
+        await write(
+            path.join(src, "mixedManifest.json"),
+            JSON.stringify(
+                {
+                    name: "mixed",
+                    schema: {
+                        originalSchemaFile: "./schema.ts",
+                        schemaFile: "./schema.json",
+                        // Non-injected → legitimately needs a grammar.
+                    },
+                    subActionManifests: {
+                        fallback: {
+                            schema: {
+                                schemaFile: "./fallback.json",
+                                injected: true,
+                            },
+                        },
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("mixed");
+        expect(
+            findings.some((f) => f.ruleId === "schema.actions.haveGrammar"),
+        ).toBe(true);
     });
 
     it("returns no findings for a healthy minimal agent", async () => {
@@ -174,9 +215,18 @@ describe("FileHealthService", () => {
         const variants: { agent: string; handlerFileName: string }[] = [
             { agent: "playerlike", handlerFileName: "playerlikeHandlers.ts" },
             { agent: "responder", handlerFileName: "chatResponseHandler.ts" },
-            { agent: "scaffolderlike", handlerFileName: "scaffolderHandler.ts" },
-            { agent: "browserlike", handlerFileName: "browserlikeActionHandler.mts" },
-            { agent: "calendarlike", handlerFileName: "calendarlikeActionHandlerV3.ts" },
+            {
+                agent: "scaffolderlike",
+                handlerFileName: "scaffolderHandler.ts",
+            },
+            {
+                agent: "browserlike",
+                handlerFileName: "browserlikeActionHandler.mts",
+            },
+            {
+                agent: "calendarlike",
+                handlerFileName: "calendarlikeActionHandlerV3.ts",
+            },
         ];
 
         for (const { agent, handlerFileName } of variants) {

@@ -354,10 +354,11 @@ function createRules(): HealthRule[] {
                 // Injected agents (e.g. chat) are invoked as a fallback rather
                 // than dispatched via grammar matching, so they're allowed to
                 // ship a schema with no grammar. The dispatcher signals this
-                // with `schema.injected: true` (and the same flag on any
-                // sub-action manifest).
+                // with `schema.injected: true`. Only suppress when *every*
+                // declared schema is injected — if any non-injected schema
+                // exists it legitimately needs a grammar, so keep warning.
                 const manifest = await readManifest(ctx);
-                if (manifest && manifestDeclaresInjected(manifest)) {
+                if (manifest && allManifestSchemasInjected(manifest)) {
                     return [];
                 }
                 return [
@@ -573,12 +574,9 @@ function collectManifestRefs(manifest: AgentManifest): ManifestSchemaRef[] {
     return refs;
 }
 
-function manifestDeclaresInjected(manifest: AgentManifest): boolean {
-    if (manifest.schema?.injected) return true;
-    for (const sub of Object.values(manifest.subActionManifests ?? {})) {
-        if (sub.schema?.injected) return true;
-    }
-    return false;
+function allManifestSchemasInjected(manifest: AgentManifest): boolean {
+    const refs = collectManifestRefs(manifest);
+    return refs.length > 0 && refs.every((ref) => ref.injected === true);
 }
 
 async function computeSchemaHash(files: string[]): Promise<string | undefined> {
