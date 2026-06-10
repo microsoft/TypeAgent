@@ -55,12 +55,17 @@ function loadSchemaFile(schemaFile: string): SchemaContent {
 
 function loadGrammarFile(grammarFile: string): GrammarContent {
     const fullPath = getPackageFilePath(grammarFile);
-    const isActionGrammar = grammarFile.endsWith(".ag.json");
-    if (!isActionGrammar) {
-        throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
-    }
     const content = fs.readFileSync(fullPath, "utf-8");
-    return { format: "ag", content };
+    if (grammarFile.endsWith(".ag.json")) {
+        return { format: "ag", content };
+    }
+    if (grammarFile.endsWith(".agr")) {
+        // Raw grammar rule source — parsed at load time by the action-grammar
+        // compiler. Lets agents (notably the built-in dispatcher/system agent)
+        // ship a static grammar without an explicit .agr -> .ag.json build step.
+        return { format: "agr", content };
+    }
+    throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
 }
 
 export function getSchemaContent(actionConfig: ActionConfig): SchemaContent {

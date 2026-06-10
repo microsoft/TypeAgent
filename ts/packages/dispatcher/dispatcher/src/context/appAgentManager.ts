@@ -153,12 +153,30 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
         return undefined;
     }
 
-    if (grammarContent.format !== "ag") {
-        throw new Error(
-            `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
-        );
+    if (grammarContent.format === "ag") {
+        return grammarFromJson(JSON.parse(grammarContent.content));
     }
-    return grammarFromJson(JSON.parse(grammarContent.content));
+    if (grammarContent.format === "agr") {
+        // Parse raw .agr text into a Grammar at load time. Errors are surfaced
+        // immediately because this path is only used for static (manifest-
+        // declared) grammar files; bad syntax should fail loudly during
+        // development rather than silently disable the rules.
+        const errors: string[] = [];
+        const grammar = loadGrammarRulesNoThrow(
+            `${actionConfig.schemaName}.agr`,
+            grammarContent.content,
+            errors,
+        );
+        if (errors.length > 0) {
+            throw new Error(
+                `Failed to parse static grammar for ${actionConfig.schemaName}: ${errors.join(", ")}`,
+            );
+        }
+        return grammar ?? undefined;
+    }
+    throw new Error(
+        `Unsupported grammar format '${(grammarContent as { format: string }).format}' for ${actionConfig.schemaName}`,
+    );
 }
 
 export class AppAgentManager implements ActionConfigProvider {

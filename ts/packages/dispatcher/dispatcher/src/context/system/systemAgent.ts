@@ -175,6 +175,8 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/conversationActionSchema.ts",
                 schemaType: "ConversationAction",
+                grammarFile:
+                    "./src/context/system/schema/conversationActionSchema.agr",
             },
         },
         notify: {
