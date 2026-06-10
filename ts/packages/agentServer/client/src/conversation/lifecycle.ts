@@ -1,18 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Connection-level lifecycle helpers shared by every client that joins
- * an agent server (CLI, Electron shell, VS Code extension, browser
- * extension). These wrap the raw {@link AgentServerConnection} API with
- * the race-handling, fallback, and join-before-leave patterns that all
- * four clients had reinvented inline.
- *
- * The helpers are deliberately UI-agnostic: they take the connection +
- * a clientIO and return structured results. Persistence
- * (lastConversationId), dispatcher rebinding, and history replay stay
- * in the caller via the hook callbacks on {@link switchConversationSafe}.
- */
+// Connection-level lifecycle helpers shared by every client that joins
+// an agent server. UI-agnostic: clients supply hooks for dispatcher
+// rebinding, persistence, and history replay; the helpers run the
+// join-before-leave protocol and race-handling.
 
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
@@ -24,32 +16,29 @@ import { findConversationByName, normalizeConversationName } from "./naming.js";
 
 /**
  * Find a conversation by name (case-insensitive), creating one if none
- * exists. Handles the race where two clients simultaneously try to
- * create the same named default — the loser of the create race re-lists
- * and adopts the winning entry instead of bubbling a `name in use`
- * error to the user.
+ * exists. If two clients race to create the same named default, the
+ * loser re-lists and adopts the winning entry instead of failing.
  *
- * Used by:
- *  - CLI to find-or-create the "CLI" conversation.
- *  - Electron shell to find-or-create the "Shell" conversation.
- *  - VS Code extension to find-or-create the named default (e.g. "VS Code").
- *  - Browser extension equivalents.
+ * Input is trimmed once at the boundary to match the server's
+ * uniqueness check (which also trims).
  */
 export async function findOrCreateNamedConversation(
     connection: AgentServerConnection,
     name: string,
 ): Promise<ConversationInfo> {
-    const initial = await connection.listConversations(name);
-    const match = findConversationByName(initial, name);
+    const trimmed = name.trim();
+    const initial = await connection.listConversations(trimmed);
+    const match = findConversationByName(initial, trimmed);
     if (match !== undefined) {
         return match;
     }
     try {
-        return await connection.createConversation(name);
+        return await connection.createConversation(trimmed);
     } catch (createErr) {
-        // Race with a peer client: re-list and adopt the winner.
-        const retry = await connection.listConversations(name);
-        const retryMatch = findConversationByName(retry, name);
+        // Peer-client race. List unfiltered to avoid the server's
+        // raw `includes` filter missing a name with extra whitespace.
+        const retry = await connection.listConversations();
+        const retryMatch = findConversationByName(retry, trimmed);
         if (retryMatch !== undefined) {
             return retryMatch;
         }
@@ -57,71 +46,48 @@ export async function findOrCreateNamedConversation(
     }
 }
 
-/**
- * Options for {@link joinNamedOrFallback}.
- */
 export type JoinNamedOrFallbackOptions = {
-    /**
-     * If provided, attempt to join this conversation first (typically a
-     * persisted "last used" id). On failure (deleted server-side, etc.)
-     * fall through to {@link defaultName}.
-     */
+    /** Try this id first; on join failure fall through to {@link defaultName}. */
     savedConversationId?: string;
-    /**
-     * Default conversation name to find-or-create when {@link
-     * savedConversationId} is absent or the join fails.
-     */
+    /** Find-or-create this name when savedId is absent or its join fails. */
     defaultName: string;
-    /**
-     * Options forwarded to `connection.joinConversation` (e.g. `clientType`,
-     * `filter`). The `conversationId` field is overridden by this helper.
-     */
+    /** Forwarded to `connection.joinConversation`; conversationId is overridden. */
     joinOptions?: Omit<
         Parameters<AgentServerConnection["joinConversation"]>[1] & object,
         "conversationId"
     >;
-    /**
-     * Optional hook invoked when the saved id was unreachable so the
-     * caller can log / clear stale state. Receives the original error.
-     */
+    /** Invoked when the saved id was unreachable (logging / clearing stale state). */
     onSavedConversationUnavailable?: (err: unknown) => void;
     /**
-     * Optional gate on whether the saved-id failure should fall back to
-     * the named default. Defaults to "always fall back" — i.e. any
-     * error from saved-id join triggers the fallback path. Clients with
-     * stricter semantics (the CLI prompts the user and only falls back
-     * for "Conversation not found:" errors) should supply a predicate.
-     * Return false (or a Promise resolving to false) to abort with the
-     * original error.
+     * Gate the fallback. Defaults to "always fall back". Return false
+     * to abort with the original error (CLI uses this to only fall
+     * back for "Conversation not found:" errors).
      */
     shouldFallback?: (err: unknown) => boolean | Promise<boolean>;
 };
 
-/**
- * Result of {@link joinNamedOrFallback}.
- */
 export type JoinNamedOrFallbackResult = {
-    /** The joined conversation. */
     conversation: ConversationDispatcher;
-    /**
-     * True if the saved id was used; false if we fell back to the named
-     * default (either because no savedId was provided, the saved
-     * conversation was gone, or the join failed).
-     */
+    /** True if savedId was used; false if we fell back to the named default. */
     usedSavedId: boolean;
 };
 
 /**
- * Restore-or-fallback: try a saved conversation id first, otherwise
- * find-or-create the named default and join it. Also recovers from
- * the race where `listConversations` saw the default but
- * `joinConversation` failed because it was deleted in between.
- *
- * By default any error from the saved-id join falls back to the named
- * default; pass `shouldFallback` to gate this (e.g. the CLI prompts
- * the user and only falls back for "Conversation not found:" errors).
- * Persistence is the caller's responsibility — record
- * `result.conversation.conversationId` on success.
+ * Detect the server's "Conversation not found:" error so callers can
+ * distinguish a missing conversation from other failures (transport,
+ * permission, etc.). Used by helpers to decide when to recover by
+ * re-creating vs. surfacing the original error.
+ */
+export function isConversationNotFoundError(err: unknown): boolean {
+    const msg = (err as { message?: unknown } | null | undefined)?.message;
+    return typeof msg === "string" && msg.startsWith("Conversation not found");
+}
+
+/**
+ * Try `savedConversationId`, otherwise find-or-create `defaultName`.
+ * If the named conversation was deleted between list and join, recovers
+ * via {@link findOrCreateNamedConversation} (race-safe). Other join
+ * errors are surfaced as-is.
  */
 export async function joinNamedOrFallback(
     connection: AgentServerConnection,
@@ -136,15 +102,18 @@ export async function joinNamedOrFallback(
             });
             return { conversation, usedSavedId: true };
         } catch (e: unknown) {
-            options.onSavedConversationUnavailable?.(e);
+            // Default: only fall back when the server says the saved
+            // conversation no longer exists. Transport / permission
+            // errors are rethrown so callers don't silently land in a
+            // different conversation than the user asked for.
             const shouldFall =
                 options.shouldFallback === undefined
-                    ? true
+                    ? isConversationNotFoundError(e)
                     : await options.shouldFallback(e);
             if (!shouldFall) {
                 throw e;
             }
-            // fall through to default
+            options.onSavedConversationUnavailable?.(e);
         }
     }
 
@@ -158,11 +127,17 @@ export async function joinNamedOrFallback(
             conversationId: target.conversationId,
         });
         return { conversation, usedSavedId: false };
-    } catch {
-        // The conversation may have been deleted between listConversations
-        // and joinConversation. Create a fresh one with the same name and
-        // join that — this matches Electron shell `restoreOrJoinShell`.
-        const fresh = await connection.createConversation(options.defaultName);
+    } catch (e: unknown) {
+        // Only recover from "deleted between list and join" — other
+        // join failures (permission, transport) would otherwise be
+        // masked by a bogus duplicate-name error.
+        if (!isConversationNotFoundError(e)) {
+            throw e;
+        }
+        const fresh = await findOrCreateNamedConversation(
+            connection,
+            options.defaultName,
+        );
         const conversation = await connection.joinConversation(clientIO, {
             ...options.joinOptions,
             conversationId: fresh.conversationId,
@@ -171,49 +146,33 @@ export async function joinNamedOrFallback(
     }
 }
 
-/**
- * Hooks for {@link switchConversationSafe}. All are optional; each
- * fires at a distinct stage of the join-before-leave protocol so the
- * caller can coordinate its own UI / persistence side-effects without
- * the helper needing to know about them.
- */
 export type SwitchConversationHooks = {
     /**
-     * Fires immediately after the new conversation is joined and its
-     * dispatcher is ready. Use this to rebind the active dispatcher,
-     * clear request-id maps, reset queue state, etc. — anything that
-     * must happen before the helper attempts to leave the old session.
+     * Fires after the new conversation is joined, before old-leave.
+     * Use to rebind the active dispatcher. If this throws, the helper
+     * leaves the new conversation and re-throws — the caller stays on
+     * `currentConversationId`.
      */
     onJoined?: (
         newConversation: ConversationDispatcher,
     ) => void | Promise<void>;
-    /**
-     * Fires after {@link onJoined}, intended for persistence (writing
-     * the new id to user settings, cli-state.json, workspace state).
-     * A throw here is logged but does NOT roll back the switch — the
-     * client is already on the new conversation.
-     */
+    /** Best-effort persistence after onJoined; a throw is swallowed. */
     onPersist?: (conversationId: string) => void | Promise<void>;
     /**
-     * Fires after the (best-effort) leave of the old conversation.
-     * Receives any error from the leave attempt; ignoring it is fine
-     * (the user-facing switch already succeeded).
+     * Fires once after the (best-effort) leave of the old conversation;
+     * `err` is the leave-call error or undefined on success. A throw or
+     * rejection here is swallowed so the hook can't turn a successful
+     * switch into a thrown failure.
      */
-    onLeftOld?: (oldConversationId: string, err: unknown) => void;
+    onLeftOld?: (
+        oldConversationId: string,
+        err: unknown,
+    ) => void | Promise<void>;
 };
 
-/**
- * Result of {@link switchConversationSafe}.
- */
 export type SwitchConversationResult =
-    | {
-          kind: "switched";
-          conversation: ConversationDispatcher;
-      }
-    | {
-          kind: "already-on";
-          conversationId: string;
-      }
+    | { kind: "switched"; conversation: ConversationDispatcher }
+    | { kind: "already-on"; conversationId: string }
     | {
           kind: "join-failed";
           targetConversationId: string;
@@ -221,19 +180,12 @@ export type SwitchConversationResult =
       };
 
 /**
- * Switch to a different conversation using the join-before-leave
- * protocol that all four clients hand-rolled:
- *
- *   1. Join the new conversation. If this fails, the old conversation
- *      is still active and the caller can surface the error cleanly.
- *   2. Fire `onJoined` so the caller rebinds its dispatcher reference
- *      etc. before anything else can race with a stale dispatcher.
- *   3. Fire `onPersist` so the new id is saved.
- *   4. Best-effort leave the old conversation; `onLeftOld` fires with
- *      any error (a failure here does NOT roll back the switch).
- *
- * No-ops cleanly (`already-on`) when `currentConversationId` equals
- * `targetConversationId`.
+ * Join-before-leave switch:
+ *   1. Join new (failure leaves caller on current; returns join-failed).
+ *   2. `onJoined` (caller rebinds; throw → rollback + re-throw).
+ *   3. `onPersist` (best-effort; throw is swallowed).
+ *   4. Leave old; `onLeftOld` fires once with any leave error
+ *      (a throw inside the hook is swallowed).
  */
 export async function switchConversationSafe(
     connection: AgentServerConnection,
@@ -264,16 +216,11 @@ export async function switchConversationSafe(
         try {
             await hooks.onJoined(conversation);
         } catch (e) {
-            // The caller's rebind failed — without this, the server
-            // would hold a joined channel for a conversation the client
-            // can't drive. Roll back by leaving the new conversation,
-            // then re-throw so the caller surfaces the failure (the
-            // user is still on `currentConversationId`).
+            // Caller rebind failed: roll back the new join so the server
+            // doesn't keep a channel the client can't drive.
             await connection
                 .leaveConversation(conversation.conversationId)
-                .catch(() => {
-                    // best-effort cleanup
-                });
+                .catch(() => {});
             throw e;
         }
     }
@@ -282,16 +229,23 @@ export async function switchConversationSafe(
         try {
             await hooks.onPersist(conversation.conversationId);
         } catch {
-            // Persistence is best-effort; don't roll back the switch.
+            // Persistence is best-effort; don't roll back.
         }
     }
 
     if (currentConversationId !== undefined) {
+        let leaveErr: unknown;
         try {
             await connection.leaveConversation(currentConversationId);
-            hooks.onLeftOld?.(currentConversationId, undefined);
         } catch (e: unknown) {
-            hooks.onLeftOld?.(currentConversationId, e);
+            leaveErr = e;
+        }
+        if (hooks.onLeftOld) {
+            try {
+                await hooks.onLeftOld(currentConversationId, leaveErr);
+            } catch {
+                // Hook is purely observational; never fail the switch.
+            }
         }
     }
 
@@ -299,11 +253,10 @@ export async function switchConversationSafe(
 }
 
 /**
- * Create and join a uniquely-named ephemeral conversation. Used by the
- * CLI's `--memory` flag and the VS Code extension's per-panel ephemeral
- * sessions. Callers are responsible for calling
- * {@link deleteEphemeralConversation} on shutdown to keep the server
- * tidy.
+ * Create and join a uniquely-named ephemeral conversation. Callers
+ * are responsible for calling {@link deleteEphemeralConversation} on
+ * shutdown — the server's orphan sweeper only collects conversations
+ * with specific name prefixes.
  */
 export async function createEphemeralConversation(
     connection: AgentServerConnection,
@@ -318,10 +271,6 @@ export async function createEphemeralConversation(
     ephemeralConversationId: string;
     name: string;
 }> {
-    // crypto.randomUUID is in the Web Crypto API exposed by Node ≥19
-    // globalThis; widely available in every runtime that already runs
-    // this package (CLI, Electron main, vscode extension host,
-    // browser MV3 service worker).
     const uniqueSuffix =
         typeof globalThis.crypto?.randomUUID === "function"
             ? globalThis.crypto.randomUUID()
@@ -337,15 +286,9 @@ export async function createEphemeralConversation(
             conversationId: created.conversationId,
         });
     } catch (e) {
-        // Don't leak the server-side conversation if join fails — the
-        // server's orphan sweeper only collects conversations whose
-        // names start with specific prefixes (e.g. "cli-ephemeral-"),
-        // so other callers would leak forever.
         await connection
             .deleteConversation(created.conversationId)
-            .catch(() => {
-                // best-effort cleanup
-            });
+            .catch(() => {});
         throw e;
     }
     return {
@@ -355,11 +298,7 @@ export async function createEphemeralConversation(
     };
 }
 
-/**
- * Best-effort cleanup for an ephemeral conversation created with
- * {@link createEphemeralConversation}. Swallows errors so it can be
- * called from `finally` blocks during shutdown.
- */
+/** Best-effort cleanup; swallows errors so it's safe in `finally` blocks. */
 export async function deleteEphemeralConversation(
     connection: AgentServerConnection,
     conversationId: string,
@@ -372,15 +311,9 @@ export async function deleteEphemeralConversation(
 }
 
 /**
- * Check whether a new name is unique among existing conversations,
- * optionally excluding a specific id (used by rename so renaming
- * to the *current* name is allowed). Returns the colliding entry on
- * collision; undefined on success.
- *
- * Note: the server enforces uniqueness on create/rename. This is a
- * client-side pre-check used by UIs that want to validate input
- * *before* sending (e.g. VS Code's `validateInput` hook on
- * `showInputBox`).
+ * Client-side name uniqueness pre-check (server enforces uniqueness
+ * authoritatively). Returns the colliding entry or undefined.
+ * `excludeConversationId` lets rename skip the current row.
  */
 export async function validateConversationNameUnique(
     connection: AgentServerConnection,

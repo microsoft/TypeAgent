@@ -1,21 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Shared implementation of the dispatcher's `manage-conversation`
- * client-action surface. Mirrors the `ManageConversationPayload`
- * subcommands declared in
- * `agent-dispatcher/src/context/system/manageConversationPayload.ts`
- * (kept as a structural copy here so this package doesn't take a
- * dependency on `agent-dispatcher`).
- *
- * Each subcommand returns a typed {@link ConversationActionResult}
- * discriminated union. The caller (CLI chalk, Shell HTML, VS Code
- * notification, browser HTML) decides how to render it — these
- * helpers contain only logic, never presentation.
- *
- * Subcommands: new, list, info, switch, prev, next, rename, delete.
- */
+// Shared implementation of the dispatcher's `manage-conversation`
+// client-action surface (new/list/info/switch/prev/next/rename/delete).
+// Each subcommand returns a {@link ConversationActionResult} that the
+// caller renders to its UI (CLI text, Electron HTML, VS Code
+// notification, browser HTML); these helpers contain no presentation.
 
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
@@ -30,17 +20,14 @@ import {
     sortConversationsByCreatedDesc,
 } from "./naming.js";
 import {
+    isConversationNotFoundError,
     switchConversationSafe,
     type SwitchConversationHooks,
 } from "./lifecycle.js";
 
-// ── Payload shape ──────────────────────────────────────────────────────
-
 /**
- * Structural copy of the dispatcher's `ManageConversationPayload`.
- * Kept in this package so callers can route the inbound client-action
- * `manage-conversation` payload directly to {@link manageConversation}
- * without having to import the dispatcher.
+ * Structural copy of the dispatcher's `ManageConversationPayload` —
+ * kept here so this package doesn't depend on agent-dispatcher.
  */
 export type ManageConversationPayload = {
     subcommand:
@@ -56,129 +43,97 @@ export type ManageConversationPayload = {
     newName?: string;
 };
 
-// ── Caller-provided context ────────────────────────────────────────────
-
-/**
- * The caller's view of "what conversation am I on right now" plus a hook
- * the helpers fire after a successful join-before-leave switch so the
- * client can rebind its dispatcher, persist the new id, and replay
- * display history.
- *
- * `currentConversationId` may be undefined briefly during startup; most
- * subcommands degrade to a clear "no active conversation" result in
- * that case.
- */
 export type ManageConversationContext = {
     currentConversationId: string | undefined;
     currentConversationName: string | undefined;
     /**
-     * Fired after any successful conversation switch driven by the
-     * manage layer. Receives the new conversation. Use this to rebind
-     * the active dispatcher, save the id to user settings, replay
-     * display history, etc. — anything that belongs to the client.
-     *
-     * Wraps {@link SwitchConversationHooks.onJoined}; a separate
-     * `onPersist` is exposed for callers that want to distinguish
-     * "rebind" from "save id" timing.
+     * Optional live getter for the active conversation id. When set,
+     * helpers that fire post-RPC hooks (e.g. {@link manageRename}'s
+     * `onCurrentConversationUpdated`) re-check the current id at hook
+     * time to avoid firing for a conversation that was switched out
+     * from under the in-flight op.
+     */
+    getCurrentConversationId?: () => string | undefined;
+    /**
+     * Fires after the new conversation is joined, before the old one
+     * is left. Rebind the active dispatcher here, but keep work minimal
+     * — UI clears, history replay, and broadcasts that should not race
+     * lingering events from the old conversation belong in
+     * {@link onAfterSwitched}.
      */
     onSwitched?: (
         newConversation: ConversationDispatcher,
     ) => void | Promise<void>;
-    /**
-     * Fires after `onSwitched`, intended for persistence (saving the
-     * id to disk). A throw here is logged but does not roll back the
-     * switch.
-     */
+    /** Best-effort persistence after onSwitched; a throw is swallowed. */
     onPersistSwitched?: (conversationId: string) => void | Promise<void>;
     /**
-     * Optional: confirmation prompt for destructive operations
-     * (currently only `delete`). Return `true` to proceed, `false` to
-     * abort. If omitted, destructive operations proceed without
-     * confirmation — the dispatcher's `delete` slash command requires
-     * the user to type the name, so this is a defensible default;
-     * UIs that want a yes/no prompt (browser, VS Code modal) should
-     * supply one.
+     * Fires once the old conversation has been (best-effort) left.
+     * Safe place for history replay, UI clears, and broadcasts that
+     * must not see late events from the prior conversation.
+     * `leaveError` is the leave-call error or undefined on success;
+     * a throw inside this hook is swallowed.
+     */
+    onAfterSwitched?: (
+        newConversation: ConversationDispatcher,
+        leaveError: unknown,
+    ) => void | Promise<void>;
+    /**
+     * Fires when a manage-* op changes the *current* conversation's
+     * metadata in place (e.g. rename). Use to refresh title bars and
+     * cached names without going through a full switch. A throw is
+     * swallowed — never fails the operation.
+     */
+    onCurrentConversationUpdated?: (
+        updated: ConversationInfo,
+    ) => void | Promise<void>;
+    /**
+     * Confirmation prompt for destructive ops. Omit to proceed without
+     * prompting (the dispatcher's `delete` slash command already
+     * requires the user to type the name, so that's defensible).
      */
     confirmDestructive?: (
         action: "delete",
         target: ConversationInfo,
     ) => boolean | Promise<boolean>;
-    /**
-     * Optional: extra options passed to `connection.joinConversation`
-     * for every switch — used by clients that need `clientType`,
-     * `filter: false`, etc.
-     */
+    /** Forwarded to every `joinConversation` call (e.g. `clientType`, `filter`). */
     joinOptions?: Omit<
         Parameters<AgentServerConnection["joinConversation"]>[1] & object,
         "conversationId"
     >;
-    /**
-     * Ordering for `prev` / `next` cycle. Defaults to "newest-first"
-     * (matches the `list` ordering and the shell / browser behavior).
-     * Pass "server-order" to preserve the iteration order returned by
-     * the server (matches VS Code's existing `manageCycleConversation`).
-     */
+    /** Cycle order for prev/next. Defaults to "newest-first". */
     cycleOrder?: "newest-first" | "server-order";
     /**
      * What to do when the current conversation isn't in the cycle list
-     * (e.g. it was just deleted). "wrap" picks index 0 of the configured
-     * `cycleOrder` (matches VS Code + shell). "error" returns an error
-     * result (matches the browser's `"Current conversation not found in
-     * list."` behavior). Defaults to "wrap".
+     * (e.g. it was just deleted). "wrap" picks index 0; "error" returns
+     * an error result. Defaults to "wrap".
      */
     cycleOnCurrentNotInList?: "wrap" | "error";
 };
 
-// ── Result discriminator ───────────────────────────────────────────────
-
 /**
- * Discriminated result returned by every manage-* function. The `kind`
- * tag tells the caller how to render it; the inner fields carry the
- * details (names, ids, lists) it needs to format.
- *
- *  - `ok`: success, optionally with a message. `switched=true` when
- *    the active conversation changed (caller may want to replay
- *    history etc.).
- *  - `warning`: user error (missing arg, already-on, no other
- *    conversation, etc.) — non-fatal, do not log loudly.
- *  - `error`: operation failed (network, server reject) — log + surface.
- *  - `list` / `info`: structured data the caller renders to its UI
- *    (table, bullet list, HTML, etc.) instead of a single message.
- *  - `cancelled`: destructive op the user declined.
+ * Discriminated result returned by every manage-* function:
+ *  - `ok`: success; `switched=true` when active conversation changed
+ *  - `warning`: user error (missing arg, already-on, etc.) — non-fatal
+ *  - `error`: operation failed (network, server reject)
+ *  - `list` / `info`: structured data caller renders to its UI
+ *  - `cancelled`: destructive op the user declined
  */
 export type ConversationActionResult =
     | {
           kind: "ok";
           message: string;
           switched?: boolean;
-          /** Filled when the op produced or targeted a specific conversation. */
           conversation?: ConversationInfo;
       }
-    | {
-          kind: "warning";
-          message: string;
-      }
-    | {
-          kind: "error";
-          message: string;
-          cause?: unknown;
-      }
+    | { kind: "warning"; message: string }
+    | { kind: "error"; message: string; cause?: unknown }
     | {
           kind: "list";
           conversations: ConversationInfo[];
           currentConversationId: string | undefined;
       }
-    | {
-          kind: "info";
-          conversationId: string;
-          name: string;
-      }
-    | {
-          kind: "cancelled";
-          target: ConversationInfo;
-      };
-
-// ── Helpers ────────────────────────────────────────────────────────────
+    | { kind: "info"; conversationId: string; name: string }
+    | { kind: "cancelled"; target: ConversationInfo };
 
 function ok(
     message: string,
@@ -212,6 +167,20 @@ async function performSwitch(
     if (ctx.onPersistSwitched !== undefined) {
         hooks.onPersist = ctx.onPersistSwitched;
     }
+    let joinedConv: ConversationDispatcher | undefined;
+    const wrappedOnJoined = hooks.onJoined;
+    hooks.onJoined = async (newConv) => {
+        joinedConv = newConv;
+        if (wrappedOnJoined) {
+            await wrappedOnJoined(newConv);
+        }
+    };
+    if (ctx.onAfterSwitched !== undefined) {
+        const after = ctx.onAfterSwitched;
+        hooks.onLeftOld = async (_oldId, leaveErr) => {
+            await after(joinedConv!, leaveErr);
+        };
+    }
     const result = await switchConversationSafe(
         connection,
         clientIO,
@@ -232,17 +201,28 @@ async function performSwitch(
             result.error,
         );
     }
+    // switchConversationSafe only fires onLeftOld when there *was* a
+    // current conversation. Fire onAfterSwitched explicitly for the
+    // no-current case (e.g. very first `manageNew`) so callers' replay
+    // and broadcast hooks fire regardless of starting state.
+    if (
+        ctx.currentConversationId === undefined &&
+        ctx.onAfterSwitched !== undefined &&
+        joinedConv !== undefined
+    ) {
+        try {
+            await ctx.onAfterSwitched(joinedConv, undefined);
+        } catch {
+            // Observational hook; never fail the switch.
+        }
+    }
     return ok(messageOnSuccess, { switched: true, conversation: target });
 }
 
-// ── Subcommand handlers ────────────────────────────────────────────────
-
 /**
- * `new` — create a conversation and auto-switch to it. If `name` is
- * absent, generates `formatAutoConversationName()`. On name collision,
- * switches to the existing conversation instead of failing (matches the
- * VS Code extension's existing behavior; browser, shell, and CLI did
- * the same thing slightly differently).
+ * `new` — create-and-switch. If `name` is absent, uses
+ * `formatAutoConversationName()`. On name collision, switches to the
+ * existing conversation instead of failing.
  */
 export async function manageNew(
     connection: AgentServerConnection,
@@ -253,8 +233,7 @@ export async function manageNew(
     const chosen = name?.trim() || formatAutoConversationName();
     const targetNorm = normalizeConversationName(chosen);
 
-    // Collision check: if a conversation with this name already exists,
-    // switch to it instead of producing a duplicate-name error.
+    // Collision: switch to the existing conversation instead of failing.
     const existing = await connection.listConversations(chosen);
     const collision = existing.find(
         (c) => normalizeConversationName(c.name) === targetNorm,
@@ -273,7 +252,7 @@ export async function manageNew(
     try {
         created = await connection.createConversation(chosen);
     } catch (createErr) {
-        // Race with a peer client: re-list and adopt the winner.
+        // Peer-client race: re-list and adopt the winner.
         const retry = await connection.listConversations(chosen);
         const retryMatch = retry.find(
             (c) => normalizeConversationName(c.name) === targetNorm,
@@ -305,10 +284,7 @@ export async function manageNew(
     );
 }
 
-/**
- * `list` — list all conversations. Returns structured data the caller
- * renders to its UI (table for CLI, `<ul>` for HTML, etc.).
- */
+/** `list` — returns structured `list` result for the caller to render. */
 export async function manageList(
     connection: AgentServerConnection,
     ctx: ManageConversationContext,
@@ -325,10 +301,7 @@ export async function manageList(
     };
 }
 
-/**
- * `info` — show the current conversation. Returns the id and name as
- * structured data.
- */
+/** `info` — show the current conversation id + name. */
 export function manageInfo(
     ctx: ManageConversationContext,
 ): ConversationActionResult {
@@ -345,10 +318,7 @@ export function manageInfo(
     };
 }
 
-/**
- * `switch` — switch to a conversation by name. Errors on no match
- * (does NOT create-on-miss; that's `new`'s job).
- */
+/** `switch` — switch by name; errors on no match (does NOT create). */
 export async function manageSwitch(
     connection: AgentServerConnection,
     clientIO: ClientIO,
@@ -376,10 +346,7 @@ export async function manageSwitch(
     );
 }
 
-/**
- * `prev` / `next` — cycle to the previous / next conversation in
- * creation order (matches `list` ordering). Wraps around at the ends.
- */
+/** `prev` / `next` — cycle by creation order (matches `list`). */
 export async function manageCycle(
     connection: AgentServerConnection,
     clientIO: ClientIO,
@@ -428,9 +395,8 @@ export async function manageCycle(
 }
 
 /**
- * `rename` — rename either the current conversation (when `name` is
- * absent) or a specific named conversation. Validates collision
- * against other conversations before issuing the server call.
+ * `rename` — rename current (when `name` is absent) or a specific
+ * conversation. Pre-checks collision; the server enforces it too.
  */
 export async function manageRename(
     connection: AgentServerConnection,
@@ -488,34 +454,48 @@ export async function manageRename(
         );
     }
 
-    // Preserve the original `createdAt` / `clientCount` from the
-    // server-returned record so callers that re-render the list or
-    // re-sort by created time don't see empty / zero placeholders.
+    // Preserve original createdAt/clientCount so callers re-sorting by
+    // created time don't see zero placeholders.
     const original = all.find((c) => c.conversationId === targetId);
+    const updated: ConversationInfo = {
+        conversationId: targetId,
+        name: trimmedNew,
+        clientCount: original?.clientCount ?? 0,
+        createdAt: original?.createdAt ?? "",
+    };
+
+    if (isCurrent && ctx.onCurrentConversationUpdated !== undefined) {
+        // Re-check the live current id (when available) — the active
+        // conversation may have changed during the rename RPC.
+        const currentNow =
+            ctx.getCurrentConversationId?.() ?? ctx.currentConversationId;
+        if (targetId === currentNow) {
+            try {
+                await ctx.onCurrentConversationUpdated(updated);
+            } catch {
+                // Observational hook; never fail the rename.
+            }
+        }
+    }
+
     return {
         kind: "ok",
         message:
             oldName !== undefined
                 ? `Renamed conversation "${oldName}" to "${trimmedNew}".`
                 : `Renamed conversation to "${trimmedNew}".`,
-        conversation: {
-            conversationId: targetId,
-            name: trimmedNew,
-            clientCount: original?.clientCount ?? 0,
-            createdAt: original?.createdAt ?? "",
-        },
-        // Surface whether the rename hit the current conversation so the
-        // caller knows whether to refresh its title bar / status.
+        conversation: updated,
+        // Surface whether the rename hit the current conversation so
+        // the caller knows to refresh its title bar / cached name.
         ...(isCurrent ? { switched: false } : {}),
     };
 }
 
 /**
- * `delete` — delete a conversation by name. Refuses to delete the
- * active conversation. If `ctx.confirmDestructive` is set, prompts
- * for confirmation; otherwise proceeds (matches the dispatcher's
- * `@conversation delete` slash command, which already requires the
- * user to type the name).
+ * `delete` — by name. Refuses to delete the active conversation.
+ * Invokes `ctx.confirmDestructive` when set; treats peer-already-deleted
+ * (server "Conversation not found" on either list-miss or delete-call)
+ * as idempotent success.
  */
 export async function manageDelete(
     connection: AgentServerConnection,
@@ -538,7 +518,17 @@ export async function manageDelete(
         );
     }
     if (ctx.confirmDestructive) {
-        const confirmed = await ctx.confirmDestructive("delete", match);
+        let confirmed: boolean;
+        try {
+            confirmed = await ctx.confirmDestructive("delete", match);
+        } catch (e) {
+            return error(
+                `Confirmation prompt failed: ${
+                    (e as { message?: string })?.message ?? String(e)
+                }`,
+                e,
+            );
+        }
         if (!confirmed) {
             return { kind: "cancelled", target: match };
         }
@@ -546,6 +536,12 @@ export async function manageDelete(
     try {
         await connection.deleteConversation(match.conversationId);
     } catch (e) {
+        // Peer already deleted it between list and call: success.
+        if (isConversationNotFoundError(e)) {
+            return ok(`Deleted conversation "${match.name}".`, {
+                conversation: match,
+            });
+        }
         return error(
             `Failed to delete conversation "${match.name}": ${
                 (e as { message?: string })?.message ?? String(e)
@@ -558,17 +554,20 @@ export async function manageDelete(
     });
 }
 
-// ── Top-level dispatcher ───────────────────────────────────────────────
-
 /**
  * Dispatch a `manage-conversation` payload to the right subcommand
- * handler. Returns the structured {@link ConversationActionResult} the
- * caller renders to its UI.
+ * handler. Most clients call this directly from the dispatcher's
+ * `takeAction` for `action === "manage-conversation"`.
  *
- * Most clients call this directly from their ClientIO `takeAction`
- * handler for `action === "manage-conversation"`. Clients that need
- * fine-grained control over each subcommand (different UI per
- * subcommand) can call the manage-* helpers directly instead.
+ * **Serialization contract:** subcommands that switch the active
+ * conversation (`new`, `switch`, `prev`, `next`) read `ctx` at entry
+ * and pass it to {@link switchConversationSafe}. Callers must
+ * serialize overlapping invocations themselves (e.g. mutex, queue);
+ * concurrent switches from the same starting conversation can leave
+ * two server-side conversations joined while the caller's view of
+ * `currentConversationId` reflects only one. CLI is single-threaded;
+ * Shell, VS Code, and the browser extension each serialize via their
+ * own per-instance queue/mutex.
  */
 export async function manageConversation(
     connection: AgentServerConnection,
