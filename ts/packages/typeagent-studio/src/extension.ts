@@ -281,8 +281,56 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const collisions = new CollisionsTreeProvider(runtime);
+
+    // Shared scan flow used by both the manual command and the auto-scan
+    // subscription: run the grammar collision scan, then push fresh results
+    // and the skipped set into the tree.
+    const runCollisionScan = async () => {
+        const result = await runtime.scanGrammarCollisions();
+        await collisions.reloadFromRuntime();
+        collisions.setSkipped(result.skipped);
+        return result;
+    };
+
+    // Auto-scan: when the loaded agent set changes, re-scan after a short
+    // debounce so the Collisions view stays current without a manual click.
+    // Coalesces bursts (e.g. restoring several sandboxes at activation) into a
+    // single scan. Runs quietly — no progress UI or toast.
+    let autoScanTimer: ReturnType<typeof setTimeout> | undefined;
+    const AUTO_SCAN_DEBOUNCE_MS = 500;
+    const scheduleAutoScan = () => {
+        const enabled = vscode.workspace
+            .getConfiguration("typeagentStudio.collisions")
+            .get<boolean>("autoScanOnAgentChange", true);
+        if (!enabled) {
+            return;
+        }
+        if (autoScanTimer !== undefined) {
+            clearTimeout(autoScanTimer);
+        }
+        autoScanTimer = setTimeout(() => {
+            autoScanTimer = undefined;
+            void runCollisionScan().catch((error) => {
+                console.warn(
+                    "[typeagent-studio] Auto collision scan failed:",
+                    describeError(error),
+                );
+            });
+        }, AUTO_SCAN_DEBOUNCE_MS);
+    };
+    const agentLoadSubscription = runtime.onAgentLoadChanged(scheduleAutoScan);
+
     context.subscriptions.push(
         collisions,
+        agentLoadSubscription,
+        {
+            dispose: () => {
+                if (autoScanTimer !== undefined) {
+                    clearTimeout(autoScanTimer);
+                    autoScanTimer = undefined;
+                }
+            },
+        },
         vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
@@ -301,10 +349,8 @@ export function activate(context: vscode.ExtensionContext): void {
                             location: { viewId: COLLISIONS_VIEW_ID },
                             title: "Scanning grammars for collisions...",
                         },
-                        () => runtime.scanGrammarCollisions(),
+                        () => runCollisionScan(),
                     );
-                    await collisions.reloadFromRuntime();
-                    collisions.setSkipped(result.skipped);
                     if (result.scanned.length === 0) {
                         vscode.window.showWarningMessage(
                             "No compiled grammars found to scan. Load agents into a sandbox and build their grammars first.",

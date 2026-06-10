@@ -255,6 +255,11 @@
           ],
           "default": "enforce",
           "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
+        },
+        "typeagentStudio.collisions.autoScanOnAgentChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically re-scan grammars for collisions when agents are loaded or unloaded in a sandbox, keeping the Collisions view current without a manual scan."
         }
       }
     },

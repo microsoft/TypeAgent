@@ -122,14 +122,12 @@ test("persists sandbox set across runtime instances and replays it on restore", 
         agents: string[];
     }>;
     assert.deepEqual(persisted.map((p) => p.id).sort(), ["alpha", "beta"]);
-    assert.deepEqual(
-        persisted.find((p) => p.id === "alpha")?.agents,
-        ["agentA"],
-    );
-    assert.deepEqual(
-        persisted.find((p) => p.id === "beta")?.agents,
-        ["agentB"],
-    );
+    assert.deepEqual(persisted.find((p) => p.id === "alpha")?.agents, [
+        "agentA",
+    ]);
+    assert.deepEqual(persisted.find((p) => p.id === "beta")?.agents, [
+        "agentB",
+    ]);
 
     const recorder = new CapturingSandboxManager();
     const second = createStudioRuntimeCore(context, { sandbox: recorder });
@@ -171,7 +169,10 @@ test("restoreSandboxes survives a per-sandbox failure and persists the surviving
     const persisted = store.get("studio.persistedSandboxes") as Array<{
         id: string;
     }>;
-    assert.deepEqual(persisted.map((p) => p.id), ["good"]);
+    assert.deepEqual(
+        persisted.map((p) => p.id),
+        ["good"],
+    );
 });
 
 test("runRemainingPhasesOnActiveSession completes pipeline in order", async () => {
@@ -961,6 +962,32 @@ test("scanGrammarCollisions with replace=false accumulates collisions", async ()
     await runtime.scanGrammarCollisions({ agents: ["a", "b"], replace: false });
 
     assert.equal((await runtime.listCollisions()).length, 2);
+});
+
+test("onAgentLoadChanged fires on agent load and unload but not other lifecycle", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    let fires = 0;
+    const sub = runtime.onAgentLoadChanged(() => {
+        fires++;
+    });
+
+    const started = await runtime.startSandbox();
+    // startSandbox alone (no agents) must not trigger the agent-load listener.
+    assert.equal(fires, 0);
+
+    await runtime.loadSandboxAgent(started.id, "player");
+    assert.equal(fires, 1);
+
+    await runtime.unloadSandboxAgent(started.id, "player");
+    assert.equal(fires, 2);
+
+    sub.dispose();
+
+    // After disposal, further changes must not be observed.
+    await runtime.loadSandboxAgent(started.id, "calendar");
+    assert.equal(fires, 2);
 });
 
 test("scanGrammarCollisions defaults to agents loaded across sandboxes", async () => {

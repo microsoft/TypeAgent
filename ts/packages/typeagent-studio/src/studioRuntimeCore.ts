@@ -243,6 +243,11 @@ export interface StudioRuntime {
     /** Subscribe to collision detections as they are emitted. */
     onCollisionDetected(listener: () => void): { dispose(): void };
     /**
+     * Subscribe to agent load/unload events across sandboxes. Used to keep the
+     * Collisions view current by re-scanning when the loaded agent set changes.
+     */
+    onAgentLoadChanged(listener: () => void): { dispose(): void };
+    /**
      * Scan agents' compiled grammars for real cross-schema collisions via the
      * NFA overlap engine, reporting each into the collision store (and Event
      * Log). Replaces prior `grammar-edit` collisions unless `replace` is false.
@@ -380,10 +385,7 @@ export function createStudioRuntimeCore(
                 agents: status.agents.map((a) => a.sourcePath ?? a.name),
             }),
         );
-        await context.workspaceState.update(
-            PERSISTED_SANDBOXES_KEY,
-            snapshot,
-        );
+        await context.workspaceState.update(PERSISTED_SANDBOXES_KEY, snapshot);
     };
 
     return {
@@ -669,6 +671,14 @@ export function createStudioRuntimeCore(
         onCollisionDetected(listener) {
             const subscription = events.subscribe(() => listener(), {
                 filter: { types: ["collision.detected"] },
+            });
+            return { dispose: () => subscription.unsubscribe() };
+        },
+        onAgentLoadChanged(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: {
+                    types: ["sandbox.agent.loaded", "sandbox.agent.unloaded"],
+                },
             });
             return { dispose: () => subscription.unsubscribe() };
         },
