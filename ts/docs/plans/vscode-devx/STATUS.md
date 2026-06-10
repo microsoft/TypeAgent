@@ -1,0 +1,126 @@
+# TypeAgent Studio — Status
+
+> Living status of the VS Code DevX work. Unlike `DESIGN.md` (which describes
+> the **intended** end state), this file tracks what is **actually built today**
+> and what remains. Update it whenever a capability changes state.
+
+Branch: feature work has merged to `main` via PR #2468; ongoing work continues
+on `dev/talzacc/typeagent_studio`.
+
+## Capability matrix
+
+Legend: ✅ done · 🟡 partial · ❌ not started.
+"Wired to dispatcher" = backed by the real TypeAgent dispatcher/engine rather
+than an in-memory stand-in.
+
+| Capability | Core logic | UI | Wired to dispatcher | Tested |
+| --- | --- | --- | --- | --- |
+| Sandboxes (lifecycle, agent load/unload) | ✅ in-memory | ✅ tree view | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅ |
+| Sandbox persistence across reload/restart | ✅ | ✅ (auto-restore) | n/a | ✅ |
+| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed | ✅ tree view | n/a | ✅ |
+| Event Log (structured event stream) | 🟡 in-memory ring buffer | ✅ tree view | ❌ most emit sites unwired | ✅ |
+| Agent health (status bar + findings) | 🟡 heuristic/filesystem checks | ✅ status bar | ❌ no real schema parse / grammar compile | ✅ |
+| Collisions (cross-schema grammar overlap) | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars) | ✅ |
+| Feedback (thumbs up/down → corpus) | ✅ | ✅ command | n/a | ✅ |
+| Replay / compare engine | 🟡 engine + command | 🟡 quick-pick (no Impact Report) | ❌ identity resolver (no two-version build/dispatch) | ✅ |
+| Onboarding bridge (snapshot/restore, stale detection) | ✅ | ✅ commands | ❌ in-memory bridge | ✅ |
+| Repo-root detection (find `packages/agents`) | ✅ | ✅ warn toast + status bar | n/a | ✅ |
+| Webview infrastructure (`webviewKit`) | ❌ | ❌ | — | ❌ |
+| Impact Report webview | ❌ | ❌ | ❌ | ❌ |
+| Player corpus capture | ❌ | ❌ | ❌ | ❌ |
+| Schema Studio | ❌ | ❌ | ❌ | ❌ |
+| Live Trace | ❌ | ❌ | ❌ | ❌ |
+| `agr-language` / `vscode-shell` refactor onto core | 🟡 dependency edge only | — | ❌ no behavioral integration | ❌ |
+
+## The long pole
+
+The headline "find a regression" journey (capture → replay two versions →
+Impact Report) is **not** closed:
+
+- **No webview infrastructure exists.** Impact Report, Schema Studio, Wizard,
+  Trace, and Live Trace all depend on a `webviewKit` that hasn't been started.
+  This is the single biggest hidden dependency.
+- **Replay is an identity-comparison shell.** The default resolver returns each
+  corpus entry's captured `expectedAction` for *both* versions, producing an
+  all-equal baseline (`studioRuntimeCore.ts` `identityReplayResolver`). There is
+  no git-worktree build, transient dispatcher, or version-specific resolution.
+- **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
+  it; without capture the Impact Report would have no real labelled corpus.
+- **Health gives false confidence.** It does not run the schema parser or
+  compile `.agr`; `grammar.rules.targetKnownActions` is currently a no-op pass
+  (`health/service.ts`). It can mark things healthier than the dispatcher would.
+
+## Recently completed (this work stream)
+
+- Health handler discovery uses `package.json` `exports` (dispatcher contract)
+  instead of filename heuristics; chat-style agents opt out of the
+  "needs grammar" rule via `manifest.schema.injected`.
+- Sandbox set persists across reload/restart (workspace-state snapshot).
+- Collisions view: "Skipped (N)" group surfacing each skipped schema's reason
+  and owning agent; auto-scan (debounced) when the loaded agent set changes.
+- Repo-root detection: finds the directory containing `packages/agents` by
+  probing each workspace folder, its `ts/` subdir, and ancestors; warns clearly
+  when none is found.
+- Repo policy + CodeQL fixes for the two new packages (LICENSE, Trademarks,
+  `crypto.randomUUID`, polynomial-regex removal).
+
+## Next slice candidates
+
+Smallest → larger. Quality/bugfix items first, then the long pole.
+
+1. **Corpora empty-state guidance** — actionable child item to seed an in-repo
+   corpus when an agent has none.
+2. **Add external corpus from the Corpora view** — UI for
+   `FileCorpusService.addExternalSource` (writes `<repoRoot>/.typeagent/studio.json`).
+3. **Investigate `code` agent's grammar discovery** — `code` ships
+   `dist/*.ag.json`; verify whether observed gaps were repo-root misdetection
+   (now fixed) vs. a real build/scanner-scope issue.
+4. **Investigate player/crossword grammar compile errors** — `unknown variable t`
+   / `__opt_v_0`. Classify as grammar generation vs. compiled-artifact
+   compatibility vs. scanner input assumption. (Engine/compiler quality, not UI.)
+5. **Per-schema `injected` health opt-out** — currently whole-agent; a single
+   injected sub-action wrongly silences the missing-grammar warning for the
+   whole agent (`health/service.ts`). Low severity, latent today.
+6. **Split `studioRuntimeCore.ts`** into bounded runtime modules
+   (sandbox/corpus/collision/replay/onboarding) before webviews land — it is
+   already a god/facade object.
+7. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+   restore, CSP/assets, message protocol, theming before full replay exists.
+8. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+   core corpus.
+9. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+   real dispatch; validate the Impact Report contract.
+
+## Build / test
+
+From `ts/`:
+
+```bash
+pnpm i
+
+# Engine library (jest against dist/test/*.spec.js — build first):
+pnpm --filter "@typeagent/core" build
+pnpm --filter "@typeagent/core" test          # 123 tests
+
+# Extension (esbuild bundles core into dist/extension.js; tests via tsx/node:test):
+pnpm --filter typeagent-studio build
+pnpm --filter typeagent-studio test:local     # 104 tests
+
+# Package + install the VSIX into the local VS Code:
+cd packages/typeagent-studio
+pnpm build && pnpm deploy:local               # then: Developer: Reload Window
+```
+
+## Known gotchas
+
+- **Open `ts/`, not the git root.** Repo-root detection now finds
+  `packages/agents` under `ts/` (or by walking up), and warns if it can't —
+  but pointing Studio at a folder with no agents still yields empty views.
+- **esbuild inlines core into the extension bundle.** Changes to
+  `@typeagent/core` require a `typeagent-studio` rebuild to be visible.
+- **Installed VSIX vs. F5 dev host.** Rebuilding `dist/extension.js` does not
+  update an installed VSIX — use `pnpm deploy:local` + reload, or run via F5.
+- **`vsce package` needs a LICENSE** in the package directory (now present).
+- **`string-union` action params** throw "Unknown type string-union" via
+  `confirmTranslation` when `@config dev on` (pre-existing dispatcher bug,
+  `actionTemplate.ts`), unrelated to Studio but can surface during agent work.

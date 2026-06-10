@@ -32,17 +32,20 @@ The first build is the long one; subsequent rebuilds are incremental.
 > `@typeagent/core`, rebuild core first — the studio package resolves
 > `@typeagent/core/*` to `./dist/*.js`.
 
-## 3. Run the tests
+## 3. Run the extension
 
-```pwsh
-pnpm --filter "@typeagent/core" test          # → 120 passed
-pnpm --filter typeagent-studio test:local     # → 91 passed
-```
+> **Open VS Code at `ts/`, not at the repo root.** The runtime resolves
+> the agent loader against your first workspace folder and looks for
+> `packages/agents/<name>` inside it. If you open the workspace at the
+> repo root, the loader searches `<repo-root>/packages/agents/…` which
+> doesn't exist — agents will show health `unknown` with empty
+> schema/grammar hashes. Open the workspace at `<repo-root>/ts` to
+> resolve correctly.
 
-Both suites should be fully green. If they aren't, stop and investigate
-before launching the extension — most things downstream depend on these.
+Two ways: a debug session (fastest for poking at code) or a real install
+(closer to how a user will experience it).
 
-## 4. Launch the extension in a dev VS Code
+### 3.1 As a debug session (F5)
 
 Open the repo in VS Code. There's a pre-configured launch config:
 
@@ -50,34 +53,48 @@ Open the repo in VS Code. There's a pre-configured launch config:
 2. Press **F5**
 
 This opens an Extension Development Host window with `typeagent-studio`
-loaded. The pre-launch task builds the extension automatically.
+loaded. The pre-launch task builds the extension automatically. Reloads
+on rebuild; breakpoints work.
 
-In the dev window, click the **TypeAgent Studio** icon (a beaker) in the
-activity bar.
+### 3.2 As an installed extension
+
+Package and install into your real VS Code:
+
+```pwsh
+pnpm --filter typeagent-studio deploy:local
+```
+
+This builds a `.vsix` into `dist-pub/` and runs `code --install-extension`.
+Reload your VS Code window afterwards. To uninstall later:
+`code --uninstall-extension typeagent.typeagent-studio`.
+
+Use `pnpm --filter typeagent-studio package` if you want the `.vsix`
+without installing.
 
 ---
 
-## 5. What to try, in order
+## 4. What to try, in order
 
 Roughly smallest-to-headline. Each item below is something that exists today
-on this branch and is worth a click-through to review.
+and is worth a click-through to review.
 
-### 5.1 The Sandboxes view
+### 4.1 The Sandboxes view
 
 The activity-bar app opens with a **Sandboxes** tree.
 
 - Click the `+` (Start sandbox) in the view title. A row appears with a
   generated id and `running` state.
-- Right-click the running row → **Load agent**. Pick `player`. The agent
-  appears as a child row with a health badge and (real) schema/grammar
-  hashes.
-- Right-click the agent row → **Unload agent**.
-- Right-click the sandbox row → **Restart** or **Stop**.
+- Each running sandbox row has inline icons at the right: **Load agent**
+  (`+`), **Restart**, **Stop**. Click **Load agent** and pick `player`.
+  The agent appears as a child row with a health badge and (real)
+  schema/grammar hashes.
+- Each agent row has an inline **Unload agent** (trash) icon.
+- Stopped sandbox rows show an inline **Start** icon.
 
 This exercises the sandbox-lifecycle primitive end-to-end: events fire on
 each action and the tree refreshes itself off those events.
 
-### 5.2 The Event Log view
+### 4.2 The Event Log view
 
 While doing the steps above, open the **Event Log** view. Each
 sandbox-lifecycle action emits a structured event you should see appear
@@ -86,14 +103,14 @@ live (icon + timestamp + agent). Hover any row for the full payload tooltip.
 The view is a bounded ring (newest 200). Use **Clear** in the title bar to
 reset.
 
-### 5.3 The Health status bar
+### 4.3 The Health status bar
 
 Bottom-right of the editor, a status-bar item shows the worst-case health
 across all loaded agents. Load an agent that's intentionally broken (or
 just observe with `player`) and watch the badge color update. Click it to
 focus the Sandboxes view.
 
-### 5.4 The Corpora view
+### 4.4 The Corpora view
 
 The **Corpora** tree shows agents that currently have a corpus view.
 Once `player` is loaded, expand it to see entries grouped by source
@@ -101,9 +118,9 @@ Once `player` is loaded, expand it to see entries grouped by source
 
 In-repo entries are read from `corpus/<agent>.utterances.jsonl` if such a
 file exists. (At time of writing, `player` doesn't have an in-repo corpus
-yet — see §7 below.)
+yet — see §6 below.)
 
-### 5.5 Recording feedback
+### 4.5 Recording feedback
 
 In the Corpora view title bar, click **Record feedback**. A guided flow
 collects:
@@ -119,7 +136,7 @@ After recording, watch the Event Log — a `feedback.recorded` event
 appears. If you supplied an utterance, it federates into the Corpora view
 under that agent's `feedback` source.
 
-### 5.6 The Collisions view
+### 4.6 The Collisions view
 
 The **Collisions** view title bar offers **Scan grammars for collisions**.
 This runs the real NFA overlap engine against every loaded agent's
@@ -134,7 +151,7 @@ compiled grammar.
 - **Click a participant** to jump to its grammar source — the authored
   `.agr` file when present, otherwise the compiled `.ag.json`.
 
-### 5.7 Replay corpus (the headline-but-incomplete experience)
+### 4.7 Replay corpus (the headline-but-incomplete experience)
 
 In the Corpora view title bar, click **Replay corpus**.
 
@@ -149,14 +166,15 @@ In the Corpora view title bar, click **Replay corpus**.
 
 > **What's missing today:** the result is a quick-pick, not a webview.
 > The Impact Report (the four-pane diff visualization that is the
-> headline UI in [`DESIGN.md`](./DESIGN.md) §6) is not yet built. See §7.
+> headline UI described in [`DESIGN.md`](./DESIGN.md)) is not yet built.
+> See §6.
 >
 > The default version-A vs version-B resolver is also currently an
 > *identity* resolver — every utterance routes the same way on both
 > sides, so the all-equal baseline is what you'll see. Real per-version
 > build/dispatch is a future piece.
 
-### 5.8 Onboarding (J1) — the wizard backend
+### 4.8 Onboarding — the wizard backend
 
 The wizard webview itself isn't built yet, but the entire onboarding
 *backend* is wired through commands:
@@ -181,7 +199,7 @@ command palette today and intended to be hosted in a webview later.
 
 ---
 
-## 6. Where to look in the source
+## 5. Where to look in the source
 
 If you want to read code, the highest-signal entry points:
 
@@ -199,7 +217,7 @@ worth knowing about: the presentation modules are vscode-free and
 unit-testable; the providers are thin VS Code adapters. When something
 behaves wrong, the presentation layer is usually where to look first.
 
-## 7. What is NOT yet built
+## 6. What is NOT yet built
 
 So you don't go hunting for things that aren't there:
 
@@ -226,12 +244,12 @@ system; this list will shrink as work proceeds.
 
 ---
 
-## 8. Updating this guide
+## 7. Updating this guide
 
 This is a living document. As features land or behaviour changes, edit
 the corresponding section here and commit alongside the code change. The
-goal is that anyone picking up the branch can run through §5 top to
+goal is that anyone picking up this work can run through §4 top to
 bottom and have a faithful tour of what works.
 
-If a feature graduates from §7 ("not built") into §5 ("here's how to try
-it"), move it. If §5 grows past about 10 items, split it by webview.
+If a feature graduates from §6 ("not built") into §4 ("here's how to try
+it"), move it. If §4 grows past about 10 items, split it by webview.
