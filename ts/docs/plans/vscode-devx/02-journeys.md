@@ -5,19 +5,19 @@
 > **Scope:** Capture the six developer journeys that TypeAgent Studio targets, the personas that walk them, the in-flight work that intersects each, and the success/exit criteria that tell us a journey is "done enough" for MVP.
 >
 > **Anchor agent (MVP):** `player` (Phase 2 / Q-P4).
-> **Center of gravity:** compare-and-replay — *"change schema/grammar; see action-level impact against a corpus of real utterances, annotated with the user-feedback labels we already collect."*
+> **Center of gravity:** compare-and-replay — _"change schema/grammar; see action-level impact against a corpus of real utterances, annotated with the user-feedback labels we already collect."_
 
 ---
 
 ## 0. Reading order and how this file relates to the rest
 
-| File | Role |
-|---|---|
+| File                                 | Role                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | [01-inventory.md](./01-inventory.md) | What exists today (§1–§7), gaps (§0, §8), in-flight work (§10 collisions, §11 MCP, §12 feedback), and Phase 2 decisions (§13). |
-| **02-journeys.md (this file)** | What developers *do* with Studio. Defines journeys J1–J6, the personas, and the success criteria that gate MVP. |
-| 03-features.md (next deliverable) | Per-journey feature sketch at three layers (editor / panels / commands), mapped to inventory primitives. |
-| 04-mvp-slice.md (subsequent) | Vertical slice across all six journeys that becomes the MVP scope. |
-| 05-implementation-plan.md | How we build it; sequencing, API shapes, file layouts. |
+| **02-journeys.md (this file)**       | What developers _do_ with Studio. Defines journeys J1–J6, the personas, and the success criteria that gate MVP.                |
+| 03-features.md (next deliverable)    | Per-journey feature sketch at three layers (editor / panels / commands), mapped to inventory primitives.                       |
+| 04-mvp-slice.md (subsequent)         | Vertical slice across all six journeys that becomes the MVP scope.                                                             |
+| 05-implementation-plan.md            | How we build it; sequencing, API shapes, file layouts.                                                                         |
 
 Journeys are intentionally **independent of feature sketches**. A journey is a story the developer experiences end-to-end; the features are the specific UI affordances we build to make that story possible. Keeping them separate lets us change one without breaking the other.
 
@@ -27,14 +27,14 @@ Journeys are intentionally **independent of feature sketches**. A journey is a s
 
 Six personas, derived from the inventory's capability surface and the parallel plan's `we-have-a-giant-declarative-platypus.md` Phase B. One developer typically wears multiple hats; the personas are roles, not people.
 
-| # | Persona | Owns | Today's friction |
-|---|---|---|---|
-| **P1** | **Agent Author** | A new agent from scratch. | `onboarding` agent works but is CLI/MCP-hidden. Without it: hand-copy four files and pray dispatcher picks the agent up. No health check (§0 obs 9). |
-| **P2** | **Schema Designer** | The TypeScript action surface (`<name>Schema.ts`). | `examples/schemaStudio` CLI exists but isn't in the editor. No "load corpus, see misses" view. Action collisions surface late (§10). |
-| **P3** | **Grammar Tuner** | The `.agr` file. | `agr-language` debug panel exists but loads one `.txt` corpus at a time. No federation. No direct schema-context tie-in. |
-| **P4** | **Quality / Regression Owner** | "Did this change make things better or worse?" | `diffGrammars` is structural. No action-level / utterance-level delta. No batch report. Feedback labels (PR #2341, §12) are not yet wired into a regression view. |
-| **P5** | **Trace Investigator** | "This one real utterance went wrong — why?" | Profiler is polled; `debug("typeagent:*")` is stderr text; reasoning traces are POC-grade and uncorrelated. No "all 👎 traces this week" worklist. |
-| **P6** | **Live Observer** | Demos, internal review, perf spot-checks. | `vscode-shell` shows chat; no dispatch-event trace stream. No per-session live mirror. |
+| #      | Persona                        | Owns                                               | Today's friction                                                                                                                                                  |
+| ------ | ------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P1** | **Agent Author**               | A new agent from scratch.                          | `onboarding` agent works but is CLI/MCP-hidden. Without it: hand-copy four files and pray dispatcher picks the agent up. No health check (§0 obs 9).              |
+| **P2** | **Schema Designer**            | The TypeScript action surface (`<name>Schema.ts`). | `examples/schemaStudio` CLI exists but isn't in the editor. No "load corpus, see misses" view. Action collisions surface late (§10).                              |
+| **P3** | **Grammar Tuner**              | The `.agr` file.                                   | `agr-language` debug panel exists but loads one `.txt` corpus at a time. No federation. No direct schema-context tie-in.                                          |
+| **P4** | **Quality / Regression Owner** | "Did this change make things better or worse?"     | `diffGrammars` is structural. No action-level / utterance-level delta. No batch report. Feedback labels (PR #2341, §12) are not yet wired into a regression view. |
+| **P5** | **Trace Investigator**         | "This one real utterance went wrong — why?"        | Profiler is polled; `debug("typeagent:*")` is stderr text; reasoning traces are POC-grade and uncorrelated. No "all 👎 traces this week" worklist.                |
+| **P6** | **Live Observer**              | Demos, internal review, perf spot-checks.          | `vscode-shell` shows chat; no dispatch-event trace stream. No per-session live mirror.                                                                            |
 
 **The MVP must serve P1 (entry door) and P4 (the headline value) end-to-end.** P2/P3 are heavily exercised inside P4's workflow. P5/P6 are the per-trace zoom and the live mirror; they share the structured-event infrastructure that P4 needs anyway.
 
@@ -44,14 +44,14 @@ Six personas, derived from the inventory's capability surface and the parallel p
 
 Six journeys. Numbered to match the parallel plan and to be referenceable in feature work.
 
-| # | Journey title | Primary persona(s) | Why it matters | MVP depth |
-|---|---|---|---|---|
-| **J1** | Stand up a new agent | P1 | The entry door. Without it, the platform stays one-team-deep. | Minimal viable: wizard exists, onboarding agent works behind it, scaffold compiles and dispatches. |
-| **J2** | Tune the schema against real utterances | P2 | Schemas drift. Real utterances reveal action shapes the designer didn't anticipate. | Moderate: load corpus, see typed-action mapping per utterance, see un-typeable utterances. |
-| **J3** | Tune the grammar against utterance variations | P3 | Same intent, many phrasings — grammar must cover them without forcing a cache miss / LLM round-trip every time. | Light: existing `agr-language` linked into Studio. Federation comes via the same corpus service J2 builds. |
-| **J4** | Find a regression (compare-and-replay) | P4 | **The headline.** Compare schema or grammar versions against a corpus, see action-level impact, annotated with feedback labels. | **Deep.** The defining MVP capability. |
-| **J5** | Debug a single failing trace | P5 | When the report flags an utterance, you need to walk one trace to ground truth. | Light in MVP: navigate from a failure row to a trace view; trace primitives may stay polled. |
-| **J6** | Observe a live session | P6 | Demos, live debugging, "watch the system breathe." | Minimal: status bar + a basic event tail; reuses the same structured event stream as J5. |
+| #      | Journey title                                 | Primary persona(s) | Why it matters                                                                                                                  | MVP depth                                                                                                  |
+| ------ | --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **J1** | Stand up a new agent                          | P1                 | The entry door. Without it, the platform stays one-team-deep.                                                                   | Minimal viable: wizard exists, onboarding agent works behind it, scaffold compiles and dispatches.         |
+| **J2** | Tune the schema against real utterances       | P2                 | Schemas drift. Real utterances reveal action shapes the designer didn't anticipate.                                             | Moderate: load corpus, see typed-action mapping per utterance, see un-typeable utterances.                 |
+| **J3** | Tune the grammar against utterance variations | P3                 | Same intent, many phrasings — grammar must cover them without forcing a cache miss / LLM round-trip every time.                 | Light: existing `agr-language` linked into Studio. Federation comes via the same corpus service J2 builds. |
+| **J4** | Find a regression (compare-and-replay)        | P4                 | **The headline.** Compare schema or grammar versions against a corpus, see action-level impact, annotated with feedback labels. | **Deep.** The defining MVP capability.                                                                     |
+| **J5** | Debug a single failing trace                  | P5                 | When the report flags an utterance, you need to walk one trace to ground truth.                                                 | Light in MVP: navigate from a failure row to a trace view; trace primitives may stay polled.               |
+| **J6** | Observe a live session                        | P6                 | Demos, live debugging, "watch the system breathe."                                                                              | Minimal: status bar + a basic event tail; reuses the same structured event stream as J5.                   |
 
 The **center of gravity (compare-and-replay)** cuts hardest through J2, J3, J4. J5 is per-trace zoom-in. J1 is the entry door. J6 is the live mirror.
 
@@ -153,7 +153,7 @@ Each journey below has the same five-part shape:
 - Loading a federated corpus for `player` shows every utterance grouped by (matched action / unmatched), with feedback labels where present.
 - Filtering by `rating: down`, `category: wrong-agent` returns the expected subset.
 - An un-typeable utterance produces an actionable suggestion (add field, split variant) tied to a code-action on the schema file.
-- Adding a new action variant that collides triggers the collision detector inline; the developer sees the collision *before* commit.
+- Adding a new action variant that collides triggers the collision detector inline; the developer sees the collision _before_ commit.
 - A schema edit re-evaluates the per-utterance mapping rows visibly within a few seconds (no full daemon restart for incremental edits).
 
 ---
@@ -207,7 +207,7 @@ Each journey below has the same five-part shape:
 >
 > 1. **Structural diff** — `diffGrammars` output.
 > 2. **Coverage delta** — `computeCoverage` before/after.
-> 3. **Action-level delta** *(the new primitive)* — every utterance where vA and vB produced different action JSON. Each row is annotated with a feedback label when present: a `👎` on the vA action with category `bad-response` shows green here ("you fixed a known bad response"); a `👍` on vA with a different vB action shows red ("you may have broken something users liked"). Cells that hit a cache miss in vB show the developer-chosen replay-miss state (needs-explanation / live-LLM-resolved / strict).
+> 3. **Action-level delta** _(the new primitive)_ — every utterance where vA and vB produced different action JSON. Each row is annotated with a feedback label when present: a `👎` on the vA action with category `bad-response` shows green here ("you fixed a known bad response"); a `👍` on vA with a different vB action shows red ("you may have broken something users liked"). Cells that hit a cache miss in vB show the developer-chosen replay-miss state (needs-explanation / live-LLM-resolved / strict).
 > 4. **Collisions delta** — any new action collisions vB introduced vs vA (data from the §10 detectors).
 >
 > Dani filters action-level rows to "red" (likely-bad changes). Two rows remain. They click one; J5 opens with that trace fully expanded.
@@ -232,7 +232,7 @@ Each journey below has the same five-part shape:
 #### In-flight work this journey intersects
 
 - **All of it.** This is the journey that justifies every other primitive existing.
-- **PR #2341 (§12).** Without feedback labels the Impact Report is just "different." With them it becomes "different *and judged by humans to be worse* (or better)" — the difference between a curiosity and a decision-grade tool.
+- **PR #2341 (§12).** Without feedback labels the Impact Report is just "different." With them it becomes "different _and judged by humans to be worse_ (or better)" — the difference between a curiosity and a decision-grade tool.
 - **§10 (collisions).** Collisions are surfaced as a fourth diff lens, not a separate report.
 - **Structured event stream.** Each replay run emits structured events; the report reads from the event log so individual rows can drill into J5.
 
@@ -241,7 +241,7 @@ Each journey below has the same five-part shape:
 - A replay across **the full player corpus** (in-repo + captures + feedback) finishes in **under one minute** on a developer laptop with the default replay-miss policy.
 - The report shows all four lenses (structural / coverage / action-level / collisions).
 - Action-level rows are annotated with the latest feedback label per `requestId` when one exists. Rows without a label render gracefully.
-- Filtering rows by "likely-bad change" (= changed action where the prior version had 👍 *or* current version's matching feedback is 👎) returns the expected subset.
+- Filtering rows by "likely-bad change" (= changed action where the prior version had 👍 _or_ current version's matching feedback is 👎) returns the expected subset.
 - Each row links to J5 for full-trace investigation.
 - The developer can choose the replay-miss policy per run; the choice is remembered per workspace; the auto-explain mode shows estimated LLM-call count + cost before firing.
 - **Validation gate:** the report must agree with developer judgment on a hand-labeled regression set for `player` before the journey is declared MVP-complete.
@@ -254,7 +254,7 @@ Each journey below has the same five-part shape:
 
 #### Story
 
-> Eli arrives in **Trace Viewer** from a J4 red row, or by right-clicking a 👎 message in vscode-shell. The viewer renders the full dispatch tree for that requestId: user prompt → grammar match attempts (with which rules matched/missed) → cache hit/miss → translation phase (with LLM calls if any) → action selection → execution → result. Every node carries timing. Collision events (§10) for that trace are inline. Reasoning trace steps (when available) are correlated by requestId. Eli clicks a grammar miss node; jumps to the `.agr` line that *should* have matched and didn't.
+> Eli arrives in **Trace Viewer** from a J4 red row, or by right-clicking a 👎 message in vscode-shell. The viewer renders the full dispatch tree for that requestId: user prompt → grammar match attempts (with which rules matched/missed) → cache hit/miss → translation phase (with LLM calls if any) → action selection → execution → result. Every node carries timing. Collision events (§10) for that trace are inline. Reasoning trace steps (when available) are correlated by requestId. Eli clicks a grammar miss node; jumps to the `.agr` line that _should_ have matched and didn't.
 
 #### Entry points
 
@@ -319,24 +319,24 @@ Each journey below has the same five-part shape:
 
 ## 5. Cross-journey infrastructure (which journey forces which build)
 
-Single primitives serve multiple journeys. To avoid double-building, map each cross-cutting piece to the journey that *forces* it to exist, then list the dependents:
+Single primitives serve multiple journeys. To avoid double-building, map each cross-cutting piece to the journey that _forces_ it to exist, then list the dependents:
 
-| Primitive | Forced by | Reused by |
-|---|---|---|
-| **Sandboxed dispatcher lifecycle** (Q2) | J1 | All journeys |
-| **Federated corpus service** | J2 | J3, J4, J5 |
-| **`replayCorpus()` engine primitive** | J4 | (J2 incrementally; J5 for single-trace replay) |
-| **Structured event stream** | J4 (impact report) | J5, J6 |
-| **Feedback corpus integration** (PR #2341 wired into corpus + report) | J4 | J2, J3, J5 |
-| **Collision-event annotation surface** (§10) | J2 (inline diagnostic) | J4 (diff lens), J5 (trace annotation) |
-| **Trace viewer scaffolding** | J5 | J4 (drill-in), J6 (drill-in) |
-| **Agent health check** | J1 (final phase) | J2/J3 (sanity check after edit), J4 (per-replay) |
+| Primitive                                                             | Forced by              | Reused by                                        |
+| --------------------------------------------------------------------- | ---------------------- | ------------------------------------------------ |
+| **Sandboxed dispatcher lifecycle** (Q2)                               | J1                     | All journeys                                     |
+| **Federated corpus service**                                          | J2                     | J3, J4, J5                                       |
+| **`replayCorpus()` engine primitive**                                 | J4                     | (J2 incrementally; J5 for single-trace replay)   |
+| **Structured event stream**                                           | J4 (impact report)     | J5, J6                                           |
+| **Feedback corpus integration** (PR #2341 wired into corpus + report) | J4                     | J2, J3, J5                                       |
+| **Collision-event annotation surface** (§10)                          | J2 (inline diagnostic) | J4 (diff lens), J5 (trace annotation)            |
+| **Trace viewer scaffolding**                                          | J5                     | J4 (drill-in), J6 (drill-in)                     |
+| **Agent health check**                                                | J1 (final phase)       | J2/J3 (sanity check after edit), J4 (per-replay) |
 
 This table is also the build dependency graph for Phase 5 (implementation plan).
 
 ---
 
-## 6. What's deliberately *not* in any MVP journey
+## 6. What's deliberately _not_ in any MVP journey
 
 To keep MVP focused, the following are explicitly **out of scope** and will be revisited post-MVP:
 
@@ -377,4 +377,4 @@ Before this file is "done," confirm with the user:
 
 ---
 
-*End of Phase 3 journeys draft.*
+_End of Phase 3 journeys draft._

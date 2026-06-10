@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    EventEmitterLike,
-} from "../events/eventStream.js";
+import type { EventEmitterLike } from "../events/eventStream.js";
 import {
     EVENT_SCHEMA_VERSION,
     type SandboxLifecycleEvent,

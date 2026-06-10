@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    InProcessEventStream,
-} from "../src/events/index.js";
+import { InProcessEventStream } from "../src/events/index.js";
 import type {
     SandboxLifecycleEvent,
     StudioEvent,
@@ -29,16 +27,15 @@ function baseConfig(overrides: Partial<SandboxConfig> = {}): SandboxConfig {
 
 function lifecycleTypes(events: StudioEvent[]): string[] {
     return events
-        .filter(
-            (e): e is SandboxLifecycleEvent =>
-                e.type.startsWith("sandbox."),
+        .filter((e): e is SandboxLifecycleEvent =>
+            e.type.startsWith("sandbox."),
         )
         .map((e) => e.type);
 }
 
 function lifecycleEvents(events: StudioEvent[]): SandboxLifecycleEvent[] {
-    return events.filter(
-        (e): e is SandboxLifecycleEvent => e.type.startsWith("sandbox."),
+    return events.filter((e): e is SandboxLifecycleEvent =>
+        e.type.startsWith("sandbox."),
     );
 }
 

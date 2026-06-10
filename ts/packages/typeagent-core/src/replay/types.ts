@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { CorpusFilter, CorpusSource, FeedbackLabel } from "../corpus/types.js";
+import type {
+    CorpusFilter,
+    CorpusSource,
+    FeedbackLabel,
+} from "../corpus/types.js";
 import type { CollisionDetectedEvent } from "../events/types.js";
 
 export type ReplayMissPolicy =

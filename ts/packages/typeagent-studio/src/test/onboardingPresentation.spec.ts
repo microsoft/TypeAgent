@@ -240,5 +240,8 @@ test("normalizeMarkdownFileName preserves markdown extension and trims whitespac
 });
 
 test("normalizeMarkdownFileName uses fallback when configured value is blank", () => {
-    assert.equal(normalizeMarkdownFileName("   ", "fallback.md"), "fallback.md");
+    assert.equal(
+        normalizeMarkdownFileName("   ", "fallback.md"),
+        "fallback.md",
+    );
 });

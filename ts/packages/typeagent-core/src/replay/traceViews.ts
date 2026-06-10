@@ -91,9 +91,7 @@ export function buildWorkflowViewModel(
     return { nodes, edges };
 }
 
-function extractWorkflow(
-    payload: unknown,
-):
+function extractWorkflow(payload: unknown):
     | {
           stepId: string;
           parentStepId?: string;

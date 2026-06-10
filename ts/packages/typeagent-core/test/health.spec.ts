@@ -16,7 +16,10 @@ async function write(file: string, text: string): Promise<void> {
     await fs.writeFile(file, text, "utf8");
 }
 
-async function createAgentScaffold(repoRoot: string, agent: string): Promise<void> {
+async function createAgentScaffold(
+    repoRoot: string,
+    agent: string,
+): Promise<void> {
     const src = path.join(repoRoot, "packages", "agents", agent, "src");
     await write(
         path.join(src, `${agent}Manifest.json`),
@@ -33,7 +36,10 @@ async function createAgentScaffold(repoRoot: string, agent: string): Promise<voi
             2,
         ) + "\n",
     );
-    await write(path.join(src, "schema.ts"), "export type X = { kind: string };\n");
+    await write(
+        path.join(src, "schema.ts"),
+        "export type X = { kind: string };\n",
+    );
     await write(path.join(src, "schema.json"), '{"actions":["a"]}\n');
     await write(path.join(src, "schema.agr"), "[A] => action\n");
     await write(
@@ -49,7 +55,8 @@ async function createAgentScaffold(repoRoot: string, agent: string): Promise<voi
             "data",
             "config.json",
         ),
-        JSON.stringify({ agents: { [agent]: { name: agent } } }, null, 2) + "\n",
+        JSON.stringify({ agents: { [agent]: { name: agent } } }, null, 2) +
+            "\n",
     );
 }
 
@@ -100,7 +107,8 @@ describe("FileHealthService", () => {
                 "data",
                 "config.json",
             ),
-            JSON.stringify({ agents: { demo: { name: "demo" } } }, null, 2) + "\n",
+            JSON.stringify({ agents: { demo: { name: "demo" } } }, null, 2) +
+                "\n",
         );
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("demo");
@@ -121,9 +129,9 @@ describe("FileHealthService", () => {
         );
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("demo");
-        expect(
-            findings.some((f) => f.ruleId === "provider.registers"),
-        ).toBe(true);
+        expect(findings.some((f) => f.ruleId === "provider.registers")).toBe(
+            true,
+        );
     });
 
     it("reports actions.unique.acrossLoaded warning for duplicate action types", async () => {

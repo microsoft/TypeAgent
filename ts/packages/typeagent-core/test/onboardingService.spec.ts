@@ -14,7 +14,9 @@ describe("InMemoryOnboardingBridge", () => {
             now: () => 100,
         });
 
-        const state = await bridge.start({ description: "Calendar integration" });
+        const state = await bridge.start({
+            description: "Calendar integration",
+        });
         expect(state.sessionId).toBe("s1");
         expect(state.currentPhase).toBe("Discovery");
         expect(state.agentName).toBe("calendar-integration");
@@ -34,7 +36,10 @@ describe("InMemoryOnboardingBridge", () => {
         await bridge.start({ description: "Calendar integration" });
         const snap = await bridge.runPhase("s1", "Discovery", { seed: 1 });
         expect(snap.status).toBe("complete");
-        expect(snap.outputs).toEqual({ phase: "Discovery", inputs: { seed: 1 } });
+        expect(snap.outputs).toEqual({
+            phase: "Discovery",
+            inputs: { seed: 1 },
+        });
 
         const state = await bridge.snapshot("s1");
         expect(state.currentPhase).toBe("PhraseGen");

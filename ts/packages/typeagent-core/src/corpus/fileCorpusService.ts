@@ -4,10 +4,7 @@
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 
-import {
-    readJsonlFile,
-    writeJsonlFile,
-} from "./jsonl.js";
+import { readJsonlFile, writeJsonlFile } from "./jsonl.js";
 import {
     CorpusEntryNotFoundError,
     ExternalSourceExistsError,
@@ -24,9 +21,7 @@ import {
  * dispatcher feedback sink; until then the default is empty so the rest of
  * F0.2 can land independently.
  */
-export type FeedbackEntryProvider = (
-    agent: string,
-) => Promise<CorpusEntry[]>;
+export type FeedbackEntryProvider = (agent: string) => Promise<CorpusEntry[]>;
 
 export interface FileCorpusServiceOptions {
     /** Repository root; in-repo corpus + studio.json live here. */
@@ -65,15 +60,11 @@ export class FileCorpusService implements CorpusService {
     constructor(opts: FileCorpusServiceOptions) {
         this.repoRoot = opts.repoRoot;
         this.profileDir = opts.profileDir;
-        this.feedbackProvider =
-            opts.feedbackProvider ?? (async () => []);
+        this.feedbackProvider = opts.feedbackProvider ?? (async () => []);
         this.now = opts.now ?? Date.now;
     }
 
-    async list(
-        agent: string,
-        filter?: CorpusFilter,
-    ): Promise<CorpusEntry[]> {
+    async list(agent: string, filter?: CorpusFilter): Promise<CorpusEntry[]> {
         const all = await this.loadAll(agent);
         return filter ? all.filter((e) => matchesFilter(e, filter)) : all;
     }
@@ -177,9 +168,7 @@ export class FileCorpusService implements CorpusService {
         const cfg = await this.readStudioConfig();
         const sources = cfg.externalSources ?? [];
         if (
-            sources.some(
-                (s) => s.agent === spec.agent && s.name === spec.name,
-            )
+            sources.some((s) => s.agent === spec.agent && s.name === spec.name)
         ) {
             throw new ExternalSourceExistsError(spec.agent, spec.name);
         }
@@ -195,9 +184,7 @@ export class FileCorpusService implements CorpusService {
         await this.writeStudioConfig({ ...cfg, externalSources: sources });
     }
 
-    async listExternalSources(
-        agent?: string,
-    ): Promise<ExternalSourceSpec[]> {
+    async listExternalSources(agent?: string): Promise<ExternalSourceSpec[]> {
         const cfg = await this.readStudioConfig();
         const all = cfg.externalSources ?? [];
         return agent ? all.filter((s) => s.agent === agent) : all;
@@ -292,10 +279,7 @@ async function listJsonlFiles(dir: string): Promise<string[]> {
         .sort();
 }
 
-function attachFeedback(
-    entry: CorpusEntry,
-    label: FeedbackLabel,
-): CorpusEntry {
+function attachFeedback(entry: CorpusEntry, label: FeedbackLabel): CorpusEntry {
     return { ...entry, feedback: label };
 }
 

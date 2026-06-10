@@ -17,49 +17,49 @@ export class InMemoryFeedbackBackend implements FeedbackBackend {
 
     async recordUserFeedback(input: FeedbackRecordInput): Promise<void> {
         const existing = this.rows.get(input.requestId);
-                const row: FeedbackRow = {
+        const row: FeedbackRow = {
             requestId: input.requestId,
             rating: input.rating,
             includesContext: input.includeContext ?? false,
             recordedAt: input.recordedAt ?? Date.now(),
             hidden: existing?.hidden ?? false,
-                        ...(input.category !== undefined
-                                ? { category: input.category }
-                                : existing?.category !== undefined
-                                    ? { category: existing.category }
-                                    : {}),
-                        ...(input.comment !== undefined
-                                ? { comment: input.comment }
-                                : existing?.comment !== undefined
-                                    ? { comment: existing.comment }
-                                    : {}),
-                        ...(input.agent !== undefined
-                                ? { agent: input.agent }
-                                : existing?.agent !== undefined
-                                    ? { agent: existing.agent }
-                                    : {}),
-                        ...(input.utterance !== undefined
-                                ? { utterance: input.utterance }
-                                : existing?.utterance !== undefined
-                                    ? { utterance: existing.utterance }
-                                    : {}),
-                        ...(input.expectedAction !== undefined
-                                ? { expectedAction: input.expectedAction }
-                                : existing?.expectedAction !== undefined
-                                    ? { expectedAction: existing.expectedAction }
-                                    : {}),
-                        ...(input.tags !== undefined
-                                ? { tags: input.tags }
-                                : existing?.tags !== undefined
-                                    ? { tags: existing.tags }
-                                    : {}),
-                        ...(input.sessionId !== undefined
-                                ? { sessionId: input.sessionId }
-                                : existing?.sessionId !== undefined
-                                    ? { sessionId: existing.sessionId }
-                                    : {}),
-                };
-                this.rows.set(input.requestId, row);
+            ...(input.category !== undefined
+                ? { category: input.category }
+                : existing?.category !== undefined
+                  ? { category: existing.category }
+                  : {}),
+            ...(input.comment !== undefined
+                ? { comment: input.comment }
+                : existing?.comment !== undefined
+                  ? { comment: existing.comment }
+                  : {}),
+            ...(input.agent !== undefined
+                ? { agent: input.agent }
+                : existing?.agent !== undefined
+                  ? { agent: existing.agent }
+                  : {}),
+            ...(input.utterance !== undefined
+                ? { utterance: input.utterance }
+                : existing?.utterance !== undefined
+                  ? { utterance: existing.utterance }
+                  : {}),
+            ...(input.expectedAction !== undefined
+                ? { expectedAction: input.expectedAction }
+                : existing?.expectedAction !== undefined
+                  ? { expectedAction: existing.expectedAction }
+                  : {}),
+            ...(input.tags !== undefined
+                ? { tags: input.tags }
+                : existing?.tags !== undefined
+                  ? { tags: existing.tags }
+                  : {}),
+            ...(input.sessionId !== undefined
+                ? { sessionId: input.sessionId }
+                : existing?.sessionId !== undefined
+                  ? { sessionId: existing.sessionId }
+                  : {}),
+        };
+        this.rows.set(input.requestId, row);
     }
 
     async recordUserHide(requestId: string): Promise<void> {

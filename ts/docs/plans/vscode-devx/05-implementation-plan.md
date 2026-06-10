@@ -2,7 +2,7 @@
 
 > **Status:** Drafted 2026-05-14, after [04-mvp-slice.md](./04-mvp-slice.md).
 >
-> **Purpose:** Concrete shapes — API surfaces, file layouts, schema-versioning rules, transport choices — to make the MVP slice buildable. Where a decision is open, this doc names it as an *open decision* with a recommended default rather than hand-waving.
+> **Purpose:** Concrete shapes — API surfaces, file layouts, schema-versioning rules, transport choices — to make the MVP slice buildable. Where a decision is open, this doc names it as an _open decision_ with a recommended default rather than hand-waving.
 >
 > **Convention:** Type definitions are TypeScript-shaped pseudo-code. They are illustrative; the real types ship in `typeagent-core` and are the single source of truth.
 
@@ -69,23 +69,28 @@ ts/
 // typeagent-core/src/events/types.ts
 
 export type StudioEvent =
-  | PhaseStartEvent | PhaseEndEvent
-  | CacheHitEvent  | CacheMissEvent
-  | GrammarMatchAttemptEvent | GrammarMatchResultEvent
-  | ActionSelectedEvent | ActionExecutedEvent
+  | PhaseStartEvent
+  | PhaseEndEvent
+  | CacheHitEvent
+  | CacheMissEvent
+  | GrammarMatchAttemptEvent
+  | GrammarMatchResultEvent
+  | ActionSelectedEvent
+  | ActionExecutedEvent
   | FeedbackRecordedEvent
   | CollisionDetectedEvent
   | ReasoningStepEvent
   | SandboxLifecycleEvent
-  | ReplayRowEvent | ReplaySummaryEvent;
+  | ReplayRowEvent
+  | ReplaySummaryEvent;
 
 export interface StudioEventBase {
-  schemaVersion: 1;       // bumped on breaking payload changes
+  schemaVersion: 1; // bumped on breaking payload changes
   type: string;
-  ts: number;             // epoch ms
-  requestId?: string;     // correlates a dispatch
-  runId?: string;         // correlates a replay
-  sandboxId: string;      // which sandbox emitted it
+  ts: number; // epoch ms
+  requestId?: string; // correlates a dispatch
+  runId?: string; // correlates a replay
+  sandboxId: string; // which sandbox emitted it
   agent?: string;
 }
 
@@ -97,7 +102,7 @@ export interface CacheHitEvent extends StudioEventBase {
 // ... and so on, one interface per type.
 ```
 
-**Schema versioning rule:** the top-level `schemaVersion` is bumped only on **payload-breaking** changes. Adding a new optional field or a new event type does *not* bump it. Removing or renaming a field does. Studio refuses to start if `events.versions()` returns a major it doesn't understand.
+**Schema versioning rule:** the top-level `schemaVersion` is bumped only on **payload-breaking** changes. Adding a new optional field or a new event type does _not_ bump it. Removing or renaming a field does. Studio refuses to start if `events.versions()` returns a major it doesn't understand.
 
 ### 2.2 Subscription surface
 
@@ -106,8 +111,15 @@ export interface EventSubscription {
   unsubscribe(): void;
 }
 export interface EventStream {
-  subscribe(filter: EventFilter, sink: (e: StudioEvent) => void): EventSubscription;
-  query(opts: { since?: number; until?: number; filter?: EventFilter }): AsyncIterable<StudioEvent>;
+  subscribe(
+    filter: EventFilter,
+    sink: (e: StudioEvent) => void,
+  ): EventSubscription;
+  query(opts: {
+    since?: number;
+    until?: number;
+    filter?: EventFilter;
+  }): AsyncIterable<StudioEvent>;
   versions(): { schemaVersion: number; supportedEventTypes: string[] };
 }
 
@@ -124,26 +136,27 @@ export interface EventFilter {
 
 - **In-process** (Studio and sandbox in the same Node process via in-memory mode): direct method calls on `EventStream`.
 - **Cross-process** (Studio extension host ↔ sandbox subprocess): JSON-RPC over a Unix domain socket on macOS/Linux, named pipe on Windows. WS as fallback only if pipe support is unreliable.
-- **Why not Cosmos/Mongo direct read?** dblogging-default-on already sends events there for telemetry; the live stream is for *correlation by requestId* and needs sub-second p95 — direct pipe/socket beats cloud round-trip.
+- **Why not Cosmos/Mongo direct read?** dblogging-default-on already sends events there for telemetry; the live stream is for _correlation by requestId_ and needs sub-second p95 — direct pipe/socket beats cloud round-trip.
 
 ### 2.4 Emission sites (MVP set)
 
 The minimum sites in dispatcher / cache / grammar / actions / reasoning that emit structured events. Existing `debug("typeagent:*")` calls remain.
 
-| Site | Event(s) emitted |
-|---|---|
-| `dispatcher` phase boundaries | `phase.start`, `phase.end` |
-| `cache.constructionMatch` | `cache.hit`, `cache.miss` |
-| `actionGrammar.matchGrammar` | `grammar.match.attempt`, `grammar.match.result` |
-| `dispatcher` action selection | `action.selected` |
-| Agent `executeAction` wrap | `action.executed` |
-| PR #2341 feedback path | `feedback.recorded` |
-| §10 detectors (all four points) | `collision.detected` |
-| `reasoning/tracing/` step emits | `reasoning.step` |
-| F0.1 sandbox manager | `sandbox.start/stop/restart`, `sandbox.agent.loaded/unloaded` |
-| F4.1 replay engine | `replay.row`, `replay.summary` |
+| Site                            | Event(s) emitted                                              |
+| ------------------------------- | ------------------------------------------------------------- |
+| `dispatcher` phase boundaries   | `phase.start`, `phase.end`                                    |
+| `cache.constructionMatch`       | `cache.hit`, `cache.miss`                                     |
+| `actionGrammar.matchGrammar`    | `grammar.match.attempt`, `grammar.match.result`               |
+| `dispatcher` action selection   | `action.selected`                                             |
+| Agent `executeAction` wrap      | `action.executed`                                             |
+| PR #2341 feedback path          | `feedback.recorded`                                           |
+| §10 detectors (all four points) | `collision.detected`                                          |
+| `reasoning/tracing/` step emits | `reasoning.step`                                              |
+| F0.1 sandbox manager            | `sandbox.start/stop/restart`, `sandbox.agent.loaded/unloaded` |
+| F4.1 replay engine              | `replay.row`, `replay.summary`                                |
 
 ### 2.5 Open decisions
+
 - **Buffer size.** Recommend a ring buffer of last 10k events in-memory per sandbox; older queryable via Cosmos/Mongo when remote read is enabled.
 - **Backpressure.** Sink slow → drop with a single `events.dropped(count)` notification rather than blocking emitters.
 
@@ -159,12 +172,12 @@ The minimum sites in dispatcher / cache / grammar / actions / reasoning that emi
 export type SandboxMode = "subprocess" | "inmemory";
 
 export interface SandboxConfig {
-  id: string;                     // stable per workspace
-  mode: SandboxMode;              // "inmemory" recommended for MVP demo
-  profileDir: string;             // ~/.typeagent/profiles/<studio-id>/
-  agents: string[];               // initial set; can change at runtime
-  env?: Record<string, string>;   // model keys etc.
-  telemetryOptOut?: boolean;      // F0.4 sandbox-scoped opt-out
+  id: string; // stable per workspace
+  mode: SandboxMode; // "inmemory" recommended for MVP demo
+  profileDir: string; // ~/.typeagent/profiles/<studio-id>/
+  agents: string[]; // initial set; can change at runtime
+  env?: Record<string, string>; // model keys etc.
+  telemetryOptOut?: boolean; // F0.4 sandbox-scoped opt-out
 }
 
 export interface SandboxManager {
@@ -181,9 +194,14 @@ export interface SandboxStatus {
   id: string;
   mode: SandboxMode;
   state: "starting" | "running" | "stopping" | "stopped" | "crashed";
-  agents: { name: string; schemaHash: string; grammarHash: string; health: HealthStatus }[];
+  agents: {
+    name: string;
+    schemaHash: string;
+    grammarHash: string;
+    health: HealthStatus;
+  }[];
   startedAt?: number;
-  pid?: number;          // subprocess mode only
+  pid?: number; // subprocess mode only
 }
 ```
 
@@ -194,9 +212,10 @@ export interface SandboxStatus {
 
 ### 3.3 Profile isolation
 
-Studio sandbox always uses `~/.typeagent/profiles/<studio-instance>/` — a *different* profile from the dev's everyday TypeAgent. Captures, displayLog, constructions, collisions all land in this profile dir. **No path under the dev's primary profile is ever read or written.**
+Studio sandbox always uses `~/.typeagent/profiles/<studio-instance>/` — a _different_ profile from the dev's everyday TypeAgent. Captures, displayLog, constructions, collisions all land in this profile dir. **No path under the dev's primary profile is ever read or written.**
 
 ### 3.4 Open decisions
+
 - **Crash recovery in inmemory mode.** Recommend isolating sandbox state in a dedicated AsyncContext / VM context so an agent throw doesn't poison the extension host. Subprocess mode is the safe option; inmemory is the fast option.
 - **Hot-reload on schema/grammar file save.** Recommend opt-in toggle in Sandbox tree, default off — the dev should control when a re-evaluation happens.
 
@@ -212,18 +231,18 @@ Studio sandbox always uses `~/.typeagent/profiles/<studio-instance>/` — a *dif
 export type CorpusSource = "in-repo" | "captures" | "external" | "feedback";
 
 export interface CorpusEntry {
-  id: string;                     // stable hash of (utterance, requestId?)
+  id: string; // stable hash of (utterance, requestId?)
   utterance: string;
   agent: string;
   source: CorpusSource;
   provenance: {
-    sourceUri: string;            // file path or remote URI
+    sourceUri: string; // file path or remote URI
     capturedAt?: number;
     sessionId?: string;
     requestId?: string;
   };
-  expectedAction?: unknown;       // typed action JSON when known
-  feedback?: FeedbackLabel;       // attached if a userFeedback event matches requestId
+  expectedAction?: unknown; // typed action JSON when known
+  feedback?: FeedbackLabel; // attached if a userFeedback event matches requestId
   tags?: string[];
 }
 
@@ -237,9 +256,13 @@ export interface FeedbackLabel {
 export interface CorpusService {
   list(agent: string): Promise<CorpusEntry[]>;
   load(agent: string, filter?: CorpusFilter): AsyncIterable<CorpusEntry>;
-  append(agent: string, entries: CorpusEntry[]): Promise<void>;       // writes to captures/
+  append(agent: string, entries: CorpusEntry[]): Promise<void>; // writes to captures/
   promote(agent: string, ids: string[], target: "in-repo"): Promise<void>;
-  exportJsonl(agent: string, filter?: CorpusFilter, out: WriteStream): Promise<void>;
+  exportJsonl(
+    agent: string,
+    filter?: CorpusFilter,
+    out: WriteStream,
+  ): Promise<void>;
   addExternalSource(spec: ExternalSourceSpec): Promise<void>;
 }
 ```
@@ -269,12 +292,14 @@ Reuses PR #2341's `@feedback export` schema **verbatim** for feedback entries, e
 ### 4.4 Promotion flow (capture → in-repo)
 
 Promotion is an **explicit, two-step user action**:
+
 1. Select entries in Corpora tree → "Promote to in-repo corpus."
 2. Studio writes to `corpus/<agent>.utterances.jsonl` and surfaces the change in source control; the dev reviews the diff before committing.
 
 Never auto-promotes. Captures stay personal until the dev says otherwise.
 
 ### 4.5 Open decisions
+
 - **De-duplication policy.** Recommend `id = hash(utterance + agent + requestId|"")`; two captures of the same utterance with different requestIds are distinct entries. The Schema Studio UI groups them visually.
 - **Remote feedback fetch cadence.** Recommend on-demand pull (button) for MVP, not background polling.
 
@@ -286,11 +311,17 @@ Thin layer over the existing PR #2341 dispatcher RPCs (`recordUserFeedback`, `re
 
 ```ts
 export interface FeedbackService {
-  record(label: FeedbackLabel & { requestId: string; includeContext?: boolean }): Promise<void>;
+  record(
+    label: FeedbackLabel & { requestId: string; includeContext?: boolean },
+  ): Promise<void>;
   hide(requestId: string): Promise<void>;
   restoreAllHidden(sessionId: string): Promise<void>;
   list(filter: FeedbackFilter): Promise<FeedbackRow[]>;
-  top(opts: { agent?: string; category?: string; limit: number }): Promise<FeedbackRow[]>;
+  top(opts: {
+    agent?: string;
+    category?: string;
+    limit: number;
+  }): Promise<FeedbackRow[]>;
   exportJsonl(filter: FeedbackFilter, out: WriteStream): Promise<void>;
   count(filter: FeedbackFilter): Promise<number>;
 }
@@ -310,7 +341,7 @@ Backed by the same Logger sinks (Cosmos / Mongo) — Studio adds nothing to the 
 export type HealthSeverity = "info" | "warning" | "error";
 
 export interface HealthRule {
-  id: string;                                 // stable, e.g. "schema.parses"
+  id: string; // stable, e.g. "schema.parses"
   description: string;
   check(ctx: HealthContext): Promise<HealthFinding[]>;
 }
@@ -321,7 +352,7 @@ export interface HealthFinding {
   agent: string;
   evidence: {
     file?: string;
-    range?: [number, number];                 // line offsets
+    range?: [number, number]; // line offsets
     message: string;
   };
   fixHint?: { kind: "code-action" | "command"; payload: unknown };
@@ -335,19 +366,19 @@ export interface HealthService {
 
 ### 6.2 MVP rule set
 
-| ID | Severity | What it checks |
-|---|---|---|
-| `manifest.parses` | error | `<name>Manifest.json` exists, is valid JSON. |
-| `manifest.name.matches` | error | manifest `name` equals package directory name. |
-| `manifest.schemaPath.exists` | error | referenced schema file exists. |
-| `schema.parses` | error | schema file parses via `actionSchema`. |
-| `schema.actions.haveGrammar` | warning | every action type has at least one AGR rule targeting it. |
-| `grammar.parses` | error | `.agr` file compiles. |
-| `grammar.rules.targetKnownActions` | error | every rule's target action exists in the schema. |
-| `handler.exports.instantiate` | error | handler file exports `instantiate(): AppAgent`. |
-| `provider.registers` | error | `defaultAgentProvider` registers the agent. |
-| `actions.unique.acrossLoaded` | warning | no duplicate action-type names across loaded sandbox agents. |
-| `cache.compatible` | info | construction cache schema-hash matches current schema. |
+| ID                                 | Severity | What it checks                                               |
+| ---------------------------------- | -------- | ------------------------------------------------------------ |
+| `manifest.parses`                  | error    | `<name>Manifest.json` exists, is valid JSON.                 |
+| `manifest.name.matches`            | error    | manifest `name` equals package directory name.               |
+| `manifest.schemaPath.exists`       | error    | referenced schema file exists.                               |
+| `schema.parses`                    | error    | schema file parses via `actionSchema`.                       |
+| `schema.actions.haveGrammar`       | warning  | every action type has at least one AGR rule targeting it.    |
+| `grammar.parses`                   | error    | `.agr` file compiles.                                        |
+| `grammar.rules.targetKnownActions` | error    | every rule's target action exists in the schema.             |
+| `handler.exports.instantiate`      | error    | handler file exports `instantiate(): AppAgent`.              |
+| `provider.registers`               | error    | `defaultAgentProvider` registers the agent.                  |
+| `actions.unique.acrossLoaded`      | warning  | no duplicate action-type names across loaded sandbox agents. |
+| `cache.compatible`                 | info     | construction cache schema-hash matches current schema.       |
 
 Rules are written so each one explains its own evidence and fix hint. The wizard's Testing phase runs the full set; live edits in P-4 run just the relevant rule(s).
 
@@ -359,13 +390,17 @@ Rules are written so each one explains its own evidence and fix hint. The wizard
 // typeagent-core/src/collisions/types.ts
 
 export type CollisionKind = "overlap" | "shadow" | "ambiguity";
-export type CollisionDetectionPoint = "load" | "schema-edit" | "grammar-edit" | "replay";
+export type CollisionDetectionPoint =
+  | "load"
+  | "schema-edit"
+  | "grammar-edit"
+  | "replay";
 
 export interface CollisionEvent extends StudioEventBase {
   type: "collision.detected";
   kind: CollisionKind;
   detectionPoint: CollisionDetectionPoint;
-  experimentId?: string;          // §10 tagging
+  experimentId?: string; // §10 tagging
   participants: {
     agent: string;
     actionType: string;
@@ -387,8 +422,13 @@ Studio subscribes to `collision.detected` and maps participants → diagnostics,
 // typeagent-core/src/onboardingBridge/types.ts
 
 export type OnboardingPhaseName =
-  | "Discovery" | "PhraseGen" | "SchemaGen" | "GrammarGen"
-  | "Scaffolder" | "Testing" | "Packaging";
+  | "Discovery"
+  | "PhraseGen"
+  | "SchemaGen"
+  | "GrammarGen"
+  | "Scaffolder"
+  | "Testing"
+  | "Packaging";
 
 export interface OnboardingState {
   sessionId: string;
@@ -403,14 +443,21 @@ export interface PhaseSnapshot {
   outputs?: unknown;
   startedAt?: number;
   completedAt?: number;
-  ancestorPhaseHashes: string[];      // for stale detection
+  ancestorPhaseHashes: string[]; // for stale detection
 }
 
 export interface OnboardingBridge {
   start(seed: { description: string }): Promise<OnboardingState>;
-  runPhase(sessionId: string, phase: OnboardingPhaseName, inputs?: unknown): Promise<PhaseSnapshot>;
+  runPhase(
+    sessionId: string,
+    phase: OnboardingPhaseName,
+    inputs?: unknown,
+  ): Promise<PhaseSnapshot>;
   snapshot(sessionId: string): Promise<OnboardingState>;
-  restorePhase(sessionId: string, phase: OnboardingPhaseName): Promise<{
+  restorePhase(
+    sessionId: string,
+    phase: OnboardingPhaseName,
+  ): Promise<{
     state: OnboardingState;
     affectedDownstream: OnboardingPhaseName[];
     reconciliationRequired: boolean;
@@ -440,7 +487,7 @@ export interface ReplayOptions {
   versionA: VersionSpec;
   versionB: VersionSpec;
   missPolicy: "needs-explanation" | "live-llm" | "strict-cache";
-  batchSize?: number;             // default 16
+  batchSize?: number; // default 16
 }
 
 export interface ReplayRunHandle {
@@ -459,8 +506,18 @@ export interface ActionDelta {
   actionB?: unknown;
   equal: boolean;
 
-  cacheStateA: "hit" | "miss" | "needs-explanation" | "llm-resolved" | "skipped";
-  cacheStateB: "hit" | "miss" | "needs-explanation" | "llm-resolved" | "skipped";
+  cacheStateA:
+    | "hit"
+    | "miss"
+    | "needs-explanation"
+    | "llm-resolved"
+    | "skipped";
+  cacheStateB:
+    | "hit"
+    | "miss"
+    | "needs-explanation"
+    | "llm-resolved"
+    | "skipped";
 
   feedbackA?: FeedbackLabel;
   feedbackB?: FeedbackLabel;
@@ -468,7 +525,7 @@ export interface ActionDelta {
   collisionsA: CollisionEvent[];
   collisionsB: CollisionEvent[];
 
-  latencyA: number;               // ms
+  latencyA: number; // ms
   latencyB: number;
   requestIdA: string;
   requestIdB: string;
@@ -506,11 +563,11 @@ For each utterance, evaluate in both sandboxes; build the `ActionDelta`; emit `r
 
 ### 9.3 Miss-policy semantics
 
-| Policy | Behavior |
-|---|---|
-| `needs-explanation` *(default, deterministic)* | A cache miss → `cacheState = needs-explanation`. No action JSON produced for that side. `ActionDelta.equal = false` if one side has action JSON and the other doesn't. |
-| `live-llm` | A cache miss → run the actual LLM translation in that sandbox. Records `cacheState = llm-resolved`. Slow; costs tokens. Cost estimate shown in launch dialog. |
-| `strict-cache` | A cache miss → `cacheState = skipped`. Row is omitted from the report entirely (with a count in the summary). Useful for "what does the cache say today" sanity checks. |
+| Policy                                         | Behavior                                                                                                                                                                |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `needs-explanation` _(default, deterministic)_ | A cache miss → `cacheState = needs-explanation`. No action JSON produced for that side. `ActionDelta.equal = false` if one side has action JSON and the other doesn't.  |
+| `live-llm`                                     | A cache miss → run the actual LLM translation in that sandbox. Records `cacheState = llm-resolved`. Slow; costs tokens. Cost estimate shown in launch dialog.           |
+| `strict-cache`                                 | A cache miss → `cacheState = skipped`. Row is omitted from the report entirely (with a count in the summary). Useful for "what does the cache say today" sanity checks. |
 
 Gate C of MVP is evaluated with `needs-explanation`. The other policies exist but don't bear MVP weight.
 
@@ -519,6 +576,7 @@ Gate C of MVP is evaluated with `needs-explanation`. The other policies exist bu
 ≤ 60s for player corpus (target size ~ 200 entries) on a dev laptop. Achieved by: (a) inmemory sandboxes share the V8 heap → no IPC, (b) batched dispatch within each sandbox, (c) no LLM in the default policy. If we slip, the next optimization is **schema-hash-keyed cache sharing** between sandboxes A and B for utterances whose cache key is unchanged across versions.
 
 ### 9.5 Open decisions
+
 - **Concurrency.** Recommend a small batch (8–16) with backpressure. Don't go heroic; the LLM-free path is fast enough.
 - **Determinism guarantees.** The `needs-explanation` policy is fully deterministic. `live-llm` is not (temperature, model nondeterminism). The launch dialog warns explicitly.
 
@@ -539,6 +597,7 @@ typeagent-studio/src/webviewKit/
 ```
 
 Each webview:
+
 - Uses a single `Webview` instance per concept; multiple instances disallowed (open-the-existing-one behavior).
 - Persists state across reloads via `webview.setState`.
 - Communicates with the host via the `webviewKit/protocol.ts` message types; the host translates those messages into `typeagent-core` calls.
@@ -552,11 +611,13 @@ Each webview:
 Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
 ### P-0 Skeleton (week 0–1)
+
 - Create `typeagent-core` package, `typeagent-studio` extension, scaffold files. No behavior.
 - Refactor `agr-language` and `vscode-shell` to import from `typeagent-core` (no consumed APIs yet — just the dependency edge). Full existing test suites must remain green.
 - Exit: `pnpm -r build` clean; both refactored extensions load and behave identically to today.
 
 ### P-1 Foundations (weeks 1–4)
+
 - **F0.3 events.** Define types in `events/types.ts`. Wire emission sites in dispatcher / cache / grammar / actions / reasoning. Build the in-process transport and a stub subprocess transport. Unit test event filtering and schema versioning.
 - **F0.1 sandbox.** Implement inmemory mode end-to-end first, subprocess mode second. Sandbox tree + status bar UI.
 - **F0.2 corpus.** Implement service against the on-disk layout. Corpora tree UI. Capture-to-corpus action on vscode-shell bubbles (F4.6 starts here, on purpose, per risk mitigation).
@@ -567,6 +628,7 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data.
 
 ### P-2 J1 vertical (weeks 4–6)
+
 - F1.1 wizard webview + onboarding snapshot/restore backend.
 - F1.2 conversational entry routing.
 - F1.3 install-into-sandbox.
@@ -575,6 +637,7 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - Exit: **Gate A passes** with a stranger walking the script.
 
 ### P-3 J4 vertical (weeks 4–9, runs partly in parallel with P-2)
+
 - F4.6 player corpus capture path already running from P-1. Build labelled set to target size during P-3.
 - F4.1 `replayCorpus()`. Implement `needs-explanation` policy first; `strict-cache` second; `live-llm` last.
 - F4.2 launch dialog.
@@ -585,21 +648,24 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.**
 
 ### P-4 J2 + J3 verticals (weeks 6–9)
+
 - F2.1 Schema Studio webview.
 - F2.2 schema code lenses.
 - F2.3 suggest-variant code action.
 - F2.4 inline collision diagnostics (already enabled by F0.6).
 - F2.5 feedback chips.
 - F2.6 live re-evaluation.
-- F3.* AGR refactor + new features.
+- F3.\* AGR refactor + new features.
 - Exit: **Gate B passes.**
 
 ### P-5 J6 vertical (week 9)
+
 - F6.1 Live Trace panel (reuses Trace Viewer renderer in tail mode).
 - F6.2 status-bar item.
 - Exit: **Gate E passes.**
 
 ### P-6 Validation & hardening (week 9–10)
+
 - Run all five gates on a clean laptop.
 - Performance budgets.
 - dblogging-default-on privacy indicator polish.
@@ -612,18 +678,22 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 ## 12. Test strategy
 
 ### Unit
+
 - `typeagent-core` modules tested in isolation via Jest (`*.spec.ts`). No VS Code dependency.
 - The replay engine has the most coverage: deterministic policy gives stable golden ActionDeltas; tests use synthetic versions A/B.
 
 ### Integration
+
 - `*.test.ts` live integration in `typeagent-core` — exercise the full sandbox lifecycle, real cache, real grammar, against a small embedded corpus.
 - Replay integration test: a fixture branch with a known schema change; assert specific rows appear as "red" or "green."
 
 ### Extension
+
 - `typeagent-studio` uses the standard `@vscode/test-electron` harness for activation + command palette tests.
 - One end-to-end test per gate (A–E) using a scripted scenario — long runtime, run in a separate CI job.
 
 ### Validation gate (Gate C) test
+
 - A versioned hand-labelled regression set checked into the repo: `corpus/player.regressions.jsonl`. Each entry tags `{branch, prior-action, current-action, human-verdict}`. The CI test computes agreement against the predicate and fails below 80%.
 
 ---
@@ -632,18 +702,18 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
 Each decision is named, with the recommended default and the deadline phase by which it must be locked.
 
-| # | Decision | Default | Lock by |
-|---|---|---|---|
-| D1 | Subprocess transport: socket vs pipe vs WS | Unix socket / Windows named pipe; WS fallback | P-1 |
-| D2 | Event buffer size and backpressure behavior | 10k ring, drop with `events.dropped(n)` | P-1 |
-| D3 | Corpus entry de-duplication policy | `hash(utterance + agent + requestId|"")` | P-1 |
-| D4 | Remote feedback fetch cadence | On-demand pull | P-1 |
-| D5 | Onboarding stale-phase semantics on partial restore | Mark stale + reconciliation prompt; no auto-merge | P-2 |
-| D6 | `replayCorpus()` concurrency | Batch 8–16; backpressure on event sink | P-3 |
-| D7 | `likely-bad change` default predicate exact form | `(feedbackA.up ∧ actionA ≠ actionB) ∨ feedbackB.down` | P-3 |
-| D8 | Webview message protocol stability | Versioned alongside event schema; bump on breaking change | P-1 |
-| D9 | Privacy indicator placement when dblogging on | Status-bar dot + Sandbox tree row; opt-out toggle | P-1 |
-| D10 | Gate C threshold | 80% | P-3 (re-evaluated against measured agreement) |
+| #   | Decision                                            | Default                                                   | Lock by                                       |
+| --- | --------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------- | --- |
+| D1  | Subprocess transport: socket vs pipe vs WS          | Unix socket / Windows named pipe; WS fallback             | P-1                                           |
+| D2  | Event buffer size and backpressure behavior         | 10k ring, drop with `events.dropped(n)`                   | P-1                                           |
+| D3  | Corpus entry de-duplication policy                  | `hash(utterance + agent + requestId                       | "")`                                          | P-1 |
+| D4  | Remote feedback fetch cadence                       | On-demand pull                                            | P-1                                           |
+| D5  | Onboarding stale-phase semantics on partial restore | Mark stale + reconciliation prompt; no auto-merge         | P-2                                           |
+| D6  | `replayCorpus()` concurrency                        | Batch 8–16; backpressure on event sink                    | P-3                                           |
+| D7  | `likely-bad change` default predicate exact form    | `(feedbackA.up ∧ actionA ≠ actionB) ∨ feedbackB.down`     | P-3                                           |
+| D8  | Webview message protocol stability                  | Versioned alongside event schema; bump on breaking change | P-1                                           |
+| D9  | Privacy indicator placement when dblogging on       | Status-bar dot + Sandbox tree row; opt-out toggle         | P-1                                           |
+| D10 | Gate C threshold                                    | 80%                                                       | P-3 (re-evaluated against measured agreement) |
 
 ---
 
@@ -662,4 +732,4 @@ Before kicking off P-0, confirm:
 
 ---
 
-*End of Phase 5 implementation plan draft.*
+_End of Phase 5 implementation plan draft._

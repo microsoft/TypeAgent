@@ -44,9 +44,7 @@ export function formatJsonl(entries: CorpusEntry[]): string {
     return entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
 }
 
-export async function readJsonlFile(
-    path: string,
-): Promise<CorpusEntry[]> {
+export async function readJsonlFile(path: string): Promise<CorpusEntry[]> {
     try {
         const text = await fs.readFile(path, "utf8");
         return parseJsonl(text, path);
@@ -101,7 +99,9 @@ function isCorpusEntry(value: unknown): value is CorpusEntry {
     ) {
         return false;
     }
-    if (typeof (v.provenance as { sourceUri?: unknown }).sourceUri !== "string") {
+    if (
+        typeof (v.provenance as { sourceUri?: unknown }).sourceUri !== "string"
+    ) {
         return false;
     }
     return true;

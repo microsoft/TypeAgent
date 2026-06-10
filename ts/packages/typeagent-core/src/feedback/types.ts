@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    FeedbackCategory,
-    FeedbackRating,
-} from "../events/types.js";
+import type { FeedbackCategory, FeedbackRating } from "../events/types.js";
 import type { CorpusEntry, CorpusWritable } from "../corpus/types.js";
 
 export interface FeedbackRecordInput {
@@ -70,7 +67,10 @@ export interface FeedbackService {
     restoreAllHidden(sessionId: string): Promise<void>;
     list(filter?: FeedbackFilter): Promise<FeedbackRow[]>;
     top(opts: FeedbackTopOptions): Promise<FeedbackRow[]>;
-    exportJsonl(filter: FeedbackFilter | undefined, out: CorpusWritable): Promise<number>;
+    exportJsonl(
+        filter: FeedbackFilter | undefined,
+        out: CorpusWritable,
+    ): Promise<number>;
     count(filter?: FeedbackFilter): Promise<number>;
 }
 

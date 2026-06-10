@@ -28,7 +28,8 @@ export function registerStudioCommands(
                 const description = await vscode.window.showInputBox({
                     title: "Start Onboarding Session",
                     prompt: "Describe the integration to onboard",
-                    placeHolder: "Calendar integration for internal scheduling API",
+                    placeHolder:
+                        "Calendar integration for internal scheduling API",
                     ignoreFocusOut: true,
                 });
                 if (!description) {
@@ -99,7 +100,9 @@ export function registerStudioCommands(
                     );
                 } catch (error) {
                     const message =
-                        error instanceof Error ? error.message : "Unknown error";
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error";
                     if (message.startsWith("Health gate failed:")) {
                         const proceed = await confirmHealthGateBypass(message);
                         if (!proceed) {
@@ -109,7 +112,9 @@ export function registerStudioCommands(
                             sandboxId,
                             { skipHealthGate: true },
                         );
-                    } else if (!message.includes("No local generated agent artifact")) {
+                    } else if (
+                        !message.includes("No local generated agent artifact")
+                    ) {
                         throw error;
                     } else {
                         const fallbackUri = await vscode.window.showOpenDialog({
@@ -226,7 +231,8 @@ export function registerStudioCommands(
             "typeagent-studio.savePackagingHealthReport",
             withErrors(async () => {
                 const report = await getPackagingHealthReport(runtime);
-                const defaultFileName = getPackagingHealthReportDefaultFileName();
+                const defaultFileName =
+                    getPackagingHealthReportDefaultFileName();
                 const targetUri = await vscode.window.showSaveDialog({
                     defaultUri: vscode.Uri.file(defaultFileName),
                     filters: {
@@ -271,7 +277,8 @@ export function registerStudioCommands(
                     return;
                 }
 
-                const status = await runtime.getPhaseStatusOnActiveSession(phase);
+                const status =
+                    await runtime.getPhaseStatusOnActiveSession(phase);
                 if (
                     status !== "pending" &&
                     !(await confirmPhaseRerun(phase, status))
@@ -280,7 +287,9 @@ export function registerStudioCommands(
                 }
 
                 const defaultInputs =
-                    await runtime.getDefaultInputsForPhaseOnActiveSession(phase);
+                    await runtime.getDefaultInputsForPhaseOnActiveSession(
+                        phase,
+                    );
 
                 const rawInputs = await vscode.window.showInputBox({
                     title: "Run Onboarding Phase",
@@ -294,7 +303,10 @@ export function registerStudioCommands(
                 }
 
                 const inputs = parseJsonInputs(rawInputs);
-                const state = await runtime.runPhaseOnActiveSession(phase, inputs);
+                const state = await runtime.runPhaseOnActiveSession(
+                    phase,
+                    inputs,
+                );
                 void vscode.window.showInformationMessage(
                     `Phase ${phase} completed. Current phase is now ${state.currentPhase}.`,
                 );
@@ -331,7 +343,9 @@ export function registerStudioCommands(
                 }
 
                 const defaultInputs =
-                    await runtime.getDefaultInputsForPhaseOnActiveSession(target);
+                    await runtime.getDefaultInputsForPhaseOnActiveSession(
+                        target,
+                    );
                 const nextState = await runtime.runPhaseOnActiveSession(
                     target,
                     defaultInputs,
@@ -372,7 +386,8 @@ export function registerStudioCommands(
                     return;
                 }
 
-                const result = await runtime.runRemainingPhasesOnActiveSession();
+                const result =
+                    await runtime.runRemainingPhasesOnActiveSession();
                 const completed =
                     result.completedPhases.length > 0
                         ? result.completedPhases.join(", ")
@@ -562,7 +577,8 @@ export function registerStudioCommands(
                     return;
                 }
 
-                const restored = await runtime.restorePhaseOnActiveSession(phase);
+                const restored =
+                    await runtime.restorePhaseOnActiveSession(phase);
                 const affected =
                     restored.affectedDownstream.length > 0
                         ? restored.affectedDownstream.join(", ")
@@ -576,9 +592,10 @@ export function registerStudioCommands(
                         restored.affectedDownstream,
                     );
                     if (rerun) {
-                        const rerunResult = await runtime.rerunPhasesOnActiveSession(
-                            restored.affectedDownstream,
-                        );
+                        const rerunResult =
+                            await runtime.rerunPhasesOnActiveSession(
+                                restored.affectedDownstream,
+                            );
                         void vscode.window.showInformationMessage(
                             `Reconciled phases: ${rerunResult.rerunPhases.join(", ")}. Current phase: ${rerunResult.state.currentPhase}.`,
                         );
@@ -596,7 +613,8 @@ export function registerStudioCommands(
         vscode.commands.registerCommand(
             "typeagent-studio.rerunStaleOnboardingPhases",
             withErrors(async () => {
-                const stalePhases = await runtime.listStalePhasesOnActiveSession();
+                const stalePhases =
+                    await runtime.listStalePhasesOnActiveSession();
 
                 if (stalePhases.length === 0) {
                     void vscode.window.showInformationMessage(
@@ -626,9 +644,8 @@ export function registerStudioCommands(
                 const rerunPhases = selected.map(
                     (item) => item.label as OnboardingPhaseName,
                 );
-                const rerunResult = await runtime.rerunPhasesOnActiveSession(
-                    rerunPhases,
-                );
+                const rerunResult =
+                    await runtime.rerunPhasesOnActiveSession(rerunPhases);
 
                 void vscode.window.showInformationMessage(
                     `Reran phases: ${rerunResult.rerunPhases.join(", ")}. Current phase: ${rerunResult.state.currentPhase}.`,
@@ -750,10 +767,7 @@ function getDefaultSandboxId(): string {
 function getDiagnosticsDefaultFileName(): string {
     const configured = vscode.workspace
         .getConfiguration("typeagentStudio.onboarding")
-        .get<string>(
-            "diagnosticsDefaultFileName",
-            "onboarding-diagnostics.md",
-        );
+        .get<string>("diagnosticsDefaultFileName", "onboarding-diagnostics.md");
     return normalizeMarkdownFileName(configured, "onboarding-diagnostics.md");
 }
 
@@ -794,7 +808,10 @@ function getOnboardingHealthSnapshotDefaultFileName(): string {
             "onboardingHealthSnapshotDefaultFileName",
             "onboarding-health-snapshot.md",
         );
-    return normalizeMarkdownFileName(configured, "onboarding-health-snapshot.md");
+    return normalizeMarkdownFileName(
+        configured,
+        "onboarding-health-snapshot.md",
+    );
 }
 
 type InstallHealthGatePolicy = "enforce" | "warn";
@@ -986,7 +1003,8 @@ async function getOnboardingDiagnosticsBundle(
 
     let artifactPath: string | undefined;
     try {
-        artifactPath = await runtime.resolveInstallArtifactPathForActiveSession();
+        artifactPath =
+            await runtime.resolveInstallArtifactPathForActiveSession();
     } catch {
         artifactPath = undefined;
     }
@@ -1043,7 +1061,9 @@ async function showPackagingHealthGateStatus(
     void vscode.window.showInformationMessage(message);
 }
 
-async function openPackagingHealthReport(runtime: StudioRuntime): Promise<void> {
+async function openPackagingHealthReport(
+    runtime: StudioRuntime,
+): Promise<void> {
     const content = await getPackagingHealthReport(runtime);
     const doc = await vscode.workspace.openTextDocument({
         language: "markdown",
@@ -1054,7 +1074,9 @@ async function openPackagingHealthReport(runtime: StudioRuntime): Promise<void> 
     });
 }
 
-async function getPackagingHealthReport(runtime: StudioRuntime): Promise<string> {
+async function getPackagingHealthReport(
+    runtime: StudioRuntime,
+): Promise<string> {
     const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
     return formatPackagingHealthReport(gate);
 }
@@ -1081,9 +1103,10 @@ function formatPackagingHealthReport(
     }
 
     for (const finding of gate.findings) {
-        lines.push(`- [${finding.severity}] ${finding.ruleId}: ${finding.evidence.message}`);
+        lines.push(
+            `- [${finding.severity}] ${finding.ruleId}: ${finding.evidence.message}`,
+        );
     }
 
     return lines.join("\n");
 }
-

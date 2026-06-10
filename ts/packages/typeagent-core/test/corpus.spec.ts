@@ -292,8 +292,9 @@ describe("FileCorpusService — append / promote / export", () => {
     it("append writes a timestamped JSONL into captures/<agent>/", async () => {
         const e = entry("play", "player", { source: "in-repo" });
         const file = await svc.append("player", [e]);
-        expect(file.startsWith(path.join(profileDir, "captures", "player")))
-            .toBe(true);
+        expect(
+            file.startsWith(path.join(profileDir, "captures", "player")),
+        ).toBe(true);
         expect(file.endsWith(".jsonl")).toBe(true);
 
         const all = await svc.list("player");
@@ -379,11 +380,9 @@ describe("FileCorpusService — append / promote / export", () => {
                 ended = true;
             },
         };
-        const n = await svc.exportJsonl(
-            "player",
-            out,
-            { utteranceContains: "play" },
-        );
+        const n = await svc.exportJsonl("player", out, {
+            utteranceContains: "play",
+        });
         expect(n).toBe(1);
         expect(ended).toBe(true);
         expect(chunks.join("")).toContain('"play"');

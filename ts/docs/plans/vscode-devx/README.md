@@ -2,7 +2,7 @@
 
 > A five-phase plan for an integrated VS Code developer experience around TypeAgent: agent authoring, schema/grammar tuning, regression detection via compare-and-replay, trace investigation, and live observation.
 >
-> **Center of gravity:** *compare schema/grammar versions against a corpus of real user utterances, see action-level impact, annotated with the feedback labels we already collect.*
+> **Center of gravity:** _compare schema/grammar versions against a corpus of real user utterances, see action-level impact, annotated with the feedback labels we already collect._
 >
 > **MVP anchor agent:** `player`.
 
@@ -10,13 +10,13 @@
 
 ## Read in order
 
-| # | Doc | What it answers |
-|---|---|---|
-| 1 | [01-inventory.md](./01-inventory.md) | What exists today, gaps, in-flight work (collisions §10, MCP §11, feedback PR #2341 §12), and Phase 2 open-question resolutions (§13). |
-| 2 | [02-journeys.md](./02-journeys.md) | Six personas, six journeys (J1–J6), MVP depth per journey, success criteria, cross-journey infrastructure. |
-| 3 | [03-features.md](./03-features.md) | Per-journey features at three layers (editor / panels / commands+RPCs). Six new engine primitives. Five webviews. |
-| 4 | [04-mvp-slice.md](./04-mvp-slice.md) | The vertical slice that *is* MVP. Five acceptance gates (A–E). Risk register. **13-step demo script** in §8. |
-| 5 | [05-implementation-plan.md](./05-implementation-plan.md) | Package layout, API surfaces, transport choices, sequencing P-0 → P-6, test strategy, 10 named open decisions (D1–D10). |
+| #   | Doc                                                      | What it answers                                                                                                                        |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | [01-inventory.md](./01-inventory.md)                     | What exists today, gaps, in-flight work (collisions §10, MCP §11, feedback PR #2341 §12), and Phase 2 open-question resolutions (§13). |
+| 2   | [02-journeys.md](./02-journeys.md)                       | Six personas, six journeys (J1–J6), MVP depth per journey, success criteria, cross-journey infrastructure.                             |
+| 3   | [03-features.md](./03-features.md)                       | Per-journey features at three layers (editor / panels / commands+RPCs). Six new engine primitives. Five webviews.                      |
+| 4   | [04-mvp-slice.md](./04-mvp-slice.md)                     | The vertical slice that _is_ MVP. Five acceptance gates (A–E). Risk register. **13-step demo script** in §8.                           |
+| 5   | [05-implementation-plan.md](./05-implementation-plan.md) | Package layout, API surfaces, transport choices, sequencing P-0 → P-6, test strategy, 10 named open decisions (D1–D10).                |
 
 ---
 
@@ -34,18 +34,18 @@
 
 From [01-inventory.md §13](./01-inventory.md):
 
-| # | Decision |
-|---|---|
-| Q2 | Hybrid sandbox isolation: subprocess + inmemory mode, always under Studio's own profile dir. |
-| Q5 | Workflows view-only in MVP. |
-| Q6 | Remote-sink reads (Cosmos/Mongo) included in MVP. |
-| Q8 | MCP host role deferred. |
-| Q9 | No new LSP. |
-| Q10 | Any workspace; not pinned to the TypeAgent repo. |
-| Q11 | Shared session API via `typeagent-core`. |
-| Q14 | No separate privacy gate; dblogging-default-on disclosed at sandbox start. |
-| Q-P2 | Wizard phases revisitable with guided default. |
-| Q-P4 | `player` is the MVP anchor agent. |
+| #    | Decision                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------- |
+| Q2   | Hybrid sandbox isolation: subprocess + inmemory mode, always under Studio's own profile dir. |
+| Q5   | Workflows view-only in MVP.                                                                  |
+| Q6   | Remote-sink reads (Cosmos/Mongo) included in MVP.                                            |
+| Q8   | MCP host role deferred.                                                                      |
+| Q9   | No new LSP.                                                                                  |
+| Q10  | Any workspace; not pinned to the TypeAgent repo.                                             |
+| Q11  | Shared session API via `typeagent-core`.                                                     |
+| Q14  | No separate privacy gate; dblogging-default-on disclosed at sandbox start.                   |
+| Q-P2 | Wizard phases revisitable with guided default.                                               |
+| Q-P4 | `player` is the MVP anchor agent.                                                            |
 
 ---
 
@@ -64,7 +64,7 @@ Top items from [05-implementation-plan.md §13](./05-implementation-plan.md) (D1
 
 ## Demo script
 
-The 13-step demo that *is* the MVP: [04-mvp-slice.md §8](./04-mvp-slice.md). If a reviewer can walk it without intervention, MVP is done.
+The 13-step demo that _is_ the MVP: [04-mvp-slice.md §8](./04-mvp-slice.md). If a reviewer can walk it without intervention, MVP is done.
 
 ---
 
@@ -77,4 +77,4 @@ The 13-step demo that *is* the MVP: [04-mvp-slice.md §8](./04-mvp-slice.md). If
 
 ---
 
-*Draft: 2026-05-14.*
+_Draft: 2026-05-14._

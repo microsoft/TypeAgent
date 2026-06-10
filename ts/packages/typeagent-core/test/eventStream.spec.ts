@@ -33,7 +33,9 @@ function makePhaseStart(
     };
 }
 
-function makeCacheHit(overrides: Partial<{ ts: number; agent: string }> = {}): StudioEvent {
+function makeCacheHit(
+    overrides: Partial<{ ts: number; agent: string }> = {},
+): StudioEvent {
     return {
         schemaVersion: EVENT_SCHEMA_VERSION,
         type: "cache.hit",
@@ -229,9 +231,7 @@ describe("InProcessEventStream — buffered (async) subscription", () => {
 
     test("rejects non-positive bufferSize", () => {
         const s = new InProcessEventStream();
-        expect(() =>
-            s.subscribe(() => undefined, { bufferSize: 0 }),
-        ).toThrow();
+        expect(() => s.subscribe(() => undefined, { bufferSize: 0 })).toThrow();
         expect(() =>
             s.subscribe(() => undefined, { bufferSize: -1 }),
         ).toThrow();

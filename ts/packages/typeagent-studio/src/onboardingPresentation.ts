@@ -123,7 +123,8 @@ export function formatOnboardingHealthSnapshot(
     const staleCount = ONBOARDING_PHASE_ORDER.filter(
         (phase) => state.phases[phase]?.status === "stale",
     ).length;
-    const pendingCount = ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
+    const pendingCount =
+        ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
     const installedSandboxes =
         state.installedSandboxIds && state.installedSandboxIds.length > 0
             ? state.installedSandboxIds.join(", ")
@@ -155,7 +156,8 @@ export function formatOnboardingHealthSnapshotMarkdown(
     const staleCount = ONBOARDING_PHASE_ORDER.filter(
         (phase) => state.phases[phase]?.status === "stale",
     ).length;
-    const pendingCount = ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
+    const pendingCount =
+        ONBOARDING_PHASE_ORDER.length - completeCount - staleCount;
     const installedSandboxes =
         state.installedSandboxIds && state.installedSandboxIds.length > 0
             ? state.installedSandboxIds.join(", ")
@@ -253,7 +255,5 @@ export function normalizeMarkdownFileName(
     if (trimmed.length === 0) {
         return fallback;
     }
-    return trimmed.toLowerCase().endsWith(".md")
-        ? trimmed
-        : `${trimmed}.md`;
+    return trimmed.toLowerCase().endsWith(".md") ? trimmed : `${trimmed}.md`;
 }

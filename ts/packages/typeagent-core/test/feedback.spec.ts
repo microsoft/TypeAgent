@@ -34,15 +34,21 @@ class TrackingBackend implements FeedbackBackend {
             includesContext: input.includeContext ?? false,
             recordedAt: input.recordedAt ?? 0,
             hidden: false,
-            ...(input.category !== undefined ? { category: input.category } : {}),
+            ...(input.category !== undefined
+                ? { category: input.category }
+                : {}),
             ...(input.comment !== undefined ? { comment: input.comment } : {}),
             ...(input.agent !== undefined ? { agent: input.agent } : {}),
-            ...(input.utterance !== undefined ? { utterance: input.utterance } : {}),
+            ...(input.utterance !== undefined
+                ? { utterance: input.utterance }
+                : {}),
             ...(input.expectedAction !== undefined
                 ? { expectedAction: input.expectedAction }
                 : {}),
             ...(input.tags !== undefined ? { tags: input.tags } : {}),
-            ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+            ...(input.sessionId !== undefined
+                ? { sessionId: input.sessionId }
+                : {}),
         };
         this.rows.push(row);
     }
@@ -112,14 +118,14 @@ describe("CoreFeedbackService", () => {
         });
         await svc.record({ requestId: "r1", rating: "down", sessionId: "s1" });
         await svc.hide("r1");
-        expect((await svc.list({ hidden: true })).map((r) => r.requestId)).toEqual([
-            "r1",
-        ]);
+        expect(
+            (await svc.list({ hidden: true })).map((r) => r.requestId),
+        ).toEqual(["r1"]);
 
         await svc.restoreAllHidden("s1");
-        expect((await svc.list({ hidden: true })).map((r) => r.requestId)).toEqual(
-            [],
-        );
+        expect(
+            (await svc.list({ hidden: true })).map((r) => r.requestId),
+        ).toEqual([]);
     });
 
     it("top ranks by net down-vs-up score", async () => {
@@ -130,7 +136,11 @@ describe("CoreFeedbackService", () => {
         await svc.record({ requestId: "a1", rating: "down", agent: "player" });
         await svc.record({ requestId: "a2", rating: "down", agent: "player" });
         await svc.record({ requestId: "a3", rating: "up", agent: "player" });
-        await svc.record({ requestId: "b1", rating: "down", agent: "calendar" });
+        await svc.record({
+            requestId: "b1",
+            rating: "down",
+            agent: "calendar",
+        });
 
         const top = await svc.top({ limit: 2 });
         expect(top).toHaveLength(2);

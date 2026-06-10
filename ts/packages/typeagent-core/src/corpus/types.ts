@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    FeedbackCategory,
-    FeedbackRating,
-} from "../events/types.js";
+import type { FeedbackCategory, FeedbackRating } from "../events/types.js";
 
 /**
  * F0.2 — Corpus federation type surface.
@@ -88,18 +85,11 @@ export interface CorpusWritable {
 
 export interface CorpusService {
     list(agent: string, filter?: CorpusFilter): Promise<CorpusEntry[]>;
-    load(
-        agent: string,
-        filter?: CorpusFilter,
-    ): AsyncIterable<CorpusEntry>;
+    load(agent: string, filter?: CorpusFilter): AsyncIterable<CorpusEntry>;
     /** Append entries to the captures store for `agent`. Returns the file path written. */
     append(agent: string, entries: CorpusEntry[]): Promise<string>;
     /** Move entries by id from captures into the in-repo corpus file. */
-    promote(
-        agent: string,
-        ids: string[],
-        target: "in-repo",
-    ): Promise<number>;
+    promote(agent: string, ids: string[], target: "in-repo"): Promise<number>;
     exportJsonl(
         agent: string,
         out: CorpusWritable,
@@ -120,7 +110,10 @@ export class CorpusEntryNotFoundError extends Error {
 
 /** Thrown when an external source registration conflicts on (agent, name). */
 export class ExternalSourceExistsError extends Error {
-    constructor(public readonly agent: string, public readonly name: string) {
+    constructor(
+        public readonly agent: string,
+        public readonly name: string,
+    ) {
         super(`External source already registered: ${agent}/${name}`);
         this.name = "ExternalSourceExistsError";
     }

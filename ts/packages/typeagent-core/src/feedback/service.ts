@@ -2,9 +2,7 @@
 // Licensed under the MIT License.
 
 import type { EventEmitterLike } from "../events/eventStream.js";
-import {
-    EVENT_SCHEMA_VERSION,
-} from "../events/index.js";
+import { EVENT_SCHEMA_VERSION } from "../events/index.js";
 import type { CorpusEntry } from "../corpus/types.js";
 import { computeEntryId } from "../corpus/id.js";
 import type {
@@ -93,9 +91,7 @@ export class CoreFeedbackService
         const filter: FeedbackFilter = {
             hidden: false,
             ...(opts.agent !== undefined ? { agent: opts.agent } : {}),
-            ...(opts.category !== undefined
-                ? { category: opts.category }
-                : {}),
+            ...(opts.category !== undefined ? { category: opts.category } : {}),
         };
         const rows = await this.list(filter);
         const grouped = new Map<string, FeedbackRow & { _score: number }>();
@@ -177,49 +173,49 @@ export class CoreFeedbackService
     private normalize(input: FeedbackRecordInput): FeedbackRow {
         const existing = this.cache.get(input.requestId);
         const recordedAt = input.recordedAt ?? this.now();
-                const row: FeedbackRow = {
+        const row: FeedbackRow = {
             requestId: input.requestId,
             rating: input.rating,
             includesContext: input.includeContext ?? false,
             recordedAt,
             hidden: existing?.hidden ?? false,
-                        ...(input.category !== undefined
-                                ? { category: input.category }
-                                : existing?.category !== undefined
-                                    ? { category: existing.category }
-                                    : {}),
-                        ...(input.comment !== undefined
-                                ? { comment: input.comment }
-                                : existing?.comment !== undefined
-                                    ? { comment: existing.comment }
-                                    : {}),
-                        ...(input.agent !== undefined
-                                ? { agent: input.agent }
-                                : existing?.agent !== undefined
-                                    ? { agent: existing.agent }
-                                    : {}),
-                        ...(input.utterance !== undefined
-                                ? { utterance: input.utterance }
-                                : existing?.utterance !== undefined
-                                    ? { utterance: existing.utterance }
-                                    : {}),
-                        ...(input.expectedAction !== undefined
-                                ? { expectedAction: input.expectedAction }
-                                : existing?.expectedAction !== undefined
-                                    ? { expectedAction: existing.expectedAction }
-                                    : {}),
-                        ...(input.tags !== undefined
-                                ? { tags: input.tags }
-                                : existing?.tags !== undefined
-                                    ? { tags: existing.tags }
-                                    : {}),
-                        ...(input.sessionId !== undefined
-                                ? { sessionId: input.sessionId }
-                                : existing?.sessionId !== undefined
-                                    ? { sessionId: existing.sessionId }
-                                    : {}),
+            ...(input.category !== undefined
+                ? { category: input.category }
+                : existing?.category !== undefined
+                  ? { category: existing.category }
+                  : {}),
+            ...(input.comment !== undefined
+                ? { comment: input.comment }
+                : existing?.comment !== undefined
+                  ? { comment: existing.comment }
+                  : {}),
+            ...(input.agent !== undefined
+                ? { agent: input.agent }
+                : existing?.agent !== undefined
+                  ? { agent: existing.agent }
+                  : {}),
+            ...(input.utterance !== undefined
+                ? { utterance: input.utterance }
+                : existing?.utterance !== undefined
+                  ? { utterance: existing.utterance }
+                  : {}),
+            ...(input.expectedAction !== undefined
+                ? { expectedAction: input.expectedAction }
+                : existing?.expectedAction !== undefined
+                  ? { expectedAction: existing.expectedAction }
+                  : {}),
+            ...(input.tags !== undefined
+                ? { tags: input.tags }
+                : existing?.tags !== undefined
+                  ? { tags: existing.tags }
+                  : {}),
+            ...(input.sessionId !== undefined
+                ? { sessionId: input.sessionId }
+                : existing?.sessionId !== undefined
+                  ? { sessionId: existing.sessionId }
+                  : {}),
         };
-                return row;
+        return row;
     }
 }
 
@@ -229,7 +225,10 @@ function matchesFilter(row: FeedbackRow, filter: FeedbackFilter): boolean {
     if (filter.rating && row.rating !== filter.rating) return false;
     if (filter.category && row.category !== filter.category) return false;
     if (filter.sessionId && row.sessionId !== filter.sessionId) return false;
-    if (filter.hidden !== undefined && (row.hidden ?? false) !== filter.hidden) {
+    if (
+        filter.hidden !== undefined &&
+        (row.hidden ?? false) !== filter.hidden
+    ) {
         return false;
     }
     if (filter.since !== undefined && row.recordedAt < filter.since) {

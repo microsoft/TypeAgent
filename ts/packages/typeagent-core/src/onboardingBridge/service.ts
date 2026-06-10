@@ -42,16 +42,16 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
         phase: OnboardingPhaseName,
         inputs: unknown,
     ) => Promise<unknown>;
-    private readonly onInstallToSandbox: ((
-        session: OnboardingState,
-        sandboxId: string,
-    ) => Promise<void>) | undefined;
+    private readonly onInstallToSandbox:
+        | ((session: OnboardingState, sandboxId: string) => Promise<void>)
+        | undefined;
 
     constructor(opts: InMemoryOnboardingBridgeOptions = {}) {
         this.now = opts.now ?? Date.now;
         this.createSessionId =
             opts.createSessionId ??
-            (() => `onb-${this.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+            (() =>
+                `onb-${this.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
         this.phaseRunner =
             opts.phaseRunner ??
             (async (_session, phase, inputs) => ({
@@ -119,7 +119,10 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
                 state.phases[next] = {
                     status: "pending",
                     inputs: {},
-                    ancestorPhaseHashes: this.computeAncestorHashes(state, next),
+                    ancestorPhaseHashes: this.computeAncestorHashes(
+                        state,
+                        next,
+                    ),
                 };
             }
         }
@@ -159,7 +162,10 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
         };
     }
 
-    async installToSandbox(sessionId: string, sandboxId: string): Promise<void> {
+    async installToSandbox(
+        sessionId: string,
+        sandboxId: string,
+    ): Promise<void> {
         const state = this.requireSession(sessionId);
         if (!state.installedSandboxIds) {
             state.installedSandboxIds = [];
@@ -205,7 +211,9 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
     }
 }
 
-function nextPhase(phase: OnboardingPhaseName): OnboardingPhaseName | undefined {
+function nextPhase(
+    phase: OnboardingPhaseName,
+): OnboardingPhaseName | undefined {
     const idx = ONBOARDING_PHASE_ORDER.indexOf(phase);
     if (idx < 0 || idx + 1 >= ONBOARDING_PHASE_ORDER.length) {
         return undefined;

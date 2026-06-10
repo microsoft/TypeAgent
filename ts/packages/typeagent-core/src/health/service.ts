@@ -78,8 +78,12 @@ export async function discoverAgentFiles(
     const schemaFiles = all.filter(
         (f) => /schema/i.test(path.basename(f)) && /\.(ts|json)$/i.test(f),
     );
-    const grammarFiles = all.filter((f) => /\.agr$/i.test(f) || /\.ag\.json$/i.test(f));
-    const handlerFiles = all.filter((f) => /actionhandler/i.test(path.basename(f)));
+    const grammarFiles = all.filter(
+        (f) => /\.agr$/i.test(f) || /\.ag\.json$/i.test(f),
+    );
+    const handlerFiles = all.filter((f) =>
+        /actionhandler/i.test(path.basename(f)),
+    );
 
     return {
         packageDir,
@@ -98,10 +102,18 @@ function createRules(): HealthRule[] {
             description: "Manifest exists and parses as JSON.",
             check: async (ctx) => {
                 if (!ctx.files.manifestFile) {
-                    return [err(ctx, "manifest.parses", "Manifest file was not found under src/")];
+                    return [
+                        err(
+                            ctx,
+                            "manifest.parses",
+                            "Manifest file was not found under src/",
+                        ),
+                    ];
                 }
                 try {
-                    JSON.parse(await fs.readFile(ctx.files.manifestFile, "utf8"));
+                    JSON.parse(
+                        await fs.readFile(ctx.files.manifestFile, "utf8"),
+                    );
                     return [];
                 } catch (e) {
                     return [
@@ -117,7 +129,8 @@ function createRules(): HealthRule[] {
         },
         {
             id: "manifest.name.matches",
-            description: "Manifest name (if present) matches package directory name.",
+            description:
+                "Manifest name (if present) matches package directory name.",
             check: async (ctx) => {
                 const manifest = await readManifest(ctx);
                 if (!manifest || manifest.name === undefined) {
@@ -144,9 +157,16 @@ function createRules(): HealthRule[] {
                 const refs = collectManifestRefs(manifest);
                 const missing: HealthFinding[] = [];
                 for (const ref of refs) {
-                    for (const candidate of [ref.originalSchemaFile, ref.schemaFile, ref.grammarFile]) {
+                    for (const candidate of [
+                        ref.originalSchemaFile,
+                        ref.schemaFile,
+                        ref.grammarFile,
+                    ]) {
                         if (!candidate) continue;
-                        const abs = path.resolve(path.dirname(ctx.files.manifestFile!), candidate);
+                        const abs = path.resolve(
+                            path.dirname(ctx.files.manifestFile!),
+                            candidate,
+                        );
                         if (!(await exists(abs))) {
                             missing.push(
                                 err(
@@ -170,7 +190,14 @@ function createRules(): HealthRule[] {
                 for (const file of ctx.files.schemaFiles) {
                     const text = await fs.readFile(file, "utf8");
                     if (text.trim().length === 0) {
-                        findings.push(err(ctx, "schema.parses", "Schema file is empty.", file));
+                        findings.push(
+                            err(
+                                ctx,
+                                "schema.parses",
+                                "Schema file is empty.",
+                                file,
+                            ),
+                        );
                         continue;
                     }
                     if (/\.json$/i.test(file)) {
@@ -193,9 +220,13 @@ function createRules(): HealthRule[] {
         },
         {
             id: "schema.actions.haveGrammar",
-            description: "At least one grammar file exists when schema files exist.",
+            description:
+                "At least one grammar file exists when schema files exist.",
             check: async (ctx) => {
-                if (ctx.files.schemaFiles.length === 0 || ctx.files.grammarFiles.length > 0) {
+                if (
+                    ctx.files.schemaFiles.length === 0 ||
+                    ctx.files.grammarFiles.length > 0
+                ) {
                     return [];
                 }
                 return [
@@ -209,13 +240,21 @@ function createRules(): HealthRule[] {
         },
         {
             id: "grammar.parses",
-            description: "Grammar files are parseable (JSON) or non-empty (AGR).",
+            description:
+                "Grammar files are parseable (JSON) or non-empty (AGR).",
             check: async (ctx) => {
                 const findings: HealthFinding[] = [];
                 for (const file of ctx.files.grammarFiles) {
                     const text = await fs.readFile(file, "utf8");
                     if (text.trim().length === 0) {
-                        findings.push(err(ctx, "grammar.parses", "Grammar file is empty.", file));
+                        findings.push(
+                            err(
+                                ctx,
+                                "grammar.parses",
+                                "Grammar file is empty.",
+                                file,
+                            ),
+                        );
                         continue;
                     }
                     if (/\.json$/i.test(file)) {
@@ -238,9 +277,13 @@ function createRules(): HealthRule[] {
         },
         {
             id: "grammar.rules.targetKnownActions",
-            description: "Grammar targets should map to known actions (heuristic MVP check).",
+            description:
+                "Grammar targets should map to known actions (heuristic MVP check).",
             check: async (ctx) => {
-                if (ctx.files.grammarFiles.length === 0 || ctx.files.schemaFiles.length === 0) {
+                if (
+                    ctx.files.grammarFiles.length === 0 ||
+                    ctx.files.schemaFiles.length === 0
+                ) {
                     return [];
                 }
                 // MVP heuristic: if we have both files, we assume target mapping is
@@ -254,7 +297,11 @@ function createRules(): HealthRule[] {
             check: async (ctx) => {
                 for (const file of ctx.files.handlerFiles) {
                     const text = await fs.readFile(file, "utf8");
-                    if (/export\s+(async\s+)?function\s+instantiate\s*\(/.test(text)) {
+                    if (
+                        /export\s+(async\s+)?function\s+instantiate\s*\(/.test(
+                            text,
+                        )
+                    ) {
                         return [];
                     }
                     if (/instantiate\s*:\s*(async\s*)?\(/.test(text)) {
@@ -293,7 +340,10 @@ function createRules(): HealthRule[] {
                 }
                 try {
                     const parsed = JSON.parse(await fs.readFile(cfg, "utf8"));
-                    const agents = (parsed?.agents ?? {}) as Record<string, unknown>;
+                    const agents = (parsed?.agents ?? {}) as Record<
+                        string,
+                        unknown
+                    >;
                     return agents[ctx.agent] !== undefined
                         ? []
                         : [
@@ -322,14 +372,18 @@ function createRules(): HealthRule[] {
             check: async (ctx) => {
                 if (!ctx.loadedActionTypes) return [];
                 const byAction = new Map<string, string[]>();
-                for (const [agent, actions] of Object.entries(ctx.loadedActionTypes)) {
+                for (const [agent, actions] of Object.entries(
+                    ctx.loadedActionTypes,
+                )) {
                     for (const action of actions) {
                         const arr = byAction.get(action) ?? [];
                         arr.push(agent);
                         byAction.set(action, arr);
                     }
                 }
-                const dupes = [...byAction.entries()].filter(([, owners]) => owners.length > 1);
+                const dupes = [...byAction.entries()].filter(
+                    ([, owners]) => owners.length > 1,
+                );
                 return dupes.map(([action, owners]) =>
                     warn(
                         ctx,
@@ -344,7 +398,9 @@ function createRules(): HealthRule[] {
             description: "Schema hash is compatible with cache hash.",
             check: async (ctx) => {
                 if (!ctx.cacheSchemaHash) return [];
-                const currentHash = await computeSchemaHash(ctx.files.schemaFiles);
+                const currentHash = await computeSchemaHash(
+                    ctx.files.schemaFiles,
+                );
                 if (!currentHash) return [];
                 return currentHash === ctx.cacheSchemaHash
                     ? []
@@ -360,10 +416,14 @@ function createRules(): HealthRule[] {
     ];
 }
 
-async function readManifest(ctx: HealthContext): Promise<AgentManifest | undefined> {
+async function readManifest(
+    ctx: HealthContext,
+): Promise<AgentManifest | undefined> {
     if (!ctx.files.manifestFile) return undefined;
     try {
-        return JSON.parse(await fs.readFile(ctx.files.manifestFile, "utf8")) as AgentManifest;
+        return JSON.parse(
+            await fs.readFile(ctx.files.manifestFile, "utf8"),
+        ) as AgentManifest;
     } catch {
         return undefined;
     }
@@ -391,7 +451,9 @@ async function computeSchemaHash(files: string[]): Promise<string | undefined> {
  * the result is independent of discovery order; returns `undefined` for an
  * empty set so callers can distinguish "no files" from "empty files".
  */
-export async function hashFileContents(files: string[]): Promise<string | undefined> {
+export async function hashFileContents(
+    files: string[],
+): Promise<string | undefined> {
     if (files.length === 0) return undefined;
     const h = createHash("sha256");
     for (const file of files.slice().sort()) {
