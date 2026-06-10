@@ -14,6 +14,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CollisionRegistry } from "../src/context/collisionRegistry.js";
+import {
+    CollisionPreferenceStore,
+    PreferenceMember,
+} from "../src/context/collisionPreferences.js";
 import type {
     Neighborhood,
     NeighborhoodPreview,
@@ -151,12 +155,22 @@ function makeGrammarCtx(
     registryFirst: boolean,
     registry: CollisionRegistry,
     registryPath: string,
+    oneShot: Set<string> = new Set<string>(),
+    preferences: CollisionPreferenceStore = CollisionPreferenceStore.load(
+        undefined,
+    ),
+    preferenceEnabled = true,
 ): CommandHandlerContext {
     return {
         session: {
             getConfig: () => ({
                 collision: {
-                    preference: { registryFirst, registryPath },
+                    preference: {
+                        registryFirst,
+                        registryPath,
+                        enabled: preferenceEnabled,
+                        ambiguitySource: "both",
+                    },
                     grammarMatch: { classifier: "distinctActions" },
                     telemetry: { emit: false, debugLog: false },
                     priorityOrder: "",
@@ -165,6 +179,8 @@ function makeGrammarCtx(
         },
         collisionRegistry: registry,
         collisionRegistryPath: registryPath,
+        collisionOneShotPicks: oneShot,
+        collisionPreferences: preferences,
         agents: { getAgentRank: () => 0 },
     } as unknown as CommandHandlerContext;
 }
@@ -248,5 +264,139 @@ describe("matchCollision.resolveGrammarRegistryFirst", () => {
             "what's on my calendar today",
         );
         expect(decision).toBeUndefined();
+    });
+
+    it("resolves to the in-set match when a one-shot pick names it", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const oneShot = new Set<string>(["calendar.findTodaysEvents"]);
+            const ctx = makeGrammarCtx(true, registry, file, oneShot);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            expect(decision?.kind).toBe("match");
+            if (decision?.kind === "match") {
+                const primary = decision.match.match.actions[0]?.action;
+                expect(primary?.schemaName).toBe("calendar");
+                expect(primary?.actionName).toBe("findTodaysEvents");
+            }
+            // The pick is consumed so a later request clarifies again.
+            expect(oneShot.size).toBe(0);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("falls through when a one-shot pick names a non-matched sibling", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            // The grammar matched calendar; the user picked the sibling
+            // taskflow.dailyAgendaEmail, which the grammar can't produce.
+            const oneShot = new Set<string>(["taskflow.dailyAgendaEmail"]);
+            const ctx = makeGrammarCtx(true, registry, file, oneShot);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            expect(decision?.kind).toBe("fallthrough");
+            // The pick is left intact so translation can pin the schema.
+            expect(oneShot.has("taskflow.dailyAgendaEmail")).toBe(true);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("auto-resolves to a learned preference in the validated set", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const members: PreferenceMember[] = [
+                { schemaName: "calendar", actionName: "findTodaysEvents" },
+                { schemaName: "taskflow", actionName: "dailyAgendaEmail" },
+            ];
+            const store = CollisionPreferenceStore.load(undefined);
+            store.set(members, members[0], "learned");
+            const ctx = makeGrammarCtx(
+                true,
+                registry,
+                file,
+                new Set<string>(),
+                store,
+            );
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            // Preference picks calendar, which is the grammar match → resolve.
+            expect(decision?.kind).toBe("match");
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("falls through when the preferred option is a non-matched sibling", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const members: PreferenceMember[] = [
+                { schemaName: "calendar", actionName: "findTodaysEvents" },
+                { schemaName: "taskflow", actionName: "dailyAgendaEmail" },
+            ];
+            const store = CollisionPreferenceStore.load(undefined);
+            store.set(members, members[1], "learned"); // prefer taskflow
+            const oneShot = new Set<string>();
+            const ctx = makeGrammarCtx(true, registry, file, oneShot, store);
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            // Preferred taskflow isn't in the grammar set → pin via one-shot.
+            expect(decision?.kind).toBe("fallthrough");
+            expect(oneShot.has("taskflow.dailyAgendaEmail")).toBe(true);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("clarifies again once the preference is cleared", () => {
+        const dir = tmpdir();
+        try {
+            const file = writePreview(dir, [calendarNeighborhood]);
+            const registry = CollisionRegistry.load(file);
+            const members: PreferenceMember[] = [
+                { schemaName: "calendar", actionName: "findTodaysEvents" },
+                { schemaName: "taskflow", actionName: "dailyAgendaEmail" },
+            ];
+            const store = CollisionPreferenceStore.load(undefined);
+            store.set(members, members[0], "learned");
+            store.clear();
+            const ctx = makeGrammarCtx(
+                true,
+                registry,
+                file,
+                new Set<string>(),
+                store,
+            );
+            const decision = resolveGrammarRegistryFirst(
+                [makeMatch("calendar", "findTodaysEvents")],
+                ctx,
+                "what's on my calendar today",
+            );
+            // No preference left → back to clarifying.
+            expect(decision?.kind).toBe("clarify");
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

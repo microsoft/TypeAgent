@@ -25,6 +25,9 @@ import {
     detectRegistryAmbiguity,
     escalateKnownAmbiguousMatch,
     resolvePreferenceClarify,
+    peekOneShotPick,
+    consumeOneShotPick,
+    getPreferenceContext,
 } from "../context/collisionResolution.js";
 import { PreferenceMember } from "../context/collisionPreferences.js";
 import {
@@ -386,6 +389,45 @@ async function pickInitialSchema(
                             systemContext,
                         );
                         if (match !== undefined) {
+                            // Honor a pending one-shot pick from a resolved
+                            // clarify card: pin the schema to the user's choice
+                            // instead of re-showing the card.
+                            const pick = peekOneShotPick(
+                                match.members,
+                                systemContext,
+                            );
+                            if (
+                                pick !== undefined &&
+                                activeSchemas.has(pick.schemaName)
+                            ) {
+                                consumeOneShotPick(pick, systemContext);
+                                return {
+                                    kind: "schema",
+                                    schemaName: pick.schemaName,
+                                };
+                            }
+                            // Tier 1: honor a learned/explicit preference so
+                            // "remember this choice" auto-resolves here too,
+                            // and clearing it makes us clarify again.
+                            if (prefCfg.enabled) {
+                                const pref =
+                                    systemContext.collisionPreferences.find(
+                                        match.members,
+                                        getPreferenceContext(systemContext),
+                                    );
+                                if (
+                                    pref !== undefined &&
+                                    activeSchemas.has(pref.chosen.schemaName)
+                                ) {
+                                    systemContext.collisionPreferences.recordHit(
+                                        pref.key,
+                                    );
+                                    return {
+                                        kind: "schema",
+                                        schemaName: pref.chosen.schemaName,
+                                    };
+                                }
+                            }
                             return clarifyFrom(
                                 match.members,
                                 "registry-first",

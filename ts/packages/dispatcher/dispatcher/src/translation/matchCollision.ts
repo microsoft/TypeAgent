@@ -19,12 +19,21 @@ import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 import {
     detectRegistryAmbiguity,
     resolvePreferenceClarify,
+    peekOneShotPick,
+    consumeOneShotPick,
+    getPreferenceContext,
 } from "../context/collisionResolution.js";
 import { PreferenceMember } from "../context/collisionPreferences.js";
 
 export type GrammarCollisionDecision =
     | { kind: "match"; match: MatchResult }
-    | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches };
+    | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches }
+    /**
+     * A pending one-shot pick names a registry sibling the grammar didn't
+     * match. Abort grammar matching and fall through to LLM translation, where
+     * `pickInitialSchema` pins the schema to the chosen candidate.
+     */
+    | { kind: "fallthrough" };
 
 function getPrimary(match: MatchResult): {
     schemaName: string;
@@ -127,6 +136,62 @@ export function resolveGrammarRegistryFirst(
         return undefined;
     }
     const { members, neighborhoodIds } = match;
+
+    // Honor a pending one-shot pick from a previously-resolved clarify card so
+    // that re-running the original request routes to the user's choice instead
+    // of re-showing the same card. Without this, the grammar cache re-matches
+    // the same action, registry-first re-detects the ambiguity, and the card
+    // duplicates indefinitely.
+    const pick = peekOneShotPick(members, ctx);
+    if (pick !== undefined) {
+        const matched = validated.find((m) => {
+            const p = getPrimary(m);
+            return (
+                p.schemaName === pick.schemaName &&
+                p.actionName === pick.actionName
+            );
+        });
+        if (matched !== undefined) {
+            consumeOneShotPick(pick, ctx);
+            return { kind: "match", match: matched };
+        }
+        // The pick is a registry sibling the grammar didn't match. Leave the
+        // pick in place and fall through to translation, which pins the schema.
+        return { kind: "fallthrough" };
+    }
+
+    // Tier 1: honor a learned/explicit preference so "remember this choice"
+    // actually auto-resolves on the registry-first path. Without this the card
+    // re-appears every time even after the user asked to remember, and
+    // `@collision preferences clear` looks like a no-op (the preference was
+    // never being consulted). When a preference matches and is in the grammar's
+    // validated set, resolve to it; when it names a sibling the grammar didn't
+    // produce, pin it via a one-shot and fall through to translation.
+    const prefCfg = ctx.session.getConfig().collision.preference;
+    if (prefCfg.enabled) {
+        const pref = ctx.collisionPreferences.find(
+            members,
+            getPreferenceContext(ctx),
+        );
+        if (pref !== undefined) {
+            ctx.collisionPreferences.recordHit(pref.key);
+            const matched = validated.find((m) => {
+                const p = getPrimary(m);
+                return (
+                    p.schemaName === pref.chosen.schemaName &&
+                    p.actionName === pref.chosen.actionName
+                );
+            });
+            if (matched !== undefined) {
+                return { kind: "match", match: matched };
+            }
+            ctx.collisionOneShotPicks.add(
+                `${pref.chosen.schemaName}.${pref.chosen.actionName}`,
+            );
+            return { kind: "fallthrough" };
+        }
+    }
+
     const clarify = buildClarifyMultipleAgentMatches(
         request,
         members,

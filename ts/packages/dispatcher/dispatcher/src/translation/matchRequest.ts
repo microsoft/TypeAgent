@@ -299,6 +299,12 @@ export async function matchRequest(
         decision = resolveGrammarCollision(validated, systemContext, request);
     }
     if (decision !== undefined) {
+        if (decision.kind === "fallthrough") {
+            // A pending one-shot pick names a registry sibling the grammar
+            // didn't match. Bail out of grammar matching so the request falls
+            // through to LLM translation, which pins the schema to the pick.
+            return undefined;
+        }
         if (decision.kind === "match") {
             chosen = decision.match;
         } else {

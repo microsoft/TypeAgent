@@ -58,6 +58,33 @@ function enrichWithSiblings(
     return [...out.values()];
 }
 
+/**
+ * Peek (without consuming) a pending one-shot pick that matches one of
+ * `members`. A one-shot pick is stashed when the user resolves an interactive
+ * clarify card so the re-run of the original request routes to their choice;
+ * the registry-first detectors call this before building a (duplicate) clarify
+ * card. Returns the matching member, or undefined when there's no pending pick.
+ */
+export function peekOneShotPick(
+    members: PreferenceMember[],
+    ctx: CommandHandlerContext,
+): PreferenceMember | undefined {
+    if (ctx.collisionOneShotPicks.size === 0) {
+        return undefined;
+    }
+    return members.find((m) =>
+        ctx.collisionOneShotPicks.has(`${m.schemaName}.${m.actionName}`),
+    );
+}
+
+/** Consume (remove) a one-shot pick once it has been honored. */
+export function consumeOneShotPick(
+    member: PreferenceMember,
+    ctx: CommandHandlerContext,
+): void {
+    ctx.collisionOneShotPicks.delete(`${member.schemaName}.${member.actionName}`);
+}
+
 export type PreferenceClarifyDecision =
     /** Tier 1 hit — auto-resolve to `chosen` (which is in the executable set). */
     | { kind: "preferred"; chosen: PreferenceMember; key: string }

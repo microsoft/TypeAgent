@@ -272,6 +272,15 @@ function clarifyAgentMatchesAction(
                 `${chosen.schemaName}.${chosen.actionName}`,
             );
 
+            // Clear the clarify card's text before re-running. Any display the
+            // re-run produces (e.g. a follow-up sign-in prompt) is appended to
+            // this same action bubble, so without resetting it the stale
+            // "Multiple agents..." question stays stacked above the new prompt.
+            liveActionContext.actionIO.setDisplay({
+                type: "text",
+                content: `Selected ${chosen.schemaName} → ${chosen.actionName}.`,
+            });
+
             // Re-run the original request through the normal pipeline. We're
             // already inside respondToChoice's command lock, so use the
             // no-lock entry point to avoid a self-deadlock.
