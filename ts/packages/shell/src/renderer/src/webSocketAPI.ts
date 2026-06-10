@@ -50,12 +50,6 @@ export const webapi: ClientAPI = {
     openImageFile: () => {
         // not supported on mobile
     },
-    getChatHistory: async () => {
-        return undefined;
-    },
-    saveChatHistory: (_html: string, _seq: number) => {
-        // not supported on mobile
-    },
     saveSettings: () => {
         // not supported on mobile
     },
@@ -109,6 +103,9 @@ export const webapi: ClientAPI = {
     },
     conversationGetCurrent: async () => {
         return undefined;
+    },
+    conversationManageAction: async () => {
+        throw new Error("Conversation management not supported on mobile");
     },
 };
 

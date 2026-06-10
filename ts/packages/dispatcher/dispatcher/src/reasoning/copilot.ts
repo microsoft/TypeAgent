@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAction,
     TypeAgentAction,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
@@ -15,8 +16,10 @@ import {
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
-import { execSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
@@ -25,6 +28,10 @@ import {
 } from "../translation/actionSchemaJsonTranslator.js";
 import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
+import {
+    ConversationMessage,
+    ConversationMessageMeta,
+} from "conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -77,6 +84,18 @@ function resolveReasoningEffort():
         return raw;
     }
     return undefined;
+}
+
+/**
+ * Resolve the display append mode for reasoning phases based on config.
+ * "inline" config → "step" mode (new bubble per phase).
+ * "block" config  → "block" mode (legacy single-bubble behavior).
+ */
+function resolveReasoningDisplayMode(
+    context: ActionContext<CommandHandlerContext>,
+): DisplayAppendMode {
+    const config = context.sessionContext.agentContext.session.getConfig();
+    return config.execution.reasoningDisplay === "inline" ? "step" : "block";
 }
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
@@ -146,24 +165,51 @@ function getRepoRoot(): string {
 }
 
 /**
- * Find the copilot CLI executable path
- * Uses 'where' on Windows or 'which' on Unix
+ * Locate the platform-specific native copilot binary bundled by the SDK.
+ * Navigates pnpm's virtual store: resolve @github/copilot-sdk, find the
+ * @github/copilot sibling directory, follow its symlink to the real path,
+ * then locate the platform binary (@github/copilot-<platform>-<arch>)
+ * among the real copilot package's siblings.
  */
-function findCopilotPath(): string {
+function findBundledNativeCli(): string | undefined {
+    const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
+    const require = createRequire(import.meta.url);
     try {
-        const isWindows = process.platform === "win32";
-        const command = isWindows ? "where copilot" : "which copilot";
-        const result = execSync(command, { encoding: "utf8" }).trim();
+        // 1. Resolve @github/copilot-sdk (our direct dependency)
+        const sdkEntry = require.resolve("@github/copilot-sdk");
+        // sdkEntry is like: .../@github/copilot-sdk/dist/index.js
+        // Navigate to the @github/ directory that contains copilot-sdk
+        const githubDir = path.resolve(path.dirname(sdkEntry), "../..");
 
-        // On Windows, 'where' may return multiple lines; take the first one
-        const path = result.split("\n")[0].trim();
-        debug(`Found copilot CLI at: ${path}`);
-        return path;
-    } catch (error) {
-        debug("Could not find copilot CLI in PATH");
-        // Fallback to just "copilot" and let the SDK handle the error
-        return "copilot";
+        // 2. @github/copilot should be a sibling (pnpm hoists deps here)
+        const copilotDir = path.join(githubDir, "copilot");
+        if (!existsSync(copilotDir)) {
+            debug(`@github/copilot not found at: ${copilotDir}`);
+            return undefined;
+        }
+
+        // 3. Follow the pnpm symlink to the real package location
+        const realCopilotDir = realpathSync(copilotDir);
+        // realCopilotDir is like: .../.pnpm/@github+copilot@VER/node_modules/@github/copilot
+        // The platform binary package is a sibling in the real location
+        const realGithubDir = path.dirname(realCopilotDir);
+        const candidate = path.join(
+            realGithubDir,
+            `copilot-${process.platform}-${process.arch}`,
+            binaryName,
+        );
+        if (existsSync(candidate)) {
+            debug(`Found bundled native CLI: ${candidate}`);
+            return candidate;
+        }
+        debug(`Platform binary not found at: ${candidate}`);
+    } catch (err) {
+        debug(
+            `Could not resolve bundled native CLI for ${process.platform}-${process.arch}:`,
+            err,
+        );
     }
+    return undefined;
 }
 
 /**
@@ -177,12 +223,38 @@ async function getCopilotClient(
 
     if (!client) {
         debug("Creating new Copilot client");
-        const cliPath = findCopilotPath();
         const repoRoot = getRepoRoot();
         debug(`Repo root: ${repoRoot}`);
         debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
+
+        // When running inside Electron, process.execPath is the Electron
+        // binary — not node. The SDK's default getBundledCliPath() resolves
+        // to a .js entry point which the SDK then spawns via
+        // process.execPath, causing the CLI to exit immediately. To avoid
+        // this, resolve the platform-specific native binary from the
+        // bundled @github/copilot-<platform> package and pass it as
+        // cliPath so the SDK spawns it directly (no node needed).
+        const cliPath = await findBundledNativeCli();
+
+        // Isolate the CLI from the user's ~/.claude/settings.json.
+        // The Copilot CLI binary internally uses the Anthropic API and
+        // reads Claude Code's settings file.  If that file contains a
+        // model value with a "[1m]" suffix (e.g. "opus[1m]"), the CLI
+        // adds a "context-1m-2025-08-07" beta header that the API
+        // rejects for accounts without the 1M-context entitlement.
+        // Pointing CLAUDE_CONFIG_DIR at an empty temp directory prevents
+        // the CLI from reading those settings while still allowing it
+        // to use its own default configuration.
+        const isolatedConfigDir = mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-copilot-"),
+        );
+
         client = new CopilotClient({
-            cliPath,
+            ...(cliPath ? { cliPath } : {}),
+            env: {
+                ...process.env,
+                CLAUDE_CONFIG_DIR: isolatedConfigDir,
+            },
             cliArgs: [
                 "--add-dir",
                 repoRoot,
@@ -266,14 +338,14 @@ function buildPromptWithContext(
  * Format thinking block display with collapsible details
  * (Matches Claude implementation styling exactly)
  */
-function formatThinkingDisplay(thinking: string, isStreaming: boolean): string {
+function formatThinkingDisplay(thinking: string): string {
     const escaped = thinking
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
     return [
-        `<details class="reasoning-thinking"${isStreaming ? "" : " open"}>`,
+        `<details class="reasoning-thinking" open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
@@ -285,10 +357,17 @@ function formatThinkingDisplay(thinking: string, isStreaming: boolean): string {
  */
 function formatToolCallDisplay(toolName: string, input: any): string {
     if (toolName === "discover_actions") {
-        return `**Tool:** discover_actions — schema: \`${input.schemaName}\``;
+        const schema = input?.schemaName ?? JSON.stringify(input);
+        return `**Tool:** discover_actions — schema: \`${schema}\``;
     } else if (toolName === "execute_action") {
-        const actionName = input.action?.actionName ?? "unknown";
-        return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\``;
+        const schema = input?.schemaName ?? "?";
+        const actionName = input?.action?.actionName ?? "?";
+        return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+    } else if (toolName === "search_memory") {
+        const question = input?.question ?? JSON.stringify(input);
+        return `**Tool:** search_memory — \`${question}\``;
+    } else if (toolName === "remember") {
+        return `**Tool:** remember`;
     }
     return `**Tool:** ${toolName}`;
 }
@@ -463,6 +542,89 @@ function getCopilotSessionConfig(
         },
     });
 
+    const searchMemoryTool = defineTool("search_memory", {
+        description: [
+            "Search the user's conversation memory to recall information from earlier in this or prior conversations.",
+            "Provide a natural language question; returns an answer synthesized from relevant remembered messages.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description: "Natural language question to recall",
+                },
+            },
+            required: ["question"],
+        },
+        handler: async (args: any) => {
+            const { question } = args;
+            debug(`Searching memory: ${question}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    textResultForLlm: "Conversation memory is not available.",
+                    resultType: "success" as const,
+                };
+            }
+            const result = await memory.getAnswerFromLanguage(question);
+            if (!result.success) {
+                return {
+                    textResultForLlm: `Memory search failed: ${result.message}`,
+                    resultType: "failure" as const,
+                    error: result.message,
+                };
+            }
+            const answers = result.data.map(([, answerResponse]) =>
+                answerResponse.type === "Answered"
+                    ? answerResponse.answer
+                    : `No answer: ${answerResponse.whyNoAnswer}`,
+            );
+            return {
+                textResultForLlm: answers.join("\n\n"),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const rememberTool = defineTool("remember", {
+        description: [
+            "Save a new memory to the user's conversation memory so it can be recalled later.",
+            "Use this to durably record facts, decisions, or context discovered during reasoning.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                text: {
+                    type: "string",
+                    description: "The information to remember",
+                },
+            },
+            required: ["text"],
+        },
+        handler: async (args: any) => {
+            const { text } = args;
+            debug(`Remembering: ${text}`);
+            const memory = systemContext.conversationMemory;
+            if (memory === undefined) {
+                return {
+                    textResultForLlm: "Conversation memory is not available.",
+                    resultType: "success" as const,
+                };
+            }
+            memory.queueAddMessage(
+                new ConversationMessage(
+                    text,
+                    new ConversationMessageMeta("reasoning", ["user"]),
+                ),
+            );
+            return {
+                textResultForLlm: "Remembered.",
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel();
     const reasoningEffort = resolveReasoningEffort();
 
@@ -471,10 +633,12 @@ function getCopilotSessionConfig(
         model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         streaming: true,
-        tools: [discoverTool, executeTool],
+        tools: [discoverTool, executeTool, searchMemoryTool, rememberTool],
         availableTools: [
             "discover_actions",
             "execute_action",
+            "search_memory",
+            "remember",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -500,6 +664,10 @@ function getCopilotSessionConfig(
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
                 "",
+                "## Conversation Memory Tools",
+                "- `search_memory`: Recall information from earlier in this or prior conversations",
+                "- `remember`: Durably save a new memory so it can be recalled later",
+                "",
                 "## Guidelines",
                 "- **PREFER built-in tools** for web search, file operations, and code investigation",
                 "- **Use TypeAgent actions** only for domain-specific operations (music, calendar, email, etc.)",
@@ -521,6 +689,7 @@ async function executeReasoningWithoutPlanning(
 ): Promise<any> {
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
+    const displayMode = resolveReasoningDisplayMode(context);
 
     const client = await getCopilotClient(context);
     const config = getCopilotSessionConfig(context);
@@ -580,7 +749,7 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning, true),
+                        content: formatThinkingDisplay(currentReasoning),
                     },
                     "temporary",
                 );
@@ -596,12 +765,9 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(
-                            event.data.content,
-                            false,
-                        ),
+                        content: formatThinkingDisplay(event.data.content),
                     },
-                    "block",
+                    displayMode,
                 );
             }
         },
@@ -638,10 +804,9 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             const parameters =
+                event.data?.arguments ||
                 event.parameters ||
                 event.data?.parameters ||
-                event.args ||
-                event.data?.args ||
                 {};
             debug(`Tool execution started: ${toolName}`);
             context.actionIO.appendDisplay(
@@ -650,7 +815,7 @@ async function executeReasoningWithoutPlanning(
                     content: formatToolCallDisplay(toolName, parameters),
                     kind: "info",
                 },
-                "block",
+                displayMode,
             );
         },
     );
@@ -707,7 +872,7 @@ async function executeReasoningWithoutPlanning(
                     type: "markdown",
                     content: displayContent,
                 },
-                "block",
+                displayMode,
             );
         } else {
             debug("Warning: No content to display!");
@@ -723,7 +888,7 @@ async function executeReasoningWithoutPlanning(
                 type: "text",
                 content: `Error: ${error instanceof Error ? error.message : String(error)}`,
             },
-            "block",
+            displayMode,
         );
         throw error;
     } finally {
@@ -768,6 +933,7 @@ async function executeReasoningWithTracing(
     try {
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
+        const displayMode = resolveReasoningDisplayMode(context);
 
         const client = await getCopilotClient(context);
         const config = getCopilotSessionConfig(context);
@@ -827,10 +993,7 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(
-                                currentReasoning,
-                                true,
-                            ),
+                            content: formatThinkingDisplay(currentReasoning),
                         },
                         "temporary",
                     );
@@ -852,12 +1015,9 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(
-                                event.data.content,
-                                false,
-                            ),
+                            content: formatThinkingDisplay(event.data.content),
                         },
-                        "block",
+                        displayMode,
                     );
                 }
             },
@@ -894,10 +1054,9 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 const parameters =
+                    event.data?.arguments ||
                     event.parameters ||
                     event.data?.parameters ||
-                    event.args ||
-                    event.data?.args ||
                     {};
                 debug(`Tool execution started: ${toolName}`);
 
@@ -910,7 +1069,7 @@ async function executeReasoningWithTracing(
                         content: formatToolCallDisplay(toolName, parameters),
                         kind: "info",
                     },
-                    "block",
+                    displayMode,
                 );
             },
         );
@@ -960,7 +1119,7 @@ async function executeReasoningWithTracing(
                         type: "markdown",
                         content: displayContent,
                     },
-                    "block",
+                    displayMode,
                 );
             } else {
                 debug("Warning: No content to display!");

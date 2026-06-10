@@ -35,8 +35,29 @@ export interface TaskContext {
      */
     constraints?: TaskConstraints;
 
-    /** The node's declared output schema, if any. */
-    outputSchema?: JSONSchema;
+    /**
+     * The dispatching node's declared output schema. Tasks may use it
+     * to shape their computation (e.g. schema-guided LLM responses, per
+     * copilot.invoke).
+     *
+     * Always present: TaskNode.outputSchema is required by the IR contract
+     * (`model/src/ir.ts`) and the static validator rejects task nodes that
+     * omit it, so the runner can — and does — pass it unconditionally.
+     *
+     * The schema is a JSON Schema 7 value. A typical schema-guided task
+     * dispatches on its shape:
+     *   - `{ type: "object", properties: { ... } }` — produce a structured
+     *     JSON object matching the declared properties.
+     *   - `{ type: "string" }` — produce free text; the returned value is a
+     *     plain string.
+     *   - `{}` (the top schema) — produce anything; the task is free to
+     *     return any JSON value.
+     *
+     * NOTE: The engine always validates the task's return value against the
+     *       output schema after execution. Tasks normally do not need to do this,
+     *       unless the task uses the results internally.
+     */
+    outputSchema: JSONSchema;
 }
 
 /**

@@ -16,6 +16,7 @@ export {
     boolToLabel,
     shellExec,
     llmGenerate,
+    copilotInvoke,
     httpGet,
     fileRead,
     fileWrite,
@@ -42,3 +43,14 @@ export {
     standardLibraryTasks,
     allBuiltinTasks,
 } from "./builtinTasks.js";
+
+// TODO: The @github/copilot-sdk dependency hints that copilotInvoke may be
+//       a good first candidate for an external task.
+export {
+    setCopilotClientFactory,
+    resetCopilotClientFactory,
+    shutdownCopilotHost,
+    type CopilotClientFactory,
+    type MinimalCopilotClient,
+    type MinimalCopilotSession,
+} from "./copilotClientHost.js";

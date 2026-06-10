@@ -33,14 +33,14 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/ai-agents": "^1.0.0-beta.3",
-    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/ai-projects": "^2.2.0",
     "@azure/identity": "^4.10.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/config": "workspace:*",
     "aiclient": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
+    "openai": "^6.16.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"

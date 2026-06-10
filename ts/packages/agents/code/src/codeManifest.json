@@ -6,6 +6,7 @@
     "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
     "originalSchemaFile": "./codeActionsSchema.ts",
     "schemaFile": "../dist/codeSchema.pas.json",
+    "grammarFile": "../dist/codeSchema.ag.json",
     "schemaType": {
       "action": "CodeActions",
       "activity": "CodeActivity"
@@ -17,6 +18,7 @@
         "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
         "originalSchemaFile": "./vscode/debugActionsSchema.ts",
         "schemaFile": "../dist/debugSchema.pas.json",
+        "grammarFile": "../dist/debugSchema.ag.json",
         "schemaType": "CodeDebugActions"
       }
     },
@@ -25,6 +27,7 @@
         "description": "Code agent that helps you work with display keyboard bindings, Zoom in, Zoom out, do text search and replace, show extensions etc.",
         "originalSchemaFile": "./vscode/displayActionsSchema.ts",
         "schemaFile": "../dist/displaySchema.pas.json",
+        "grammarFile": "../dist/displaySchema.ag.json",
         "schemaType": "CodeDisplayActions"
       }
     },
@@ -33,6 +36,7 @@
         "description": "Code agent that helps you navigate within an already-open editor: find a file in the workspace, go to a symbol or line, open a new vscode window, show the command palette, open user settings json, etc.",
         "originalSchemaFile": "./vscode/generalActionsSchema.ts",
         "schemaFile": "../dist/generalSchema.pas.json",
+        "grammarFile": "../dist/generalSchema.ag.json",
         "schemaType": "CodeGeneralActions"
       }
     },
@@ -49,6 +53,7 @@
         "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
         "originalSchemaFile": "./vscode/workbenchCommandActionsSchema.ts",
         "schemaFile": "../dist/workbenchSchema.pas.json",
+        "grammarFile": "../dist/workbenchSchema.ag.json",
         "schemaType": "CodeWorkbenchActions"
       }
     },
@@ -57,6 +62,7 @@
         "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
         "originalSchemaFile": "./vscode/extensionsActionsSchema.ts",
         "schemaFile": "../dist/extensionSchema.pas.json",
+        "grammarFile": "../dist/extensionSchema.ag.json",
         "schemaType": "CodeWorkbenchExtensionActions"
       }
     },
@@ -66,6 +72,7 @@
         "description": "Manage TypeAgent Shell conversations (chat tabs in the TypeAgent VS Code Shell extension): create a new conversation, rename the current conversation, or switch to an existing conversation by name.",
         "originalSchemaFile": "./vscode/vscodeConversationActionsSchema.ts",
         "schemaFile": "../dist/vscodeShellSchema.pas.json",
+        "grammarFile": "../dist/vscodeShellSchema.ag.json",
         "schemaType": "VSCodeConversationActions"
       }
     }

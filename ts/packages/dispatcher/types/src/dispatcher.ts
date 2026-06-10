@@ -79,7 +79,14 @@ export type CommandResult = {
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
     metrics?: RequestMetrics;
+    // Token usage for translating the user's request into actions (the LLM
+    // "translation" step). Absent for @-commands and cached translations.
     tokenUsage?: CompletionUsageStats;
+    // Token usage accumulated across all executed actions/commands that
+    // self-reported via `ActionResult.tokenUsage`. `undefined` => no action
+    // reported usage (unknown). A present all-zero value => actions ran but
+    // made no LLM call.
+    actionTokenUsage?: CompletionUsageStats;
 };
 
 // Architecture: docs/architecture/completion.md — Data flow / Key types
@@ -320,6 +327,19 @@ export interface Dispatcher {
      * @returns a `CancelResult` describing what the server did
      */
     cancelCommand(requestId: string): Promise<CancelResult>;
+
+    /**
+     * Promote a queued command so it runs next, ahead of any other queued
+     * entries ("jump the queue"). Does not affect the currently-running
+     * request — the promoted entry runs when the running one finishes.
+     *
+     * Resolves `true` if a matching queued entry was found (and moved, or was
+     * already next); `false` for the running entry or an unknown requestId.
+     * Never rejects under normal operation.
+     *
+     * @param requestId the requestId string of the queued command to promote
+     */
+    promoteCommand(requestId: string): Promise<boolean>;
 
     /**
      * Cancel an in-flight command using the client-assigned id that was passed

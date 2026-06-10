@@ -17,7 +17,7 @@ import {
     ShellSettingManager,
     ShellUserSettings,
 } from "./shellSettings.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { closeLocalWhisper } from "./localWhisperCommandHandler.js";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
@@ -198,82 +198,6 @@ async function initialize() {
     });
 
     const shellSettings = new ShellSettingManager(instanceDir);
-    const settings = shellSettings.user;
-
-    const chatHistory = instanceDir
-        ? path.join(getShellDataDir(instanceDir), "chat_history.html")
-        : undefined;
-    const chatHistorySeq = instanceDir
-        ? path.join(getShellDataDir(instanceDir), "chat_history.seq")
-        : undefined;
-    ipcMain.handle("get-chat-history", async (event) => {
-        if (chatHistory === undefined || !settings.chatHistory)
-            return undefined;
-
-        // Make sure the event is from the chat view of the current shell window
-        const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (!shellWindow) return undefined;
-
-        // Load chat history if enabled
-        if (existsSync(chatHistory)) {
-            const html = readFileSync(chatHistory, "utf-8");
-            let seq = -1;
-            if (chatHistorySeq && existsSync(chatHistorySeq)) {
-                try {
-                    seq = parseInt(
-                        readFileSync(chatHistorySeq, "utf-8").trim(),
-                        10,
-                    );
-                    if (isNaN(seq)) {
-                        seq = -1;
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-            return { html, seq };
-        }
-
-        return undefined;
-    });
-
-    // Store the chat history whenever the DOM changes
-    // this let's us rehydrate the chat when reopening the shell
-    ipcMain.on("save-chat-history", async (event, html, seq) => {
-        if (chatHistory === undefined || !settings.chatHistory) {
-            return;
-        }
-
-        // Make sure the event is from the chat view of the current shell window
-        const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (!shellWindow) return;
-
-        // store the modified DOM contents
-
-        debugShell(
-            `Saving chat history to '${chatHistory}'.`,
-            performance.now(),
-        );
-
-        try {
-            writeFileSync(chatHistory, html);
-            if (
-                chatHistorySeq !== undefined &&
-                typeof seq === "number" &&
-                seq >= 0
-            ) {
-                writeFileSync(chatHistorySeq, String(seq));
-            }
-        } catch (e) {
-            debugShell(
-                `Unable to save history to '${chatHistory}'. Error: ${e}`,
-                performance.now(),
-            );
-        }
-
-        // sync the chat history with any chat history tab
-        shellWindow?.chatViewServer?.broadcast(html);
-    });
 
     ipcMain.on("save-settings", (event, settings: ShellUserSettings) => {
         const shellWindow = getShellWindowForChatViewIpcEvent(event);

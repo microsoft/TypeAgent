@@ -9,6 +9,7 @@ import {
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { QueueSnapshot } from "agent-dispatcher";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     createDispatcherRpcClient,
@@ -113,11 +114,19 @@ function registerClient(client: Client) {
 
     ipcRenderer.on(
         "dispatcher-initialized",
-        (_event, initialQueueSnapshot?: QueueSnapshot) => {
+        (
+            _event,
+            initialQueueSnapshot?: QueueSnapshot,
+            historyCutoffSeq?: number,
+        ) => {
             // The dispatcher RPC client was set up at module init; just
             // hand it (and the initial queue snapshot, if any) to the
             // renderer's registered client.
-            client.dispatcherInitialized(dispatcher, initialQueueSnapshot);
+            client.dispatcherInitialized(
+                dispatcher,
+                initialQueueSnapshot,
+                historyCutoffSeq,
+            );
         },
     );
 
@@ -148,6 +157,13 @@ function registerClient(client: Client) {
         client.markHistoryEntries?.();
     });
 
+    ipcRenderer.on(
+        "request-completed",
+        (_, clientRequestId: string, result: any) => {
+            client.requestCompleted?.(clientRequestId, result);
+        },
+    );
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 
@@ -171,12 +187,6 @@ const api: ClientAPI = {
     },
     openImageFile: () => {
         ipcRenderer.send("open-image-file");
-    },
-    getChatHistory: () => {
-        return ipcRenderer.invoke("get-chat-history");
-    },
-    saveChatHistory: (html: string, seq: number) => {
-        ipcRenderer.send("save-chat-history", html, seq);
     },
     saveSettings: (settings: ShellUserSettings) => {
         ipcRenderer.send("save-settings", settings);
@@ -232,6 +242,9 @@ const api: ClientAPI = {
     },
     conversationGetCurrent: () => {
         return ipcRenderer.invoke("conversation-get-current");
+    },
+    conversationManageAction: (payload: ManageConversationPayload) => {
+        return ipcRenderer.invoke("conversation-manage-action", payload);
     },
 };
 

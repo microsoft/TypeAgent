@@ -31,6 +31,8 @@
 
 .chat-input {
   display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
   padding: 5px;
   background-color: white;
   align-self: flex-end;
@@ -40,6 +42,17 @@
   border: solid 1px rgb(224, 224, 224);
   border-radius: 6px;
   position: relative;
+  /* Show the text caret across the whole input surface (container padding,
+     wrapper, ghost text) so the entire box reads as an editable area —
+     not just the contenteditable .user-textarea inside it. Buttons inside
+     the container override this via their own `cursor: pointer` (see
+     .chat-input-button). */
+  cursor: text;
+}
+
+.chat-input:focus-within {
+  border-color: var(--chat-input-focus-color, #a78bfa);
+  box-shadow: 0 1px 4px var(--chat-input-focus-glow, rgba(167, 139, 250, 0.15));
 }
 
 .chat-input.listening {
@@ -66,7 +79,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  width: calc(100% - 48px);
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 5px 8px;
   min-height: 30px;
   line-height: 30px;
@@ -100,6 +114,7 @@
 
 .chat-input-button {
   align-self: flex-end;
+  flex: 0 0 auto;
   border: none;
   background-color: transparent;
   width: 24px;
@@ -110,7 +125,7 @@
   /* Inherit the host theme's foreground so glyph buttons (e.g. stop ■)
      render in the same colour as the surrounding text instead of the
      browser default. Hosts can override --chat-input-button-color. */
-  color: var(--chat-input-button-color, #e8e8f0);
+  color: var(--chat-input-button-color, #3b4252);
 }
 
 .chat-input-button:disabled svg {
@@ -148,7 +163,8 @@
   margin: 8px 20px;
 }
 
-.chat-history-message {
+.chat-history-message,
+.chat > .history {
   opacity: 0.55;
 }
 
@@ -206,6 +222,8 @@
   gap: 6px;
   padding: 4px 8px;
   flex-wrap: wrap;
+  flex-basis: 100%;
+  order: -1;
   width: 100%;
 }
 
@@ -403,6 +421,81 @@
 
 .chat-message-user-text {
   white-space: break-spaces;
+}
+
+.chat-message-user-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-message-user-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+/* Full-window image lightbox (click an image in a bubble to open). */
+.chat-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Hosts set --chat-lightbox-backdrop per theme (white in light mode,
+     black in dark mode). Falls back to a dark translucent backdrop. */
+  background: var(--chat-lightbox-backdrop, rgba(0, 0, 0, 0.75));
+  overflow: hidden;
+  outline: none;
+  user-select: none;
+}
+
+.chat-lightbox-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
+
+.chat-lightbox-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.chat-lightbox-button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-lightbox-button:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.chat-lightbox-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .chat-message-hidden {
@@ -616,6 +709,17 @@ table.table-message td {
   font-weight: 300;
 }
 
+/* When the signed-in user has an MS Graph profile photo, the avatar div
+   gets this class and a background-image data URL (set inline). Render the
+   photo as a cover-fit circle and drop the letter/background color. */
+.user-icon.user-icon-photo {
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: transparent;
+}
+
 .agent-icon {
   width: 30px;
   height: 30px;
@@ -638,6 +742,15 @@ table.table-message td {
 
 .timestring {
   font-style: normal;
+}
+
+/* Elapsed-time badge for reasoning step bubbles */
+.chat-step-elapsed {
+  font-size: 11px;
+  font-weight: normal;
+  font-style: italic;
+  color: #888;
+  margin-left: 6px;
 }
 
 /* Clickable timestamp to toggle action details */
@@ -746,25 +859,36 @@ table.table-message td {
   position: relative;
 }
 
-.chat-message-explained-icon {
-  align-self: flex-end;
-  border: none;
-  background-color: transparent;
-  margin-right: 5px;
-  position: absolute;
-  top: 0;
-  right: 0;
-  line-height: 0;
+/* The roadrunner now lives inside the content bubble's top-right corner
+   (sitting with the command text), so make the content the positioning
+   context and reserve room on the right so long text doesn't run under
+   it. */
+.chat-message-content.chat-message-explained-host {
+  position: relative;
+  padding-right: 32px;
 }
 
+.chat-message-explained-icon {
+  border: none;
+  background-color: transparent;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  line-height: 0;
+  cursor: help;
+}
+
+/* Tooltip is hosted on the bubble body (which doesn't clip overflow) and
+   floats just above the bubble's top-right on hover so it never covers the
+   command text or the bottom-anchored metrics strip. */
 .chat-message-explained[data-expl]:has(
     .chat-message-explained-icon:hover
   )::after {
   content: attr(data-expl);
   position: absolute;
   text-align: right;
-  top: 0px;
-  right: 30px;
+  bottom: calc(100% + 2px);
+  right: 0;
   white-space: nowrap;
   color: gray;
   background-color: lightyellow;
@@ -772,6 +896,134 @@ table.table-message td {
   padding: 1px 5px;
   font-size: 70%;
   z-index: 10;
+}
+
+/* =========================================================================
+   Status rail (queued / sent / working) — top of user & agent bubbles
+   ========================================================================= */
+
+/* Slim strip across the top of a bubble. Lives at the top so it never
+   collides with the hover-revealed metrics strip that slides out of the
+   bubble's bottom edge. On the user bubble it carries the queue state
+   (queued/sent) + controls (jump / remove); on the agent bubble it carries
+   the "working" state + a Stop button. Created on demand and removed when
+   the state clears, so an idle bubble shows no empty title row. */
+.chat-message-status-rail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 22px;
+  padding: 1px 4px 1px 10px;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Mid-tone state-color block on the rail — sits between the original
+   pastel wash and a fully saturated solid. Amber for queued, blue for
+   running. No opacity, no color-mix; just a muted block so the rail
+   reads as a clear status indicator without competing with the bubble
+   body. The label color below uses dark text for contrast against the
+   lighter mid-tones. */
+.chat-message-status-rail[data-status="running"] {
+  background: #70b0e0;
+}
+.chat-message-status-rail[data-status="queued"] {
+  background: #eabf63;
+}
+
+/* Square off the top of the content so the rail and content read as one
+   bubble. The rail only exists while a state is showing. */
+.chat-message-user:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Agent bubble carries the same rail while the request is "working":
+   just the spinner label + Stop. */
+.chat-message-agent:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.chat-status-state-zone {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* State label sits on top of the mid-tone state-color block. Dark text
+   gives clean contrast against both amber and blue rails at these
+   lightnesses. Outside a stateful rail the default (gray) still
+   applies. */
+.chat-status-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #7a7a7a;
+  user-select: none;
+}
+.chat-status-state[data-status="running"],
+.chat-status-state[data-status="queued"] {
+  color: #2c2c2c;
+}
+
+.chat-status-rail-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Spinner (running) + dot (queued) status indicators. */
+.chat-status-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: chat-status-spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes chat-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.chat-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+  flex: none;
+}
+
+/* Rail control buttons reuse the shared icon-button style at a slightly
+   smaller size, with a danger hover for the destructive actions. */
+.chat-message-status-rail .chat-action-button {
+  width: 22px;
+  height: 22px;
+}
+.chat-message-status-rail .chat-action-button i svg {
+  width: 14px;
+  height: 14px;
+}
+/* On a stateful (mid-tone) rail, switch icons + hover affordances to
+   dark so they read against the amber/blue block. */
+.chat-message-status-rail[data-status] .chat-action-button {
+  color: #2c2c2c;
+}
+.chat-message-status-rail[data-status] .chat-action-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+.chat-message-status-rail[data-status] .chat-action-button.danger:hover {
+  background: rgba(0, 0, 0, 0.18);
+  color: #2c2c2c;
 }
 
 /* =========================================================================
@@ -1039,7 +1291,10 @@ span.ansi-bright-white-fg {
 .chat-message-actions {
   display: flex;
   gap: 2px;
-  margin: 2px 0 6px 40px;
+  /* Align the action row's left edge with the agent bubble body, which is
+     shifted `left: 30px` within the 10px-padded container. The margin is
+     measured from the content box, so 30px here == the bubble's left edge. */
+  margin: 2px 0 6px 30px;
   align-items: center;
   opacity: 0.65;
   transition: opacity 0.15s ease;
@@ -1211,4 +1466,214 @@ span.ansi-bright-white-fg {
 
 .chat-context-menu-item-disabled:hover {
   background: transparent;
+}
+
+/* =========================================================================
+   Provider affordances: voice banner, mic, attach/camera buttons
+   ========================================================================= */
+
+.chat-voice-banner {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+  border-bottom: 1px solid #64b5f6;
+  padding: 6px 12px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 12px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.chat-mic-button.listening {
+  color: #e53935;
+  animation: chat-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-mic-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* =========================================================================
+   Modal popups (settings / help)
+   ========================================================================= */
+
+.chat-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.chat-modal-card {
+  background-color: var(--chat-modal-bg, #ffffff);
+  color: var(--chat-modal-fg, #1a1a1a);
+  border-radius: 8px;
+  min-width: 360px;
+  max-width: 90%;
+  max-height: 85%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.chat-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.chat-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.chat-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+}
+
+.chat-modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.chat-settings-section {
+  margin-bottom: 16px;
+}
+
+.chat-settings-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.chat-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.chat-settings-label {
+  font-size: 13px;
+}
+
+.chat-settings-select,
+.chat-settings-text {
+  min-width: 160px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+/* --- Template action editor (proposeActionEdit) --------------------- */
+.action-container {
+  width: 100%;
+}
+
+.action-text table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.action-text tr {
+  border-top: 1px solid lightgray;
+  border-bottom: 1px solid lightgray;
+}
+
+.action-text td {
+  padding: 1px 10px 1px 10px;
+  height: 22px;
+}
+
+.action-text .autocomplete-container {
+  bottom: 25px;
+}
+
+.action-text td.name-cell {
+  width: 30%;
+}
+
+.action-text td.value-cell {
+  border-left: 1px solid lightgray;
+  width: 62%;
+}
+
+.action-text td.button-cell {
+  padding: 0px;
+  text-align: center;
+}
+
+.action-text input,
+.action-text select,
+.action-text button {
+  width: 100%;
+  height: 100%;
+}
+
+.action-button {
+  padding: 4px;
+  border: lightgray;
+  background-color: transparent;
+  display: none;
+  opacity: 0;
+  width: 100%;
+}
+
+.action-text-editable .action-button {
+  display: block;
+  opacity: 0.25;
+}
+
+.action-text-editable tr:hover .action-button,
+.action-text-editable tr.editing .action-button {
+  display: block;
+  opacity: 1;
+}
+
+.action-text-editable tr.missing .delete-button {
+  display: none;
+}
+
+.action-text tr.error td.name-cell,
+.action-text tr.error input {
+  color: red;
+  font-weight: bold;
+}
+
+.action-text tr.missing {
+  display: none;
+}
+
+.action-text-editable tr.missing {
+  display: table-row;
+}
+
+.action-text-editable tr.missing td.name-cell {
+  font-style: italic;
+  color: lightgray;
 }

@@ -164,6 +164,16 @@
     var(--vscode-badge-foreground, #fff)
   ) !important;
 }
+/* When showing the MS Graph profile photo, drop the themed background color
+   so the inline (important) background-image is visible, and hide the letter
+   color. */
+.user-icon.user-icon-photo {
+  background-color: transparent !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+  color: transparent !important;
+}
 .agent-icon {
   background-color: var(--vscode-badge-background, #2a2a40) !important;
   color: var(--vscode-badge-foreground, var(--vscode-foreground)) !important;

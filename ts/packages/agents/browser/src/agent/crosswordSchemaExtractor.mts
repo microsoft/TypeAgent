@@ -4,6 +4,7 @@
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
+import { hookModelTokenUsage } from "./tokenUsage.mjs";
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActions.mjs";
 
@@ -60,9 +61,14 @@ function createModel() {
         undefined,
         "GPT_5_MINI",
     );
-    return ai.createChatModel(apiSettings, { temperature: 1 }, undefined, [
-        "crossword",
-    ]);
+    const model = ai.createChatModel(
+        apiSettings,
+        { temperature: 1 },
+        undefined,
+        ["crossword"],
+    );
+    hookModelTokenUsage(model);
+    return model;
 }
 
 async function checkIsCrosswordOnPage(

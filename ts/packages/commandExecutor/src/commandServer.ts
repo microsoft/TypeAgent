@@ -145,7 +145,8 @@ class Logger {
 
     log(message: string): void {
         const s = this.format("INFO", message);
-        console.log(s);
+        // stdout is reserved for the MCP JSON-RPC stream; logs go to stderr.
+        console.error(s);
         this.logStream.write(s + "\n");
     }
 

@@ -1343,6 +1343,12 @@ export function createEnhancedClientIO(
                     case "switch":
                         args = `switch "${payload.name}"`;
                         break;
+                    case "prev":
+                        args = "prev";
+                        break;
+                    case "next":
+                        args = "next";
+                        break;
                     case "delete":
                         args = `delete "${payload.name}"`;
                         break;
@@ -1350,6 +1356,11 @@ export function createEnhancedClientIO(
                         args = payload.name
                             ? `rename "${payload.name}" "${payload.newName}"`
                             : `rename "${payload.newName}"`;
+                        break;
+                    case "help":
+                        // Empty args makes handleConversationCommand call its
+                        // own printHelp().
+                        args = "";
                         break;
                     default:
                         console.error(
@@ -1698,6 +1709,9 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
+            // Hide cursor to avoid flicker during writing
+            stdout.write(ANSI.hideCursor);
+
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
@@ -1732,6 +1746,13 @@ async function questionWithCompletion(
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
                     inputLine += chalk.dim(suggestion + counter);
                 }
+            }
+            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
+            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
+            // additional visual rows, the terminal-driven wrap can cause overflow
+            // populated with stale characters from previous frames.
+            for (let r = 2; r <= inputRows; r++) {
+                layout.drawFixed(r, "");
             }
             layout.drawFixed(1, inputLine);
 
@@ -1950,19 +1971,10 @@ async function questionWithCompletion(
                 }
                 return;
             } else if (code === 13) {
-                // Enter - accept completion (if any) AND submit
-                if (
-                    filteredCompletions.length > 0 &&
-                    completionIndex < filteredCompletions.length
-                ) {
-                    const completion = filteredCompletions[completionIndex];
-                    input =
-                        completionPrefix +
-                        (filterStartIndex > completionPrefix.length
-                            ? " "
-                            : "") +
-                        completion;
-                }
+                // Enter - submit the input as typed. The inline completion is
+                // only a suggestion; use Tab to accept it. Enter must never
+                // mutate the input, otherwise typing `@config` and pressing
+                // Enter would submit `@config actions`.
                 if (controller) {
                     controller.accept();
                 }

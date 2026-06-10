@@ -105,12 +105,28 @@ async function executePlayerAction(
 ) {
     const clientContext = context.sessionContext.agentContext.spotify;
     if (clientContext) {
-        return handleCall(
+        // Per-request accumulator for any LLM tokens consumed while executing
+        // this action (currently only the LLM-backed track filter path). The
+        // chat model's completionCallback adds into it via
+        // getTypeChatLanguageModel; see client.ts.
+        const tokenUsage = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
+        const result = await handleCall(
             action,
             clientContext,
             context.actionIO,
             context.sessionContext.instanceStorage,
+            tokenUsage,
         );
+        // Report usage on success results (the error variant has no such
+        // field). An all-zero value means the action ran but made no LLM call.
+        if (result.error === undefined) {
+            result.tokenUsage = tokenUsage;
+        }
+        return result;
     }
 
     return createActionResultFromError(

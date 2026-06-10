@@ -4,50 +4,36 @@
 import chalk from "chalk";
 import type {
     AgentServerConnection,
+    ClientIO,
     ConversationDispatcher,
-    ConversationInfo,
 } from "@typeagent/agent-server-client";
+import {
+    manageConversation,
+    switchConversationSafe,
+    type ConversationActionResult,
+    type ManageConversationContext,
+    type ManageConversationPayload,
+} from "@typeagent/agent-server-client/conversation";
 import { confirmYesNo } from "./enhancedConsole.js";
 
-/**
- * Context required by conversation commands. Created in connect.ts after
- * the agent server connection is established.
- */
 export type ConversationCommandContext = {
     connection: AgentServerConnection;
+    clientIO: ClientIO;
     getCurrentConversationId: () => string;
     getCurrentConversationName: () => string;
-    switchConversation: (
-        conversationId: string,
-    ) => Promise<ConversationDispatcher>;
+    /** Pre-leave: rebind dispatcher and active id/name only. */
+    onSwitched: (newConversation: ConversationDispatcher) => Promise<void>;
+    /**
+     * Post-leave: history replay and any UI output that must not race
+     * lingering events from the old conversation.
+     */
+    onAfterSwitched?: (
+        newConversation: ConversationDispatcher,
+    ) => Promise<void>;
+    onPersistSwitched?: (conversationId: string) => void;
 };
 
-// ── Name resolution ────────────────────────────────────────────────────
-
-/**
- * Resolve a conversation name to a single SessionInfo using
- * case-insensitive exact matching.
- */
-async function resolveByName(
-    connection: AgentServerConnection,
-    name: string,
-): Promise<ConversationInfo> {
-    const all = await connection.listConversations();
-    const matches = all.filter(
-        (s) => s.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (matches.length === 0) {
-        throw new Error(
-            `No conversation named '${name}' found. Use @conversation list to see all.`,
-        );
-    }
-    if (matches.length > 1) {
-        throw new Error(
-            `Multiple conversations named '${name}' found. Use @conversation list to see all.`,
-        );
-    }
-    return matches[0];
-}
+// ── Arg parsing ────────────────────────────────────────────────────────
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -68,10 +54,9 @@ function parseNameArg(args: string): string {
 }
 
 /**
- * Tokenize a string into up to `maxTokens` logical arguments, respecting
- * double-quoted values.  A quoted token may contain spaces; the surrounding
- * quotes are stripped.  Any remaining text after `maxTokens - 1` splits is
- * returned as the last token verbatim (unquoted).
+ * Tokenize into up to `maxTokens` args, respecting double quotes. Any
+ * remaining text after `maxTokens - 1` splits is returned verbatim
+ * (unquoted) as the last token.
  */
 function tokenizeArgs(args: string, maxTokens: number): string[] {
     const tokens: string[] = [];
@@ -80,7 +65,6 @@ function tokenizeArgs(args: string, maxTokens: number): string[] {
         if (remaining.startsWith('"')) {
             const close = remaining.indexOf('"', 1);
             if (close === -1) {
-                // Unclosed quote — treat the rest as a single token
                 tokens.push(remaining.slice(1));
                 remaining = "";
             } else {
@@ -88,7 +72,6 @@ function tokenizeArgs(args: string, maxTokens: number): string[] {
                 remaining = remaining.slice(close + 1).trimStart();
             }
         } else if (tokens.length === maxTokens - 1) {
-            // Last allowed token: consume everything remaining
             tokens.push(remaining);
             remaining = "";
         } else {
@@ -105,185 +88,223 @@ function tokenizeArgs(args: string, maxTokens: number): string[] {
     return tokens;
 }
 
-// ── Subcommand handlers ────────────────────────────────────────────────
+type ParsedCommand =
+    | { ok: true; payload: ManageConversationPayload }
+    | { ok: false; usage: string };
 
-async function handleNew(
-    ctx: ConversationCommandContext,
-    args: string,
-): Promise<void> {
-    const name = parseNameArg(args);
-    if (!name) {
-        console.log(chalk.yellow("Usage: @conversation new <name>"));
-        return;
-    }
-    const created = await ctx.connection.createConversation(name);
-    const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
-    if (switchNow) {
-        await ctx.switchConversation(created.conversationId);
-    } else {
-        console.log(`Created conversation '${chalk.green(name)}'.`);
-    }
-}
-
-async function handleInfo(
-    ctx: ConversationCommandContext,
-    _args: string,
-): Promise<void> {
-    const name = ctx.getCurrentConversationName();
-    const id = ctx.getCurrentConversationId();
-    console.log(chalk.bold("\nCurrent conversation:"));
-    console.log(`  ${chalk.dim("Name:")}  ${chalk.green(name)}`);
-    console.log(`  ${chalk.dim("ID:")}    ${chalk.dim(id)}`);
-    console.log("");
-}
-
-async function handleSwitch(
-    ctx: ConversationCommandContext,
-    args: string,
-): Promise<void> {
-    const name = parseNameArg(args);
-    if (!name) {
-        console.log(chalk.yellow("Usage: @conversation switch <name>"));
-        return;
-    }
-    const target = await resolveByName(ctx.connection, name);
-    if (target.conversationId === ctx.getCurrentConversationId()) {
-        console.log(chalk.yellow(`Already in conversation '${target.name}'.`));
-        return;
-    }
-    await ctx.switchConversation(target.conversationId);
-}
-
-async function handleList(
-    ctx: ConversationCommandContext,
-    args: string,
-): Promise<void> {
-    const filter = args.trim() || undefined;
-    const sessions = await ctx.connection.listConversations(filter);
-    if (sessions.length === 0) {
-        console.log(chalk.dim("No conversations found."));
-        return;
-    }
-
-    // Sort by creation date, most recent first
-    sessions.sort(
-        (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-
-    const currentId = ctx.getCurrentConversationId();
-
-    // Calculate column widths
-    const nameWidth = Math.max(4, ...sessions.map((s) => s.name.length));
-    const header =
-        "  " + "NAME".padEnd(nameWidth + 2) + "CREATED".padEnd(22) + "CLIENTS";
-    const divider =
-        "  " + "─".repeat(nameWidth + 2) + "─".repeat(22) + "───────";
-
-    console.log(chalk.bold("\nConversations:"));
-    console.log(chalk.dim(header));
-    console.log(chalk.dim(divider));
-
-    for (const s of sessions) {
-        const isCurrent = s.conversationId === currentId;
-        const marker = isCurrent ? "▸ " : "  ";
-        const created = new Date(s.createdAt)
-            .toISOString()
-            .replace("T", " ")
-            .substring(0, 16);
-        const suffix = isCurrent ? "  (current)" : "";
-        const line =
-            marker +
-            s.name.padEnd(nameWidth + 2) +
-            created.padEnd(22) +
-            String(s.clientCount) +
-            suffix;
-        console.log(isCurrent ? chalk.green(line) : line);
-    }
-    console.log("");
-}
-
-async function handleRename(
-    ctx: ConversationCommandContext,
-    args: string,
-): Promise<void> {
+function parseSlashCommand(args: string): ParsedCommand {
     const trimmed = args.trim();
-    if (!trimmed) {
-        console.log(chalk.yellow("Usage: @conversation rename <newName>"));
-        console.log(
-            chalk.yellow("       @conversation rename <currentName> <newName>"),
-        );
-        return;
-    }
+    const spaceIdx = trimmed.indexOf(" ");
+    const sub =
+        spaceIdx === -1
+            ? trimmed.toLowerCase()
+            : trimmed.substring(0, spaceIdx).toLowerCase();
+    const subArgs = spaceIdx === -1 ? "" : trimmed.substring(spaceIdx + 1);
 
-    // If args contains two tokens, first is the target conversation name and second is the new name.
-    // If only one token, rename the current conversation.
-    // tokenizeArgs respects double quotes so names with spaces work correctly.
-    const tokens = tokenizeArgs(trimmed, 2);
-    let targetName: string | undefined;
-    let newName: string;
-    if (tokens.length === 1) {
-        newName = tokens[0];
-    } else {
-        targetName = tokens[0];
-        newName = tokens[1];
-    }
-
-    if (!newName) {
-        console.log(chalk.yellow("Usage: @conversation rename <newName>"));
-        return;
-    }
-
-    let conversationId: string;
-    if (targetName) {
-        const all = await ctx.connection.listConversations();
-        const match = all.find(
-            (s) => s.name.toLowerCase() === targetName!.toLowerCase(),
-        );
-        if (!match) {
-            console.log(
-                chalk.red(
-                    `No conversation named '${targetName}' found. Use @conversation list to see all.`,
-                ),
-            );
-            return;
+    switch (sub) {
+        case "new": {
+            const name = parseNameArg(subArgs);
+            return {
+                ok: true,
+                payload: name
+                    ? { subcommand: "new", name }
+                    : { subcommand: "new" },
+            };
         }
-        conversationId = match.conversationId;
-    } else {
-        conversationId = ctx.getCurrentConversationId();
+        case "switch": {
+            const name = parseNameArg(subArgs);
+            if (!name) {
+                return { ok: false, usage: "@conversation switch <name>" };
+            }
+            return { ok: true, payload: { subcommand: "switch", name } };
+        }
+        case "list": {
+            const filter = subArgs.trim();
+            return {
+                ok: true,
+                payload: filter
+                    ? { subcommand: "list", name: filter }
+                    : { subcommand: "list" },
+            };
+        }
+        case "info":
+            return { ok: true, payload: { subcommand: "info" } };
+        case "prev":
+            return { ok: true, payload: { subcommand: "prev" } };
+        case "next":
+            return { ok: true, payload: { subcommand: "next" } };
+        case "rename": {
+            const tokens = tokenizeArgs(subArgs, 2);
+            if (tokens.length === 0) {
+                return {
+                    ok: false,
+                    usage:
+                        "@conversation rename <newName>\n" +
+                        "       @conversation rename <currentName> <newName>",
+                };
+            }
+            if (tokens.length === 1) {
+                return {
+                    ok: true,
+                    payload: { subcommand: "rename", newName: tokens[0] },
+                };
+            }
+            return {
+                ok: true,
+                payload: {
+                    subcommand: "rename",
+                    name: tokens[0],
+                    newName: tokens[1],
+                },
+            };
+        }
+        case "delete": {
+            const name = parseNameArg(subArgs);
+            if (!name) {
+                return { ok: false, usage: "@conversation delete <name>" };
+            }
+            return { ok: true, payload: { subcommand: "delete", name } };
+        }
+        default:
+            return {
+                ok: false,
+                usage: `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
+            };
     }
-
-    await ctx.connection.renameConversation(conversationId, newName);
-    console.log(`Renamed conversation to '${chalk.green(newName)}'.`);
 }
 
-async function handleDelete(
+// ── Renderer ───────────────────────────────────────────────────────────
+
+// Render quoted names in helper messages with chalk green to match the
+// CLI's pre-refactor look.
+function colorizeQuotedNames(message: string): string {
+    return message.replace(/"([^"]+)"/g, (_, name) => `'${chalk.green(name)}'`);
+}
+
+function renderResult(result: ConversationActionResult): void {
+    switch (result.kind) {
+        case "ok":
+            console.log(colorizeQuotedNames(result.message));
+            break;
+        case "warning":
+            console.log(chalk.yellow(colorizeQuotedNames(result.message)));
+            break;
+        case "error":
+            console.log(chalk.red(`Error: ${result.message}`));
+            break;
+        case "cancelled":
+            console.log(chalk.dim("Cancelled."));
+            break;
+        case "info":
+            console.log(chalk.bold("\nCurrent conversation:"));
+            console.log(`  ${chalk.dim("Name:")}  ${chalk.green(result.name)}`);
+            console.log(
+                `  ${chalk.dim("ID:")}    ${chalk.dim(result.conversationId)}`,
+            );
+            console.log("");
+            break;
+        case "list": {
+            const sessions = result.conversations;
+            const currentId = result.currentConversationId;
+            const nameWidth = Math.max(
+                4,
+                ...sessions.map((s) => s.name.length),
+            );
+            const header =
+                "  " +
+                "NAME".padEnd(nameWidth + 2) +
+                "CREATED".padEnd(22) +
+                "CLIENTS";
+            const divider =
+                "  " + "─".repeat(nameWidth + 2) + "─".repeat(22) + "───────";
+            console.log(chalk.bold("\nConversations:"));
+            console.log(chalk.dim(header));
+            console.log(chalk.dim(divider));
+            for (const s of sessions) {
+                const isCurrent = s.conversationId === currentId;
+                const marker = isCurrent ? "▸ " : "  ";
+                const created = new Date(s.createdAt)
+                    .toISOString()
+                    .replace("T", " ")
+                    .substring(0, 16);
+                const suffix = isCurrent ? "  (current)" : "";
+                const line =
+                    marker +
+                    s.name.padEnd(nameWidth + 2) +
+                    created.padEnd(22) +
+                    String(s.clientCount) +
+                    suffix;
+                console.log(isCurrent ? chalk.green(line) : line);
+            }
+            console.log("");
+            break;
+        }
+    }
+}
+
+// ── @conversation new — preserve the CLI's confirm-before-switch UX ───
+
+async function handleNewWithConfirm(
     ctx: ConversationCommandContext,
-    args: string,
+    name: string | undefined,
 ): Promise<void> {
-    const name = parseNameArg(args);
     if (!name) {
-        console.log(chalk.yellow("Usage: @conversation delete <name>"));
+        // Auto-generate a timestamped name when called without an
+        // argument so natural-language requests like "create a new
+        // conversation" (which the dispatcher translates to `new` with
+        // no name) don't fall through to a usage error. Matches the
+        // Shell's auto-naming format in chatPanelBridge.ts.
+        const dt = new Date();
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        name = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+    }
+    let created;
+    try {
+        created = await ctx.connection.createConversation(name);
+    } catch (e: any) {
+        console.log(chalk.red(`Error: ${e?.message ?? String(e)}`));
         return;
     }
-    const target = await resolveByName(ctx.connection, name);
-    if (target.conversationId === ctx.getCurrentConversationId()) {
+    const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
+    if (!switchNow) {
+        console.log(`Created conversation '${chalk.green(name)}'.`);
+        return;
+    }
+    let joined: ConversationDispatcher | undefined;
+    const result = await switchConversationSafe(
+        ctx.connection,
+        ctx.clientIO,
+        ctx.getCurrentConversationId(),
+        created.conversationId,
+        {
+            onJoined: async (c) => {
+                joined = c;
+                await ctx.onSwitched(c);
+            },
+            ...(ctx.onPersistSwitched !== undefined
+                ? { onPersist: ctx.onPersistSwitched }
+                : {}),
+            ...(ctx.onAfterSwitched !== undefined
+                ? {
+                      onLeftOld: async () => {
+                          if (joined !== undefined) {
+                              await ctx.onAfterSwitched!(joined);
+                          }
+                      },
+                  }
+                : {}),
+        },
+    );
+    if (result.kind === "join-failed") {
         console.log(
             chalk.red(
-                "Cannot delete the active conversation. Switch to another conversation first.",
+                `Error: Failed to switch to '${name}': ${
+                    (result.error as { message?: string })?.message ??
+                    String(result.error)
+                }`,
             ),
         );
-        return;
     }
-    const confirmed = await confirmYesNo(
-        `Delete conversation '${target.name}'?`,
-    );
-    if (!confirmed) {
-        console.log(chalk.dim("Cancelled."));
-        return;
-    }
-    await ctx.connection.deleteConversation(target.conversationId);
-    console.log(`Deleted conversation '${chalk.green(target.name)}'.`);
 }
 
 // ── Help text ──────────────────────────────────────────────────────────
@@ -293,6 +314,11 @@ function printHelp(): void {
     const cmds: [string, string][] = [
         ["new <name>", "Create a new conversation"],
         ["switch <name>", "Switch to a conversation by name"],
+        ["next", "Switch to the next conversation in the list (wraps around)"],
+        [
+            "prev",
+            "Switch to the previous conversation in the list (wraps around)",
+        ],
         ["list [<filter>]", "List all conversations"],
         ["info", "Show info about the current conversation"],
         ["rename <newName>", "Rename the current conversation"],
@@ -308,24 +334,6 @@ function printHelp(): void {
 
 // ── Main entry point ───────────────────────────────────────────────────
 
-const subcommands: Record<
-    string,
-    (ctx: ConversationCommandContext, args: string) => Promise<void>
-> = {
-    new: handleNew,
-    switch: handleSwitch,
-    list: handleList,
-    rename: handleRename,
-    delete: handleDelete,
-    info: handleInfo,
-};
-
-/**
- * Handle a conversation command. Called from the slash command system.
- *
- * @param ctx - The conversation command context (connection, session state, switch callback)
- * @param args - Everything after "conversation", e.g. "list" or "switch myChat"
- */
 export async function handleConversationCommand(
     ctx: ConversationCommandContext,
     args: string,
@@ -336,26 +344,41 @@ export async function handleConversationCommand(
         return;
     }
 
-    const spaceIdx = trimmed.indexOf(" ");
-    const sub =
-        spaceIdx === -1
-            ? trimmed.toLowerCase()
-            : trimmed.substring(0, spaceIdx).toLowerCase();
-    const subArgs = spaceIdx === -1 ? "" : trimmed.substring(spaceIdx + 1);
-
-    const handler = subcommands[sub];
-    if (!handler) {
-        console.log(
-            chalk.yellow(
-                `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
-            ),
-        );
+    const parsed = parseSlashCommand(trimmed);
+    if (!parsed.ok) {
+        console.log(chalk.yellow(parsed.usage));
         return;
     }
 
-    try {
-        await handler(ctx, subArgs);
-    } catch (err: any) {
-        console.log(chalk.red(`Error: ${err?.message ?? String(err)}`));
+    if (parsed.payload.subcommand === "new") {
+        try {
+            await handleNewWithConfirm(ctx, parsed.payload.name);
+        } catch (err: any) {
+            console.log(chalk.red(`Error: ${err?.message ?? String(err)}`));
+        }
+        return;
     }
+
+    const mctx: ManageConversationContext = {
+        currentConversationId: ctx.getCurrentConversationId(),
+        currentConversationName: ctx.getCurrentConversationName(),
+        getCurrentConversationId: () => ctx.getCurrentConversationId(),
+        onSwitched: ctx.onSwitched,
+        ...(ctx.onAfterSwitched !== undefined
+            ? { onAfterSwitched: ctx.onAfterSwitched }
+            : {}),
+        ...(ctx.onPersistSwitched !== undefined
+            ? { onPersistSwitched: ctx.onPersistSwitched }
+            : {}),
+        confirmDestructive: async (_action, target) =>
+            confirmYesNo(`Delete conversation '${target.name}'?`),
+    };
+
+    const result = await manageConversation(
+        ctx.connection,
+        ctx.clientIO,
+        mctx,
+        parsed.payload,
+    );
+    renderResult(result);
 }

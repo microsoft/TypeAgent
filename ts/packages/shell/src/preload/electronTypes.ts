@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import type { ShellUserSettings } from "./shellSettingsType.js";
-import type { Dispatcher, ClientIO, QueueSnapshot } from "agent-dispatcher";
+import type {
+    Dispatcher,
+    ClientIO,
+    QueueSnapshot,
+    CommandResult,
+} from "agent-dispatcher";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 
 export type { ShellUserSettings };
 
@@ -58,8 +64,6 @@ export interface ClientAPI {
     registerClient: (client: Client) => void;
     getSpeechToken: (silent: boolean) => Promise<SpeechToken | undefined>;
     getLocalWhisperStatus: () => Promise<boolean>;
-    getChatHistory: () => Promise<{ html: string; seq: number } | undefined>;
-    saveChatHistory: (history: string, seq: number) => void;
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
@@ -92,6 +96,11 @@ export interface ClientAPI {
     conversationGetCurrent(): Promise<
         { conversationId: string; name: string } | undefined
     >;
+    conversationManageAction(payload: ManageConversationPayload): Promise<{
+        html: string;
+        kind: "info" | "warning" | "error";
+        switched?: boolean;
+    }>;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -100,6 +109,7 @@ export interface Client {
     dispatcherInitialized(
         dispatcher: Dispatcher,
         initialQueueSnapshot?: QueueSnapshot,
+        historyCutoffSeq?: number,
     ): void;
     updateRegisterAgents(agents: [string, string][]): void;
     showInputText(message: string): Promise<void>;
@@ -123,6 +133,16 @@ export interface Client {
     ): void;
     markHistoryEntries?(): void;
     demoStateChanged?(state: DemoUIState): void;
+    /**
+     * A request dispatched by the *main* process (e.g. the startup
+     * `@greeting`) has completed. Lets the renderer finalize the request's
+     * metrics bubble — server-initiated requests never go through the
+     * renderer's onSend → completeRequest path.
+     */
+    requestCompleted?(
+        clientRequestId: string,
+        result: CommandResult | undefined,
+    ): void;
     /** Show/clear the reconnect banner. Pass undefined to clear. */
     reconnectStatusChanged?(message: string | undefined): void;
 }

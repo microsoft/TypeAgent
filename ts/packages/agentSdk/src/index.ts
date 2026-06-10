@@ -71,6 +71,7 @@ export {
     ActionResultSuccess,
     ActionResult,
     ActionResultActivityContext,
+    ActionTokenUsage,
     PendingChoice,
     PendingYesNoChoice,
     PendingMultiChoice,
