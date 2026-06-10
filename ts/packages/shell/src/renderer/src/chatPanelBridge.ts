@@ -651,7 +651,15 @@ export function createChatPanelClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        requestChoice: (requestId, choiceId, type, message, choices) => {
+        requestChoice: (
+            requestId,
+            choiceId,
+            type,
+            message,
+            choices,
+            _source,
+            checkboxLabel,
+        ) => {
             void (async () => {
                 // The prompt text is already rendered as the agent's
                 // displayContent (emitActionResult appends it before
@@ -664,6 +672,14 @@ export function createChatPanelClient(
                         showMessage: false,
                     });
                     await dispatcher?.respondToChoice(choiceId, yes);
+                } else if (type === "pickRemember") {
+                    const result = await chatPanel.addPickRememberPrompt(
+                        message,
+                        choices,
+                        checkboxLabel ?? "Remember this for next time",
+                        { showMessage: false },
+                    );
+                    await dispatcher?.respondToChoice(choiceId, result);
                 } else {
                     const index = await chatPanel.addChoicePrompt<number>(
                         message,

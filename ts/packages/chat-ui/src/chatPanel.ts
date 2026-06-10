@@ -2807,6 +2807,146 @@ export class ChatPanel {
     }
 
     /**
+     * Present a single-select radio list plus a "remember this" checkbox
+     * below a system message and resolve with `{ selected, remember }`.
+     * `selected` is the chosen index, or -1 when cancelled. Maps from
+     * ClientIO.requestChoice with type "pickRemember".
+     *
+     * Set `opts.showMessage = false` to render only the panel without the
+     * prompt text — used by hosts that already display the prompt separately
+     * (the shell renders the agent's `displayContent` before requesting the
+     * choice, so repeating it here would duplicate the message).
+     */
+    public addPickRememberPrompt(
+        message: string,
+        labels: string[],
+        checkboxLabel: string,
+        opts?: {
+            signal?: AbortSignal;
+            showMessage?: boolean;
+        },
+    ): Promise<{ selected: number; remember: boolean }> {
+        return new Promise((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
+            const container = this.createAgentContainer("system", "");
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
+
+            const panelDiv = document.createElement("div");
+            panelDiv.className = "pick-remember-panel";
+
+            // Single-select candidate radio group.
+            const radios: HTMLInputElement[] = [];
+            const groupName = `pick-remember-${Date.now()}`;
+            for (let i = 0; i < labels.length; i++) {
+                const label = document.createElement("label");
+                label.className = "pick-remember-choice";
+                const radio = document.createElement("input");
+                radio.type = "radio";
+                radio.name = groupName;
+                radio.dataset.index = String(i);
+                if (i === 0) {
+                    radio.checked = true;
+                }
+                radios.push(radio);
+                label.appendChild(radio);
+                const span = document.createElement("span");
+                span.textContent = labels[i];
+                label.appendChild(span);
+                panelDiv.appendChild(label);
+            }
+
+            // Single "remember this" checkbox.
+            const rememberLabel = document.createElement("label");
+            rememberLabel.className = "pick-remember-toggle";
+            const rememberCb = document.createElement("input");
+            rememberCb.type = "checkbox";
+            rememberLabel.appendChild(rememberCb);
+            const rememberSpan = document.createElement("span");
+            rememberSpan.textContent = checkboxLabel;
+            rememberLabel.appendChild(rememberSpan);
+            panelDiv.appendChild(rememberLabel);
+
+            const cleanup = () => {
+                panelDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
+            };
+
+            const submit = () => {
+                const picked = radios.find((r) => r.checked) ?? radios[0];
+                const selected = picked
+                    ? parseInt(picked.dataset.index!, 10)
+                    : 0;
+                const remember = rememberCb.checked;
+                cleanup();
+                resolve({ selected, remember });
+            };
+
+            const cancel = () => {
+                cleanup();
+                // -1 signals no selection / cancelled.
+                resolve({ selected: -1, remember: false });
+            };
+
+            // Allow the host to dismiss the prompt externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                reject(
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    submit();
+                } else if (e.key === "Delete") {
+                    e.preventDefault();
+                    cancel();
+                }
+            };
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "checkbox-buttons";
+
+            const confirmBtn = document.createElement("button");
+            confirmBtn.className = "choice-button";
+            confirmBtn.textContent = "Confirm (Enter)";
+            confirmBtn.addEventListener("click", () => submit());
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "choice-button";
+            cancelBtn.textContent = "Cancel (Del)";
+            cancelBtn.addEventListener("click", () => cancel());
+
+            buttonDiv.appendChild(confirmBtn);
+            buttonDiv.appendChild(cancelBtn);
+            panelDiv.appendChild(buttonDiv);
+
+            signal?.addEventListener("abort", onAbort, { once: true });
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(panelDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
      * Show a Yes/No prompt and return the user's choice.
      *
      * Set `opts.showMessage = false` to render only the Yes/No buttons
