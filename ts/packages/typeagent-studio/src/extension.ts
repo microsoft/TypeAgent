@@ -35,6 +35,19 @@ import {
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
 
+    // Warn early if we couldn't locate `packages/agents` under any open
+    // folder. Without it, health/corpus/collision views are silently empty
+    // because there are no agents to discover. Most often this means the user
+    // opened the git root rather than the monorepo's `ts/` directory.
+    const repoRootInfo = runtime.getRepoRootInfo();
+    if (!repoRootInfo.agentsDirFound) {
+        const hasFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+        const message = hasFolder
+            ? "TypeAgent Studio couldn't find a 'packages/agents' directory in the open workspace. Open the monorepo's 'ts' folder so agents, health, and collisions can be discovered."
+            : "TypeAgent Studio has no folder open. Open the monorepo's 'ts' folder so agents, health, and collisions can be discovered.";
+        void vscode.window.showWarningMessage(message);
+    }
+
     registerStudioCommands(context, runtime);
 
     const sandboxTree = new SandboxTreeProvider(runtime);

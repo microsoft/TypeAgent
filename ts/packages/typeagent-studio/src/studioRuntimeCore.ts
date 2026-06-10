@@ -58,6 +58,10 @@ import {
 } from "@typeagent/core/collisionScanner";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
+import {
+    resolveRepoRoot,
+    type RepoRootResolution,
+} from "./repoRootResolver.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
@@ -131,6 +135,13 @@ export interface StudioCollisionScanResult {
 }
 
 export interface StudioRuntime {
+    /**
+     * Repo root used for agent discovery and whether a `packages/agents`
+     * directory was actually found there. When not found, the UI should warn
+     * that health/corpus/collision results will be empty until the correct
+     * folder (the monorepo's `ts/` directory) is opened.
+     */
+    getRepoRootInfo(): RepoRootResolution;
     startOnboarding(seed: {
         description: string;
         agentName?: string;
@@ -326,8 +337,11 @@ export function createStudioRuntimeCore(
     options: CreateStudioRuntimeOptions = {},
 ): StudioRuntime {
     const events = new InProcessEventStream();
-    const repoRoot =
-        context.workspaceFolderFsPaths?.[0] ?? context.globalStorageFsPath;
+    const repoRootResolution = resolveRepoRoot(
+        context.workspaceFolderFsPaths ?? [],
+        context.globalStorageFsPath,
+    );
+    const repoRoot = repoRootResolution.repoRoot;
     const sandbox =
         options.sandbox ??
         new InMemorySandboxManager({
@@ -389,6 +403,9 @@ export function createStudioRuntimeCore(
     };
 
     return {
+        getRepoRootInfo() {
+            return repoRootResolution;
+        },
         async startOnboarding(seed) {
             const state = await onboarding.start(seed);
             await context.workspaceState.update(
