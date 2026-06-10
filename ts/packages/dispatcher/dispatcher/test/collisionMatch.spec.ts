@@ -200,10 +200,9 @@ describe("matchCollision.resolveGrammarRegistryFirst", () => {
             expect(decision).toBeDefined();
             expect(decision?.kind).toBe("clarify");
             if (decision?.kind === "clarify") {
-                const candidates =
-                    decision.clarify.parameters.candidates.map(
-                        (c) => `${c.schemaName}.${c.actionName}`,
-                    );
+                const candidates = decision.clarify.parameters.candidates.map(
+                    (c) => `${c.schemaName}.${c.actionName}`,
+                );
                 // The single cache match plus its registry sibling.
                 expect(candidates).toEqual(
                     expect.arrayContaining([

@@ -206,8 +206,8 @@ export function resolveGrammarRegistryFirst(
                 actionName: m.actionName,
             })),
             firstMatchCandidate: toCandidate(validated[0], ctx),
-            classifier: ctx.session.getConfig().collision.grammarMatch
-                .classifier,
+            classifier:
+                ctx.session.getConfig().collision.grammarMatch.classifier,
             strategy: "preference-clarify",
             note:
                 neighborhoodIds.length > 0

@@ -92,9 +92,7 @@ describe("collisionRegistry.CollisionRegistry", () => {
                 schemaName: "player",
                 actionName: "play",
             });
-            expect(sibs).toEqual([
-                { schemaName: "video", actionName: "play" },
-            ]);
+            expect(sibs).toEqual([{ schemaName: "video", actionName: "play" }]);
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }

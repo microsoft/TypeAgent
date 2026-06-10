@@ -96,10 +96,7 @@ export type DispatcherInvokeFunctions = {
 
     respondToChoice(
         choiceId: string,
-        response:
-            | boolean
-            | number[]
-            | { selected: number; remember: boolean },
+        response: boolean | number[] | { selected: number; remember: boolean },
     ): Promise<CommandResult | undefined>;
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;

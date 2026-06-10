@@ -8,10 +8,7 @@
 // the policy lives in one place.
 
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import {
-    PreferenceContext,
-    PreferenceMember,
-} from "./collisionPreferences.js";
+import { PreferenceContext, PreferenceMember } from "./collisionPreferences.js";
 import { CollisionRegistry } from "./collisionRegistry.js";
 
 /**
@@ -82,7 +79,9 @@ export function consumeOneShotPick(
     member: PreferenceMember,
     ctx: CommandHandlerContext,
 ): void {
-    ctx.collisionOneShotPicks.delete(`${member.schemaName}.${member.actionName}`);
+    ctx.collisionOneShotPicks.delete(
+        `${member.schemaName}.${member.actionName}`,
+    );
 }
 
 export type PreferenceClarifyDecision =

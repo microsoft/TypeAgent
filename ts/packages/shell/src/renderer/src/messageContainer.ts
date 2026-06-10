@@ -715,9 +715,7 @@ export class MessageContainer {
 
         function submit() {
             const picked = radios.find((r) => r.checked) ?? radios[0];
-            const selected = picked
-                ? parseInt(picked.dataset.index!, 10)
-                : 0;
+            const selected = picked ? parseInt(picked.dataset.index!, 10) : 0;
             const remember = rememberCb.checked;
             window.removeEventListener("keydown", keyHandler);
             panelDiv.remove();

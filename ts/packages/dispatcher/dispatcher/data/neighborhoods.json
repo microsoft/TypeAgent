@@ -85,9 +85,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.removeBreakpoint",
@@ -169,9 +167,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--player.AdjustVolume",
@@ -253,9 +249,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.clearList",
@@ -337,9 +331,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.playFile",
@@ -421,9 +413,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player--taskflow.searchTracks",
@@ -505,9 +495,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--screencapture.captureScreenshot",
@@ -584,9 +572,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.deleteWebFlow--webFlows.deleteWebFlow",
@@ -663,9 +649,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.getAllWebFlows--webFlows.listWebFlows",
@@ -742,9 +726,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.external.openTab--openWebPage",
@@ -836,9 +818,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--markdown.newMarkdownFile",
@@ -930,9 +910,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--system.code-vscode-shell.renameConversation",
@@ -1009,9 +987,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--localPlayer.AdjustVolume",
@@ -1088,9 +1064,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--localPlayer.Volume",
@@ -1167,9 +1141,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--player.Volume",
@@ -1246,9 +1218,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--player.Volume_1",
@@ -1325,9 +1295,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.next",
@@ -1422,9 +1390,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.pause",
@@ -1501,9 +1467,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.status",
@@ -1580,9 +1544,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player--vampire.playTrack",
@@ -1659,9 +1621,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--list.webFlows.buyAllInList",
@@ -1733,9 +1693,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--list.webFlows.viewShoppingCart",
@@ -1807,9 +1765,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.followLinkByText--webFlows.navigateToPage",
@@ -1881,9 +1837,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.searchForProduct",
@@ -1955,9 +1909,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--image.generateResponse",
@@ -2029,9 +1981,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--markdown.code-workbench.workbenchOpenFile",
@@ -2103,9 +2053,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--system.code-vscode-shell.newConversation",
@@ -2177,9 +2125,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--system.code-vscode-shell.switchConversation",
@@ -2251,9 +2197,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--localPlayer.Mute",
@@ -2325,9 +2269,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--powershell.LaunchProgram",
@@ -2399,9 +2341,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--powershell.reasoning.reasoningAction_2",
@@ -2473,9 +2413,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--powershell.reasoning.reasoningAction_3",
@@ -2547,9 +2485,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.resume",
@@ -2633,9 +2569,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.shuffle",
@@ -2707,9 +2641,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.powershell-files.readFile--tailLog",
@@ -2781,9 +2713,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.getWebFlowsForDomain--webFlows.listWebFlows",
@@ -2850,9 +2780,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.searchForRecipe",
@@ -2919,9 +2847,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--code.generateResponse",
@@ -2988,9 +2914,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.setBreakpoint",
@@ -3054,9 +2978,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--settings.AdjustScreenBrightness",
@@ -3123,9 +3045,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.getList",
@@ -3192,9 +3112,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.removeItems",
@@ -3261,9 +3179,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player--taskflow.searchTracks_1",
@@ -3330,9 +3246,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player--vampire.playTrack_1",
@@ -3399,9 +3313,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "taskflow--utility.searchAndList",
@@ -3468,9 +3380,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--code.zoomReset",
@@ -3529,9 +3439,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--dispatcher.external.openFromHistory",
@@ -3593,9 +3501,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--powershell.lookupAndAnswer.lookupAndAnswerInternet",
@@ -3657,9 +3563,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.lookupAndAnswer.lookupAndAnswerInternet",
@@ -3721,9 +3625,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.webFlows.findNearbyStore",
@@ -3782,9 +3684,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "calendar--dispatcher.addParticipant",
@@ -3846,9 +3746,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--utility.generateResponse",
@@ -3910,9 +3808,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--system.code-vscode-shell.deleteConversation",
@@ -3974,9 +3870,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--taskflow.lookup.lookupAndAnswerConversation",
@@ -4035,9 +3929,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli.browseIssue--issueView",
@@ -4099,9 +3991,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.previous",
@@ -4163,9 +4053,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.searchFiles",
@@ -4227,9 +4115,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell--utility.logGrep",
@@ -4291,9 +4177,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--desktop.executeAdHocScript",
@@ -4347,9 +4231,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.buyProduct",
@@ -4406,9 +4288,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.filterProducts",
@@ -4465,9 +4345,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.navigateToProductPage",
@@ -4524,9 +4402,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.openWebPage--webFlows.browseProductCategories",
@@ -4580,9 +4456,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.openWebPage--webFlows.navigateToProductPage",
@@ -4636,9 +4510,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.stopDebugging",
@@ -4695,9 +4567,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--powershell.reasoning.reasoningAction_1",
@@ -4751,9 +4621,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "email--taskflow.findEmail",
@@ -4807,9 +4675,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli.browsePr--prView",
@@ -4863,9 +4729,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.addItems",
@@ -4922,9 +4786,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.createList",
@@ -4981,9 +4843,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.playFromQueue",
@@ -5037,9 +4897,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.powershell-processes.listProcesses--powershell-processes.processMemory",
@@ -5093,9 +4951,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--chat.searchImageAction_1",
@@ -5144,9 +5000,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--code.zoomIn",
@@ -5195,9 +5049,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--list.webFlows.saveRecipe",
@@ -5246,9 +5098,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--taskflow.lookupAndAnswer.lookupAndAnswerInternet",
@@ -5297,9 +5147,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--taskflow.webFlows.deleteWebFlow",
@@ -5348,9 +5196,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.webFlows.filterProducts",
@@ -5402,9 +5248,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.webFlows.searchForRecipe",
@@ -5456,9 +5300,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.createInferredFlows--createInferredFlow",
@@ -5504,9 +5346,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.detectPageActions--actionDiscovery.inferActions",
@@ -5558,9 +5398,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.changeTab--external.switchToTabByPosition",
@@ -5606,9 +5444,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.changeTab--external.switchToTabByText",
@@ -5657,9 +5493,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.closeWebPage--external.closeTab",
@@ -5708,9 +5542,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.external.openTab--followLinkByText",
@@ -5759,9 +5591,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.buyAllInRecipe",
@@ -5810,9 +5640,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.lookupAndAnswer.lookupAndAnswerInternet--webFlows.searchForReservation",
@@ -5858,9 +5686,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.openSearchResult--webFlows.selectSearchResult",
@@ -5909,9 +5735,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "calendar--dispatcher.findEvents",
@@ -5960,9 +5784,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--github-cli.code-extension.installExtension",
@@ -6011,9 +5833,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.startDebugging",
@@ -6062,9 +5882,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-editor.saveAllFiles",
@@ -6113,9 +5931,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code.code-display.openSettings--code-general.showUserSettings",
@@ -6167,9 +5983,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code.code-editor.createFile--newCodeFile",
@@ -6215,9 +6029,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code.code-editor.createFile--newMarkdownFile",
@@ -6263,9 +6075,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--settings.Tile",
@@ -6314,9 +6124,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop.desktop-personalization.SystemThemeMode--SetThemeMode",
@@ -6368,9 +6176,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--powershell.reasoning.reasoningAction",
@@ -6422,9 +6228,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli--powershell.repoView",
@@ -6473,9 +6277,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli.agentTaskRun--prList",
@@ -6527,9 +6329,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli.apiRequest--issueList",
@@ -6581,9 +6381,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli.authStatus--statusPrint",
@@ -6632,9 +6430,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.removeItems_1",
@@ -6686,9 +6482,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.playFolder",
@@ -6737,9 +6531,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.playFolder_2",
@@ -6788,9 +6580,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.showQueue",
@@ -6839,9 +6629,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--powershell.listFiles",
@@ -6890,9 +6678,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "osNotifications--system.syncOsNotifications",
@@ -6941,9 +6727,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--chat.actionDiscovery.summarizePage",
@@ -6984,9 +6768,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--chat.lookupAndAnswer.lookupAndAnswerInternet",
@@ -7027,9 +6809,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--chat.searchImageAction",
@@ -7070,9 +6850,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--code.zoomOut",
@@ -7116,9 +6894,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--desktop.external.closeWindow",
@@ -7162,9 +6938,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--discord.lookupAndAnswer.lookupAndAnswerInternet",
@@ -7208,9 +6982,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--dispatcher.webFlows.browseProductCategories",
@@ -7251,9 +7023,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--localPlayer.goBack",
@@ -7294,9 +7064,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.lookupAndAnswer.lookupAndAnswerInternet_1",
@@ -7340,9 +7108,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.openWebPage",
@@ -7386,9 +7152,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.webFlows.searchForProduct",
@@ -7429,9 +7193,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser--utility.webFlows.selectSearchResult",
@@ -7475,9 +7237,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.actionDiscovery.detectPageActions--actionDiscovery.registerPageDynamicAgent",
@@ -7521,9 +7281,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.external.switchToTabByPosition--followLinkByPosition",
@@ -7567,9 +7325,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "browser.openWebPage--webFlows.buyAllInRecipe",
@@ -7613,9 +7369,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "calendar--dispatcher.scheduleEvent",
@@ -7659,9 +7413,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "calendar--vampire.scheduleEvent",
@@ -7705,9 +7457,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--discord.generateResponse",
@@ -7751,9 +7501,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--discord.generateResponse_1",
@@ -7794,9 +7542,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--discord.generateResponse_2",
@@ -7840,9 +7586,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--discord.generateResponse_3",
@@ -7883,9 +7627,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--dispatcher.generateResponse",
@@ -7929,9 +7671,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "chat--video.generateResponse",
@@ -7975,9 +7715,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--dispatcher.code-editor.insertOrDeleteLines",
@@ -8021,9 +7759,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--github-cli.code-editor.generateWithCopilot",
@@ -8064,9 +7800,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--github-cli.code-workbench.openInIntegratedTerminal",
@@ -8107,9 +7841,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--github-cli.code-workbench.workbenchBuildRelatedTask",
@@ -8153,9 +7885,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--github-cli.newTextFile",
@@ -8199,9 +7929,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--powershell.code-workbench.workbenchCreateFolderFromExplorer",
@@ -8245,9 +7973,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--powershell.newTextFile",
@@ -8288,9 +8014,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--utility.code-display.replaceInFiles",
@@ -8334,9 +8058,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--utility.code-editor.createFunction",
@@ -8380,9 +8102,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--utility.newTextFile",
@@ -8426,9 +8146,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.step",
@@ -8469,9 +8187,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-debug.toggleBreakpoint",
@@ -8512,9 +8228,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code--visualStudio.code-workbench.workbenchOpenFile",
@@ -8558,9 +8272,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code.code-general.gotoFileOrLineOrSymbol--code-workbench.workbenchOpenFile",
@@ -8601,9 +8313,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "code.code-general.gotoFileOrLineOrSymbol--code-workbench.workbenchOpenFolder",
@@ -8647,9 +8357,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "desktop--settings.SetScreenResolution",
@@ -8693,9 +8401,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "discord--dispatcher.getChannelMessages",
@@ -8736,9 +8442,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "discord--dispatcher.getThreadMember",
@@ -8782,9 +8486,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "discord--player.setGuild",
@@ -8828,9 +8530,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "discord--system.startThreadInForumOrMediaChannel",
@@ -8871,9 +8571,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--email.lookup.lookupAndAnswerConversation",
@@ -8914,9 +8612,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--markdown.reasoning.reasoningAction",
@@ -8960,9 +8656,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--onboarding.reasoning.reasoningAction",
@@ -9003,9 +8697,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--powershell.lookup.lookupAndAnswerConversation",
@@ -9046,9 +8738,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--screencapture.lookup.startLookup",
@@ -9092,9 +8782,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--screencapture.lookup.startLookup_1",
@@ -9138,9 +8826,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--system.lookup.lookupAndAnswerConversation",
@@ -9184,9 +8870,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--utility.lookup.startLookup",
@@ -9230,9 +8914,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher--video.reasoning.reasoningAction",
@@ -9273,9 +8955,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "dispatcher.lookup.lookupAndAnswerConversation--unknown",
@@ -9319,9 +8999,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli--powershell.apiRequest",
@@ -9365,9 +9043,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli--powershell.apiRequest_1",
@@ -9411,9 +9087,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "github-cli--powershell.statusPrint",
@@ -9457,9 +9131,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "list--vampire.getList_1",
@@ -9503,9 +9175,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.addToQueue",
@@ -9546,9 +9216,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.addToQueue_1",
@@ -9592,9 +9260,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.playFolder_1",
@@ -9638,9 +9304,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "localPlayer--player.stop",
@@ -9684,9 +9348,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "markdown.streamingUpdateDocument--updateDocument",
@@ -9730,9 +9392,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "montage.clearSelectedPhotos--removePhotos",
@@ -9776,9 +9436,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "onboarding.onboarding-discovery.approveApiSurface--onboarding-grammargen.approveGrammar",
@@ -9819,9 +9477,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player--taskflow.playGenre",
@@ -9862,9 +9518,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "player.playAlbum--searchTracks",
@@ -9905,9 +9559,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.findLargeFiles--powershell-files.findText",
@@ -9948,9 +9600,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.listFiles--powershell-files.listFiles",
@@ -9994,9 +9644,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.logGrep--powershell-files.findText",
@@ -10040,9 +9688,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "powershell.powershell-data.readJson--powershell-files.readFile",
@@ -10083,9 +9729,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "screencapture.recording--startRecording",
@@ -10129,9 +9773,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "system--weather.notify.showNotifications",
@@ -10172,9 +9814,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "timer.repeatReminder--setReminder",
@@ -10215,9 +9855,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "visualStudio.build--executeCommand",
@@ -10258,9 +9896,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     },
     {
       "id": "windowsClock.createAlarm--setAlarmEnabled",
@@ -10304,9 +9940,7 @@
           }
         ]
       },
-      "sources": [
-        "corpus"
-      ]
+      "sources": ["corpus"]
     }
   ],
   "gravity": {

@@ -88,7 +88,10 @@ export function canonicalizeCandidateSet(
 ): PreferenceMember[] {
     const seen = new Map<string, PreferenceMember>();
     for (const m of members) {
-        seen.set(memberId(m), { schemaName: m.schemaName, actionName: m.actionName });
+        seen.set(memberId(m), {
+            schemaName: m.schemaName,
+            actionName: m.actionName,
+        });
     }
     return [...seen.values()].sort((a, b) =>
         memberId(a).localeCompare(memberId(b)),
@@ -129,9 +132,7 @@ export function preferenceKey(
     members: PreferenceMember[],
     context?: PreferenceContext,
 ): string {
-    const set = canonicalizeCandidateSet(members)
-        .map(memberId)
-        .join("|");
+    const set = canonicalizeCandidateSet(members).map(memberId).join("|");
     const ctx = contextSignature(context);
     return ctx ? `${set}#${ctx}` : set;
 }

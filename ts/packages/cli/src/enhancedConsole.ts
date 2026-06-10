@@ -1139,9 +1139,11 @@ export function createEnhancedClientIO(
                         );
                         const selected = parseInt(pickInput.trim(), 10) - 1;
                         let remember = false;
-                        if (!isNaN(selected) &&
+                        if (
+                            !isNaN(selected) &&
                             selected >= 0 &&
-                            selected < choices.length) {
+                            selected < choices.length
+                        ) {
                             const rememberInput = await question_internal(
                                 `${chalk.dim(`${checkboxLabel ?? "Remember this for next time"}?`)} ${chalk.dim("(y/n)")} `,
                                 rl,

@@ -2368,7 +2368,10 @@ function buildVisualizationPayload(
         : undefined;
     if (translatorData && txWrongByPhrase) {
         for (const row of translatorData.results) {
-            if (row.chosenSchema === undefined || row.chosenAction === undefined)
+            if (
+                row.chosenSchema === undefined ||
+                row.chosenAction === undefined
+            )
                 continue;
             if (row.outcome !== "CLEAN" && row.outcome !== "MISROUTE") continue;
             const wrong = !(

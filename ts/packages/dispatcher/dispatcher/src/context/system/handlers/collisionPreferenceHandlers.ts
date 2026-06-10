@@ -40,8 +40,7 @@ function memberLabel(m: PreferenceMember): string {
 }
 
 class CollisionPreferenceListCommandHandler implements CommandHandler {
-    public readonly description =
-        "List stored collision preferences (Tier-1)";
+    public readonly description = "List stored collision preferences (Tier-1)";
     public readonly parameters = {} as const;
 
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -131,7 +130,9 @@ class CollisionPreferenceSetCommandHandler implements CommandHandler {
         displayResult(
             `Preference set: ${pref.candidateSet
                 .map(memberLabel)
-                .join(", ")} → ${memberLabel(pref.chosen)}\n    key: ${pref.key}`,
+                .join(
+                    ", ",
+                )} → ${memberLabel(pref.chosen)}\n    key: ${pref.key}`,
             context,
         );
     }

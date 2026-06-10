@@ -482,9 +482,8 @@ export const dispatcherManifest: AppAgentManifest = {
 export const dispatcherAgent: AppAgent = {
     executeAction: executeDispatcherAction,
     handleChoice: async (choiceId, response, context) => {
-        const systemContext = (
-            context as ActionContext<CommandHandlerContext>
-        ).sessionContext.agentContext;
+        const systemContext = (context as ActionContext<CommandHandlerContext>)
+            .sessionContext.agentContext;
         return systemContext.collisionChoiceManager.handleChoice(
             choiceId,
             response,
