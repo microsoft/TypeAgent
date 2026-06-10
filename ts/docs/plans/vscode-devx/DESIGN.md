@@ -35,22 +35,22 @@ loop**:
 
 > A developer changes the player agent's schema and grammar on a feature
 > branch. From the source-control gutter they run **Replay corpus across
-> versions** with *working tree* against *the previous commit*. Studio loads
+> versions** with _working tree_ against _the previous commit_. Studio loads
 > the federated player corpus — the in-repo seed, the developer's own
 > captures, plus utterances labelled by users with thumbs-up or thumbs-down
 > ratings. It replays each utterance against both versions in a sandboxed
 > dispatcher. About twenty seconds later, an **Impact Report** opens with
 > four panes: structural diff, coverage delta, **action-level delta**, and
 > collisions delta. Each action-level row is annotated with the user-feedback
-> label when one exists — a thumbs-down on the *old* action with category
+> label when one exists — a thumbs-down on the _old_ action with category
 > "bad-response" shows green here ("you fixed a known bad response"); a
-> thumbs-up on the *old* action with a different *new* action shows red
+> thumbs-up on the _old_ action with a different _new_ action shows red
 > ("you may have broken something users liked"). The developer filters to
 > red rows, finds two, clicks one, and the Trace Viewer opens with the old
 > and new versions of that one trace side-by-side.
 
-This loop — *change schema or grammar, see action-level impact against real
-utterances annotated with real feedback* — is the **center of gravity** of
+This loop — _change schema or grammar, see action-level impact against real
+utterances annotated with real feedback_ — is the **center of gravity** of
 the entire design. Everything else either feeds it, zooms into one of its
 rows, or mirrors it live.
 
@@ -60,12 +60,12 @@ rows, or mirrors it live.
 
 ### 3.1 Four extensions, one shared library
 
-| Package | Purpose |
-|---|---|
-| **`typeagent-core`** | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, command-line tools, and tests all consume it. |
-| **`typeagent-studio`** | The main VS Code extension. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`. |
-| **`agr-language`** | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema. |
-| **`vscode-shell`** | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles. |
+| Package                | Purpose                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, command-line tools, and tests all consume it. |
+| **`typeagent-studio`** | The main VS Code extension. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`.                                                                                                                                                                      |
+| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                               |
+| **`vscode-shell`**     | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                  |
 
 Together these are the "TypeAgent Studio extension pack." A user installs the
 pack; each component activates on demand.
@@ -85,10 +85,10 @@ Inside `typeagent-core`, six primitives carry the weight of the design.
 3. **Structured event stream** — a typed event API covering the high-value
    sites in the dispatcher: phase boundaries, cache hits and misses, grammar
    match attempts and results, action selection and execution, feedback
-   recording, collision detection, replay rows. Sits *alongside* the existing
+   recording, collision detection, replay rows. Sits _alongside_ the existing
    `debug("typeagent:*")` traces — no migration. Schema-versioned.
 4. **Health rule engine** — invariants over the chain `manifest → schema →
-   grammar → handler → provider`. Each rule produces evidence and a
+grammar → handler → provider`. Each rule produces evidence and a
    fix hint. Catches the silent-runtime-failure class of bugs that today
    only surface when the dispatcher tries to load the agent.
 5. **Replay engine** — the long pole. Takes an agent, a corpus, two version
@@ -129,7 +129,7 @@ Every feature lives in one of three layers, kept strictly separate so we
 don't build a webview when a code lens would do:
 
 - **Editor surfaces** — code lenses, hover, diagnostics, code actions,
-  decorations, status bar. Anything *on the file the developer is editing*.
+  decorations, status bar. Anything _on the file the developer is editing_.
   Examples: a lens on each grammar rule reporting "matched by 4 corpus
   utterances; 15 utterances target this action but miss"; a collision
   diagnostic on a colliding schema variant.
@@ -199,7 +199,7 @@ These hold for every feature in the system.
   thumbs-up / thumbs-down ratings with categories (`wrong-agent`,
   `didnt-understand`, `bad-response`, `other`) and free-text comments. The
   Impact Report uses these labels to separate "different" from "different
-  *and judged by humans to be worse*" — the difference between a curiosity
+  _and judged by humans to be worse_" — the difference between a curiosity
   and a decision-grade tool.
 - **Collisions are first-class.** When two grammar rules or two schema
   variants overlap in conflicting ways, that's a collision. Detection runs
@@ -207,9 +207,9 @@ These hold for every feature in the system.
   surfaces the resulting events inline in the editor and as a pane in the
   Impact Report.
 - **Replay-miss policy is developer-controlled** per replay run. Three
-  modes: *needs-explanation* (the deterministic default — a cache miss
-  becomes a row annotation, not an LLM call), *live-LLM* (slow, costs
-  tokens, shows estimate before firing), and *strict-cache* (fastest, lossy
+  modes: _needs-explanation_ (the deterministic default — a cache miss
+  becomes a row annotation, not an LLM call), _live-LLM_ (slow, costs
+  tokens, shows estimate before firing), and _strict-cache_ (fastest, lossy
   — misses are simply omitted from the report).
 - **Telemetry is on by default** and disclosed at sandbox start, with an
   opt-out toggle in the Sandboxes tree.
@@ -228,7 +228,7 @@ multiple hats; the personas are roles, not people.
 > does, and walks the seven onboarding phases — Discovery, PhraseGen,
 > SchemaGen, GrammarGen, Scaffolder, Testing, Packaging. When SchemaGen
 > looks wrong she jumps back to PhraseGen, fixes it, re-runs SchemaGen —
-> *the later phases keep their state*. At the end she clicks **Install into
+> _the later phases keep their state_. At the end she clicks **Install into
 > sandbox**. The sandboxed dispatcher restarts with `thermostat` loaded.
 > She types "set the living room to 68" in the chat panel. It works.
 
@@ -252,7 +252,7 @@ missing, action type with no grammar rule, handler not exporting
 
 The federated corpus loads with feedback labels attached. Per-utterance
 mappings refresh within a couple of seconds on a schema edit — no daemon
-restart. Collisions surface *as the developer types*, not after commit.
+restart. Collisions surface _as the developer types_, not after commit.
 
 ### Tune the grammar against utterance variations
 
@@ -299,7 +299,7 @@ Every row drills into the Trace Viewer for that one trace, side-by-side.
 > translation phase (with LLM calls if any) → action selection → execution
 > → result. Every node carries timing. Collision events for that trace are
 > inline. Reasoning trace steps are correlated by request id. Eli clicks a
-> grammar miss node and jumps to the grammar line that *should* have
+> grammar miss node and jumps to the grammar line that _should_ have
 > matched and didn't.
 
 Click any node, jump to source — grammar rule, schema variant, cache entry.
@@ -352,10 +352,10 @@ correlate reasoning steps with grammar matches with cache outcomes.
 ## 8. The ultimate goal
 
 **Make schema and grammar changes a decision-grade activity instead of a
-guessing game.** A developer edits a grammar file, hits *compare against
-last week*, and gets a verdict — *this change improves 12 utterances,
+guessing game.** A developer edits a grammar file, hits _compare against
+last week_, and gets a verdict — _this change improves 12 utterances,
 breaks 3, and 2 of those 3 had user thumbs-down already so they were
-already broken; ship it.* A new contributor opens VS Code, runs **New
+already broken; ship it._ A new contributor opens VS Code, runs **New
 Agent**, and produces something that works in one sitting without ever
 touching `package.json`. A live debugging session shows what the system is
 actually doing the moment it does it, with a click-through to the line of
@@ -371,21 +371,21 @@ reach for the test runner.
 
 ## 9. Glossary
 
-| Term | Meaning |
-|---|---|
-| **Action collision** | A user utterance is matched by two or more schema variants or grammar rules in conflicting ways. Detected at four points: agent load, schema edit, grammar edit, replay. |
-| **Action-level delta** | One row of replay output describing one utterance, the actions the two versions produced for it, whether they're equal, the cache state on each side, the feedback label if any, and any collision events. |
-| **AGR file** | A `.agr` grammar source file. Compiled into a runtime grammar by the action-grammar compiler. |
-| **Anchor agent** | The agent the workbench is built around for the initial release. The `player` agent. |
-| **Center of gravity** | The compare-and-replay loop. Compare schema or grammar versions against a corpus, see action-level impact, annotated with feedback labels. |
-| **Federated corpus** | Three source types — in-repo, per-user captures, external — plus user-feedback entries, queryable as one. |
-| **Impact Report** | The four-pane regression-finding webview: structural diff, coverage delta, action-level delta, collisions delta. |
-| **Miss policy** | What replay does on a cache miss. *Needs-explanation* (the default — annotate the row, don't call the LLM), *live-LLM* (call the LLM, costs tokens), or *strict-cache* (skip the row entirely). |
-| **Sandbox** | An isolated agent-server instance Studio runs experiments in. Subprocess or in-memory. Always under the Studio-owned profile directory. |
-| **Schema Studio** | The schema-tuning webview: corpus on the left, schema on the right, per-utterance mapping in the centre. |
-| **Structured event stream** | The typed event API the workbench reads from. Sits alongside the existing `debug("typeagent:*")` traces. |
-| **`typeagent-core`** | The shared engine library. No VS Code dependency. |
-| **`typeagent-studio`** | The main VS Code extension. |
+| Term                        | Meaning                                                                                                                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Action collision**        | A user utterance is matched by two or more schema variants or grammar rules in conflicting ways. Detected at four points: agent load, schema edit, grammar edit, replay.                                   |
+| **Action-level delta**      | One row of replay output describing one utterance, the actions the two versions produced for it, whether they're equal, the cache state on each side, the feedback label if any, and any collision events. |
+| **AGR file**                | A `.agr` grammar source file. Compiled into a runtime grammar by the action-grammar compiler.                                                                                                              |
+| **Anchor agent**            | The agent the workbench is built around for the initial release. The `player` agent.                                                                                                                       |
+| **Center of gravity**       | The compare-and-replay loop. Compare schema or grammar versions against a corpus, see action-level impact, annotated with feedback labels.                                                                 |
+| **Federated corpus**        | Three source types — in-repo, per-user captures, external — plus user-feedback entries, queryable as one.                                                                                                  |
+| **Impact Report**           | The four-pane regression-finding webview: structural diff, coverage delta, action-level delta, collisions delta.                                                                                           |
+| **Miss policy**             | What replay does on a cache miss. _Needs-explanation_ (the default — annotate the row, don't call the LLM), _live-LLM_ (call the LLM, costs tokens), or _strict-cache_ (skip the row entirely).            |
+| **Sandbox**                 | An isolated agent-server instance Studio runs experiments in. Subprocess or in-memory. Always under the Studio-owned profile directory.                                                                    |
+| **Schema Studio**           | The schema-tuning webview: corpus on the left, schema on the right, per-utterance mapping in the centre.                                                                                                   |
+| **Structured event stream** | The typed event API the workbench reads from. Sits alongside the existing `debug("typeagent:*")` traces.                                                                                                   |
+| **`typeagent-core`**        | The shared engine library. No VS Code dependency.                                                                                                                                                          |
+| **`typeagent-studio`**      | The main VS Code extension.                                                                                                                                                                                |
 
 ---
 
@@ -394,15 +394,15 @@ reach for the test runner.
 This document consolidates the five-part planning series. For deeper detail
 on any topic, the source docs remain canonical:
 
-| Doc | What it covers |
-|---|---|
-| [`README.md`](./README.md) | Series index, locked and open decisions, demo-script reference. |
-| [`01-inventory.md`](./01-inventory.md) | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions. |
-| [`02-journeys.md`](./02-journeys.md) | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure. |
-| [`03-features.md`](./03-features.md) | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map. |
-| [`04-mvp-slice.md`](./04-mvp-slice.md) | The vertical slice that defines the first release. Acceptance gates, risk register, demo script. |
-| [`05-implementation-plan.md`](./05-implementation-plan.md) | Workspace layout, API type surfaces, transport choices, sequencing, named open decisions. |
+| Doc                                                        | What it covers                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`README.md`](./README.md)                                 | Series index, locked and open decisions, demo-script reference.                                                     |
+| [`01-inventory.md`](./01-inventory.md)                     | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions. |
+| [`02-journeys.md`](./02-journeys.md)                       | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure.          |
+| [`03-features.md`](./03-features.md)                       | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map.              |
+| [`04-mvp-slice.md`](./04-mvp-slice.md)                     | The vertical slice that defines the first release. Acceptance gates, risk register, demo script.                    |
+| [`05-implementation-plan.md`](./05-implementation-plan.md) | Workspace layout, API type surfaces, transport choices, sequencing, named open decisions.                           |
 
 ---
 
-*End of consolidated design.*
+_End of consolidated design._

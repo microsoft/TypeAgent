@@ -170,14 +170,14 @@ In the Corpora view title bar, click **Replay corpus**.
 > See §6.
 >
 > The default version-A vs version-B resolver is also currently an
-> *identity* resolver — every utterance routes the same way on both
+> _identity_ resolver — every utterance routes the same way on both
 > sides, so the all-equal baseline is what you'll see. Real per-version
 > build/dispatch is a future piece.
 
 ### 4.8 Onboarding — the wizard backend
 
 The wizard webview itself isn't built yet, but the entire onboarding
-*backend* is wired through commands:
+_backend_ is wired through commands:
 
 - `TypeAgent Studio: Start onboarding session` — kicks off the seven-phase
   flow (Discovery, PhraseGen, SchemaGen, GrammarGen, Scaffolder, Testing,
@@ -203,14 +203,14 @@ command palette today and intended to be hosted in a webview later.
 
 If you want to read code, the highest-signal entry points:
 
-| Area | Path | Notes |
-|---|---|---|
-| Engine library | `ts/packages/typeagent-core/src/` | Eight subdirs, one per primitive: `sandbox/`, `corpus/`, `events/`, `feedback/`, `health/`, `collisions/`, `replay/`, `onboardingBridge/`. Each has `types.ts` + a service implementation. |
-| Replay engine | `ts/packages/typeagent-core/src/replay/engine.ts` | `replayCorpus()` itself — dependency-injected, ~330 lines, unit-tested. |
-| Collision scan | `ts/packages/typeagent-core/src/collisions/scanner.ts` | The real NFA overlap pass. |
-| Health rules | `ts/packages/typeagent-core/src/health/service.ts` | The 11 MVP rules. |
-| Studio extension | `ts/packages/typeagent-studio/src/` | `extension.ts` is the activation entry; `commands.ts` wires the command palette; everything ending in `*Provider.ts` is a tree-data provider; everything ending in `*Presentation.ts` is the unit-testable formatting/shaping. |
-| Tests | `ts/packages/typeagent-core/test/` and `ts/packages/typeagent-studio/src/test/` | The `*.spec.ts` files are good as a tour of the expected behaviour. |
+| Area             | Path                                                                            | Notes                                                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Engine library   | `ts/packages/typeagent-core/src/`                                               | Eight subdirs, one per primitive: `sandbox/`, `corpus/`, `events/`, `feedback/`, `health/`, `collisions/`, `replay/`, `onboardingBridge/`. Each has `types.ts` + a service implementation.                                     |
+| Replay engine    | `ts/packages/typeagent-core/src/replay/engine.ts`                               | `replayCorpus()` itself — dependency-injected, ~330 lines, unit-tested.                                                                                                                                                        |
+| Collision scan   | `ts/packages/typeagent-core/src/collisions/scanner.ts`                          | The real NFA overlap pass.                                                                                                                                                                                                     |
+| Health rules     | `ts/packages/typeagent-core/src/health/service.ts`                              | The 11 MVP rules.                                                                                                                                                                                                              |
+| Studio extension | `ts/packages/typeagent-studio/src/`                                             | `extension.ts` is the activation entry; `commands.ts` wires the command palette; everything ending in `*Provider.ts` is a tree-data provider; everything ending in `*Presentation.ts` is the unit-testable formatting/shaping. |
+| Tests            | `ts/packages/typeagent-core/test/` and `ts/packages/typeagent-studio/src/test/` | The `*.spec.ts` files are good as a tour of the expected behaviour.                                                                                                                                                            |
 
 The presentation/provider split (`*Presentation.ts` vs `*Provider.ts`) is
 worth knowing about: the presentation modules are vscode-free and

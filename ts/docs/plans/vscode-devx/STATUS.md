@@ -13,24 +13,24 @@ Legend: ✅ done · 🟡 partial · ❌ not started.
 "Wired to dispatcher" = backed by the real TypeAgent dispatcher/engine rather
 than an in-memory stand-in.
 
-| Capability | Core logic | UI | Wired to dispatcher | Tested |
-| --- | --- | --- | --- | --- |
-| Sandboxes (lifecycle, agent load/unload) | ✅ in-memory | ✅ tree view | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅ |
-| Sandbox persistence across reload/restart | ✅ | ✅ (auto-restore) | n/a | ✅ |
-| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed | ✅ tree view | n/a | ✅ |
-| Event Log (structured event stream) | 🟡 in-memory ring buffer | ✅ tree view | ❌ most emit sites unwired | ✅ |
-| Agent health (status bar + findings) | 🟡 heuristic/filesystem checks | ✅ status bar | ❌ no real schema parse / grammar compile | ✅ |
-| Collisions (cross-schema grammar overlap) | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars) | ✅ |
-| Feedback (thumbs up/down → corpus) | ✅ | ✅ command | n/a | ✅ |
-| Replay / compare engine | 🟡 engine + command | 🟡 quick-pick (no Impact Report) | ❌ identity resolver (no two-version build/dispatch) | ✅ |
-| Onboarding bridge (snapshot/restore, stale detection) | ✅ | ✅ commands | ❌ in-memory bridge | ✅ |
-| Repo-root detection (find `packages/agents`) | ✅ | ✅ warn toast + status bar | n/a | ✅ |
-| Webview infrastructure (`webviewKit`) | ❌ | ❌ | — | ❌ |
-| Impact Report webview | ❌ | ❌ | ❌ | ❌ |
-| Player corpus capture | ❌ | ❌ | ❌ | ❌ |
-| Schema Studio | ❌ | ❌ | ❌ | ❌ |
-| Live Trace | ❌ | ❌ | ❌ | ❌ |
-| `agr-language` / `vscode-shell` refactor onto core | 🟡 dependency edge only | — | ❌ no behavioral integration | ❌ |
+| Capability                                                     | Core logic                                   | UI                                       | Wired to dispatcher                                   | Tested |
+| -------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------- | ----------------------------------------------------- | ------ |
+| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view                             | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
+| Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                        | n/a                                                   | ✅     |
+| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                             | n/a                                                   | ✅     |
+| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view                             | ❌ most emit sites unwired                            | ✅     |
+| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                            | ❌ no real schema parse / grammar compile             | ✅     |
+| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars)                         | ✅     |
+| Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                               | n/a                                                   | ✅     |
+| Replay / compare engine                                        | 🟡 engine + command                          | 🟡 quick-pick (no Impact Report)         | ❌ identity resolver (no two-version build/dispatch)  | ✅     |
+| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                           | ✅ commands                              | ❌ in-memory bridge                                   | ✅     |
+| Repo-root detection (find `packages/agents`)                   | ✅                                           | ✅ warn toast + status bar               | n/a                                                   | ✅     |
+| Webview infrastructure (`webviewKit`)                          | ❌                                           | ❌                                       | —                                                     | ❌     |
+| Impact Report webview                                          | ❌                                           | ❌                                       | ❌                                                    | ❌     |
+| Player corpus capture                                          | ❌                                           | ❌                                       | ❌                                                    | ❌     |
+| Schema Studio                                                  | ❌                                           | ❌                                       | ❌                                                    | ❌     |
+| Live Trace                                                     | ❌                                           | ❌                                       | ❌                                                    | ❌     |
+| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                      | —                                        | ❌ no behavioral integration                          | ❌     |
 
 ## The long pole
 
@@ -41,7 +41,7 @@ Impact Report) is **not** closed:
   Trace, and Live Trace all depend on a `webviewKit` that hasn't been started.
   This is the single biggest hidden dependency.
 - **Replay is an identity-comparison shell.** The default resolver returns each
-  corpus entry's captured `expectedAction` for *both* versions, producing an
+  corpus entry's captured `expectedAction` for _both_ versions, producing an
   all-equal baseline (`studioRuntimeCore.ts` `identityReplayResolver`). There is
   no git-worktree build, transient dispatcher, or version-specific resolution.
 - **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
