@@ -3,10 +3,12 @@
 
 import * as vscode from "vscode";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
+import type { GrammarScanSkip } from "@typeagent/core/collisionScanner";
 import type { StudioRuntime } from "./studioRuntimeCore.js";
 import {
     buildCollisionChildRows,
     buildCollisionRows,
+    buildSkippedRows,
     type CollisionEntry,
     type CollisionRow,
 } from "./collisionsPresentation.js";
@@ -32,6 +34,7 @@ export class CollisionsTreeProvider
     private readonly subscription: { dispose(): void };
     private entries: CollisionEntry[] = [];
     private readonly entryBySeq = new Map<number, CollisionEntry>();
+    private skipped: GrammarScanSkip[] = [];
     private seq = 0;
 
     constructor(private readonly runtime: StudioRuntime) {
@@ -51,10 +54,21 @@ export class CollisionsTreeProvider
         await this.reload();
     }
 
+    /**
+     * Replace the list of agents the most recent scan skipped. The Collisions
+     * tree renders this as a "Skipped (N)" group above any detected
+     * collisions so authors can see why an agent doesn't appear in results.
+     */
+    setSkipped(skipped: readonly GrammarScanSkip[]): void {
+        this.skipped = [...skipped];
+        this.refresh();
+    }
+
     async clear(): Promise<void> {
         await this.runtime.clearCollisions();
         this.entries = [];
         this.entryBySeq.clear();
+        this.skipped = [];
         this.refresh();
     }
 
@@ -82,7 +96,10 @@ export class CollisionsTreeProvider
 
     getChildren(row?: CollisionRow): CollisionRow[] {
         if (!row) {
-            return buildCollisionRows(this.entries);
+            return buildCollisionRows(this.entries, this.skipped);
+        }
+        if (row.kind === "skipped-group") {
+            return buildSkippedRows(this.skipped);
         }
         if (row.kind !== "collision") {
             return [];

@@ -304,6 +304,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         () => runtime.scanGrammarCollisions(),
                     );
                     await collisions.reloadFromRuntime();
+                    collisions.setSkipped(result.skipped);
                     if (result.scanned.length === 0) {
                         vscode.window.showWarningMessage(
                             "No compiled grammars found to scan. Load agents into a sandbox and build their grammars first.",

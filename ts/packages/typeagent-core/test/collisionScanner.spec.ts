@@ -31,7 +31,11 @@ describe("createRepoGrammarScanner", () => {
         expect(report.scanned).toEqual([]);
         expect(report.collisions).toEqual([]);
         expect(report.skipped).toEqual([
-            { schemaName: "definitely-not-an-agent", reason: "no-grammar" },
+            {
+                schemaName: "definitely-not-an-agent",
+                agentName: "definitely-not-an-agent",
+                reason: "no-grammar",
+            },
         ]);
     });
 });

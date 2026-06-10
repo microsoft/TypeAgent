@@ -33,6 +33,8 @@ export interface GrammarScanRequest {
 
 export interface GrammarScanSkip {
     schemaName: string;
+    /** Owning agent package, when the schema is a sub-schema of an agent. */
+    agentName?: string;
     reason: "no-grammar" | "parse-error" | "compile-error";
     error?: string;
 }
@@ -89,12 +91,17 @@ export function createRepoGrammarScanner(
         const skipped: GrammarScanSkip[] = [];
         const seen = new Set<string>();
         const fileBySchema = new Map<string, string>();
+        const agentBySchema = new Map<string, string>();
 
         for (const agent of agents) {
             const packageDir = path.join(repoRoot, "packages", "agents", agent);
             const compiled = await findAgJsonFiles(packageDir);
             if (compiled.length === 0) {
-                skipped.push({ schemaName: agent, reason: "no-grammar" });
+                skipped.push({
+                    schemaName: agent,
+                    agentName: agent,
+                    reason: "no-grammar",
+                });
                 continue;
             }
             for (const file of compiled) {
@@ -103,6 +110,7 @@ export function createRepoGrammarScanner(
                     continue;
                 }
                 seen.add(schemaName);
+                agentBySchema.set(schemaName, agent);
                 try {
                     const grammar = grammarFromJson(
                         JSON.parse(await readFile(file, "utf8")),
@@ -115,6 +123,7 @@ export function createRepoGrammarScanner(
                 } catch (err) {
                     skipped.push({
                         schemaName,
+                        agentName: agent,
                         reason: "parse-error",
                         error: err instanceof Error ? err.message : String(err),
                     });
@@ -125,8 +134,10 @@ export function createRepoGrammarScanner(
         const result = scanGrammarCollisions(inputs);
 
         for (const skip of result.skipped) {
+            const agentName = agentBySchema.get(skip.schemaName);
             skipped.push({
                 schemaName: skip.schemaName,
+                ...(agentName !== undefined ? { agentName } : {}),
                 reason: skip.reason,
                 error: skip.error,
             });
