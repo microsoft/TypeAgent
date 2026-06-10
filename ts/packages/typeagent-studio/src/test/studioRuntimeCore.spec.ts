@@ -702,6 +702,31 @@ test("loadSandboxAgent loads an agent and emits a lifecycle event", async () => 
     anySub.dispose();
 });
 
+test("startSandbox mints unique ids so multiple sandboxes can coexist", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    const first = await runtime.startSandbox();
+    const second = await runtime.startSandbox();
+    const third = await runtime.startSandbox();
+
+    // First reuses the default id; subsequent ones get unique suffixes.
+    assert.equal(first.id, "studio-default");
+    assert.notEqual(second.id, first.id);
+    assert.notEqual(third.id, second.id);
+
+    const ids = (await runtime.listSandboxes()).map((s) => s.id).sort();
+    assert.deepEqual(ids, [
+        "studio-default",
+        "studio-default-2",
+        "studio-default-3",
+    ]);
+
+    // An explicit id is still honored.
+    const named = await runtime.startSandbox({ id: "experiment-1" });
+    assert.equal(named.id, "experiment-1");
+});
+
 test("unloadSandboxAgent removes a loaded agent", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context);

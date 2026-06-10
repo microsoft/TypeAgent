@@ -77,9 +77,32 @@ export function activate(context: vscode.ExtensionContext): void {
             "typeagent-studio.startSandbox",
             async (node?: SandboxTreeNode) => {
                 try {
-                    const status = await runtime.startSandbox(
-                        node?.sandboxId ? { id: node.sandboxId } : undefined,
-                    );
+                    let options: { id?: string } | undefined;
+                    if (node?.sandboxId) {
+                        // Restarting a specific (stopped) sandbox row.
+                        options = { id: node.sandboxId };
+                    } else {
+                        // Title-bar action: let the user name it, or leave it
+                        // blank to auto-generate a unique id.
+                        const name = await vscode.window.showInputBox({
+                            title: "Start sandbox",
+                            prompt: "Sandbox name (optional — leave blank to auto-generate)",
+                            placeHolder: "e.g. experiment-1",
+                            ignoreFocusOut: true,
+                            validateInput: (value) =>
+                                value.length === 0 ||
+                                /^[A-Za-z0-9._-]+$/.test(value.trim())
+                                    ? undefined
+                                    : "Use only letters, digits, dot, dash, or underscore.",
+                        });
+                        if (name === undefined) {
+                            return; // cancelled
+                        }
+                        const trimmed = name.trim();
+                        options =
+                            trimmed.length > 0 ? { id: trimmed } : undefined;
+                    }
+                    const status = await runtime.startSandbox(options);
                     vscode.window.showInformationMessage(
                         `Sandbox '${status.id}' started.`,
                     );

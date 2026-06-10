@@ -605,7 +605,10 @@ export function createStudioRuntimeCore(
             return sandbox.list();
         },
         async startSandbox(startOptions = {}) {
-            const id = startOptions.id ?? DEFAULT_SANDBOX_ID;
+            // Title-bar "Start sandbox" passes no id; mint a unique one so
+            // multiple sandboxes can coexist (the default id is reused only
+            // when it's free, keeping install commands' default stable).
+            const id = startOptions.id ?? (await nextSandboxId(sandbox));
             await sandbox.start({
                 id,
                 mode: "inmemory",
@@ -1014,6 +1017,23 @@ function stripAgentSuffix(agentName: string): string {
     return agentName.endsWith("-agent")
         ? agentName.slice(0, -"-agent".length)
         : agentName;
+}
+
+/**
+ * Pick an unused sandbox id: the default id when free, otherwise
+ * `<default>-2`, `<default>-3`, … so the "Start sandbox" action can create
+ * multiple coexisting sandboxes.
+ */
+async function nextSandboxId(sandbox: SandboxManager): Promise<string> {
+    const existing = new Set((await sandbox.list()).map((s) => s.id));
+    if (!existing.has(DEFAULT_SANDBOX_ID)) {
+        return DEFAULT_SANDBOX_ID;
+    }
+    let n = 2;
+    while (existing.has(`${DEFAULT_SANDBOX_ID}-${n}`)) {
+        n++;
+    }
+    return `${DEFAULT_SANDBOX_ID}-${n}`;
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
