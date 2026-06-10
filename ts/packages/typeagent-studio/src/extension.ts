@@ -158,16 +158,20 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!id) {
                     return;
                 }
-                const agentRef = await vscode.window.showInputBox({
-                    title: `Load agent into '${id}'`,
-                    prompt: "Agent reference (name, module specifier, or path)",
-                    placeHolder: "e.g. player",
-                    ignoreFocusOut: true,
-                    validateInput: (value) =>
-                        value.trim().length === 0
-                            ? "Enter an agent reference."
-                            : undefined,
-                });
+                const available = await runtime.listAvailableAgents();
+                const agentRef =
+                    available.length > 0
+                        ? await pickAgentRef(available, id)
+                        : await vscode.window.showInputBox({
+                              title: `Load agent into '${id}'`,
+                              prompt: "Agent reference (name, module specifier, or path)",
+                              placeHolder: "e.g. player",
+                              ignoreFocusOut: true,
+                              validateInput: (value) =>
+                                  value.trim().length === 0
+                                      ? "Enter an agent reference."
+                                      : undefined,
+                          });
                 if (!agentRef) {
                     return;
                 }
@@ -629,6 +633,42 @@ async function resolveSandboxId(
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Filterable agent picker: type-to-filter over the discovered agents, while
+ * still allowing a free-text reference (a module specifier or path) that isn't
+ * in the list. Returns the chosen reference, or undefined if cancelled.
+ */
+function pickAgentRef(
+    available: readonly string[],
+    sandboxId: string,
+): Promise<string | undefined> {
+    return new Promise((resolve) => {
+        const qp = vscode.window.createQuickPick();
+        qp.title = `Load agent into '${sandboxId}'`;
+        qp.placeholder =
+            "Pick an agent, or type a name / module specifier / path";
+        qp.items = available.map((name) => ({
+            label: name,
+            iconPath: new vscode.ThemeIcon("package"),
+        }));
+        qp.ignoreFocusOut = true;
+        let accepted = false;
+        qp.onDidAccept(() => {
+            const picked = qp.selectedItems[0]?.label ?? qp.value.trim();
+            accepted = true;
+            qp.hide();
+            resolve(picked.length > 0 ? picked : undefined);
+        });
+        qp.onDidHide(() => {
+            qp.dispose();
+            if (!accepted) {
+                resolve(undefined);
+            }
+        });
+        qp.show();
+    });
 }
 
 /**

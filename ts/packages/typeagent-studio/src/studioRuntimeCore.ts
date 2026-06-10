@@ -197,6 +197,13 @@ export interface StudioRuntime {
         reason: string;
     };
     listSandboxes(): Promise<SandboxStatus[]>;
+    /**
+     * Names of agents available to load, discovered from
+     * `<repoRoot>/packages/agents/*` (directories whose `package.json` declares
+     * the dispatcher `./agent/manifest` export). Used to offer autocomplete in
+     * the Load agent UI.
+     */
+    listAvailableAgents(): Promise<string[]>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -603,6 +610,9 @@ export function createStudioRuntimeCore(
         },
         async listSandboxes() {
             return sandbox.list();
+        },
+        async listAvailableAgents() {
+            return listAvailableAgentNames(repoRoot);
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so
@@ -1017,6 +1027,44 @@ function stripAgentSuffix(agentName: string): string {
     return agentName.endsWith("-agent")
         ? agentName.slice(0, -"-agent".length)
         : agentName;
+}
+
+/**
+ * Discover loadable agent names under `<repoRoot>/packages/agents`: directory
+ * names whose `package.json` declares the dispatcher `./agent/manifest` export.
+ * Returns a sorted list; empty when the directory can't be read.
+ */
+async function listAvailableAgentNames(repoRoot: string): Promise<string[]> {
+    const agentsDir = path.join(repoRoot, "packages", "agents");
+    let entries;
+    try {
+        entries = await fs.readdir(agentsDir, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+    const names: string[] = [];
+    for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === "dist") {
+            continue;
+        }
+        try {
+            const raw = await fs.readFile(
+                path.join(agentsDir, entry.name, "package.json"),
+                "utf8",
+            );
+            const exp = (JSON.parse(raw) as { exports?: unknown }).exports;
+            if (
+                typeof exp === "object" &&
+                exp !== null &&
+                "./agent/manifest" in exp
+            ) {
+                names.push(entry.name);
+            }
+        } catch {
+            // not an agent package (no/invalid package.json) — skip
+        }
+    }
+    return names.sort((a, b) => a.localeCompare(b));
 }
 
 /**

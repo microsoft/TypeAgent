@@ -727,6 +727,39 @@ test("startSandbox mints unique ids so multiple sandboxes can coexist", async ()
     assert.equal(named.id, "experiment-1");
 });
 
+test("listAvailableAgents discovers packages that declare the ./agent/manifest export", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-agents-"));
+    try {
+        const agentsDir = path.join(repoRoot, "packages", "agents");
+        const mkAgent = async (name: string, withExport: boolean) => {
+            await fs.mkdir(path.join(agentsDir, name), { recursive: true });
+            await fs.writeFile(
+                path.join(agentsDir, name, "package.json"),
+                JSON.stringify({
+                    name,
+                    ...(withExport
+                        ? { exports: { "./agent/manifest": "./dist/m.js" } }
+                        : {}),
+                }),
+            );
+        };
+        await mkAgent("player", true);
+        await mkAgent("calendar", true);
+        await mkAgent("agentUtils", false); // a lib, not an agent
+        await fs.mkdir(path.join(agentsDir, "dist"), { recursive: true });
+
+        const { context } = createContext([repoRoot]);
+        const runtime = createStudioRuntimeCore(context);
+
+        assert.deepEqual(await runtime.listAvailableAgents(), [
+            "calendar",
+            "player",
+        ]);
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("unloadSandboxAgent removes a loaded agent", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context);
