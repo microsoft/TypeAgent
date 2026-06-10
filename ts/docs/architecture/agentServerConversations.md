@@ -229,15 +229,19 @@ Conversation management only applies when the Shell is running in **connected mo
 When connected to the agentServer, the Shell exposes `/conversation` commands in the chat input:
 
 ```
+/conversation                   — Show conversation command help
+/conversation help              — Show conversation command help
 /conversation list              — List all conversations
 /conversation new [name]        — Create a new conversation
 /conversation switch <id|name>  — Switch to a conversation
 /conversation info              — Show current conversation info
+/conversation next              — Switch to the next conversation (wraps around)
+/conversation prev              — Switch to the previous conversation (wraps around)
 /conversation rename <id|name> <name>  — Rename a conversation
 /conversation delete <id|name>  — Delete a conversation
 ```
 
-`@conversation` is accepted as an alias for `/conversation`.
+`@conversation` is accepted as an alias for `/conversation`. Natural-language phrases ("list my conversations", "create a new conversation called notes", etc.) are translated by the `system.conversation` sub-agent into the same `manage-conversation` `ClientIO.takeAction` payload, so all three input styles share one client-side renderer (`packages/shell/src/renderer/src/chatPanelBridge.ts:handleManageConversation`).
 
 On startup, the Shell first tries to restore the last conversation it had open (`userSettings.conversation.lastConversationId`); if that conversation no longer exists on the server (deleted, server data wiped, etc.), it falls back to find-or-create a conversation named `"Shell"`. See `packages/shell/src/main/instance.ts`.
 
@@ -265,13 +269,64 @@ See `packages/vscode-shell/src/agentServerBridge.ts` (`handleManageConversation`
 
 The browser extension (`packages/agents/browser/src/extension`) is a Chrome MV3 extension that runs in **connected mode only** — its service worker maintains a WebSocket to the agentServer. The chat panel surfaces the same `@conversation` slash commands and NL phrases as the Shell and CLI.
 
-The chat panel forwards the dispatcher's `manage-conversation` `takeAction` payload to the service worker via a `chatPanelManageConversation` invoke RPC. The service worker (`extension/serviceWorker/dispatcherConnection.ts`) implements all eight subcommands (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`, `delete`) against `AgentServerInvokeFunctions` and returns a rendered HTML message plus a `switched` flag.
+The chat panel forwards the dispatcher's `manage-conversation` `takeAction` payload to the service worker via a `chatPanelManageConversation` invoke RPC. The service worker (`extension/serviceWorker/dispatcherConnection.ts`) delegates to the shared `manageConversation` helper from `@typeagent/agent-server-client/conversation` (which implements all eight subcommands) via a thin `AgentServerConnection` adapter over the extension's RPC channel, and returns a rendered HTML message plus a `switched` flag.
 
 When `switched` is set, the chat panel clears its DOM and re-runs `loadSessionHistory()` (mirroring the Shell's `replayDisplayHistory` on `conversationChanged`), then renders the confirmation message so it lands after the replayed history. Live display events arriving during the replay are queued via a `runOrDefer` gate and flushed in order on completion.
 
-Switching follows the bind-new → leave-old → delete-old-channels ordering used by `agentServerClient.ts` and the CLI's `commands/connect.ts`: if the new join throws, the existing dispatcher and channels stay live so the user can retry. The chat panel joins with `filter: false` (matching Shell), so display events from peer clients (Shell or CLI joined to the same conversation) are also visible.
+Switching follows the bind-new → leave-old → delete-old-channels ordering enforced by `switchConversationSafe`: if the new join throws, the existing dispatcher and channels stay live so the user can retry. The chat panel joins with `filter: false` (matching Shell), so display events from peer clients (Shell or CLI joined to the same conversation) are also visible.
 
-See `packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts` (`bindToConversation`, `switchToConversationId`, `manageConversation`) and `packages/agents/browser/src/extension/views/chatPanel.ts` (`dispatcherTakeAction`, `runOrDefer`, `loadSessionHistory`) for the implementation.
+See `packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts` (`bindToConversation`, `joinConversationDispatcher`, `makeConnectionAdapter`, `manageConversation`) and `packages/agents/browser/src/extension/views/chatPanel.ts` (`dispatcherTakeAction`, `runOrDefer`, `loadSessionHistory`) for the implementation.
+
+---
+
+## Shared Client Helpers
+
+All four clients (CLI, Electron Shell, VS Code, browser extension) drive their conversation surfaces through the shared `@typeagent/agent-server-client/conversation` package. It is UI-agnostic — no chalk, no HTML, no Electron, no DOM — and consolidates the find-or-create, restore-or-fallback, join-before-leave, and `manage-conversation` logic that the four clients previously reinvented (with subtly different race handling).
+
+Modules:
+
+| Module         | Surface                                                                                                                                                                                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `naming.ts`    | `normalizeConversationName`, `findConversationByName`, `findUniqueConversationByName`, `formatAutoConversationName`, `sortConversationsByCreatedDesc`                                                                                                                  |
+| `lifecycle.ts` | `findOrCreateNamedConversation`, `joinNamedOrFallback`, `switchConversationSafe`, `createEphemeralConversation`, `deleteEphemeralConversation`, `validateConversationNameUnique`, `isConversationNotFoundError`                                                        |
+| `manage.ts`    | `manageConversation` (top-level dispatcher) + per-subcommand entries (`manageNew`, `manageList`, `manageInfo`, `manageSwitch`, `manageCycle`, `manageRename`, `manageDelete`). All return a discriminated `ConversationActionResult` the caller renders to its own UI. |
+
+### Switch protocol
+
+`switchConversationSafe` enforces the strict join-before-leave protocol every client needs:
+
+1. Join the target conversation. Failure leaves the caller on the current one and returns `kind: "join-failed"`.
+2. Invoke `onJoined` (caller rebinds the active dispatcher). A throw here triggers a rollback: the helper leaves the freshly-joined target and re-throws.
+3. Invoke `onPersist` (best-effort; a throw is swallowed — persistence never blocks a switch).
+4. Leave the old conversation (best-effort), then invoke `onLeftOld` exactly once with `(oldId, leaveError | undefined)`. A throw inside `onLeftOld` is swallowed.
+
+The `manage-conversation` surface exposes the same staged sequence via two distinct hooks on `ManageConversationContext`:
+
+- **`onSwitched`** — pre-leave; rebind the active dispatcher and any per-conversation request-id maps. **Keep work here minimal.** Broadcasts, UI clears, and history replay that could observe events from the old conversation belong in `onAfterSwitched`.
+- **`onAfterSwitched(newConversation, leaveError)`** — post-leave; safe place for history replay, "conversation changed" broadcasts, and any output that must not race lingering events from the old conversation. A throw here is swallowed.
+- **`onPersistSwitched`** — best-effort persistence; same swallow-on-throw semantics as `onPersist` in `switchConversationSafe`.
+- **`onCurrentConversationUpdated(updated)`** — fires when a manage-* op changes the *current\* conversation's metadata in place (e.g. `rename` of the active one). Refresh title bars and cached names here. A throw is swallowed.
+- **`confirmDestructive(action, target)`** — prompt the user for destructive subcommands (`delete`). A throw is caught and surfaced as an `error` result (it is **not** treated as user-cancellation; that would mask infrastructure failures).
+- **`cycleOrder`** — `"newest-first"` (default; matches CLI/Shell list output) or `"server-order"` (matches VS Code's QuickPick order).
+- **`cycleOnCurrentNotInList`** — `"wrap"` (default; jumps to index 0) or `"error"` (refuses to cycle from a conversation that's gone from the list; matches browser UX).
+
+### Race handling
+
+- **Find-or-create race**: `findOrCreateNamedConversation` re-lists after a failed `createConversation` and adopts the peer's winning entry instead of bubbling the create error. The name is trimmed once at the boundary so it matches the server's uniqueness check (which trims) even when the server's list filter (which does not trim, only case-insensitive `includes`) misses it.
+- **Saved-id vs. default-fallback race**: `joinNamedOrFallback` recovers from "deleted between list and join" by re-running `findOrCreateNamedConversation`. Other join errors (permission, transport) are **surfaced as-is**, not masked by a spurious re-create. Callers can override the fallback decision via the optional `shouldFallback(err)` hook.
+- **Peer-already-deleted**: `manageDelete` treats a server `Conversation not found` from the delete RPC as idempotent success — the user wanted it gone and it is.
+- **Per-client mutex**: `switchConversationSafe` is re-entrant per client, but clients that issue overlapping switches (e.g. VS Code's rapid `@conversation next`) must serialize calls themselves. VS Code uses `joinInFlight`; the browser extension uses a `conversationOpQueue` promise chain.
+
+### Per-client integration
+
+| Client       | Entry point                                                                   | Notes                                                                                                                                                                               |
+| ------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI          | `packages/cli/src/conversationCommands.ts`                                    | Splits rebind (`onSwitched`) from replay (`onAfterSwitched`) in `commands/connect.ts`.                                                                                              |
+| Shell        | `packages/shell/src/main/conversationManager.ts`                              | `commitSwitch` is pre-leave; `broadcastSwitched` is post-leave (wired into `onLeftOld` for explicit switch + `onAfterSwitched` for manage).                                         |
+| VS Code      | `packages/vscode-shell/src/agentServerBridge.ts`                              | `applySessionJoinedRebindOnly` is pre-leave; `sessionChanged`/`status`/replay broadcasts go in `onAfterSwitched`. Manage handler wraps all switching subcommands in `joinInFlight`. |
+| Browser ext. | `packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts` | `makeConnectionAdapter()` resolves the live module-level WS/RPC state on every call so a reconnect mid-op doesn't bind on stale transport.                                          |
+
+Tests live in `packages/agentServer/client/test/conversation-{naming,lifecycle,manage}.spec.ts` and exercise the helpers against an in-memory stub `AgentServerConnection`.
 
 ---
 
@@ -286,6 +341,7 @@ agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
 where `payload` has the shape:
 
 ```typescript
+{ subcommand: "help" }
 { subcommand: "new"; name?: string }
 { subcommand: "list" }
 { subcommand: "info" }
@@ -296,12 +352,12 @@ where `payload` has the shape:
 { subcommand: "rename"; name?: string; newName: string }
 ```
 
-See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
+`help` is dispatched when `@conversation` / `/conversation` is invoked with no subcommand (via the dispatcher's `defaultSubCommand: "help"`); there is intentionally no natural-language form for it. NL drops `help` from its `ConversationActionPayload` union and only emits `new`, `list`, `info`, `switch`, `prev`, `next`, `rename`, `delete`. See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
 
 Each client handles `"manage-conversation"` using its own conversation management API:
 
 - **CLI** — `enhancedConsole.ts` calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands.
-- **Shell** — `main.ts` calls the corresponding `ClientAPI` method (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge.
+- **Shell** — `chatPanelBridge.ts:handleManageConversation` renders results into the active `chat-ui` chat panel via `addAgentMessage` (info) or `showInline` (warnings/errors), and switches conversations via the corresponding `ClientAPI` methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge. All HTML interpolated into bubbles is escaped via a local `escapeHtml()`.
 - **VS Code Shell** — `agentServerBridge.handleManageConversation` invokes the legacy `LegacyAgentServerConnection` (`listSessions`/`createSession`/`renameSession`/`deleteSession`) directly. Renders results inline via `overwriteActionBubble` for non-switching subcommands, and via the post-switch `conversationNotification` webview message for switching subcommands (`new`/`switch`/`prev`/`next`).
 
 See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#conversations) for the full list of supported phrases.

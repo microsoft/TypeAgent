@@ -64,6 +64,7 @@ import type {
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
+import { iconX, iconJumpQueue, iconStop } from "./icons.js";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -503,6 +504,14 @@ export class ChatPanel {
      * Toast and inline rows do NOT participate in this map.
      */
     private threadContainers = new Map<string, AgentMessageContainer>();
+    /**
+     * Thread ids whose request is currently being processed. Drives the
+     * agent bubble's "working" status rail + Stop button. An id is added on
+     * `setProcessing` and removed on `completeRequest` / `setIdle`. The rail
+     * is applied lazily when the agent bubble materializes (so the Stop only
+     * appears once there's a visible bubble to anchor it to).
+     */
+    private agentRunningRequestIds = new Set<string>();
     /**
      * The threadId of the most-recent user request. Methods that take an
      * optional requestId/threadId default to this when no explicit id is
@@ -1182,10 +1191,10 @@ export class ChatPanel {
                 // current text with the previous command. (Previously gated
                 // on empty input, which forced users to clear first.)
                 e.preventDefault();
-                this.navigateHistory(-1);
+                this.navigateHistory(1);
             } else if (e.key === "ArrowDown") {
                 e.preventDefault();
-                this.navigateHistory(1);
+                this.navigateHistory(-1);
             }
         });
 
@@ -1378,13 +1387,17 @@ export class ChatPanel {
         this.sendButton.disabled = !this.textInput.textContent?.trim();
     }
 
+    private shouldAddToHistory(text: string) {
+        return !/^@exit(?:\s|$)/i.test(text.trim());
+    }
+
     private send(requestId?: string) {
         const text = this.textInput.textContent?.trim() ?? "";
         // Allow sending when there is text OR at least one pending image
         // attachment (image-only requests are valid — e.g. "what is this?").
         if (!text && this.pendingAttachments.length === 0) return;
 
-        if (text) {
+        if (text && this.shouldAddToHistory(text)) {
             this.commandHistory.unshift(text);
         }
         this.historyIndex = -1;
@@ -1546,13 +1559,42 @@ export class ChatPanel {
         this.activeRequestId = requestId;
         this.sendButton.style.display = "none";
         this.stopButton.style.display = "";
+        // Mark this request as in-flight so the agent bubble shows a
+        // "working" rail + Stop button once it materializes. If the bubble
+        // already exists (re-processing), apply immediately.
+        this.agentRunningRequestIds.add(requestId);
+        this.applyAgentRunning(requestId);
     }
 
     /** Clear the active request and restore the send button. */
     public setIdle() {
+        if (this.activeRequestId !== undefined) {
+            this.clearAgentRunning(this.activeRequestId);
+        }
         this.activeRequestId = undefined;
         this.stopButton.style.display = "none";
         this.sendButton.style.display = "";
+    }
+
+    /**
+     * Apply the "working" status rail + Stop button to the agent bubble for
+     * `threadId`, if the request is still in-flight and its bubble exists.
+     * Called both when the request starts (bubble may not exist yet — no-op)
+     * and when the bubble materializes in `getOrCreateAgentContainer`.
+     */
+    private applyAgentRunning(threadId: string): void {
+        if (!this.agentRunningRequestIds.has(threadId)) return;
+        const container = this.threadContainers.get(threadId);
+        container?.setRunning(() => this.onCancel?.(threadId));
+    }
+
+    /**
+     * Clear the in-flight marker and remove the "working" rail from the
+     * agent bubble for `threadId` (if any). Idempotent.
+     */
+    private clearAgentRunning(threadId: string): void {
+        this.agentRunningRequestIds.delete(threadId);
+        this.threadContainers.get(threadId)?.clearRunning();
     }
 
     /**
@@ -1591,95 +1633,142 @@ export class ChatPanel {
     }
 
     /**
-     * Stamp / clear a "queued" or "running" pill on the user bubble.
-     * No-op if the bubble doesn't exist. When `status === "queued"`
-     * with `onCancel`, renders an `×` button that invokes it on click.
+     * Ensure the user bubble's status rail exists and return its zones.
+     * The rail is a slim strip across the top of the bubble with a left
+     * "state" zone (queued/sent label) and a right "controls" zone. It is
+     * created on demand only when there's a queue state to show — there is
+     * no persistent/idle rail (an empty title row), matching the agent
+     * bubble. Returns `undefined` if the bubble is gone.
+     */
+    private ensureUserStatusRail(requestId: string):
+        | {
+              rail: HTMLDivElement;
+              stateZone: HTMLElement;
+              controls: HTMLElement;
+          }
+        | undefined {
+        const container = this.userMessageById.get(requestId);
+        if (!container) return undefined;
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        if (!bodyDiv) return undefined;
+        let rail = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-message-status-rail",
+        );
+        if (!rail) {
+            rail = document.createElement("div");
+            rail.className = "chat-message-status-rail";
+            const stateZone = document.createElement("span");
+            stateZone.className = "chat-status-state-zone";
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            rail.append(stateZone, controls);
+            bodyDiv.insertBefore(rail, bodyDiv.firstChild);
+        }
+        const stateZone = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-state-zone",
+        )!;
+        const controls = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-rail-controls",
+        )!;
+        return { rail, stateZone, controls };
+    }
+
+    /**
+     * Stamp / clear the queue state on the user bubble's status rail. The
+     * rail carries a de-emphasized, state-tinted label ("sent" while the
+     * request is being processed, "queued" while it waits) on the left and
+     * controls on the right.
+     *
+     * For queued entries, `onCancel` (when provided) renders a Remove (×)
+     * button and `onPromote` renders a "run next" jump-the-queue button.
+     * The running ("sent") state intentionally carries no queue controls:
+     * once the request is dispatched, cancelling its in-flight action
+     * belongs on the agent message, not the user bubble.
+     *
+     * The rail is created on demand and removed when the state clears, so an
+     * idle user bubble shows no empty title row (matching the agent bubble).
+     * It lives at the top so it never collides with the hover-revealed
+     * metrics strip that slides out of the bubble's bottom edge, and the
+     * roadrunner ("explained") icon sits inside the content corner rather
+     * than this rail.
      */
     public setUserBubbleQueueStatus(
         requestId: string,
         status: "queued" | "running" | null,
         onCancel?: () => void,
+        onPromote?: () => void,
     ): void {
-        const container = this.userMessageById.get(requestId);
-        if (!container) return;
-        const bodyDiv =
-            container.querySelector<HTMLElement>(".chat-message-user");
-        if (!bodyDiv) return;
-        let chip = bodyDiv.querySelector<HTMLDivElement>(
-            ":scope > .chat-queue-status-chip",
-        );
+        // Nothing to do on a clear when no rail exists — avoids creating an
+        // empty rail just to remove it.
         if (status === null) {
-            chip?.remove();
+            const container = this.userMessageById.get(requestId);
+            container
+                ?.querySelector(
+                    ".chat-message-user > .chat-message-status-rail",
+                )
+                ?.remove();
             return;
         }
-        if (!chip) {
-            chip = document.createElement("div");
-            chip.className = "chat-queue-status-chip";
-            chip.style.display = "inline-flex";
-            chip.style.alignItems = "center";
-            chip.style.gap = "4px";
-            // VS Code webview font sits low in the line-box; +1px bottom
-            // padding visually centers the lowercase label text.
-            chip.style.padding = "2px 6px 3px 6px";
-            // Matches Electron chip insets (messageContainer.ts:363-365).
-            chip.style.marginLeft = "4px";
-            chip.style.marginTop = "4px";
-            chip.style.marginBottom = "2px";
-            chip.style.fontSize = "11px";
-            chip.style.lineHeight = "1";
-            chip.style.borderRadius = "8px";
-            chip.style.opacity = "0.85";
-            chip.style.boxSizing = "border-box";
-            bodyDiv.insertBefore(chip, bodyDiv.firstChild);
-        }
-        chip.replaceChildren();
-        chip.dataset.status = status;
+
+        const parts = this.ensureUserStatusRail(requestId);
+        if (!parts) return;
+        const { rail, stateZone, controls } = parts;
+
+        // Reset the state label and any prior queue controls.
+        stateZone.replaceChildren();
+        controls.replaceChildren();
+
+        rail.dataset.status = status;
+
+        // De-emphasized, state-tinted label: a spinner while running, a
+        // small dot while queued. "running" reads as "sent" to the user —
+        // the request has left the queue and is being handled.
+        const state = document.createElement("span");
+        state.className = "chat-status-state";
+        state.dataset.status = status;
+        const indicator = document.createElement("span");
+        indicator.className =
+            status === "running" ? "chat-status-spinner" : "chat-status-dot";
+        indicator.setAttribute("aria-hidden", "true");
         const label = document.createElement("span");
-        label.textContent = status;
-        chip.appendChild(label);
+        label.textContent = status === "running" ? "sent" : "queued";
+        state.append(indicator, label);
+        stateZone.appendChild(state);
+
+        // Queued entries can be promoted ("run next") or removed.
         if (status === "queued") {
-            // Alpha-tinted yellow reads on both light and dark themes.
-            chip.style.background =
-                "var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.18))";
-            chip.style.color =
-                "var(--vscode-inputValidation-warningForeground, rgba(120, 80, 0, 0.95))";
+            if (onPromote) {
+                const jump = document.createElement("button");
+                jump.type = "button";
+                jump.className = "chat-action-button chat-queue-jump-button";
+                jump.dataset.action = "jump-queue";
+                jump.title = "Run this next";
+                jump.setAttribute("aria-label", "Run this request next");
+                jump.appendChild(iconJumpQueue());
+                jump.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onPromote();
+                });
+                controls.appendChild(jump);
+            }
             if (onCancel) {
                 const btn = document.createElement("button");
                 btn.type = "button";
-                btn.className = "chat-queue-cancel-button";
-                btn.title = "Cancel this queued request";
-                btn.setAttribute("aria-label", "Cancel queued request");
-                btn.textContent = "×";
-                btn.style.display = "inline-flex";
-                btn.style.alignItems = "center";
-                btn.style.justifyContent = "center";
-                btn.style.padding = "0";
-                btn.style.margin = "0";
-                btn.style.border = "none";
-                btn.style.background = "transparent";
-                btn.style.color = "inherit";
-                btn.style.cursor = "pointer";
-                btn.style.fontSize = "0.7em";
-                btn.style.lineHeight = "1";
-                btn.style.fontFamily = "inherit";
-                // Reset VS Code webview's UA button defaults that would
-                // otherwise inflate chip height.
-                btn.style.minHeight = "0";
-                btn.style.minWidth = "0";
-                btn.style.height = "auto";
-                btn.style.boxSizing = "border-box";
+                btn.className =
+                    "chat-action-button danger chat-queue-cancel-button";
+                btn.dataset.action = "remove-from-queue";
+                btn.title = "Remove from queue";
+                btn.setAttribute("aria-label", "Remove queued request");
+                btn.appendChild(iconX());
                 btn.addEventListener("click", (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onCancel();
                 });
-                chip.appendChild(btn);
+                controls.appendChild(btn);
             }
-        } else {
-            chip.style.background =
-                "var(--vscode-inputValidation-infoBackground, rgba(0, 150, 255, 0.18))";
-            chip.style.color =
-                "var(--vscode-inputValidation-infoForeground, rgba(0, 80, 140, 0.95))";
         }
     }
 
@@ -2035,6 +2124,9 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        // If this request is in-flight, stamp the "working" rail + Stop now
+        // that there's a visible bubble to anchor it to.
+        this.applyAgentRunning(threadId);
         // Capture the elapsed time from request send to first agent
         // bubble for this thread — drives the "First Message"
         // metric line on the agent metrics tooltip.
@@ -2221,6 +2313,7 @@ export class ChatPanel {
         this.threadContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.agentRunningRequestIds.clear();
 
         // Suppress first-message timing tracking during replay — those
         // timestamps would reflect the speed of replay, not the original
@@ -2235,7 +2328,11 @@ export class ChatPanel {
                         // user commands so it recalls prior-session input.
                         // Entries arrive oldest-first; unshift keeps the
                         // most recent command at index 0.
-                        if (entry.text && entry.text.trim()) {
+                        if (
+                            entry.text &&
+                            entry.text.trim() &&
+                            this.shouldAddToHistory(entry.text)
+                        ) {
                             this.commandHistory.unshift(entry.text);
                         }
                         break;
@@ -2384,6 +2481,13 @@ export class ChatPanel {
         this.userMessageById.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
+        this.agentRunningRequestIds.clear();
+        // Reset the up-arrow back stack too — `@clear` resets the chat, which
+        // includes the command recall history seeded from prior-session
+        // replayed commands. After clearing, recall starts empty until the
+        // user issues new commands.
+        this.commandHistory = [];
+        this.historyIndex = -1;
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
@@ -2421,9 +2525,22 @@ export class ChatPanel {
         container
             .querySelectorAll(".chat-message-explained-icon")
             .forEach((n) => n.remove());
-        container.classList.add("chat-message-explained");
-        container.setAttribute("data-expl", message);
-        container.appendChild(iconRoadrunner(color));
+        // Anchor the roadrunner inside the content bubble (top-right corner)
+        // so it sits with the command text instead of floating in the
+        // container's corner where it collided with the avatar / actions.
+        // The hover tooltip is hosted on the bubble body (which doesn't clip
+        // overflow), while the icon itself is positioned within the content.
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        const content = container.querySelector<HTMLElement>(
+            ".chat-message-content",
+        );
+        const tooltipHost = bodyDiv ?? container;
+        const iconHost = content ?? container;
+        iconHost.classList.add("chat-message-explained-host");
+        tooltipHost.classList.add("chat-message-explained");
+        tooltipHost.setAttribute("data-expl", message);
+        iconHost.appendChild(iconRoadrunner(color));
     }
 
     /**
@@ -2479,6 +2596,9 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
         const threadId = this.resolveThreadId(requestId);
+        // The request is done — drop the in-flight marker and remove the
+        // "working" rail + Stop from its agent bubble.
+        this.clearAgentRunning(threadId);
         const target = this.threadContainers.get(threadId);
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
@@ -2598,19 +2718,41 @@ export class ChatPanel {
      * resolve with the chosen option's `value`. Generalizes askYesNo to an
      * arbitrary list with optional per-choice keyboard accelerators. Maps
      * directly from ClientIO.question / requestChoice.
+     *
+     * Set `opts.showMessage = false` to render only the choice buttons
+     * without the prompt text — used by hosts that already display the
+     * prompt separately (e.g. the shell renders the agent's `displayContent`
+     * for `createYesNoChoiceResult`, so repeating it on the card would
+     * duplicate the message).
      */
     public addChoicePrompt<T>(
         message: string,
         choices: ChoiceOption<T>[],
-        opts?: { defaultValue?: T },
+        opts?: {
+            defaultValue?: T;
+            signal?: AbortSignal;
+            showMessage?: boolean;
+        },
     ): Promise<T> {
-        return new Promise<T>((resolve) => {
+        return new Promise<T>((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
             const container = this.createAgentContainer("system", "");
-            container.setMessage(
-                { type: "text", content: message },
-                undefined,
-                undefined,
-            );
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
 
             const buttonDiv = document.createElement("div");
             buttonDiv.className = "chat-prompt-buttons choice-panel";
@@ -2618,11 +2760,21 @@ export class ChatPanel {
             const cleanup = () => {
                 buttonDiv.remove();
                 document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
             };
 
             const choose = (value: T) => {
                 cleanup();
                 resolve(value);
+            };
+
+            // Allow the host to dismiss the prompt externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                reject(
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
+                );
             };
 
             const keyHandler = (e: KeyboardEvent) => {
@@ -2647,6 +2799,7 @@ export class ChatPanel {
                 buttonDiv.appendChild(btn);
             }
 
+            signal?.addEventListener("abort", onAbort, { once: true });
             document.addEventListener("keydown", keyHandler);
             container.appendElement(buttonDiv);
             this.scrollToBottom();
@@ -2655,15 +2808,27 @@ export class ChatPanel {
 
     /**
      * Show a Yes/No prompt and return the user's choice.
+     *
+     * Set `opts.showMessage = false` to render only the Yes/No buttons
+     * without the prompt text — used by hosts that already display the
+     * prompt separately (e.g. the shell renders the agent's `displayContent`
+     * for `createYesNoChoiceResult`, so repeating it here would duplicate
+     * the message).
      */
-    public askYesNo(message: string, defaultValue?: boolean): Promise<boolean> {
+    public askYesNo(
+        message: string,
+        defaultValue?: boolean,
+        opts?: { showMessage?: boolean },
+    ): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
             const container = this.createAgentContainer("system", "");
-            container.setMessage(
-                { type: "text", content: message },
-                undefined,
-                undefined,
-            );
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
 
             const buttonDiv = document.createElement("div");
             buttonDiv.className = "chat-prompt-buttons";
@@ -3249,10 +3414,14 @@ export class ChatPanel {
             return;
         }
         this.textInput.contentEditable = enabled ? "true" : "false";
-        this.sendButton.disabled = !enabled;
         if (enabled) {
+            // Reflect the current input contents rather than force-enabling:
+            // an empty input must keep Send disabled even once the dispatcher
+            // re-enables interaction.
+            this.updateSendButtonState();
             this.inputArea.classList.remove("chat-input-disabled");
         } else {
+            this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
             // No commands can be in flight when input is disabled (typically
             // because the dispatcher disconnected). Hide the stop button so
@@ -3408,10 +3577,11 @@ export class ChatPanel {
      */
     private setEnabledInternal(enabled: boolean) {
         this.textInput.contentEditable = enabled ? "true" : "false";
-        this.sendButton.disabled = !enabled;
         if (enabled) {
+            this.updateSendButtonState();
             this.inputArea.classList.remove("chat-input-disabled");
         } else {
+            this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
         }
     }
@@ -3567,12 +3737,14 @@ export class ChatPanel {
 class AgentMessageContainer {
     public readonly div: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
+    private readonly bodyDiv: HTMLDivElement;
     private readonly detailsDiv: HTMLDivElement;
     private readonly metricsDiv: HTMLDivElement;
     private readonly nameSpan: HTMLSpanElement;
     private readonly iconDiv: HTMLDivElement;
     private readonly timestampDiv: HTMLDivElement;
     private feedbackWidget?: FeedbackWidget;
+    private statusRail?: HTMLDivElement;
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
@@ -3635,6 +3807,7 @@ class AgentMessageContainer {
         // Message body
         const bodyDiv = document.createElement("div");
         bodyDiv.className = "chat-message-body-hide-metrics chat-message-agent";
+        this.bodyDiv = bodyDiv;
 
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat-message-content";
@@ -3960,6 +4133,71 @@ class AgentMessageContainer {
 
     public setFeedbackVariant(variant: FeedbackUIVariant) {
         this.feedbackWidget?.setVariant(variant);
+    }
+
+    /**
+     * Show a "working" status rail at the top of the agent bubble while the
+     * request is being processed: a spinner, a de-emphasized state label
+     * (default "working"; agents may augment it, e.g. "thinking" while
+     * reasoning), and a Stop button wired to `onStop`. Mirrors the user
+     * bubble's status rail so the two read as one consistent affordance.
+     * Idempotent — repeated calls update the label and re-wire Stop.
+     */
+    public setRunning(onStop: () => void, label: string = "working") {
+        if (!this.statusRail) {
+            const rail = document.createElement("div");
+            rail.className = "chat-message-status-rail";
+            rail.dataset.status = "running";
+            const stateZone = document.createElement("span");
+            stateZone.className = "chat-status-state-zone";
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            rail.append(stateZone, controls);
+            // Insert as the body's first child so it sits above the message
+            // content (the bottom edge stays free for the hover metrics).
+            this.bodyDiv.insertBefore(rail, this.bodyDiv.firstChild);
+            this.statusRail = rail;
+        }
+        const rail = this.statusRail;
+        const stateZone = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-state-zone",
+        )!;
+        const controls = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-rail-controls",
+        )!;
+
+        stateZone.replaceChildren();
+        const state = document.createElement("span");
+        state.className = "chat-status-state";
+        state.dataset.status = "running";
+        const spinner = document.createElement("span");
+        spinner.className = "chat-status-spinner";
+        spinner.setAttribute("aria-hidden", "true");
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        state.append(spinner, labelSpan);
+        stateZone.appendChild(state);
+
+        controls.replaceChildren();
+        const stop = document.createElement("button");
+        stop.type = "button";
+        stop.className = "chat-action-button danger chat-agent-stop-button";
+        stop.dataset.action = "stop";
+        stop.title = "Stop";
+        stop.setAttribute("aria-label", "Stop this request");
+        stop.appendChild(iconStop());
+        stop.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onStop();
+        });
+        controls.appendChild(stop);
+    }
+
+    /** Remove the "working" status rail (request finished or cancelled). */
+    public clearRunning() {
+        this.statusRail?.remove();
+        this.statusRail = undefined;
     }
 
     /**

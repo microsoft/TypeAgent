@@ -36,15 +36,20 @@ When the Shell connects to the agent server, it automatically joins a conversati
 
 ### Conversation commands
 
-Use `/conversation` (or the `@conversation` alias) to manage conversations from the chat input:
+Use `/conversation` (or the `@conversation` alias) to manage conversations from the chat input. All three input styles route through the same dispatcher action, so you can also drive these via natural language (e.g., "list my conversations", "create a new conversation called notes"):
 
-| Command                            | Description               |
-| ---------------------------------- | ------------------------- |
-| `/conversation list`               | List all conversations    |
-| `/conversation new [name]`         | Create a new conversation |
-| `/conversation switch <id\|name>`  | Switch to a conversation  |
-| `/conversation rename <id> <name>` | Rename a conversation     |
-| `/conversation delete <id\|name>`  | Delete a conversation     |
+| Command                                     | Description                                                                      |
+| ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `/conversation`                             | Show the help screen (same as `/conversation help`)                              |
+| `/conversation help`                        | Show the list of conversation commands                                           |
+| `/conversation list`                        | List all conversations; the active one is marked with `← current`                |
+| `/conversation info`                        | Show the active conversation's name and id                                       |
+| `/conversation new [name]`                  | Create a new conversation and switch to it (auto-names when no name is given)    |
+| `/conversation switch <id\|name>`           | Switch to a conversation by id or name (case-insensitive)                        |
+| `/conversation next`                        | Switch to the next conversation in the server's list (wraps around)              |
+| `/conversation prev`                        | Switch to the previous conversation in the server's list (wraps around)          |
+| `/conversation rename [id\|name] <newName>` | Rename a conversation (omit `[id\|name]` to rename the active conversation)      |
+| `/conversation delete <id\|name>`           | Delete a conversation by id or name (the server rejects deleting the active one) |
 
 ### Switching conversations
 
@@ -53,6 +58,17 @@ When you switch to a different conversation:
 - The chat area clears and replays that conversation's history, shown in grayscale to distinguish it from new activity.
 - A `─── now ───` separator marks where new messages will appear.
 - A status message confirms which conversation you have joined: `Connected to conversation 'X'.`
+
+### Request queue affordances
+
+When you submit a request while one is already running, it is queued on the server and surfaced inline on the corresponding user bubble:
+
+- A small **"queued"** chip appears on each waiting bubble. Click the `×` on the chip to cancel that specific queued entry without affecting the running one.
+- The bubble for the currently-executing request shows a **"running"** chip.
+- **Esc** with focus in the input cancels the in-flight request (chat-ui's built-in stop affordance — equivalent to clicking the stop button on the input).
+- **Esc twice within 1 second** (from anywhere in the window) cancels every queued + running entry on the current conversation.
+
+These chips also appear for entries submitted by other clients connected to the same conversation, so you can see and cancel work driven by a peer Shell or CLI.
 
 ### Multi-client notifications
 

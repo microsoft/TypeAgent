@@ -482,6 +482,9 @@ export function createDispatcherFromContext(
             }
             return { kind: "not_found", requestId };
         },
+        async promoteCommand(requestId: string): Promise<boolean> {
+            return context.requestQueue.promote(requestId);
+        },
         cancelCommandByClientId(clientRequestId: unknown) {
             const controller =
                 context.activeRequestsByClientId.get(clientRequestId);

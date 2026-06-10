@@ -27,6 +27,7 @@ jest.mock("../../src/extension/serviceWorker/ui", () => ({
 
 jest.mock("../../src/extension/serviceWorker/contextMenu", () => ({
     initializeContextMenu: jest.fn(),
+    initContextMenuSettings: jest.fn(),
     handleContextMenuClick: jest.fn(),
     setContextMenuRpcSend: jest.fn(),
 }));

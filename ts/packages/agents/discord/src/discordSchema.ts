@@ -3,6 +3,7 @@
 
 export type DiscordActions =
     | CreateMessageAction
+    | CraftMessageAction
     | GetChannelMessagesAction
     | CreateGuildAction
     | GetGuildAction
@@ -67,6 +68,30 @@ export type CreateMessageAction = {
         content: string;
         // A unique identifier for the message.
         nonce?: string;
+        // Whether the message should be sent as text-to-speech.
+        tts?: boolean;
+    };
+};
+
+// Drafts a message via LLM from a high-level intent, then posts it.
+// Use when the user describes what the message should convey
+// ("that ...", "to ...", "about ...", "reminding ...", "asking ...")
+// instead of supplying literal content.
+// Sample phrases:
+//   - "Send a message to #general that welcomes everyone to the discord"
+//   - "Send a message to #general to remind everyone about tonight's plans"
+//   - "Post a message in #announcements about the new release"
+//   - "Write a message in #random asking who's free tomorrow"
+//   - "Send a message in #events reminding people to RSVP"
+export type CraftMessageAction = {
+    actionName: "craftMessage";
+    parameters: {
+        // Single channel token (ID, bare name, or "#name"). Must not
+        // contain spaces — anything after the channel belongs in `intent`.
+        channel_id: string;
+        // What the message should convey — everything the user said about
+        // the message after the channel and connector word.
+        intent: string;
         // Whether the message should be sent as text-to-speech.
         tts?: boolean;
     };

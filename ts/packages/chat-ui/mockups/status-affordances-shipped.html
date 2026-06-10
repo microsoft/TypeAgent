@@ -1,0 +1,633 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!--
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License.
+
+  MOCKUP / SCRATCH FILE — not shipped.
+
+  AS-SHIPPED preview of the chat-ui status rail (Option 3). This mirrors the
+  exact class names + CSS that landed in:
+    • packages/chat-ui/src/chatPanel.ts  (setUserBubbleQueueStatus, notifyExplained)
+    • packages/chat-ui/styles/chat.css   (status rail + explained icon)
+
+  Differences vs. the v3 Option-3 concept, reflecting the semantics you flagged:
+    • the running state reads "sent" (not "running") and shows NO stop button
+      ("stop" belongs on the agent action bubble, not the user bubble).
+    • queued shows the state label + a "run next" jump-the-queue button + a
+      Remove (×) button.
+    • the rail is created on demand and removed when the state clears, so an
+      idle user bubble shows no empty title row (matches the agent bubble).
+    • roadrunner moved into the content bubble's top-right corner.
+    • agent bubbles get the SAME rail while processing: a spinner + "working"
+      label (agents may augment, e.g. "thinking" while reasoning) + a Stop
+      button wired to the existing cancel path. Appears once the agent bubble
+      is visible; clears on completion/cancel.
+  Hover a bubble to see the bottom metrics strip + the roadrunner tooltip.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>chat-ui status rail — as shipped</title>
+    <style>
+      :root {
+        --bg: #f3f3f3;
+        --panel: #fff;
+        --user-bubble: lavender;
+        --user-metrics: #e2e0ec;
+        --text: #1f1f1f;
+        --muted: #6b6b6b;
+        --shadow: rgba(0, 0, 0, 0.1);
+        --vscode-descriptionForeground: #7a7a7a;
+        --vscode-charts-blue: #1f8fff;
+      }
+      [data-theme="dark"] {
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --user-bubble: #3a3a5a;
+        --user-metrics: #2c2c44;
+        --text: #e6e6e6;
+        --muted: #a0a0a0;
+        --shadow: rgba(0, 0, 0, 0.4);
+        --vscode-descriptionForeground: #9a9a9a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 32px 90px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+      }
+      h1 {
+        font-size: 19px;
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 26px;
+        max-width: 720px;
+        font-size: 13px;
+      }
+      .theme-toggle {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 100;
+        border: 1px solid var(--muted);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .stage {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-end;
+        max-width: 620px;
+      }
+
+      /* ---- scaffolding approximating chat-ui ---- */
+      .chat-message-container-user {
+        width: 100%;
+        position: relative;
+        transform: scale(1);
+      }
+      .chat-timestamp-user {
+        font-size: 10px;
+        color: darkgray;
+        text-align: end;
+        margin: 4px 35px 4px 4px;
+      }
+      .user-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        position: absolute;
+        right: 0;
+        top: 18px;
+        background: #6c63ff;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+      .chat-message-user {
+        border-radius: 8px;
+        margin-bottom: 4px;
+        position: relative;
+        background-color: var(--user-bubble);
+        margin-right: 30px;
+      }
+      .chat-message-content {
+        padding: 6px 15px;
+        word-wrap: break-word;
+        overflow-x: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px var(--shadow);
+      }
+      .chat-message-user-text {
+        font-family: Consolas, monospace;
+        font-size: 13px;
+      }
+
+      /* agent bubble scaffolding (approximates chat-ui) */
+      .chat-message-container-agent {
+        width: 100%;
+        position: relative;
+      }
+      .chat-timestamp-agent {
+        font-size: 10px;
+        color: darkgray;
+        margin: 4px 4px 4px 34px;
+      }
+      .chat-message-agent {
+        position: relative;
+        left: 30px;
+        margin-right: 60px;
+        background-color: var(--agent-bubble);
+        border-radius: 8px;
+        margin-bottom: 4px;
+      }
+      .agent-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        position: absolute;
+        left: 0;
+        top: 18px;
+        background: #2e8b57;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+      .chat-message-agent:has(> .chat-message-status-rail[data-status])
+        .chat-message-content {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+
+      /* ===== copied verbatim from chat-ui/styles/chat.css ===== */
+      .chat-message-content.chat-message-explained-host {
+        position: relative;
+        padding-right: 32px;
+      }
+      .chat-message-explained {
+        position: relative;
+      }
+      .chat-message-explained-icon {
+        border: none;
+        background-color: transparent;
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        line-height: 0;
+        cursor: help;
+      }
+      .chat-message-explained[data-expl]:has(
+          .chat-message-explained-icon:hover
+        )::after {
+        content: attr(data-expl);
+        position: absolute;
+        text-align: right;
+        bottom: calc(100% + 2px);
+        right: 0;
+        white-space: nowrap;
+        color: gray;
+        background-color: lightyellow;
+        border: 1px solid black;
+        padding: 1px 5px;
+        font-size: 70%;
+        z-index: 10;
+      }
+
+      .chat-message-status-rail {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-sizing: border-box;
+        min-height: 22px;
+        padding: 1px 4px 1px 10px;
+        border-radius: 8px 8px 0 0;
+      }
+      .chat-message-status-rail[data-status] {
+        border-bottom: 1px solid rgba(127, 127, 127, 0.22);
+      }
+      .chat-message-status-rail[data-status="running"] {
+        background: rgba(31, 143, 255, 0.07);
+      }
+      .chat-message-status-rail[data-status="queued"] {
+        background: rgba(233, 168, 0, 0.09);
+      }
+      .chat-message-user:has(> .chat-message-status-rail[data-status])
+        .chat-message-content {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+      .chat-status-state-zone {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+      }
+      .chat-status-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10.5px;
+        font-weight: 500;
+        letter-spacing: 0.2px;
+        color: #7a7a7a;
+        user-select: none;
+      }
+      .chat-status-state[data-status="running"] {
+        color: rgb(58, 122, 165);
+        color: color-mix(
+          in srgb,
+          var(--vscode-charts-blue, #1f8fff) 60%,
+          var(--vscode-descriptionForeground, #7a7a7a)
+        );
+      }
+      .chat-status-state[data-status="queued"] {
+        color: rgb(150, 120, 40);
+        color: color-mix(
+          in srgb,
+          #e9a800 62%,
+          var(--vscode-descriptionForeground, #7a7a7a)
+        );
+      }
+      .chat-status-rail-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: auto;
+      }
+      .chat-status-spinner {
+        width: 9px;
+        height: 9px;
+        border: 1.5px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: chat-status-spin 0.7s linear infinite;
+        flex: none;
+      }
+      @keyframes chat-status-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .chat-status-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.7;
+        flex: none;
+      }
+      .chat-action-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        border-radius: 6px;
+        color: #8a8a8a;
+        cursor: pointer;
+        transition:
+          background 0.12s ease,
+          color 0.12s ease;
+      }
+      .chat-action-button i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .chat-action-button i svg {
+        width: 16px;
+        height: 16px;
+      }
+      .chat-action-button:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: #333;
+      }
+      .chat-message-status-rail .chat-action-button {
+        width: 22px;
+        height: 22px;
+      }
+      .chat-message-status-rail .chat-action-button i svg {
+        width: 14px;
+        height: 14px;
+      }
+      .chat-message-status-rail .chat-action-button.danger:hover {
+        background: rgba(192, 57, 43, 0.14);
+        color: #c0392b;
+      }
+
+      /* faux metrics strip (hover) */
+      .chat-message-metrics-user {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        background: var(--user-metrics);
+        border-radius: 0 0 8px 8px;
+        font-size: 10px;
+        text-align: right;
+        padding: 3px 10px;
+        color: var(--muted);
+        box-shadow: 0 2px 8px var(--shadow);
+        z-index: 5;
+      }
+      .chat-message-user:hover .chat-message-metrics-user {
+        display: block;
+      }
+      .chat-message-user:hover
+        .chat-message-content:not(
+          .chat-message-user:has(> .chat-message-status-rail) *
+        ) {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 4px;
+        align-self: flex-start;
+      }
+    </style>
+  </head>
+  <body data-theme="light">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      Toggle light / dark
+    </button>
+    <h1>chat-ui status rail — as shipped</h1>
+    <p class="subtitle">
+      Exact classes + CSS that landed. Hover a bubble for the bottom metrics
+      strip and the roadrunner tooltip. Note the semantics:
+      <strong>sent</strong> is label-only, <strong>queued</strong> has a "run
+      next" jump button + Remove (×), and the rail is removed when idle so
+      there's no empty title row.
+    </p>
+
+    <svg style="display: none" aria-hidden="true">
+      <defs>
+        <g
+          id="i-x"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="6" y1="6" x2="18" y2="18" transform="scale(0.6667)" />
+          <line x1="18" y1="6" x2="6" y2="18" transform="scale(0.6667)" />
+        </g>
+      </defs>
+    </svg>
+
+    <div class="stage">
+      <p class="caption">sent — label only (no controls)</p>
+      <div class="chat-message-container-user">
+        <div class="chat-timestamp-user">robert · 3:20:23 PM</div>
+        <div class="user-icon">R</div>
+        <div class="chat-message-user">
+          <div class="chat-message-status-rail" data-status="running">
+            <span class="chat-status-state-zone">
+              <span class="chat-status-state" data-status="running">
+                <span class="chat-status-spinner" aria-hidden="true"></span>
+                <span>sent</span>
+              </span>
+            </span>
+            <span class="chat-status-rail-controls"></span>
+          </div>
+          <div class="chat-message-content chat-message-explained-host">
+            <span class="chat-message-user-text"
+              >@collision optimize validate --workdir D:\collisions2</span
+            >
+            <i class="chat-message-explained-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="#00c000"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            </i>
+          </div>
+          <div class="chat-message-metrics-user">
+            translation 0.21s · cached
+          </div>
+        </div>
+      </div>
+
+      <p class="caption">queued — run next (»») + Remove (×)</p>
+      <div class="chat-message-container-user">
+        <div class="chat-timestamp-user">robert · 3:20:25 PM</div>
+        <div class="user-icon">R</div>
+        <div class="chat-message-user">
+          <div class="chat-message-status-rail" data-status="queued">
+            <span class="chat-status-state-zone">
+              <span class="chat-status-state" data-status="queued">
+                <span class="chat-status-dot" aria-hidden="true"></span>
+                <span>queued</span>
+              </span>
+            </span>
+            <span class="chat-status-rail-controls">
+              <button
+                class="chat-action-button chat-queue-jump-button"
+                data-action="jump-queue"
+                title="Run this next"
+              >
+                <i
+                  ><svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M5 5l7 7-7 7z" />
+                    <path d="M13 5l7 7-7 7z" /></svg
+                ></i>
+              </button>
+              <button
+                class="chat-action-button danger chat-queue-cancel-button"
+                data-action="remove-from-queue"
+                title="Remove from queue"
+              >
+                <i
+                  ><svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                    <line x1="18" y1="6" x2="6" y2="18" /></svg
+                ></i>
+              </button>
+            </span>
+          </div>
+          <div class="chat-message-content chat-message-explained-host">
+            <span class="chat-message-user-text"
+              >@collision optimize validate --workdir D:\collisions2</span
+            >
+            <i class="chat-message-explained-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="#c0c000"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            </i>
+          </div>
+          <div class="chat-message-metrics-user">
+            queued · waiting on 1 request
+          </div>
+        </div>
+      </div>
+
+      <p class="caption">idle + explained — roadrunner only, no rail</p>
+      <div class="chat-message-container-user">
+        <div class="chat-timestamp-user">robert · 3:20:30 PM</div>
+        <div class="user-icon">R</div>
+        <div
+          class="chat-message-user chat-message-explained"
+          data-expl="Translated by cache. Explained at 3:20:31 PM"
+        >
+          <div class="chat-message-content chat-message-explained-host">
+            <span class="chat-message-user-text"
+              >what's on my calendar tomorrow?</span
+            >
+            <i class="chat-message-explained-icon">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="#00c000"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            </i>
+          </div>
+          <div class="chat-message-metrics-user">
+            translation 0.18s · cached
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="caption" style="margin-top: 22px">
+      agent side — "working" rail + Stop (parity with the user rail)
+    </p>
+    <div class="stage" style="align-items: flex-start">
+      <div class="chat-message-container-agent">
+        <div class="chat-timestamp-agent">collision · 3:20:24 PM</div>
+        <div class="agent-icon">C</div>
+        <div class="chat-message-agent">
+          <div class="chat-message-status-rail" data-status="running">
+            <span class="chat-status-state-zone">
+              <span class="chat-status-state" data-status="running">
+                <span class="chat-status-spinner" aria-hidden="true"></span>
+                <span>working</span>
+              </span>
+            </span>
+            <span class="chat-status-rail-controls">
+              <button
+                class="chat-action-button danger chat-agent-stop-button"
+                data-action="stop"
+                title="Stop"
+              >
+                <i
+                  ><svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" /></svg
+                ></i>
+              </button>
+            </span>
+          </div>
+          <div class="chat-message-content">
+            Searching collisions in D:\collisions2…
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-message-container-agent">
+        <div class="chat-timestamp-agent">collision · 3:20:26 PM</div>
+        <div class="agent-icon">C</div>
+        <div class="chat-message-agent">
+          <div class="chat-message-status-rail" data-status="running">
+            <span class="chat-status-state-zone">
+              <span class="chat-status-state" data-status="running">
+                <span class="chat-status-spinner" aria-hidden="true"></span>
+                <span>thinking</span>
+              </span>
+            </span>
+            <span class="chat-status-rail-controls">
+              <button
+                class="chat-action-button danger chat-agent-stop-button"
+                data-action="stop"
+                title="Stop"
+              >
+                <i
+                  ><svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" /></svg
+                ></i>
+              </button>
+            </span>
+          </div>
+          <div class="chat-message-content">
+            Reasoning about the optimal validation order…
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function toggleTheme() {
+        const b = document.body;
+        b.dataset.theme = b.dataset.theme === "light" ? "dark" : "light";
+      }
+    </script>
+  </body>
+</html>

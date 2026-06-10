@@ -61,6 +61,8 @@ export type DispatcherInvokeFunctions = {
 
     cancelCommand(requestId: string): Promise<CancelResult>;
 
+    promoteCommand(requestId: string): Promise<boolean>;
+
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
     getDynamicDisplay(

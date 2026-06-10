@@ -328,6 +328,19 @@ export interface Dispatcher {
     cancelCommand(requestId: string): Promise<CancelResult>;
 
     /**
+     * Promote a queued command so it runs next, ahead of any other queued
+     * entries ("jump the queue"). Does not affect the currently-running
+     * request — the promoted entry runs when the running one finishes.
+     *
+     * Resolves `true` if a matching queued entry was found (and moved, or was
+     * already next); `false` for the running entry or an unknown requestId.
+     * Never rejects under normal operation.
+     *
+     * @param requestId the requestId string of the queued command to promote
+     */
+    promoteCommand(requestId: string): Promise<boolean>;
+
+    /**
      * Cancel an in-flight command using the client-assigned id that was passed
      * as the `clientRequestId` argument to `submitCommand()`.  This is the
      * early-cancel path: the client can call this immediately after

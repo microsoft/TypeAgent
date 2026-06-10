@@ -1380,6 +1380,12 @@ export function createEnhancedClientIO(
                     case "switch":
                         args = `switch "${payload.name}"`;
                         break;
+                    case "prev":
+                        args = "prev";
+                        break;
+                    case "next":
+                        args = "next";
+                        break;
                     case "delete":
                         args = `delete "${payload.name}"`;
                         break;
@@ -1387,6 +1393,11 @@ export function createEnhancedClientIO(
                         args = payload.name
                             ? `rename "${payload.name}" "${payload.newName}"`
                             : `rename "${payload.newName}"`;
+                        break;
+                    case "help":
+                        // Empty args makes handleConversationCommand call its
+                        // own printHelp().
+                        args = "";
                         break;
                     default:
                         console.error(
