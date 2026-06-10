@@ -69,6 +69,77 @@ let currentSpinner: EnhancedSpinner | null = null;
 // Wire up the debug interceptor's spinner access
 setSpinnerAccessor(() => currentSpinner);
 
+// Run the CLI inside the terminal's alternate screen buffer so the parent
+// shell is restored to its pre-CLI state on any exit path.
+
+let altScreenActive = false;
+let exitHandlerRegistered = false;
+let pendingExitMessage: string | undefined;
+
+function isInteractiveTty(): boolean {
+    return Boolean(process.stdout.isTTY && process.stdin.isTTY);
+}
+
+function enterAltScreen(): void {
+    if (altScreenActive || !isInteractiveTty()) return;
+    altScreenActive = true;
+    // Save cursor, switch to alt screen, clear it.
+    process.stdout.write("\x1b[?1049h");
+    if (!exitHandlerRegistered) {
+        exitHandlerRegistered = true;
+        process.on("exit", exitAltScreen);
+    }
+}
+
+function exitAltScreen(): void {
+    if (!altScreenActive) return;
+    altScreenActive = false;
+    try {
+        if (currentSpinner) {
+            try {
+                currentSpinner.stop();
+            } catch {
+                // ignore
+            }
+            currentSpinner = null;
+        }
+        if (terminalLayout?.isActive) {
+            try {
+                terminalLayout.cleanup();
+            } catch {
+                // ignore
+            }
+        }
+        // Reset scroll region, show cursor, leave alt screen.
+        process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
+        if (process.stdin.isTTY) {
+            try {
+                process.stdin.setRawMode(false);
+            } catch {
+                // ignore
+            }
+        }
+        if (pendingExitMessage) {
+            try {
+                process.stderr.write(pendingExitMessage + "\n");
+            } catch {
+                // ignore
+            }
+            pendingExitMessage = undefined;
+        }
+    } catch {
+        // Exit handlers must never throw.
+    }
+}
+
+/**
+ * Queue a message to be printed on the main terminal buffer after the
+ * CLI exits the alternate screen (e.g., disconnect reasons).
+ */
+export function setPendingExitMessage(message: string): void {
+    pendingExitMessage = message;
+}
+
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
@@ -1675,17 +1746,15 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
-            // Hide cursor to avoid flicker during writing
+            // Hide the cursor during redraw to avoid it visibly jumping
+            // through each drawFixed target; ANSI.showCursor below restores it.
             stdout.write(ANSI.hideCursor);
 
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
-            // drawFixed() clears each line before writing, so a separate
-            // clearFixed() pass is not needed and would cause visible
-            // flicker (blank frame between clear and redraw).  Only clear
-            // stale rows left over when the prompt shrinks (e.g. input
-            // un-wraps to fewer lines).
+            // drawFixed clears each line before writing; only clear stale
+            // rows when the prompt shrinks (input un-wraps to fewer lines).
             const prevTotal = prevInputRows + EXTRA_ROWS;
             if (totalRows < prevTotal) {
                 for (let r = totalRows; r < prevTotal; r++) {
@@ -1713,10 +1782,8 @@ async function questionWithCompletion(
                     inputLine += chalk.dim(suggestion + counter);
                 }
             }
-            // Pre-clear wrap continuation rows.  drawFixed(1, ...) only clears
-            // row 1 itself via \x1b[2K; when the input is long enough to wrap to
-            // additional visual rows, the terminal-driven wrap can cause overflow
-            // populated with stale characters from previous frames.
+            // Pre-clear wrap continuation rows; drawFixed only clears row 1,
+            // so terminal-driven wrap leaves stale chars in trailing columns.
             for (let r = 2; r <= inputRows; r++) {
                 layout.drawFixed(r, "");
             }
@@ -2230,6 +2297,10 @@ export async function withEnhancedConsoleClientIO(
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
+
+    // Run the session in the terminal's alternate screen buffer so the
+    // parent shell is restored on any exit path.
+    enterAltScreen();
 
     try {
         const dispatcherRef: { current?: Dispatcher } = {};
