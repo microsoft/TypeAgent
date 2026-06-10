@@ -4174,7 +4174,7 @@ importers:
         specifier: ^20.10.0
         version: 20.19.40
       esbuild:
-        specifier: ^0.25.0
+        specifier: ^0.25.12
         version: 0.25.12
       rimraf:
         specifier: ^6.0.1
