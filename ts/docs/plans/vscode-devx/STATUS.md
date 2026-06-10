@@ -93,19 +93,24 @@ Smallest → larger. Quality/bugfix items first, then the long pole.
 
 ## Known issues
 
-- **Collision scan can't compile grammars that import the built-in
-  `Ordinal`/`Cardinal`** (affects `player`, `browser`'s `crossword`, `code`'s
-  `workbench`). The scan reports `compile-error: Cannot compile: unknown
-  variable t` (or `__opt_v_0`). Root cause: the `agc` optimizer inlines the
-  compound number rules (e.g. `$(t:<Tens>) (\-)? $(o:<OrdinalOnes>) -> t + o`
-  in `builtInEntities.agr`) and leaves a capture variable dangling in the
-  flattened rule, which `grammar-tools-core`'s re-compilation
-  (`action-grammar/environment.ts`) rejects. The grammar **source is valid** and
-  the **dispatcher consumes these grammars fine** (it uses the precompiled
-  dispatch tables rather than re-compiling the AST); a fresh `agc` rebuild does
-  **not** fix it. This is an engine-level issue for the action-grammar /
+- **Collision scan can't compile many agents' optimized grammars**
+  (`compile-error: Cannot compile: unknown variable t` / `__opt_v_0`).
+  Confirmed-affected: `list`, `timer`, `desktop`, `github-cli`, `powershell`,
+  `visualStudio`, `player`, `browser`'s `crossword`, `code`'s `workbench`.
+  Root cause: the `agc` **optimizer** rewrites two constructs into rule
+  fragments that reference a variable not bound in the flattened rule —
+  (1) **optional groups**, emitted as `__opt_v_N`, and (2) **inlined captures**
+  from sub-rules (e.g. the built-in `Ordinal`/`Cardinal` compound number rules
+  `$(t:<Tens>) (\-)? $(o:<OrdinalOnes>) -> t + o` in `builtInEntities.agr`,
+  leaving `t` dangling). `grammar-tools-core`'s re-compilation
+  (`action-grammar/environment.ts`) rejects these. The grammar **source is
+  valid** and the **dispatcher consumes these grammars fine** (it uses the
+  precompiled dispatch tables rather than re-compiling the AST); a fresh `agc`
+  rebuild does **not** fix it. Engine-level issue for the action-grammar /
   grammar-tools owners, not a per-agent grammar defect. The Skipped view
   surfaces it honestly as a compile error.
+  - Agents that **do** scan cleanly today: `calendar`, `weather`, `ipconfig`,
+    `discord`, `vampire`, `utility`, `screencapture`, `osNotifications`.
 
 ## Build / test
 
