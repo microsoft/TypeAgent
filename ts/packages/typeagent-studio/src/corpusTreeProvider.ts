@@ -51,6 +51,15 @@ export class CorpusTreeProvider
         item.tooltip = node.tooltip;
         item.contextValue = node.contextValue;
         item.iconPath = iconForNode(node);
+        // The empty-state seed node is clickable: it creates and opens the
+        // agent's in-repo corpus file.
+        if (node.contextValue === "corpusAgentSeed" && node.agent) {
+            item.command = {
+                command: "typeagent-studio.seedInRepoCorpus",
+                title: "Seed in-repo corpus",
+                arguments: [node.agent],
+            };
+        }
         return item;
     }
 
@@ -84,6 +93,9 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "entry":
             return new vscode.ThemeIcon("comment");
         case "empty":
+            return new vscode.ThemeIcon(
+                node.contextValue === "corpusAgentSeed" ? "add" : "info",
+            );
         default:
             return new vscode.ThemeIcon("info");
     }

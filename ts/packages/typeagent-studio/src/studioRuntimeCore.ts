@@ -27,6 +27,7 @@ import {
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
+    type ExternalSourceSpec,
 } from "@typeagent/core/corpus";
 import {
     CoreFeedbackService,
@@ -222,6 +223,19 @@ export interface StudioRuntime {
     listCorpusAgents(): Promise<string[]>;
     /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
+    /**
+     * Register an external JSONL corpus source for an agent (writes
+     * `<repoRoot>/.typeagent/studio.json`). Throws if a source with the same
+     * name already exists for the agent.
+     */
+    addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void>;
+    /**
+     * Ensure an agent's in-repo corpus file exists so it can be populated.
+     * Returns its path and whether it was newly created.
+     */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
     /** Most recent events from the structured event stream, oldest-first. */
     queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
     /** Subscribe to every event as it is emitted. Returns a disposable. */
@@ -633,6 +647,12 @@ export function createStudioRuntimeCore(
         },
         async listCorpusEntries(agent) {
             return corpus.list(agent);
+        },
+        async addExternalCorpusSource(spec) {
+            await corpus.addExternalSource(spec);
+        },
+        async seedInRepoCorpus(agent) {
+            return corpus.seedInRepoCorpus(agent);
         },
         async queryRecentEvents(limit = 200) {
             const all: StudioEvent[] = [];

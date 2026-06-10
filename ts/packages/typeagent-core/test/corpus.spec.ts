@@ -447,4 +447,25 @@ describe("FileCorpusService — external sources", () => {
         );
         expect(JSON.parse(text).externalSources).toHaveLength(1);
     });
+
+    it("seedInRepoCorpus creates an empty in-repo file when absent and is idempotent", async () => {
+        const expected = path.join(
+            repoRoot,
+            "corpus",
+            "player.utterances.jsonl",
+        );
+
+        const first = await svc.seedInRepoCorpus("player");
+        expect(first.created).toBe(true);
+        expect(path.normalize(first.path)).toBe(path.normalize(expected));
+        expect(await fs.readFile(expected, "utf8")).toBe("");
+
+        // Second call must not clobber existing content.
+        await fs.writeFile(expected, '{"utterance":"hi"}\n', "utf8");
+        const second = await svc.seedInRepoCorpus("player");
+        expect(second.created).toBe(false);
+        expect(await fs.readFile(expected, "utf8")).toBe(
+            '{"utterance":"hi"}\n',
+        );
+    });
 });

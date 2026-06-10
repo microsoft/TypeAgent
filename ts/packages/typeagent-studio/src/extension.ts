@@ -11,6 +11,7 @@ import { createStudioRuntime } from "./studioRuntime.js";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
+import type { CorpusTreeNode } from "./corpusTreePresentation.js";
 import {
     FEEDBACK_CATEGORY_CHOICES,
     FEEDBACK_RATING_CHOICES,
@@ -274,8 +275,79 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.seedInRepoCorpus",
+            async (arg?: string | CorpusTreeNode) => {
+                const agent =
+                    typeof arg === "string" ? arg : (arg?.agent ?? undefined);
+                const target = agent ?? (await pickCorpusAgent(runtime));
+                if (!target) {
+                    return;
+                }
+                try {
+                    const { path: filePath, created } =
+                        await runtime.seedInRepoCorpus(target);
+                    corpusTree.refresh();
+                    const doc = await vscode.workspace.openTextDocument(
+                        vscode.Uri.file(filePath),
+                    );
+                    await vscode.window.showTextDocument(doc);
+                    vscode.window.showInformationMessage(
+                        created
+                            ? `Created in-repo corpus for ${target}. Add one JSON object per line.`
+                            : `In-repo corpus for ${target} already exists.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to seed corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.addExternalCorpus",
+            async (node?: CorpusTreeNode) => {
+                const agent = node?.agent ?? (await pickCorpusAgent(runtime));
+                if (!agent) {
+                    return;
+                }
+                const name = await vscode.window.showInputBox({
+                    title: "Add external corpus",
+                    prompt: `Name for this external source (unique per agent)`,
+                    placeHolder: "e.g. regression-set",
+                    ignoreFocusOut: true,
+                });
+                if (name === undefined || name.trim().length === 0) {
+                    return;
+                }
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Select a JSONL corpus file",
+                    canSelectMany: false,
+                    openLabel: "Add corpus",
+                    filters: { "JSONL corpus": ["jsonl"], "All files": ["*"] },
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                try {
+                    await runtime.addExternalCorpusSource({
+                        name: name.trim(),
+                        agent,
+                        kind: "jsonl-file",
+                        filePath: picked[0].fsPath,
+                    });
+                    corpusTree.refresh();
+                    vscode.window.showInformationMessage(
+                        `Added external corpus '${name.trim()}' for ${agent}.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to add external corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
-
     const statusBar = new StudioStatusBar(runtime);
     context.subscriptions.push(
         statusBar,
@@ -529,6 +601,30 @@ async function resolveSandboxId(
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Prompt the user to choose an agent that currently has a corpus view. Returns
+ * the only agent when there's just one, or undefined if there are none / the
+ * user cancels.
+ */
+async function pickCorpusAgent(
+    runtime: ReturnType<typeof createStudioRuntime>,
+): Promise<string | undefined> {
+    const agents = await runtime.listCorpusAgents();
+    if (agents.length === 0) {
+        vscode.window.showInformationMessage(
+            "No agents are loaded. Load an agent into a sandbox first.",
+        );
+        return undefined;
+    }
+    if (agents.length === 1) {
+        return agents[0];
+    }
+    return vscode.window.showQuickPick(agents, {
+        title: "Select an agent",
+        placeHolder: "Agent",
+    });
 }
 
 /**

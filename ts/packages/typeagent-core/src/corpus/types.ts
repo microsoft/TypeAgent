@@ -98,6 +98,15 @@ export interface CorpusService {
     addExternalSource(spec: ExternalSourceSpec): Promise<void>;
     removeExternalSource(agent: string, name: string): Promise<void>;
     listExternalSources(agent?: string): Promise<ExternalSourceSpec[]>;
+    /**
+     * Ensure the in-repo corpus file (`<repoRoot>/corpus/<agent>.utterances.jsonl`)
+     * exists so an author can start populating it. Creates an empty file (and
+     * its parent directory) when absent. Returns the path and whether it was
+     * newly created.
+     */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
 }
 
 /** Thrown when promotion references ids not found in captures. */

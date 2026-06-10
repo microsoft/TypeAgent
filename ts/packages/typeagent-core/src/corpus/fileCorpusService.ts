@@ -190,6 +190,20 @@ export class FileCorpusService implements CorpusService {
         return agent ? all.filter((s) => s.agent === agent) : all;
     }
 
+    async seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }> {
+        const file = this.inRepoFile(agent);
+        try {
+            await fs.access(file);
+            return { path: file, created: false };
+        } catch {
+            await fs.mkdir(path.dirname(file), { recursive: true });
+            await fs.writeFile(file, "", "utf8");
+            return { path: file, created: true };
+        }
+    }
+
     /* ---------------------------------------------------------------- */
     /* internal                                                          */
     /* ---------------------------------------------------------------- */

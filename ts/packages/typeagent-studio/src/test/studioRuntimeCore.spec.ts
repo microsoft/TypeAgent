@@ -773,6 +773,12 @@ class StubCorpusService implements CorpusService {
     async listExternalSources() {
         return [];
     }
+    async seedInRepoCorpus(agent: string) {
+        return {
+            path: `mem://corpus/${agent}.utterances.jsonl`,
+            created: true,
+        };
+    }
 }
 
 function corpusEntry(id: string, expectedAction?: unknown): CorpusEntry {

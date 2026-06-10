@@ -57,11 +57,12 @@ test("buildCorpusSourceNodes shows only present sources with counts in fixed ord
     assert.equal(nodes[0].contextValue, "corpusSource");
 });
 
-test("buildCorpusSourceNodes returns a placeholder when no entries exist", () => {
+test("buildCorpusSourceNodes returns an actionable seed node when no entries exist", () => {
     const nodes = buildCorpusSourceNodes("player", []);
     assert.equal(nodes.length, 1);
     assert.equal(nodes[0].kind, "empty");
-    assert.equal(nodes[0].label, "No corpus entries");
+    assert.equal(nodes[0].label, "Seed in-repo corpus\u2026");
+    assert.equal(nodes[0].contextValue, "corpusAgentSeed");
     assert.equal(nodes[0].agent, "player");
 });
 
