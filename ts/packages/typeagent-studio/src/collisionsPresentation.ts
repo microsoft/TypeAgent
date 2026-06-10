@@ -137,12 +137,14 @@ export function buildCollisionRows(
 
 const SKIPPED_REASON_ICON: Record<GrammarScanSkip["reason"], string> = {
     "no-grammar": "circle-outline",
+    "grammar-not-built": "tools",
     "parse-error": "warning",
     "compile-error": "error",
 };
 
 const SKIPPED_REASON_LABEL: Record<GrammarScanSkip["reason"], string> = {
     "no-grammar": "no grammar",
+    "grammar-not-built": "grammar not built",
     "parse-error": "parse error",
     "compile-error": "compile error",
 };

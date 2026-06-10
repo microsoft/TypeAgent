@@ -196,6 +196,17 @@ test("buildSkippedRows formats reason and surfaces error detail in description",
     assert.equal(rows[2].icon, "warning");
 });
 
+test("buildSkippedRows labels grammar-not-built distinctly from no-grammar", () => {
+    const rows = buildSkippedRows([
+        { schemaName: "code", agentName: "code", reason: "grammar-not-built" },
+        { schemaName: "chat", agentName: "chat", reason: "no-grammar" },
+    ]);
+    assert.equal(rows[0].description, "grammar not built");
+    assert.equal(rows[0].icon, "tools");
+    assert.equal(rows[1].description, "no grammar");
+    assert.equal(rows[1].icon, "circle-outline");
+});
+
 test("buildSkippedRows annotates sub-schemas with their owning agent", () => {
     const rows = buildSkippedRows([
         {

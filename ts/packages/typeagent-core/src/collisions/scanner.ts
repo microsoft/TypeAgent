@@ -35,7 +35,11 @@ export interface GrammarScanSkip {
     schemaName: string;
     /** Owning agent package, when the schema is a sub-schema of an agent. */
     agentName?: string;
-    reason: "no-grammar" | "parse-error" | "compile-error";
+    reason:
+        | "no-grammar"
+        | "grammar-not-built"
+        | "parse-error"
+        | "compile-error";
     error?: string;
 }
 
@@ -95,12 +99,18 @@ export function createRepoGrammarScanner(
 
         for (const agent of agents) {
             const packageDir = path.join(repoRoot, "packages", "agents", agent);
-            const compiled = await findAgJsonFiles(packageDir);
+            const compiled = await findFilesWithSuffix(packageDir, ".ag.json");
             if (compiled.length === 0) {
+                // Distinguish "no grammar by design" (chat-style agents with no
+                // .agr sources) from "grammar source exists but isn't built"
+                // (actionable — the agent just needs a build) so the Skipped
+                // view can point the user at the right fix.
+                const hasSource =
+                    (await findFilesWithSuffix(packageDir, ".agr")).length > 0;
                 skipped.push({
                     schemaName: agent,
                     agentName: agent,
-                    reason: "no-grammar",
+                    reason: hasSource ? "grammar-not-built" : "no-grammar",
                 });
                 continue;
             }
@@ -200,7 +210,10 @@ async function resolveGrammarSource(agJsonFile: string): Promise<string> {
  * skipping heavy/irrelevant folders. Compiled grammars are emitted to each
  * agent's build output (`dist/`), so a recursive walk is required.
  */
-async function findAgJsonFiles(dir: string): Promise<string[]> {
+async function findFilesWithSuffix(
+    dir: string,
+    suffix: string,
+): Promise<string[]> {
     let entries: Dirent[];
     try {
         entries = await readdir(dir, { withFileTypes: true });
@@ -218,8 +231,8 @@ async function findAgJsonFiles(dir: string): Promise<string[]> {
             ) {
                 continue;
             }
-            out.push(...(await findAgJsonFiles(full)));
-        } else if (entry.isFile() && entry.name.endsWith(".ag.json")) {
+            out.push(...(await findFilesWithSuffix(full, suffix)));
+        } else if (entry.isFile() && entry.name.endsWith(suffix)) {
             out.push(full);
         }
     }
