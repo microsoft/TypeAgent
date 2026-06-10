@@ -28,55 +28,6 @@
     "watch": "node esbuild.mjs --watch"
   },
   "contributes": {
-    "configuration": {
-      "title": "TypeAgent Studio",
-      "properties": {
-        "typeagentStudio.onboarding.openSummaryAfterBatchRun": {
-          "type": "boolean",
-          "default": true,
-          "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
-        },
-        "typeagentStudio.onboarding.defaultSandboxId": {
-          "type": "string",
-          "default": "studio-default",
-          "description": "Default sandbox id used by Studio install commands."
-        },
-        "typeagentStudio.onboarding.diagnosticsDefaultFileName": {
-          "type": "string",
-          "default": "onboarding-diagnostics.md",
-          "description": "Default file name suggested by Save onboarding diagnostics bundle."
-        },
-        "typeagentStudio.onboarding.settingsSnapshotDefaultFileName": {
-          "type": "string",
-          "default": "onboarding-settings.md",
-          "description": "Default file name suggested by Save onboarding settings snapshot."
-        },
-        "typeagentStudio.onboarding.packagingHealthReportDefaultFileName": {
-          "type": "string",
-          "default": "packaging-health-report.md",
-          "description": "Default file name suggested by Save packaging health report."
-        },
-        "typeagentStudio.onboarding.onboardingSummaryDefaultFileName": {
-          "type": "string",
-          "default": "onboarding-summary.md",
-          "description": "Default file name suggested by Save onboarding summary."
-        },
-        "typeagentStudio.onboarding.onboardingHealthSnapshotDefaultFileName": {
-          "type": "string",
-          "default": "onboarding-health-snapshot.md",
-          "description": "Default file name suggested by Save onboarding health snapshot."
-        },
-        "typeagentStudio.onboarding.installHealthGatePolicy": {
-          "type": "string",
-          "enum": [
-            "enforce",
-            "warn"
-          ],
-          "default": "enforce",
-          "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
-        }
-      }
-    },
     "commands": [
       {
         "command": "typeagent-studio.hello",
@@ -258,34 +209,54 @@
         "icon": "$(search)"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "typeagentStudio",
-          "title": "TypeAgent Studio",
-          "icon": "$(beaker)"
+    "configuration": {
+      "title": "TypeAgent Studio",
+      "properties": {
+        "typeagentStudio.onboarding.openSummaryAfterBatchRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the onboarding summary document automatically after running remaining onboarding phases."
+        },
+        "typeagentStudio.onboarding.defaultSandboxId": {
+          "type": "string",
+          "default": "studio-default",
+          "description": "Default sandbox id used by Studio install commands."
+        },
+        "typeagentStudio.onboarding.diagnosticsDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-diagnostics.md",
+          "description": "Default file name suggested by Save onboarding diagnostics bundle."
+        },
+        "typeagentStudio.onboarding.settingsSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-settings.md",
+          "description": "Default file name suggested by Save onboarding settings snapshot."
+        },
+        "typeagentStudio.onboarding.packagingHealthReportDefaultFileName": {
+          "type": "string",
+          "default": "packaging-health-report.md",
+          "description": "Default file name suggested by Save packaging health report."
+        },
+        "typeagentStudio.onboarding.onboardingSummaryDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-summary.md",
+          "description": "Default file name suggested by Save onboarding summary."
+        },
+        "typeagentStudio.onboarding.onboardingHealthSnapshotDefaultFileName": {
+          "type": "string",
+          "default": "onboarding-health-snapshot.md",
+          "description": "Default file name suggested by Save onboarding health snapshot."
+        },
+        "typeagentStudio.onboarding.installHealthGatePolicy": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "warn"
+          ],
+          "default": "enforce",
+          "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
         }
-      ]
-    },
-    "views": {
-      "typeagentStudio": [
-        {
-          "id": "typeagentStudioSandboxes",
-          "name": "Sandboxes"
-        },
-        {
-          "id": "typeagentStudioCorpora",
-          "name": "Corpora"
-        },
-        {
-          "id": "typeagentStudioEvents",
-          "name": "Event Log"
-        },
-        {
-          "id": "typeagentStudioCollisions",
-          "name": "Collisions"
-        }
-      ]
+      }
     },
     "menus": {
       "commandPalette": [
@@ -371,6 +342,35 @@
           "command": "typeagent-studio.unloadAgent",
           "when": "view == typeagentStudioSandboxes && viewItem == sandboxAgent",
           "group": "inline@1"
+        }
+      ]
+    },
+    "views": {
+      "typeagentStudio": [
+        {
+          "id": "typeagentStudioSandboxes",
+          "name": "Sandboxes"
+        },
+        {
+          "id": "typeagentStudioCorpora",
+          "name": "Corpora"
+        },
+        {
+          "id": "typeagentStudioEvents",
+          "name": "Event Log"
+        },
+        {
+          "id": "typeagentStudioCollisions",
+          "name": "Collisions"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "typeagentStudio",
+          "title": "TypeAgent Studio",
+          "icon": "$(beaker)"
         }
       ]
     }
