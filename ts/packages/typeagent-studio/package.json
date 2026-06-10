@@ -207,6 +207,12 @@
         "title": "Scan grammars for collisions",
         "category": "TypeAgent Studio",
         "icon": "$(search)"
+      },
+      {
+        "command": "typeagent-studio.buildAgentGrammar",
+        "title": "Build grammar",
+        "category": "TypeAgent Studio",
+        "icon": "$(tools)"
       }
     ],
     "configuration": {
@@ -347,6 +353,11 @@
           "command": "typeagent-studio.unloadAgent",
           "when": "view == typeagentStudioSandboxes && viewItem == sandboxAgent",
           "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.buildAgentGrammar",
+          "when": "view == typeagentStudioCollisions && viewItem == studioCollisionSkippedBuildable",
+          "group": "inline@0"
         }
       ]
     },
@@ -417,7 +428,8 @@
     "onCommand:typeagent-studio.clearEvents",
     "onCommand:typeagent-studio.refreshCollisions",
     "onCommand:typeagent-studio.clearCollisions",
-    "onCommand:typeagent-studio.scanCollisions"
+    "onCommand:typeagent-studio.scanCollisions",
+    "onCommand:typeagent-studio.buildAgentGrammar"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

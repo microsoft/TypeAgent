@@ -40,6 +40,12 @@ export interface GrammarScanSkip {
         | "grammar-not-built"
         | "parse-error"
         | "compile-error";
+    /**
+     * For `grammar-not-built`: whether the agent has a grammar-compile script
+     * (`agc` / `agc:all`) so the grammar can actually be built. When false, the
+     * agent ships `.agr` source with no build step to compile it.
+     */
+    compilable?: boolean;
     error?: string;
 }
 
@@ -102,16 +108,25 @@ export function createRepoGrammarScanner(
             const compiled = await findFilesWithSuffix(packageDir, ".ag.json");
             if (compiled.length === 0) {
                 // Distinguish "no grammar by design" (chat-style agents with no
-                // .agr sources) from "grammar source exists but isn't built"
-                // (actionable — the agent just needs a build) so the Skipped
-                // view can point the user at the right fix.
+                // .agr sources) from "grammar source exists but isn't built".
+                // For the latter, also report whether a grammar-compile script
+                // exists so the UI only offers a build when one can succeed.
                 const hasSource =
                     (await findFilesWithSuffix(packageDir, ".agr")).length > 0;
-                skipped.push({
-                    schemaName: agent,
-                    agentName: agent,
-                    reason: hasSource ? "grammar-not-built" : "no-grammar",
-                });
+                if (!hasSource) {
+                    skipped.push({
+                        schemaName: agent,
+                        agentName: agent,
+                        reason: "no-grammar",
+                    });
+                } else {
+                    skipped.push({
+                        schemaName: agent,
+                        agentName: agent,
+                        reason: "grammar-not-built",
+                        compilable: await hasGrammarCompileScript(packageDir),
+                    });
+                }
                 continue;
             }
             for (const file of compiled) {
@@ -237,4 +252,28 @@ async function findFilesWithSuffix(
         }
     }
     return out;
+}
+
+/**
+ * Whether an agent package has a grammar-compile script (`agc` or `agc:all`,
+ * or any `agc:*` variant). Used to decide whether an unbuilt grammar can
+ * actually be compiled, vs. shipping `.agr` source with no build step.
+ */
+async function hasGrammarCompileScript(packageDir: string): Promise<boolean> {
+    try {
+        const raw = await readFile(
+            path.join(packageDir, "package.json"),
+            "utf8",
+        );
+        const parsed: unknown = JSON.parse(raw);
+        const scripts = (parsed as { scripts?: unknown }).scripts;
+        if (typeof scripts !== "object" || scripts === null) {
+            return false;
+        }
+        return Object.keys(scripts).some(
+            (name) => name === "agc" || name.startsWith("agc:"),
+        );
+    } catch {
+        return false;
+    }
 }

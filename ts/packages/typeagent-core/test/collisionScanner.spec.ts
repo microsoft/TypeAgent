@@ -41,40 +41,65 @@ describe("createRepoGrammarScanner", () => {
         ]);
     });
 
-    it("distinguishes grammar-not-built (has .agr source, no compiled output) from no-grammar", async () => {
+    it("distinguishes grammar-not-built (has .agr source, no compiled output) from no-grammar, and reports compilability", async () => {
         const repoRoot = await fs.mkdtemp(
             path.join(os.tmpdir(), "collision-scan-"),
         );
         try {
-            // Agent with an authored .agr source but no compiled .ag.json.
-            const unbuilt = path.join(
-                repoRoot,
-                "packages",
-                "agents",
-                "unbuilt",
-                "src",
-            );
-            await fs.mkdir(unbuilt, { recursive: true });
+            const agentsDir = path.join(repoRoot, "packages", "agents");
+
+            // Agent with .agr source AND a grammar-compile script → buildable.
+            const buildable = path.join(agentsDir, "buildable");
+            await fs.mkdir(path.join(buildable, "src"), { recursive: true });
             await fs.writeFile(
-                path.join(unbuilt, "unbuiltSchema.agr"),
+                path.join(buildable, "src", "buildableSchema.agr"),
                 "// grammar source",
             );
-            // Agent with neither source nor compiled grammar (chat-style).
-            await fs.mkdir(
-                path.join(repoRoot, "packages", "agents", "chatlike", "src"),
-                { recursive: true },
+            await fs.writeFile(
+                path.join(buildable, "package.json"),
+                JSON.stringify({
+                    name: "buildable-agent",
+                    scripts: { "agc:all": "agc ..." },
+                }),
             );
+
+            // Agent with .agr source but NO compile script → not buildable.
+            const sourceOnly = path.join(agentsDir, "sourceonly");
+            await fs.mkdir(path.join(sourceOnly, "src"), { recursive: true });
+            await fs.writeFile(
+                path.join(sourceOnly, "src", "sourceonlySchema.agr"),
+                "// grammar source",
+            );
+            await fs.writeFile(
+                path.join(sourceOnly, "package.json"),
+                JSON.stringify({
+                    name: "sourceonly-agent",
+                    scripts: { build: "tsc -b" },
+                }),
+            );
+
+            // Agent with neither source nor compiled grammar (chat-style).
+            await fs.mkdir(path.join(agentsDir, "chatlike", "src"), {
+                recursive: true,
+            });
 
             const scanner = createRepoGrammarScanner({ repoRoot });
             const report = await scanner({
-                agents: ["unbuilt", "chatlike"],
+                agents: ["buildable", "sourceonly", "chatlike"],
             });
 
             expect(report.skipped).toEqual([
                 {
-                    schemaName: "unbuilt",
-                    agentName: "unbuilt",
+                    schemaName: "buildable",
+                    agentName: "buildable",
                     reason: "grammar-not-built",
+                    compilable: true,
+                },
+                {
+                    schemaName: "sourceonly",
+                    agentName: "sourceonly",
+                    reason: "grammar-not-built",
+                    compilable: false,
                 },
                 {
                     schemaName: "chatlike",

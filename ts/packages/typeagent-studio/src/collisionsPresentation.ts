@@ -41,6 +41,8 @@ export interface CollisionRow {
     hasChildren: boolean;
     /** Absolute path the row opens when activated (navigable rows only). */
     openPath?: string;
+    /** Owning agent package for skipped rows (used by the build action). */
+    agentName?: string;
 }
 
 const KIND_ICON: Record<CollisionKind, string> = {
@@ -137,7 +139,7 @@ export function buildCollisionRows(
 
 const SKIPPED_REASON_ICON: Record<GrammarScanSkip["reason"], string> = {
     "no-grammar": "circle-outline",
-    "grammar-not-built": "tools",
+    "grammar-not-built": "circle-slash",
     "parse-error": "warning",
     "compile-error": "error",
 };
@@ -162,11 +164,20 @@ export function buildSkippedRows(
             skip.agentName !== undefined && skip.agentName !== skip.schemaName
                 ? ` (${skip.agentName})`
                 : "";
+        // An unbuilt grammar is only buildable when the agent has a compile
+        // script; otherwise it ships .agr source with no build step and the
+        // "Build grammar" action would do nothing — so don't offer it.
+        const buildable =
+            skip.reason === "grammar-not-built" && skip.compilable === true;
+        const reasonText =
+            skip.reason === "grammar-not-built" && skip.compilable === false
+                ? "grammar source not compiled (no build step)"
+                : reasonLabel;
         const tooltipLines = [`Schema: ${skip.schemaName}`];
         if (ownerSuffix !== "") {
             tooltipLines.push(`Agent: ${skip.agentName}`);
         }
-        tooltipLines.push(`Reason: ${reasonLabel}`);
+        tooltipLines.push(`Reason: ${reasonText}`);
         if (skip.error !== undefined) {
             tooltipLines.push(`Detail: ${skip.error}`);
         }
@@ -176,12 +187,17 @@ export function buildSkippedRows(
             label: `${skip.schemaName}${ownerSuffix}`,
             description:
                 skip.error !== undefined
-                    ? `${reasonLabel} — ${skip.error}`
-                    : reasonLabel,
+                    ? `${reasonText} — ${skip.error}`
+                    : reasonText,
             tooltip: tooltipLines.join("\n"),
-            contextValue: "studioCollisionSkipped",
+            contextValue: buildable
+                ? "studioCollisionSkippedBuildable"
+                : "studioCollisionSkipped",
             icon: SKIPPED_REASON_ICON[skip.reason] ?? "circle-slash",
             hasChildren: false,
+            ...(skip.agentName !== undefined
+                ? { agentName: skip.agentName }
+                : {}),
         };
     });
 }

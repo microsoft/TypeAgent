@@ -3,6 +3,8 @@
 
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
+import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
@@ -23,6 +25,7 @@ import {
     COLLISIONS_VIEW_ID,
     CollisionsTreeProvider,
 } from "./collisionsTreeProvider.js";
+import type { CollisionRow } from "./collisionsPresentation.js";
 import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
@@ -384,6 +387,59 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.buildAgentGrammar",
+            async (row?: CollisionRow) => {
+                const agent = row?.agentName;
+                if (agent === undefined || agent.length === 0) {
+                    vscode.window.showErrorMessage(
+                        "No agent selected to build.",
+                    );
+                    return;
+                }
+                const { repoRoot, agentsDirFound } = runtime.getRepoRootInfo();
+                if (!agentsDirFound) {
+                    vscode.window.showErrorMessage(
+                        "Can't build grammar: no 'packages/agents' directory found. Open the monorepo's 'ts' folder.",
+                    );
+                    return;
+                }
+                const pkg = await readAgentPackageInfo(repoRoot, agent);
+                const packageName = pkg?.name ?? agent;
+                // Prefer a dedicated grammar-compile script; not every agent
+                // folds `agc` into its `build`, so falling straight to `build`
+                // can "succeed" without producing any compiled grammar.
+                const script = pickGrammarBuildScript(pkg?.scripts);
+                try {
+                    await vscode.window.withProgress(
+                        {
+                            location: vscode.ProgressLocation.Notification,
+                            title: `Building ${agent} grammar...`,
+                        },
+                        () => runAgentBuildTask(packageName, script, repoRoot),
+                    );
+                    const scan = await runCollisionScan();
+                    const stillUnbuilt = scan.skipped.some(
+                        (s) =>
+                            s.agentName === agent &&
+                            s.reason === "grammar-not-built",
+                    );
+                    if (stillUnbuilt) {
+                        vscode.window.showWarningMessage(
+                            `Built ${agent}, but no compiled grammar was produced. Its build may not compile grammar (no 'agc' step) — check the agent's package.json scripts.`,
+                        );
+                    } else {
+                        vscode.window.showInformationMessage(
+                            `Built ${agent} and re-scanned collisions.`,
+                        );
+                    }
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to build ${agent}: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
 
     context.subscriptions.push(
@@ -473,6 +529,110 @@ async function resolveSandboxId(
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Read an agent package's name and scripts from
+ * `packages/agents/<agent>/package.json`. Returns undefined when unreadable.
+ */
+async function readAgentPackageInfo(
+    repoRoot: string,
+    agent: string,
+): Promise<{ name?: string; scripts: Record<string, string> } | undefined> {
+    try {
+        const pkgPath = path.join(
+            repoRoot,
+            "packages",
+            "agents",
+            agent,
+            "package.json",
+        );
+        const parsed: unknown = JSON.parse(await readFile(pkgPath, "utf8"));
+        if (typeof parsed !== "object" || parsed === null) {
+            return undefined;
+        }
+        const obj = parsed as { name?: unknown; scripts?: unknown };
+        const scripts: Record<string, string> = {};
+        if (typeof obj.scripts === "object" && obj.scripts !== null) {
+            for (const [key, value] of Object.entries(obj.scripts)) {
+                if (typeof value === "string") {
+                    scripts[key] = value;
+                }
+            }
+        }
+        return {
+            ...(typeof obj.name === "string" ? { name: obj.name } : {}),
+            scripts,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Choose the npm script that compiles an agent's grammar. Prefer a dedicated
+ * `agc:all` / `agc` script; fall back to `build` (some agents fold grammar
+ * compilation into their build).
+ */
+function pickGrammarBuildScript(
+    scripts: Record<string, string> | undefined,
+): string {
+    if (scripts?.["agc:all"] !== undefined) {
+        return "agc:all";
+    }
+    if (scripts?.["agc"] !== undefined) {
+        return "agc";
+    }
+    return "build";
+}
+
+/**
+ * Run a single agent package script via a VS Code task (e.g. `agc:all` to
+ * compile its grammars). Resolves on a clean exit and rejects on a non-zero
+ * exit code or task failure.
+ */
+function runAgentBuildTask(
+    packageName: string,
+    script: string,
+    cwd: string,
+): Promise<void> {
+    const execution = new vscode.ShellExecution(
+        "pnpm",
+        ["--filter", packageName, "run", script],
+        { cwd },
+    );
+    const task = new vscode.Task(
+        { type: "typeagent-studio.buildAgentGrammar" },
+        vscode.TaskScope.Workspace,
+        `Build ${packageName}`,
+        "TypeAgent Studio",
+        execution,
+    );
+    task.presentationOptions = {
+        reveal: vscode.TaskRevealKind.Silent,
+        clear: true,
+    };
+    return new Promise<void>((resolve, reject) => {
+        const subscription = vscode.tasks.onDidEndTaskProcess((event) => {
+            if (event.execution.task !== task) {
+                return;
+            }
+            subscription.dispose();
+            if (event.exitCode === 0) {
+                resolve();
+            } else {
+                reject(
+                    new Error(
+                        `build exited with code ${event.exitCode ?? "unknown"}`,
+                    ),
+                );
+            }
+        });
+        vscode.tasks.executeTask(task).then(undefined, (error: unknown) => {
+            subscription.dispose();
+            reject(error instanceof Error ? error : new Error(String(error)));
+        });
+    });
 }
 
 export function deactivate(): void {}

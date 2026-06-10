@@ -198,13 +198,66 @@ test("buildSkippedRows formats reason and surfaces error detail in description",
 
 test("buildSkippedRows labels grammar-not-built distinctly from no-grammar", () => {
     const rows = buildSkippedRows([
-        { schemaName: "code", agentName: "code", reason: "grammar-not-built" },
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
         { schemaName: "chat", agentName: "chat", reason: "no-grammar" },
     ]);
     assert.equal(rows[0].description, "grammar not built");
-    assert.equal(rows[0].icon, "tools");
+    assert.equal(rows[0].icon, "circle-slash");
     assert.equal(rows[1].description, "no grammar");
     assert.equal(rows[1].icon, "circle-outline");
+});
+
+test("buildSkippedRows only marks grammar-not-built buildable when compilable", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
+        {
+            schemaName: "email",
+            agentName: "email",
+            reason: "grammar-not-built",
+            compilable: false,
+        },
+    ]);
+    // Compilable → buildable row with the build action.
+    assert.equal(rows[0].contextValue, "studioCollisionSkippedBuildable");
+    assert.equal(rows[0].agentName, "code");
+    assert.equal(rows[0].description, "grammar not built");
+    // Has .agr source but no compile script → not buildable, clear reason.
+    assert.equal(rows[1].contextValue, "studioCollisionSkipped");
+    assert.equal(
+        rows[1].description,
+        "grammar source not compiled (no build step)",
+    );
+});
+
+test("buildSkippedRows marks grammar-not-built rows buildable with their agent", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
+        {
+            schemaName: "player",
+            agentName: "player",
+            reason: "compile-error",
+            error: "unknown variable t",
+        },
+    ]);
+    assert.equal(rows[0].contextValue, "studioCollisionSkippedBuildable");
+    assert.equal(rows[0].agentName, "code");
+    // Non-buildable reasons keep the plain contextValue.
+    assert.equal(rows[1].contextValue, "studioCollisionSkipped");
 });
 
 test("buildSkippedRows annotates sub-schemas with their owning agent", () => {
