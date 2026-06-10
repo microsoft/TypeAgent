@@ -198,10 +198,11 @@ export interface StudioRuntime {
     };
     listSandboxes(): Promise<SandboxStatus[]>;
     /**
-     * Names of agents available to load, discovered from
-     * `<repoRoot>/packages/agents/*` (directories whose `package.json` declares
-     * the dispatcher `./agent/manifest` export). Used to offer autocomplete in
-     * the Load agent UI.
+     * Names of agents available to load. Merges the curated registry
+     * (`defaultAgentProvider/data/config.json` agent keys — what the shell
+     * loads) with `packages/agents/*` directories declaring the dispatcher
+     * `./agent/manifest` export. Used to offer autocomplete in the Load agent
+     * UI.
      */
     listAvailableAgents(): Promise<string[]>;
     startSandbox(options?: {
@@ -1030,11 +1031,50 @@ function stripAgentSuffix(agentName: string): string {
 }
 
 /**
- * Discover loadable agent names under `<repoRoot>/packages/agents`: directory
- * names whose `package.json` declares the dispatcher `./agent/manifest` export.
- * Returns a sorted list; empty when the directory can't be read.
+ * Discover loadable agent names. Merges two sources so the picker matches what
+ * the shell offers without being limited to physical directories:
+ *  1. the curated registry at
+ *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
+ *     keys — the same set the shell loads), and
+ *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
+ *     declares the dispatcher `./agent/manifest` export (catches agents not yet
+ *     in the registry, e.g. freshly scaffolded ones).
+ * Returns the sorted, de-duplicated union; empty when nothing can be read.
  */
 async function listAvailableAgentNames(repoRoot: string): Promise<string[]> {
+    const names = new Set<string>();
+    for (const name of await readConfiguredAgentNames(repoRoot)) {
+        names.add(name);
+    }
+    for (const name of await readAgentDirNames(repoRoot)) {
+        names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/** Agent keys from the defaultAgentProvider registry config. */
+async function readConfiguredAgentNames(repoRoot: string): Promise<string[]> {
+    const configPath = path.join(
+        repoRoot,
+        "packages",
+        "defaultAgentProvider",
+        "data",
+        "config.json",
+    );
+    try {
+        const parsed = JSON.parse(await fs.readFile(configPath, "utf8")) as {
+            agents?: Record<string, unknown>;
+        };
+        return parsed.agents && typeof parsed.agents === "object"
+            ? Object.keys(parsed.agents)
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Agent directory names declaring the dispatcher `./agent/manifest` export. */
+async function readAgentDirNames(repoRoot: string): Promise<string[]> {
     const agentsDir = path.join(repoRoot, "packages", "agents");
     let entries;
     try {
@@ -1064,7 +1104,7 @@ async function listAvailableAgentNames(repoRoot: string): Promise<string[]> {
             // not an agent package (no/invalid package.json) — skip
         }
     }
-    return names.sort((a, b) => a.localeCompare(b));
+    return names;
 }
 
 /**

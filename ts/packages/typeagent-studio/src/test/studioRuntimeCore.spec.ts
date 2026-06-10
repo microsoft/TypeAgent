@@ -727,7 +727,7 @@ test("startSandbox mints unique ids so multiple sandboxes can coexist", async ()
     assert.equal(named.id, "experiment-1");
 });
 
-test("listAvailableAgents discovers packages that declare the ./agent/manifest export", async () => {
+test("listAvailableAgents merges the registry config with packages/agents dirs", async () => {
     const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-agents-"));
     try {
         const agentsDir = path.join(repoRoot, "packages", "agents");
@@ -748,11 +748,31 @@ test("listAvailableAgents discovers packages that declare the ./agent/manifest e
         await mkAgent("agentUtils", false); // a lib, not an agent
         await fs.mkdir(path.join(agentsDir, "dist"), { recursive: true });
 
+        // Registry adds a curated entry with no matching dir (localPlayer) and
+        // overlaps with player (must de-dupe).
+        const dataDir = path.join(
+            repoRoot,
+            "packages",
+            "defaultAgentProvider",
+            "data",
+        );
+        await fs.mkdir(dataDir, { recursive: true });
+        await fs.writeFile(
+            path.join(dataDir, "config.json"),
+            JSON.stringify({
+                agents: {
+                    player: { name: "music" },
+                    localPlayer: { name: "music-local" },
+                },
+            }),
+        );
+
         const { context } = createContext([repoRoot]);
         const runtime = createStudioRuntimeCore(context);
 
         assert.deepEqual(await runtime.listAvailableAgents(), [
             "calendar",
+            "localPlayer",
             "player",
         ]);
     } finally {
