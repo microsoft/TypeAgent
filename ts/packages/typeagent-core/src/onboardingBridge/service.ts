@@ -50,7 +50,8 @@ export class InMemoryOnboardingBridge implements OnboardingBridge {
         this.now = opts.now ?? Date.now;
         this.createSessionId =
             opts.createSessionId ??
-            (() => `onb-${this.now().toString(36)}-${randomUUID().slice(0, 8)}`);
+            (() =>
+                `onb-${this.now().toString(36)}-${randomUUID().slice(0, 8)}`);
         this.phaseRunner =
             opts.phaseRunner ??
             (async (_session, phase, inputs) => ({
