@@ -5715,7 +5715,7 @@ importers:
         specifier: ^3.2.1
         version: 3.4.0
       esbuild:
-        specifier: ^0.25.0
+        specifier: ^0.25.12
         version: 0.25.12
       mkdirp:
         specifier: ^3.0.1
