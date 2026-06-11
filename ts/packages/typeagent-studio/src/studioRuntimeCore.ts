@@ -322,6 +322,13 @@ export interface StudioRuntimeContext {
     workspaceState: StudioWorkspaceState;
     globalStorageFsPath: string;
     workspaceFolderFsPaths?: string[];
+    /**
+     * Additional directories that contain agent subdirectories (peer to
+     * `packages/agents`), from the `typeagentStudio.agentSearchPaths` setting.
+     * Relative entries are resolved against the detected repo root. The repo's
+     * own `packages/agents` is always included as the first root.
+     */
+    agentSearchPaths?: string[];
 }
 
 export interface CreateStudioRuntimeOptions {
@@ -379,11 +386,19 @@ export function createStudioRuntimeCore(
         context.globalStorageFsPath,
     );
     const repoRoot = repoRootResolution.repoRoot;
+    // Agent roots: the repo's own packages/agents first, then any configured
+    // search paths (relative entries resolved against the repo root).
+    const agentRoots = [
+        path.join(repoRoot, "packages", "agents"),
+        ...(context.agentSearchPaths ?? []).map((p) =>
+            path.isAbsolute(p) ? p : path.join(repoRoot, p),
+        ),
+    ];
     const sandbox =
         options.sandbox ??
         new InMemorySandboxManager({
             emitter: events,
-            agentLoader: createRepoAgentLoader({ repoRoot }),
+            agentLoader: createRepoAgentLoader({ repoRoot, agentRoots }),
         });
     const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
     const evaluatePackagingHealthGate =
@@ -419,7 +434,8 @@ export function createStudioRuntimeCore(
         });
 
     const collisionScanner =
-        options.collisionScanner ?? createRepoGrammarScanner({ repoRoot });
+        options.collisionScanner ??
+        createRepoGrammarScanner({ repoRoot, agentRoots });
 
     // Persistence for sandbox lifecycle. The in-memory sandbox manager has no
     // durable storage of its own, so the studio runtime snapshots the live
@@ -620,7 +636,7 @@ export function createStudioRuntimeCore(
             return sandbox.list();
         },
         async listAvailableAgents() {
-            return listAvailableAgentNames(repoRoot);
+            return listAvailableAgentNames(repoRoot, agentRoots);
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so
@@ -1055,8 +1071,9 @@ function stripAgentSuffix(agentName: string): string {
  */
 async function listAvailableAgentNames(
     repoRoot: string,
+    agentRoots: string[],
 ): Promise<AvailableAgent[]> {
-    const emojiByName = await readAgentDirEmojis(repoRoot);
+    const emojiByName = await readAgentDirEmojis(agentRoots);
     const names = new Set<string>([
         ...(await readConfiguredAgentNames(repoRoot)),
         ...emojiByName.keys(),
@@ -1091,43 +1108,48 @@ async function readConfiguredAgentNames(repoRoot: string): Promise<string[]> {
 }
 
 /**
- * Map of agent directory name → manifest emoji, for `packages/agents`
+ * Map of agent directory name → manifest emoji, across all agent roots, for
  * directories declaring the dispatcher `./agent/manifest` export. The emoji is
- * undefined when the manifest has none (or can't be read).
+ * undefined when the manifest has none (or can't be read). Earlier roots win on
+ * name collisions (the repo's own `packages/agents` is first).
  */
 async function readAgentDirEmojis(
-    repoRoot: string,
+    agentRoots: string[],
 ): Promise<Map<string, string | undefined>> {
-    const agentsDir = path.join(repoRoot, "packages", "agents");
     const result = new Map<string, string | undefined>();
-    let entries;
-    try {
-        entries = await fs.readdir(agentsDir, { withFileTypes: true });
-    } catch {
-        return result;
-    }
-    for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name === "dist") {
+    for (const agentsDir of agentRoots) {
+        let entries;
+        try {
+            entries = await fs.readdir(agentsDir, { withFileTypes: true });
+        } catch {
             continue;
         }
-        const packageDir = path.join(agentsDir, entry.name);
-        try {
-            const pkg = JSON.parse(
-                await fs.readFile(
-                    path.join(packageDir, "package.json"),
-                    "utf8",
-                ),
-            ) as { exports?: Record<string, unknown> };
-            const manifestRef = resolveManifestExport(pkg.exports);
-            if (manifestRef === undefined) {
-                continue; // not a loadable agent package
+        for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name === "dist") {
+                continue;
             }
-            result.set(
-                entry.name,
-                await readManifestEmoji(packageDir, manifestRef),
-            );
-        } catch {
-            // not an agent package (no/invalid package.json) — skip
+            if (result.has(entry.name)) {
+                continue; // earlier root wins
+            }
+            const packageDir = path.join(agentsDir, entry.name);
+            try {
+                const pkg = JSON.parse(
+                    await fs.readFile(
+                        path.join(packageDir, "package.json"),
+                        "utf8",
+                    ),
+                ) as { exports?: Record<string, unknown> };
+                const manifestRef = resolveManifestExport(pkg.exports);
+                if (manifestRef === undefined) {
+                    continue; // not a loadable agent package
+                }
+                result.set(
+                    entry.name,
+                    await readManifestEmoji(packageDir, manifestRef),
+                );
+            } catch {
+                // not an agent package (no/invalid package.json) — skip
+            }
         }
     }
     return result;

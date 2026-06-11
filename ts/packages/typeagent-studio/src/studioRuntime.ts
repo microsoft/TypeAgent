@@ -15,6 +15,9 @@ export function createStudioRuntime(
         globalStorageFsPath: context.globalStorageUri.fsPath,
         workspaceFolderFsPaths:
             vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [],
+        agentSearchPaths: vscode.workspace
+            .getConfiguration("typeagentStudio")
+            .get<string[]>("agentSearchPaths", []),
     });
 }
 

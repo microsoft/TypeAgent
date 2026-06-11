@@ -15,6 +15,12 @@ import type {
 
 export interface FileHealthServiceOptions {
     repoRoot: string;
+    /**
+     * Ordered directories that contain agent subdirectories (each peer to
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. An agent
+     * is resolved by probing each root for `<root>/<agent>`.
+     */
+    agentRoots?: string[];
     loadedActionTypes?: Record<string, string[]>;
     cacheSchemaHash?: string;
 }
@@ -46,7 +52,10 @@ export class FileHealthService implements HealthService {
     }
 
     async check(agent: string): Promise<HealthFinding[]> {
-        const files = await discoverAgentFiles(this.opts.repoRoot, agent);
+        const files = await discoverAgentFiles(
+            this.opts.agentRoots ?? defaultAgentRoots(this.opts.repoRoot),
+            agent,
+        );
         const ctx: HealthContext = {
             repoRoot: this.opts.repoRoot,
             agent,
@@ -66,11 +75,39 @@ export class FileHealthService implements HealthService {
     }
 }
 
+/** Default agent root: the monorepo's `packages/agents` under `repoRoot`. */
+export function defaultAgentRoots(repoRoot: string): string[] {
+    return [path.join(repoRoot, "packages", "agents")];
+}
+
+/**
+ * Resolve an agent name to its package directory by probing each agent root in
+ * order for an existing `<root>/<agent>`. Falls back to the first root's
+ * `<root>/<agent>` (which simply won't resolve any files) so callers always get
+ * a well-formed path and report `unknown`/missing gracefully.
+ */
+export async function resolveAgentPackageDir(
+    agentRoots: string[],
+    agent: string,
+): Promise<string> {
+    for (const root of agentRoots) {
+        const candidate = path.join(root, agent);
+        try {
+            if ((await fs.stat(candidate)).isDirectory()) {
+                return candidate;
+            }
+        } catch {
+            // not here — try the next root
+        }
+    }
+    return path.join(agentRoots[0] ?? "", agent);
+}
+
 export async function discoverAgentFiles(
-    repoRoot: string,
+    agentRoots: string[],
     agent: string,
 ): Promise<AgentFileRefs> {
-    const packageDir = path.join(repoRoot, "packages", "agents", agent);
+    const packageDir = await resolveAgentPackageDir(agentRoots, agent);
     const srcDir = path.join(packageDir, "src");
     const all = await walkFiles(srcDir);
 

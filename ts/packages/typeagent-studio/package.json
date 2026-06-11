@@ -150,6 +150,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "typeagent-studio.addAgentsDirectory",
+        "title": "Add agents directory",
+        "category": "TypeAgent Studio",
+        "icon": "$(new-folder)"
+      },
+      {
         "command": "typeagent-studio.unloadAgent",
         "title": "Unload agent",
         "category": "TypeAgent Studio",
@@ -278,6 +284,14 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically re-scan grammars for collisions when agents are loaded or unloaded in a sandbox, keeping the Collisions view current without a manual scan."
+        },
+        "typeagentStudio.agentSearchPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional directories that contain agent subdirectories (peer to 'packages/agents') to discover and load agents from — e.g. a sibling 'agents' directory in another repo or submodule. Relative paths are resolved against the detected repo root. The repo's own 'packages/agents' is always included."
         }
       }
     },
@@ -446,6 +460,7 @@
     "onCommand:typeagent-studio.stopSandbox",
     "onCommand:typeagent-studio.restartSandbox",
     "onCommand:typeagent-studio.loadAgent",
+    "onCommand:typeagent-studio.addAgentsDirectory",
     "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",

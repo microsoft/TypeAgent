@@ -23,12 +23,16 @@ import type { ReplayActionResolver } from "@typeagent/core/replay";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
 
-function createContext(workspaceFolderFsPaths: string[] = []) {
+function createContext(
+    workspaceFolderFsPaths: string[] = [],
+    agentSearchPaths: string[] = [],
+) {
     const store = new Map<string, unknown>();
     return {
         context: {
             globalStorageFsPath: "C:/tmp/typeagent-studio-tests",
             workspaceFolderFsPaths,
+            agentSearchPaths,
             workspaceState: {
                 get<T>(key: string): T | undefined {
                     return store.get(key) as T | undefined;
@@ -810,6 +814,52 @@ test("listAvailableAgents merges the registry config with packages/agents dirs a
             { name: "calendar", emoji: "📅" },
             { name: "localPlayer" }, // registry-only, no dir → no emoji
             { name: "player", emoji: "🎵" },
+        ]);
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("listAvailableAgents includes agents from configured agentSearchPaths", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-roots-"));
+    try {
+        const mkAgentAt = async (dir: string, name: string, emoji: string) => {
+            const pkgDir = path.join(dir, name);
+            await fs.mkdir(path.join(pkgDir, "src"), { recursive: true });
+            await fs.writeFile(
+                path.join(pkgDir, "package.json"),
+                JSON.stringify({
+                    name,
+                    exports: { "./agent/manifest": "./src/m.json" },
+                }),
+            );
+            await fs.writeFile(
+                path.join(pkgDir, "src", "m.json"),
+                JSON.stringify({ emojiChar: emoji }),
+            );
+        };
+        // One agent in the repo's own packages/agents, one in a sibling dir.
+        await mkAgentAt(
+            path.join(repoRoot, "packages", "agents"),
+            "player",
+            "🎵",
+        );
+        await mkAgentAt(
+            path.join(repoRoot, "external", "agents"),
+            "secret",
+            "🕵",
+        );
+
+        // Relative search path, resolved against the repo root.
+        const { context } = createContext(
+            [repoRoot],
+            [path.join("external", "agents")],
+        );
+        const runtime = createStudioRuntimeCore(context);
+
+        assert.deepEqual(await runtime.listAvailableAgents(), [
+            { name: "player", emoji: "🎵" },
+            { name: "secret", emoji: "🕵" },
         ]);
     } finally {
         await fs.rm(repoRoot, { recursive: true, force: true });

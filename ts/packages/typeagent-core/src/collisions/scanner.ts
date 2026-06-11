@@ -24,6 +24,7 @@ import {
     type CollisionRecord,
     type SchemaInput,
 } from "grammar-tools-core";
+import { defaultAgentRoots, resolveAgentPackageDir } from "../health/index.js";
 import type { GrammarToolCollisionLike } from "./types.js";
 
 export interface GrammarScanRequest {
@@ -69,6 +70,12 @@ export type GrammarCollisionScanner = (
 export interface RepoGrammarScannerOptions {
     /** Repository root that contains `packages/agents/<name>`. */
     repoRoot: string;
+    /**
+     * Ordered directories that contain agent subdirectories (each peer to
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. An agent
+     * is resolved by probing each root.
+     */
+    agentRoots?: string[];
 }
 
 /**
@@ -89,6 +96,7 @@ export function createRepoGrammarScanner(
     options: RepoGrammarScannerOptions,
 ): GrammarCollisionScanner {
     const { repoRoot } = options;
+    const agentRoots = options.agentRoots ?? defaultAgentRoots(repoRoot);
     let entitiesRegistered = false;
 
     return async ({ agents }) => {
@@ -104,7 +112,7 @@ export function createRepoGrammarScanner(
         const agentBySchema = new Map<string, string>();
 
         for (const agent of agents) {
-            const packageDir = path.join(repoRoot, "packages", "agents", agent);
+            const packageDir = await resolveAgentPackageDir(agentRoots, agent);
             const compiled = await findFilesWithSuffix(packageDir, ".ag.json");
             if (compiled.length === 0) {
                 // Distinguish "no grammar by design" (chat-style agents with no

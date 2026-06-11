@@ -185,6 +185,12 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!agentRef) {
                     return;
                 }
+                if (agentRef === ADD_AGENTS_DIR_SENTINEL) {
+                    await vscode.commands.executeCommand(
+                        "typeagent-studio.addAgentsDirectory",
+                    );
+                    return;
+                }
                 try {
                     const status = await runtime.loadSandboxAgent(
                         id,
@@ -196,6 +202,53 @@ export function activate(context: vscode.ExtensionContext): void {
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Failed to load agent: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.addAgentsDirectory",
+            async () => {
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Add agents directory",
+                    openLabel: "Add",
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                const dir = picked[0].fsPath;
+                const config =
+                    vscode.workspace.getConfiguration("typeagentStudio");
+                const current =
+                    config.get<string[]>("agentSearchPaths", []) ?? [];
+                if (current.includes(dir)) {
+                    vscode.window.showInformationMessage(
+                        `'${dir}' is already an agent search path.`,
+                    );
+                    return;
+                }
+                const target =
+                    (vscode.workspace.workspaceFolders?.length ?? 0) > 0
+                        ? vscode.ConfigurationTarget.Workspace
+                        : vscode.ConfigurationTarget.Global;
+                await config.update(
+                    "agentSearchPaths",
+                    [...current, dir],
+                    target,
+                );
+                // The runtime reads agentSearchPaths at construction, so a
+                // reload is needed for the new directory's agents to be
+                // discoverable and loadable.
+                const choice = await vscode.window.showInformationMessage(
+                    `Added '${dir}' to agent search paths. Reload the window to use it now?`,
+                    "Reload Window",
+                );
+                if (choice === "Reload Window") {
+                    await vscode.commands.executeCommand(
+                        "workbench.action.reloadWindow",
                     );
                 }
             },
@@ -664,6 +717,9 @@ function describeError(error: unknown): string {
 /** Fallback emoji for agents whose manifest declares none. */
 const DEFAULT_AGENT_EMOJI = "🔌";
 
+/** Sentinel returned by the agent picker to request adding a search directory. */
+const ADD_AGENTS_DIR_SENTINEL = "\u0000add-agents-dir";
+
 /**
  * Filterable agent picker: type-to-filter over the discovered agents (shown
  * with their manifest emoji), while still allowing a free-text reference (a
@@ -680,10 +736,17 @@ function pickAgentRef(
         qp.title = `Load agent into '${sandboxId}'`;
         qp.placeholder =
             "Pick an agent, or type a name / module specifier / path";
-        qp.items = available.map((agent) => ({
-            label: `${agent.emoji ?? DEFAULT_AGENT_EMOJI} ${agent.name}`,
-            agentName: agent.name,
-        }));
+        qp.items = [
+            {
+                label: "$(add) Add agents directory…",
+                detail: "Discover agents from another folder (saved to settings)",
+                agentName: ADD_AGENTS_DIR_SENTINEL,
+            },
+            ...available.map((agent) => ({
+                label: `${agent.emoji ?? DEFAULT_AGENT_EMOJI} ${agent.name}`,
+                agentName: agent.name,
+            })),
+        ];
         qp.ignoreFocusOut = true;
         let accepted = false;
         qp.onDidAccept(() => {

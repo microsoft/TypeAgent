@@ -111,4 +111,48 @@ describe("createRepoGrammarScanner", () => {
             await fs.rm(repoRoot, { recursive: true, force: true });
         }
     });
+
+    it("resolves agents from additional agentRoots (e.g. a sibling agents dir)", async () => {
+        const repoRoot = await fs.mkdtemp(
+            path.join(os.tmpdir(), "collision-scan-"),
+        );
+        try {
+            // An agent that lives OUTSIDE packages/agents — in a second root.
+            const extraRoot = path.join(repoRoot, "external", "agents");
+            const ext = path.join(extraRoot, "extagent", "src");
+            await fs.mkdir(ext, { recursive: true });
+            await fs.writeFile(
+                path.join(ext, "extagentSchema.agr"),
+                "// grammar source",
+            );
+            await fs.writeFile(
+                path.join(extraRoot, "extagent", "package.json"),
+                JSON.stringify({
+                    name: "extagent",
+                    scripts: { "agc:all": "agc ..." },
+                }),
+            );
+
+            const scanner = createRepoGrammarScanner({
+                repoRoot,
+                agentRoots: [
+                    path.join(repoRoot, "packages", "agents"),
+                    extraRoot,
+                ],
+            });
+            const report = await scanner({ agents: ["extagent"] });
+
+            // Found via the second root → reported (not "no-grammar" absent).
+            expect(report.skipped).toEqual([
+                {
+                    schemaName: "extagent",
+                    agentName: "extagent",
+                    reason: "grammar-not-built",
+                    compilable: true,
+                },
+            ]);
+        } finally {
+            await fs.rm(repoRoot, { recursive: true, force: true });
+        }
+    });
 });

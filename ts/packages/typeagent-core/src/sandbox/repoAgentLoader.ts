@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    defaultAgentRoots,
     discoverAgentFiles,
     FileHealthService,
     hashFileContents,
@@ -13,6 +14,12 @@ import type { AgentLoader, HealthStatus, SandboxAgentInfo } from "./types.js";
 export interface RepoAgentLoaderOptions {
     /** Repository root that contains `packages/agents/<name>`. */
     repoRoot: string;
+    /**
+     * Ordered directories that contain agent subdirectories (each peer to
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. An agent
+     * reference is resolved by probing each root.
+     */
+    agentRoots?: string[];
     /**
      * Health service used to assess a loaded agent. Defaults to a
      * `FileHealthService` rooted at `repoRoot`. Injectable for tests.
@@ -70,15 +77,17 @@ export function createRepoAgentLoader(
     options: RepoAgentLoaderOptions,
 ): AgentLoader {
     const { repoRoot } = options;
+    const agentRoots = options.agentRoots ?? defaultAgentRoots(repoRoot);
     const healthService =
-        options.healthService ?? new FileHealthService({ repoRoot });
+        options.healthService ??
+        new FileHealthService({ repoRoot, agentRoots });
 
     return async (
         _sandboxId: string,
         agentRef: string,
     ): Promise<Omit<SandboxAgentInfo, "loadedAt">> => {
         const name = resolveAgentName(agentRef);
-        const files = await discoverAgentFiles(repoRoot, name);
+        const files = await discoverAgentFiles(agentRoots, name);
 
         const located =
             files.manifestFile !== undefined ||
