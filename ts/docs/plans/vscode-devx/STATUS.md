@@ -100,6 +100,52 @@ Smallest → larger.
    core corpus.
 6. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report contract.
+7. **Agent-drivable surfaces** (cross-cutting; see "Interaction modes" below).
+   Publish stable typed result contracts for the headline primitives
+   (`replayCorpus` → `ActionDelta[]` + summary, health findings, collision
+   reports) and a headless entry point (CLI and/or Studio-as-MCP-host) so an
+   AI agent — not just the webview — can drive author → tune → replay → judge.
+
+## Interaction modes & agent-drivability
+
+Studio's authoring loop (author → tune schema/grammar → compare-and-replay →
+judge) can be driven three ways (see [`USER-STORY.md`](./USER-STORY.md) §5):
+
+- **A. Human-driven** — clicks through trees/webviews; optimized for judgment.
+  This is what the MVP UX targets today.
+- **B. AI-agent-driven** — an autonomous agent drives the same primitives
+  headlessly, consuming typed results as data.
+- **C. Hybrid** — human sets intent, agent does the mechanical loop, human
+  approves; needs UI _and_ callable primitives over one source of truth.
+
+**Where we are:** the architecture is **agent-ready** (the vscode-free
+`typeagent-core`, typed runtime methods, the structured event stream, and
+RPC-shaped capabilities), and the J1 entry door already reuses the platform's
+existing MCP/conversational authoring (`@typeagent create an agent for X` →
+`onboarding`). But the _new_ Studio primitives are currently only consumed
+**in-process by the extension host** — there is no headless entry point, CLI,
+MCP tool, or published JSON result contract for `replayCorpus` / health /
+collisions. The earlier plan deferred the CLI/CI form of replay and the
+"Studio as MCP host" role to post-MVP; we are **electing to treat
+agent-drivability as a first-class direction** rather than a deferred extra.
+
+**Design principle (going forward):** every Studio capability should have a
+**headless core primitive with a typed, documented result**, and the UI should
+be a thin presenter over it. This single investment serves modes A, B, and C at
+once (the webview renders the result; an agent consumes the same shape).
+
+**Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
+
+- Where does the driving agent run — in-editor (Copilot driving commands), as a
+  TypeAgent agent (conversational), or a CLI in CI? Each implies a different
+  headless surface.
+- Should `typeagent-studio` (or `typeagent-core`) expose an **MCP server** so
+  external LLM tools can drive the loop? (Previously an open question in the
+  inventory; revisit now.)
+- What is the **approval boundary** in hybrid mode (which steps an agent may do
+  autonomously vs. which require human sign-off)?
+- The **minimum machine-readable contract** for the Impact Report so an agent
+  can act before the webview exists (likely a typed `ActionDelta[]` + summary).
 
 ## Known issues
 
