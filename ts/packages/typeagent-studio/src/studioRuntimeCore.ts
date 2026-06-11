@@ -646,7 +646,7 @@ export function createStudioRuntimeCore(
             return sandbox.list();
         },
         async listAvailableAgents() {
-            return listAvailableAgentNames(repoRoot, agentRoots());
+            return listAvailableAgentNames(agentRoots());
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so
@@ -1080,41 +1080,15 @@ function stripAgentSuffix(agentName: string): string {
  * Returns the sorted, de-duplicated union; empty when nothing can be read.
  */
 async function listAvailableAgentNames(
-    repoRoot: string,
     agentRoots: string[],
 ): Promise<AvailableAgent[]> {
     const emojiByName = await readAgentDirEmojis(agentRoots);
-    const names = new Set<string>([
-        ...(await readConfiguredAgentNames(repoRoot)),
-        ...emojiByName.keys(),
-    ]);
-    return [...names]
+    return [...emojiByName.keys()]
         .sort((a, b) => a.localeCompare(b))
         .map((name) => {
             const emoji = emojiByName.get(name);
             return emoji !== undefined ? { name, emoji } : { name };
         });
-}
-
-/** Agent keys from the defaultAgentProvider registry config. */
-async function readConfiguredAgentNames(repoRoot: string): Promise<string[]> {
-    const configPath = path.join(
-        repoRoot,
-        "packages",
-        "defaultAgentProvider",
-        "data",
-        "config.json",
-    );
-    try {
-        const parsed = JSON.parse(await fs.readFile(configPath, "utf8")) as {
-            agents?: Record<string, unknown>;
-        };
-        return parsed.agents && typeof parsed.agents === "object"
-            ? Object.keys(parsed.agents)
-            : [];
-    } catch {
-        return [];
-    }
 }
 
 /**

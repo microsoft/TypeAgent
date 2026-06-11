@@ -511,55 +511,6 @@ function createRules(): HealthRule[] {
             },
         },
         {
-            id: "provider.registers",
-            description: "defaultAgentProvider config includes the agent.",
-            check: async (ctx) => {
-                const cfg = path.join(
-                    ctx.repoRoot,
-                    "packages",
-                    "defaultAgentProvider",
-                    "data",
-                    "config.json",
-                );
-                if (!(await exists(cfg))) {
-                    return [
-                        err(
-                            ctx,
-                            "provider.registers",
-                            "defaultAgentProvider config.json was not found.",
-                            cfg,
-                        ),
-                    ];
-                }
-                try {
-                    const parsed = JSON.parse(await fs.readFile(cfg, "utf8"));
-                    const agents = (parsed?.agents ?? {}) as Record<
-                        string,
-                        unknown
-                    >;
-                    return agents[ctx.agent] !== undefined
-                        ? []
-                        : [
-                              err(
-                                  ctx,
-                                  "provider.registers",
-                                  `Agent '${ctx.agent}' is not registered in defaultAgentProvider config.json.`,
-                                  cfg,
-                              ),
-                          ];
-                } catch (e) {
-                    return [
-                        err(
-                            ctx,
-                            "provider.registers",
-                            `config.json parse failed: ${(e as Error).message}`,
-                            cfg,
-                        ),
-                    ];
-                }
-            },
-        },
-        {
             id: "actions.unique.acrossLoaded",
             description: "Loaded action type names are unique across agents.",
             check: async (ctx) => {

@@ -376,7 +376,6 @@ export interface HealthService {
 | `grammar.parses`                   | error    | `.agr` file compiles.                                        |
 | `grammar.rules.targetKnownActions` | error    | every rule's target action exists in the schema.             |
 | `handler.exports.instantiate`      | error    | handler file exports `instantiate(): AppAgent`.              |
-| `provider.registers`               | error    | `defaultAgentProvider` registers the agent.                  |
 | `actions.unique.acrossLoaded`      | warning  | no duplicate action-type names across loaded sandbox agents. |
 | `cache.compatible`                 | info     | construction cache schema-hash matches current schema.       |
 

@@ -46,18 +46,6 @@ async function createAgentScaffold(
         path.join(src, `${agent}ActionHandler.ts`),
         "export function instantiate() { return {}; }\n",
     );
-
-    await write(
-        path.join(
-            repoRoot,
-            "packages",
-            "defaultAgentProvider",
-            "data",
-            "config.json",
-        ),
-        JSON.stringify({ agents: { [agent]: { name: agent } } }, null, 2) +
-            "\n",
-    );
 }
 
 describe("FileHealthService", () => {
@@ -71,7 +59,7 @@ describe("FileHealthService", () => {
         await fs.rm(repoRoot, { recursive: true, force: true });
     });
 
-    it("registers all 11 MVP rule ids", () => {
+    it("registers all 10 MVP rule ids", () => {
         const svc = new FileHealthService({ repoRoot });
         const ids = svc.rules().map((r) => r.id);
         expect(ids).toEqual([
@@ -83,7 +71,6 @@ describe("FileHealthService", () => {
             "grammar.parses",
             "grammar.rules.targetKnownActions",
             "handler.exports.instantiate",
-            "provider.registers",
             "actions.unique.acrossLoaded",
             "cache.compatible",
         ]);
@@ -252,39 +239,9 @@ describe("FileHealthService", () => {
     it("reports manifest.parses error for malformed manifest JSON", async () => {
         const src = path.join(repoRoot, "packages", "agents", "demo", "src");
         await write(path.join(src, "demoManifest.json"), "{not-json}\n");
-        await write(
-            path.join(
-                repoRoot,
-                "packages",
-                "defaultAgentProvider",
-                "data",
-                "config.json",
-            ),
-            JSON.stringify({ agents: { demo: { name: "demo" } } }, null, 2) +
-                "\n",
-        );
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("demo");
         expect(findings.some((f) => f.ruleId === "manifest.parses")).toBe(true);
-    });
-
-    it("reports provider.registers when agent is missing from default config", async () => {
-        await createAgentScaffold(repoRoot, "demo");
-        await write(
-            path.join(
-                repoRoot,
-                "packages",
-                "defaultAgentProvider",
-                "data",
-                "config.json",
-            ),
-            JSON.stringify({ agents: {} }, null, 2) + "\n",
-        );
-        const svc = new FileHealthService({ repoRoot });
-        const findings = await svc.check("demo");
-        expect(findings.some((f) => f.ruleId === "provider.registers")).toBe(
-            true,
-        );
     });
 
     it("reports actions.unique.acrossLoaded warning for duplicate action types", async () => {
