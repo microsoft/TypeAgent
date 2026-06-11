@@ -181,22 +181,36 @@ Then **D (Run/try)** and **C (Corpus)**, then **E (Validate)** once real
 two-version replay lands, then **B (Author/edit)** and finally **F
 (Orchestrate)**, which composes everything. The phasing in §7 reflects this.
 
-## 4. Architecture
+## 4. Architecture — the agent hosts the one runtime
 
-- **Reuse `@typeagent/core` directly.** The agent's handler constructs the core
-  services (`InMemorySandboxManager` + `createRepoAgentLoader`,
+> **Decision (Option B).** The Studio runtime is instantiated **once, inside this
+> agent**, in the agent-server. The `typeagent-studio` extension, the
+> `vscode-shell` canvas, an AI orchestrator (MCP), and the CLI are all
+> **clients** of it — none builds its own runtime. This is the same shape as the
+> rest of the system: `code` : `coda` :: `studio` : `typeagent-studio` (the agent
+> holds the capability + a channel; the extension is the rich client/view). See
+> [`DESIGN.md` §3.5](./DESIGN.md).
+
+- **The agent owns the runtime.** Its handler constructs the context-agnostic
+  Studio runtime from `@typeagent/core/runtime` (`createStudioRuntimeCore`),
+  which wires `InMemorySandboxManager` + `createRepoAgentLoader`,
   `FileHealthService`, `FileCorpusService`, `InProcessCollisionService`,
-  `createRepoGrammarScanner`, `replayCorpus`) — exactly what the extension's
-  runtime does, minus the VS Code context.
-- **Factor a headless runtime.** The extension's `studioRuntimeCore` already
-  contains this orchestration but is shaped around a VS Code-ish context
-  (`workspaceState`, `globalStorageFsPath`). Extract the engine wiring into a
-  context-agnostic core runtime that **both** the extension and the `studio`
-  agent consume. (This is the "split `studioRuntimeCore`" item in STATUS,
-  now with a second consumer justifying it.)
-- **Repo root / search paths.** The agent resolves its repo root the same way
-  the extension does (`resolveRepoRoot` + the planned `agentSearchPaths`), so
-  both surfaces see the same agents.
+  `createRepoGrammarScanner`, and `replayCorpus`.
+- **The shared engine is already extracted.** `@typeagent/core/runtime` is the
+  context-agnostic runtime (the former extension `studioRuntimeCore`, now in
+  core). The agent consumes it directly; the extension consumes it **only as a
+  transitional bootstrap** and migrates to driving this agent over the
+  agent-server (see §8 and the implementation plan's phasing).
+- **Typed result / event channel.** Rich clients need typed results (not chat
+  markdown) and a live event stream (health changed, replay rows, trace tail).
+  The agent exposes a structured channel for this — mirroring how the `code`
+  agent serves `coda`. Results flow client←agent; events flow agent→client.
+- **Repo root / search paths.** A single place resolves the repo root (the
+  agent), so clients never diverge. The inspect/run actions accept the target
+  explicitly where it matters (an orchestrator supplies it); the agent falls
+  back to a configured root / `TYPEAGENT_STUDIO_REPO_ROOT` / cwd. Clients that
+  know the workspace (the extension) pass it in rather than letting the agent
+  guess.
 - **State / profile.** Follow the onboarding agent's convention
   (`~/.typeagent/studio/...`) for any persisted state (e.g. replay run history),
   via an `AGENTS.md`-style `workspace.ts`.
@@ -276,10 +290,14 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 - **One agent or two?** Fold tune+validate into a single `studio` agent (simpler
   discovery) vs. separate `studio-tune` / `studio-validate` agents (smaller
   surfaces). Leaning single agent with sub-action groups, like onboarding.
-- **Sandbox sharing.** Should the `studio` agent and the extension share one
-  sandbox set, or run isolated ones? Sharing enables true hybrid (human watches
-  in the UI what the agent does); isolation is simpler. Likely: shared, keyed by
-  repo root + sandbox id.
+- **Typed result / event channel shape.** Rich clients need typed results + a
+  live event stream (§4). What's the channel — a dedicated WebSocket like
+  `code↔coda`, the dispatcher's structured `ActionResult` data, or an
+  agent-rpc/MCP streaming path? This is the main design task Option B introduces.
+- ~~**Sandbox sharing.**~~ **Resolved by Option B:** there is one runtime (in the
+  agent), so there is one sandbox set; the extension and orchestrator are clients
+  of it. Hybrid mode (human watches in the UI what the agent does) falls out for
+  free — no cross-process sandbox reconciliation needed.
 - **Where the driving orchestrator runs** (in-editor Copilot, external MCP
   client, CI) — affects auth and which actions are allow-listed autonomous.
 - **Relationship to a possible "Studio as MCP host"** (STATUS open decision):

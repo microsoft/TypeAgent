@@ -9,9 +9,15 @@ Studio: sandbox lifecycle, corpus federation, the structured event stream,
 feedback, health rules, the collision scanner, the replay engine, and the
 onboarding bridge. The `runtime/` module wires these primitives into the
 context-agnostic Studio runtime (`createStudioRuntimeCore` → `StudioRuntime`)
-that presenters drive via a host-supplied `StudioRuntimeContext`. The VS Code
-extension (`typeagent-studio`), and — by design — a future `studio` TypeAgent
-agent and any CLI/MCP entry, all consume it.
+via a host-supplied `StudioRuntimeContext`.
+
+**Where the runtime instance lives:** the runtime is hosted **once, inside the
+`studio` agent** (`packages/agents/studio`), in the agent-server. The
+`typeagent-studio` extension, the `vscode-shell` canvas, an AI orchestrator
+(MCP), and the CLI are all **clients** of that one runtime — they call the
+agent's typed actions, they do not each build a runtime. (The extension's
+in-process construction is a transitional bootstrap being migrated out.) See
+[`DESIGN.md` §3.5](../../docs/plans/vscode-devx/DESIGN.md).
 
 ## Design principle you MUST preserve — headless core, thin presenters
 

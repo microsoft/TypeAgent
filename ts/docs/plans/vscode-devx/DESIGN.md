@@ -88,13 +88,13 @@ principle before writing UI-only code.**
 
 ### 3.1 Four extensions and an agent, one shared library
 
-| Package                | Purpose                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, the `studio` agent, command-line tools, and tests all consume it.                                |
-| **`typeagent-studio`** | The main VS Code extension — the **human presenter**. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`.                                                                                                                                                                                               |
-| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                                                                                  |
-| **`vscode-shell`**     | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                                                                     |
-| **`agents/studio`**    | A first-party TypeAgent agent — the **AI / conversational presenter**. Exposes the same core primitives as typed, dispatchable actions (auto-available over MCP), so an AI orchestrator or a human in chat can drive the loop. A thin layer on `typeagent-core` (via its `runtime` module), peer to the extension. See [`STUDIO-AGENT.md`](./STUDIO-AGENT.md). |
+| Package                | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Its `runtime` module assembles these into the Studio runtime, which is **instantiated once, inside the `studio` agent** (see §3.5). The `studio` agent, command-line tools, and tests consume it directly. |
+| **`typeagent-studio`** | The bespoke VS Code extension — the **human presenter**. The activity-bar app: tree views, webviews, status bar, commands. A thin **client of the agent-server**: it drives the `studio` agent's typed actions and renders the rich UI from the results — it does **not** host the runtime. This mirrors how `coda` is the rich VS Code client of the `code` agent.                                                                                          |
+| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                                                                                                                                                                                |
+| **`vscode-shell`**     | The existing chat surface — the **generic canvas**. Connects to the agent-server and can route requests to any agent (including `studio`). Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                                                                                     |
+| **`agents/studio`**    | A first-party TypeAgent agent — the **AI / conversational presenter** and the **host of the Studio runtime** (built on `typeagent-core`) inside the agent-server. Exposes the Studio loop as typed, dispatchable actions (auto-available over MCP). Every other surface — the `typeagent-studio` UI, the `vscode-shell` canvas, an AI orchestrator, the CLI — is a **client** of this one runtime. See [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).               |
 
 Together the four VS Code packages are the "TypeAgent Studio extension pack." A user installs the
 pack; each component activates on demand.
@@ -173,45 +173,85 @@ don't build a webview when a code lens would do:
 Most capabilities show up on all three layers — a lens, a panel, a command —
 because that's how a developer naturally encounters them.
 
+### 3.5 Where the runtime runs — one runtime in the `studio` agent
+
+The §3.0 principle says capability logic is a headless core primitive with thin
+presenters. This section pins down the consequence the rest of the system
+already follows: **the Studio runtime is instantiated once, inside the `studio`
+agent in the agent-server — not separately inside each UI.**
+
+This matches how TypeAgent is built everywhere else:
+
+- **Capability = an agent in the agent-server.** Every capability (`code`,
+  `calendar`, `onboarding`, …) is an agent reached through the dispatcher.
+  Studio is no exception: the `studio` agent owns the runtime.
+- **VS Code = a thin client of the agent-server.** `vscode-shell` is the generic
+  canvas (connects via an agent-server bridge, routes to any agent). `coda` is a
+  rich, bespoke client of the `code` agent: the **`code` agent hosts a channel;
+  `coda` renders/executes**. The relationship we adopt is the direct analogue:
+
+  > **`studio` : `typeagent-studio` :: `code` : `coda`** — the agent holds the
+  > capability and a channel; the extension is the rich client/view.
+
+Concretely:
+
+- The `studio` agent constructs the runtime (`@typeagent/core/runtime`) once.
+- The `typeagent-studio` extension does **not** build its own runtime. It
+  connects to the agent-server, drives the agent's typed actions, and renders
+  the rich UI (trees, Impact Report webview, status bar) from the results.
+- An AI orchestrator (MCP), the CLI, and the `vscode-shell` canvas are peers of
+  the extension — all clients of the same single runtime, so they never diverge
+  on repo root, sandbox set, or corpus state.
+
+**The new design surface this introduces** (vs. today's chat agents, which only
+render `ActionResult` display content): the rich views need **typed results and
+an event stream**, not rendered markdown. The precedent is exactly `code↔coda` —
+an agent exposing a structured channel to its companion extension. Studio uses
+the same shape: results flow client←agent; live events (health changed, replay
+rows, trace tail) flow agent→client.
+
+> **Transitional note.** The extension today still builds an in-process runtime
+> via `createStudioRuntime`. That is a bootstrap; it is migrated to an
+> agent-server client + the typed result/event channel as the `studio` agent's
+> action surface grows (see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md) and the
+> implementation plan's phasing).
+
 ---
 
 ## 4. Architecture in a single picture
 
 ```
-   ┌──────────────── VS Code — human presenter ────────────────┐
-   │  typeagent-studio        agr-language       vscode-shell   │
-   │  trees · webviews ·      LSP · debug ·      chat ·          │
-   │  status bar              miss-cluster ·     capture-to-     │
-   │  (Sandboxes, Corpora,    code lenses        corpus          │
-   │   Impact Report, …)                                        │
-   └───────────────────────────────┬────────────────────────────┘
-                                    │
-   ┌──────── studio agent — AI / conversational presenter ───────┐
-   │  dispatchable actions, groups A–F  ·  MCP  ·  @studio …      │
-   │  (Inspect / Run / Validate / Author / Orchestrate)          │
-   └───────────────────────────────┬────────────────────────────┘
-                                    │  both are thin presenters
-                                    ▼
-        ┌────────────────────────────────────────────────────┐
-        │                   @typeagent/core                   │
-        │  sandbox · corpus · events · feedback · health ·    │
-        │  collisions · replay · onboardingBridge · runtime   │
-        └───────────────────────────┬─────────────────────────┘
-                                    │  in-memory or
-                                    │  IPC (socket / named pipe)
-                                    ▼
-                        ┌──────────────────────┐
-                        │  Sandboxed dispatcher │
-                        │  (player + others     │
-                        │  loaded under the     │
-                        │  Studio profile dir)  │
-                        └──────────────────────┘
+   Presenters (clients) ─ all drive the same runtime, none host it:
+
+   ┌─────────────────────┬────────────────────┬──────────────────────┐
+   │ typeagent-studio     │ vscode-shell        │ AI orchestrator (MCP)│
+   │ rich VS Code UI:     │ generic chat        │ · CLI                │
+   │ trees · webviews ·   │ canvas (any agent)  │                      │
+   │ status bar           │                     │                      │
+   └──────────┬───────────┴──────────┬──────────┴───────────┬──────────┘
+              │   agent-server connection (RPC + typed result/event channel)
+              ▼                       ▼                       ▼
+   ┌──────────────────────────── agent-server ─────────────────────────┐
+   │  dispatcher + agents                                              │
+   │  ┌──────────────────────── studio agent ───────────────────────┐ │
+   │  │ dispatchable actions A–F  +  the Studio runtime, built on    │ │
+   │  │ @typeagent/core: sandbox · corpus · events · feedback ·      │ │
+   │  │ health · collisions · replay · onboardingBridge              │ │
+   │  └───────────────────────────────┬──────────────────────────────┘ │
+   └──────────────────────────────────┼─────────────────────────────────┘
+                                       │  spins up (in-memory or IPC)
+                                       ▼
+                           ┌──────────────────────┐
+                           │  Sandboxed dispatcher │
+                           │  (agents under the    │
+                           │  Studio profile dir)  │
+                           └──────────────────────┘
 ```
 
-Both presenters are thin layers over the same `@typeagent/core` primitives —
-one source of truth, two surfaces. The sandboxed dispatcher runs the user's
-actual agents. The Studio profile directory is **always separate** from the
-developer's personal TypeAgent profile.
+`@typeagent/core` is the shared engine **library**; the runtime **instance**
+lives in the `studio` agent, and every presenter is a client of it (§3.5). The
+sandboxed dispatcher runs the user's actual agents. The Studio profile directory
+is **always separate** from the developer's personal TypeAgent profile.
 
 ---
 

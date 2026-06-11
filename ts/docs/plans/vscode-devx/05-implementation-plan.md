@@ -37,12 +37,14 @@ ts/
         replay/                  # F4.1
         onboardingBridge/        # F1.1 backend
         runtime/                 # S0: context-agnostic Studio runtime
-                                 #     (both presenters consume this)
+                                 #     (hosted by the studio agent; the
+                                 #      extension consumes it only as a
+                                 #      transitional bootstrap — see §3.5/§11)
         index.ts
       package.json
       tsconfig.json
 
-    typeagent-studio/            [NEW — main extension; UI presenter]
+    typeagent-studio/            [NEW — bespoke VS Code extension; UI client of the agent-server]
       src/
         extension.ts             # activation
         sandbox/                 # tree + status bar
@@ -58,10 +60,11 @@ ts/
       package.json
       tsconfig.json
 
-    agents/studio/               [NEW — agent presenter; S0+]
+    agents/studio/               [NEW — hosts the Studio runtime; AI/MCP surface]
       # depends on typeagent-core/runtime
-      # thin dispatchable/MCP presenter over the same primitives as the extension
-      # action surface catalogued in STUDIO-AGENT.md (groups A–F)
+      # constructs the ONE Studio runtime; the extension/canvas/CLI are clients
+      # dispatchable + MCP action surface catalogued in STUDIO-AGENT.md (A–F)
+      # exposes a typed result/event channel for rich clients (à la code↔coda)
 
     agr-language/                [REFACTORED]
       # depends on typeagent-core
@@ -599,13 +602,16 @@ Gate C of MVP is evaluated with `needs-explanation`. The other policies exist bu
 
 ---
 
-## 10. Presentation layer — two thin presenters
+## 10. Presentation layer — one runtime, many clients
 
-Both surfaces are **thin presenters over `typeagent-core`** (DESIGN §3.0): the
-extension UI for humans, the `studio` agent for AI / conversational / hybrid
-callers. Neither owns capability logic.
+The Studio runtime is built on `typeagent-core` and instantiated **once, inside
+the `studio` agent** in the agent-server (DESIGN §3.5). Every surface is a
+**client** of that runtime, not a second host: the `typeagent-studio` extension
+(rich human UI), the `vscode-shell` canvas (generic chat), an AI orchestrator
+(MCP), and the CLI. This is the `code` : `coda` shape — the agent owns the
+capability + a channel; the extension is the rich client/view.
 
-### 10.1 UI presenter — webview infrastructure
+### 10.1 UI client — webview infrastructure
 
 Five webviews. All share a common module:
 
@@ -623,17 +629,21 @@ Each webview:
 
 - Uses a single `Webview` instance per concept; multiple instances disallowed (open-the-existing-one behavior).
 - Persists state across reloads via `webview.setState`.
-- Communicates with the host via the `webviewKit/protocol.ts` message types; the host translates those messages into `typeagent-core` calls.
+- Communicates with the host via the `webviewKit/protocol.ts` message types; the host turns those messages into `studio`-agent action calls over the agent-server (not into an in-process runtime).
 
-**No direct dispatcher calls from inside a webview.** Always: webview → extension host → `typeagent-core` → sandbox.
+**No direct dispatcher state in the webview or the extension host.** Always:
+webview → extension host → agent-server (`studio` agent) → runtime → sandbox. The
+extension renders typed results and subscribes to the agent's event stream; it
+does not own the runtime. (The current in-process `createStudioRuntime` is a
+transitional bootstrap — see §11.)
 
-### 10.2 Agent presenter — the `studio` agent surface
+### 10.2 Agent — host of the runtime; the AI / conversational surface
 
-The `studio` agent (`packages/agents/studio/`) exposes the same primitives as
-**typed, dispatchable actions** — automatically available over MCP and
-conversationally, with no new transport code. It follows the `onboarding` agent
-template (manifest + per-group schema/grammar/handler) and constructs the
-**S0 headless runtime** rather than a VS Code context.
+The `studio` agent (`packages/agents/studio/`) **hosts the runtime** and exposes
+the Studio loop as **typed, dispatchable actions** — automatically available over
+MCP and conversationally, with no new transport code. It follows the `onboarding`
+agent template (manifest + per-group schema/handler) and constructs the
+**S0 headless runtime** (`@typeagent/core/runtime`) rather than a VS Code context.
 
 The surface is **layered by abstraction** (full catalogue in
 [STUDIO-AGENT.md](./STUDIO-AGENT.md)):
@@ -672,8 +682,11 @@ Studio MCP host in scope (locked decision Q8). The `studio` agent's actions
 become available over MCP and `list_commands` automatically by virtue of being a
 registered TypeAgent agent, the same way the `onboarding` agent's are.
 
-**No direct dispatcher state from the handler.** Always: agent action →
-`typeagent-core/runtime` → sandbox — the same path the webview host takes.
+**The agent owns the runtime; clients reach it through the dispatcher.** The
+agent's handler calls its hosted runtime directly (agent action → runtime →
+sandbox). The `typeagent-studio` webview host reaches that **same** runtime by
+calling the `studio` agent's actions over the agent-server — it does not hold a
+runtime of its own.
 
 ---
 
@@ -681,16 +694,16 @@ registered TypeAgent agent, the same way the `onboarding` agent's are.
 
 Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
-**One capability, two presenters — by P-6.** Each capability is a headless
-primitive in `typeagent-core` consumed by both presenters: the extension UI
-(tree / webview / command) and the `studio` agent action (group A–F per §10.2).
-The invariant is that **no capability is permanently UI-only or agent-only** —
-every one gets both surfaces by MVP. It does **not** mean both surfaces land in
-the same week: **read-only** agent actions (the Inspect slice S1) ride along in
-P-1 with the UI that surfaces the same primitive, at zero extra risk; the
-**mutating / sandbox-executing** agent actions (Run, Corpus, Validate, Author)
-land in P-3/P-4 behind the same approval checkpoint as the corresponding UI
-write, once those primitives and the approval model exist. The agent's own
+**One capability, one runtime, many clients — by P-6.** Each capability is a
+headless primitive in `typeagent-core`, assembled into the Studio runtime that is
+hosted **once, in the `studio` agent** (DESIGN §3.5). Every surface is a client
+of that runtime: the `studio` agent's own dispatchable actions (groups A–F per
+§10.2), the `typeagent-studio` UI, the `vscode-shell` canvas, an AI orchestrator
+(MCP), and the CLI. The invariant is that **no capability is permanently UI-only
+or agent-only** — every one is reachable as a typed action by MVP. It does **not**
+mean every surface lands the same week: **read-only** actions (the Inspect slice
+S1) ride along in P-1; the **mutating / sandbox-executing** actions (Run, Corpus,
+Validate, Author) land in P-3/P-4 behind the approval checkpoint. The agent's own
 phases **S0–S5** map onto the phases below (see the table at the end). There is
 one plan; the agent is not a separate track.
 
@@ -698,8 +711,9 @@ one plan; the agent is not a separate track.
 
 - Create `typeagent-core` package, `typeagent-studio` extension, scaffold files. No behavior.
 - Refactor `agr-language` and `vscode-shell` to import from `typeagent-core` (no consumed APIs yet — just the dependency edge). Full existing test suites must remain green.
-- **Agent (S0 — headless runtime):** extract the engine wiring out of the extension's `studioRuntimeCore` into a context-agnostic runtime in `typeagent-core/runtime/` that both presenters consume (no behavior change). Scaffold `packages/agents/studio/` (manifest, schema, handler) with no actions yet.
-- Exit: `pnpm -r build` clean; both refactored extensions load and behave identically to today; `studio` agent loads with an empty surface.
+- **Agent (S0 — headless runtime):** extract the engine wiring out of the extension's `studioRuntimeCore` into a context-agnostic runtime in `typeagent-core/runtime/` (done). Scaffold `packages/agents/studio/` (manifest, schema, handler), which **hosts** that runtime; ship the first read-only Inspect actions (done). The extension keeps its in-process runtime as a **transitional bootstrap**.
+- **Migration (Option B):** define the `studio` agent's **typed result / event channel** (the `code↔coda` analogue) and begin moving the `typeagent-studio` extension from its in-process runtime to an agent-server client of the `studio` agent. Tracked as a cross-cutting migration that completes as each UI surface's backing actions land (S1→S4); the extension must not gain _new_ in-process runtime logic.
+- Exit: `pnpm -r build` clean; refactored extensions behave identically to today; the `studio` agent loads and answers the read-only Inspect actions over the dispatcher / MCP.
 
 ### P-1 Foundations (weeks 1–4)
 

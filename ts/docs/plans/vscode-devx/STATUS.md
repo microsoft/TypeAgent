@@ -148,8 +148,26 @@ once (the webview renders the result; an agent consumes the same shape). A
 concrete vehicle for the agent surface is a new first-party **`studio` TypeAgent
 agent** — see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).
 
+**Architecture decision — where the runtime runs (Option B; decided).** The
+Studio runtime is hosted **once, in the `studio` agent** (in the agent-server),
+and every UI is a **client** of it — the same shape as the rest of the system
+(`code` : `coda` :: `studio` : `typeagent-studio`). The `typeagent-studio`
+extension does **not** host its own runtime; it drives the agent's typed actions
+and renders the results. See [`DESIGN.md` §3.5](./DESIGN.md). The extension's
+current in-process `createStudioRuntime` is a **transitional bootstrap** to be
+migrated to an agent-server client as the agent's action surface grows. The main
+new design task this introduces is the agent's **typed result / event channel**
+for rich (non-chat) clients (the `code↔coda` analogue).
+
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
+- ~~Where does the Studio **runtime** live?~~ **Resolved (Option B):** in the
+  `studio` agent; UIs are clients (see the architecture-decision note above).
+- **Typed result / event channel** for rich clients — the live design task that
+  Option B introduces: a dedicated channel (à la `code↔coda` WebSocket), the
+  dispatcher's structured `ActionResult` data, or an agent-rpc/MCP streaming
+  path? Results flow client←agent; events (health changed, replay rows, trace
+  tail) flow agent→client.
 - Where does the driving agent run — in-editor (Copilot driving commands), as a
   TypeAgent agent (conversational), or a CLI in CI? Each implies a different
   headless surface.
