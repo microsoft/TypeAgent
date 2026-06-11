@@ -159,7 +159,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!id) {
                     return;
                 }
-                const available = await runtime.listAvailableAgents();
+                // Exclude agents already loaded in this sandbox from the
+                // suggestions (loading a duplicate is a no-op / confusing).
+                const loaded = new Set(
+                    (await runtime.listSandboxes())
+                        .find((s) => s.id === id)
+                        ?.agents.map((a) => a.name) ?? [],
+                );
+                const available = (await runtime.listAvailableAgents()).filter(
+                    (a) => !loaded.has(a.name),
+                );
                 const agentRef =
                     available.length > 0
                         ? await pickAgentRef(available, id)
@@ -649,6 +658,9 @@ function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+/** Fallback emoji for agents whose manifest declares none. */
+const DEFAULT_AGENT_EMOJI = "🧩";
+
 /**
  * Filterable agent picker: type-to-filter over the discovered agents (shown
  * with their manifest emoji), while still allowing a free-text reference (a
@@ -666,7 +678,7 @@ function pickAgentRef(
         qp.placeholder =
             "Pick an agent, or type a name / module specifier / path";
         qp.items = available.map((agent) => ({
-            label: agent.emoji ? `${agent.emoji} ${agent.name}` : agent.name,
+            label: `${agent.emoji ?? DEFAULT_AGENT_EMOJI} ${agent.name}`,
             agentName: agent.name,
         }));
         qp.ignoreFocusOut = true;

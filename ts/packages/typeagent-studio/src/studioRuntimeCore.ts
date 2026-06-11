@@ -812,33 +812,37 @@ export function createStudioRuntimeCore(
                 const existing = new Set(
                     (await sandbox.list()).map((s) => s.id),
                 );
-                for (const entry of snapshot) {
-                    if (existing.has(entry.id)) {
-                        continue;
-                    }
-                    try {
-                        await sandbox.start({
-                            id: entry.id,
-                            mode: "inmemory",
-                            profileDir: path.join(
-                                context.globalStorageFsPath,
-                                "profiles",
-                                entry.id,
-                            ),
-                            agents: entry.agents,
-                        });
-                    } catch (err) {
-                        // One sandbox failing to restore (e.g. an agent that
-                        // no longer resolves) shouldn't block the rest. Log
-                        // to the extension host console; the surviving
-                        // sandboxes still come back.
-                        // eslint-disable-next-line no-console
-                        console.warn(
-                            `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
-                            err,
-                        );
-                    }
-                }
+                // Restore sandboxes in parallel; they're independent, so this
+                // avoids serializing agent loads at startup. Each entry isolates
+                // its own failure so one bad sandbox can't block the rest.
+                await Promise.all(
+                    snapshot
+                        .filter((entry) => !existing.has(entry.id))
+                        .map(async (entry) => {
+                            try {
+                                await sandbox.start({
+                                    id: entry.id,
+                                    mode: "inmemory",
+                                    profileDir: path.join(
+                                        context.globalStorageFsPath,
+                                        "profiles",
+                                        entry.id,
+                                    ),
+                                    agents: entry.agents,
+                                });
+                            } catch (err) {
+                                // One sandbox failing to restore (e.g. an agent
+                                // that no longer resolves) shouldn't block the
+                                // rest. Log to the extension host console; the
+                                // surviving sandboxes still come back.
+                                // eslint-disable-next-line no-console
+                                console.warn(
+                                    `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
+                                    err,
+                                );
+                            }
+                        }),
+                );
             } finally {
                 restoring = false;
             }
