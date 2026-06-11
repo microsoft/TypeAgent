@@ -659,7 +659,7 @@ function describeError(error: unknown): string {
 }
 
 /** Fallback emoji for agents whose manifest declares none. */
-const DEFAULT_AGENT_EMOJI = "🧩";
+const DEFAULT_AGENT_EMOJI = "🔌";
 
 /**
  * Filterable agent picker: type-to-filter over the discovered agents (shown
