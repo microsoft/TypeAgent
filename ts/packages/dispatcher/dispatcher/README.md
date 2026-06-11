@@ -418,22 +418,22 @@ Verify with `@config collision` (look for `registryFirst=on`, `enabled=on`, and 
 ask the dispatcher to remember the choice; afterward it auto-resolves silently on
 the same kind of ambiguity. Inspect and manage stored preferences with:
 
-| Command                                    | Effect                                                                 |
-| ------------------------------------------ | ---------------------------------------------------------------------- |
-| `@collision preferences` (or `… list`)     | List stored Tier-1 preferences (the default subcommand).               |
-| `@collision preferences set <args>`        | Add a preference explicitly.                                           |
-| `@collision preferences remove <key>`      | Remove one preference by key (keys shown in `list`).                   |
-| `@collision preferences clear`             | Clear all stored preferences — the card will start asking again.       |
+| Command                                | Effect                                                           |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `@collision preferences` (or `… list`) | List stored Tier-1 preferences (the default subcommand).         |
+| `@collision preferences set <args>`    | Add a preference explicitly.                                     |
+| `@collision preferences remove <key>`  | Remove one preference by key (keys shown in `list`).             |
+| `@collision preferences clear`         | Clear all stored preferences — the card will start asking again. |
 
 Related `@config collision preference` knobs:
 
-| Command                                                  | Effect                                                                                          |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `@config collision preference enabled [on\|off]`         | Enable/disable the preference-clarify strategy (Tier-1 preferences + Tier-2 registry).          |
-| `@config collision preference registry [<path>]`         | Set/show the path to `neighborhoods.json` (empty string clears it).                             |
-| `@config collision preference registryFirst [on\|off]`   | Toggle registry-first detection (scan all candidates against the registry).                     |
-| `@config collision preference source <runtime\|registry\|both>` | Which ambiguity sources feed the resolver.                                               |
-| `@config collision preference remember <prompt\|always\|never>` | Whether (and how) a user's pick is persisted as a learned preference.                     |
+| Command                                                         | Effect                                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@config collision preference enabled [on\|off]`                | Enable/disable the preference-clarify strategy (Tier-1 preferences + Tier-2 registry). |
+| `@config collision preference registry [<path>]`                | Set/show the path to `neighborhoods.json` (empty string clears it).                    |
+| `@config collision preference registryFirst [on\|off]`          | Toggle registry-first detection (scan all candidates against the registry).            |
+| `@config collision preference source <runtime\|registry\|both>` | Which ambiguity sources feed the resolver.                                             |
+| `@config collision preference remember <prompt\|always\|never>` | Whether (and how) a user's pick is persisted as a learned preference.                  |
 
 > **Note:** the dispatcher does not hot-reload. The `@config collision …` commands
 > apply live without a rebuild, but if you rebuild the dispatcher

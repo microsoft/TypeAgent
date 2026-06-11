@@ -3749,9 +3749,7 @@ export class ChatPanel {
      * fresh system container when there is no requestId or no bubble yet
      * (e.g. a bare `ClientIO.question` with no preceding displayContent).
      */
-    private choicePromptContainer(
-        requestId?: string,
-    ): AgentMessageContainer {
+    private choicePromptContainer(requestId?: string): AgentMessageContainer {
         if (requestId !== undefined) {
             const existing = this.threadContainers.get(
                 this.resolveThreadId(requestId),
