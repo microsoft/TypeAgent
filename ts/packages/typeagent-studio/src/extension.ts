@@ -762,7 +762,7 @@ function pickAgentRef(
         qp.items = [
             {
                 label: "$(add) Add agents directory…",
-                detail: "Discover agents from another folder (saved to settings)",
+                description: "Discover agents from another folder",
                 agentName: ADD_AGENTS_DIR_SENTINEL,
             },
             ...available.map((agent) => ({
