@@ -11,7 +11,10 @@ import {
     formatStudioInfo,
     formatCollisions,
 } from "../src/lib/inspect.js";
-import { resolveStudioRepoRootCandidates } from "../src/lib/runtime.js";
+import {
+    resolveStudioRepoRootCandidates,
+    getStudioRuntime,
+} from "../src/lib/runtime.js";
 
 describe("studio inspect formatters", () => {
     it("formatAgentList renders names with emoji and a count", () => {
@@ -112,5 +115,25 @@ describe("resolveStudioRepoRootCandidates", () => {
                 "/current/dir",
             ),
         ).toEqual(["/current/dir"]);
+    });
+});
+
+describe("getStudioRuntime", () => {
+    it("caches one runtime per explicit repoRoot and reuses it", () => {
+        const a1 = getStudioRuntime("/repo/alpha");
+        const a2 = getStudioRuntime("/repo/alpha");
+        const b = getStudioRuntime("/repo/beta");
+        // Same root → same cached instance; different root → distinct instance.
+        expect(a1).toBe(a2);
+        expect(a1).not.toBe(b);
+        // It points at the requested root rather than guessing.
+        expect(a1.getRepoRootInfo().repoRoot).toBe("/repo/alpha");
+        expect(b.getRepoRootInfo().repoRoot).toBe("/repo/beta");
+    });
+
+    it("falls back to the default candidates when no repoRoot is given", () => {
+        const first = getStudioRuntime();
+        const second = getStudioRuntime();
+        expect(first).toBe(second);
     });
 });

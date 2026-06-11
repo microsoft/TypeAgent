@@ -29,15 +29,16 @@ async function executeAction(
     action: TypeAgentAction<StudioActions>,
     _context: ActionContext<unknown>,
 ): Promise<ActionResult> {
-    const runtime = getStudioRuntime();
     switch (action.actionName) {
         case "listAgents": {
+            const runtime = getStudioRuntime(action.parameters?.repoRoot);
             const agents = await runtime.listAvailableAgents();
             return createActionResultFromMarkdownDisplay(
                 formatAgentList(agents),
             );
         }
         case "getStudioInfo": {
+            const runtime = getStudioRuntime(action.parameters?.repoRoot);
             const info = runtime.getRepoRootInfo();
             const agents = await runtime.listAvailableAgents();
             return createActionResultFromMarkdownDisplay(
@@ -45,6 +46,7 @@ async function executeAction(
             );
         }
         case "listCollisions": {
+            const runtime = getStudioRuntime(action.parameters?.repoRoot);
             const collisions = await runtime.listCollisions();
             return createActionResultFromMarkdownDisplay(
                 formatCollisions(collisions),

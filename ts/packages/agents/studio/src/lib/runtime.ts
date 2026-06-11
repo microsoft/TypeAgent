@@ -57,20 +57,35 @@ function studioProfileDir(): string {
     return path.join(os.homedir(), ".typeagent", "studio");
 }
 
-let cachedRuntime: StudioRuntime | undefined;
+const runtimeCache = new Map<string, StudioRuntime>();
 
 /**
- * Construct (once) the context-agnostic Studio runtime. The agent is a thin
- * presenter: it owns no capability logic, it just drives this runtime — the
- * same engine the VS Code extension drives.
+ * Get the Studio runtime for a target repository, constructing (and caching) one
+ * per resolved root. The agent does not silently bind to a single guessed root:
+ *
+ * - `repoRoot` (when provided by the caller — e.g. an orchestrator or the VS
+ *   Code client that knows the workspace) is used directly. This is the
+ *   preferred path; the agent shouldn't have to guess.
+ * - Otherwise it falls back to `resolveStudioRepoRootCandidates()`
+ *   (`TYPEAGENT_STUDIO_REPO_ROOT` → cwd).
+ *
+ * The runtime itself resolves the actual root from these candidates via
+ * `resolveRepoRoot`; `getStudioInfo` surfaces what it landed on.
  */
-export function getStudioRuntime(): StudioRuntime {
-    if (cachedRuntime === undefined) {
-        cachedRuntime = createStudioRuntimeCore({
+export function getStudioRuntime(repoRoot?: string): StudioRuntime {
+    const candidates =
+        repoRoot !== undefined && repoRoot.trim().length > 0
+            ? [repoRoot]
+            : resolveStudioRepoRootCandidates();
+    const key = candidates.join(path.delimiter);
+    let runtime = runtimeCache.get(key);
+    if (runtime === undefined) {
+        runtime = createStudioRuntimeCore({
             workspaceState: new MemoryWorkspaceState(),
             globalStorageFsPath: studioProfileDir(),
-            workspaceFolderFsPaths: resolveStudioRepoRootCandidates(),
+            workspaceFolderFsPaths: candidates,
         });
+        runtimeCache.set(key, runtime);
     }
-    return cachedRuntime;
+    return runtime;
 }

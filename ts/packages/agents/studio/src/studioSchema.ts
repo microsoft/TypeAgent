@@ -11,7 +11,13 @@ export type StudioActions =
 // manifest emoji when one is declared. Read-only.
 export type ListAgentsAction = {
     actionName: "listAgents";
-    parameters: {};
+    parameters: {
+        // Optional absolute path to the repository to inspect (its root or its
+        // `ts/` directory). Supply this when driving Studio from outside the
+        // target repo; otherwise the agent uses its configured/working
+        // directory.
+        repoRoot?: string;
+    };
 };
 
 // Report Studio's resolved environment: the repository root it is inspecting,
@@ -20,7 +26,12 @@ export type ListAgentsAction = {
 // place. Read-only.
 export type GetStudioInfoAction = {
     actionName: "getStudioInfo";
-    parameters: {};
+    parameters: {
+        // Optional absolute path to the repository to inspect (its root or its
+        // `ts/` directory). Defaults to the agent's configured/working
+        // directory.
+        repoRoot?: string;
+    };
 };
 
 // List the cross-schema grammar collisions Studio currently knows about
@@ -28,5 +39,9 @@ export type GetStudioInfoAction = {
 // until a scan has run. Read-only.
 export type ListCollisionsAction = {
     actionName: "listCollisions";
-    parameters: {};
+    parameters: {
+        // Optional absolute path to the repository whose collisions to list.
+        // Defaults to the agent's configured/working directory.
+        repoRoot?: string;
+    };
 };
