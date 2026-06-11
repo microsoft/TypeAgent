@@ -289,16 +289,25 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 - ~~**Typed result / event channel shape.**~~ **Decided (dedicated WS, the
   `code`↔`coda` pattern, with guardrails):** the `studio` agent runs its **own
-  WebSocket server** and registers the port via `SessionContext.registerPort`;
-  the `typeagent-studio` extension discovers it through the agent-server
-  `discovery` channel (`discoverPort("studio")`) and connects. The
-  **`agent-rpc` `createRpc` framing** rides on top — `invoke` for typed results
-  (e.g. `AvailableAgent[]`, `ActionDelta[]`, health findings) + a subscription
-  for events (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`).
-  That WS protocol is the **canonical typed Studio API**; `studio` actions and
-  MCP tools are thin wrappers over the **same typed runtime methods**, so it's
-  never VS-Code-only and the AI/CLI audiences get identical data;
-  `ActionResult.displayContent` is chat-summary-only.
+  WebSocket server** and registers the port via `SessionContext.registerPort`
+  (from `updateAgentContext` — there is no `SessionContext` at
+  `initializeAgentContext` time); the `typeagent-studio` extension discovers it
+  through the agent-server `discovery` channel (`discoverPort("studio")`) and
+  connects. The **`agent-rpc` `createRpc` framing** rides on top — `invoke` for
+  typed results (e.g. `AvailableAgent[]`, `ActionDelta[]`, health findings) + a
+  server→client subscription that pushes the **existing `StudioEvent` union**
+  from `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row`
+  / `replay.summary`, `feedback.recorded`, …) — reuse that type, don't invent a
+  parallel one. That WS protocol is the **canonical typed Studio API**; `studio`
+  actions and MCP tools are thin wrappers over the **same typed runtime
+  methods**, so it's never VS-Code-only and the AI/CLI audiences get identical
+  data; `ActionResult.displayContent` is chat-summary-only.
+  - _Repo scoping from day one:_ the runtime is per-workspace (cached by repo
+    root), so every `invoke` and the event subscription carry `repoRoot`, and
+    subscriptions are per-connection — repo A's window must never receive repo
+    B's events. A single shared broker port is fine because every message is
+    repo-scoped (`PortRegistrar.lookup`/`discoverPort` are last-writer-wins on
+    `(agent, role)`, so don't rely on the port to disambiguate repos).
   - _Why a dedicated WS and not an agent-server channel:_ an AppAgent only gets
     `SessionContext` — **no** `ChannelProvider`/transport handle — and only the
     agent-server's `connectionHandler` creates connection channels. So an agent

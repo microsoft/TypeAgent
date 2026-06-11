@@ -175,8 +175,10 @@ migrated to an agent-server client as the agent's action surface grows.
 `studio` agent serves a **typed service channel over its own WebSocket** — the
 proven `code`↔`coda` pattern: port registered via `registerPort`, the
 `typeagent-studio` client discovers it via `discoverPort("studio")`. On top runs
-`agent-rpc` `createRpc`: `invoke` for typed results + a subscription for events
-(`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`). That WS
+`agent-rpc` `createRpc`: `invoke` for typed results + a server→client
+subscription that pushes the existing `StudioEvent` union from
+`@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
+`replay.summary`, `feedback.recorded`, …) — reuse that type. That WS
 protocol is the **canonical typed API**; `studio` actions and MCP tools wrap the
 **same typed runtime methods**; `ActionResult.displayContent` is
 chat-summary-only. Guardrails: session/repo identity on every message, a

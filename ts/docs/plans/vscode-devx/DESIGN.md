@@ -214,10 +214,18 @@ an event stream**, not rendered markdown. The decided shape (see
 - **A typed `studio` service channel — the `studio` agent runs its own
   WebSocket server** (the proven `code`↔`coda` pattern), with the `agent-rpc`
   `createRpc` framing on top: request/response `invoke` for typed results + a
-  subscription for events (`healthChanged`, `replayRow`, `replayCompleted`,
-  `traceAppended`). The agent registers its port via `SessionContext.registerPort`;
-  the `typeagent-studio` extension discovers it via the agent-server `discovery`
-  channel (`discoverPort("studio")`) and connects as a client.
+  server→client subscription that pushes the existing `StudioEvent` union from
+  `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
+  `replay.summary`, `feedback.recorded`, …). The agent registers its port via
+  `SessionContext.registerPort` (from `updateAgentContext`, not init — there's no
+  `SessionContext` at init time); the `typeagent-studio` extension discovers it
+  via the agent-server `discovery` channel (`discoverPort("studio")`) and
+  connects as a client.
+  - _Repo scoping from day one:_ the runtime is per-workspace (cached by repo
+    root), so **every `invoke` and event subscription carries `repoRoot`** and
+    event subscriptions are per-connection — a window for repo A must never
+    receive repo B's events. (A single shared broker port is fine _because_ every
+    message is repo-scoped.)
   - _Why its own WS, not a channel on the agent-server connection:_ an AppAgent
     only receives `SessionContext` — it has **no** `ChannelProvider`/transport
     handle, and only the agent-server's `connectionHandler` creates connection
