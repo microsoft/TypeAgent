@@ -421,9 +421,23 @@ export function activate(context: vscode.ExtensionContext): void {
     const collisions = new CollisionsTreeProvider(runtime);
 
     // Shared scan flow used by both the manual command and the auto-scan
+    // Auto-scan debounce state, declared before the shared scan helper so an
+    // explicit scan can supersede a pending debounced one.
+    let autoScanTimer: ReturnType<typeof setTimeout> | undefined;
+    const AUTO_SCAN_DEBOUNCE_MS = 500;
+    const cancelPendingAutoScan = () => {
+        if (autoScanTimer !== undefined) {
+            clearTimeout(autoScanTimer);
+            autoScanTimer = undefined;
+        }
+    };
+
     // subscription: run the grammar collision scan, then push fresh results
     // and the skipped set into the tree.
     const runCollisionScan = async () => {
+        // An explicit scan makes any queued debounced auto-scan redundant
+        // (e.g. the one refreshSandboxAgent triggers after Build grammar).
+        cancelPendingAutoScan();
         const result = await runtime.scanGrammarCollisions();
         await collisions.reloadFromRuntime();
         collisions.setSkipped(result.skipped);
@@ -434,8 +448,6 @@ export function activate(context: vscode.ExtensionContext): void {
     // debounce so the Collisions view stays current without a manual click.
     // Coalesces bursts (e.g. restoring several sandboxes at activation) into a
     // single scan. Runs quietly — no progress UI or toast.
-    let autoScanTimer: ReturnType<typeof setTimeout> | undefined;
-    const AUTO_SCAN_DEBOUNCE_MS = 500;
     const scheduleAutoScan = () => {
         const enabled = vscode.workspace
             .getConfiguration("typeagentStudio.collisions")
@@ -443,9 +455,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!enabled) {
             return;
         }
-        if (autoScanTimer !== undefined) {
-            clearTimeout(autoScanTimer);
-        }
+        cancelPendingAutoScan();
         autoScanTimer = setTimeout(() => {
             autoScanTimer = undefined;
             void runCollisionScan().catch((error) => {
@@ -461,14 +471,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         collisions,
         agentLoadSubscription,
-        {
-            dispose: () => {
-                if (autoScanTimer !== undefined) {
-                    clearTimeout(autoScanTimer);
-                    autoScanTimer = undefined;
-                }
-            },
-        },
+        { dispose: cancelPendingAutoScan },
         vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
