@@ -736,6 +736,22 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  examples/snipsBench:
+    dependencies:
+      action-grammar:
+        specifier: workspace:*
+        version: link:../../packages/actionGrammar
+      chalk:
+        specifier: ^5.4.1
+        version: 5.6.2
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/viewList:
     dependencies:
       agent-dispatcher:
