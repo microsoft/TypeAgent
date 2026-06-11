@@ -618,7 +618,13 @@ export function createDispatcherFromContext(
                 // best-effort
             }
         },
-        async respondToChoice(choiceId: string, response: boolean | number[]) {
+        async respondToChoice(
+            choiceId: string,
+            response:
+                | boolean
+                | number[]
+                | { selected: number; remember: boolean },
+        ) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
                 if (!pending) {

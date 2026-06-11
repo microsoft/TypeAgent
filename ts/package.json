@@ -74,7 +74,7 @@
     "shx": "^0.4.0",
     "tsx": "^4.21.0"
   },
-  "packageManager": "pnpm@10.34.0+sha512.8736169c56fdb6e26afb5d7e2bd5f4c99cc299620d8bdc288cb354e6dd0936bd4ea62276d1a6b2de4b6e971a00a530e0e08bbeeda63da5d820118d3d7e21ff69",
+  "packageManager": "pnpm@10.34.2+sha512.9ae7e3fe477c52bbce1ddc8aa196ff243ed4b48f1ceaa7455820adfa7a48b5f57e817ed2d20e5f3c2c3646dfedba360567693e534572dccd252fb2eb8b7c044c",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"

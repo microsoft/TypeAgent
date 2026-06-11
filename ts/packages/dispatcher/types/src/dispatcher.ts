@@ -279,11 +279,12 @@ export interface Dispatcher {
     /**
      * Respond to a pending choice from an agent.
      * @param choiceId the choice ID returned from ChoiceManager.registerChoice
-     * @param response boolean for yesNo, number[] of selected indices for multiChoice
+     * @param response boolean for yesNo, number[] of selected indices for
+     *   multiChoice, or `{ selected, remember }` for pickRemember
      */
     respondToChoice(
         choiceId: string,
-        response: boolean | number[],
+        response: boolean | number[] | { selected: number; remember: boolean },
     ): Promise<CommandResult | undefined>;
 
     /**

@@ -2732,6 +2732,7 @@ export class ChatPanel {
             defaultValue?: T;
             signal?: AbortSignal;
             showMessage?: boolean;
+            requestId?: string;
         },
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
@@ -2745,7 +2746,11 @@ export class ChatPanel {
                 return;
             }
 
-            const container = this.createAgentContainer("system", "");
+            // When a requestId is supplied, append the buttons to that
+            // request's existing agent bubble (the one already showing the
+            // agent's displayContent / prompt) so the message and the choice
+            // buttons render as a single card instead of two stacked boxes.
+            const container = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -2807,6 +2812,150 @@ export class ChatPanel {
     }
 
     /**
+     * Present a single-select radio list plus a "remember this" checkbox
+     * below a system message and resolve with `{ selected, remember }`.
+     * `selected` is the chosen index, or -1 when cancelled. Maps from
+     * ClientIO.requestChoice with type "pickRemember".
+     *
+     * Set `opts.showMessage = false` to render only the panel without the
+     * prompt text — used by hosts that already display the prompt separately
+     * (the shell renders the agent's `displayContent` before requesting the
+     * choice, so repeating it here would duplicate the message).
+     */
+    public addPickRememberPrompt(
+        message: string,
+        labels: string[],
+        checkboxLabel: string,
+        opts?: {
+            signal?: AbortSignal;
+            showMessage?: boolean;
+            requestId?: string;
+        },
+    ): Promise<{ selected: number; remember: boolean }> {
+        return new Promise((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
+            // See addChoicePrompt: a requestId anchors the panel onto the
+            // request's existing agent bubble so the prompt and the pick /
+            // remember controls share one card.
+            const container = this.choicePromptContainer(opts?.requestId);
+            if (opts?.showMessage !== false) {
+                container.setMessage(
+                    { type: "text", content: message },
+                    undefined,
+                    undefined,
+                );
+            }
+
+            const panelDiv = document.createElement("div");
+            panelDiv.className = "pick-remember-panel";
+
+            // Single-select candidate radio group.
+            const radios: HTMLInputElement[] = [];
+            const groupName = `pick-remember-${Date.now()}`;
+            for (let i = 0; i < labels.length; i++) {
+                const label = document.createElement("label");
+                label.className = "pick-remember-choice";
+                const radio = document.createElement("input");
+                radio.type = "radio";
+                radio.name = groupName;
+                radio.dataset.index = String(i);
+                if (i === 0) {
+                    radio.checked = true;
+                }
+                radios.push(radio);
+                label.appendChild(radio);
+                const span = document.createElement("span");
+                span.textContent = labels[i];
+                label.appendChild(span);
+                panelDiv.appendChild(label);
+            }
+
+            // Single "remember this" checkbox.
+            const rememberLabel = document.createElement("label");
+            rememberLabel.className = "pick-remember-toggle";
+            const rememberCb = document.createElement("input");
+            rememberCb.type = "checkbox";
+            rememberLabel.appendChild(rememberCb);
+            const rememberSpan = document.createElement("span");
+            rememberSpan.textContent = checkboxLabel;
+            rememberLabel.appendChild(rememberSpan);
+            panelDiv.appendChild(rememberLabel);
+
+            const cleanup = () => {
+                panelDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
+            };
+
+            const submit = () => {
+                const picked = radios.find((r) => r.checked) ?? radios[0];
+                const selected = picked
+                    ? parseInt(picked.dataset.index!, 10)
+                    : 0;
+                const remember = rememberCb.checked;
+                cleanup();
+                resolve({ selected, remember });
+            };
+
+            const cancel = () => {
+                cleanup();
+                // -1 signals no selection / cancelled.
+                resolve({ selected: -1, remember: false });
+            };
+
+            // Allow the host to dismiss the prompt externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                reject(
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    submit();
+                } else if (e.key === "Delete") {
+                    e.preventDefault();
+                    cancel();
+                }
+            };
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "checkbox-buttons";
+
+            const confirmBtn = document.createElement("button");
+            confirmBtn.className = "choice-button";
+            confirmBtn.textContent = "Confirm (Enter)";
+            confirmBtn.addEventListener("click", () => submit());
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "choice-button";
+            cancelBtn.textContent = "Cancel (Del)";
+            cancelBtn.addEventListener("click", () => cancel());
+
+            buttonDiv.appendChild(confirmBtn);
+            buttonDiv.appendChild(cancelBtn);
+            panelDiv.appendChild(buttonDiv);
+
+            signal?.addEventListener("abort", onAbort, { once: true });
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(panelDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
      * Show a Yes/No prompt and return the user's choice.
      *
      * Set `opts.showMessage = false` to render only the Yes/No buttons
@@ -2818,10 +2967,13 @@ export class ChatPanel {
     public askYesNo(
         message: string,
         defaultValue?: boolean,
-        opts?: { showMessage?: boolean },
+        opts?: { showMessage?: boolean; requestId?: string },
     ): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
-            const container = this.createAgentContainer("system", "");
+            // See addChoicePrompt: a requestId anchors the Yes/No buttons onto
+            // the request's existing agent bubble so the prompt message and
+            // the buttons render as a single card.
+            const container = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3584,6 +3736,29 @@ export class ChatPanel {
             this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
         }
+    }
+
+    /**
+     * Pick the container that a choice prompt (Yes/No, multi-choice,
+     * pickRemember) should attach its buttons to.
+     *
+     * With a `requestId` whose agent bubble already exists, reuse it so the
+     * agent's prompt text (its `displayContent`) and the choice buttons share
+     * a single card — otherwise the buttons would land in a separate
+     * standalone "system" box stacked beneath the message. Falls back to a
+     * fresh system container when there is no requestId or no bubble yet
+     * (e.g. a bare `ClientIO.question` with no preceding displayContent).
+     */
+    private choicePromptContainer(requestId?: string): AgentMessageContainer {
+        if (requestId !== undefined) {
+            const existing = this.threadContainers.get(
+                this.resolveThreadId(requestId),
+            );
+            if (existing) {
+                return existing;
+            }
+        }
+        return this.createAgentContainer("system", "");
     }
 
     private createAgentContainer(

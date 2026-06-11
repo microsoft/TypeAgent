@@ -46,7 +46,23 @@ export type PendingMultiChoice = {
     choices: string[];
 };
 
-export type PendingChoice = PendingYesNoChoice | PendingMultiChoice;
+/**
+ * A single-select pick combined with a "remember this" checkbox. Rendered as
+ * one card: the user clicks one of `choices` and optionally checks the
+ * `checkboxLabel` box. The response is a `PickRememberResponse`.
+ */
+export type PendingPickRememberChoice = {
+    choiceId: string;
+    type: "pickRemember";
+    message: string;
+    choices: string[];
+    checkboxLabel: string;
+};
+
+export type PendingChoice =
+    | PendingYesNoChoice
+    | PendingMultiChoice
+    | PendingPickRememberChoice;
 
 export type ActionResultSuccess = {
     historyText?: string | undefined;

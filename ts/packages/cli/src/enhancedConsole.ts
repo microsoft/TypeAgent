@@ -1156,10 +1156,11 @@ export function createEnhancedClientIO(
         requestChoice(
             _requestId: RequestId,
             choiceId: string,
-            type: "yesNo" | "multiChoice",
+            type: "yesNo" | "multiChoice" | "pickRemember",
             message: string,
             choices: string[],
             source: string,
+            checkboxLabel?: string,
         ): void {
             // Set up a promise so the main loop waits before
             // showing "Complete" and the next prompt.
@@ -1183,13 +1184,46 @@ export function createEnhancedClientIO(
                     process.stdout.write("\n");
                     process.stdout.write(line + "\n");
 
-                    let response: boolean | number[];
+                    let response:
+                        | boolean
+                        | number[]
+                        | { selected: number; remember: boolean };
                     if (type === "yesNo") {
                         const prompt = `${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
                         const input = await question_internal(prompt, rl);
                         response =
                             input.toLowerCase() === "y" ||
                             input.toLowerCase() === "yes";
+                    } else if (type === "pickRemember") {
+                        // pickRemember — pick one, then ask remember.
+                        process.stdout.write(
+                            `${chalk.dim(`[${source}]`)} ${message}\n`,
+                        );
+                        for (let i = 0; i < choices.length; i++) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                            );
+                        }
+                        const pickInput = await question_internal(
+                            `${chalk.dim("Enter choice number:")} `,
+                            rl,
+                        );
+                        const selected = parseInt(pickInput.trim(), 10) - 1;
+                        let remember = false;
+                        if (
+                            !isNaN(selected) &&
+                            selected >= 0 &&
+                            selected < choices.length
+                        ) {
+                            const rememberInput = await question_internal(
+                                `${chalk.dim(`${checkboxLabel ?? "Remember this for next time"}?`)} ${chalk.dim("(y/n)")} `,
+                                rl,
+                            );
+                            remember =
+                                rememberInput.toLowerCase() === "y" ||
+                                rememberInput.toLowerCase() === "yes";
+                        }
+                        response = { selected, remember };
                     } else {
                         // multiChoice — show numbered list, accept comma-separated
                         process.stdout.write(

@@ -268,7 +268,10 @@ export type AgentInvokeFunctions = {
     handleChoice(
         param: Partial<ActionContextParams> & {
             choiceId: string;
-            response: boolean | number[];
+            response:
+                | boolean
+                | number[]
+                | { selected: number; remember: boolean };
         },
     ): Promise<ActionResult | undefined>;
     getDynamicSchema(
