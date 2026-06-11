@@ -132,7 +132,9 @@ agent-drivability as a first-class direction** rather than a deferred extra.
 **Design principle (going forward):** every Studio capability should have a
 **headless core primitive with a typed, documented result**, and the UI should
 be a thin presenter over it. This single investment serves modes A, B, and C at
-once (the webview renders the result; an agent consumes the same shape).
+once (the webview renders the result; an agent consumes the same shape). A
+concrete vehicle for the agent surface is a new first-party **`studio` TypeAgent
+agent** — see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).
 
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
