@@ -287,17 +287,37 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 ## 8. Open questions
 
+- ~~**Typed result / event channel shape.**~~ **Decided (hybrid, leaning the
+  agent-rpc path):** expose a **typed `studio` service channel over the existing
+  agent-server transport** — request/response `invoke` for typed results (e.g.
+  `AvailableAgent[]`, `ActionDelta[]`, health findings) plus a subscription for
+  events (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`),
+  using the `agent-rpc` channel pattern. **No second WebSocket/port.** `studio`
+  actions and MCP tools are thin wrappers over the **same typed runtime
+  methods**, so the channel is never VS-Code-only and the AI/CLI audiences get
+  identical data; `ActionResult.displayContent` is used only for chat
+  summaries/links.
+  - _Why not "structured data on `ActionResult`":_ `ActionResult` carries no
+    generic typed payload, and clients receive a `CommandResult` (errors /
+    executed actions / metrics / tokens), **not** the raw `ActionResult<T>` — so
+    that route is a platform change, not a Studio feature.
+  - _Why not a dedicated `code↔coda` WebSocket:_ workable and fastest to ship,
+    but it inherits port/lifecycle/ref-count machinery and (per the `code`
+    precedent) has **no session identity** — risky for Studio's per-workspace
+    repo root / sandbox set / approval scoping. Acceptable only as a fallback,
+    and only if its protocol becomes the shared typed API (not a side channel).
+- **Authorization on the service channel.** Because the agent now owns the
+  runtime, any local agent-server client could invoke it. Mutating actions must
+  stay behind `dryRun` + approval **and** an authorization check on the channel —
+  see §5.
 - **One agent or two?** Fold tune+validate into a single `studio` agent (simpler
   discovery) vs. separate `studio-tune` / `studio-validate` agents (smaller
   surfaces). Leaning single agent with sub-action groups, like onboarding.
-- **Typed result / event channel shape.** Rich clients need typed results + a
-  live event stream (§4). What's the channel — a dedicated WebSocket like
-  `code↔coda`, the dispatcher's structured `ActionResult` data, or an
-  agent-rpc/MCP streaming path? This is the main design task Option B introduces.
-- ~~**Sandbox sharing.**~~ **Resolved by Option B:** there is one runtime (in the
-  agent), so there is one sandbox set; the extension and orchestrator are clients
-  of it. Hybrid mode (human watches in the UI what the agent does) falls out for
-  free — no cross-process sandbox reconciliation needed.
+- ~~**Sandbox sharing.**~~ **Resolved by Option B:** there is one runtime **per
+  target workspace** (in the agent, keyed by resolved repo root), so there is one
+  sandbox set per workspace; the extension and orchestrator are clients of it.
+  Hybrid mode (human watches in the UI what the agent does) falls out for free —
+  no cross-process sandbox reconciliation needed.
 - **Where the driving orchestrator runs** (in-editor Copilot, external MCP
   client, CI) — affects auth and which actions are allow-listed autonomous.
 - **Relationship to a possible "Studio as MCP host"** (STATUS open decision):
@@ -306,7 +326,9 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 ## 9. Why this is low-risk, high-leverage
 
-- It adds **no new transport** — rides the dispatcher + existing MCP exposure.
+- It adds **no new transport/port** — actions ride the dispatcher + existing MCP
+  exposure, and the typed result/event channel rides the existing agent-server
+  connection (a new service channel, not a new socket).
 - It reuses **already-tested** core primitives; the new code is thin action
   routing plus schema/grammar.
 - It makes the **agent-driven and hybrid interaction modes real** without

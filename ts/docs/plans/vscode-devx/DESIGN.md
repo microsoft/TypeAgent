@@ -173,12 +173,14 @@ don't build a webview when a code lens would do:
 Most capabilities show up on all three layers — a lens, a panel, a command —
 because that's how a developer naturally encounters them.
 
-### 3.5 Where the runtime runs — one runtime in the `studio` agent
+### 3.5 Where the runtime runs — the `studio` agent, one runtime per workspace
 
 The §3.0 principle says capability logic is a headless core primitive with thin
 presenters. This section pins down the consequence the rest of the system
-already follows: **the Studio runtime is instantiated once, inside the `studio`
-agent in the agent-server — not separately inside each UI.**
+already follows: **the Studio runtime is hosted inside the `studio` agent in the
+agent-server — not separately inside each UI.** There is **one runtime per target
+repository/workspace** (keyed by resolved repo root), not one global singleton
+and not one-per-presenter.
 
 This matches how TypeAgent is built everywhere else:
 
@@ -195,20 +197,37 @@ This matches how TypeAgent is built everywhere else:
 
 Concretely:
 
-- The `studio` agent constructs the runtime (`@typeagent/core/runtime`) once.
+- The `studio` agent constructs the runtime (`@typeagent/core/runtime`) — one
+  per target workspace, cached by resolved repo root.
 - The `typeagent-studio` extension does **not** build its own runtime. It
   connects to the agent-server, drives the agent's typed actions, and renders
   the rich UI (trees, Impact Report webview, status bar) from the results.
 - An AI orchestrator (MCP), the CLI, and the `vscode-shell` canvas are peers of
-  the extension — all clients of the same single runtime, so they never diverge
-  on repo root, sandbox set, or corpus state.
+  the extension — all clients of the same runtime for a given workspace, so they
+  never diverge on repo root, sandbox set, or corpus state.
 
 **The new design surface this introduces** (vs. today's chat agents, which only
 render `ActionResult` display content): the rich views need **typed results and
-an event stream**, not rendered markdown. The precedent is exactly `code↔coda` —
-an agent exposing a structured channel to its companion extension. Studio uses
-the same shape: results flow client←agent; live events (health changed, replay
-rows, trace tail) flow agent→client.
+an event stream**, not rendered markdown. The decided shape (see
+[`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md)):
+
+- **A typed `studio` service channel over the existing agent-server transport** —
+  request/response `invoke` for typed results + a subscription for events
+  (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`), using the
+  `agent-rpc` channel pattern. **No second WebSocket/port** — it rides the
+  agent-server connection the canvas already uses.
+- **`studio` actions and MCP tools are thin wrappers over the same typed runtime
+  methods** — so the AI/conversational/CLI audiences get the same data, and the
+  channel is never a VS-Code-only side path. `ActionResult.displayContent` is
+  used only for chat summaries/links, never as the UI data plane (it carries no
+  generic typed payload, and clients receive a `CommandResult`, not the raw
+  `ActionResult<T>`).
+
+**Security / approval boundary.** Because the agent now _owns_ the runtime, any
+local client of the agent-server could in principle invoke it. Mutating actions
+(sandbox lifecycle, corpus/schema/grammar writes, costly replays) must stay
+behind the `dryRun` + approval model (§3.0, STUDIO-AGENT §5) and an
+authorization check on the service channel — not be silently invokable.
 
 > **Transitional note.** The extension today still builds an in-process runtime
 > via `createStudioRuntime`. That is a bootstrap; it is migrated to an

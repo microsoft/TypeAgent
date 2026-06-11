@@ -149,25 +149,34 @@ concrete vehicle for the agent surface is a new first-party **`studio` TypeAgent
 agent** — see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).
 
 **Architecture decision — where the runtime runs (Option B; decided).** The
-Studio runtime is hosted **once, in the `studio` agent** (in the agent-server),
-and every UI is a **client** of it — the same shape as the rest of the system
-(`code` : `coda` :: `studio` : `typeagent-studio`). The `typeagent-studio`
+Studio runtime is hosted **in the `studio` agent** (in the agent-server) — **one
+runtime per target workspace** (keyed by resolved repo root), not a global
+singleton — and every UI is a **client** of it, the same shape as the rest of the
+system (`code` : `coda` :: `studio` : `typeagent-studio`). The `typeagent-studio`
 extension does **not** host its own runtime; it drives the agent's typed actions
 and renders the results. See [`DESIGN.md` §3.5](./DESIGN.md). The extension's
 current in-process `createStudioRuntime` is a **transitional bootstrap** to be
-migrated to an agent-server client as the agent's action surface grows. The main
-new design task this introduces is the agent's **typed result / event channel**
-for rich (non-chat) clients (the `code↔coda` analogue).
+migrated to an agent-server client as the agent's action surface grows.
+
+**Typed result / event channel (decided).** For rich (non-chat) clients, expose a
+**typed `studio` service channel over the existing agent-server transport** —
+`invoke` for typed results + a subscription for events (`healthChanged`,
+`replayRow`, `replayCompleted`, `traceAppended`), using the `agent-rpc` channel
+pattern, **no new port**. `studio` actions and MCP tools wrap the **same typed
+runtime methods**; `ActionResult.displayContent` is chat-summary-only. Rejected:
+"structured data on `ActionResult`" (clients get a `CommandResult`, not the raw
+`ActionResult<T>` — a platform change) and a VS-Code-only WebSocket (no session
+identity in the `code` precedent; risky for per-workspace scoping). See
+[`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md). Mutating actions must sit behind
+`dryRun` + approval **and** an authorization check on the channel.
 
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
 - ~~Where does the Studio **runtime** live?~~ **Resolved (Option B):** in the
-  `studio` agent; UIs are clients (see the architecture-decision note above).
-- **Typed result / event channel** for rich clients — the live design task that
-  Option B introduces: a dedicated channel (à la `code↔coda` WebSocket), the
-  dispatcher's structured `ActionResult` data, or an agent-rpc/MCP streaming
-  path? Results flow client←agent; events (health changed, replay rows, trace
-  tail) flow agent→client.
+  `studio` agent (one per workspace); UIs are clients (see the note above).
+- ~~**Typed result / event channel** for rich clients.~~ **Resolved:** typed
+  `studio` service channel over the agent-server (`agent-rpc` pattern), no new
+  port; actions/MCP wrap the same methods (see the note above).
 - Where does the driving agent run — in-editor (Copilot driving commands), as a
   TypeAgent agent (conversational), or a CLI in CI? Each implies a different
   headless surface.
