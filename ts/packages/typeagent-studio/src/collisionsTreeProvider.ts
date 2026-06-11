@@ -4,7 +4,7 @@
 import * as vscode from "vscode";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import type { GrammarScanSkip } from "@typeagent/core/collisionScanner";
-import type { StudioRuntime } from "./studioRuntimeCore.js";
+import type { StudioRuntime } from "@typeagent/core/runtime";
 import {
     buildCollisionChildRows,
     buildCollisionRows,

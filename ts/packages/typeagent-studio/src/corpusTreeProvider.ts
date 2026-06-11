@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import type { StudioRuntime } from "./studioRuntimeCore.js";
+import type { StudioRuntime } from "@typeagent/core/runtime";
 import {
     buildCorpusAgentNodes,
     buildCorpusEntryNodes,

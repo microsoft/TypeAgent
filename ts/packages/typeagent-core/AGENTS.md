@@ -7,9 +7,11 @@ For AI agents and developers working in this package.
 `@typeagent/core` is the **VS Code-free engine library** behind TypeAgent
 Studio: sandbox lifecycle, corpus federation, the structured event stream,
 feedback, health rules, the collision scanner, the replay engine, and the
-onboarding bridge. The VS Code extension (`typeagent-studio`), and — by
-design — a future `studio` TypeAgent agent and any CLI/MCP entry, all consume
-it.
+onboarding bridge. The `runtime/` module wires these primitives into the
+context-agnostic Studio runtime (`createStudioRuntimeCore` → `StudioRuntime`)
+that presenters drive via a host-supplied `StudioRuntimeContext`. The VS Code
+extension (`typeagent-studio`), and — by design — a future `studio` TypeAgent
+agent and any CLI/MCP entry, all consume it.
 
 ## Design principle you MUST preserve — headless core, thin presenters
 

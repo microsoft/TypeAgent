@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
-import type { AvailableAgent } from "./studioRuntimeCore.js";
+import type { AvailableAgent } from "@typeagent/core/runtime";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";

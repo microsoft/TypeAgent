@@ -3,7 +3,7 @@
 
 import * as vscode from "vscode";
 import type { StudioEvent } from "@typeagent/core/events";
-import type { StudioRuntime } from "./studioRuntimeCore.js";
+import type { StudioRuntime } from "@typeagent/core/runtime";
 import {
     buildEventLogRows,
     iconForEvent,

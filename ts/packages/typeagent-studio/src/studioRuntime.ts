@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import {
     createStudioRuntimeCore,
     type StudioRuntime,
-} from "./studioRuntimeCore.js";
+} from "@typeagent/core/runtime";
 
 export function createStudioRuntime(
     context: vscode.ExtensionContext,
@@ -22,4 +22,4 @@ export function createStudioRuntime(
     });
 }
 
-export type { StudioRuntime } from "./studioRuntimeCore.js";
+export type { StudioRuntime } from "@typeagent/core/runtime";

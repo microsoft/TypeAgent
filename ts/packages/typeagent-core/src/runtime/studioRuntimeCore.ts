@@ -12,23 +12,23 @@ import {
     type OnboardingState,
     type RestorePhaseResult,
     routeStudioConversation,
-} from "@typeagent/core/onboardingBridge";
-import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
-import { InProcessEventStream } from "@typeagent/core/events";
-import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
+} from "../onboardingBridge/index.js";
+import { FileHealthService, type HealthFinding } from "../health/index.js";
+import { InProcessEventStream } from "../events/index.js";
+import type { StudioEvent, StudioEventType } from "../events/index.js";
 import {
     createRepoAgentLoader,
     InMemorySandboxManager,
     type SandboxManager,
     type SandboxStatus,
-} from "@typeagent/core/sandbox";
+} from "../sandbox/index.js";
 import {
     FileCorpusService,
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
     type ExternalSourceSpec,
-} from "@typeagent/core/corpus";
+} from "../corpus/index.js";
 import {
     CoreFeedbackService,
     InMemoryFeedbackBackend,
@@ -37,7 +37,7 @@ import {
     type FeedbackRecordInput,
     type FeedbackRow,
     type FeedbackService,
-} from "@typeagent/core/feedback";
+} from "../feedback/index.js";
 import {
     replayCorpus,
     type ActionDelta,
@@ -46,19 +46,19 @@ import {
     type ReplayMissPolicy,
     type ReplaySummary,
     type VersionSpec,
-} from "@typeagent/core/replay";
+} from "../replay/index.js";
 import {
     InProcessCollisionService,
     type CollisionFilter,
     type CollisionService,
-} from "@typeagent/core/collisions";
+} from "../collisions/index.js";
 import {
     createRepoGrammarScanner,
     type GrammarCollisionScanner,
     type GrammarScanSkip,
-} from "@typeagent/core/collisionScanner";
-import type { CollisionDetectedEvent } from "@typeagent/core/events";
-import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
+} from "../collisions/scanner.js";
+import type { CollisionDetectedEvent } from "../events/index.js";
+import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
     resolveRepoRoot,
     type RepoRootResolution,
@@ -205,11 +205,10 @@ export interface StudioRuntime {
     };
     listSandboxes(): Promise<SandboxStatus[]>;
     /**
-     * Agents available to load (name + manifest emoji when known). Merges the
-     * curated registry (`defaultAgentProvider/data/config.json` agent keys —
-     * what the shell loads) with `packages/agents/*` directories declaring the
-     * dispatcher `./agent/manifest` export. Used to offer autocomplete in the
-     * Load agent UI.
+     * Agents available to load (name + manifest emoji when known). Discovered
+     * by scanning the configured agent roots (`packages/agents` plus any
+     * `agentSearchPaths`) for directories declaring the dispatcher
+     * `./agent/manifest` export. Used to offer autocomplete in the Load agent UI.
      */
     listAvailableAgents(): Promise<AvailableAgent[]>;
     startSandbox(options?: {
