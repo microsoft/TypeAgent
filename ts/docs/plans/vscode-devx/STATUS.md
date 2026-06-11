@@ -89,18 +89,20 @@ Done / superseded:
   needed. **Still open in P-0:** scaffold the empty `packages/agents/studio/`
   agent (manifest/schema/handler + `defaultAgentProvider` registration).
 - ~~**P-0 `studio` agent scaffold + S1 Inspect actions**~~ — **done**:
-  `packages/agents/studio/` (schema-only agent, emoji 🔌) registered in
+  `packages/agents/studio/` (schema-only agent, emoji 🎨) registered in
   `defaultAgentProvider`, with a thin handler over the headless runtime
-  (`getStudioRuntime` → `createStudioRuntimeCore`). Read-only group-A actions
-  shipped: `listAgents`, `getStudioInfo`, `listCollisions`, `describeAgent`
-  (emoji + health findings + corpus size + collisions + feedback), `getSchema`,
-  `getGrammar` (source text), `searchCorpus`, `queryEvents`. Backed by two new
-  read-only core runtime methods (`checkAgentHealth`, `getAgentSources`). Repo
-  root is an explicit per-action param (cached per root), `TYPEAGENT_STUDIO_REPO_ROOT`/cwd
-  fallback. Verified end-to-end; 18 agent tests + core 127 + studio-ext 112 green.
-  _Remaining S1 (deferred — need heavier engines):_ `ListActions`
-  (action-schema parse of the `.pas.json`), `GetCoverage` (`computeCoverage` +
-  corpus), `GetTrace` (P-3, structured dispatch tree).
+  (`getStudioRuntime` → `createStudioRuntimeCore`). Read-only group-A surface,
+  deliberately scoped to what's Studio-distinct and headless-appropriate (no
+  duplication of the dispatcher's `@config agent`):
+  `getStudioInfo` (repo root + agent **locations** with per-root counts),
+  `listCollisions`, `queryEvents`. Backed by a read-only `getAgentLocations()`
+  core runtime method. Repo root is an explicit per-action param (cached per
+  root), `TYPEAGENT_STUDIO_REPO_ROOT`/cwd fallback. Verified end-to-end; 11
+  agent tests + core 127 + studio-ext 112 green.
+  _Reintroduce later (not as generic agent actions):_ per-agent describe,
+  schema/grammar/corpus inspection — these belong **sandbox-scoped** (S2) and/or
+  as client-side "open in VS Code" actions over the P-1.5 channel (the headless
+  agent can't open an editor).
 - ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
   `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
   directory commands, user-settings persistence.
@@ -111,21 +113,19 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **S1 leftovers** — `ListActions` (parse the agent's `.pas.json` action union),
-   `GetCoverage`, and (in P-3) `GetTrace`.
-2. **Studio service channel (the Option B migration; plan phase P-1.5)** — the
+1. **Studio service channel (the Option B migration; plan phase P-1.5)** — the
    typed `StudioRequest/Response<T>` + `StudioEvent` subscription over a new
    agent-server service channel (`agent-rpc` pattern, no new port), with channel
    authorization. This is the prerequisite for any rich client and the step that
    unifies collisions/events across the UI, chat, and MCP (one runtime). Build it
    **before** the webview so the webview is its first, greenfield client.
-3. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
    Built as a **client of the `studio` agent over the channel**, not on the
    extension's in-process runtime.
-4. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-5. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
    agent's `ValidateChange` and the webview both consume).
 

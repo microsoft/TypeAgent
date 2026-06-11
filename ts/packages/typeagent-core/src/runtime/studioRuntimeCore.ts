@@ -13,11 +13,7 @@ import {
     type RestorePhaseResult,
     routeStudioConversation,
 } from "../onboardingBridge/index.js";
-import {
-    FileHealthService,
-    discoverAgentFiles,
-    type HealthFinding,
-} from "../health/index.js";
+import { FileHealthService, type HealthFinding } from "../health/index.js";
 import { InProcessEventStream } from "../events/index.js";
 import type { StudioEvent, StudioEventType } from "../events/index.js";
 import {
@@ -146,16 +142,14 @@ export interface AvailableAgent {
     emoji?: string;
 }
 
-/** A source artifact (schema/grammar) read from disk. */
-export interface AgentSourceFile {
-    path: string;
-    text: string;
-}
-
-/** An agent's on-disk source artifacts. */
-export interface AgentSources {
-    schema: AgentSourceFile[];
-    grammar: AgentSourceFile[];
+/** A directory Studio scans for agents, with what it found there. */
+export interface AgentLocation {
+    /** Resolved absolute path of the agent root. */
+    root: string;
+    /** Whether the directory exists / is readable. */
+    exists: boolean;
+    /** Number of agent packages (declaring `./agent/manifest`) found in it. */
+    agentCount: number;
 }
 
 export interface StudioRuntime {
@@ -228,16 +222,11 @@ export interface StudioRuntime {
      */
     listAvailableAgents(): Promise<AvailableAgent[]>;
     /**
-     * Read-only per-agent health findings (manifest → schema → grammar →
-     * handler invariants). Computed from disk; does **not** load a sandbox.
-     * (Studio Inspect surface, group A.)
+     * The directories Studio scans for agents (`packages/agents` plus any
+     * configured `agentSearchPaths`), each with whether it exists and how many
+     * agent packages it contains. Read-only. (Studio Inspect surface.)
      */
-    checkAgentHealth(agent: string): Promise<HealthFinding[]>;
-    /**
-     * Read an agent's on-disk **source** artifacts (schema `.ts`, grammar
-     * `.agr`) as text, so a client can display them. Read-only. (Inspect/A.)
-     */
-    getAgentSources(agent: string): Promise<AgentSources>;
+    getAgentLocations(): Promise<AgentLocation[]>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -674,21 +663,15 @@ export function createStudioRuntimeCore(
         async listAvailableAgents() {
             return listAvailableAgentNames(agentRoots());
         },
-        async checkAgentHealth(agent) {
-            const health = new FileHealthService({ repoRoot, agentRoots });
-            return health.check(agent);
-        },
-        async getAgentSources(agent) {
-            const files = await discoverAgentFiles(agentRoots(), agent);
-            const read = async (p: string): Promise<AgentSourceFile> => ({
-                path: p,
-                text: await fs.readFile(p, "utf8"),
-            });
-            const [schema, grammar] = await Promise.all([
-                Promise.all(files.schemaFiles.map(read)),
-                Promise.all(files.grammarFiles.map(read)),
-            ]);
-            return { schema, grammar };
+        async getAgentLocations() {
+            return Promise.all(
+                agentRoots().map(async (root) => {
+                    const agentCount = await countAgentsInRoot(root);
+                    return agentCount === undefined
+                        ? { root, exists: false, agentCount: 0 }
+                        : { root, exists: true, agentCount };
+                }),
+            );
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so
@@ -1127,6 +1110,41 @@ async function listAvailableAgentNames(
             const emoji = emojiByName.get(name);
             return emoji !== undefined ? { name, emoji } : { name };
         });
+}
+
+/**
+ * Count the agent packages in a single root (directories declaring the
+ * dispatcher `./agent/manifest` export). Returns `undefined` when the root
+ * doesn't exist / can't be read, so callers can distinguish "missing" from
+ * "present but empty".
+ */
+async function countAgentsInRoot(root: string): Promise<number | undefined> {
+    let entries;
+    try {
+        entries = await fs.readdir(root, { withFileTypes: true });
+    } catch {
+        return undefined;
+    }
+    let count = 0;
+    for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === "dist") {
+            continue;
+        }
+        try {
+            const pkg = JSON.parse(
+                await fs.readFile(
+                    path.join(root, entry.name, "package.json"),
+                    "utf8",
+                ),
+            ) as { exports?: Record<string, unknown> };
+            if (resolveManifestExport(pkg.exports) !== undefined) {
+                count++;
+            }
+        } catch {
+            // not an agent package — skip
+        }
+    }
+    return count;
 }
 
 /**
