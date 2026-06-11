@@ -37,4 +37,4 @@ The following TypeAgent features/components are not automatically created or con
 
 - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
 - [Docker](../ts/Dockerfile) endpoint app service
-- AI Foundry Agent creation & Grounding with BING resource creation and linking. If you want to use the generic chat agent to do internet lookups ([lookupAndAnswer](../../../packages/dispatcher/src/context/dispatcher/dispatcherAgent.ts)) you must complete some additional manual configuration steps at this time. [Follow these instructions]().
+- AI Foundry Agent creation & Grounding with BING resource creation and linking. If you want to use the generic chat agent to do internet lookups ([lookupAndAnswer](../../../packages/dispatcher/src/context/dispatcher/dispatcherAgent.ts)) you must complete some additional manual configuration steps at this time. Follow these instructions in the linked dispatcher agent source.
