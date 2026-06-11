@@ -51,6 +51,10 @@ export class CorpusTreeProvider
         item.tooltip = node.tooltip;
         item.contextValue = node.contextValue;
         item.iconPath = iconForNode(node);
+        // Note: the seed empty-state node intentionally has no click command —
+        // creating a file is done via its explicit inline action (with a
+        // confirmation) so a corpus file is never written just by selecting
+        // the row.
         return item;
     }
 
@@ -84,6 +88,9 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "entry":
             return new vscode.ThemeIcon("comment");
         case "empty":
+            return new vscode.ThemeIcon(
+                node.contextValue === "corpusAgentSeed" ? "add" : "info",
+            );
         default:
             return new vscode.ThemeIcon("info");
     }

@@ -150,6 +150,17 @@
         "icon": "$(add)"
       },
       {
+        "command": "typeagent-studio.addAgentsDirectory",
+        "title": "Add agents directory",
+        "category": "TypeAgent Studio",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "typeagent-studio.removeAgentsDirectory",
+        "title": "Remove agents directory",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.unloadAgent",
         "title": "Unload agent",
         "category": "TypeAgent Studio",
@@ -172,6 +183,18 @@
         "title": "Replay corpus",
         "category": "TypeAgent Studio",
         "icon": "$(debug-rerun)"
+      },
+      {
+        "command": "typeagent-studio.addExternalCorpus",
+        "title": "Add external corpus",
+        "category": "TypeAgent Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "typeagent-studio.seedInRepoCorpus",
+        "title": "Seed in-repo corpus",
+        "category": "TypeAgent Studio",
+        "icon": "$(new-file)"
       },
       {
         "command": "typeagent-studio.focusSandboxes",
@@ -207,6 +230,12 @@
         "title": "Scan grammars for collisions",
         "category": "TypeAgent Studio",
         "icon": "$(search)"
+      },
+      {
+        "command": "typeagent-studio.buildAgentGrammar",
+        "title": "Build grammar",
+        "category": "TypeAgent Studio",
+        "icon": "$(tools)"
       }
     ],
     "configuration": {
@@ -255,6 +284,19 @@
           ],
           "default": "enforce",
           "description": "Controls sandbox install behavior when packaging health gate reports errors. 'enforce' blocks install unless explicitly bypassed; 'warn' attempts install without gate blocking."
+        },
+        "typeagentStudio.collisions.autoScanOnAgentChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically re-scan grammars for collisions when agents are loaded or unloaded in a sandbox, keeping the Collisions view current without a manual scan."
+        },
+        "typeagentStudio.agentSearchPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional directories that contain agent subdirectories (peer to 'packages/agents') to discover and load agents from — e.g. a sibling 'agents' directory in another repo or submodule. Relative paths are resolved against the detected repo root. The repo's own 'packages/agents' is always included."
         }
       }
     },
@@ -290,6 +332,11 @@
           "command": "typeagent-studio.replayCorpus",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@3"
+        },
+        {
+          "command": "typeagent-studio.addExternalCorpus",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@4"
         },
         {
           "command": "typeagent-studio.refreshEvents",
@@ -342,6 +389,21 @@
           "command": "typeagent-studio.unloadAgent",
           "when": "view == typeagentStudioSandboxes && viewItem == sandboxAgent",
           "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.buildAgentGrammar",
+          "when": "view == typeagentStudioCollisions && viewItem == studioCollisionSkippedBuildable",
+          "group": "inline@0"
+        },
+        {
+          "command": "typeagent-studio.addExternalCorpus",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
+          "group": "inline@0"
+        },
+        {
+          "command": "typeagent-studio.seedInRepoCorpus",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgentSeed",
+          "group": "inline@0"
         }
       ]
     },
@@ -403,16 +465,21 @@
     "onCommand:typeagent-studio.stopSandbox",
     "onCommand:typeagent-studio.restartSandbox",
     "onCommand:typeagent-studio.loadAgent",
+    "onCommand:typeagent-studio.addAgentsDirectory",
+    "onCommand:typeagent-studio.removeAgentsDirectory",
     "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
     "onCommand:typeagent-studio.recordFeedback",
     "onCommand:typeagent-studio.replayCorpus",
+    "onCommand:typeagent-studio.addExternalCorpus",
+    "onCommand:typeagent-studio.seedInRepoCorpus",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents",
     "onCommand:typeagent-studio.refreshCollisions",
     "onCommand:typeagent-studio.clearCollisions",
-    "onCommand:typeagent-studio.scanCollisions"
+    "onCommand:typeagent-studio.scanCollisions",
+    "onCommand:typeagent-studio.buildAgentGrammar"
   ],
   "dependencies": {
     "@typeagent/core": "workspace:*",

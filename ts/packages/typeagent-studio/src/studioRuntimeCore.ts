@@ -27,6 +27,7 @@ import {
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
+    type ExternalSourceSpec,
 } from "@typeagent/core/corpus";
 import {
     CoreFeedbackService,
@@ -58,9 +59,19 @@ import {
 } from "@typeagent/core/collisionScanner";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
+import {
+    resolveRepoRoot,
+    type RepoRootResolution,
+} from "./repoRootResolver.js";
 
 const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
 const DEFAULT_SANDBOX_ID = "studio-default";
+const PERSISTED_SANDBOXES_KEY = "studio.persistedSandboxes";
+
+interface PersistedSandbox {
+    id: string;
+    agents: string[];
+}
 
 const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
     "sandbox.start",
@@ -124,7 +135,21 @@ export interface StudioCollisionScanResult {
     collisionCount: number;
 }
 
+/** An agent discoverable in the Load agent UI. */
+export interface AvailableAgent {
+    name: string;
+    /** Emoji from the agent's manifest (`emojiChar`), when resolvable. */
+    emoji?: string;
+}
+
 export interface StudioRuntime {
+    /**
+     * Repo root used for agent discovery and whether a `packages/agents`
+     * directory was actually found there. When not found, the UI should warn
+     * that health/corpus/collision results will be empty until the correct
+     * folder (the monorepo's `ts/` directory) is opened.
+     */
+    getRepoRootInfo(): RepoRootResolution;
     startOnboarding(seed: {
         description: string;
         agentName?: string;
@@ -179,6 +204,14 @@ export interface StudioRuntime {
         reason: string;
     };
     listSandboxes(): Promise<SandboxStatus[]>;
+    /**
+     * Agents available to load (name + manifest emoji when known). Merges the
+     * curated registry (`defaultAgentProvider/data/config.json` agent keys —
+     * what the shell loads) with `packages/agents/*` directories declaring the
+     * dispatcher `./agent/manifest` export. Used to offer autocomplete in the
+     * Load agent UI.
+     */
+    listAvailableAgents(): Promise<AvailableAgent[]>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -193,6 +226,14 @@ export interface StudioRuntime {
     /** Unload a named agent from a sandbox. Returns the updated status. */
     unloadSandboxAgent(id: string, agentName: string): Promise<SandboxStatus>;
     /**
+     * Re-load a named agent in every sandbox where it is currently loaded,
+     * recomputing its health and schema/grammar hashes from disk. Used after
+     * building an agent's grammar so the (cached) health badge refreshes
+     * without a manual sandbox restart. Returns the number of sandboxes
+     * refreshed.
+     */
+    refreshSandboxAgent(agentName: string): Promise<number>;
+    /**
      * Subscribe to sandbox lifecycle changes (start/stop/restart, agent
      * load/unload). The listener is invoked after each such event so a UI can
      * refresh. Returns a disposable to stop listening.
@@ -205,6 +246,19 @@ export interface StudioRuntime {
     listCorpusAgents(): Promise<string[]>;
     /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
+    /**
+     * Register an external JSONL corpus source for an agent (writes
+     * `<repoRoot>/.typeagent/studio.json`). Throws if a source with the same
+     * name already exists for the agent.
+     */
+    addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void>;
+    /**
+     * Ensure an agent's in-repo corpus file exists so it can be populated.
+     * Returns its path and whether it was newly created.
+     */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
     /** Most recent events from the structured event stream, oldest-first. */
     queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
     /** Subscribe to every event as it is emitted. Returns a disposable. */
@@ -237,6 +291,11 @@ export interface StudioRuntime {
     /** Subscribe to collision detections as they are emitted. */
     onCollisionDetected(listener: () => void): { dispose(): void };
     /**
+     * Subscribe to agent load/unload events across sandboxes. Used to keep the
+     * Collisions view current by re-scanning when the loaded agent set changes.
+     */
+    onAgentLoadChanged(listener: () => void): { dispose(): void };
+    /**
      * Scan agents' compiled grammars for real cross-schema collisions via the
      * NFA overlap engine, reporting each into the collision store (and Event
      * Log). Replaces prior `grammar-edit` collisions unless `replace` is false.
@@ -244,6 +303,14 @@ export interface StudioRuntime {
     scanGrammarCollisions(
         request?: StudioCollisionScanRequest,
     ): Promise<StudioCollisionScanResult>;
+    /**
+     * Re-create sandboxes (and their agent loadouts) from the workspace-scoped
+     * persisted snapshot written on every sandbox mutation. Safe to call
+     * multiple times — sandboxes that already exist are skipped, and per-
+     * sandbox restore failures are isolated so one bad entry can't block the
+     * rest. Intended to be invoked once at extension activation.
+     */
+    restoreSandboxes(): Promise<void>;
 }
 
 export interface StudioWorkspaceState {
@@ -255,6 +322,15 @@ export interface StudioRuntimeContext {
     workspaceState: StudioWorkspaceState;
     globalStorageFsPath: string;
     workspaceFolderFsPaths?: string[];
+    /**
+     * Additional directories that contain agent subdirectories (peer to
+     * `packages/agents`), from the `typeagentStudio.agentSearchPaths` setting.
+     * Relative entries are resolved against the detected repo root. The repo's
+     * own `packages/agents` is always included as the first root. May be a
+     * provider, read fresh on each use, so a changed setting is picked up
+     * without recreating the runtime.
+     */
+    agentSearchPaths?: string[] | (() => string[]);
 }
 
 export interface CreateStudioRuntimeOptions {
@@ -307,13 +383,32 @@ export function createStudioRuntimeCore(
     options: CreateStudioRuntimeOptions = {},
 ): StudioRuntime {
     const events = new InProcessEventStream();
-    const repoRoot =
-        context.workspaceFolderFsPaths?.[0] ?? context.globalStorageFsPath;
+    const repoRootResolution = resolveRepoRoot(
+        context.workspaceFolderFsPaths ?? [],
+        context.globalStorageFsPath,
+    );
+    const repoRoot = repoRootResolution.repoRoot;
+    // Agent roots, resolved fresh on each use so a changed
+    // `agentSearchPaths` setting is picked up without reconstructing the
+    // runtime: the repo's own packages/agents first, then any configured
+    // search paths (relative entries resolved against the repo root).
+    const agentRoots = (): string[] => {
+        const configured =
+            typeof context.agentSearchPaths === "function"
+                ? context.agentSearchPaths()
+                : (context.agentSearchPaths ?? []);
+        return [
+            path.join(repoRoot, "packages", "agents"),
+            ...configured.map((p) =>
+                path.isAbsolute(p) ? p : path.join(repoRoot, p),
+            ),
+        ];
+    };
     const sandbox =
         options.sandbox ??
         new InMemorySandboxManager({
             emitter: events,
-            agentLoader: createRepoAgentLoader({ repoRoot }),
+            agentLoader: createRepoAgentLoader({ repoRoot, agentRoots }),
         });
     const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
     const evaluatePackagingHealthGate =
@@ -349,9 +444,31 @@ export function createStudioRuntimeCore(
         });
 
     const collisionScanner =
-        options.collisionScanner ?? createRepoGrammarScanner({ repoRoot });
+        options.collisionScanner ??
+        createRepoGrammarScanner({ repoRoot, agentRoots });
+
+    // Persistence for sandbox lifecycle. The in-memory sandbox manager has no
+    // durable storage of its own, so the studio runtime snapshots the live
+    // sandbox set into workspaceState after every mutation and replays it on
+    // demand via `restoreSandboxes()` (called once at activation).
+    let restoring = false;
+    const persistSandboxes = async (): Promise<void> => {
+        if (restoring) {
+            return;
+        }
+        const snapshot: PersistedSandbox[] = (await sandbox.list()).map(
+            (status) => ({
+                id: status.id,
+                agents: status.agents.map((a) => a.sourcePath ?? a.name),
+            }),
+        );
+        await context.workspaceState.update(PERSISTED_SANDBOXES_KEY, snapshot);
+    };
 
     return {
+        getRepoRootInfo() {
+            return repoRootResolution;
+        },
         async startOnboarding(seed) {
             const state = await onboarding.start(seed);
             await context.workspaceState.update(
@@ -528,8 +645,14 @@ export function createStudioRuntimeCore(
         async listSandboxes() {
             return sandbox.list();
         },
+        async listAvailableAgents() {
+            return listAvailableAgentNames(agentRoots());
+        },
         async startSandbox(startOptions = {}) {
-            const id = startOptions.id ?? DEFAULT_SANDBOX_ID;
+            // Title-bar "Start sandbox" passes no id; mint a unique one so
+            // multiple sandboxes can coexist (the default id is reused only
+            // when it's free, keeping install commands' default stable).
+            const id = startOptions.id ?? (await nextSandboxId(sandbox));
             await sandbox.start({
                 id,
                 mode: "inmemory",
@@ -540,21 +663,43 @@ export function createStudioRuntimeCore(
                 ),
                 agents: startOptions.agents ?? [],
             });
+            await persistSandboxes();
             return sandbox.status(id);
         },
         async stopSandbox(id) {
             await sandbox.stop(id);
+            await persistSandboxes();
         },
         async restartSandbox(id) {
             await sandbox.restart(id);
+            await persistSandboxes();
         },
         async loadSandboxAgent(id, agentRef) {
             await sandbox.loadAgent(id, agentRef);
+            await persistSandboxes();
             return sandbox.status(id);
         },
         async unloadSandboxAgent(id, agentName) {
             await sandbox.unloadAgent(id, agentName);
+            await persistSandboxes();
             return sandbox.status(id);
+        },
+        async refreshSandboxAgent(agentName) {
+            let refreshed = 0;
+            for (const status of await sandbox.list()) {
+                const loaded = status.agents.find((a) => a.name === agentName);
+                if (loaded !== undefined) {
+                    // Re-running loadAgent re-invokes the loader, recomputing
+                    // health/hashes and emitting `sandbox.agent.loaded` (which
+                    // refreshes the trees, status bar, and collision auto-scan).
+                    await sandbox.loadAgent(
+                        status.id,
+                        loaded.sourcePath ?? loaded.name,
+                    );
+                    refreshed += 1;
+                }
+            }
+            return refreshed;
         },
         onSandboxChanged(listener) {
             const subscription = events.subscribe(() => listener(), {
@@ -574,6 +719,12 @@ export function createStudioRuntimeCore(
         },
         async listCorpusEntries(agent) {
             return corpus.list(agent);
+        },
+        async addExternalCorpusSource(spec) {
+            await corpus.addExternalSource(spec);
+        },
+        async seedInRepoCorpus(agent) {
+            return corpus.seedInRepoCorpus(agent);
         },
         async queryRecentEvents(limit = 200) {
             const all: StudioEvent[] = [];
@@ -632,6 +783,14 @@ export function createStudioRuntimeCore(
             });
             return { dispose: () => subscription.unsubscribe() };
         },
+        onAgentLoadChanged(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: {
+                    types: ["sandbox.agent.loaded", "sandbox.agent.unloaded"],
+                },
+            });
+            return { dispose: () => subscription.unsubscribe() };
+        },
         async scanGrammarCollisions(request = {}) {
             const sandboxId = request.sandboxId ?? DEFAULT_SANDBOX_ID;
             let agents = request.agents;
@@ -662,6 +821,59 @@ export function createStudioRuntimeCore(
                 skipped: report.skipped,
                 collisionCount: report.collisions.length,
             };
+        },
+        async restoreSandboxes() {
+            const snapshot =
+                context.workspaceState.get<PersistedSandbox[]>(
+                    PERSISTED_SANDBOXES_KEY,
+                ) ?? [];
+            if (snapshot.length === 0) {
+                return;
+            }
+            // Don't write back to workspaceState while we replay; each call
+            // to `start()` / `loadAgent()` would otherwise trigger persist
+            // and clobber sandboxes we haven't yet restored.
+            restoring = true;
+            try {
+                const existing = new Set(
+                    (await sandbox.list()).map((s) => s.id),
+                );
+                // Restore sandboxes in parallel; they're independent, so this
+                // avoids serializing agent loads at startup. Each entry isolates
+                // its own failure so one bad sandbox can't block the rest.
+                await Promise.all(
+                    snapshot
+                        .filter((entry) => !existing.has(entry.id))
+                        .map(async (entry) => {
+                            try {
+                                await sandbox.start({
+                                    id: entry.id,
+                                    mode: "inmemory",
+                                    profileDir: path.join(
+                                        context.globalStorageFsPath,
+                                        "profiles",
+                                        entry.id,
+                                    ),
+                                    agents: entry.agents,
+                                });
+                            } catch (err) {
+                                // One sandbox failing to restore (e.g. an agent
+                                // that no longer resolves) shouldn't block the
+                                // rest. Log to the extension host console; the
+                                // surviving sandboxes still come back.
+                                // eslint-disable-next-line no-console
+                                console.warn(
+                                    `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
+                                    err,
+                                );
+                            }
+                        }),
+                );
+            } finally {
+                restoring = false;
+            }
+            // Re-snapshot to drop any sandboxes that failed to come back.
+            await persistSandboxes();
         },
     };
 }
@@ -853,6 +1065,131 @@ function stripAgentSuffix(agentName: string): string {
     return agentName.endsWith("-agent")
         ? agentName.slice(0, -"-agent".length)
         : agentName;
+}
+
+/**
+ * Discover agents available to load. Merges two sources so the picker matches
+ * what the shell offers without being limited to physical directories:
+ *  1. the curated registry at
+ *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
+ *     keys — the same set the shell loads), and
+ *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
+ *     declares the dispatcher `./agent/manifest` export (catches agents not yet
+ *     in the registry, e.g. freshly scaffolded ones).
+ * Each agent carries its manifest emoji when one can be resolved from disk.
+ * Returns the sorted, de-duplicated union; empty when nothing can be read.
+ */
+async function listAvailableAgentNames(
+    agentRoots: string[],
+): Promise<AvailableAgent[]> {
+    const emojiByName = await readAgentDirEmojis(agentRoots);
+    return [...emojiByName.keys()]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => {
+            const emoji = emojiByName.get(name);
+            return emoji !== undefined ? { name, emoji } : { name };
+        });
+}
+
+/**
+ * Map of agent directory name → manifest emoji, across all agent roots, for
+ * directories declaring the dispatcher `./agent/manifest` export. The emoji is
+ * undefined when the manifest has none (or can't be read). Earlier roots win on
+ * name collisions (the repo's own `packages/agents` is first).
+ */
+async function readAgentDirEmojis(
+    agentRoots: string[],
+): Promise<Map<string, string | undefined>> {
+    const result = new Map<string, string | undefined>();
+    for (const agentsDir of agentRoots) {
+        let entries;
+        try {
+            entries = await fs.readdir(agentsDir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name === "dist") {
+                continue;
+            }
+            if (result.has(entry.name)) {
+                continue; // earlier root wins
+            }
+            const packageDir = path.join(agentsDir, entry.name);
+            try {
+                const pkg = JSON.parse(
+                    await fs.readFile(
+                        path.join(packageDir, "package.json"),
+                        "utf8",
+                    ),
+                ) as { exports?: Record<string, unknown> };
+                const manifestRef = resolveManifestExport(pkg.exports);
+                if (manifestRef === undefined) {
+                    continue; // not a loadable agent package
+                }
+                result.set(
+                    entry.name,
+                    await readManifestEmoji(packageDir, manifestRef),
+                );
+            } catch {
+                // not an agent package (no/invalid package.json) — skip
+            }
+        }
+    }
+    return result;
+}
+
+/** Resolve the `./agent/manifest` export to a relative file path, if present. */
+function resolveManifestExport(
+    exports?: Record<string, unknown>,
+): string | undefined {
+    const entry = exports?.["./agent/manifest"];
+    if (typeof entry === "string") {
+        return entry;
+    }
+    if (entry && typeof entry === "object") {
+        const cond = entry as Record<string, unknown>;
+        for (const key of ["default", "import", "require"]) {
+            if (typeof cond[key] === "string") {
+                return cond[key] as string;
+            }
+        }
+    }
+    return undefined;
+}
+
+/** Read `emojiChar` from an agent manifest JSON referenced from its package. */
+async function readManifestEmoji(
+    packageDir: string,
+    manifestRef: string,
+): Promise<string | undefined> {
+    try {
+        const manifest = JSON.parse(
+            await fs.readFile(path.join(packageDir, manifestRef), "utf8"),
+        ) as { emojiChar?: unknown };
+        return typeof manifest.emojiChar === "string"
+            ? manifest.emojiChar
+            : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Pick an unused sandbox id: the default id when free, otherwise
+ * `<default>-2`, `<default>-3`, … so the "Start sandbox" action can create
+ * multiple coexisting sandboxes.
+ */
+async function nextSandboxId(sandbox: SandboxManager): Promise<string> {
+    const existing = new Set((await sandbox.list()).map((s) => s.id));
+    if (!existing.has(DEFAULT_SANDBOX_ID)) {
+        return DEFAULT_SANDBOX_ID;
+    }
+    let n = 2;
+    while (existing.has(`${DEFAULT_SANDBOX_ID}-${n}`)) {
+        n++;
+    }
+    return `${DEFAULT_SANDBOX_ID}-${n}`;
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

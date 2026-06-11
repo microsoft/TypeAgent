@@ -46,18 +46,6 @@ async function createAgentScaffold(
         path.join(src, `${agent}ActionHandler.ts`),
         "export function instantiate() { return {}; }\n",
     );
-
-    await write(
-        path.join(
-            repoRoot,
-            "packages",
-            "defaultAgentProvider",
-            "data",
-            "config.json",
-        ),
-        JSON.stringify({ agents: { [agent]: { name: agent } } }, null, 2) +
-            "\n",
-    );
 }
 
 describe("FileHealthService", () => {
@@ -71,7 +59,7 @@ describe("FileHealthService", () => {
         await fs.rm(repoRoot, { recursive: true, force: true });
     });
 
-    it("registers all 11 MVP rule ids", () => {
+    it("registers all 10 MVP rule ids", () => {
         const svc = new FileHealthService({ repoRoot });
         const ids = svc.rules().map((r) => r.id);
         expect(ids).toEqual([
@@ -83,10 +71,119 @@ describe("FileHealthService", () => {
             "grammar.parses",
             "grammar.rules.targetKnownActions",
             "handler.exports.instantiate",
-            "provider.registers",
             "actions.unique.acrossLoaded",
             "cache.compatible",
         ]);
+    });
+
+    it("uses package.json exports to locate the handler when present", async () => {
+        // Mirror real agents (e.g. browser, calendar) that use a non-standard
+        // handler filename declared via `exports["./agent/handlers"]`. The
+        // permissive filename heuristic would also pick this up, but the
+        // declared-entry path is what the dispatcher actually resolves, so
+        // we exercise it explicitly.
+        await createAgentScaffold(repoRoot, "exported");
+        const pkgDir = path.join(repoRoot, "packages", "agents", "exported");
+        // Remove the conventional handler so only the declared one exists.
+        await fs.rm(path.join(pkgDir, "src", "exportedActionHandler.ts"));
+        await write(
+            path.join(pkgDir, "src", "agent", "weirdName.ts"),
+            "export function instantiate() { return {}; }\n",
+        );
+        await write(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify(
+                {
+                    name: "exported",
+                    exports: {
+                        "./agent/manifest": "./src/exportedManifest.json",
+                        "./agent/handlers": "./dist/agent/weirdName.js",
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("exported");
+        expect(
+            findings.some((f) => f.ruleId === "handler.exports.instantiate"),
+        ).toBe(false);
+    });
+
+    it("does not warn about missing grammar when the manifest marks the schema as injected", async () => {
+        // Chat-style fallback agents declare `schema.injected: true` in their
+        // manifest because they're invoked when no grammar matches; warning
+        // about the missing grammar is a false positive for them.
+        await createAgentScaffold(repoRoot, "chatlike");
+        const src = path.join(
+            repoRoot,
+            "packages",
+            "agents",
+            "chatlike",
+            "src",
+        );
+        // Drop the grammar so the rule has something to potentially warn about.
+        await fs.rm(path.join(src, "schema.agr"));
+        await write(
+            path.join(src, "chatlikeManifest.json"),
+            JSON.stringify(
+                {
+                    name: "chatlike",
+                    schema: {
+                        originalSchemaFile: "./schema.ts",
+                        schemaFile: "./schema.json",
+                        injected: true,
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("chatlike");
+        expect(
+            findings.some((f) => f.ruleId === "schema.actions.haveGrammar"),
+        ).toBe(false);
+    });
+
+    it("still warns about missing grammar when only some schemas are injected", async () => {
+        // An injected sub-action must not silence the missing-grammar warning
+        // for a non-injected schema that legitimately needs a grammar.
+        await createAgentScaffold(repoRoot, "mixed");
+        const src = path.join(repoRoot, "packages", "agents", "mixed", "src");
+        await fs.rm(path.join(src, "schema.agr"));
+        await write(
+            path.join(src, "mixedManifest.json"),
+            JSON.stringify(
+                {
+                    name: "mixed",
+                    schema: {
+                        originalSchemaFile: "./schema.ts",
+                        schemaFile: "./schema.json",
+                        // Non-injected → legitimately needs a grammar.
+                    },
+                    subActionManifests: {
+                        fallback: {
+                            schema: {
+                                schemaFile: "./fallback.json",
+                                injected: true,
+                            },
+                        },
+                    },
+                },
+                null,
+                2,
+            ) + "\n",
+        );
+
+        const svc = new FileHealthService({ repoRoot });
+        const findings = await svc.check("mixed");
+        expect(
+            findings.some((f) => f.ruleId === "schema.actions.haveGrammar"),
+        ).toBe(true);
     });
 
     it("returns no findings for a healthy minimal agent", async () => {
@@ -96,42 +193,55 @@ describe("FileHealthService", () => {
         expect(findings).toEqual([]);
     });
 
+    it("recognizes handler files that don't follow the *ActionHandler.ts naming convention", async () => {
+        // Some bundled agents (player, scaffolder, list/chatResponse) name
+        // their handler files differently — e.g. `playerHandlers.ts`,
+        // `scaffolderHandler.ts`, `chatResponseHandler.ts`. Discovery must
+        // accept any `*Handler.ts` / `*Handlers.ts` / `*.mts` variant so the
+        // handler.exports.instantiate rule doesn't fire spuriously.
+        const variants: { agent: string; handlerFileName: string }[] = [
+            { agent: "playerlike", handlerFileName: "playerlikeHandlers.ts" },
+            { agent: "responder", handlerFileName: "chatResponseHandler.ts" },
+            {
+                agent: "scaffolderlike",
+                handlerFileName: "scaffolderHandler.ts",
+            },
+            {
+                agent: "browserlike",
+                handlerFileName: "browserlikeActionHandler.mts",
+            },
+            {
+                agent: "calendarlike",
+                handlerFileName: "calendarlikeActionHandlerV3.ts",
+            },
+        ];
+
+        for (const { agent, handlerFileName } of variants) {
+            await createAgentScaffold(repoRoot, agent);
+            const src = path.join(repoRoot, "packages", "agents", agent, "src");
+            // Replace the default *ActionHandler.ts with the variant name.
+            await fs.rm(path.join(src, `${agent}ActionHandler.ts`));
+            await write(
+                path.join(src, handlerFileName),
+                "export function instantiate() { return {}; }\n",
+            );
+
+            const svc = new FileHealthService({ repoRoot });
+            const findings = await svc.check(agent);
+            expect(
+                findings.some(
+                    (f) => f.ruleId === "handler.exports.instantiate",
+                ),
+            ).toBe(false);
+        }
+    });
+
     it("reports manifest.parses error for malformed manifest JSON", async () => {
         const src = path.join(repoRoot, "packages", "agents", "demo", "src");
         await write(path.join(src, "demoManifest.json"), "{not-json}\n");
-        await write(
-            path.join(
-                repoRoot,
-                "packages",
-                "defaultAgentProvider",
-                "data",
-                "config.json",
-            ),
-            JSON.stringify({ agents: { demo: { name: "demo" } } }, null, 2) +
-                "\n",
-        );
         const svc = new FileHealthService({ repoRoot });
         const findings = await svc.check("demo");
         expect(findings.some((f) => f.ruleId === "manifest.parses")).toBe(true);
-    });
-
-    it("reports provider.registers when agent is missing from default config", async () => {
-        await createAgentScaffold(repoRoot, "demo");
-        await write(
-            path.join(
-                repoRoot,
-                "packages",
-                "defaultAgentProvider",
-                "data",
-                "config.json",
-            ),
-            JSON.stringify({ agents: {} }, null, 2) + "\n",
-        );
-        const svc = new FileHealthService({ repoRoot });
-        const findings = await svc.check("demo");
-        expect(findings.some((f) => f.ruleId === "provider.registers")).toBe(
-            true,
-        );
     });
 
     it("reports actions.unique.acrossLoaded warning for duplicate action types", async () => {

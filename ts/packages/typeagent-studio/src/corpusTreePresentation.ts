@@ -85,7 +85,10 @@ export function buildCorpusSourceNodes(
             {
                 kind: "empty",
                 id: `corpus:agent:${agent}:empty`,
-                label: "No corpus entries",
+                label: "Seed in-repo corpus\u2026",
+                description: "No entries yet — create a corpus file",
+                tooltip: `Create corpus/${agent}.utterances.jsonl and open it so you can add labelled utterances for ${agent}.`,
+                contextValue: "corpusAgentSeed",
                 agent,
                 hasChildren: false,
             },

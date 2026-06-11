@@ -3,12 +3,16 @@
 
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
+import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
+import type { AvailableAgent } from "./studioRuntimeCore.js";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
+import type { CorpusTreeNode } from "./corpusTreePresentation.js";
 import {
     FEEDBACK_CATEGORY_CHOICES,
     FEEDBACK_RATING_CHOICES,
@@ -23,6 +27,7 @@ import {
     COLLISIONS_VIEW_ID,
     CollisionsTreeProvider,
 } from "./collisionsTreeProvider.js";
+import type { CollisionRow } from "./collisionsPresentation.js";
 import {
     STUDIO_STATUS_BAR_COMMAND,
     StudioStatusBar,
@@ -35,9 +40,33 @@ import {
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
 
+    // Warn early if we couldn't locate `packages/agents` under any open
+    // folder. Without it, health/corpus/collision views are silently empty
+    // because there are no agents to discover. Most often this means the user
+    // opened the git root rather than the monorepo's `ts/` directory.
+    const repoRootInfo = runtime.getRepoRootInfo();
+    if (!repoRootInfo.agentsDirFound) {
+        const hasFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+        const message = hasFolder
+            ? "TypeAgent Studio couldn't find a 'packages/agents' directory in the open workspace. Open the monorepo's 'ts' folder so agents, health, and collisions can be discovered."
+            : "TypeAgent Studio has no folder open. Open the monorepo's 'ts' folder so agents, health, and collisions can be discovered.";
+        void vscode.window.showWarningMessage(message);
+    }
+
     registerStudioCommands(context, runtime);
 
     const sandboxTree = new SandboxTreeProvider(runtime);
+
+    // Replay the persisted sandbox set asynchronously so activation stays
+    // synchronous; the sandbox tree refreshes via the lifecycle event
+    // subscription as each sandbox comes back online.
+    runtime.restoreSandboxes().catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+            "[typeagent-studio] Failed to restore persisted sandboxes:",
+            err,
+        );
+    });
     context.subscriptions.push(
         sandboxTree,
         vscode.window.registerTreeDataProvider(SANDBOX_VIEW_ID, sandboxTree),
@@ -49,9 +78,32 @@ export function activate(context: vscode.ExtensionContext): void {
             "typeagent-studio.startSandbox",
             async (node?: SandboxTreeNode) => {
                 try {
-                    const status = await runtime.startSandbox(
-                        node?.sandboxId ? { id: node.sandboxId } : undefined,
-                    );
+                    let options: { id?: string } | undefined;
+                    if (node?.sandboxId) {
+                        // Restarting a specific (stopped) sandbox row.
+                        options = { id: node.sandboxId };
+                    } else {
+                        // Title-bar action: let the user name it, or leave it
+                        // blank to auto-generate a unique id.
+                        const name = await vscode.window.showInputBox({
+                            title: "Start sandbox",
+                            prompt: "Sandbox name (optional — leave blank to auto-generate)",
+                            placeHolder: "e.g. experiment-1",
+                            ignoreFocusOut: true,
+                            validateInput: (value) =>
+                                value.length === 0 ||
+                                /^[A-Za-z0-9._-]+$/.test(value.trim())
+                                    ? undefined
+                                    : "Use only letters, digits, dot, dash, or underscore.",
+                        });
+                        if (name === undefined) {
+                            return; // cancelled
+                        }
+                        const trimmed = name.trim();
+                        options =
+                            trimmed.length > 0 ? { id: trimmed } : undefined;
+                    }
+                    const status = await runtime.startSandbox(options);
                     vscode.window.showInformationMessage(
                         `Sandbox '${status.id}' started.`,
                     );
@@ -107,17 +159,36 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (!id) {
                     return;
                 }
-                const agentRef = await vscode.window.showInputBox({
-                    title: `Load agent into '${id}'`,
-                    prompt: "Agent reference (name, module specifier, or path)",
-                    placeHolder: "e.g. player",
-                    ignoreFocusOut: true,
-                    validateInput: (value) =>
-                        value.trim().length === 0
-                            ? "Enter an agent reference."
-                            : undefined,
-                });
+                // Exclude agents already loaded in this sandbox from the
+                // suggestions (loading a duplicate is a no-op / confusing).
+                const loaded = new Set(
+                    (await runtime.listSandboxes())
+                        .find((s) => s.id === id)
+                        ?.agents.map((a) => a.name) ?? [],
+                );
+                const available = (await runtime.listAvailableAgents()).filter(
+                    (a) => !loaded.has(a.name),
+                );
+                const agentRef =
+                    available.length > 0
+                        ? await pickAgentRef(available, id)
+                        : await vscode.window.showInputBox({
+                              title: `Load agent into '${id}'`,
+                              prompt: "Agent reference (name, module specifier, or path)",
+                              placeHolder: "e.g. player",
+                              ignoreFocusOut: true,
+                              validateInput: (value) =>
+                                  value.trim().length === 0
+                                      ? "Enter an agent reference."
+                                      : undefined,
+                          });
                 if (!agentRef) {
+                    return;
+                }
+                if (agentRef === ADD_AGENTS_DIR_SENTINEL) {
+                    await vscode.commands.executeCommand(
+                        "typeagent-studio.addAgentsDirectory",
+                    );
                     return;
                 }
                 try {
@@ -133,6 +204,76 @@ export function activate(context: vscode.ExtensionContext): void {
                         `Failed to load agent: ${describeError(error)}`,
                     );
                 }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.addAgentsDirectory",
+            async () => {
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Add agents directory",
+                    openLabel: "Add",
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                const dir = picked[0].fsPath;
+                const config =
+                    vscode.workspace.getConfiguration("typeagentStudio");
+                // Read the effective value, but persist to USER (global)
+                // settings: agent search paths are machine-specific absolute
+                // paths and must not land in a tracked workspace settings file
+                // (e.g. ts/.vscode/settings.json) or get committed.
+                const current =
+                    config.inspect<string[]>("agentSearchPaths")?.globalValue ??
+                    [];
+                if (current.includes(dir)) {
+                    vscode.window.showInformationMessage(
+                        `'${dir}' is already an agent search path.`,
+                    );
+                    return;
+                }
+                await config.update(
+                    "agentSearchPaths",
+                    [...current, dir],
+                    vscode.ConfigurationTarget.Global,
+                );
+                vscode.window.showInformationMessage(
+                    `Added '${dir}' to your agent search paths. Its agents are now available in Load agent.`,
+                );
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.removeAgentsDirectory",
+            async () => {
+                const config =
+                    vscode.workspace.getConfiguration("typeagentStudio");
+                const current =
+                    config.inspect<string[]>("agentSearchPaths")?.globalValue ??
+                    [];
+                if (current.length === 0) {
+                    vscode.window.showInformationMessage(
+                        "No agent search paths are configured.",
+                    );
+                    return;
+                }
+                const dir = await vscode.window.showQuickPick(current, {
+                    title: "Remove agents directory",
+                    placeHolder: "Select a search path to remove",
+                });
+                if (!dir) {
+                    return;
+                }
+                await config.update(
+                    "agentSearchPaths",
+                    current.filter((p) => p !== dir),
+                    vscode.ConfigurationTarget.Global,
+                );
+                vscode.window.showInformationMessage(
+                    `Removed '${dir}' from your agent search paths.`,
+                );
             },
         ),
         vscode.commands.registerCommand(
@@ -247,8 +388,92 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.seedInRepoCorpus",
+            async (arg?: string | CorpusTreeNode) => {
+                const agent =
+                    typeof arg === "string" ? arg : (arg?.agent ?? undefined);
+                const target = agent ?? (await pickCorpusAgent(runtime));
+                if (!target) {
+                    return;
+                }
+                // Explicit confirmation so a corpus file is never written
+                // without the user asking for it.
+                const confirm = await vscode.window.showInformationMessage(
+                    `Create an in-repo corpus file for '${target}'?`,
+                    {
+                        modal: true,
+                        detail: `This creates corpus/${target}.utterances.jsonl and opens it so you can add one labelled utterance (JSON) per line.`,
+                    },
+                    "Create",
+                );
+                if (confirm !== "Create") {
+                    return;
+                }
+                try {
+                    const { path: filePath, created } =
+                        await runtime.seedInRepoCorpus(target);
+                    corpusTree.refresh();
+                    const doc = await vscode.workspace.openTextDocument(
+                        vscode.Uri.file(filePath),
+                    );
+                    await vscode.window.showTextDocument(doc);
+                    vscode.window.showInformationMessage(
+                        created
+                            ? `Created in-repo corpus for ${target}. Add one JSON object per line.`
+                            : `In-repo corpus for ${target} already exists.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to seed corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.addExternalCorpus",
+            async (node?: CorpusTreeNode) => {
+                const agent = node?.agent ?? (await pickCorpusAgent(runtime));
+                if (!agent) {
+                    return;
+                }
+                const name = await vscode.window.showInputBox({
+                    title: "Add external corpus",
+                    prompt: `Name for this external source (unique per agent)`,
+                    placeHolder: "e.g. regression-set",
+                    ignoreFocusOut: true,
+                });
+                if (name === undefined || name.trim().length === 0) {
+                    return;
+                }
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Select a JSONL corpus file",
+                    canSelectMany: false,
+                    openLabel: "Add corpus",
+                    filters: { "JSONL corpus": ["jsonl"], "All files": ["*"] },
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                try {
+                    await runtime.addExternalCorpusSource({
+                        name: name.trim(),
+                        agent,
+                        kind: "jsonl-file",
+                        filePath: picked[0].fsPath,
+                    });
+                    corpusTree.refresh();
+                    vscode.window.showInformationMessage(
+                        `Added external corpus '${name.trim()}' for ${agent}.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to add external corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
-
     const statusBar = new StudioStatusBar(runtime);
     context.subscriptions.push(
         statusBar,
@@ -270,8 +495,59 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const collisions = new CollisionsTreeProvider(runtime);
+
+    // Shared scan flow used by both the manual command and the auto-scan
+    // Auto-scan debounce state, declared before the shared scan helper so an
+    // explicit scan can supersede a pending debounced one.
+    let autoScanTimer: ReturnType<typeof setTimeout> | undefined;
+    const AUTO_SCAN_DEBOUNCE_MS = 500;
+    const cancelPendingAutoScan = () => {
+        if (autoScanTimer !== undefined) {
+            clearTimeout(autoScanTimer);
+            autoScanTimer = undefined;
+        }
+    };
+
+    // subscription: run the grammar collision scan, then push fresh results
+    // and the skipped set into the tree.
+    const runCollisionScan = async () => {
+        // An explicit scan makes any queued debounced auto-scan redundant
+        // (e.g. the one refreshSandboxAgent triggers after Build grammar).
+        cancelPendingAutoScan();
+        const result = await runtime.scanGrammarCollisions();
+        await collisions.reloadFromRuntime();
+        collisions.setSkipped(result.skipped);
+        return result;
+    };
+
+    // Auto-scan: when the loaded agent set changes, re-scan after a short
+    // debounce so the Collisions view stays current without a manual click.
+    // Coalesces bursts (e.g. restoring several sandboxes at activation) into a
+    // single scan. Runs quietly — no progress UI or toast.
+    const scheduleAutoScan = () => {
+        const enabled = vscode.workspace
+            .getConfiguration("typeagentStudio.collisions")
+            .get<boolean>("autoScanOnAgentChange", true);
+        if (!enabled) {
+            return;
+        }
+        cancelPendingAutoScan();
+        autoScanTimer = setTimeout(() => {
+            autoScanTimer = undefined;
+            void runCollisionScan().catch((error) => {
+                console.warn(
+                    "[typeagent-studio] Auto collision scan failed:",
+                    describeError(error),
+                );
+            });
+        }, AUTO_SCAN_DEBOUNCE_MS);
+    };
+    const agentLoadSubscription = runtime.onAgentLoadChanged(scheduleAutoScan);
+
     context.subscriptions.push(
         collisions,
+        agentLoadSubscription,
+        { dispose: cancelPendingAutoScan },
         vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
@@ -290,9 +566,8 @@ export function activate(context: vscode.ExtensionContext): void {
                             location: { viewId: COLLISIONS_VIEW_ID },
                             title: "Scanning grammars for collisions...",
                         },
-                        () => runtime.scanGrammarCollisions(),
+                        () => runCollisionScan(),
                     );
-                    await collisions.reloadFromRuntime();
                     if (result.scanned.length === 0) {
                         vscode.window.showWarningMessage(
                             "No compiled grammars found to scan. Load agents into a sandbox and build their grammars first.",
@@ -309,6 +584,64 @@ export function activate(context: vscode.ExtensionContext): void {
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Collision scan failed: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.buildAgentGrammar",
+            async (row?: CollisionRow) => {
+                const agent = row?.agentName;
+                if (agent === undefined || agent.length === 0) {
+                    vscode.window.showErrorMessage(
+                        "No agent selected to build.",
+                    );
+                    return;
+                }
+                const { repoRoot, agentsDirFound } = runtime.getRepoRootInfo();
+                if (!agentsDirFound) {
+                    vscode.window.showErrorMessage(
+                        "Can't build grammar: no 'packages/agents' directory found. Open the monorepo's 'ts' folder.",
+                    );
+                    return;
+                }
+                const pkg = await readAgentPackageInfo(repoRoot, agent);
+                const packageName = pkg?.name ?? agent;
+                // Prefer a dedicated grammar-compile script; not every agent
+                // folds `agc` into its `build`, so falling straight to `build`
+                // can "succeed" without producing any compiled grammar.
+                const script = pickGrammarBuildScript(pkg?.scripts);
+                try {
+                    await vscode.window.withProgress(
+                        {
+                            location: vscode.ProgressLocation.Notification,
+                            title: `Building ${agent} grammar...`,
+                        },
+                        () => runAgentBuildTask(packageName, script, repoRoot),
+                    );
+                    // Reload the agent so its (cached) health badge and hashes
+                    // re-evaluate against the freshly built grammar; this also
+                    // emits sandbox.agent.loaded, which refreshes the trees and
+                    // triggers the collision auto-scan.
+                    await runtime.refreshSandboxAgent(agent);
+                    const scan = await runCollisionScan();
+                    const stillUnbuilt = scan.skipped.some(
+                        (s) =>
+                            s.agentName === agent &&
+                            s.reason === "grammar-not-built",
+                    );
+                    if (stillUnbuilt) {
+                        vscode.window.showWarningMessage(
+                            `Built ${agent}, but no compiled grammar was produced. Its build may not compile grammar (no 'agc' step) — check the agent's package.json scripts.`,
+                        );
+                    } else {
+                        vscode.window.showInformationMessage(
+                            `Built ${agent} and re-scanned collisions.`,
+                        );
+                    }
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to build ${agent}: ${describeError(error)}`,
                     );
                 }
             },
@@ -402,6 +735,186 @@ async function resolveSandboxId(
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/** Fallback emoji for agents whose manifest declares none. */
+const DEFAULT_AGENT_EMOJI = "🔌";
+
+/** Sentinel returned by the agent picker to request adding a search directory. */
+const ADD_AGENTS_DIR_SENTINEL = "\u0000add-agents-dir";
+
+/**
+ * Filterable agent picker: type-to-filter over the discovered agents (shown
+ * with their manifest emoji), while still allowing a free-text reference (a
+ * module specifier or path) that isn't in the list. Returns the chosen agent
+ * name/reference, or undefined if cancelled.
+ */
+function pickAgentRef(
+    available: readonly AvailableAgent[],
+    sandboxId: string,
+): Promise<string | undefined> {
+    type AgentItem = vscode.QuickPickItem & { agentName?: string };
+    return new Promise((resolve) => {
+        const qp = vscode.window.createQuickPick<AgentItem>();
+        qp.title = `Load agent into '${sandboxId}'`;
+        qp.placeholder =
+            "Pick an agent, or type a name / module specifier / path";
+        qp.items = [
+            {
+                label: "$(add) Add agents directory…",
+                description: "Discover agents from another folder",
+                agentName: ADD_AGENTS_DIR_SENTINEL,
+            },
+            ...available.map((agent) => ({
+                label: `${agent.emoji ?? DEFAULT_AGENT_EMOJI} ${agent.name}`,
+                agentName: agent.name,
+            })),
+        ];
+        qp.ignoreFocusOut = true;
+        let accepted = false;
+        qp.onDidAccept(() => {
+            // Selected item → its agent name; otherwise the typed free text.
+            const picked = qp.selectedItems[0]?.agentName ?? qp.value.trim();
+            accepted = true;
+            qp.hide();
+            resolve(picked.length > 0 ? picked : undefined);
+        });
+        qp.onDidHide(() => {
+            qp.dispose();
+            if (!accepted) {
+                resolve(undefined);
+            }
+        });
+        qp.show();
+    });
+}
+
+/**
+ * Prompt the user to choose an agent that currently has a corpus view. Returns
+ * the only agent when there's just one, or undefined if there are none / the
+ * user cancels.
+ */
+async function pickCorpusAgent(
+    runtime: ReturnType<typeof createStudioRuntime>,
+): Promise<string | undefined> {
+    const agents = await runtime.listCorpusAgents();
+    if (agents.length === 0) {
+        vscode.window.showInformationMessage(
+            "No agents are loaded. Load an agent into a sandbox first.",
+        );
+        return undefined;
+    }
+    if (agents.length === 1) {
+        return agents[0];
+    }
+    return vscode.window.showQuickPick(agents, {
+        title: "Select an agent",
+        placeHolder: "Agent",
+    });
+}
+
+/**
+ * Read an agent package's name and scripts from
+ * `packages/agents/<agent>/package.json`. Returns undefined when unreadable.
+ */
+async function readAgentPackageInfo(
+    repoRoot: string,
+    agent: string,
+): Promise<{ name?: string; scripts: Record<string, string> } | undefined> {
+    try {
+        const pkgPath = path.join(
+            repoRoot,
+            "packages",
+            "agents",
+            agent,
+            "package.json",
+        );
+        const parsed: unknown = JSON.parse(await readFile(pkgPath, "utf8"));
+        if (typeof parsed !== "object" || parsed === null) {
+            return undefined;
+        }
+        const obj = parsed as { name?: unknown; scripts?: unknown };
+        const scripts: Record<string, string> = {};
+        if (typeof obj.scripts === "object" && obj.scripts !== null) {
+            for (const [key, value] of Object.entries(obj.scripts)) {
+                if (typeof value === "string") {
+                    scripts[key] = value;
+                }
+            }
+        }
+        return {
+            ...(typeof obj.name === "string" ? { name: obj.name } : {}),
+            scripts,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Choose the npm script that compiles an agent's grammar. Prefer a dedicated
+ * `agc:all` / `agc` script; fall back to `build` (some agents fold grammar
+ * compilation into their build).
+ */
+function pickGrammarBuildScript(
+    scripts: Record<string, string> | undefined,
+): string {
+    if (scripts?.["agc:all"] !== undefined) {
+        return "agc:all";
+    }
+    if (scripts?.["agc"] !== undefined) {
+        return "agc";
+    }
+    return "build";
+}
+
+/**
+ * Run a single agent package script via a VS Code task (e.g. `agc:all` to
+ * compile its grammars). Resolves on a clean exit and rejects on a non-zero
+ * exit code or task failure.
+ */
+function runAgentBuildTask(
+    packageName: string,
+    script: string,
+    cwd: string,
+): Promise<void> {
+    const execution = new vscode.ShellExecution(
+        "pnpm",
+        ["--filter", packageName, "run", script],
+        { cwd },
+    );
+    const task = new vscode.Task(
+        { type: "typeagent-studio.buildAgentGrammar" },
+        vscode.TaskScope.Workspace,
+        `Build ${packageName}`,
+        "TypeAgent Studio",
+        execution,
+    );
+    task.presentationOptions = {
+        reveal: vscode.TaskRevealKind.Silent,
+        clear: true,
+    };
+    return new Promise<void>((resolve, reject) => {
+        const subscription = vscode.tasks.onDidEndTaskProcess((event) => {
+            if (event.execution.task !== task) {
+                return;
+            }
+            subscription.dispose();
+            if (event.exitCode === 0) {
+                resolve();
+            } else {
+                reject(
+                    new Error(
+                        `build exited with code ${event.exitCode ?? "unknown"}`,
+                    ),
+                );
+            }
+        });
+        vscode.tasks.executeTask(task).then(undefined, (error: unknown) => {
+            subscription.dispose();
+            reject(error instanceof Error ? error : new Error(String(error)));
+        });
+    });
 }
 
 export function deactivate(): void {}

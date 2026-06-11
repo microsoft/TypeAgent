@@ -12,12 +12,15 @@ import type {
     CollisionDetectedEvent,
     CollisionKind,
 } from "@typeagent/core/events";
+import type { GrammarScanSkip } from "@typeagent/core/collisionScanner";
 
 export type CollisionRowKind =
     | "collision"
     | "participant"
     | "exemplar"
-    | "empty";
+    | "empty"
+    | "skipped-group"
+    | "skipped";
 
 export interface CollisionEntry {
     /** Monotonic sequence assigned by the provider as collisions arrive. */
@@ -38,6 +41,8 @@ export interface CollisionRow {
     hasChildren: boolean;
     /** Absolute path the row opens when activated (navigable rows only). */
     openPath?: string;
+    /** Owning agent package for skipped rows (used by the build action). */
+    agentName?: string;
 }
 
 const KIND_ICON: Record<CollisionKind, string> = {
@@ -85,33 +90,116 @@ function formatCollisionTooltip(event: CollisionDetectedEvent): string {
 /** Map provider entries (expected newest-first) into top-level rows. */
 export function buildCollisionRows(
     entries: readonly CollisionEntry[],
+    skipped: readonly GrammarScanSkip[] = [],
 ): CollisionRow[] {
-    if (entries.length === 0) {
-        return [
-            {
-                kind: "empty",
-                id: "collision:empty",
-                label: "No collisions detected",
-                description:
-                    "Collisions appear as schemas and grammars overlap",
-                icon: "check",
-                hasChildren: false,
-            },
-        ];
+    const rows: CollisionRow[] = [];
+
+    if (skipped.length > 0) {
+        rows.push({
+            kind: "skipped-group",
+            id: "collision:skipped",
+            label: `Skipped (${skipped.length})`,
+            description: "Agents excluded from the most recent scan",
+            tooltip:
+                "Agents whose grammars couldn't be scanned (no compiled grammar, parse error, or compile error). Click to expand.",
+            contextValue: "studioCollisionSkippedGroup",
+            icon: "circle-slash",
+            hasChildren: true,
+        });
     }
 
-    return entries.map(({ seq, event }) => ({
-        kind: "collision" as const,
-        id: `collision:${seq}`,
-        label: formatCollisionSummary(event),
-        description: event.detectionPoint,
-        tooltip: formatCollisionTooltip(event),
-        contextValue: "studioCollision",
-        icon: iconForCollisionKind(event.kind),
-        hasChildren:
-            event.participants.length > 0 ||
-            (event.exemplarUtterances?.length ?? 0) > 0,
-    }));
+    if (entries.length === 0) {
+        rows.push({
+            kind: "empty",
+            id: "collision:empty",
+            label: "No collisions detected",
+            description: "Collisions appear as schemas and grammars overlap",
+            icon: "check",
+            hasChildren: false,
+        });
+        return rows;
+    }
+
+    for (const { seq, event } of entries) {
+        rows.push({
+            kind: "collision",
+            id: `collision:${seq}`,
+            label: formatCollisionSummary(event),
+            description: event.detectionPoint,
+            tooltip: formatCollisionTooltip(event),
+            contextValue: "studioCollision",
+            icon: iconForCollisionKind(event.kind),
+            hasChildren:
+                event.participants.length > 0 ||
+                (event.exemplarUtterances?.length ?? 0) > 0,
+        });
+    }
+    return rows;
+}
+
+const SKIPPED_REASON_ICON: Record<GrammarScanSkip["reason"], string> = {
+    "no-grammar": "circle-outline",
+    "grammar-not-built": "circle-slash",
+    "parse-error": "warning",
+    "compile-error": "error",
+};
+
+const SKIPPED_REASON_LABEL: Record<GrammarScanSkip["reason"], string> = {
+    "no-grammar": "no grammar",
+    "grammar-not-built": "grammar not built",
+    "parse-error": "parse error",
+    "compile-error": "compile error",
+};
+
+/** Build the child rows under the "Skipped (N)" group. */
+export function buildSkippedRows(
+    skipped: readonly GrammarScanSkip[],
+): CollisionRow[] {
+    return skipped.map((skip, index) => {
+        const reasonLabel = SKIPPED_REASON_LABEL[skip.reason];
+        // Surface the owning agent when the skipped schema is a sub-schema of
+        // a different package (e.g. `crossword` inside `browser`) so authors
+        // aren't confused by a name that doesn't match a loaded agent.
+        const ownerSuffix =
+            skip.agentName !== undefined && skip.agentName !== skip.schemaName
+                ? ` (${skip.agentName})`
+                : "";
+        // An unbuilt grammar is only buildable when the agent has a compile
+        // script; otherwise it ships .agr source with no build step and the
+        // "Build grammar" action would do nothing — so don't offer it.
+        const buildable =
+            skip.reason === "grammar-not-built" && skip.compilable === true;
+        const reasonText =
+            skip.reason === "grammar-not-built" && skip.compilable === false
+                ? "grammar source not compiled (no build step)"
+                : reasonLabel;
+        const tooltipLines = [`Schema: ${skip.schemaName}`];
+        if (ownerSuffix !== "") {
+            tooltipLines.push(`Agent: ${skip.agentName}`);
+        }
+        tooltipLines.push(`Reason: ${reasonText}`);
+        if (skip.error !== undefined) {
+            tooltipLines.push(`Detail: ${skip.error}`);
+        }
+        return {
+            kind: "skipped",
+            id: `collision:skipped:${index}`,
+            label: `${skip.schemaName}${ownerSuffix}`,
+            description:
+                skip.error !== undefined
+                    ? `${reasonText} — ${skip.error}`
+                    : reasonText,
+            tooltip: tooltipLines.join("\n"),
+            contextValue: buildable
+                ? "studioCollisionSkippedBuildable"
+                : "studioCollisionSkipped",
+            icon: SKIPPED_REASON_ICON[skip.reason] ?? "circle-slash",
+            hasChildren: false,
+            ...(skip.agentName !== undefined
+                ? { agentName: skip.agentName }
+                : {}),
+        };
+    });
 }
 
 /** Child rows (participants then exemplar utterances) for one collision. */

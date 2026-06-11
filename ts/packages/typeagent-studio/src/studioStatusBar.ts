@@ -34,6 +34,17 @@ export class StudioStatusBar implements vscode.Disposable {
     }
 
     async refresh(): Promise<void> {
+        // When no `packages/agents` directory was found, agent health is
+        // meaningless — surface a persistent warning pointing at the fix
+        // instead of an "all healthy / unknown" summary over zero agents.
+        const repoRootInfo = this.runtime.getRepoRootInfo();
+        if (!repoRootInfo.agentsDirFound) {
+            this.item.text = "$(warning) Studio: no agents";
+            this.item.tooltip =
+                "TypeAgent Studio couldn't find a 'packages/agents' directory. Open the monorepo's 'ts' folder to enable agent discovery, health, and collisions.";
+            this.item.backgroundColor = backgroundForLevel("warning");
+            return;
+        }
         const summary = summarizeAgentHealth(
             await this.runtime.listSandboxes(),
         );

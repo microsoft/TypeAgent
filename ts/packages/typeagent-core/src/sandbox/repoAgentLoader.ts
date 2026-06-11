@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import {
+    type AgentRootsInput,
     discoverAgentFiles,
     FileHealthService,
     hashFileContents,
+    resolveAgentRoots,
     type HealthFinding,
     type HealthService,
 } from "../health/index.js";
@@ -13,6 +15,13 @@ import type { AgentLoader, HealthStatus, SandboxAgentInfo } from "./types.js";
 export interface RepoAgentLoaderOptions {
     /** Repository root that contains `packages/agents/<name>`. */
     repoRoot: string;
+    /**
+     * Ordered directories that contain agent subdirectories (each peer to
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. May be a
+     * provider so configuration changes are picked up without reconstruction.
+     * An agent reference is resolved by probing each root.
+     */
+    agentRoots?: AgentRootsInput;
     /**
      * Health service used to assess a loaded agent. Defaults to a
      * `FileHealthService` rooted at `repoRoot`. Injectable for tests.
@@ -71,14 +80,21 @@ export function createRepoAgentLoader(
 ): AgentLoader {
     const { repoRoot } = options;
     const healthService =
-        options.healthService ?? new FileHealthService({ repoRoot });
+        options.healthService ??
+        new FileHealthService({
+            repoRoot,
+            ...(options.agentRoots !== undefined
+                ? { agentRoots: options.agentRoots }
+                : {}),
+        });
 
     return async (
         _sandboxId: string,
         agentRef: string,
     ): Promise<Omit<SandboxAgentInfo, "loadedAt">> => {
         const name = resolveAgentName(agentRef);
-        const files = await discoverAgentFiles(repoRoot, name);
+        const agentRoots = resolveAgentRoots(options.agentRoots, repoRoot);
+        const files = await discoverAgentFiles(agentRoots, name);
 
         const located =
             files.manifestFile !== undefined ||

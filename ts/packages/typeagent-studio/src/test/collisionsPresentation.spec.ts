@@ -7,6 +7,7 @@ import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import {
     buildCollisionChildRows,
     buildCollisionRows,
+    buildSkippedRows,
     formatCollisionSummary,
     formatParticipants,
     iconForCollisionKind,
@@ -138,4 +139,141 @@ test("participant rows omit openPath for placeholder source files", () => {
         ),
     );
     assert.equal(rows[0].openPath, undefined);
+});
+
+test("buildCollisionRows prepends a skipped-group row when scan reported skips", () => {
+    const rows = buildCollisionRows(
+        [entry(0, collision())],
+        [
+            { schemaName: "code", reason: "no-grammar" },
+            {
+                schemaName: "player",
+                reason: "compile-error",
+                error: "unknown variable t",
+            },
+        ],
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].kind, "skipped-group");
+    assert.equal(rows[0].id, "collision:skipped");
+    assert.equal(rows[0].label, "Skipped (2)");
+    assert.equal(rows[0].hasChildren, true);
+    assert.equal(rows[1].kind, "collision");
+});
+
+test("buildCollisionRows skipped-group appears alongside the empty placeholder", () => {
+    const rows = buildCollisionRows(
+        [],
+        [{ schemaName: "code", reason: "no-grammar" }],
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].kind, "skipped-group");
+    assert.equal(rows[1].kind, "empty");
+});
+
+test("buildSkippedRows formats reason and surfaces error detail in description", () => {
+    const rows = buildSkippedRows([
+        { schemaName: "code", reason: "no-grammar" },
+        {
+            schemaName: "player",
+            reason: "compile-error",
+            error: "unknown variable t",
+        },
+        {
+            schemaName: "crossword",
+            reason: "parse-error",
+            error: "unexpected token",
+        },
+    ]);
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].id, "collision:skipped:0");
+    assert.equal(rows[0].label, "code");
+    assert.equal(rows[0].description, "no grammar");
+    assert.equal(rows[0].icon, "circle-outline");
+    assert.equal(rows[1].description, "compile error — unknown variable t");
+    assert.equal(rows[1].icon, "error");
+    assert.equal(rows[1].tooltip?.includes("Detail: unknown variable t"), true);
+    assert.equal(rows[2].icon, "warning");
+});
+
+test("buildSkippedRows labels grammar-not-built distinctly from no-grammar", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
+        { schemaName: "chat", agentName: "chat", reason: "no-grammar" },
+    ]);
+    assert.equal(rows[0].description, "grammar not built");
+    assert.equal(rows[0].icon, "circle-slash");
+    assert.equal(rows[1].description, "no grammar");
+    assert.equal(rows[1].icon, "circle-outline");
+});
+
+test("buildSkippedRows only marks grammar-not-built buildable when compilable", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
+        {
+            schemaName: "email",
+            agentName: "email",
+            reason: "grammar-not-built",
+            compilable: false,
+        },
+    ]);
+    // Compilable → buildable row with the build action.
+    assert.equal(rows[0].contextValue, "studioCollisionSkippedBuildable");
+    assert.equal(rows[0].agentName, "code");
+    assert.equal(rows[0].description, "grammar not built");
+    // Has .agr source but no compile script → not buildable, clear reason.
+    assert.equal(rows[1].contextValue, "studioCollisionSkipped");
+    assert.equal(
+        rows[1].description,
+        "grammar source not compiled (no build step)",
+    );
+});
+
+test("buildSkippedRows marks grammar-not-built rows buildable with their agent", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "code",
+            agentName: "code",
+            reason: "grammar-not-built",
+            compilable: true,
+        },
+        {
+            schemaName: "player",
+            agentName: "player",
+            reason: "compile-error",
+            error: "unknown variable t",
+        },
+    ]);
+    assert.equal(rows[0].contextValue, "studioCollisionSkippedBuildable");
+    assert.equal(rows[0].agentName, "code");
+    // Non-buildable reasons keep the plain contextValue.
+    assert.equal(rows[1].contextValue, "studioCollisionSkipped");
+});
+
+test("buildSkippedRows annotates sub-schemas with their owning agent", () => {
+    const rows = buildSkippedRows([
+        {
+            schemaName: "crossword",
+            agentName: "browser",
+            reason: "compile-error",
+            error: "unknown variable __opt_v_0",
+        },
+        { schemaName: "code", agentName: "code", reason: "no-grammar" },
+    ]);
+    // Sub-schema name differs from agent -> show "(browser)" suffix.
+    assert.equal(rows[0].label, "crossword (browser)");
+    assert.equal(rows[0].tooltip?.includes("Agent: browser"), true);
+    // Agent name equals schema name -> no redundant suffix.
+    assert.equal(rows[1].label, "code");
+    assert.equal(rows[1].tooltip?.includes("Agent:"), false);
 });

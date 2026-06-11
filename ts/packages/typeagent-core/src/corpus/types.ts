@@ -98,6 +98,15 @@ export interface CorpusService {
     addExternalSource(spec: ExternalSourceSpec): Promise<void>;
     removeExternalSource(agent: string, name: string): Promise<void>;
     listExternalSources(agent?: string): Promise<ExternalSourceSpec[]>;
+    /**
+     * Ensure the in-repo corpus file (`<repoRoot>/corpus/<agent>.utterances.jsonl`)
+     * exists so an author can start populating it. Creates an empty file (and
+     * its parent directory) when absent. Returns the path and whether it was
+     * newly created.
+     */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
 }
 
 /** Thrown when promotion references ids not found in captures. */
@@ -116,5 +125,17 @@ export class ExternalSourceExistsError extends Error {
     ) {
         super(`External source already registered: ${agent}/${name}`);
         this.name = "ExternalSourceExistsError";
+    }
+}
+
+/**
+ * Thrown when an agent name can't be used as a single path segment (e.g. it
+ * contains a path separator or `..`), which would let corpus file operations
+ * escape `<repoRoot>/corpus`.
+ */
+export class InvalidAgentNameError extends Error {
+    constructor(public readonly agent: string) {
+        super(`Invalid agent name (must be a single path segment): ${agent}`);
+        this.name = "InvalidAgentNameError";
     }
 }

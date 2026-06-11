@@ -23,12 +23,16 @@ import type { ReplayActionResolver } from "@typeagent/core/replay";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
 
-function createContext(workspaceFolderFsPaths: string[] = []) {
+function createContext(
+    workspaceFolderFsPaths: string[] = [],
+    agentSearchPaths: string[] = [],
+) {
     const store = new Map<string, unknown>();
     return {
         context: {
             globalStorageFsPath: "C:/tmp/typeagent-studio-tests",
             workspaceFolderFsPaths,
+            agentSearchPaths,
             workspaceState: {
                 get<T>(key: string): T | undefined {
                     return store.get(key) as T | undefined;
@@ -80,6 +84,100 @@ class RecordingSandboxManager implements SandboxManager {
         return [...this.running.values()];
     }
 }
+
+test("persists sandbox set across runtime instances and replays it on restore", async () => {
+    const { context, store } = createContext();
+
+    // The base RecordingSandboxManager doesn't propagate cfg.agents into
+    // status, so we extend it to mirror the real manager's semantics: agents
+    // listed in cfg or added via loadAgent show up in status.agents.
+    class CapturingSandboxManager extends RecordingSandboxManager {
+        readonly started: SandboxConfig[] = [];
+        async start(cfg: SandboxConfig): Promise<SandboxHandle> {
+            this.started.push(cfg);
+            const handle = await super.start(cfg);
+            for (const ref of cfg.agents) {
+                await this.loadAgent(cfg.id, ref);
+            }
+            return handle;
+        }
+        async loadAgent(id: string, agentRef: string): Promise<void> {
+            await super.loadAgent(id, agentRef);
+            const status = await super.status(id);
+            status.agents.push({
+                name: agentRef,
+                sourcePath: agentRef,
+                schemaHash: "stub",
+                grammarHash: "stub",
+                health: "unknown",
+            });
+        }
+    }
+
+    const first = createStudioRuntimeCore(context, {
+        sandbox: new CapturingSandboxManager(),
+    });
+    await first.startSandbox({ id: "alpha", agents: ["agentA"] });
+    await first.startSandbox({ id: "beta" });
+    await first.loadSandboxAgent("beta", "agentB");
+
+    const persisted = store.get("studio.persistedSandboxes") as Array<{
+        id: string;
+        agents: string[];
+    }>;
+    assert.deepEqual(persisted.map((p) => p.id).sort(), ["alpha", "beta"]);
+    assert.deepEqual(persisted.find((p) => p.id === "alpha")?.agents, [
+        "agentA",
+    ]);
+    assert.deepEqual(persisted.find((p) => p.id === "beta")?.agents, [
+        "agentB",
+    ]);
+
+    const recorder = new CapturingSandboxManager();
+    const second = createStudioRuntimeCore(context, { sandbox: recorder });
+    assert.deepEqual(await second.listSandboxes(), []);
+
+    await second.restoreSandboxes();
+
+    const restored = (await second.listSandboxes()).map((s) => s.id).sort();
+    assert.deepEqual(restored, ["alpha", "beta"]);
+    const startedById = new Map(recorder.started.map((c) => [c.id, c.agents]));
+    assert.deepEqual(startedById.get("alpha"), ["agentA"]);
+    assert.deepEqual(startedById.get("beta"), ["agentB"]);
+});
+
+test("restoreSandboxes survives a per-sandbox failure and persists the surviving set", async () => {
+    const { context, store } = createContext();
+    await context.workspaceState.update("studio.persistedSandboxes", [
+        { id: "good", agents: [] },
+        { id: "bad", agents: [] },
+    ]);
+
+    class HostileSandboxManager extends RecordingSandboxManager {
+        async start(cfg: SandboxConfig): Promise<SandboxHandle> {
+            if (cfg.id === "bad") {
+                throw new Error("nope");
+            }
+            return super.start(cfg);
+        }
+    }
+
+    const runtime = createStudioRuntimeCore(context, {
+        sandbox: new HostileSandboxManager(),
+    });
+    await runtime.restoreSandboxes();
+
+    const live = (await runtime.listSandboxes()).map((s) => s.id);
+    assert.deepEqual(live, ["good"]);
+
+    const persisted = store.get("studio.persistedSandboxes") as Array<{
+        id: string;
+    }>;
+    assert.deepEqual(
+        persisted.map((p) => p.id),
+        ["good"],
+    );
+});
 
 test("runRemainingPhasesOnActiveSession completes pipeline in order", async () => {
     let now = 100;
@@ -608,6 +706,146 @@ test("loadSandboxAgent loads an agent and emits a lifecycle event", async () => 
     anySub.dispose();
 });
 
+test("startSandbox after restore mints a unique id instead of colliding with the restored default", async () => {
+    const { context, store } = createContext();
+    // Simulate a prior session whose default sandbox was persisted.
+    store.set("studio.persistedSandboxes", [
+        { id: "studio-default", agents: [] },
+    ]);
+    const runtime = createStudioRuntimeCore(context);
+
+    await runtime.restoreSandboxes();
+    assert.deepEqual(
+        (await runtime.listSandboxes()).map((s) => s.id),
+        ["studio-default"],
+    );
+
+    // The title-bar "+" (no id) must not collide with the restored default.
+    const added = await runtime.startSandbox();
+    assert.equal(added.id, "studio-default-2");
+    assert.equal((await runtime.listSandboxes()).length, 2);
+});
+
+test("startSandbox mints unique ids so multiple sandboxes can coexist", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    const first = await runtime.startSandbox();
+    const second = await runtime.startSandbox();
+    const third = await runtime.startSandbox();
+
+    // First reuses the default id; subsequent ones get unique suffixes.
+    assert.equal(first.id, "studio-default");
+    assert.notEqual(second.id, first.id);
+    assert.notEqual(third.id, second.id);
+
+    const ids = (await runtime.listSandboxes()).map((s) => s.id).sort();
+    assert.deepEqual(ids, [
+        "studio-default",
+        "studio-default-2",
+        "studio-default-3",
+    ]);
+
+    // An explicit id is still honored.
+    const named = await runtime.startSandbox({ id: "experiment-1" });
+    assert.equal(named.id, "experiment-1");
+});
+
+test("listAvailableAgents lists packages/agents dirs and reads manifest emojis", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-agents-"));
+    try {
+        const agentsDir = path.join(repoRoot, "packages", "agents");
+        const mkAgent = async (
+            name: string,
+            opts: { manifestRef?: string; emoji?: string } = {},
+        ) => {
+            const dir = path.join(agentsDir, name);
+            await fs.mkdir(path.join(dir, "src"), { recursive: true });
+            await fs.writeFile(
+                path.join(dir, "package.json"),
+                JSON.stringify({
+                    name,
+                    ...(opts.manifestRef
+                        ? { exports: { "./agent/manifest": opts.manifestRef } }
+                        : {}),
+                }),
+            );
+            if (opts.manifestRef) {
+                await fs.writeFile(
+                    path.join(dir, opts.manifestRef),
+                    JSON.stringify({ emojiChar: opts.emoji }),
+                );
+            }
+        };
+        await mkAgent("player", {
+            manifestRef: "./src/playerManifest.json",
+            emoji: "🎵",
+        });
+        await mkAgent("calendar", {
+            manifestRef: "./src/calendarManifest.json",
+            emoji: "📅",
+        });
+        await mkAgent("agentUtils"); // a lib, not an agent (no manifest export)
+        await fs.mkdir(path.join(agentsDir, "dist"), { recursive: true });
+
+        const { context } = createContext([repoRoot]);
+        const runtime = createStudioRuntimeCore(context);
+
+        assert.deepEqual(await runtime.listAvailableAgents(), [
+            { name: "calendar", emoji: "📅" },
+            { name: "player", emoji: "🎵" },
+        ]);
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("listAvailableAgents includes agents from configured agentSearchPaths", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-roots-"));
+    try {
+        const mkAgentAt = async (dir: string, name: string, emoji: string) => {
+            const pkgDir = path.join(dir, name);
+            await fs.mkdir(path.join(pkgDir, "src"), { recursive: true });
+            await fs.writeFile(
+                path.join(pkgDir, "package.json"),
+                JSON.stringify({
+                    name,
+                    exports: { "./agent/manifest": "./src/m.json" },
+                }),
+            );
+            await fs.writeFile(
+                path.join(pkgDir, "src", "m.json"),
+                JSON.stringify({ emojiChar: emoji }),
+            );
+        };
+        // One agent in the repo's own packages/agents, one in a sibling dir.
+        await mkAgentAt(
+            path.join(repoRoot, "packages", "agents"),
+            "player",
+            "🎵",
+        );
+        await mkAgentAt(
+            path.join(repoRoot, "external", "agents"),
+            "secret",
+            "🕵",
+        );
+
+        // Relative search path, resolved against the repo root.
+        const { context } = createContext(
+            [repoRoot],
+            [path.join("external", "agents")],
+        );
+        const runtime = createStudioRuntimeCore(context);
+
+        assert.deepEqual(await runtime.listAvailableAgents(), [
+            { name: "player", emoji: "🎵" },
+            { name: "secret", emoji: "🕵" },
+        ]);
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("unloadSandboxAgent removes a loaded agent", async () => {
     const { context } = createContext();
     const runtime = createStudioRuntimeCore(context);
@@ -619,6 +857,34 @@ test("unloadSandboxAgent removes a loaded agent", async () => {
 
     const status = await runtime.unloadSandboxAgent(started.id, "calendar");
     assert.ok(!status.agents.some((agent) => agent.name === "calendar"));
+});
+
+test("refreshSandboxAgent reloads the agent in each sandbox where it is loaded", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    await runtime.startSandbox({ id: "a", agents: ["player"] });
+    await runtime.startSandbox({ id: "b", agents: ["player", "calendar"] });
+
+    let playerReloads = 0;
+    const sub = runtime.onAnyEvent((event) => {
+        if (
+            event.type === "sandbox.agent.loaded" &&
+            event.affectedAgent === "player"
+        ) {
+            playerReloads++;
+        }
+    });
+
+    const refreshed = await runtime.refreshSandboxAgent("player");
+    sub.dispose();
+
+    // player is loaded in both sandboxes → both reloaded, one event each.
+    assert.equal(refreshed, 2);
+    assert.equal(playerReloads, 2);
+
+    // An agent not loaded anywhere refreshes nothing.
+    assert.equal(await runtime.refreshSandboxAgent("nonexistent"), 0);
 });
 
 test("recordFeedback emits an event and federates into the agent corpus", async () => {
@@ -678,6 +944,12 @@ class StubCorpusService implements CorpusService {
     async removeExternalSource(): Promise<void> {}
     async listExternalSources() {
         return [];
+    }
+    async seedInRepoCorpus(agent: string) {
+        return {
+            path: `mem://corpus/${agent}.utterances.jsonl`,
+            created: true,
+        };
     }
 }
 
@@ -868,6 +1140,32 @@ test("scanGrammarCollisions with replace=false accumulates collisions", async ()
     await runtime.scanGrammarCollisions({ agents: ["a", "b"], replace: false });
 
     assert.equal((await runtime.listCollisions()).length, 2);
+});
+
+test("onAgentLoadChanged fires on agent load and unload but not other lifecycle", async () => {
+    const { context } = createContext();
+    const runtime = createStudioRuntimeCore(context);
+
+    let fires = 0;
+    const sub = runtime.onAgentLoadChanged(() => {
+        fires++;
+    });
+
+    const started = await runtime.startSandbox();
+    // startSandbox alone (no agents) must not trigger the agent-load listener.
+    assert.equal(fires, 0);
+
+    await runtime.loadSandboxAgent(started.id, "player");
+    assert.equal(fires, 1);
+
+    await runtime.unloadSandboxAgent(started.id, "player");
+    assert.equal(fires, 2);
+
+    sub.dispose();
+
+    // After disposal, further changes must not be observed.
+    await runtime.loadSandboxAgent(started.id, "calendar");
+    assert.equal(fires, 2);
 });
 
 test("scanGrammarCollisions defaults to agents loaded across sandboxes", async () => {

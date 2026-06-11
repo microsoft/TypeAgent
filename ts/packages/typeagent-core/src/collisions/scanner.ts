@@ -24,6 +24,11 @@ import {
     type CollisionRecord,
     type SchemaInput,
 } from "grammar-tools-core";
+import {
+    resolveAgentPackageDir,
+    resolveAgentRoots,
+    type AgentRootsInput,
+} from "../health/index.js";
 import type { GrammarToolCollisionLike } from "./types.js";
 
 export interface GrammarScanRequest {
@@ -33,7 +38,19 @@ export interface GrammarScanRequest {
 
 export interface GrammarScanSkip {
     schemaName: string;
-    reason: "no-grammar" | "parse-error" | "compile-error";
+    /** Owning agent package, when the schema is a sub-schema of an agent. */
+    agentName?: string;
+    reason:
+        | "no-grammar"
+        | "grammar-not-built"
+        | "parse-error"
+        | "compile-error";
+    /**
+     * For `grammar-not-built`: whether the agent has a grammar-compile script
+     * (`agc` / `agc:all`) so the grammar can actually be built. When false, the
+     * agent ships `.agr` source with no build step to compile it.
+     */
+    compilable?: boolean;
     error?: string;
 }
 
@@ -57,6 +74,13 @@ export type GrammarCollisionScanner = (
 export interface RepoGrammarScannerOptions {
     /** Repository root that contains `packages/agents/<name>`. */
     repoRoot: string;
+    /**
+     * Ordered directories that contain agent subdirectories (each peer to
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. May be a
+     * provider so configuration changes are picked up without reconstruction.
+     * An agent is resolved by probing each root.
+     */
+    agentRoots?: AgentRootsInput;
 }
 
 /**
@@ -84,17 +108,38 @@ export function createRepoGrammarScanner(
             registerBuiltInEntities();
             entitiesRegistered = true;
         }
+        const agentRoots = resolveAgentRoots(options.agentRoots, repoRoot);
 
         const inputs: SchemaInput[] = [];
         const skipped: GrammarScanSkip[] = [];
         const seen = new Set<string>();
         const fileBySchema = new Map<string, string>();
+        const agentBySchema = new Map<string, string>();
 
         for (const agent of agents) {
-            const packageDir = path.join(repoRoot, "packages", "agents", agent);
-            const compiled = await findAgJsonFiles(packageDir);
+            const packageDir = await resolveAgentPackageDir(agentRoots, agent);
+            const compiled = await findFilesWithSuffix(packageDir, ".ag.json");
             if (compiled.length === 0) {
-                skipped.push({ schemaName: agent, reason: "no-grammar" });
+                // Distinguish "no grammar by design" (chat-style agents with no
+                // .agr sources) from "grammar source exists but isn't built".
+                // For the latter, also report whether a grammar-compile script
+                // exists so the UI only offers a build when one can succeed.
+                const hasSource =
+                    (await findFilesWithSuffix(packageDir, ".agr")).length > 0;
+                if (!hasSource) {
+                    skipped.push({
+                        schemaName: agent,
+                        agentName: agent,
+                        reason: "no-grammar",
+                    });
+                } else {
+                    skipped.push({
+                        schemaName: agent,
+                        agentName: agent,
+                        reason: "grammar-not-built",
+                        compilable: await hasGrammarCompileScript(packageDir),
+                    });
+                }
                 continue;
             }
             for (const file of compiled) {
@@ -103,6 +148,7 @@ export function createRepoGrammarScanner(
                     continue;
                 }
                 seen.add(schemaName);
+                agentBySchema.set(schemaName, agent);
                 try {
                     const grammar = grammarFromJson(
                         JSON.parse(await readFile(file, "utf8")),
@@ -115,6 +161,7 @@ export function createRepoGrammarScanner(
                 } catch (err) {
                     skipped.push({
                         schemaName,
+                        agentName: agent,
                         reason: "parse-error",
                         error: err instanceof Error ? err.message : String(err),
                     });
@@ -125,8 +172,10 @@ export function createRepoGrammarScanner(
         const result = scanGrammarCollisions(inputs);
 
         for (const skip of result.skipped) {
+            const agentName = agentBySchema.get(skip.schemaName);
             skipped.push({
                 schemaName: skip.schemaName,
+                ...(agentName !== undefined ? { agentName } : {}),
                 reason: skip.reason,
                 error: skip.error,
             });
@@ -189,7 +238,10 @@ async function resolveGrammarSource(agJsonFile: string): Promise<string> {
  * skipping heavy/irrelevant folders. Compiled grammars are emitted to each
  * agent's build output (`dist/`), so a recursive walk is required.
  */
-async function findAgJsonFiles(dir: string): Promise<string[]> {
+async function findFilesWithSuffix(
+    dir: string,
+    suffix: string,
+): Promise<string[]> {
     let entries: Dirent[];
     try {
         entries = await readdir(dir, { withFileTypes: true });
@@ -207,10 +259,34 @@ async function findAgJsonFiles(dir: string): Promise<string[]> {
             ) {
                 continue;
             }
-            out.push(...(await findAgJsonFiles(full)));
-        } else if (entry.isFile() && entry.name.endsWith(".ag.json")) {
+            out.push(...(await findFilesWithSuffix(full, suffix)));
+        } else if (entry.isFile() && entry.name.endsWith(suffix)) {
             out.push(full);
         }
     }
     return out;
+}
+
+/**
+ * Whether an agent package has a grammar-compile script (`agc` or `agc:all`,
+ * or any `agc:*` variant). Used to decide whether an unbuilt grammar can
+ * actually be compiled, vs. shipping `.agr` source with no build step.
+ */
+async function hasGrammarCompileScript(packageDir: string): Promise<boolean> {
+    try {
+        const raw = await readFile(
+            path.join(packageDir, "package.json"),
+            "utf8",
+        );
+        const parsed: unknown = JSON.parse(raw);
+        const scripts = (parsed as { scripts?: unknown }).scripts;
+        if (typeof scripts !== "object" || scripts === null) {
+            return false;
+        }
+        return Object.keys(scripts).some(
+            (name) => name === "agc" || name.startsWith("agc:"),
+        );
+    } catch {
+        return false;
+    }
 }
