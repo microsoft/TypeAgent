@@ -211,23 +211,34 @@ render `ActionResult` display content): the rich views need **typed results and
 an event stream**, not rendered markdown. The decided shape (see
 [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md)):
 
-- **A typed `studio` service channel over the existing agent-server transport** —
-  request/response `invoke` for typed results + a subscription for events
-  (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`), using the
-  `agent-rpc` channel pattern. **No second WebSocket/port** — it rides the
-  agent-server connection the canvas already uses.
-- **`studio` actions and MCP tools are thin wrappers over the same typed runtime
-  methods** — so the AI/conversational/CLI audiences get the same data, and the
-  channel is never a VS-Code-only side path. `ActionResult.displayContent` is
-  used only for chat summaries/links, never as the UI data plane (it carries no
-  generic typed payload, and clients receive a `CommandResult`, not the raw
-  `ActionResult<T>`).
+- **A typed `studio` service channel — the `studio` agent runs its own
+  WebSocket server** (the proven `code`↔`coda` pattern), with the `agent-rpc`
+  `createRpc` framing on top: request/response `invoke` for typed results + a
+  subscription for events (`healthChanged`, `replayRow`, `replayCompleted`,
+  `traceAppended`). The agent registers its port via `SessionContext.registerPort`;
+  the `typeagent-studio` extension discovers it via the agent-server `discovery`
+  channel (`discoverPort("studio")`) and connects as a client.
+  - _Why its own WS, not a channel on the agent-server connection:_ an AppAgent
+    only receives `SessionContext` — it has **no** `ChannelProvider`/transport
+    handle, and only the agent-server's `connectionHandler` creates connection
+    channels. So an agent **cannot** add a multiplexed channel to that
+    connection; running its own WS (like `code`) is the available pattern.
+- **The WS protocol is the canonical typed Studio API** — `studio` actions and
+  MCP tools are thin wrappers over the **same typed runtime methods**, so the
+  AI/conversational/CLI audiences get the same data and the channel is never a
+  VS-Code-only side path. `ActionResult.displayContent` is used only for chat
+  summaries/links, never as the UI data plane.
+- **Guardrails (carried from the channel review):** every message carries
+  **session/repo identity** (so per-workspace repo root / sandbox set / approval
+  scope can't bleed across windows); connections present a **capability token**
+  beyond an Origin check; the protocol has explicit **subscription ids,
+  cancellation, and backpressure/paging**.
 
 **Security / approval boundary.** Because the agent now _owns_ the runtime, any
-local client of the agent-server could in principle invoke it. Mutating actions
-(sandbox lifecycle, corpus/schema/grammar writes, costly replays) must stay
-behind the `dryRun` + approval model (§3.0, STUDIO-AGENT §5) and an
-authorization check on the service channel — not be silently invokable.
+local client that connects to its WS could in principle invoke it. Mutating
+actions (sandbox lifecycle, corpus/schema/grammar writes, costly replays) must
+stay behind the `dryRun` + approval model (§3.0, STUDIO-AGENT §5) and the
+channel's capability-token authorization — not be silently invokable.
 
 > **Transitional note.** The extension today still builds an in-process runtime
 > via `createStudioRuntime`. That is a bootstrap; it is migrated to an

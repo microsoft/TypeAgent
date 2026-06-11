@@ -114,10 +114,12 @@ Done / superseded:
 Ready to start (smallest → larger):
 
 1. **Studio service channel (the Option B migration; plan phase P-1.5)** — the
-   typed `StudioRequest/Response<T>` + `StudioEvent` subscription over a new
-   agent-server service channel (`agent-rpc` pattern, no new port), with channel
-   authorization. This is the prerequisite for any rich client and the step that
-   unifies collisions/events across the UI, chat, and MCP (one runtime). Build it
+   typed `StudioRequest/Response<T>` + `StudioEvent` subscription served by the
+   `studio` agent's **own WebSocket** (the `code`↔`coda` pattern: port via
+   `registerPort`, client discovers via `discoverPort("studio")`), with
+   `agent-rpc` `createRpc` framing and capability-token authorization. This is
+   the prerequisite for any rich client and the step that unifies
+   collisions/events across the UI, chat, and MCP (one runtime). Build it
    **before** the webview so the webview is its first, greenfield client.
 2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
@@ -169,25 +171,33 @@ and renders the results. See [`DESIGN.md` §3.5](./DESIGN.md). The extension's
 current in-process `createStudioRuntime` is a **transitional bootstrap** to be
 migrated to an agent-server client as the agent's action surface grows.
 
-**Typed result / event channel (decided).** For rich (non-chat) clients, expose a
-**typed `studio` service channel over the existing agent-server transport** —
-`invoke` for typed results + a subscription for events (`healthChanged`,
-`replayRow`, `replayCompleted`, `traceAppended`), using the `agent-rpc` channel
-pattern, **no new port**. `studio` actions and MCP tools wrap the **same typed
-runtime methods**; `ActionResult.displayContent` is chat-summary-only. Rejected:
+**Typed result / event channel (decided).** For rich (non-chat) clients, the
+`studio` agent serves a **typed service channel over its own WebSocket** — the
+proven `code`↔`coda` pattern: port registered via `registerPort`, the
+`typeagent-studio` client discovers it via `discoverPort("studio")`. On top runs
+`agent-rpc` `createRpc`: `invoke` for typed results + a subscription for events
+(`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`). That WS
+protocol is the **canonical typed API**; `studio` actions and MCP tools wrap the
+**same typed runtime methods**; `ActionResult.displayContent` is
+chat-summary-only. Guardrails: session/repo identity on every message, a
+capability token, and subscription/cancellation/backpressure. Rejected:
 "structured data on `ActionResult`" (clients get a `CommandResult`, not the raw
-`ActionResult<T>` — a platform change) and a VS-Code-only WebSocket (no session
-identity in the `code` precedent; risky for per-workspace scoping). See
-[`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md). Mutating actions must sit behind
-`dryRun` + approval **and** an authorization check on the channel.
+`ActionResult<T>` — a platform change) **and** "an `agent-rpc` channel on the
+existing agent-server connection, no new port" — **infeasible**: an AppAgent gets
+only `SessionContext` (no `ChannelProvider`/transport), and only the
+agent-server's `connectionHandler` creates channels, so an agent can't add one
+(this is exactly why `code` runs its own WS). See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
+Mutating actions must sit behind `dryRun` + approval **and** the channel's
+capability-token check.
 
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
 - ~~Where does the Studio **runtime** live?~~ **Resolved (Option B):** in the
   `studio` agent (one per workspace); UIs are clients (see the note above).
-- ~~**Typed result / event channel** for rich clients.~~ **Resolved:** typed
-  `studio` service channel over the agent-server (`agent-rpc` pattern), no new
-  port; actions/MCP wrap the same methods (see the note above).
+- ~~**Typed result / event channel** for rich clients.~~ **Resolved:** the
+  `studio` agent's own WebSocket (`code`↔`coda` pattern: `registerPort` /
+  `discoverPort`) with `agent-rpc` framing; actions/MCP wrap the same methods
+  (see the note above).
 - Where does the driving agent run — in-editor (Copilot driving commands), as a
   TypeAgent agent (conversational), or a CLI in CI? Each implies a different
   headless surface.

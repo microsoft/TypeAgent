@@ -287,29 +287,37 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 ## 8. Open questions
 
-- ~~**Typed result / event channel shape.**~~ **Decided (hybrid, leaning the
-  agent-rpc path):** expose a **typed `studio` service channel over the existing
-  agent-server transport** — request/response `invoke` for typed results (e.g.
-  `AvailableAgent[]`, `ActionDelta[]`, health findings) plus a subscription for
-  events (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`),
-  using the `agent-rpc` channel pattern. **No second WebSocket/port.** `studio`
-  actions and MCP tools are thin wrappers over the **same typed runtime
-  methods**, so the channel is never VS-Code-only and the AI/CLI audiences get
-  identical data; `ActionResult.displayContent` is used only for chat
-  summaries/links.
+- ~~**Typed result / event channel shape.**~~ **Decided (dedicated WS, the
+  `code`↔`coda` pattern, with guardrails):** the `studio` agent runs its **own
+  WebSocket server** and registers the port via `SessionContext.registerPort`;
+  the `typeagent-studio` extension discovers it through the agent-server
+  `discovery` channel (`discoverPort("studio")`) and connects. The
+  **`agent-rpc` `createRpc` framing** rides on top — `invoke` for typed results
+  (e.g. `AvailableAgent[]`, `ActionDelta[]`, health findings) + a subscription
+  for events (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`).
+  That WS protocol is the **canonical typed Studio API**; `studio` actions and
+  MCP tools are thin wrappers over the **same typed runtime methods**, so it's
+  never VS-Code-only and the AI/CLI audiences get identical data;
+  `ActionResult.displayContent` is chat-summary-only.
+  - _Why a dedicated WS and not an agent-server channel:_ an AppAgent only gets
+    `SessionContext` — **no** `ChannelProvider`/transport handle — and only the
+    agent-server's `connectionHandler` creates connection channels. So an agent
+    **cannot** add a multiplexed channel to that connection; its own WS is the
+    available, proven pattern (this is exactly why `code` does it). The
+    "agent-rpc channel over the agent-server, no new port" idea is infeasible
+    without a platform change to the agent-server.
   - _Why not "structured data on `ActionResult`":_ `ActionResult` carries no
     generic typed payload, and clients receive a `CommandResult` (errors /
-    executed actions / metrics / tokens), **not** the raw `ActionResult<T>` — so
-    that route is a platform change, not a Studio feature.
-  - _Why not a dedicated `code↔coda` WebSocket:_ workable and fastest to ship,
-    but it inherits port/lifecycle/ref-count machinery and (per the `code`
-    precedent) has **no session identity** — risky for Studio's per-workspace
-    repo root / sandbox set / approval scoping. Acceptable only as a fallback,
-    and only if its protocol becomes the shared typed API (not a side channel).
+    executed actions / metrics / tokens), **not** the raw `ActionResult<T>` — a
+    platform change, not a Studio feature.
+  - _Guardrails (the conditions under which the WS is the right call):_ every
+    message carries session/repo identity (per-workspace scoping can't bleed
+    across windows); connections present a capability token beyond an Origin
+    check; explicit subscription ids, cancellation, and backpressure/paging.
 - **Authorization on the service channel.** Because the agent now owns the
-  runtime, any local agent-server client could invoke it. Mutating actions must
-  stay behind `dryRun` + approval **and** an authorization check on the channel —
-  see §5.
+  runtime, any local client that connects to its WS could invoke it. Mutating
+  actions must stay behind `dryRun` + approval **and** the channel's
+  capability-token check — see §5.
 - **One agent or two?** Fold tune+validate into a single `studio` agent (simpler
   discovery) vs. separate `studio-tune` / `studio-validate` agents (smaller
   surfaces). Leaning single agent with sub-action groups, like onboarding.
@@ -326,9 +334,12 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 ## 9. Why this is low-risk, high-leverage
 
-- It adds **no new transport/port** — actions ride the dispatcher + existing MCP
-  exposure, and the typed result/event channel rides the existing agent-server
-  connection (a new service channel, not a new socket).
+- The **conversational/MCP surface adds no new transport** — `studio` actions
+  ride the dispatcher + existing MCP exposure. The rich-client **typed
+  result/event channel reuses the proven `code`↔`coda` plumbing**: the shared
+  `discoverPort` discovery util (`@typeagent/agent-server-client/discovery`) plus
+  `agent-rpc`'s `createRpc` for typed framing — so the only genuinely new piece
+  is a small per-agent WS server, mirroring `codeAgentWebSocketServer`.
 - It reuses **already-tested** core primitives; the new code is thin action
   routing plus schema/grammar.
 - It makes the **agent-driven and hybrid interaction modes real** without
