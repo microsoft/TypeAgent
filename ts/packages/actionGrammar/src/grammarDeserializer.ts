@@ -99,6 +99,21 @@ function validateDispatchInvariants(
 }
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
+    if (
+        json === null ||
+        typeof json !== "object" ||
+        Array.isArray(json) ||
+        !Array.isArray((json as GrammarJson).ruleArrays)
+    ) {
+        // The input isn't a current-format compiled grammar object (for
+        // example, an array-shaped `.ag.json` produced by a different or
+        // older toolchain).  Surface an actionable error instead of a
+        // cryptic `Cannot read properties of undefined (reading 'length')`.
+        throw new Error(
+            "Invalid grammar JSON: expected a compiled-grammar object with a 'ruleArrays' array " +
+                "(the file may be in an incompatible/older format - recompile it with the current agc).",
+        );
+    }
     if (json.ruleArrays.length === 0) {
         // Slot 0 is the top-level alternation by contract; an empty
         // pool means the grammar has no rules at all - structurally
