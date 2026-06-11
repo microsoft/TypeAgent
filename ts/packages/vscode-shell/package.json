@@ -174,6 +174,7 @@
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/completion-ui": "workspace:*",
+    "@typeagent/core": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
