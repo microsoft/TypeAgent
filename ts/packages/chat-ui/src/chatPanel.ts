@@ -96,6 +96,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     settings: "⚙️",
     shell: "🐚",
     spelunker: "⛏",
+    studio: "🎨",
     system: "⚙",
     taskflow: "📜",
     test: "➕",
