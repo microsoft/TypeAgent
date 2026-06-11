@@ -664,12 +664,16 @@ export function createChatPanelClient(
                 // The prompt text is already rendered as the agent's
                 // displayContent (emitActionResult appends it before
                 // requesting the choice), so suppress the card's duplicate
-                // copy and show just the buttons. See the option-2 TODO in
+                // copy and show just the buttons. Pass the requestId so the
+                // buttons attach to that agent bubble instead of a separate
+                // box. See the option-2 TODO in
                 // agentSdk/src/helpers/actionHelpers.ts for the source-side
                 // dedup that would let every host drop this workaround.
+                const rid = ridStr(requestId);
                 if (type === "yesNo") {
                     const yes = await chatPanel.askYesNo(message, undefined, {
                         showMessage: false,
+                        requestId: rid,
                     });
                     await dispatcher?.respondToChoice(choiceId, yes);
                 } else if (type === "pickRemember") {
@@ -677,14 +681,14 @@ export function createChatPanelClient(
                         message,
                         choices,
                         checkboxLabel ?? "Remember this for next time",
-                        { showMessage: false },
+                        { showMessage: false, requestId: rid },
                     );
                     await dispatcher?.respondToChoice(choiceId, result);
                 } else {
                     const index = await chatPanel.addChoicePrompt<number>(
                         message,
                         choices.map((label, i) => ({ label, value: i })),
-                        { showMessage: false },
+                        { showMessage: false, requestId: rid },
                     );
                     await dispatcher?.respondToChoice(choiceId, [index]);
                 }

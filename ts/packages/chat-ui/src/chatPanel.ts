@@ -2732,6 +2732,7 @@ export class ChatPanel {
             defaultValue?: T;
             signal?: AbortSignal;
             showMessage?: boolean;
+            requestId?: string;
         },
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
@@ -2745,7 +2746,11 @@ export class ChatPanel {
                 return;
             }
 
-            const container = this.createAgentContainer("system", "");
+            // When a requestId is supplied, append the buttons to that
+            // request's existing agent bubble (the one already showing the
+            // agent's displayContent / prompt) so the message and the choice
+            // buttons render as a single card instead of two stacked boxes.
+            const container = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -2824,6 +2829,7 @@ export class ChatPanel {
         opts?: {
             signal?: AbortSignal;
             showMessage?: boolean;
+            requestId?: string;
         },
     ): Promise<{ selected: number; remember: boolean }> {
         return new Promise((resolve, reject) => {
@@ -2837,7 +2843,10 @@ export class ChatPanel {
                 return;
             }
 
-            const container = this.createAgentContainer("system", "");
+            // See addChoicePrompt: a requestId anchors the panel onto the
+            // request's existing agent bubble so the prompt and the pick /
+            // remember controls share one card.
+            const container = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -2958,10 +2967,13 @@ export class ChatPanel {
     public askYesNo(
         message: string,
         defaultValue?: boolean,
-        opts?: { showMessage?: boolean },
+        opts?: { showMessage?: boolean; requestId?: string },
     ): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
-            const container = this.createAgentContainer("system", "");
+            // See addChoicePrompt: a requestId anchors the Yes/No buttons onto
+            // the request's existing agent bubble so the prompt message and
+            // the buttons render as a single card.
+            const container = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3724,6 +3736,31 @@ export class ChatPanel {
             this.sendButton.disabled = true;
             this.inputArea.classList.add("chat-input-disabled");
         }
+    }
+
+    /**
+     * Pick the container that a choice prompt (Yes/No, multi-choice,
+     * pickRemember) should attach its buttons to.
+     *
+     * With a `requestId` whose agent bubble already exists, reuse it so the
+     * agent's prompt text (its `displayContent`) and the choice buttons share
+     * a single card — otherwise the buttons would land in a separate
+     * standalone "system" box stacked beneath the message. Falls back to a
+     * fresh system container when there is no requestId or no bubble yet
+     * (e.g. a bare `ClientIO.question` with no preceding displayContent).
+     */
+    private choicePromptContainer(
+        requestId?: string,
+    ): AgentMessageContainer {
+        if (requestId !== undefined) {
+            const existing = this.threadContainers.get(
+                this.resolveThreadId(requestId),
+            );
+            if (existing) {
+                return existing;
+            }
+        }
+        return this.createAgentContainer("system", "");
     }
 
     private createAgentContainer(
