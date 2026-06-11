@@ -55,12 +55,15 @@ function loadSchemaFile(schemaFile: string): SchemaContent {
 
 function loadGrammarFile(grammarFile: string): GrammarContent {
     const fullPath = getPackageFilePath(grammarFile);
-    const isActionGrammar = grammarFile.endsWith(".ag.json");
-    if (!isActionGrammar) {
-        throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
-    }
     const content = fs.readFileSync(fullPath, "utf-8");
-    return { format: "ag", content };
+    if (grammarFile.endsWith(".ag.json")) {
+        return { format: "ag", content };
+    }
+    if (grammarFile.endsWith(".agr")) {
+        // Raw grammar source; parsed at load time instead of via a build step.
+        return { format: "agr", content };
+    }
+    throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
 }
 
 export function getSchemaContent(actionConfig: ActionConfig): SchemaContent {
