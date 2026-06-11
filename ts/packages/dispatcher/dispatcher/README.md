@@ -385,6 +385,61 @@ session.updateSettings({
 });
 ```
 
+### Registry-driven detection & learned preferences
+
+The detection points above decide _whether_ a given request is ambiguous from
+runtime signals (grammar matches, embedding score-deltas). An alternative is to
+drive detection from a **persisted neighborhood registry** — a `neighborhoods.json`
+file that records groups of actions known to be confusable (e.g.
+`calendar.findTodaysEvents` vs. `taskflow.dailyAgendaEmail`). A copy ships in the
+repo at [`data/neighborhoods.json`](data/neighborhoods.json).
+
+**Registry-first mode** scans every candidate for a request against the registry,
+independent of the embedding score-delta detector (`llmSelect.detect`) and the
+grammar detector (`grammarMatch.detect`). When a candidate is marked
+known-ambiguous, it drives a clarify card enriched with that candidate's
+neighborhood siblings. Because it only fires on true neighborhood members, the
+cards stay clean (no noisy multi-cluster results from low-confidence flat sets).
+
+Minimum setup:
+
+```
+@config collision preference registry "<absolute path to neighborhoods.json>"
+@config collision preference registryFirst on
+@config collision preference enabled on
+```
+
+Registry-first does **not** require `llmSelect detect` or `grammarMatch detect`.
+Verify with `@config collision` (look for `registryFirst=on`, `enabled=on`, and the
+`registry="…neighborhoods.json"` path), then try a known-ambiguous phrase such as
+`what's on my calendar today` to get a clarify card.
+
+**Learned preferences (Tier 1).** When you pick an option on a clarify card you can
+ask the dispatcher to remember the choice; afterward it auto-resolves silently on
+the same kind of ambiguity. Inspect and manage stored preferences with:
+
+| Command                                    | Effect                                                                 |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| `@collision preferences` (or `… list`)     | List stored Tier-1 preferences (the default subcommand).               |
+| `@collision preferences set <args>`        | Add a preference explicitly.                                           |
+| `@collision preferences remove <key>`      | Remove one preference by key (keys shown in `list`).                   |
+| `@collision preferences clear`             | Clear all stored preferences — the card will start asking again.       |
+
+Related `@config collision preference` knobs:
+
+| Command                                                  | Effect                                                                                          |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `@config collision preference enabled [on\|off]`         | Enable/disable the preference-clarify strategy (Tier-1 preferences + Tier-2 registry).          |
+| `@config collision preference registry [<path>]`         | Set/show the path to `neighborhoods.json` (empty string clears it).                             |
+| `@config collision preference registryFirst [on\|off]`   | Toggle registry-first detection (scan all candidates against the registry).                     |
+| `@config collision preference source <runtime\|registry\|both>` | Which ambiguity sources feed the resolver.                                               |
+| `@config collision preference remember <prompt\|always\|never>` | Whether (and how) a user's pick is persisted as a learned preference.                     |
+
+> **Note:** the dispatcher does not hot-reload. The `@config collision …` commands
+> apply live without a rebuild, but if you rebuild the dispatcher
+> (`pnpm --filter agent-dispatcher build`) you must restart the shell
+> (`pnpm run shell`) for code changes to take effect.
+
 ### MultipleAction interaction
 
 `multipleActionBehavior` controls what happens when `user-clarify` would fire on a sub-action inside a `MultipleAction` batch:
