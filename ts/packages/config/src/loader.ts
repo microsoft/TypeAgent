@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
@@ -23,13 +24,29 @@ import {
 const debug = registerDebug("typeagent:config");
 
 /**
- * Locate the TypeAgent `ts/` workspace root by walking up from this
- * source file. The package lives at
- * `ts/packages/config/dist/loader.js` once built (or `src/loader.ts`
- * when run from source under ts-node), so we walk up four levels and
- * verify by looking for `pnpm-workspace.yaml`.
+ * The TypeAgent user data directory (`~/.typeagent`, overridable via
+ * `TYPEAGENT_USER_DATA_DIR`). This mirrors `getUserDataDir()` in
+ * agent-dispatcher; it is re-implemented here because `@typeagent/config`
+ * is a low-level package that must not depend on the dispatcher. It is the
+ * fallback home for config files on a machine without the repo checked out
+ * (where the installer / getKeys writes `config.local.yaml`).
  */
-function defaultWorkspaceRoot(): string {
+function userDataDir(): string {
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
+/**
+ * Locate the TypeAgent `ts/` workspace root by walking up from this source
+ * file. The package lives at `ts/packages/config/dist/loader.js` once built
+ * (or `src/loader.ts` when run from source), so we walk up and verify by
+ * looking for `pnpm-workspace.yaml`. Returns `undefined` when not found —
+ * e.g. a repo-less install where the bundled code does not sit inside the
+ * monorepo.
+ */
+function findWorkspaceRoot(): string | undefined {
     const here = path.dirname(fileURLToPath(import.meta.url));
     let candidate = here;
     for (let i = 0; i < 8; i++) {
@@ -43,9 +60,49 @@ function defaultWorkspaceRoot(): string {
         if (parent === candidate) break;
         candidate = parent;
     }
-    // Fall back to the current working directory; callers can override
-    // via `LoadConfigOptions.workspaceRoot`.
-    return process.cwd();
+    return undefined;
+}
+
+interface ResolvedConfigPaths {
+    defaultsPath: string;
+    localPath: string;
+    dotEnvPath: string;
+}
+
+/**
+ * Resolve the three config file paths. Precedence per file:
+ *   explicit option  >  dedicated env var  >  `<configDir>/<filename>`
+ * where `configDir` is, in order:
+ *   `options.workspaceRoot` > `TYPEAGENT_CONFIG_DIR` > the detected `ts/`
+ *   workspace root (dev / in-repo) > the user data dir (`~/.typeagent`).
+ *
+ * In a normal in-repo run the workspace root is detected, so behavior is
+ * unchanged. On a machine without the repo, files resolve under
+ * `~/.typeagent` (where the installer / getKeys writes `config.local.yaml`),
+ * and individual files can be redirected with the env vars below — e.g. the
+ * service launcher points `TYPEAGENT_CONFIG_DEFAULTS` at the
+ * `config.defaults.yaml` shipped alongside the executable.
+ */
+function resolveConfigPaths(options: LoadConfigOptions): ResolvedConfigPaths {
+    const configDir =
+        options.workspaceRoot ??
+        process.env.TYPEAGENT_CONFIG_DIR ??
+        findWorkspaceRoot() ??
+        userDataDir();
+    return {
+        defaultsPath:
+            options.defaultsPath ??
+            process.env.TYPEAGENT_CONFIG_DEFAULTS ??
+            path.join(configDir, "config.defaults.yaml"),
+        localPath:
+            options.localPath ??
+            process.env.TYPEAGENT_CONFIG_LOCAL ??
+            path.join(configDir, "config.local.yaml"),
+        dotEnvPath:
+            options.dotEnvPath ??
+            process.env.TYPEAGENT_DOTENV ??
+            path.join(configDir, ".env"),
+    };
 }
 
 function readYamlFile(filePath: string): ConfigTree | null {
@@ -86,18 +143,13 @@ function readDotEnvFile(filePath: string): FlatEnv {
 export function loadConfigSync(
     options: LoadConfigOptions = {},
 ): LoadConfigResult {
-    const root = options.workspaceRoot ?? defaultWorkspaceRoot();
-    const defaultsPath =
-        options.defaultsPath ?? path.join(root, "config.defaults.yaml");
-    const localPath = options.localPath ?? path.join(root, "config.local.yaml");
-    const dotEnvPath = options.dotEnvPath ?? path.join(root, ".env");
+    const { defaultsPath, localPath, dotEnvPath } = resolveConfigPaths(options);
     const trackSources = options.trackSources ?? false;
     const populateProcessEnv = options.populateProcessEnv ?? true;
     const strict = options.strict ?? true;
 
     debug(
-        "loading config (workspaceRoot=%s, defaults=%s, local=%s, dotenv=%s)",
-        root,
+        "loading config (defaults=%s, local=%s, dotenv=%s)",
         defaultsPath,
         localPath,
         dotEnvPath,
@@ -194,11 +246,7 @@ export async function loadConfig(
     // Fetch the Key Vault layer first, then run the sync loader with
     // the rest of the precedence chain. We splice the KV layer in at
     // the correct position by routing through a custom assembly path.
-    const root = options.workspaceRoot ?? defaultWorkspaceRoot();
-    const defaultsPath =
-        options.defaultsPath ?? path.join(root, "config.defaults.yaml");
-    const localPath = options.localPath ?? path.join(root, "config.local.yaml");
-    const dotEnvPath = options.dotEnvPath ?? path.join(root, ".env");
+    const { defaultsPath, localPath, dotEnvPath } = resolveConfigPaths(options);
     const trackSources = options.trackSources ?? false;
     const populateProcessEnv = options.populateProcessEnv ?? true;
     const strict = options.strict ?? true;
@@ -230,11 +278,7 @@ export async function loadConfig(
         debug("auto-discovered vault name: %s", vaultName);
     }
 
-    debug(
-        "loading config with key vault (workspaceRoot=%s, vault=%s)",
-        root,
-        vaultName,
-    );
+    debug("loading config with key vault (vault=%s)", vaultName);
 
     const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
 
