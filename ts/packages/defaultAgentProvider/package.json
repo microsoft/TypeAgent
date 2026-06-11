@@ -78,6 +78,7 @@
     "screencapture-agent": "workspace:*",
     "settings-agent": "workspace:*",
     "string-width": "^7.2.0",
+    "studio-agent": "workspace:*",
     "taskflow-typeagent": "workspace:*",
     "telemetry": "workspace:*",
     "timer-agent": "workspace:*",

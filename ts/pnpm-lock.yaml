@@ -3109,6 +3109,40 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/studio:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../../typeagent-core
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/taskflow:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -4314,6 +4348,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
+      studio-agent:
+        specifier: workspace:*
+        version: link:../agents/studio
       taskflow-typeagent:
         specifier: workspace:*
         version: link:../agents/taskflow

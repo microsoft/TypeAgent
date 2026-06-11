@@ -88,6 +88,13 @@ Done / superseded:
   tests green. The further "split into bounded modules" cleanup can follow as
   needed. **Still open in P-0:** scaffold the empty `packages/agents/studio/`
   agent (manifest/schema/handler + `defaultAgentProvider` registration).
+- ~~**P-0 `studio` agent scaffold + first S1 Inspect actions**~~ — **done**:
+  `packages/agents/studio/` (schema-only agent, emoji 🔌) registered in
+  `defaultAgentProvider`, with a thin handler over the headless runtime
+  (`getStudioRuntime` → `createStudioRuntimeCore`). Read-only group-A actions
+  shipped: `listAgents`, `getStudioInfo`, `listCollisions`. Repo-root resolution
+  via `TYPEAGENT_STUDIO_REPO_ROOT` / cwd. Verified end-to-end (discovers all
+  on-disk agents); 9 formatter/runtime tests green.
 - ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
   `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
   directory commands, user-settings persistence.
@@ -98,19 +105,16 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **Finish P-0 — scaffold the empty `studio` agent** on the landed runtime:
-   `packages/agents/studio/` (manifest, schema, handler) that loads with no
-   actions yet, registered in `defaultAgentProvider` so the dispatcher can load
-   it (a load-path concern, not Studio discovery).
-2. **S1 — `studio` agent, Inspect slice (read-only, group A)** — `ListAgents`,
+1. **Finish S1 — remaining read-only Inspect actions** on the `studio` agent:
    `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`,
-   `SearchCorpus`, `ListCollisions`, `QueryEvents` over the S0 runtime. Zero
-   mutation risk; proves MCP/conversational drivability. Plan phase **P-1 / S1**.
-3. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+   `SearchCorpus`, `QueryEvents`. A few need small read-only additions to the
+   core runtime (e.g. a standalone per-agent health/schema read). Plan phase
+   **P-1 / S1**.
+2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
-4. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-5. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
    agent's `ValidateChange` and the webview both consume).
 

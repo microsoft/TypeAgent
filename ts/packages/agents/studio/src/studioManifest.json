@@ -1,0 +1,10 @@
+{
+  "emojiChar": "🔌",
+  "description": "TypeAgent Studio agent — inspect agents, their grammars, and collisions (the AI / conversational presenter over the Studio engine)",
+  "schema": {
+    "description": "Read-only inspection of the TypeAgent agents on disk: list discoverable agents, report Studio's resolved environment, and list known cross-schema grammar collisions. (More of the Studio loop — run, validate, author — arrives in later phases.)",
+    "originalSchemaFile": "./studioSchema.ts",
+    "schemaFile": "../dist/studioSchema.pas.json",
+    "schemaType": "StudioActions"
+  }
+}
