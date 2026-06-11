@@ -10,6 +10,11 @@ import {
     formatAgentList,
     formatStudioInfo,
     formatCollisions,
+    formatAgentDescription,
+    formatAgentSources,
+    formatCorpusSearch,
+    formatEvents,
+    collisionsForAgent,
 } from "../src/lib/inspect.js";
 import {
     resolveStudioRepoRootCandidates,
@@ -90,6 +95,96 @@ describe("studio inspect formatters", () => {
     it("formatCollisions handles the empty case", () => {
         const md = formatCollisions([]);
         expect(md).toContain("No collisions recorded");
+    });
+});
+
+describe("studio describe/sources/corpus/events formatters", () => {
+    it("formatAgentDescription summarizes health, corpus, collisions, feedback", () => {
+        const md = formatAgentDescription("player", {
+            emoji: "🎵",
+            health: [
+                {
+                    ruleId: "schema.parses",
+                    severity: "error",
+                    agent: "player",
+                    evidence: { message: "Schema JSON parse failed" },
+                },
+            ] as any,
+            corpusCount: 7,
+            collisions: [],
+            feedback: [{}, {}] as any,
+        });
+        expect(md).toContain("## 🎵 player");
+        expect(md).toContain("1 error(s), 0 warning(s)");
+        expect(md).toContain("Corpus utterances:** 7");
+        expect(md).toContain("Feedback rows:** 2");
+        expect(md).toContain("`schema.parses` — Schema JSON parse failed");
+    });
+
+    it("formatAgentDescription reports a clean bill of health", () => {
+        const md = formatAgentDescription("calendar", {
+            health: [],
+            corpusCount: 0,
+            collisions: [],
+            feedback: [],
+        });
+        expect(md).toContain("✅ no findings");
+    });
+
+    it("formatAgentSources fences schema text and lists the path", () => {
+        const md = formatAgentSources("player", "schema", {
+            schema: [
+                { path: "/p/playerSchema.ts", text: "export type X = {};" },
+            ],
+            grammar: [],
+        });
+        expect(md).toContain("## player — schema");
+        expect(md).toContain("`/p/playerSchema.ts`");
+        expect(md).toContain("```typescript");
+        expect(md).toContain("export type X = {};");
+    });
+
+    it("formatAgentSources handles a missing artifact kind", () => {
+        const md = formatAgentSources("player", "grammar", {
+            schema: [],
+            grammar: [],
+        });
+        expect(md).toContain("No grammar source files found");
+    });
+
+    it("formatCorpusSearch filters by query and flags ratings", () => {
+        const entries = [
+            {
+                utterance: "play jazz",
+                source: "in-repo",
+                feedback: { rating: "up" },
+            },
+            { utterance: "stop", source: "capture" },
+        ] as any;
+        const md = formatCorpusSearch("player", entries, "play");
+        expect(md).toContain('corpus matching "play" (1/2)');
+        expect(md).toContain("play jazz 👍");
+        expect(md).not.toContain("- _(capture)_ stop");
+    });
+
+    it("formatEvents lists recent events newest last", () => {
+        const md = formatEvents([
+            { type: "sandbox.start", ts: 0 },
+            { type: "collision.detected", ts: 1000 },
+        ] as any);
+        expect(md).toContain("## Events (2)");
+        expect(md).toContain("**sandbox.start**");
+        expect(md).toContain("**collision.detected**");
+    });
+
+    it("collisionsForAgent filters by participant", () => {
+        const collisions = [
+            { participants: [{ agent: "player" }, { agent: "list" }] },
+            { participants: [{ agent: "calendar" }] },
+        ] as any;
+        expect(collisionsForAgent(collisions, "player")).toHaveLength(1);
+        expect(collisionsForAgent(collisions, "calendar")).toHaveLength(1);
+        expect(collisionsForAgent(collisions, "email")).toHaveLength(0);
     });
 });
 

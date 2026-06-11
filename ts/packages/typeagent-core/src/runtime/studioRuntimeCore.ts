@@ -13,7 +13,11 @@ import {
     type RestorePhaseResult,
     routeStudioConversation,
 } from "../onboardingBridge/index.js";
-import { FileHealthService, type HealthFinding } from "../health/index.js";
+import {
+    FileHealthService,
+    discoverAgentFiles,
+    type HealthFinding,
+} from "../health/index.js";
 import { InProcessEventStream } from "../events/index.js";
 import type { StudioEvent, StudioEventType } from "../events/index.js";
 import {
@@ -142,6 +146,18 @@ export interface AvailableAgent {
     emoji?: string;
 }
 
+/** A source artifact (schema/grammar) read from disk. */
+export interface AgentSourceFile {
+    path: string;
+    text: string;
+}
+
+/** An agent's on-disk source artifacts. */
+export interface AgentSources {
+    schema: AgentSourceFile[];
+    grammar: AgentSourceFile[];
+}
+
 export interface StudioRuntime {
     /**
      * Repo root used for agent discovery and whether a `packages/agents`
@@ -211,6 +227,17 @@ export interface StudioRuntime {
      * `./agent/manifest` export. Used to offer autocomplete in the Load agent UI.
      */
     listAvailableAgents(): Promise<AvailableAgent[]>;
+    /**
+     * Read-only per-agent health findings (manifest → schema → grammar →
+     * handler invariants). Computed from disk; does **not** load a sandbox.
+     * (Studio Inspect surface, group A.)
+     */
+    checkAgentHealth(agent: string): Promise<HealthFinding[]>;
+    /**
+     * Read an agent's on-disk **source** artifacts (schema `.ts`, grammar
+     * `.agr`) as text, so a client can display them. Read-only. (Inspect/A.)
+     */
+    getAgentSources(agent: string): Promise<AgentSources>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -646,6 +673,22 @@ export function createStudioRuntimeCore(
         },
         async listAvailableAgents() {
             return listAvailableAgentNames(agentRoots());
+        },
+        async checkAgentHealth(agent) {
+            const health = new FileHealthService({ repoRoot, agentRoots });
+            return health.check(agent);
+        },
+        async getAgentSources(agent) {
+            const files = await discoverAgentFiles(agentRoots(), agent);
+            const read = async (p: string): Promise<AgentSourceFile> => ({
+                path: p,
+                text: await fs.readFile(p, "utf8"),
+            });
+            const [schema, grammar] = await Promise.all([
+                Promise.all(files.schemaFiles.map(read)),
+                Promise.all(files.grammarFiles.map(read)),
+            ]);
+            return { schema, grammar };
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so

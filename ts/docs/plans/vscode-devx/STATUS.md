@@ -88,13 +88,19 @@ Done / superseded:
   tests green. The further "split into bounded modules" cleanup can follow as
   needed. **Still open in P-0:** scaffold the empty `packages/agents/studio/`
   agent (manifest/schema/handler + `defaultAgentProvider` registration).
-- ~~**P-0 `studio` agent scaffold + first S1 Inspect actions**~~ — **done**:
+- ~~**P-0 `studio` agent scaffold + S1 Inspect actions**~~ — **done**:
   `packages/agents/studio/` (schema-only agent, emoji 🔌) registered in
   `defaultAgentProvider`, with a thin handler over the headless runtime
   (`getStudioRuntime` → `createStudioRuntimeCore`). Read-only group-A actions
-  shipped: `listAgents`, `getStudioInfo`, `listCollisions`. Repo-root resolution
-  via `TYPEAGENT_STUDIO_REPO_ROOT` / cwd. Verified end-to-end (discovers all
-  on-disk agents); 9 formatter/runtime tests green.
+  shipped: `listAgents`, `getStudioInfo`, `listCollisions`, `describeAgent`
+  (emoji + health findings + corpus size + collisions + feedback), `getSchema`,
+  `getGrammar` (source text), `searchCorpus`, `queryEvents`. Backed by two new
+  read-only core runtime methods (`checkAgentHealth`, `getAgentSources`). Repo
+  root is an explicit per-action param (cached per root), `TYPEAGENT_STUDIO_REPO_ROOT`/cwd
+  fallback. Verified end-to-end; 18 agent tests + core 127 + studio-ext 112 green.
+  _Remaining S1 (deferred — need heavier engines):_ `ListActions`
+  (action-schema parse of the `.pas.json`), `GetCoverage` (`computeCoverage` +
+  corpus), `GetTrace` (P-3, structured dispatch tree).
 - ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
   `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
   directory commands, user-settings persistence.
@@ -105,11 +111,8 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **Finish S1 — remaining read-only Inspect actions** on the `studio` agent:
-   `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`,
-   `SearchCorpus`, `QueryEvents`. A few need small read-only additions to the
-   core runtime (e.g. a standalone per-agent health/schema read). Plan phase
-   **P-1 / S1**.
+1. **S1 leftovers** — `ListActions` (parse the agent's `.pas.json` action union),
+   `GetCoverage`, and (in P-3) `GetTrace`.
 2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
 3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the

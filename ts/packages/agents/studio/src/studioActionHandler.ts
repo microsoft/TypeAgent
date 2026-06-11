@@ -17,6 +17,11 @@ import {
     formatAgentList,
     formatStudioInfo,
     formatCollisions,
+    formatAgentDescription,
+    formatAgentSources,
+    formatCorpusSearch,
+    formatEvents,
+    collisionsForAgent,
 } from "./lib/inspect.js";
 
 export function instantiate(): AppAgent {
@@ -51,6 +56,59 @@ async function executeAction(
             return createActionResultFromMarkdownDisplay(
                 formatCollisions(collisions),
             );
+        }
+        case "describeAgent": {
+            const { agent, repoRoot } = action.parameters;
+            const runtime = getStudioRuntime(repoRoot);
+            const [available, health, corpus, allCollisions, feedback] =
+                await Promise.all([
+                    runtime.listAvailableAgents(),
+                    runtime.checkAgentHealth(agent),
+                    runtime.listCorpusEntries(agent),
+                    runtime.listCollisions(),
+                    runtime.listFeedback(),
+                ]);
+            const emoji = available.find((a) => a.name === agent)?.emoji;
+            return createActionResultFromMarkdownDisplay(
+                formatAgentDescription(agent, {
+                    ...(emoji !== undefined ? { emoji } : {}),
+                    health,
+                    corpusCount: corpus.length,
+                    collisions: collisionsForAgent(allCollisions, agent),
+                    feedback: feedback.filter((f) => f.agent === agent),
+                }),
+            );
+        }
+        case "getSchema": {
+            const { agent, repoRoot } = action.parameters;
+            const sources =
+                await getStudioRuntime(repoRoot).getAgentSources(agent);
+            return createActionResultFromMarkdownDisplay(
+                formatAgentSources(agent, "schema", sources),
+            );
+        }
+        case "getGrammar": {
+            const { agent, repoRoot } = action.parameters;
+            const sources =
+                await getStudioRuntime(repoRoot).getAgentSources(agent);
+            return createActionResultFromMarkdownDisplay(
+                formatAgentSources(agent, "grammar", sources),
+            );
+        }
+        case "searchCorpus": {
+            const { agent, query, repoRoot } = action.parameters;
+            const entries =
+                await getStudioRuntime(repoRoot).listCorpusEntries(agent);
+            return createActionResultFromMarkdownDisplay(
+                formatCorpusSearch(agent, entries, query),
+            );
+        }
+        case "queryEvents": {
+            const { limit, repoRoot } = action.parameters;
+            const events = await getStudioRuntime(repoRoot).queryRecentEvents(
+                limit ?? 20,
+            );
+            return createActionResultFromMarkdownDisplay(formatEvents(events));
         }
         default:
             return createActionResultFromError(
