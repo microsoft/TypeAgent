@@ -9,6 +9,7 @@ import {
     CorpusEntryNotFoundError,
     ExternalSourceExistsError,
     FileCorpusService,
+    InvalidAgentNameError,
     computeEntryId,
     formatJsonl,
     parseJsonl,
@@ -467,5 +468,21 @@ describe("FileCorpusService — external sources", () => {
         expect(await fs.readFile(expected, "utf8")).toBe(
             '{"utterance":"hi"}\n',
         );
+    });
+
+    it("rejects agent names that would escape the corpus root (path traversal)", async () => {
+        for (const bad of ["../evil", "..", "a/b", "a\\b", ".", ""]) {
+            await expect(svc.seedInRepoCorpus(bad)).rejects.toBeInstanceOf(
+                InvalidAgentNameError,
+            );
+            // Read paths are guarded too.
+            await expect(svc.list(bad)).rejects.toBeInstanceOf(
+                InvalidAgentNameError,
+            );
+        }
+        // Nothing was written outside the corpus directory.
+        await expect(
+            fs.readFile(path.join(repoRoot, "evil.utterances.jsonl"), "utf8"),
+        ).rejects.toThrow();
     });
 });

@@ -127,3 +127,15 @@ export class ExternalSourceExistsError extends Error {
         this.name = "ExternalSourceExistsError";
     }
 }
+
+/**
+ * Thrown when an agent name can't be used as a single path segment (e.g. it
+ * contains a path separator or `..`), which would let corpus file operations
+ * escape `<repoRoot>/corpus`.
+ */
+export class InvalidAgentNameError extends Error {
+    constructor(public readonly agent: string) {
+        super(`Invalid agent name (must be a single path segment): ${agent}`);
+        this.name = "InvalidAgentNameError";
+    }
+}

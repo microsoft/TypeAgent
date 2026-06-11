@@ -8,6 +8,7 @@ import { readJsonlFile, writeJsonlFile } from "./jsonl.js";
 import {
     CorpusEntryNotFoundError,
     ExternalSourceExistsError,
+    InvalidAgentNameError,
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
@@ -209,10 +210,12 @@ export class FileCorpusService implements CorpusService {
     /* ---------------------------------------------------------------- */
 
     private inRepoFile(agent: string): string {
+        assertSafeAgentSegment(agent);
         return path.join(this.repoRoot, "corpus", `${agent}.utterances.jsonl`);
     }
 
     private capturesDir(agent: string): string {
+        assertSafeAgentSegment(agent);
         return path.join(this.profileDir, "captures", agent);
     }
 
@@ -275,6 +278,24 @@ export class FileCorpusService implements CorpusService {
 
 function captureFileStamp(ts: number): string {
     return new Date(ts).toISOString().replace(/[:.]/g, "-");
+}
+
+/**
+ * Guard against path traversal: an agent name is used to build corpus file
+ * paths, so it must be a single, separator-free path segment (and not `.` /
+ * `..`). Rejects e.g. `"../secrets"` before it can escape the corpus root.
+ */
+function assertSafeAgentSegment(agent: string): void {
+    if (
+        agent.length === 0 ||
+        agent === "." ||
+        agent === ".." ||
+        agent.includes("/") ||
+        agent.includes("\\") ||
+        agent.includes("\0")
+    ) {
+        throw new InvalidAgentNameError(agent);
+    }
 }
 
 async function listJsonlFiles(dir: string): Promise<string[]> {
