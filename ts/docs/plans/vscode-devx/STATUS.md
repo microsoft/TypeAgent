@@ -113,11 +113,19 @@ Ready to start (smallest → larger):
 
 1. **S1 leftovers** — `ListActions` (parse the agent's `.pas.json` action union),
    `GetCoverage`, and (in P-3) `GetTrace`.
-2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+2. **Studio service channel (the Option B migration; plan phase P-1.5)** — the
+   typed `StudioRequest/Response<T>` + `StudioEvent` subscription over a new
+   agent-server service channel (`agent-rpc` pattern, no new port), with channel
+   authorization. This is the prerequisite for any rich client and the step that
+   unifies collisions/events across the UI, chat, and MCP (one runtime). Build it
+   **before** the webview so the webview is its first, greenfield client.
+3. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
-3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+   Built as a **client of the `studio` agent over the channel**, not on the
+   extension's in-process runtime.
+4. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+5. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
    agent's `ValidateChange` and the webview both consume).
 

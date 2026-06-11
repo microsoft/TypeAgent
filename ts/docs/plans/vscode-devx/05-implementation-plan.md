@@ -712,7 +712,7 @@ one plan; the agent is not a separate track.
 - Create `typeagent-core` package, `typeagent-studio` extension, scaffold files. No behavior.
 - Refactor `agr-language` and `vscode-shell` to import from `typeagent-core` (no consumed APIs yet — just the dependency edge). Full existing test suites must remain green.
 - **Agent (S0 — headless runtime):** extract the engine wiring out of the extension's `studioRuntimeCore` into a context-agnostic runtime in `typeagent-core/runtime/` (done). Scaffold `packages/agents/studio/` (manifest, schema, handler), which **hosts** that runtime; ship the first read-only Inspect actions (done). The extension keeps its in-process runtime as a **transitional bootstrap**.
-- **Migration (Option B):** define the `studio` agent's **typed result / event channel** (the `code↔coda` analogue) and begin moving the `typeagent-studio` extension from its in-process runtime to an agent-server client of the `studio` agent. Tracked as a cross-cutting migration that completes as each UI surface's backing actions land (S1→S4); the extension must not gain _new_ in-process runtime logic.
+- **Migration (Option B) — begins here, lands in P-1.5.** The extension keeps its in-process runtime as a transitional bootstrap **only** until the typed result/event channel exists; the dedicated **P-1.5** milestone stands that channel up and starts the cutover. The one rule during P-0→P-1: the extension gains **no new** in-process runtime logic.
 - Exit: `pnpm -r build` clean; refactored extensions behave identically to today; the `studio` agent loads and answers the read-only Inspect actions over the dispatcher / MCP.
 
 ### P-1 Foundations (weeks 1–4)
@@ -726,6 +726,20 @@ one plan; the agent is not a separate track.
 - **F0.7 conversational, F0.8 miss-policy, F0.9 workflow view, F0.10 reasoning view.** Land at end of P-1; they are mostly small.
 - **Agent (S1 — Inspect, group A):** `ListAgents`, `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`, `SearchCorpus`, `ListCollisions`, `QueryEvents` — each wraps the same primitive the P-1 UI surfaces. Read-only; proves MCP/conversational drivability with zero mutation risk. Register `studio` in `defaultAgentProvider` (the dispatcher load path, not Studio's discovery).
 - Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data; the Inspect surface is callable over MCP / conversationally.
+
+### P-1.5 Studio service channel (Option B migration — the typed result/event channel)
+
+The pivotal Option-B step: stand up the **typed `studio` service channel** so rich
+clients consume the agent's runtime instead of hosting their own. This is its own
+milestone because everything stateful downstream (Impact Report, sandbox/replay
+UIs, live trace) should be built as a **client** of it from day one rather than on
+the extension's transitional in-process runtime.
+
+- **Channel protocol** (in `@typeagent/core` / the `studio` agent): `StudioRequest`/`StudioResponse<T>` (typed `invoke`) + a `StudioEvent` subscription (`healthChanged`, `replayRow`, `replayCompleted`, `traceAppended`) with subscription ids, schema version, cancellation, and paging — over a new agent-server **service channel** using the `agent-rpc` pattern (no new port). See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
+- **Authorization** on the channel: mutating invokes stay behind `dryRun` + approval and a capability check (the agent now owns the runtime; any local client could otherwise invoke it).
+- **First client = the new Impact Report webview** (P-3's `webviewKit` shell): greenfield, so it proves the channel end-to-end with zero migration risk.
+- **Cut over existing trees view-by-view** (Sandboxes / Corpora / Event Log / Collisions) from the in-process runtime to channel calls, as each view's backing actions land (rides S2–S3). The extension must gain **no new** in-process runtime logic in the meantime.
+- Exit: the Impact Report shell and at least one existing tree read through the `studio` agent over the channel; a collision scan or sandbox action is visible identically from the UI, chat, and MCP (one runtime, one source of truth); the extension's in-process `createStudioRuntime` is on a path to deletion.
 
 ### P-2 J1 vertical (weeks 4–6)
 
@@ -783,15 +797,16 @@ one plan; the agent is not a separate track.
 
 #### Agent phase ↔ plan phase
 
-| Agent phase         | Action group   | Lands in |
-| ------------------- | -------------- | -------- |
-| S0 headless runtime | —              | P-0      |
-| S1 Inspect          | A              | P-1      |
-| S2 Run/try + Corpus | D, C           | P-3      |
-| S3 Validate         | E              | P-3      |
-| S4 Author/edit      | B              | P-4      |
-| (Trace)             | A (`GetTrace`) | P-3      |
-| S5 Orchestrate      | F              | P-6      |
+| Agent phase                | Action group   | Lands in |
+| -------------------------- | -------------- | -------- |
+| S0 headless runtime        | —              | P-0      |
+| S1 Inspect                 | A              | P-1      |
+| Studio service channel (B) | —              | P-1.5    |
+| S2 Run/try + Corpus        | D, C           | P-3      |
+| S3 Validate                | E              | P-3      |
+| S4 Author/edit             | B              | P-4      |
+| (Trace)                    | A (`GetTrace`) | P-3      |
+| S5 Orchestrate             | F              | P-6      |
 
 ---
 
