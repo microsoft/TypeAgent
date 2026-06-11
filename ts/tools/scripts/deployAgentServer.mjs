@@ -41,6 +41,7 @@ function parseArgs(argv) {
         else if (a === "--arch") args.arch = argv[++i];
         else if (a === "--skip-deploy") args.skipDeploy = true;
         else if (a === "--skip-prune") args.skipPrune = true;
+        else if (a === "--profile") args.profile = argv[++i];
         else throw new Error(`Unknown argument: ${a}`);
     }
     if (!args.out) throw new Error("Missing --out <dir>.");
@@ -111,6 +112,30 @@ function main() {
         );
     } else {
         console.log("Skipping prune (--skip-prune).");
+    }
+
+    // 2b. Apply an agent profile: drop agents (and deps reachable only through
+    //     them) not in the selected profile, and record the profile so the
+    //     launcher starts the daemon with it by default (the pruned artifact can
+    //     no longer load the excluded agents).
+    if (args.profile) {
+        run(
+            "node",
+            [
+                path.join(scriptsDir, "pruneUnusedAgents.mjs"),
+                "--dir",
+                args.out,
+                "--profile",
+                args.profile,
+            ],
+            tsRoot,
+        );
+        fs.writeFileSync(
+            path.join(args.out, ".typeagent-profile"),
+            args.profile,
+            "utf8",
+        );
+        console.log(`  recorded profile '${args.profile}' (.typeagent-profile)`);
     }
 
     // 3. Copy the config-provisioning tool (getKeys + its config/lib) and the
