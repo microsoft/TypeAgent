@@ -24,7 +24,11 @@ import {
     type CollisionRecord,
     type SchemaInput,
 } from "grammar-tools-core";
-import { defaultAgentRoots, resolveAgentPackageDir } from "../health/index.js";
+import {
+    resolveAgentPackageDir,
+    resolveAgentRoots,
+    type AgentRootsInput,
+} from "../health/index.js";
 import type { GrammarToolCollisionLike } from "./types.js";
 
 export interface GrammarScanRequest {
@@ -72,10 +76,11 @@ export interface RepoGrammarScannerOptions {
     repoRoot: string;
     /**
      * Ordered directories that contain agent subdirectories (each peer to
-     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. An agent
-     * is resolved by probing each root.
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. May be a
+     * provider so configuration changes are picked up without reconstruction.
+     * An agent is resolved by probing each root.
      */
-    agentRoots?: string[];
+    agentRoots?: AgentRootsInput;
 }
 
 /**
@@ -96,7 +101,6 @@ export function createRepoGrammarScanner(
     options: RepoGrammarScannerOptions,
 ): GrammarCollisionScanner {
     const { repoRoot } = options;
-    const agentRoots = options.agentRoots ?? defaultAgentRoots(repoRoot);
     let entitiesRegistered = false;
 
     return async ({ agents }) => {
@@ -104,6 +108,7 @@ export function createRepoGrammarScanner(
             registerBuiltInEntities();
             entitiesRegistered = true;
         }
+        const agentRoots = resolveAgentRoots(options.agentRoots, repoRoot);
 
         const inputs: SchemaInput[] = [];
         const skipped: GrammarScanSkip[] = [];

@@ -13,14 +13,33 @@ import type {
     HealthService,
 } from "./types.js";
 
+/**
+ * Agent roots, supplied either as a fixed list or as a provider that is called
+ * each time roots are needed (so a changed configuration is picked up without
+ * reconstructing the consumer).
+ */
+export type AgentRootsInput = string[] | (() => string[]);
+
+/** Resolve {@link AgentRootsInput} to a concrete list, defaulting from repoRoot. */
+export function resolveAgentRoots(
+    input: AgentRootsInput | undefined,
+    repoRoot: string,
+): string[] {
+    if (typeof input === "function") {
+        return input();
+    }
+    return input ?? defaultAgentRoots(repoRoot);
+}
+
 export interface FileHealthServiceOptions {
     repoRoot: string;
     /**
      * Ordered directories that contain agent subdirectories (each peer to
-     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. An agent
-     * is resolved by probing each root for `<root>/<agent>`.
+     * `packages/agents`). Defaults to `[<repoRoot>/packages/agents]`. May be a
+     * provider so configuration changes are picked up without reconstruction.
+     * An agent is resolved by probing each root for `<root>/<agent>`.
      */
-    agentRoots?: string[];
+    agentRoots?: AgentRootsInput;
     loadedActionTypes?: Record<string, string[]>;
     cacheSchemaHash?: string;
 }
@@ -53,7 +72,7 @@ export class FileHealthService implements HealthService {
 
     async check(agent: string): Promise<HealthFinding[]> {
         const files = await discoverAgentFiles(
-            this.opts.agentRoots ?? defaultAgentRoots(this.opts.repoRoot),
+            resolveAgentRoots(this.opts.agentRoots, this.opts.repoRoot),
             agent,
         );
         const ctx: HealthContext = {

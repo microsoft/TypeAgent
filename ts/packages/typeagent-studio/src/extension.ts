@@ -240,18 +240,40 @@ export function activate(context: vscode.ExtensionContext): void {
                     [...current, dir],
                     vscode.ConfigurationTarget.Global,
                 );
-                // The runtime reads agentSearchPaths at construction, so a
-                // reload is needed for the new directory's agents to be
-                // discoverable and loadable.
-                const choice = await vscode.window.showInformationMessage(
-                    `Added '${dir}' to your agent search paths (user settings). Reload the window to use it now?`,
-                    "Reload Window",
+                vscode.window.showInformationMessage(
+                    `Added '${dir}' to your agent search paths. Its agents are now available in Load agent.`,
                 );
-                if (choice === "Reload Window") {
-                    await vscode.commands.executeCommand(
-                        "workbench.action.reloadWindow",
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.removeAgentsDirectory",
+            async () => {
+                const config =
+                    vscode.workspace.getConfiguration("typeagentStudio");
+                const current =
+                    config.inspect<string[]>("agentSearchPaths")?.globalValue ??
+                    [];
+                if (current.length === 0) {
+                    vscode.window.showInformationMessage(
+                        "No agent search paths are configured.",
                     );
+                    return;
                 }
+                const dir = await vscode.window.showQuickPick(current, {
+                    title: "Remove agents directory",
+                    placeHolder: "Select a search path to remove",
+                });
+                if (!dir) {
+                    return;
+                }
+                await config.update(
+                    "agentSearchPaths",
+                    current.filter((p) => p !== dir),
+                    vscode.ConfigurationTarget.Global,
+                );
+                vscode.window.showInformationMessage(
+                    `Removed '${dir}' from your agent search paths.`,
+                );
             },
         ),
         vscode.commands.registerCommand(

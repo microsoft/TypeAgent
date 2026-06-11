@@ -326,9 +326,11 @@ export interface StudioRuntimeContext {
      * Additional directories that contain agent subdirectories (peer to
      * `packages/agents`), from the `typeagentStudio.agentSearchPaths` setting.
      * Relative entries are resolved against the detected repo root. The repo's
-     * own `packages/agents` is always included as the first root.
+     * own `packages/agents` is always included as the first root. May be a
+     * provider, read fresh on each use, so a changed setting is picked up
+     * without recreating the runtime.
      */
-    agentSearchPaths?: string[];
+    agentSearchPaths?: string[] | (() => string[]);
 }
 
 export interface CreateStudioRuntimeOptions {
@@ -386,14 +388,22 @@ export function createStudioRuntimeCore(
         context.globalStorageFsPath,
     );
     const repoRoot = repoRootResolution.repoRoot;
-    // Agent roots: the repo's own packages/agents first, then any configured
+    // Agent roots, resolved fresh on each use so a changed
+    // `agentSearchPaths` setting is picked up without reconstructing the
+    // runtime: the repo's own packages/agents first, then any configured
     // search paths (relative entries resolved against the repo root).
-    const agentRoots = [
-        path.join(repoRoot, "packages", "agents"),
-        ...(context.agentSearchPaths ?? []).map((p) =>
-            path.isAbsolute(p) ? p : path.join(repoRoot, p),
-        ),
-    ];
+    const agentRoots = (): string[] => {
+        const configured =
+            typeof context.agentSearchPaths === "function"
+                ? context.agentSearchPaths()
+                : (context.agentSearchPaths ?? []);
+        return [
+            path.join(repoRoot, "packages", "agents"),
+            ...configured.map((p) =>
+                path.isAbsolute(p) ? p : path.join(repoRoot, p),
+            ),
+        ];
+    };
     const sandbox =
         options.sandbox ??
         new InMemorySandboxManager({
@@ -636,7 +646,7 @@ export function createStudioRuntimeCore(
             return sandbox.list();
         },
         async listAvailableAgents() {
-            return listAvailableAgentNames(repoRoot, agentRoots);
+            return listAvailableAgentNames(repoRoot, agentRoots());
         },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so

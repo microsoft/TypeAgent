@@ -156,6 +156,11 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "typeagent-studio.removeAgentsDirectory",
+        "title": "Remove agents directory",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.unloadAgent",
         "title": "Unload agent",
         "category": "TypeAgent Studio",
@@ -461,6 +466,7 @@
     "onCommand:typeagent-studio.restartSandbox",
     "onCommand:typeagent-studio.loadAgent",
     "onCommand:typeagent-studio.addAgentsDirectory",
+    "onCommand:typeagent-studio.removeAgentsDirectory",
     "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
