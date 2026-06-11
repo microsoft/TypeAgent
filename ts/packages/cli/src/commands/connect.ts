@@ -12,6 +12,7 @@ import {
     withEnhancedConsoleClientIO,
     applyQueueSnapshot,
     clearRecentSubmissions,
+    setPendingExitMessage,
 } from "../enhancedConsole.js";
 import {
     setConversationCommandContext,
@@ -25,10 +26,16 @@ import {
     connectAgentServer,
     ensureAgentServer,
     AgentServerConnection,
+    type ConversationDispatcher,
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
+import {
+    createEphemeralConversation,
+    deleteEphemeralConversation,
+    findOrCreateNamedConversation,
+    joinNamedOrFallback,
+} from "@typeagent/agent-server-client/conversation";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
-import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -58,8 +65,14 @@ function saveLastConversationId(conversationId: string): void {
             CLI_STATE_FILE,
             JSON.stringify({ lastConversationId: conversationId }),
         );
-    } catch {
-        // Non-fatal: persistence failure should not block the conversation.
+    } catch (e: any) {
+        // Non-fatal but surface — silent failure leaves cli-state.json
+        // pointing at the previous conversation, so --resume restores
+        // the wrong one on next launch.
+        console.warn(
+            `Warning: failed to persist last conversation id (${e?.message ?? String(e)}). ` +
+                `Next --resume may restore a different conversation.`,
+        );
     }
 }
 
@@ -191,7 +204,10 @@ export default class Connect extends Command {
             const url = `ws://localhost:${flags.port}`;
 
             const onDisconnect = () => {
-                console.error("Disconnected from dispatcher");
+                // Print on the restored main buffer (after the alt screen
+                // is torn down by the exit handler) so the user sees why
+                // the CLI exited rather than a blank shell prompt.
+                setPendingExitMessage("Disconnected from dispatcher");
                 process.exit(1);
             };
 
@@ -203,26 +219,14 @@ export default class Connect extends Command {
                     flags.idleTimeout,
                 );
                 const connection = await connectAgentServer(url, onDisconnect);
-                const existing = await connection.listConversations(
+                const target = await findOrCreateNamedConversation(
+                    connection,
                     CLI_CONVERSATION_NAME,
                 );
-                const match = existing.find(
-                    (s) =>
-                        s.name.toLowerCase() ===
-                        CLI_CONVERSATION_NAME.toLowerCase(),
-                );
-                const cliConversationId =
-                    match !== undefined
-                        ? match.conversationId
-                        : (
-                              await connection.createConversation(
-                                  CLI_CONVERSATION_NAME,
-                              )
-                          ).conversationId;
                 const conversation = await connection.joinConversation(
                     clientIO,
                     {
-                        conversationId: cliConversationId,
+                        conversationId: target.conversationId,
                     },
                 );
                 conversation.dispatcher.close = async () => {
@@ -239,22 +243,18 @@ export default class Connect extends Command {
                     flags.idleTimeout,
                 );
                 const connection = await connectAgentServer(url, onDisconnect);
-                const ephemeralName = `cli-ephemeral-${crypto.randomUUID()}`;
-                const created =
-                    await connection.createConversation(ephemeralName);
-                const conversation = await connection.joinConversation(
+                const eph = await createEphemeralConversation(
+                    connection,
                     clientIO,
-                    {
-                        conversationId: created.conversationId,
-                    },
+                    "cli-ephemeral",
                 );
-                conversation.dispatcher.close = async () => {
+                eph.conversation.dispatcher.close = async () => {
                     await connection.close();
                 };
                 return {
-                    conversation,
+                    conversation: eph.conversation,
                     connection,
-                    ephemeralConversationId: created.conversationId,
+                    ephemeralConversationId: eph.ephemeralConversationId,
                 };
             };
 
@@ -265,64 +265,62 @@ export default class Connect extends Command {
             let ephemeralConversationId: string | undefined;
 
             if (isEphemeral) {
-                // --memory: use an ephemeral conversation, delete on exit
                 const result = await connectToEphemeralConversation();
                 conversation = result.conversation;
                 connection = result.connection;
                 ephemeralConversationId = result.ephemeralConversationId;
-            } else {
-                // Resolve the conversation to join:
-                //   1. explicit --conversation flag
-                //   2. persisted last-used conversation ID (with "not found" recovery)
-                //   3. default: find-or-create the "CLI" conversation
-                const result =
-                    persistedConversationId !== undefined
-                        ? await (async () => {
-                              await ensureAgentServer(
-                                  flags.port,
-                                  flags.hidden,
-                                  flags.idleTimeout,
-                              );
-                              const conn = await connectAgentServer(
-                                  url,
-                                  onDisconnect,
-                              );
-                              const conv = await conn.joinConversation(
-                                  clientIO,
-                                  { conversationId: persistedConversationId },
-                              );
-                              conv.dispatcher.close = async () => {
-                                  await conn.close();
-                              };
-                              return { conversation: conv, connection: conn };
-                          })().catch(async (err: any) => {
-                              if (
-                                  isDefaultConversation &&
-                                  typeof err?.message === "string" &&
-                                  err.message.startsWith(
-                                      "Conversation not found:",
-                                  )
-                              ) {
-                                  console.log(
-                                      `The last used conversation no longer exists on the server.`,
-                                  );
-                                  const join = await promptYesNo(
-                                      `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
-                                  );
-                                  if (!join) {
-                                      clearLastConversationId();
-                                      return null;
-                                  }
-                                  clearLastConversationId();
-                                  return connectToCliConversation();
-                              }
-                              throw err;
-                          })
-                        : await connectToCliConversation();
-
-                if (result === null) {
-                    return;
+            } else if (persistedConversationId !== undefined) {
+                // Restore the persisted/explicit conversation, falling back
+                // to find-or-create only when the user opts in (default flow)
+                // and the server returned "Conversation not found:".
+                await ensureAgentServer(
+                    flags.port,
+                    flags.hidden,
+                    flags.idleTimeout,
+                );
+                const conn = await connectAgentServer(url, onDisconnect);
+                let userDeclined = false;
+                try {
+                    const result = await joinNamedOrFallback(conn, clientIO, {
+                        savedConversationId: persistedConversationId,
+                        defaultName: CLI_CONVERSATION_NAME,
+                        shouldFallback: async (err: unknown) => {
+                            const msg = (err as { message?: string })?.message;
+                            if (
+                                !isDefaultConversation ||
+                                typeof msg !== "string" ||
+                                !msg.startsWith("Conversation not found:")
+                            ) {
+                                return false;
+                            }
+                            console.log(
+                                `The last used conversation no longer exists on the server.`,
+                            );
+                            const join = await promptYesNo(
+                                `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
+                            );
+                            clearLastConversationId();
+                            if (!join) {
+                                userDeclined = true;
+                                return false;
+                            }
+                            return true;
+                        },
+                    });
+                    result.conversation.dispatcher.close = async () => {
+                        await conn.close();
+                    };
+                    conversation = result.conversation;
+                    connection = conn;
+                } catch (err) {
+                    if (userDeclined) {
+                        await conn.close().catch(() => {});
+                        return;
+                    }
+                    throw err;
                 }
+            } else {
+                const result = await connectToCliConversation();
                 conversation = result.conversation;
                 connection = result.connection;
             }
@@ -354,41 +352,48 @@ export default class Connect extends Command {
             // AgentServerConnection.
             let convCtx: ConversationCommandContext | undefined;
             if (connection !== undefined) {
+                const conn = connection;
+                // Pre-leave: rebind dispatcher + active id/name only.
+                const rebindAfterSwitch = async (
+                    newConversation: ConversationDispatcher,
+                ) => {
+                    newConversation.dispatcher.close = async () => {
+                        await conn.close();
+                    };
+                    activeDispatcher = newConversation.dispatcher;
+                    activeConversationId = newConversation.conversationId;
+                    activeName = newConversation.name;
+                    bindDispatcher(activeDispatcher);
+                    setQueueDispatcher(activeDispatcher);
+                    setCliConnectionId(newConversation.connectionId);
+                    clearRecentSubmissions();
+                    applyQueueSnapshot(newConversation.queueSnapshot);
+                };
+                // Post-leave: history replay (UI output) only happens after
+                // the old conversation is left, so its lingering events
+                // can't render into the new conversation's replay block.
+                const replayAfterSwitch = async (
+                    newConversation: ConversationDispatcher,
+                ) => {
+                    await replayDisplayHistory(
+                        newConversation.dispatcher,
+                        clientIO,
+                        newConversation.name,
+                    );
+                };
                 convCtx = {
-                    connection,
+                    connection: conn,
+                    clientIO,
                     getCurrentConversationId: () => activeConversationId,
                     getCurrentConversationName: () => activeName,
-                    switchConversation: async (newConversationId: string) => {
-                        // Join the new conversation first so that if it fails we
-                        // haven't already left the old one (avoids stranded state).
-                        const newConversation =
-                            await connection.joinConversation(clientIO, {
-                                conversationId: newConversationId,
-                            });
-                        newConversation.dispatcher.close = async () => {
-                            await connection.close();
-                        };
-                        await connection.leaveConversation(
-                            activeConversationId,
-                        );
-                        activeDispatcher = newConversation.dispatcher;
-                        activeConversationId = newConversation.conversationId;
-                        activeName = newConversation.name;
-                        bindDispatcher(activeDispatcher);
-                        setQueueDispatcher(activeDispatcher);
-                        setCliConnectionId(newConversation.connectionId);
-                        clearRecentSubmissions();
-                        applyQueueSnapshot(newConversation.queueSnapshot);
-                        if (!isEphemeral) {
-                            saveLastConversationId(activeConversationId);
-                        }
-                        await replayDisplayHistory(
-                            activeDispatcher,
-                            clientIO,
-                            activeName,
-                        );
-                        return newConversation;
-                    },
+                    onSwitched: rebindAfterSwitch,
+                    onAfterSwitched: replayAfterSwitch,
+                    ...(isEphemeral
+                        ? {}
+                        : {
+                              onPersistSwitched: (id: string) =>
+                                  saveLastConversationId(id),
+                          }),
                 };
                 setConversationCommandContext(convCtx);
                 setServerPort(flags.port);
@@ -446,13 +451,10 @@ export default class Connect extends Command {
                     ephemeralConversationId !== undefined &&
                     connection !== undefined
                 ) {
-                    try {
-                        await connection.deleteConversation(
-                            ephemeralConversationId,
-                        );
-                    } catch {
-                        // Best effort cleanup of ephemeral conversation
-                    }
+                    await deleteEphemeralConversation(
+                        connection,
+                        ephemeralConversationId,
+                    );
                 }
                 if (activeDispatcher) {
                     await activeDispatcher.close();

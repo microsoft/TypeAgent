@@ -1,0 +1,1232 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+import {
+    InMemoryOnboardingBridge,
+    ONBOARDING_PHASE_ORDER,
+    type OnboardingPhaseName,
+    type PhaseStatus,
+    type OnboardingState,
+    type RestorePhaseResult,
+    routeStudioConversation,
+} from "@typeagent/core/onboardingBridge";
+import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
+import { InProcessEventStream } from "@typeagent/core/events";
+import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
+import {
+    createRepoAgentLoader,
+    InMemorySandboxManager,
+    type SandboxManager,
+    type SandboxStatus,
+} from "@typeagent/core/sandbox";
+import {
+    FileCorpusService,
+    type CorpusEntry,
+    type CorpusFilter,
+    type CorpusService,
+    type ExternalSourceSpec,
+} from "@typeagent/core/corpus";
+import {
+    CoreFeedbackService,
+    InMemoryFeedbackBackend,
+    type FeedbackCorpusProjector,
+    type FeedbackFilter,
+    type FeedbackRecordInput,
+    type FeedbackRow,
+    type FeedbackService,
+} from "@typeagent/core/feedback";
+import {
+    replayCorpus,
+    type ActionDelta,
+    type ReplayActionResolver,
+    type ReplayAgentResolution,
+    type ReplayMissPolicy,
+    type ReplaySummary,
+    type VersionSpec,
+} from "@typeagent/core/replay";
+import {
+    InProcessCollisionService,
+    type CollisionFilter,
+    type CollisionService,
+} from "@typeagent/core/collisions";
+import {
+    createRepoGrammarScanner,
+    type GrammarCollisionScanner,
+    type GrammarScanSkip,
+} from "@typeagent/core/collisionScanner";
+import type { CollisionDetectedEvent } from "@typeagent/core/events";
+import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
+import {
+    resolveRepoRoot,
+    type RepoRootResolution,
+} from "./repoRootResolver.js";
+
+const LAST_ONBOARDING_SESSION_KEY = "studio.lastOnboardingSessionId";
+const DEFAULT_SANDBOX_ID = "studio-default";
+const PERSISTED_SANDBOXES_KEY = "studio.persistedSandboxes";
+
+interface PersistedSandbox {
+    id: string;
+    agents: string[];
+}
+
+const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
+    "sandbox.start",
+    "sandbox.stop",
+    "sandbox.restart",
+    "sandbox.agent.loaded",
+    "sandbox.agent.unloaded",
+];
+
+export type PackagingHealthGateStatus =
+    | "pass"
+    | "warn"
+    | "fail"
+    | "unavailable";
+
+export interface PackagingHealthGateResult {
+    status: PackagingHealthGateStatus;
+    summary: string;
+    findings: HealthFinding[];
+    artifactPath: string;
+    checkedAgent?: string;
+}
+
+/** Request shape for {@link StudioRuntime.replayCorpus}. Versions and miss
+ *  policy default to a deterministic working-tree self-compare. */
+export interface StudioReplayRequest {
+    agent: string;
+    corpus?: CorpusFilter;
+    versionA?: VersionSpec;
+    versionB?: VersionSpec;
+    missPolicy?: ReplayMissPolicy;
+}
+
+export interface StudioReplayResult {
+    runId: string;
+    summary: ReplaySummary;
+    rows: ActionDelta[];
+}
+
+export interface StudioCollisionScanRequest {
+    /**
+     * Agent package names to scan. Defaults to every agent currently loaded
+     * across running sandboxes.
+     */
+    agents?: string[];
+    /** Sandbox id recorded on reported collisions. Defaults to the studio sandbox. */
+    sandboxId?: string;
+    /**
+     * When true (default), clears prior `grammar-edit` collisions before
+     * reporting the fresh scan so the view reflects the current grammars.
+     */
+    replace?: boolean;
+}
+
+export interface StudioCollisionScanResult {
+    /** Schema names that compiled and participated in the scan. */
+    scanned: string[];
+    /** Agents/schemas skipped, with reasons. */
+    skipped: GrammarScanSkip[];
+    /** Number of collisions reported into the store. */
+    collisionCount: number;
+}
+
+/** An agent discoverable in the Load agent UI. */
+export interface AvailableAgent {
+    name: string;
+    /** Emoji from the agent's manifest (`emojiChar`), when resolvable. */
+    emoji?: string;
+}
+
+export interface StudioRuntime {
+    /**
+     * Repo root used for agent discovery and whether a `packages/agents`
+     * directory was actually found there. When not found, the UI should warn
+     * that health/corpus/collision results will be empty until the correct
+     * folder (the monorepo's `ts/` directory) is opened.
+     */
+    getRepoRootInfo(): RepoRootResolution;
+    startOnboarding(seed: {
+        description: string;
+        agentName?: string;
+    }): Promise<OnboardingState>;
+    installLastSessionToSandbox(
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{
+        sessionId: string;
+        artifactPath: string;
+    }>;
+    installArtifactToSandbox(
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{
+        sessionId: string;
+        artifactPath: string;
+    }>;
+    resolveInstallArtifactPathForActiveSession(): Promise<string>;
+    evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
+    enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
+    clearActiveOnboardingSession(): Promise<void>;
+    getActiveOnboardingSession(): Promise<OnboardingState>;
+    runPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState>;
+    getDefaultInputsForPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<unknown>;
+    getPhaseStatusOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus>;
+    listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]>;
+    runRemainingPhasesOnActiveSession(): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }>;
+    rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }>;
+    restorePhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<RestorePhaseResult>;
+    checkPackagingHealthGate(
+        artifactPath: string,
+    ): Promise<PackagingHealthGateResult>;
+    listPhases(): readonly OnboardingPhaseName[];
+    routeConversation(prompt: string): {
+        target: "onboarding" | "schemaAuthor";
+        reason: string;
+    };
+    listSandboxes(): Promise<SandboxStatus[]>;
+    /**
+     * Agents available to load (name + manifest emoji when known). Merges the
+     * curated registry (`defaultAgentProvider/data/config.json` agent keys —
+     * what the shell loads) with `packages/agents/*` directories declaring the
+     * dispatcher `./agent/manifest` export. Used to offer autocomplete in the
+     * Load agent UI.
+     */
+    listAvailableAgents(): Promise<AvailableAgent[]>;
+    startSandbox(options?: {
+        id?: string;
+        agents?: string[];
+    }): Promise<SandboxStatus>;
+    stopSandbox(id: string): Promise<void>;
+    restartSandbox(id: string): Promise<void>;
+    /**
+     * Load an agent into a running sandbox. `agentRef` is a path or module
+     * reference; the loader derives the agent name. Returns the updated status.
+     */
+    loadSandboxAgent(id: string, agentRef: string): Promise<SandboxStatus>;
+    /** Unload a named agent from a sandbox. Returns the updated status. */
+    unloadSandboxAgent(id: string, agentName: string): Promise<SandboxStatus>;
+    /**
+     * Re-load a named agent in every sandbox where it is currently loaded,
+     * recomputing its health and schema/grammar hashes from disk. Used after
+     * building an agent's grammar so the (cached) health badge refreshes
+     * without a manual sandbox restart. Returns the number of sandboxes
+     * refreshed.
+     */
+    refreshSandboxAgent(agentName: string): Promise<number>;
+    /**
+     * Subscribe to sandbox lifecycle changes (start/stop/restart, agent
+     * load/unload). The listener is invoked after each such event so a UI can
+     * refresh. Returns a disposable to stop listening.
+     */
+    onSandboxChanged(listener: () => void): { dispose(): void };
+    /**
+     * Agents that currently have a federated corpus view, derived from the
+     * union of agents loaded across running sandboxes.
+     */
+    listCorpusAgents(): Promise<string[]>;
+    /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
+    listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
+    /**
+     * Register an external JSONL corpus source for an agent (writes
+     * `<repoRoot>/.typeagent/studio.json`). Throws if a source with the same
+     * name already exists for the agent.
+     */
+    addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void>;
+    /**
+     * Ensure an agent's in-repo corpus file exists so it can be populated.
+     * Returns its path and whether it was newly created.
+     */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
+    /** Most recent events from the structured event stream, oldest-first. */
+    queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
+    /** Subscribe to every event as it is emitted. Returns a disposable. */
+    onAnyEvent(listener: (event: StudioEvent) => void): { dispose(): void };
+    /**
+     * Record a thumbs-up/down feedback row. Emits a `feedback.recorded` event
+     * and (when an utterance is supplied) surfaces the row in the agent's
+     * federated corpus under the `feedback` source.
+     */
+    recordFeedback(input: FeedbackRecordInput): Promise<void>;
+    /** List recorded feedback rows, optionally filtered. */
+    listFeedback(filter?: FeedbackFilter): Promise<FeedbackRow[]>;
+    /**
+     * Replay an agent's corpus through the F4.1 compare engine, evaluating each
+     * utterance against versions A and B. Emits `replay.row`/`replay.summary`
+     * events (visible in the Event Log) and resolves with the collected rows
+     * and summary.
+     */
+    replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult>;
+    /**
+     * Report a detected schema/grammar collision. Stores it and emits a
+     * `collision.detected` event (visible in the Event Log and the Collisions
+     * view). Returns the stored event.
+     */
+    reportCollision(event: CollisionDetectedEvent): CollisionDetectedEvent;
+    /** List stored collisions, newest-first, optionally filtered. */
+    listCollisions(filter?: CollisionFilter): Promise<CollisionDetectedEvent[]>;
+    /** Remove stored collisions matching the filter (all when omitted). */
+    clearCollisions(filter?: CollisionFilter): Promise<number>;
+    /** Subscribe to collision detections as they are emitted. */
+    onCollisionDetected(listener: () => void): { dispose(): void };
+    /**
+     * Subscribe to agent load/unload events across sandboxes. Used to keep the
+     * Collisions view current by re-scanning when the loaded agent set changes.
+     */
+    onAgentLoadChanged(listener: () => void): { dispose(): void };
+    /**
+     * Scan agents' compiled grammars for real cross-schema collisions via the
+     * NFA overlap engine, reporting each into the collision store (and Event
+     * Log). Replaces prior `grammar-edit` collisions unless `replace` is false.
+     */
+    scanGrammarCollisions(
+        request?: StudioCollisionScanRequest,
+    ): Promise<StudioCollisionScanResult>;
+    /**
+     * Re-create sandboxes (and their agent loadouts) from the workspace-scoped
+     * persisted snapshot written on every sandbox mutation. Safe to call
+     * multiple times — sandboxes that already exist are skipped, and per-
+     * sandbox restore failures are isolated so one bad entry can't block the
+     * rest. Intended to be invoked once at extension activation.
+     */
+    restoreSandboxes(): Promise<void>;
+}
+
+export interface StudioWorkspaceState {
+    get<T>(key: string): T | undefined;
+    update(key: string, value: unknown): Promise<void>;
+}
+
+export interface StudioRuntimeContext {
+    workspaceState: StudioWorkspaceState;
+    globalStorageFsPath: string;
+    workspaceFolderFsPaths?: string[];
+    /**
+     * Additional directories that contain agent subdirectories (peer to
+     * `packages/agents`), from the `typeagentStudio.agentSearchPaths` setting.
+     * Relative entries are resolved against the detected repo root. The repo's
+     * own `packages/agents` is always included as the first root. May be a
+     * provider, read fresh on each use, so a changed setting is picked up
+     * without recreating the runtime.
+     */
+    agentSearchPaths?: string[] | (() => string[]);
+}
+
+export interface CreateStudioRuntimeOptions {
+    onboarding?: InMemoryOnboardingBridge;
+    sandbox?: SandboxManager;
+    corpus?: CorpusService;
+    feedback?: FeedbackService & FeedbackCorpusProjector;
+    /**
+     * Resolver that evaluates one utterance against one agent version. Injected
+     * so a real per-version build/dispatch can replace the default, which does a
+     * deterministic identity replay over each entry's captured `expectedAction`.
+     */
+    replayResolver?: ReplayActionResolver;
+    collisions?: CollisionService;
+    /**
+     * Scans agents' compiled grammars for collisions. Injected so tests can
+     * substitute a deterministic stub for the default filesystem/NFA scanner.
+     */
+    collisionScanner?: GrammarCollisionScanner;
+    evaluatePackagingHealthGate?: (
+        artifactPath: string,
+    ) => Promise<PackagingHealthGateResult>;
+}
+
+/** Deterministic default resolver: surfaces each entry's captured
+ *  `expectedAction` (and feedback) identically for both versions, so an
+ *  un-parameterized replay reports an all-equal baseline. */
+const identityReplayResolver: ReplayActionResolver = {
+    resolve(entry): ReplayAgentResolution {
+        if (entry.expectedAction !== undefined) {
+            return {
+                action: entry.expectedAction,
+                cacheState: "hit",
+                ...(entry.feedback !== undefined
+                    ? { feedback: entry.feedback }
+                    : {}),
+            };
+        }
+        return {
+            cacheState: "needs-explanation",
+            ...(entry.feedback !== undefined
+                ? { feedback: entry.feedback }
+                : {}),
+        };
+    },
+};
+
+export function createStudioRuntimeCore(
+    context: StudioRuntimeContext,
+    options: CreateStudioRuntimeOptions = {},
+): StudioRuntime {
+    const events = new InProcessEventStream();
+    const repoRootResolution = resolveRepoRoot(
+        context.workspaceFolderFsPaths ?? [],
+        context.globalStorageFsPath,
+    );
+    const repoRoot = repoRootResolution.repoRoot;
+    // Agent roots, resolved fresh on each use so a changed
+    // `agentSearchPaths` setting is picked up without reconstructing the
+    // runtime: the repo's own packages/agents first, then any configured
+    // search paths (relative entries resolved against the repo root).
+    const agentRoots = (): string[] => {
+        const configured =
+            typeof context.agentSearchPaths === "function"
+                ? context.agentSearchPaths()
+                : (context.agentSearchPaths ?? []);
+        return [
+            path.join(repoRoot, "packages", "agents"),
+            ...configured.map((p) =>
+                path.isAbsolute(p) ? p : path.join(repoRoot, p),
+            ),
+        ];
+    };
+    const sandbox =
+        options.sandbox ??
+        new InMemorySandboxManager({
+            emitter: events,
+            agentLoader: createRepoAgentLoader({ repoRoot, agentRoots }),
+        });
+    const onboarding = options.onboarding ?? new InMemoryOnboardingBridge();
+    const evaluatePackagingHealthGate =
+        options.evaluatePackagingHealthGate ??
+        defaultEvaluatePackagingHealthGate;
+
+    const profileDir = path.join(
+        context.globalStorageFsPath,
+        "profiles",
+        DEFAULT_SANDBOX_ID,
+    );
+
+    const feedback =
+        options.feedback ??
+        new CoreFeedbackService({
+            backend: new InMemoryFeedbackBackend(),
+            emitter: events,
+        });
+
+    const corpus =
+        options.corpus ??
+        new FileCorpusService({
+            repoRoot,
+            profileDir: path.join(context.globalStorageFsPath, "corpus"),
+            feedbackProvider: (agent) => feedback.toCorpusEntries(agent),
+        });
+
+    const collisions =
+        options.collisions ??
+        new InProcessCollisionService({
+            emitter: events,
+            defaultSandboxId: DEFAULT_SANDBOX_ID,
+        });
+
+    const collisionScanner =
+        options.collisionScanner ??
+        createRepoGrammarScanner({ repoRoot, agentRoots });
+
+    // Persistence for sandbox lifecycle. The in-memory sandbox manager has no
+    // durable storage of its own, so the studio runtime snapshots the live
+    // sandbox set into workspaceState after every mutation and replays it on
+    // demand via `restoreSandboxes()` (called once at activation).
+    let restoring = false;
+    const persistSandboxes = async (): Promise<void> => {
+        if (restoring) {
+            return;
+        }
+        const snapshot: PersistedSandbox[] = (await sandbox.list()).map(
+            (status) => ({
+                id: status.id,
+                agents: status.agents.map((a) => a.sourcePath ?? a.name),
+            }),
+        );
+        await context.workspaceState.update(PERSISTED_SANDBOXES_KEY, snapshot);
+    };
+
+    return {
+        getRepoRootInfo() {
+            return repoRootResolution;
+        },
+        async startOnboarding(seed) {
+            const state = await onboarding.start(seed);
+            await context.workspaceState.update(
+                LAST_ONBOARDING_SESSION_KEY,
+                state.sessionId,
+            );
+            return state;
+        },
+        async installLastSessionToSandbox(
+            sandboxId = DEFAULT_SANDBOX_ID,
+            installOptions = {},
+        ) {
+            const sessionId = getRequiredSessionId(context);
+            const artifactPath = await resolveArtifactPathForSession(
+                onboarding,
+                sessionId,
+                context,
+            );
+
+            if (!installOptions.skipHealthGate) {
+                const gate = await evaluatePackagingHealthGate(artifactPath);
+                if (gate.status === "fail") {
+                    throw new Error(`Health gate failed: ${gate.summary}`);
+                }
+            }
+
+            return installResolvedArtifact(
+                sandbox,
+                onboarding,
+                sessionId,
+                sandboxId,
+                profileDir,
+                artifactPath,
+            );
+        },
+        async installArtifactToSandbox(
+            artifactPath,
+            sandboxId = DEFAULT_SANDBOX_ID,
+        ) {
+            const sessionId = getRequiredSessionId(context);
+            if (!(await pathExists(artifactPath))) {
+                throw new Error(
+                    `Artifact path does not exist: ${artifactPath}`,
+                );
+            }
+
+            return installResolvedArtifact(
+                sandbox,
+                onboarding,
+                sessionId,
+                sandboxId,
+                profileDir,
+                artifactPath,
+            );
+        },
+        async resolveInstallArtifactPathForActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            return resolveArtifactPathForSession(
+                onboarding,
+                sessionId,
+                context,
+            );
+        },
+        async evaluatePackagingHealthGateForActiveSession() {
+            const artifactPath =
+                await this.resolveInstallArtifactPathForActiveSession();
+            return evaluatePackagingHealthGate(artifactPath);
+        },
+        async enforcePackagingHealthGateForActiveSession() {
+            const gate =
+                await this.evaluatePackagingHealthGateForActiveSession();
+            if (gate.status === "fail") {
+                throw new Error(`Health gate failed: ${gate.summary}`);
+            }
+            return gate;
+        },
+        async clearActiveOnboardingSession() {
+            await context.workspaceState.update(
+                LAST_ONBOARDING_SESSION_KEY,
+                undefined,
+            );
+        },
+        async getActiveOnboardingSession() {
+            const sessionId = getRequiredSessionId(context);
+            return onboarding.snapshot(sessionId);
+        },
+        async runPhaseOnActiveSession(phase, inputs = {}) {
+            const sessionId = getRequiredSessionId(context);
+            await onboarding.runPhase(sessionId, phase, inputs);
+            return onboarding.snapshot(sessionId);
+        },
+        async getDefaultInputsForPhaseOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return getDefaultPhaseInputs(state, phase);
+        },
+        async getPhaseStatusOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return state.phases[phase]?.status ?? "pending";
+        },
+        async listStalePhasesOnActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            const state = await onboarding.snapshot(sessionId);
+            return ONBOARDING_PHASE_ORDER.filter(
+                (phase) => state.phases[phase]?.status === "stale",
+            );
+        },
+        async runRemainingPhasesOnActiveSession() {
+            const sessionId = getRequiredSessionId(context);
+            let state = await onboarding.snapshot(sessionId);
+            const completedPhases: OnboardingPhaseName[] = [];
+
+            for (const phase of ONBOARDING_PHASE_ORDER) {
+                const existing = state.phases[phase];
+                if (existing?.status === "complete") {
+                    continue;
+                }
+
+                await onboarding.runPhase(
+                    sessionId,
+                    phase,
+                    getDefaultPhaseInputs(state, phase),
+                );
+                completedPhases.push(phase);
+                state = await onboarding.snapshot(sessionId);
+            }
+
+            return {
+                state,
+                completedPhases,
+            };
+        },
+        async rerunPhasesOnActiveSession(phases) {
+            const sessionId = getRequiredSessionId(context);
+            let state = await onboarding.snapshot(sessionId);
+            const rerunPhases: OnboardingPhaseName[] = [];
+            const normalizedPhases = ONBOARDING_PHASE_ORDER.filter((phase) =>
+                phases.includes(phase),
+            );
+
+            for (const phase of normalizedPhases) {
+                await onboarding.runPhase(
+                    sessionId,
+                    phase,
+                    getDefaultPhaseInputs(state, phase),
+                );
+                rerunPhases.push(phase);
+                state = await onboarding.snapshot(sessionId);
+            }
+
+            return {
+                state,
+                rerunPhases,
+            };
+        },
+        async restorePhaseOnActiveSession(phase) {
+            const sessionId = getRequiredSessionId(context);
+            return onboarding.restorePhase(sessionId, phase);
+        },
+        async checkPackagingHealthGate(artifactPath) {
+            return evaluatePackagingHealthGate(artifactPath);
+        },
+        listPhases() {
+            return ONBOARDING_PHASE_ORDER;
+        },
+        routeConversation(prompt) {
+            const routed = routeStudioConversation(prompt);
+            return {
+                target: routed.target,
+                reason: routed.reason,
+            };
+        },
+        async listSandboxes() {
+            return sandbox.list();
+        },
+        async listAvailableAgents() {
+            return listAvailableAgentNames(agentRoots());
+        },
+        async startSandbox(startOptions = {}) {
+            // Title-bar "Start sandbox" passes no id; mint a unique one so
+            // multiple sandboxes can coexist (the default id is reused only
+            // when it's free, keeping install commands' default stable).
+            const id = startOptions.id ?? (await nextSandboxId(sandbox));
+            await sandbox.start({
+                id,
+                mode: "inmemory",
+                profileDir: path.join(
+                    context.globalStorageFsPath,
+                    "profiles",
+                    id,
+                ),
+                agents: startOptions.agents ?? [],
+            });
+            await persistSandboxes();
+            return sandbox.status(id);
+        },
+        async stopSandbox(id) {
+            await sandbox.stop(id);
+            await persistSandboxes();
+        },
+        async restartSandbox(id) {
+            await sandbox.restart(id);
+            await persistSandboxes();
+        },
+        async loadSandboxAgent(id, agentRef) {
+            await sandbox.loadAgent(id, agentRef);
+            await persistSandboxes();
+            return sandbox.status(id);
+        },
+        async unloadSandboxAgent(id, agentName) {
+            await sandbox.unloadAgent(id, agentName);
+            await persistSandboxes();
+            return sandbox.status(id);
+        },
+        async refreshSandboxAgent(agentName) {
+            let refreshed = 0;
+            for (const status of await sandbox.list()) {
+                const loaded = status.agents.find((a) => a.name === agentName);
+                if (loaded !== undefined) {
+                    // Re-running loadAgent re-invokes the loader, recomputing
+                    // health/hashes and emitting `sandbox.agent.loaded` (which
+                    // refreshes the trees, status bar, and collision auto-scan).
+                    await sandbox.loadAgent(
+                        status.id,
+                        loaded.sourcePath ?? loaded.name,
+                    );
+                    refreshed += 1;
+                }
+            }
+            return refreshed;
+        },
+        onSandboxChanged(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: { types: SANDBOX_LIFECYCLE_EVENT_TYPES },
+            });
+            return { dispose: () => subscription.unsubscribe() };
+        },
+        async listCorpusAgents() {
+            const sandboxes = await sandbox.list();
+            const agents = new Set<string>();
+            for (const status of sandboxes) {
+                for (const agent of status.agents) {
+                    agents.add(agent.name);
+                }
+            }
+            return [...agents].sort((a, b) => a.localeCompare(b));
+        },
+        async listCorpusEntries(agent) {
+            return corpus.list(agent);
+        },
+        async addExternalCorpusSource(spec) {
+            await corpus.addExternalSource(spec);
+        },
+        async seedInRepoCorpus(agent) {
+            return corpus.seedInRepoCorpus(agent);
+        },
+        async queryRecentEvents(limit = 200) {
+            const all: StudioEvent[] = [];
+            for await (const event of events.query()) {
+                all.push(event);
+            }
+            return all.slice(-limit);
+        },
+        onAnyEvent(listener) {
+            const subscription = events.subscribe(listener);
+            return { dispose: () => subscription.unsubscribe() };
+        },
+        async recordFeedback(input) {
+            await feedback.record(input);
+        },
+        async listFeedback(filter) {
+            return feedback.list(filter);
+        },
+        async replayCorpus(request) {
+            const replayOptions = {
+                agent: request.agent,
+                corpus: request.corpus ?? {},
+                versionA: request.versionA ?? { kind: "workingTree" },
+                versionB: request.versionB ?? { kind: "workingTree" },
+                missPolicy: request.missPolicy ?? "needs-explanation",
+            } satisfies Parameters<typeof replayCorpus>[0];
+
+            const handle = replayCorpus(replayOptions, {
+                corpus: { list: (agent, filter) => corpus.list(agent, filter) },
+                resolver: options.replayResolver ?? identityReplayResolver,
+                emitter: events,
+            });
+
+            const rows: ActionDelta[] = [];
+            for await (const row of handle.rows) {
+                rows.push(row);
+            }
+            const summary = await handle.summary;
+            return { runId: handle.runId, summary, rows };
+        },
+        reportCollision(event) {
+            return collisions.report(event);
+        },
+        async listCollisions(filter) {
+            return collisions
+                .list(filter)
+                .slice()
+                .sort((a, b) => b.ts - a.ts);
+        },
+        async clearCollisions(filter) {
+            return collisions.clear(filter);
+        },
+        onCollisionDetected(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: { types: ["collision.detected"] },
+            });
+            return { dispose: () => subscription.unsubscribe() };
+        },
+        onAgentLoadChanged(listener) {
+            const subscription = events.subscribe(() => listener(), {
+                filter: {
+                    types: ["sandbox.agent.loaded", "sandbox.agent.unloaded"],
+                },
+            });
+            return { dispose: () => subscription.unsubscribe() };
+        },
+        async scanGrammarCollisions(request = {}) {
+            const sandboxId = request.sandboxId ?? DEFAULT_SANDBOX_ID;
+            let agents = request.agents;
+            if (agents === undefined) {
+                const loaded = new Set<string>();
+                for (const status of await sandbox.list()) {
+                    for (const agent of status.agents) {
+                        loaded.add(agent.name);
+                    }
+                }
+                agents = [...loaded].sort((a, b) => a.localeCompare(b));
+            }
+
+            const report = await collisionScanner({ agents });
+
+            if (request.replace !== false) {
+                collisions.clear({ detectionPoint: "grammar-edit" });
+            }
+            for (const collision of report.collisions) {
+                collisions.fromGrammarTools(collision, {
+                    sandboxId,
+                    detectionPoint: "grammar-edit",
+                });
+            }
+
+            return {
+                scanned: report.scanned,
+                skipped: report.skipped,
+                collisionCount: report.collisions.length,
+            };
+        },
+        async restoreSandboxes() {
+            const snapshot =
+                context.workspaceState.get<PersistedSandbox[]>(
+                    PERSISTED_SANDBOXES_KEY,
+                ) ?? [];
+            if (snapshot.length === 0) {
+                return;
+            }
+            // Don't write back to workspaceState while we replay; each call
+            // to `start()` / `loadAgent()` would otherwise trigger persist
+            // and clobber sandboxes we haven't yet restored.
+            restoring = true;
+            try {
+                const existing = new Set(
+                    (await sandbox.list()).map((s) => s.id),
+                );
+                // Restore sandboxes in parallel; they're independent, so this
+                // avoids serializing agent loads at startup. Each entry isolates
+                // its own failure so one bad sandbox can't block the rest.
+                await Promise.all(
+                    snapshot
+                        .filter((entry) => !existing.has(entry.id))
+                        .map(async (entry) => {
+                            try {
+                                await sandbox.start({
+                                    id: entry.id,
+                                    mode: "inmemory",
+                                    profileDir: path.join(
+                                        context.globalStorageFsPath,
+                                        "profiles",
+                                        entry.id,
+                                    ),
+                                    agents: entry.agents,
+                                });
+                            } catch (err) {
+                                // One sandbox failing to restore (e.g. an agent
+                                // that no longer resolves) shouldn't block the
+                                // rest. Log to the extension host console; the
+                                // surviving sandboxes still come back.
+                                // eslint-disable-next-line no-console
+                                console.warn(
+                                    `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
+                                    err,
+                                );
+                            }
+                        }),
+                );
+            } finally {
+                restoring = false;
+            }
+            // Re-snapshot to drop any sandboxes that failed to come back.
+            await persistSandboxes();
+        },
+    };
+}
+
+async function resolveArtifactPathForSession(
+    onboarding: InMemoryOnboardingBridge,
+    sessionId: string,
+    context: StudioRuntimeContext,
+): Promise<string> {
+    const session = await onboarding.snapshot(sessionId);
+    return resolveLocalArtifactPath(session, context);
+}
+
+async function defaultEvaluatePackagingHealthGate(
+    artifactPath: string,
+): Promise<PackagingHealthGateResult> {
+    const resolved = path.resolve(artifactPath);
+    const inferred = inferRepoRootAndAgent(resolved);
+    if (!inferred) {
+        return {
+            status: "unavailable",
+            summary:
+                "Could not infer repo root + agent from artifact path; health gate check skipped.",
+            findings: [],
+            artifactPath: resolved,
+        };
+    }
+
+    const service = new FileHealthService({ repoRoot: inferred.repoRoot });
+    const findings = await service.check(inferred.agent);
+    const errors = findings.filter((f) => f.severity === "error").length;
+    const warnings = findings.filter((f) => f.severity === "warning").length;
+
+    if (errors > 0) {
+        return {
+            status: "fail",
+            summary: `${errors} error findings and ${warnings} warning findings for agent ${inferred.agent}.`,
+            findings,
+            artifactPath: resolved,
+            checkedAgent: inferred.agent,
+        };
+    }
+    if (warnings > 0) {
+        return {
+            status: "warn",
+            summary: `${warnings} warning findings for agent ${inferred.agent}.`,
+            findings,
+            artifactPath: resolved,
+            checkedAgent: inferred.agent,
+        };
+    }
+
+    return {
+        status: "pass",
+        summary: `Health gate passed for agent ${inferred.agent}.`,
+        findings,
+        artifactPath: resolved,
+        checkedAgent: inferred.agent,
+    };
+}
+
+function inferRepoRootAndAgent(
+    artifactPath: string,
+): { repoRoot: string; agent: string } | undefined {
+    const normalized = path.normalize(artifactPath);
+    const parts = normalized.split(path.sep);
+    const packagesIndex = parts.lastIndexOf("packages");
+    if (packagesIndex < 0 || parts[packagesIndex + 1] !== "agents") {
+        return undefined;
+    }
+    const agent = parts[packagesIndex + 2];
+    if (!agent) {
+        return undefined;
+    }
+    const repoRoot = parts.slice(0, packagesIndex).join(path.sep) || path.sep;
+    return { repoRoot, agent };
+}
+
+async function installResolvedArtifact(
+    sandbox: SandboxManager,
+    onboarding: InMemoryOnboardingBridge,
+    sessionId: string,
+    sandboxId: string,
+    profileDir: string,
+    artifactPath: string,
+): Promise<{ sessionId: string; artifactPath: string }> {
+    try {
+        await sandbox.status(sandboxId);
+    } catch {
+        await sandbox.start({
+            id: sandboxId,
+            mode: "inmemory",
+            profileDir,
+            agents: [],
+        });
+    }
+
+    await sandbox.loadAgent(sandboxId, artifactPath);
+    await onboarding.installToSandbox(sessionId, sandboxId);
+    return { sessionId, artifactPath };
+}
+const ONBOARDING_WORKSPACE_ROOT = path.join(
+    os.homedir(),
+    ".typeagent",
+    "onboarding",
+);
+
+async function resolveLocalArtifactPath(
+    state: OnboardingState,
+    context: StudioRuntimeContext,
+): Promise<string> {
+    const candidates = collectArtifactCandidates(state, context);
+    for (const candidate of candidates) {
+        const resolved = await resolveCandidatePath(candidate);
+        if (resolved && (await pathExists(resolved))) {
+            return resolved;
+        }
+    }
+
+    throw new Error(
+        `No local generated agent artifact found for ${state.agentName}. Checked ${candidates.length} candidate paths.`,
+    );
+}
+
+function collectArtifactCandidates(
+    state: OnboardingState,
+    context: StudioRuntimeContext,
+): string[] {
+    const out: string[] = [];
+    const push = (value: string | undefined) => {
+        const trimmed = value?.trim();
+        if (trimmed) {
+            out.push(trimmed);
+        }
+    };
+
+    for (const phase of ["Packaging", "Scaffolder"] as const) {
+        const outputs = state.phases[phase]?.outputs;
+        if (outputs && typeof outputs === "object") {
+            const obj = outputs as Record<string, unknown>;
+            for (const key of [
+                "artifactPath",
+                "agentPath",
+                "agentDir",
+                "outputDir",
+                "scaffoldedTo",
+                "targetDir",
+            ]) {
+                const raw = obj[key];
+                if (typeof raw === "string") {
+                    push(raw);
+                }
+            }
+        }
+    }
+
+    const onboardingScaffoldRecord = path.join(
+        ONBOARDING_WORKSPACE_ROOT,
+        state.agentName,
+        "scaffolder",
+        "scaffolded-to.txt",
+    );
+    push(onboardingScaffoldRecord);
+
+    for (const root of context.workspaceFolderFsPaths ?? []) {
+        push(path.join(root, "packages", "agents", state.agentName));
+        push(
+            path.join(
+                root,
+                "packages",
+                "agents",
+                state.agentName.toLowerCase(),
+            ),
+        );
+        push(
+            path.join(
+                root,
+                "packages",
+                "agents",
+                stripAgentSuffix(state.agentName),
+            ),
+        );
+    }
+
+    return dedupe(out);
+}
+
+function stripAgentSuffix(agentName: string): string {
+    return agentName.endsWith("-agent")
+        ? agentName.slice(0, -"-agent".length)
+        : agentName;
+}
+
+/**
+ * Discover agents available to load. Merges two sources so the picker matches
+ * what the shell offers without being limited to physical directories:
+ *  1. the curated registry at
+ *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
+ *     keys — the same set the shell loads), and
+ *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
+ *     declares the dispatcher `./agent/manifest` export (catches agents not yet
+ *     in the registry, e.g. freshly scaffolded ones).
+ * Each agent carries its manifest emoji when one can be resolved from disk.
+ * Returns the sorted, de-duplicated union; empty when nothing can be read.
+ */
+async function listAvailableAgentNames(
+    agentRoots: string[],
+): Promise<AvailableAgent[]> {
+    const emojiByName = await readAgentDirEmojis(agentRoots);
+    return [...emojiByName.keys()]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => {
+            const emoji = emojiByName.get(name);
+            return emoji !== undefined ? { name, emoji } : { name };
+        });
+}
+
+/**
+ * Map of agent directory name → manifest emoji, across all agent roots, for
+ * directories declaring the dispatcher `./agent/manifest` export. The emoji is
+ * undefined when the manifest has none (or can't be read). Earlier roots win on
+ * name collisions (the repo's own `packages/agents` is first).
+ */
+async function readAgentDirEmojis(
+    agentRoots: string[],
+): Promise<Map<string, string | undefined>> {
+    const result = new Map<string, string | undefined>();
+    for (const agentsDir of agentRoots) {
+        let entries;
+        try {
+            entries = await fs.readdir(agentsDir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory() || entry.name === "dist") {
+                continue;
+            }
+            if (result.has(entry.name)) {
+                continue; // earlier root wins
+            }
+            const packageDir = path.join(agentsDir, entry.name);
+            try {
+                const pkg = JSON.parse(
+                    await fs.readFile(
+                        path.join(packageDir, "package.json"),
+                        "utf8",
+                    ),
+                ) as { exports?: Record<string, unknown> };
+                const manifestRef = resolveManifestExport(pkg.exports);
+                if (manifestRef === undefined) {
+                    continue; // not a loadable agent package
+                }
+                result.set(
+                    entry.name,
+                    await readManifestEmoji(packageDir, manifestRef),
+                );
+            } catch {
+                // not an agent package (no/invalid package.json) — skip
+            }
+        }
+    }
+    return result;
+}
+
+/** Resolve the `./agent/manifest` export to a relative file path, if present. */
+function resolveManifestExport(
+    exports?: Record<string, unknown>,
+): string | undefined {
+    const entry = exports?.["./agent/manifest"];
+    if (typeof entry === "string") {
+        return entry;
+    }
+    if (entry && typeof entry === "object") {
+        const cond = entry as Record<string, unknown>;
+        for (const key of ["default", "import", "require"]) {
+            if (typeof cond[key] === "string") {
+                return cond[key] as string;
+            }
+        }
+    }
+    return undefined;
+}
+
+/** Read `emojiChar` from an agent manifest JSON referenced from its package. */
+async function readManifestEmoji(
+    packageDir: string,
+    manifestRef: string,
+): Promise<string | undefined> {
+    try {
+        const manifest = JSON.parse(
+            await fs.readFile(path.join(packageDir, manifestRef), "utf8"),
+        ) as { emojiChar?: unknown };
+        return typeof manifest.emojiChar === "string"
+            ? manifest.emojiChar
+            : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Pick an unused sandbox id: the default id when free, otherwise
+ * `<default>-2`, `<default>-3`, … so the "Start sandbox" action can create
+ * multiple coexisting sandboxes.
+ */
+async function nextSandboxId(sandbox: SandboxManager): Promise<string> {
+    const existing = new Set((await sandbox.list()).map((s) => s.id));
+    if (!existing.has(DEFAULT_SANDBOX_ID)) {
+        return DEFAULT_SANDBOX_ID;
+    }
+    let n = 2;
+    while (existing.has(`${DEFAULT_SANDBOX_ID}-${n}`)) {
+        n++;
+    }
+    return `${DEFAULT_SANDBOX_ID}-${n}`;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+    try {
+        await fs.stat(filePath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function resolveCandidatePath(
+    candidate: string,
+): Promise<string | undefined> {
+    if (candidate.endsWith("scaffolded-to.txt")) {
+        try {
+            const txt = (await fs.readFile(candidate, "utf-8")).trim();
+            return txt || undefined;
+        } catch {
+            return undefined;
+        }
+    }
+    return candidate;
+}
+
+function dedupe(values: string[]): string[] {
+    return [...new Set(values.map((v) => path.normalize(v)))];
+}
+
+function getRequiredSessionId(context: StudioRuntimeContext): string {
+    const sessionId = context.workspaceState.get<string>(
+        LAST_ONBOARDING_SESSION_KEY,
+    );
+    if (!sessionId) {
+        throw new Error(
+            "No onboarding session found. Start one first with 'TypeAgent Studio: Start onboarding session'.",
+        );
+    }
+    return sessionId;
+}

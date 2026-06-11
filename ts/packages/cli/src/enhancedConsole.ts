@@ -69,6 +69,77 @@ let currentSpinner: EnhancedSpinner | null = null;
 // Wire up the debug interceptor's spinner access
 setSpinnerAccessor(() => currentSpinner);
 
+// Run the CLI inside the terminal's alternate screen buffer so the parent
+// shell is restored to its pre-CLI state on any exit path.
+
+let altScreenActive = false;
+let exitHandlerRegistered = false;
+let pendingExitMessage: string | undefined;
+
+function isInteractiveTty(): boolean {
+    return Boolean(process.stdout.isTTY && process.stdin.isTTY);
+}
+
+function enterAltScreen(): void {
+    if (altScreenActive || !isInteractiveTty()) return;
+    altScreenActive = true;
+    // Save cursor, switch to alt screen, clear it.
+    process.stdout.write("\x1b[?1049h");
+    if (!exitHandlerRegistered) {
+        exitHandlerRegistered = true;
+        process.on("exit", exitAltScreen);
+    }
+}
+
+function exitAltScreen(): void {
+    if (!altScreenActive) return;
+    altScreenActive = false;
+    try {
+        if (currentSpinner) {
+            try {
+                currentSpinner.stop();
+            } catch {
+                // ignore
+            }
+            currentSpinner = null;
+        }
+        if (terminalLayout?.isActive) {
+            try {
+                terminalLayout.cleanup();
+            } catch {
+                // ignore
+            }
+        }
+        // Reset scroll region, show cursor, leave alt screen.
+        process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
+        if (process.stdin.isTTY) {
+            try {
+                process.stdin.setRawMode(false);
+            } catch {
+                // ignore
+            }
+        }
+        if (pendingExitMessage) {
+            try {
+                process.stderr.write(pendingExitMessage + "\n");
+            } catch {
+                // ignore
+            }
+            pendingExitMessage = undefined;
+        }
+    } catch {
+        // Exit handlers must never throw.
+    }
+}
+
+/**
+ * Queue a message to be printed on the main terminal buffer after the
+ * CLI exits the alternate screen (e.g., disconnect reasons).
+ */
+export function setPendingExitMessage(message: string): void {
+    pendingExitMessage = message;
+}
+
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
@@ -1085,10 +1156,11 @@ export function createEnhancedClientIO(
         requestChoice(
             _requestId: RequestId,
             choiceId: string,
-            type: "yesNo" | "multiChoice",
+            type: "yesNo" | "multiChoice" | "pickRemember",
             message: string,
             choices: string[],
             source: string,
+            checkboxLabel?: string,
         ): void {
             // Set up a promise so the main loop waits before
             // showing "Complete" and the next prompt.
@@ -1112,13 +1184,46 @@ export function createEnhancedClientIO(
                     process.stdout.write("\n");
                     process.stdout.write(line + "\n");
 
-                    let response: boolean | number[];
+                    let response:
+                        | boolean
+                        | number[]
+                        | { selected: number; remember: boolean };
                     if (type === "yesNo") {
                         const prompt = `${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
                         const input = await question_internal(prompt, rl);
                         response =
                             input.toLowerCase() === "y" ||
                             input.toLowerCase() === "yes";
+                    } else if (type === "pickRemember") {
+                        // pickRemember — pick one, then ask remember.
+                        process.stdout.write(
+                            `${chalk.dim(`[${source}]`)} ${message}\n`,
+                        );
+                        for (let i = 0; i < choices.length; i++) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                            );
+                        }
+                        const pickInput = await question_internal(
+                            `${chalk.dim("Enter choice number:")} `,
+                            rl,
+                        );
+                        const selected = parseInt(pickInput.trim(), 10) - 1;
+                        let remember = false;
+                        if (
+                            !isNaN(selected) &&
+                            selected >= 0 &&
+                            selected < choices.length
+                        ) {
+                            const rememberInput = await question_internal(
+                                `${chalk.dim(`${checkboxLabel ?? "Remember this for next time"}?`)} ${chalk.dim("(y/n)")} `,
+                                rl,
+                            );
+                            remember =
+                                rememberInput.toLowerCase() === "y" ||
+                                rememberInput.toLowerCase() === "yes";
+                        }
+                        response = { selected, remember };
                     } else {
                         // multiChoice — show numbered list, accept comma-separated
                         process.stdout.write(
@@ -1309,6 +1414,12 @@ export function createEnhancedClientIO(
                     case "switch":
                         args = `switch "${payload.name}"`;
                         break;
+                    case "prev":
+                        args = "prev";
+                        break;
+                    case "next":
+                        args = "next";
+                        break;
                     case "delete":
                         args = `delete "${payload.name}"`;
                         break;
@@ -1316,6 +1427,11 @@ export function createEnhancedClientIO(
                         args = payload.name
                             ? `rename "${payload.name}" "${payload.newName}"`
                             : `rename "${payload.newName}"`;
+                        break;
+                    case "help":
+                        // Empty args makes handleConversationCommand call its
+                        // own printHelp().
+                        args = "";
                         break;
                     default:
                         console.error(
@@ -1664,14 +1780,15 @@ async function questionWithCompletion(
             const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
             const totalRows = inputRows + EXTRA_ROWS;
 
+            // Hide the cursor during redraw to avoid it visibly jumping
+            // through each drawFixed target; ANSI.showCursor below restores it.
+            stdout.write(ANSI.hideCursor);
+
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
-            // drawFixed() clears each line before writing, so a separate
-            // clearFixed() pass is not needed and would cause visible
-            // flicker (blank frame between clear and redraw).  Only clear
-            // stale rows left over when the prompt shrinks (e.g. input
-            // un-wraps to fewer lines).
+            // drawFixed clears each line before writing; only clear stale
+            // rows when the prompt shrinks (input un-wraps to fewer lines).
             const prevTotal = prevInputRows + EXTRA_ROWS;
             if (totalRows < prevTotal) {
                 for (let r = totalRows; r < prevTotal; r++) {
@@ -1698,6 +1815,11 @@ async function questionWithCompletion(
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
                     inputLine += chalk.dim(suggestion + counter);
                 }
+            }
+            // Pre-clear wrap continuation rows; drawFixed only clears row 1,
+            // so terminal-driven wrap leaves stale chars in trailing columns.
+            for (let r = 2; r <= inputRows; r++) {
+                layout.drawFixed(r, "");
             }
             layout.drawFixed(1, inputLine);
 
@@ -2209,6 +2331,10 @@ export async function withEnhancedConsoleClientIO(
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
+
+    // Run the session in the terminal's alternate screen buffer so the
+    // parent shell is restored on any exit path.
+    enterAltScreen();
 
     try {
         const dispatcherRef: { current?: Dispatcher } = {};

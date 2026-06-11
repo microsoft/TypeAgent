@@ -2064,6 +2064,7 @@ const RUNTIME_STRATEGIES = [
     "score-rank",
     "priority",
     "user-clarify",
+    "preference-clarify",
 ] as const;
 
 function strategiesFor(point: CollisionPoint): readonly string[] {
@@ -2150,6 +2151,13 @@ function renderCollisionShowHTML(cfg: {
         debugLog: boolean;
         experimentId?: string | undefined;
     };
+    preference: {
+        enabled: boolean;
+        ambiguitySource: string;
+        registryPath: string;
+        registryFirst: boolean;
+        remember: string;
+    };
 }): string {
     const C_MUTED = "#777";
     const C_LABEL = "#555";
@@ -2233,6 +2241,18 @@ function renderCollisionShowHTML(cfg: {
                         : ""
                 }
             </div>
+            <div style="margin-top:6px;">
+                <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">preference</span>
+                enabled ${statusPill(cfg.preference.enabled)}
+                source <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.preference.ambiguitySource)}</code>
+                registryFirst ${statusPill(cfg.preference.registryFirst)}
+                remember <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.preference.remember)}</code>
+                ${
+                    cfg.preference.registryPath
+                        ? `registry <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.preference.registryPath)}"</code>`
+                        : `<span style="color:#999;font-style:italic;">(no registry)</span>`
+                }
+            </div>
         </div>`;
 
     const anyOn =
@@ -2288,6 +2308,13 @@ function renderCollisionShowText(cfg: {
         debugLog: boolean;
         experimentId?: string | undefined;
     };
+    preference: {
+        enabled: boolean;
+        ambiguitySource: string;
+        registryPath: string;
+        registryFirst: boolean;
+        remember: string;
+    };
 }): string[] {
     const onOff = (b: boolean) => (b ? "on" : "off");
     const expId = cfg.telemetry.experimentId
@@ -2302,6 +2329,7 @@ function renderCollisionShowText(cfg: {
         `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
         `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
+        `  preference: enabled=${onOff(cfg.preference.enabled)} source=${cfg.preference.ambiguitySource} registryFirst=${onOff(cfg.preference.registryFirst)} remember=${cfg.preference.remember} registry=${cfg.preference.registryPath ? `"${cfg.preference.registryPath}"` : "(empty)"}`,
     ];
 }
 
@@ -2358,6 +2386,23 @@ class CollisionStrategyCommandHandler implements CommandHandler {
         } as SessionOptions;
         await changeContextConfig(options, context);
         displayResult(`${this.point}.strategy = ${strategy}`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "strategy") {
+                completions.push({
+                    name,
+                    completions: [...this.allowed],
+                });
+            }
+        }
+        return { groups: completions };
     }
 }
 
@@ -2441,6 +2486,173 @@ class CollisionPriorityCommandHandler implements CommandHandler {
     }
 }
 
+const PREFERENCE_SOURCES = ["runtime", "registry", "both"] as const;
+const PREFERENCE_REMEMBER = ["prompt", "always", "never"] as const;
+
+class CollisionPreferenceSourceCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set which ambiguity source feeds the `preference-clarify` strategy. Empty argument shows the current value.";
+    public readonly parameters = {
+        args: {
+            source: {
+                description: `One of: ${PREFERENCE_SOURCES.join(", ")}.`,
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        if (params.args.source === undefined) {
+            displayResult(
+                `preference.ambiguitySource: "${cfg.preference.ambiguitySource}"`,
+                context,
+            );
+            return;
+        }
+        const source = params.args.source.trim();
+        if (!PREFERENCE_SOURCES.includes(source as any)) {
+            displayWarn(
+                `Unknown source "${source}". Allowed: ${PREFERENCE_SOURCES.join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        await changeContextConfig(
+            {
+                collision: { preference: { ambiguitySource: source } },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(`preference.ambiguitySource = "${source}"`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "source") {
+                completions.push({
+                    name,
+                    completions: [...PREFERENCE_SOURCES],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+class CollisionPreferenceRememberCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set how learned preferences are captured for the `preference-clarify` strategy. Empty argument shows the current value.";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description: `One of: ${PREFERENCE_REMEMBER.join(", ")}.`,
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        if (params.args.mode === undefined) {
+            displayResult(
+                `preference.remember: "${cfg.preference.remember}"`,
+                context,
+            );
+            return;
+        }
+        const mode = params.args.mode.trim();
+        if (!PREFERENCE_REMEMBER.includes(mode as any)) {
+            displayWarn(
+                `Unknown mode "${mode}". Allowed: ${PREFERENCE_REMEMBER.join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        await changeContextConfig(
+            {
+                collision: { preference: { remember: mode } },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(`preference.remember = "${mode}"`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "mode") {
+                completions.push({
+                    name,
+                    completions: [...PREFERENCE_REMEMBER],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+class CollisionPreferenceRegistryCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the filesystem path to the known-ambiguous neighborhoods registry (neighborhoods.json). Empty string clears it.";
+    public readonly parameters = {
+        args: {
+            path: {
+                description:
+                    'Absolute path to neighborhoods.json. Use the empty string "" to clear.',
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg =
+            context.sessionContext.agentContext.session.getConfig().collision;
+        if (params.args.path === undefined) {
+            const cur = cfg.preference.registryPath;
+            displayResult(
+                `preference.registryPath: ${cur ? `"${cur}"` : "(empty)"}`,
+                context,
+            );
+            return;
+        }
+        const registryPath = params.args.path.trim();
+        await changeContextConfig(
+            {
+                collision: { preference: { registryPath } },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(
+            `preference.registryPath = ${registryPath ? `"${registryPath}"` : "(empty)"}`,
+            context,
+        );
+    }
+}
+
 function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
     const allowedStrategies = strategiesFor(point);
     return {
@@ -2479,6 +2691,41 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
             show: new CollisionShowCommandHandler(),
             ...pointHandlers,
             priority: new CollisionPriorityCommandHandler(),
+            preference: {
+                description:
+                    "Configure the preference-clarify strategy (Tier-1 preferences + Tier-2 registry)",
+                commands: {
+                    enabled: getToggleHandlerTable(
+                        "preference-clarify resolution",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        preference: { enabled: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                    source: new CollisionPreferenceSourceCommandHandler(),
+                    remember: new CollisionPreferenceRememberCommandHandler(),
+                    registry: new CollisionPreferenceRegistryCommandHandler(),
+                    registryFirst: getToggleHandlerTable(
+                        "registry-first detection (scan all embedding candidates against the neighborhood registry, independent of the score-delta detector)",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        preference: { registryFirst: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                },
+            },
             telemetry: {
                 description: "Configure collision telemetry",
                 commands: {

@@ -132,15 +132,18 @@ Conversation management commands can also be invoked via natural language throug
 The dispatcher translates these requests into structured payloads and forwards them to the client via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where `payload` is one of:
 
 ```
+{ subcommand: "help" }
 { subcommand: "new";    name?: string }
 { subcommand: "list" }
 { subcommand: "info" }
 { subcommand: "switch"; name: string }
+{ subcommand: "prev" }
+{ subcommand: "next" }
 { subcommand: "rename"; name?: string; newName: string }
 { subcommand: "delete"; name: string }
 ```
 
-`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell calls the corresponding `ClientAPI` conversation methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over Electron IPC. This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection conversations in both clients.
+`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. `help` is dispatched by `@conversation` with no subcommand, and renders an inline help block in the client. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell (`packages/shell/src/renderer/src/chatPanelBridge.ts`) renders results into the active `chat-ui` chat panel via `ClientAPI` conversation methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`). This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection conversations in all clients.
 
 TypeAgent dispatcher settings, such as translator, explainer, etc., are stored in sessions, and sessions can be persisted across activation on a per user basis and restored when the app restarts. Use `@session <args>` command to do run operations. Additionally data such as construction store are saved in the sessions as well by default unless an explicit path are provided. The last cache file used is preserved thru reload.
 
@@ -381,6 +384,61 @@ session.updateSettings({
   },
 });
 ```
+
+### Registry-driven detection & learned preferences
+
+The detection points above decide _whether_ a given request is ambiguous from
+runtime signals (grammar matches, embedding score-deltas). An alternative is to
+drive detection from a **persisted neighborhood registry** — a `neighborhoods.json`
+file that records groups of actions known to be confusable (e.g.
+`calendar.findTodaysEvents` vs. `taskflow.dailyAgendaEmail`). A copy ships in the
+repo at [`data/neighborhoods.json`](data/neighborhoods.json).
+
+**Registry-first mode** scans every candidate for a request against the registry,
+independent of the embedding score-delta detector (`llmSelect.detect`) and the
+grammar detector (`grammarMatch.detect`). When a candidate is marked
+known-ambiguous, it drives a clarify card enriched with that candidate's
+neighborhood siblings. Because it only fires on true neighborhood members, the
+cards stay clean (no noisy multi-cluster results from low-confidence flat sets).
+
+Minimum setup:
+
+```
+@config collision preference registry "<absolute path to neighborhoods.json>"
+@config collision preference registryFirst on
+@config collision preference enabled on
+```
+
+Registry-first does **not** require `llmSelect detect` or `grammarMatch detect`.
+Verify with `@config collision` (look for `registryFirst=on`, `enabled=on`, and the
+`registry="…neighborhoods.json"` path), then try a known-ambiguous phrase such as
+`what's on my calendar today` to get a clarify card.
+
+**Learned preferences (Tier 1).** When you pick an option on a clarify card you can
+ask the dispatcher to remember the choice; afterward it auto-resolves silently on
+the same kind of ambiguity. Inspect and manage stored preferences with:
+
+| Command                                | Effect                                                           |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `@collision preferences` (or `… list`) | List stored Tier-1 preferences (the default subcommand).         |
+| `@collision preferences set <args>`    | Add a preference explicitly.                                     |
+| `@collision preferences remove <key>`  | Remove one preference by key (keys shown in `list`).             |
+| `@collision preferences clear`         | Clear all stored preferences — the card will start asking again. |
+
+Related `@config collision preference` knobs:
+
+| Command                                                         | Effect                                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@config collision preference enabled [on\|off]`                | Enable/disable the preference-clarify strategy (Tier-1 preferences + Tier-2 registry). |
+| `@config collision preference registry [<path>]`                | Set/show the path to `neighborhoods.json` (empty string clears it).                    |
+| `@config collision preference registryFirst [on\|off]`          | Toggle registry-first detection (scan all candidates against the registry).            |
+| `@config collision preference source <runtime\|registry\|both>` | Which ambiguity sources feed the resolver.                                             |
+| `@config collision preference remember <prompt\|always\|never>` | Whether (and how) a user's pick is persisted as a learned preference.                  |
+
+> **Note:** the dispatcher does not hot-reload. The `@config collision …` commands
+> apply live without a rebuild, but if you rebuild the dispatcher
+> (`pnpm --filter agent-dispatcher build`) you must restart the shell
+> (`pnpm run shell`) for code changes to take effect.
 
 ### MultipleAction interaction
 

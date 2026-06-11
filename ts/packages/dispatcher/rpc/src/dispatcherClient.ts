@@ -190,6 +190,9 @@ export function createDispatcherRpcClient(
         async cancelCommand(...args) {
             return rpc.invoke("cancelCommand", ...args);
         },
+        async promoteCommand(...args) {
+            return rpc.invoke("promoteCommand", ...args);
+        },
         cancelCommandByClientId(...args) {
             return rpc.send("cancelCommandByClientId", ...args);
         },

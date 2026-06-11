@@ -44,6 +44,7 @@ import {
     SpeechToken,
     UserExpression,
 } from "../../preload/electronTypes";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import { defaultUserSettings } from "../../preload/shellSettingsType";
 import { getClientAPI } from "./main";
 import { setSpeechToken } from "./speechToken";
@@ -650,15 +651,44 @@ export function createChatPanelClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        requestChoice: (requestId, choiceId, type, message, choices) => {
+        requestChoice: (
+            requestId,
+            choiceId,
+            type,
+            message,
+            choices,
+            _source,
+            checkboxLabel,
+        ) => {
             void (async () => {
+                // The prompt text is already rendered as the agent's
+                // displayContent (emitActionResult appends it before
+                // requesting the choice), so suppress the card's duplicate
+                // copy and show just the buttons. Pass the requestId so the
+                // buttons attach to that agent bubble instead of a separate
+                // box. See the option-2 TODO in
+                // agentSdk/src/helpers/actionHelpers.ts for the source-side
+                // dedup that would let every host drop this workaround.
+                const rid = ridStr(requestId);
                 if (type === "yesNo") {
-                    const yes = await chatPanel.askYesNo(message);
+                    const yes = await chatPanel.askYesNo(message, undefined, {
+                        showMessage: false,
+                        requestId: rid,
+                    });
                     await dispatcher?.respondToChoice(choiceId, yes);
+                } else if (type === "pickRemember") {
+                    const result = await chatPanel.addPickRememberPrompt(
+                        message,
+                        choices,
+                        checkboxLabel ?? "Remember this for next time",
+                        { showMessage: false, requestId: rid },
+                    );
+                    await dispatcher?.respondToChoice(choiceId, result);
                 } else {
                     const index = await chatPanel.addChoicePrompt<number>(
                         message,
                         choices.map((label, i) => ({ label, value: i })),
+                        { showMessage: false, requestId: rid },
                     );
                     await dispatcher?.respondToChoice(choiceId, [index]);
                 }
@@ -679,7 +709,10 @@ export function createChatPanelClient(
                                 label,
                                 value: index,
                             })),
-                            { defaultValue: interaction.defaultId },
+                            {
+                                defaultValue: interaction.defaultId,
+                                signal: ac.signal,
+                            },
                         );
                         response = {
                             interactionId: interaction.interactionId,
@@ -715,6 +748,9 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort({ kind: "resolved-by-other" });
+                chatPanel.addSystemMessage(
+                    "Interaction answered by another client.",
+                );
             }
         },
         interactionCancelled: (interactionId) => {
@@ -722,6 +758,7 @@ export function createChatPanelClient(
             if (ac) {
                 activeInteractions.delete(interactionId);
                 ac.abort("cancelled");
+                chatPanel.addSystemMessage("Interaction cancelled.");
             }
         },
         takeAction: (_requestId, action, data) => {
@@ -819,102 +856,14 @@ export function createChatPanelClient(
         }
     }
 
-    async function handleManageConversation(payload: {
-        subcommand: string;
-        name?: string;
-        newName?: string;
-    }) {
-        const api = getClientAPI();
-        const inline = (content: string, kind: "info" | "warning" = "info") =>
-            chatPanel.showInline(
-                { type: "html", content, kind },
-                "conversation",
-            );
-        switch (payload.subcommand) {
-            case "new": {
-                let newName = payload.name;
-                if (!newName) {
-                    const dt = new Date();
-                    const pad = (n: number) => n.toString().padStart(2, "0");
-                    newName = `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-                }
-                const created = await api.conversationCreate(newName);
-                const switchResult = await api.conversationSwitch(
-                    created.conversationId,
-                );
-                inline(
-                    switchResult.success
-                        ? `✅ Created and switched to conversation "<b>${created.name}</b>"`
-                        : `✅ Created conversation "<b>${created.name}</b>" but could not switch.`,
-                );
-                break;
-            }
-            case "list": {
-                const sessions = await api.conversationList();
-                const cur = await api.conversationGetCurrent();
-                inline(
-                    `<ul>${sessions
-                        .map(
-                            (s) =>
-                                `<li>${s.conversationId === cur?.conversationId ? "▶ " : ""}${s.name}</li>`,
-                        )
-                        .join("")}</ul>`,
-                );
-                break;
-            }
-            case "rename": {
-                if (!payload.newName) {
-                    inline("A new name is required to rename.", "warning");
-                    break;
-                }
-                const cur = await api.conversationGetCurrent();
-                let conversationId = cur?.conversationId;
-                if (payload.name) {
-                    const sessions = await api.conversationList();
-                    const match = sessions.find(
-                        (s) =>
-                            s.name.toLowerCase() ===
-                            payload.name!.toLowerCase(),
-                    );
-                    conversationId = match?.conversationId;
-                }
-                if (!conversationId) {
-                    inline("No conversation to rename.", "warning");
-                    break;
-                }
-                await api.conversationRename(conversationId, payload.newName);
-                inline(
-                    `✅ Renamed conversation to "<b>${payload.newName}</b>"`,
-                );
-                break;
-            }
-            case "delete": {
-                if (!payload.name) {
-                    inline("A conversation name is required.", "warning");
-                    break;
-                }
-                const sessions = await api.conversationList();
-                const match = sessions.find(
-                    (s) => s.name.toLowerCase() === payload.name!.toLowerCase(),
-                );
-                if (!match) {
-                    inline(
-                        `❌ Conversation "<b>${payload.name}</b>" not found.`,
-                        "warning",
-                    );
-                    break;
-                }
-                await api.conversationDelete(match.conversationId);
-                inline(`🗑️ Deleted conversation "<b>${match.name}</b>"`);
-                break;
-            }
-            default:
-                inline(
-                    `Unknown manage-conversation subcommand: "<b>${payload.subcommand}</b>"`,
-                    "warning",
-                );
-                break;
-        }
+    async function handleManageConversation(
+        payload: ManageConversationPayload,
+    ) {
+        const result = await getClientAPI().conversationManageAction(payload);
+        chatPanel.showInline(
+            { type: "html", content: result.html, kind: result.kind },
+            "conversation",
+        );
     }
 
     // Fetch the dispatcher's structured display history and replay it into

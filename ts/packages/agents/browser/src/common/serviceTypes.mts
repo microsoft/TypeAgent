@@ -369,6 +369,23 @@ export type ChatPanelInvokeFunctions = {
         actionName: string;
         actionDescription: string;
     }): Promise<{ success: boolean; flowName?: string; error?: string }>;
+
+    // @conversation slash commands and NL conversation actions. Returns
+    // an HTML message the chat panel renders inline; `switched` signals
+    // that the active conversation changed and history should be reloaded.
+    chatPanelManageConversation(params: {
+        subcommand:
+            | "new"
+            | "list"
+            | "info"
+            | "switch"
+            | "prev"
+            | "next"
+            | "rename"
+            | "delete";
+        name?: string;
+        newName?: string;
+    }): Promise<{ kind: "ok" | "error"; html: string; switched?: boolean }>;
 };
 
 // =============================================
@@ -422,6 +439,18 @@ export type ChatPanelCallFunctions = {
         data: any;
     }): void;
     dispatcherConnectionStatus(data: { connected: boolean }): void;
+    // ---- Queue lifecycle (opt-in UX; chat panel does not render chips yet) ----
+    // Forwarded from the service worker's ClientIO so the chat panel can opt
+    // into queue chip UX later by implementing these handlers. Current
+    // implementations are no-ops.
+    dispatcherRequestQueued(data: { entry: any; version: number }): void;
+    dispatcherRequestStarted(data: { entry: any; version: number }): void;
+    dispatcherRequestCancelled(data: {
+        requestId: string;
+        reason: any;
+        version: number;
+    }): void;
+    dispatcherQueueStateChanged(data: { snapshot: any }): void;
     /** Inject a command into the chat panel as if the user typed it. */
     injectCommand(data: { command: string }): void;
     /** Start the interactive macro authoring flow. */

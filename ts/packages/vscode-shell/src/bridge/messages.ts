@@ -174,6 +174,8 @@ export type BridgeToWebviewMessage =
 export type BridgeFromWebviewMessage =
     | { type: "sendCommand"; command: string; requestId?: string }
     | { type: "cancelCommand"; requestId: string }
+    // Promote a queued request so it runs next ("jump the queue").
+    | { type: "promoteCommand"; requestId: string }
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }

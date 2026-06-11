@@ -859,25 +859,36 @@ table.table-message td {
   position: relative;
 }
 
-.chat-message-explained-icon {
-  align-self: flex-end;
-  border: none;
-  background-color: transparent;
-  margin-right: 5px;
-  position: absolute;
-  top: 0;
-  right: 0;
-  line-height: 0;
+/* The roadrunner now lives inside the content bubble's top-right corner
+   (sitting with the command text), so make the content the positioning
+   context and reserve room on the right so long text doesn't run under
+   it. */
+.chat-message-content.chat-message-explained-host {
+  position: relative;
+  padding-right: 32px;
 }
 
+.chat-message-explained-icon {
+  border: none;
+  background-color: transparent;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  line-height: 0;
+  cursor: help;
+}
+
+/* Tooltip is hosted on the bubble body (which doesn't clip overflow) and
+   floats just above the bubble's top-right on hover so it never covers the
+   command text or the bottom-anchored metrics strip. */
 .chat-message-explained[data-expl]:has(
     .chat-message-explained-icon:hover
   )::after {
   content: attr(data-expl);
   position: absolute;
   text-align: right;
-  top: 0px;
-  right: 30px;
+  bottom: calc(100% + 2px);
+  right: 0;
   white-space: nowrap;
   color: gray;
   background-color: lightyellow;
@@ -885,6 +896,134 @@ table.table-message td {
   padding: 1px 5px;
   font-size: 70%;
   z-index: 10;
+}
+
+/* =========================================================================
+   Status rail (queued / sent / working) — top of user & agent bubbles
+   ========================================================================= */
+
+/* Slim strip across the top of a bubble. Lives at the top so it never
+   collides with the hover-revealed metrics strip that slides out of the
+   bubble's bottom edge. On the user bubble it carries the queue state
+   (queued/sent) + controls (jump / remove); on the agent bubble it carries
+   the "working" state + a Stop button. Created on demand and removed when
+   the state clears, so an idle bubble shows no empty title row. */
+.chat-message-status-rail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 22px;
+  padding: 1px 4px 1px 10px;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Mid-tone state-color block on the rail — sits between the original
+   pastel wash and a fully saturated solid. Amber for queued, blue for
+   running. No opacity, no color-mix; just a muted block so the rail
+   reads as a clear status indicator without competing with the bubble
+   body. The label color below uses dark text for contrast against the
+   lighter mid-tones. */
+.chat-message-status-rail[data-status="running"] {
+  background: #70b0e0;
+}
+.chat-message-status-rail[data-status="queued"] {
+  background: #eabf63;
+}
+
+/* Square off the top of the content so the rail and content read as one
+   bubble. The rail only exists while a state is showing. */
+.chat-message-user:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Agent bubble carries the same rail while the request is "working":
+   just the spinner label + Stop. */
+.chat-message-agent:has(> .chat-message-status-rail[data-status])
+  .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.chat-status-state-zone {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* State label sits on top of the mid-tone state-color block. Dark text
+   gives clean contrast against both amber and blue rails at these
+   lightnesses. Outside a stateful rail the default (gray) still
+   applies. */
+.chat-status-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #7a7a7a;
+  user-select: none;
+}
+.chat-status-state[data-status="running"],
+.chat-status-state[data-status="queued"] {
+  color: #2c2c2c;
+}
+
+.chat-status-rail-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Spinner (running) + dot (queued) status indicators. */
+.chat-status-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: chat-status-spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes chat-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.chat-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+  flex: none;
+}
+
+/* Rail control buttons reuse the shared icon-button style at a slightly
+   smaller size, with a danger hover for the destructive actions. */
+.chat-message-status-rail .chat-action-button {
+  width: 22px;
+  height: 22px;
+}
+.chat-message-status-rail .chat-action-button i svg {
+  width: 14px;
+  height: 14px;
+}
+/* On a stateful (mid-tone) rail, switch icons + hover affordances to
+   dark so they read against the amber/blue block. */
+.chat-message-status-rail[data-status] .chat-action-button {
+  color: #2c2c2c;
+}
+.chat-message-status-rail[data-status] .chat-action-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+.chat-message-status-rail[data-status] .chat-action-button.danger:hover {
+  background: rgba(0, 0, 0, 0.18);
+  color: #2c2c2c;
 }
 
 /* =========================================================================

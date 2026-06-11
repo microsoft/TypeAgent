@@ -129,14 +129,16 @@ export interface ClientIO {
     openLocalView(requestId: RequestId, port: number): Promise<void>;
     closeLocalView(requestId: RequestId, port: number): Promise<void>;
 
-    // Non-blocking choice request (yes/no buttons or multi-select checkboxes)
+    // Non-blocking choice request (yes/no buttons, multi-select checkboxes,
+    // or a single-select pick + "remember" checkbox via `pickRemember`).
     requestChoice(
         requestId: RequestId,
         choiceId: string,
-        type: "yesNo" | "multiChoice",
+        type: "yesNo" | "multiChoice" | "pickRemember",
         message: string,
         choices: string[],
         source: string,
+        checkboxLabel?: string,
     ): void;
 
     // Non-blocking interaction requests (async deferred pattern)

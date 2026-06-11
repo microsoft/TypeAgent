@@ -16,10 +16,24 @@ import {
 import { getAppAgentName } from "./agentTranslators.js";
 import { ClarifyMultipleAgentMatches } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
+import {
+    detectRegistryAmbiguity,
+    resolvePreferenceClarify,
+    peekOneShotPick,
+    consumeOneShotPick,
+    getPreferenceContext,
+} from "../context/collisionResolution.js";
+import { PreferenceMember } from "../context/collisionPreferences.js";
 
 export type GrammarCollisionDecision =
     | { kind: "match"; match: MatchResult }
-    | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches };
+    | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches }
+    /**
+     * A pending one-shot pick names a registry sibling the grammar didn't
+     * match. Abort grammar matching and fall through to LLM translation, where
+     * `pickInitialSchema` pins the schema to the chosen candidate.
+     */
+    | { kind: "fallthrough" };
 
 function getPrimary(match: MatchResult): {
     schemaName: string;
@@ -93,6 +107,116 @@ export function isCollision(
         a.nonOptionalCount === b.nonOptionalCount &&
         a.wildcardCharCount === b.wildcardCharCount
     );
+}
+
+/**
+ * Registry-first detection for the grammar/cache path. Independent of
+ * `grammarMatch.detect` and the collision classifier: even a single confident
+ * cache match can be "known to be ambiguous" via the neighborhood registry.
+ *
+ * Scans the validated cache matches against the registry and, when any is a
+ * known-ambiguous member, returns a clarify decision whose options are the
+ * matched member plus its registry siblings (which may not themselves be in
+ * the cache match set). Returns undefined when registry-first is off or no
+ * match is a registry member.
+ */
+export function resolveGrammarRegistryFirst(
+    validated: MatchResult[],
+    ctx: CommandHandlerContext,
+    request: string,
+): GrammarCollisionDecision | undefined {
+    if (!ctx.session.getConfig().collision.preference.registryFirst) {
+        return undefined;
+    }
+    const match = detectRegistryAmbiguity(
+        validated.map((m) => getPrimary(m)),
+        ctx,
+    );
+    if (match === undefined) {
+        return undefined;
+    }
+    const { members, neighborhoodIds } = match;
+
+    // Honor a pending one-shot pick from a previously-resolved clarify card so
+    // that re-running the original request routes to the user's choice instead
+    // of re-showing the same card. Without this, the grammar cache re-matches
+    // the same action, registry-first re-detects the ambiguity, and the card
+    // duplicates indefinitely.
+    const pick = peekOneShotPick(members, ctx);
+    if (pick !== undefined) {
+        const matched = validated.find((m) => {
+            const p = getPrimary(m);
+            return (
+                p.schemaName === pick.schemaName &&
+                p.actionName === pick.actionName
+            );
+        });
+        if (matched !== undefined) {
+            consumeOneShotPick(pick, ctx);
+            return { kind: "match", match: matched };
+        }
+        // The pick is a registry sibling the grammar didn't match. Leave the
+        // pick in place and fall through to translation, which pins the schema.
+        return { kind: "fallthrough" };
+    }
+
+    // Tier 1: honor a learned/explicit preference so "remember this choice"
+    // actually auto-resolves on the registry-first path. Without this the card
+    // re-appears every time even after the user asked to remember, and
+    // `@collision preferences clear` looks like a no-op (the preference was
+    // never being consulted). When a preference matches and is in the grammar's
+    // validated set, resolve to it; when it names a sibling the grammar didn't
+    // produce, pin it via a one-shot and fall through to translation.
+    const prefCfg = ctx.session.getConfig().collision.preference;
+    if (prefCfg.enabled) {
+        const pref = ctx.collisionPreferences.find(
+            members,
+            getPreferenceContext(ctx),
+        );
+        if (pref !== undefined) {
+            ctx.collisionPreferences.recordHit(pref.key);
+            const matched = validated.find((m) => {
+                const p = getPrimary(m);
+                return (
+                    p.schemaName === pref.chosen.schemaName &&
+                    p.actionName === pref.chosen.actionName
+                );
+            });
+            if (matched !== undefined) {
+                return { kind: "match", match: matched };
+            }
+            ctx.collisionOneShotPicks.add(
+                `${pref.chosen.schemaName}.${pref.chosen.actionName}`,
+            );
+            return { kind: "fallthrough" };
+        }
+    }
+
+    const clarify = buildClarifyMultipleAgentMatches(
+        request,
+        members,
+        neighborhoodIds,
+    );
+    emitCollisionEvent(
+        {
+            kind: "grammarMatch",
+            request,
+            candidates: members.map((m) => ({
+                schemaName: m.schemaName,
+                actionName: m.actionName,
+            })),
+            firstMatchCandidate: toCandidate(validated[0], ctx),
+            classifier:
+                ctx.session.getConfig().collision.grammarMatch.classifier,
+            strategy: "preference-clarify",
+            note:
+                neighborhoodIds.length > 0
+                    ? `registry-first [${neighborhoodIds.join(",")}]`
+                    : "registry-first",
+        },
+        ctx,
+    );
+    return { kind: "clarify", clarify };
 }
 
 function parsePriorityOrder(s: string): string[] {
@@ -232,6 +356,106 @@ export function resolveGrammarCollision(
                 ctx,
             );
             return decision;
+        }
+        case "preference-clarify": {
+            const executable: PreferenceMember[] = validated.map((m) =>
+                getPrimary(m),
+            );
+            const dec = resolvePreferenceClarify(executable, ctx);
+            if (dec.kind === "preferred") {
+                // Tier 1 hit: resolve to the preferred match (guaranteed to be
+                // in the validated set by resolvePreferenceClarify).
+                chosen =
+                    validated.find((m) => {
+                        const p = getPrimary(m);
+                        return (
+                            p.schemaName === dec.chosen.schemaName &&
+                            p.actionName === dec.chosen.actionName
+                        );
+                    }) ?? validated[0];
+                emitCollisionEvent(
+                    {
+                        kind: "grammarMatch",
+                        request,
+                        candidates: validated.map((m) => toCandidate(m, ctx)),
+                        chosen: toCandidate(chosen, ctx),
+                        firstMatchCandidate: toCandidate(validated[0], ctx),
+                        classifier: cfg.grammarMatch.classifier,
+                        strategy,
+                        elapsedMs: performance.now() - startedAt,
+                        note: "preference-hit",
+                    },
+                    ctx,
+                );
+                return { kind: "match", match: chosen };
+            }
+            if (dec.kind === "first-match") {
+                // Registry-only ambiguity source and the set isn't known-
+                // ambiguous: preserve legacy behavior.
+                chosen = validated[0];
+                decision = { kind: "match", match: chosen };
+                break;
+            }
+            // Tier 2: clarify. Inside a MultipleAction batch, honor
+            // multipleActionBehavior just like user-clarify.
+            if (
+                ctx.executingMultipleAction &&
+                cfg.multipleActionBehavior !== "abort"
+            ) {
+                const sorted = [...validated].sort(
+                    (a, b) =>
+                        priorityForMatch(a, ctx) - priorityForMatch(b, ctx),
+                );
+                chosen = sorted[0];
+                emitCollisionEvent(
+                    {
+                        kind: "grammarMatch",
+                        request,
+                        candidates: validated.map((m) => toCandidate(m, ctx)),
+                        chosen: toCandidate(chosen, ctx),
+                        firstMatchCandidate: toCandidate(validated[0], ctx),
+                        classifier: cfg.grammarMatch.classifier,
+                        strategy: "downgraded",
+                        elapsedMs: performance.now() - startedAt,
+                        note: `preference-miss; downgraded clarify under multipleActionBehavior=${cfg.multipleActionBehavior}`,
+                    },
+                    ctx,
+                );
+                return { kind: "match", match: chosen };
+            }
+            const candidates = dec.members.map((m) => {
+                const match = validated.find((v) => {
+                    const p = getPrimary(v);
+                    return (
+                        p.schemaName === m.schemaName &&
+                        p.actionName === m.actionName
+                    );
+                });
+                return match
+                    ? toCandidate(match, ctx)
+                    : {
+                          schemaName: m.schemaName,
+                          actionName: m.actionName,
+                      };
+            });
+            const clarify = buildClarifyMultipleAgentMatches(
+                request,
+                candidates,
+            );
+            emitCollisionEvent(
+                {
+                    kind: "grammarMatch",
+                    request,
+                    candidates,
+                    firstMatchCandidate: toCandidate(validated[0], ctx),
+                    classifier: cfg.grammarMatch.classifier,
+                    strategy,
+                    elapsedMs: performance.now() - startedAt,
+                    note: "preference-miss-clarify",
+                },
+                ctx,
+            );
+            return { kind: "clarify", clarify };
         }
         default: {
             // Exhaustiveness: unknown strategy falls back to first-match.

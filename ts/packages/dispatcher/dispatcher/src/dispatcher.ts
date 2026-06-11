@@ -482,6 +482,9 @@ export function createDispatcherFromContext(
             }
             return { kind: "not_found", requestId };
         },
+        async promoteCommand(requestId: string): Promise<boolean> {
+            return context.requestQueue.promote(requestId);
+        },
         cancelCommandByClientId(clientRequestId: unknown) {
             const controller =
                 context.activeRequestsByClientId.get(clientRequestId);
@@ -615,7 +618,13 @@ export function createDispatcherFromContext(
                 // best-effort
             }
         },
-        async respondToChoice(choiceId: string, response: boolean | number[]) {
+        async respondToChoice(
+            choiceId: string,
+            response:
+                | boolean
+                | number[]
+                | { selected: number; remember: boolean },
+        ) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
                 if (!pending) {

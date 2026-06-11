@@ -9,6 +9,23 @@ import {
 } from "@typeagent/completion-ui";
 
 /**
+ * Opt-in tracing for integration tests. Enabled at runtime by setting
+ * `globalThis.__partialCompletionTrace = true` (the shell's Playwright suite
+ * does this). Emits a `console.debug` line on every completion update so the
+ * tests can assert that each keystroke posts exactly one host update. No-op in
+ * production where the flag is unset.
+ */
+function pcTrace(...args: unknown[]): void {
+    if (
+        (globalThis as { __partialCompletionTrace?: boolean })
+            .__partialCompletionTrace === true
+    ) {
+        // eslint-disable-next-line no-console
+        console.debug("[partialCompletion]", ...args);
+    }
+}
+
+/**
  * Subset of agent-dispatcher's CompletionState received from the host
  * over the pcState postMessage protocol.
  */
@@ -387,6 +404,7 @@ export class PartialCompletion {
 
     private requestUpdate() {
         if (!this.isCaretAtEnd()) {
+            pcTrace("selection not at end");
             this.post({ type: "pcHide" });
             this.hideAll();
             return;
@@ -398,6 +416,7 @@ export class PartialCompletion {
                 ? "backward"
                 : "forward";
         this.previousInput = input;
+        pcTrace("content changed:", input, direction);
         this.post({ type: "pcUpdate", input, direction });
     }
 
@@ -485,6 +504,8 @@ export class PartialCompletion {
         const withTrailing = /\s$/.test(suffix) ? suffix : suffix + " ";
         this.ghostSpan.textContent =
             (needsLeadingSpace ? " " : "") + withTrailing;
+        // Inline ghost is showing → the toggle offers to expand to the menu.
+        this.toggle?.setDirection("expand");
         this.toggle?.show();
     }
 
@@ -511,6 +532,8 @@ export class PartialCompletion {
             prefix: this.state.prefix,
             items: this.state.items,
         });
+        // Dropdown menu is showing → the toggle offers to collapse to inline.
+        this.toggle?.setDirection("collapse");
         this.toggle?.show();
     }
 

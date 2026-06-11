@@ -279,11 +279,12 @@ export interface Dispatcher {
     /**
      * Respond to a pending choice from an agent.
      * @param choiceId the choice ID returned from ChoiceManager.registerChoice
-     * @param response boolean for yesNo, number[] of selected indices for multiChoice
+     * @param response boolean for yesNo, number[] of selected indices for
+     *   multiChoice, or `{ selected, remember }` for pickRemember
      */
     respondToChoice(
         choiceId: string,
-        response: boolean | number[],
+        response: boolean | number[] | { selected: number; remember: boolean },
     ): Promise<CommandResult | undefined>;
 
     /**
@@ -326,6 +327,19 @@ export interface Dispatcher {
      * @returns a `CancelResult` describing what the server did
      */
     cancelCommand(requestId: string): Promise<CancelResult>;
+
+    /**
+     * Promote a queued command so it runs next, ahead of any other queued
+     * entries ("jump the queue"). Does not affect the currently-running
+     * request — the promoted entry runs when the running one finishes.
+     *
+     * Resolves `true` if a matching queued entry was found (and moved, or was
+     * already next); `false` for the running entry or an unknown requestId.
+     * Never rejects under normal operation.
+     *
+     * @param requestId the requestId string of the queued command to promote
+     */
+    promoteCommand(requestId: string): Promise<boolean>;
 
     /**
      * Cancel an in-flight command using the client-assigned id that was passed

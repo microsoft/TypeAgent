@@ -61,6 +61,8 @@ export type DispatcherInvokeFunctions = {
 
     cancelCommand(requestId: string): Promise<CancelResult>;
 
+    promoteCommand(requestId: string): Promise<boolean>;
+
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
     getDynamicDisplay(
@@ -96,7 +98,7 @@ export type DispatcherInvokeFunctions = {
 
     respondToChoice(
         choiceId: string,
-        response: boolean | number[],
+        response: boolean | number[] | { selected: number; remember: boolean },
     ): Promise<CommandResult | undefined>;
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;

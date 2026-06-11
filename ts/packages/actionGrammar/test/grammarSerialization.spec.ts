@@ -36,6 +36,30 @@ describe("Grammar Serialization", () => {
         expect(JSON.stringify(json)).not.toContain("regexpCache");
     });
 
+    describe("incompatible JSON shape", () => {
+        it("throws an actionable error for an array-shaped .ag.json", () => {
+            // A grammar file produced by a different/older toolchain can be a
+            // bare JSON array rather than the current compiled-grammar object.
+            // It must fail with a clear message, not `Cannot read properties
+            // of undefined (reading 'length')`.
+            expect(() => grammarFromJson([] as any)).toThrow(
+                /incompatible\/older format/i,
+            );
+        });
+
+        it("throws an actionable error when ruleArrays is missing", () => {
+            expect(() => grammarFromJson({ rules: [] } as any)).toThrow(
+                /'ruleArrays' array/i,
+            );
+        });
+
+        it("throws an actionable error for null/non-object input", () => {
+            expect(() => grammarFromJson(null as any)).toThrow(
+                /compiled-grammar object/i,
+            );
+        });
+    });
+
     describe("spacingMode preservation", () => {
         it("preserves optional mode through grammarToJson/grammarFromJson", () => {
             const g = `<Start> [spacing=optional] = hello world -> true;`;

@@ -10,7 +10,7 @@ import {
 import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
-import { ChoiceManager } from "./choiceManager.js";
+import { ChoiceManager, PickRememberResponse } from "./choiceManager.js";
 export { ChoiceManager };
 
 export function createActionResultNoDisplay(
@@ -129,6 +129,18 @@ export function createActionResultFromMarkdownDisplay(
 // captured in the enclosing scope) when calling actionContext.actionIO.*
 // inside the callback — the original ActionContext is closed/stale by the
 // time the user responds.
+//
+// TODO(choice-card dedup / "option 2"): `message` is intentionally placed in
+// BOTH `displayContent` (rendered as a normal agent bubble) and
+// `pendingChoice.message` (rendered as the interactive choice card). Hosts
+// that render choice cards (the Electron shell) therefore show the prompt
+// twice; the shell currently suppresses the card's copy via the
+// `showMessage:false` option on ChatPanel.askYesNo/addChoicePrompt
+// (see shell/src/renderer/src/chatPanelBridge.ts requestChoice). The cleaner
+// fix is to stop emitting `displayContent` here and have EVERY host render
+// `pendingChoice` — but that first requires implementing `requestChoice` in
+// the vscode-shell bridge (currently a no-op that relies on displayContent).
+// Until all hosts render choice cards, displayContent stays as the fallback.
 export function createYesNoChoiceResult(
     choiceManager: ChoiceManager,
     message: string,
@@ -160,6 +172,8 @@ export function createMultiChoiceResult(
     ) => Promise<ActionResult | undefined>,
     displayHtml?: string,
 ): ActionResultSuccess {
+    // See the choice-card dedup TODO on createYesNoChoiceResult — `message`
+    // is duplicated into displayContent + pendingChoice.message here too.
     const choiceId = choiceManager.registerChoice((response, actionContext) =>
         onResponse(response as number[], actionContext),
     );
@@ -169,6 +183,41 @@ export function createMultiChoiceResult(
             ? { type: "html", content: displayHtml }
             : message,
         pendingChoice: { choiceId, type: "multiChoice", message, choices },
+    };
+}
+
+// Single-select pick + a "remember this" checkbox rendered as one card. The
+// callback receives the picked index and the checkbox state. Like the other
+// choice helpers, the callback's `actionContext` is the LIVE context created
+// when the user responds.
+export function createPickRememberChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    choices: string[],
+    checkboxLabel: string,
+    onResponse: (
+        selected: number,
+        remember: boolean,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    displayHtml?: string,
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response, actionContext) => {
+        const r = response as PickRememberResponse;
+        return onResponse(r.selected, r.remember, actionContext);
+    });
+    return {
+        entities: [],
+        displayContent: displayHtml
+            ? { type: "html", content: displayHtml }
+            : message,
+        pendingChoice: {
+            choiceId,
+            type: "pickRemember",
+            message,
+            choices,
+            checkboxLabel,
+        },
     };
 }
 

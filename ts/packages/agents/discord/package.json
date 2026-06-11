@@ -24,7 +24,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*"
+    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

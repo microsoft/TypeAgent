@@ -51,15 +51,28 @@ The agent will fetch and cache all channels in the server automatically.
 
 ## Implemented Actions
 
-| Action                | Example Phrase                                     | Notes                                                        |
-| --------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| `setGuild`            | "set my discord server to 123456789"               | Persists across sessions; triggers channel cache refresh     |
-| `getCurrentUser`      | "who am I on Discord?"                             | Returns bot username, discriminator, and ID                  |
-| `createMessage`       | "send a message to #general saying hello"          | Resolves channel names and `#name` references                |
-| `getChannelMessages`  | "show me the last 5 messages in #general"          | Returns messages with human-readable timestamps and authors  |
-| `listChannels`        | "list discord channels"                            | Shows channels nested under categories; includes type labels |
-| `refreshChannels`     | "refresh discord channels"                         | Force-refreshes the channel name cache from Discord          |
-| `createChannelInvite` | "create an invite for #general that never expires" | Supports `never_expires`, `max_age`, `max_uses`, `temporary` |
+| Action                | Example Phrase                                      | Notes                                                            |
+| --------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| `setGuild`            | "set my discord server to 123456789"                | Persists across sessions; triggers channel cache refresh         |
+| `getCurrentUser`      | "who am I on Discord?"                              | Returns bot username, discriminator, and ID                      |
+| `createMessage`       | "send a message to #general saying hello"           | Resolves channel names and `#name` references                    |
+| `craftMessage`        | "send a message to #general that welcomes everyone" | LLM drafts the message body from a high-level intent (see below) |
+| `getChannelMessages`  | "show me the last 5 messages in #general"           | Returns messages with human-readable timestamps and authors      |
+| `listChannels`        | "list discord channels"                             | Shows channels nested under categories; includes type labels     |
+| `refreshChannels`     | "refresh discord channels"                          | Force-refreshes the channel name cache from Discord              |
+| `createChannelInvite` | "create an invite for #general that never expires"  | Supports `never_expires`, `max_age`, `max_uses`, `temporary`     |
+
+### `createMessage` vs `craftMessage`
+
+The agent picks between two send actions based on phrasing:
+
+- **`createMessage`** — you provide the literal body, typically with _"saying"_, _"with the text"_, or by quoting the content.
+  - "Send `'Hello everyone!'` to #general"
+  - "Post a message in #updates saying the deploy is done"
+- **`craftMessage`** — you describe the intent (using connectors like _"that …"_, _"to …"_, _"about …"_, _"reminding …"_), and an LLM writes the body before posting.
+  - "Send a message to #general that welcomes everyone to the discord"
+  - "Send a message to #events to remind everyone about tonight's plans"
+  - "Post a message in #announcements about the new release"
 
 ## Channel Name Resolution
 

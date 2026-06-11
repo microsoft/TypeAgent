@@ -33,6 +33,7 @@ import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { getCollisionCorpusCommandHandlers } from "./collisionCorpusHandlers.js";
 import { CollisionNeighborhoodsCommandHandler } from "./collisionNeighborhoodHandlers.js";
 import { getCollisionOptimizeCommandHandlers } from "./collisionOptimizeHandlers.js";
+import { getCollisionPreferenceCommandHandlers } from "./collisionPreferenceHandlers.js";
 
 // ---------------------------------------------------------------------------
 // `@collision events` — show recent events captured in the in-memory ring
@@ -1280,6 +1281,7 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
             corpus: getCollisionCorpusCommandHandlers(),
             neighborhoods: new CollisionNeighborhoodsCommandHandler(),
             optimize: getCollisionOptimizeCommandHandlers(),
+            preferences: getCollisionPreferenceCommandHandlers(),
             "list-strategies":
                 new CollisionSimilarListStrategiesCommandHandler(),
         },

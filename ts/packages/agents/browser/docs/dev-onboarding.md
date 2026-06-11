@@ -148,6 +148,11 @@ DEBUG=typeagent:webAgent:proxy pnpm run cli:dev
   keep-alive (20s interval) prevents this during normal operation.
 - After extension reload, the service worker restarts and re-establishes
   the WebSocket connection.
+- **After `pnpm --filter browser-typeagent build`, the running service
+  worker does NOT auto-reload.** Click the ↻ reload icon for the extension
+  on `chrome://extensions` to pick up new code. A symptom of stale SW
+  code is an RPC error like `No invoke handler <name>` for a handler you
+  just added.
 
 ### Content script
 

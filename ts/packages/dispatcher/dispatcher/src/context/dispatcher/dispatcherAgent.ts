@@ -20,10 +20,12 @@ import {
     createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
     createActionResultNoDisplay,
+    createPickRememberChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { DispatcherActions } from "./schema/dispatcherActionSchema.js";
 import {
     ClarifyRequestAction,
+    ClarifyMultipleAgentMatches,
     ClarifyUnresolvedReference,
 } from "./schema/clarifyActionSchema.js";
 import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
@@ -39,6 +41,8 @@ import { ClarifyEntityAction } from "../../execute/pendingActions.js";
 import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
+import { processCommandNoLock } from "../../command/command.js";
+import { PreferenceMember } from "../collisionPreferences.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
 import {
     executeReasoningAction as executeClaudeReasoningAction,
@@ -79,8 +83,9 @@ async function executeDispatcherAction(
             switch (action.actionName) {
                 case "clarifyMultiplePossibleActionName":
                 case "clarifyMissingParameter":
-                case "clarifyMultipleAgentMatches":
                     return clarifyRequestAction(action, context);
+                case "clarifyMultipleAgentMatches":
+                    return clarifyAgentMatchesAction(action, context);
                 case "clarifyUnresolvedReference":
                     const result = await clarifyWithLookup(action, context);
                     // If we fail to clarify with lookup, just ask the user.
@@ -224,6 +229,95 @@ function clarifyRequestAction(
         `Asked the user to clarify the request '${request}'`,
     ];
     return result;
+}
+
+// Interactive cross-agent collision clarify. When the two-tier
+// `preference-clarify` feature is enabled, render a single card with the
+// candidate (schema, action) options plus a "remember this" checkbox instead
+// of a text question. Picking a candidate auto-executes it (the original
+// request is re-run, pinned to the chosen schema via a one-shot override);
+// checking "remember" persists the pick as a learned preference so Tier 1
+// resolves it silently next time. Falls back to the plain text clarify when
+// the feature is off, learning is disabled, or there are no candidates.
+function clarifyAgentMatchesAction(
+    action: ClarifyMultipleAgentMatches,
+    context: ActionContext<CommandHandlerContext>,
+) {
+    const systemContext = context.sessionContext.agentContext;
+    const cfg = systemContext.session.getConfig().collision.preference;
+    const { request, candidates, clarifyingQuestion } = action.parameters;
+
+    if (!cfg.enabled || cfg.remember === "never" || candidates.length === 0) {
+        return clarifyRequestAction(action, context);
+    }
+
+    const members: PreferenceMember[] = candidates.map((c) => ({
+        schemaName: c.schemaName,
+        actionName: c.actionName,
+    }));
+    // The radio list below already shows each option, so drop the numbered
+    // list that buildClarifyMultipleAgentMatches embeds in the question and
+    // keep only the prompt line. Scores (when present) move onto the labels.
+    const question = clarifyingQuestion.split("\n")[0];
+    const choiceLabels = candidates.map((c) =>
+        c.score !== undefined
+            ? `${c.schemaName} → ${c.actionName}  (${c.score.toFixed(2)})`
+            : `${c.schemaName} → ${c.actionName}`,
+    );
+
+    return createPickRememberChoiceResult(
+        systemContext.collisionChoiceManager,
+        question,
+        choiceLabels,
+        "Remember this choice for next time",
+        async (selected, remember, liveActionContext) => {
+            // Cancelled (no candidate picked).
+            if (selected < 0 || selected >= members.length) {
+                return createActionResultFromTextDisplay(
+                    "Okay, I won't run anything.",
+                );
+            }
+
+            const liveSystemContext = (
+                liveActionContext as ActionContext<CommandHandlerContext>
+            ).sessionContext.agentContext;
+            const chosen = members[selected];
+
+            // Persist the pick when configured to learn from it.
+            const shouldRemember =
+                cfg.remember === "always" ||
+                (cfg.remember === "prompt" && remember);
+            if (shouldRemember) {
+                liveSystemContext.collisionPreferences.set(
+                    members,
+                    chosen,
+                    "learned",
+                );
+            }
+
+            // One-shot override so the re-translation of the original request
+            // resolves deterministically to the chosen candidate, even when we
+            // didn't persist a durable preference.
+            liveSystemContext.collisionOneShotPicks.add(
+                `${chosen.schemaName}.${chosen.actionName}`,
+            );
+
+            // Clear the clarify card's text before re-running. Any display the
+            // re-run produces (e.g. a follow-up sign-in prompt) is appended to
+            // this same action bubble, so without resetting it the stale
+            // "Multiple agents..." question stays stacked above the new prompt.
+            liveActionContext.actionIO.setDisplay({
+                type: "text",
+                content: `Selected ${chosen.schemaName} → ${chosen.actionName}.`,
+            });
+
+            // Re-run the original request through the normal pipeline. We're
+            // already inside respondToChoice's command lock, so use the
+            // no-lock entry point to avoid a self-deadlock.
+            await processCommandNoLock(request, liveSystemContext);
+            return undefined;
+        },
+    );
 }
 
 // Cache the lookup clarify translator per systemContext since it is expensive
@@ -417,5 +511,14 @@ export const dispatcherManifest: AppAgentManifest = {
 
 export const dispatcherAgent: AppAgent = {
     executeAction: executeDispatcherAction,
+    handleChoice: async (choiceId, response, context) => {
+        const systemContext = (context as ActionContext<CommandHandlerContext>)
+            .sessionContext.agentContext;
+        return systemContext.collisionChoiceManager.handleChoice(
+            choiceId,
+            response,
+            context,
+        );
+    },
     ...getCommandInterface(dispatcherHandlers),
 };
