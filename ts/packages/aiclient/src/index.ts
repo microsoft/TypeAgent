@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export * from "./common.js";
+export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
 export * from "./models.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";

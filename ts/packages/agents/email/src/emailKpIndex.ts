@@ -39,6 +39,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "aiclient";
 
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:email:kp");
@@ -403,7 +404,12 @@ export class EmailKpIndex {
 
         const queryInstance = query({
             prompt,
-            options: { model: this.model },
+            options: {
+                model: this.model,
+                // Use a PATH-installed `claude` when present; contributes
+                // nothing (bundled-binary fallback) in dev/CI.
+                ...claudeExecutableOption(),
+            },
         });
 
         let responseText = "";

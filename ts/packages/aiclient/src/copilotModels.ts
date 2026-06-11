@@ -16,8 +16,8 @@ import {
     ImagePromptContent,
     MultimodalPromptContent,
 } from "typechat";
-import { execSync } from "node:child_process";
 import registerDebug from "debug";
+import { resolveCliOnPath } from "./cliPath.js";
 import {
     ChatModelWithStreaming,
     CompletionSettings,
@@ -36,17 +36,9 @@ let cachedCliPath: string | undefined;
 let exitHandlerInstalled = false;
 
 function findCopilotPath(): string {
-    try {
-        const isWindows = process.platform === "win32";
-        const command = isWindows ? "where copilot" : "which copilot";
-        const result = execSync(command, { encoding: "utf8" }).trim();
-        const first = result.split("\n")[0].trim();
-        debug(`Found copilot CLI at: ${first}`);
-        return first;
-    } catch {
-        debug("Could not find copilot CLI in PATH, falling back to 'copilot'");
-        return "copilot";
-    }
+    // Prefer the PATH-installed copilot; fall back to the bare name so the
+    // copilot-sdk can still try its own resolution.
+    return resolveCliOnPath("copilot") ?? "copilot";
 }
 
 async function getClient(cliPathOverride?: string): Promise<CopilotClient> {
