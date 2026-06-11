@@ -80,6 +80,14 @@ candidates below are the immediate ready-to-start slices; pick per that plan.
 
 Done / superseded:
 
+- ~~**S0 — extract the runtime into `@typeagent/core/runtime`**~~ — **done**:
+  `studioRuntimeCore` (+ `repoRootResolver`, `getDefaultPhaseInputs`) moved into
+  a context-agnostic `typeagent-core/src/runtime/` with a `./runtime` export; the
+  extension consumes it via the package boundary (the only VS-Code-coupled file
+  is the `studioRuntime.ts` adapter). No behavior change; core 127 / studio 112
+  tests green. The further "split into bounded modules" cleanup can follow as
+  needed. **Still open in P-0:** scaffold the empty `packages/agents/studio/`
+  agent (manifest/schema/handler + `defaultAgentProvider` registration).
 - ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
   `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
   directory commands, user-settings persistence.
@@ -90,10 +98,10 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **S0 — split `studioRuntimeCore.ts` into a headless `typeagent-core/runtime`**
-   (sandbox/corpus/collision/replay/onboarding modules), context-agnostic, so it
-   has a second consumer. This is the prerequisite for the `studio` agent and
-   unblocks webviews; it is plan phase **P-0 / S0**.
+1. **Finish P-0 — scaffold the empty `studio` agent** on the landed runtime:
+   `packages/agents/studio/` (manifest, schema, handler) that loads with no
+   actions yet, registered in `defaultAgentProvider` so the dispatcher can load
+   it (a load-path concern, not Studio discovery).
 2. **S1 — `studio` agent, Inspect slice (read-only, group A)** — `ListAgents`,
    `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`,
    `SearchCorpus`, `ListCollisions`, `QueryEvents` over the S0 runtime. Zero

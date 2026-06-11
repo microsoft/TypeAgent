@@ -1,6 +1,6 @@
 # TypeAgent Studio — Planning Series
 
-> A five-phase plan for an integrated VS Code developer experience around TypeAgent: agent authoring, schema/grammar tuning, regression detection via compare-and-replay, trace investigation, and live observation.
+> A planning series (P-0 → P-6) for an integrated developer experience around TypeAgent: agent authoring, schema/grammar tuning, regression detection via compare-and-replay, trace investigation, and live observation — surfaced through both a VS Code extension and a `studio` agent over one headless core.
 >
 > **Center of gravity:** _compare schema/grammar versions against a corpus of real user utterances, see action-level impact, annotated with the feedback labels we already collect._
 >

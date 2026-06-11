@@ -136,28 +136,31 @@ grammar rule id) so calls are idempotent and composable.
 
 ### E. Validate / regress (the headline; read-only analysis)
 
-| Action              | Returns                                                                              | Building block                           |
-| ------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------- |
-| `ReplayCorpus`      | `ActionDelta[]` + summary (vA vs vB over the federated corpus)                       | `replayCorpus`                           |
-| `DetectRegressions` | red/green verdict per delta by policy (changed action where prior 👍, or current 👎) | composite over `ReplayCorpus` + feedback |
-| `DiffGrammars`      | structural grammar diff                                                              | `grammarTools/core.diffGrammars`         |
-| `CoverageDelta`     | coverage before/after                                                                | `computeCoverage`                        |
-| `CollisionsDelta`   | collisions introduced/removed by a change                                            | collision scanner                        |
-| `HealthGate`        | pass/fail + findings (the ship gate)                                                 | `FileHealthService`                      |
-| `ScanCollisions`    | full cross-agent overlap report                                                      | collision scanner                        |
+| Action              | Returns                                                                                                       | Building block                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `ReplayCorpus`      | `ActionDelta[]` + summary (vA vs vB over the federated corpus)                                                | `replayCorpus`                           |
+| `DetectRegressions` | red/green verdict per delta by policy (changed action where prior 👍, or current 👎)                          | composite over `ReplayCorpus` + feedback |
+| `ValidateChange`    | one Impact-Report-shaped verdict over all of tier E (the same shape the webview renders); read-only composite | composite over the row above + below     |
+| `DiffGrammars`      | structural grammar diff                                                                                       | `grammarTools/core.diffGrammars`         |
+| `CoverageDelta`     | coverage before/after                                                                                         | `computeCoverage`                        |
+| `CollisionsDelta`   | collisions introduced/removed by a change                                                                     | collision scanner                        |
+| `HealthGate`        | pass/fail + findings (the ship gate)                                                                          | `FileHealthService`                      |
+| `ScanCollisions`    | full cross-agent overlap report                                                                               | collision scanner                        |
 
 ### F. Orchestrate (Tier 3; goal-oriented, LLM-planned, checkpointed)
 
 These are the actions that make the agent _autonomous_; each is a loop over A–E
 that emits structured progress and stops at an approval boundary.
 
-| Action                               | Goal                                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `ImproveCoverage(agent, utterances)` | add grammar/schema until the target utterances map; re-validate; report what changed                    |
-| `FixRegression(agent, deltaId)`      | propose + apply a schema/grammar fix for one red replay row; re-replay; report                          |
-| `TuneAgent(agent, goal)`             | a guided improve→validate loop toward a stated objective, surfacing each proposed change for approval   |
-| `ValidateChange(agent, vA, vB)`      | run all of tier E and return a single Impact-Report-shaped verdict (the same shape the webview renders) |
-| `ReviewAgent(agent)`                 | one-shot audit: health + collisions + coverage gaps + un-typeable utterances, as an actionable report   |
+| Action                               | Goal                                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `ImproveCoverage(agent, utterances)` | add grammar/schema until the target utterances map; re-validate; report what changed                  |
+| `FixRegression(agent, deltaId)`      | propose + apply a schema/grammar fix for one red replay row; re-replay; report                        |
+| `TuneAgent(agent, goal)`             | a guided improve→validate loop toward a stated objective, surfacing each proposed change for approval |
+| `ReviewAgent(agent)`                 | one-shot audit: health + collisions + coverage gaps + un-typeable utterances, as an actionable report |
+
+(`ValidateChange` — the read-only verdict composite — lives in group E above;
+these orchestration loops call it to judge their own proposed changes.)
 
 ### Mapping to journeys & modes
 
@@ -203,13 +206,19 @@ two-version replay lands, then **B (Author/edit)** and finally **F
 Mirror onboarding's `pending → in-progress → approved` checkpoint model for any
 **mutating** or **judgment** step:
 
-- **Autonomous-safe** (no approval): all of group **A (Inspect)**, group **E
-  (Validate)** read-only analysis (`ReplayCorpus`, `ScanCollisions`,
-  `HealthGate`), and `RunUtterance` (executes in the throwaway sandbox only).
-- **Needs approval / `dryRun` first**: group **C** writes (`SeedInRepoCorpus`,
-  `AddExternalCorpus`, `PromoteCaptures` — already guarded in the extension by a
-  confirmation) and all of group **B (Author/edit)** (schema/grammar edits),
-  plus anything that commits. The agent proposes a diff; a human (or an
+- **Autonomous-safe** (no approval): all of group **A (Inspect)**; the
+  **deterministic read-only** group **E** analyses — `ScanCollisions`,
+  `HealthGate`, `DiffGrammars`, `CoverageDelta`, `CollisionsDelta`, and
+  `ReplayCorpus` / `ValidateChange` **under the `needs-explanation` policy**; and
+  `RunUtterance` **when it executes in a throwaway sandbox**.
+- **Needs approval / `dryRun` first (or an explicit allow-list)**: group **C**
+  writes (`SeedInRepoCorpus`, `AddExternalCorpus`, `PromoteCaptures` — already
+  guarded in the extension by a confirmation) and all of group **B
+  (Author/edit)** (schema/grammar edits), plus anything that commits; **sandbox
+  lifecycle that persists state** (`StartSandbox` / `LoadAgent` against a
+  non-throwaway sandbox); and any **cost-bearing or external-calling** run —
+  notably `ReplayCorpus(live-llm)` and large-corpus replays, which surface a cost
+  estimate before firing. The agent proposes a diff/plan; a human (or an
   allow-listed policy) approves.
 - **Tier 3 orchestration** runs the whole loop but pauses at each group-B/C
   mutation for the same checkpoint, so `TuneAgent` is safe to invoke
@@ -258,8 +267,9 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 - **S4 — Author/edit, group B (P-4).** `Propose*`, `Add/Edit*`,
   `GenerateGrammarFromSchema`, build actions — mutating, always `dryRun`-able.
 - **S5 — Orchestrate, group F (P-6).** `ImproveCoverage`, `FixRegression`,
-  `TuneAgent`, `ValidateChange`, `ReviewAgent` — goal-oriented loops that compose
-  S1–S4 and turn the agent from scriptable into autonomous.
+  `TuneAgent`, `ReviewAgent` — goal-oriented loops that compose S1–S4 (calling the
+  read-only `ValidateChange` from group E to judge their own changes) and turn the
+  agent from scriptable into autonomous.
 
 ## 8. Open questions
 

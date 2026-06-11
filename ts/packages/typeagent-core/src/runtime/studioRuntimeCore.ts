@@ -1067,16 +1067,12 @@ function stripAgentSuffix(agentName: string): string {
 }
 
 /**
- * Discover agents available to load. Merges two sources so the picker matches
- * what the shell offers without being limited to physical directories:
- *  1. the curated registry at
- *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
- *     keys — the same set the shell loads), and
- *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
- *     declares the dispatcher `./agent/manifest` export (catches agents not yet
- *     in the registry, e.g. freshly scaffolded ones).
- * Each agent carries its manifest emoji when one can be resolved from disk.
- * Returns the sorted, de-duplicated union; empty when nothing can be read.
+ * Discover agents available to load by scanning the configured agent roots
+ * (`packages/agents` plus any `agentSearchPaths`) for directories whose
+ * `package.json` declares the dispatcher `./agent/manifest` export. Each agent
+ * carries its manifest emoji when one can be resolved from disk. Returns the
+ * sorted, de-duplicated list; empty when nothing can be read. (Discovery is
+ * filesystem-only; it does not consult the `defaultAgentProvider` registry.)
  */
 async function listAvailableAgentNames(
     agentRoots: string[],

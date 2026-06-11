@@ -117,9 +117,12 @@ Inside `typeagent-core`, six primitives carry the weight of the design.
    recording, collision detection, replay rows. Sits _alongside_ the existing
    `debug("typeagent:*")` traces — no migration. Schema-versioned.
 4. **Health rule engine** — invariants over the chain `manifest → schema →
-grammar → handler → provider`. Each rule produces evidence and a
+grammar → handler` (10 MVP rules). Each rule produces evidence and a
    fix hint. Catches the silent-runtime-failure class of bugs that today
-   only surface when the dispatcher tries to load the agent.
+   only surface when the dispatcher tries to load the agent. (Agent discovery
+   in Studio is filesystem-only; the dispatcher's own `defaultAgentProvider`
+   registration is what loads an agent, and is checked at load time, not by a
+   health rule.)
 5. **Replay engine** — the long pole. Takes an agent, a corpus, two version
    specs (a git ref or working tree on each side), and a miss policy. Spins
    up two transient sandboxes, evaluates each utterance against both

@@ -653,11 +653,24 @@ Action groups (each maps to a build phase in §11):
 | E. Validate    | no       | `ScanCollisions`, `HealthGate`, `ReplayCorpus`, `DetectRegressions`, `ValidateChange`                  |
 | F. Orchestrate | composes | `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ReviewAgent`                                         |
 
-**Approval boundary (hybrid mode):** group A and read-only group E are
-autonomous-safe; groups B and C (and anything that commits) require `dryRun` +
-approval, mirroring onboarding's `pending → in-progress → approved` checkpoint
-and the same confirmations the UI uses. Authentic 👍/👎 feedback stays human;
-the agent may only _propose_ labels.
+**Approval boundary (hybrid mode).** Autonomous-safe (no approval): all of group
+A; `RunUtterance(s)` (group D) **when it runs in a throwaway sandbox**; and the
+read-only group E analyses — `ScanCollisions`, `HealthGate`, `DiffGrammars`,
+`CoverageDelta`, `CollisionsDelta`, and `ReplayCorpus` / `ValidateChange` under
+the deterministic `needs-explanation` policy. Require `dryRun` + approval (or an
+explicit allow-list policy): all of groups B and C (and anything that commits);
+sandbox lifecycle that persists state (`StartSandbox` / `LoadAgent` against a
+non-throwaway sandbox); and any **cost-bearing or external-calling** run —
+notably `ReplayCorpus(live-llm)` and large-corpus replays, which show a cost
+estimate first. Tier-3 orchestration (group F) runs the whole loop but pauses at
+each group-B/C mutation for the same checkpoint. This mirrors onboarding's
+`pending → in-progress → approved` model and the same confirmations the UI uses.
+Authentic 👍/👎 feedback stays human; the agent may only _propose_ labels.
+
+**MCP exposure uses the existing TypeAgent integration** — there is no new
+Studio MCP host in scope (locked decision Q8). The `studio` agent's actions
+become available over MCP and `list_commands` automatically by virtue of being a
+registered TypeAgent agent, the same way the `onboarding` agent's are.
 
 **No direct dispatcher state from the handler.** Always: agent action →
 `typeagent-core/runtime` → sandbox — the same path the webview host takes.
@@ -668,12 +681,16 @@ the agent may only _propose_ labels.
 
 Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
-**One capability, two presenters.** Each phase builds a capability as a headless
-primitive in `typeagent-core` and ships **both** presenters for it in the same
-phase: the extension UI (tree / webview / command) and the `studio` agent action
-(group A–F per §10.2). Read-only agent actions ride along with the UI that
-surfaces the same primitive — zero extra risk. Mutating agent actions ship behind
-the same approval checkpoint as the corresponding UI write. The agent's own
+**One capability, two presenters — by P-6.** Each capability is a headless
+primitive in `typeagent-core` consumed by both presenters: the extension UI
+(tree / webview / command) and the `studio` agent action (group A–F per §10.2).
+The invariant is that **no capability is permanently UI-only or agent-only** —
+every one gets both surfaces by MVP. It does **not** mean both surfaces land in
+the same week: **read-only** agent actions (the Inspect slice S1) ride along in
+P-1 with the UI that surfaces the same primitive, at zero extra risk; the
+**mutating / sandbox-executing** agent actions (Run, Corpus, Validate, Author)
+land in P-3/P-4 behind the same approval checkpoint as the corresponding UI
+write, once those primitives and the approval model exist. The agent's own
 phases **S0–S5** map onto the phases below (see the table at the end). There is
 one plan; the agent is not a separate track.
 
@@ -716,7 +733,8 @@ one plan; the agent is not a separate track.
 - F4.5 export.
 - In parallel: **J5 trace viewer module (F5.1, F5.2, F5.3, F5.4)** so J4 drill-in is real at demo time.
 - **Agent (S2 — Run/try + Corpus, groups D, C):** `StartSandbox`/`LoadAgent`/`RunUtterance(s)`; corpus `SeedInRepoCorpus`/`AddExternalCorpus`/`CaptureSession`/`PromoteCaptures` (writes behind `dryRun` + approval).
-- **Agent (S3 — Validate, group E):** `ScanCollisions`, `HealthGate`, `DiffGrammars`, `CoverageDelta`, `CollisionsDelta`; then `ReplayCorpus` / `DetectRegressions` / `ValidateChange` as `replayCorpus()` lands — emitting the same `ActionDelta[]` contract the Impact Report webview renders.
+- **Agent (S3 — Validate, group E):** `ScanCollisions`, `HealthGate`, `DiffGrammars`, `CoverageDelta`, `CollisionsDelta`; then `ReplayCorpus` / `DetectRegressions` / `ValidateChange` as `replayCorpus()` lands — emitting the same `ActionDelta[]` contract the Impact Report webview renders. `ValidateChange` is the read-only composite that returns one Impact-Report-shaped verdict. Autonomous-safe only for the deterministic `needs-explanation` policy; `live-llm` / large-corpus runs require approval (see §10.2).
+- **Agent (Trace, group A):** `GetTrace(requestId)` ships here with the J5 trace viewer (it needs the structured dispatch tree), so an agent can drill into a replay/regression row exactly like the Trace Viewer does.
 - Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.** `ValidateChange` returns an Impact-Report-shaped verdict headlessly.
 
 ### P-4 J2 + J3 verticals (weeks 6–9)
@@ -735,7 +753,7 @@ one plan; the agent is not a separate track.
 
 - F6.1 Live Trace panel (reuses Trace Viewer renderer in tail mode).
 - F6.2 status-bar item.
-- **Agent:** `GetTrace` (group A) over the same structured event stream the Live Trace panel tails.
+- **Agent:** `QueryEvents` / an event-tail action (group A) over the same structured event stream the Live Trace panel tails (`GetTrace` already shipped in P-3).
 - Exit: **Gate E passes.**
 
 ### P-6 Validation & hardening (week 9–10)
@@ -743,7 +761,7 @@ one plan; the agent is not a separate track.
 - Run all five gates on a clean laptop.
 - Performance budgets.
 - dblogging-default-on privacy indicator polish.
-- **Agent (S5 — Orchestrate, group F):** `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ValidateChange`, `ReviewAgent` — Tier-3 goal-oriented loops that compose S1–S4 and pause at each mutation checkpoint. Lands here because it can only compose primitives that already exist.
+- **Agent (S5 — Orchestrate, group F):** `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ReviewAgent` — Tier-3 goal-oriented loops that compose the S1–S4 actions and pause at each mutation checkpoint. (`ValidateChange` is the read-only verdict composite from P-3, which these loops call.) Lands here because it can only compose primitives that already exist.
 - **Agent-mode gate:** a scripted MCP/conversational run of the Inspect→Run→Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C), so agent-drivability is validated like the human gates.
 - Documentation: this plan series + a Studio README + a Demo runbook.
 
@@ -758,7 +776,7 @@ one plan; the agent is not a separate track.
 | S2 Run/try + Corpus | D, C           | P-3      |
 | S3 Validate         | E              | P-3      |
 | S4 Author/edit      | B              | P-4      |
-| (Trace)             | A (`GetTrace`) | P-5      |
+| (Trace)             | A (`GetTrace`) | P-3      |
 | S5 Orchestrate      | F              | P-6      |
 
 ---
