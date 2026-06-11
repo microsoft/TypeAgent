@@ -1,8 +1,19 @@
 # TypeAgent Studio — Phase 5: Implementation Plan
 
 > **Status:** Drafted 2026-05-14, after [04-mvp-slice.md](./04-mvp-slice.md).
+> Revised 2026-06-11 to make this a **single plan for both presenters** — the
+> VS Code extension UI and the `studio` agent — over one headless core.
 >
 > **Purpose:** Concrete shapes — API surfaces, file layouts, schema-versioning rules, transport choices — to make the MVP slice buildable. Where a decision is open, this doc names it as an _open decision_ with a recommended default rather than hand-waving.
+>
+> **Scope — one capability, two presenters.** Per
+> [DESIGN.md §3.0](./DESIGN.md) ("headless core, thin presenters, three
+> audiences"), every capability is a typed primitive in `typeagent-core`,
+> surfaced by **both** the extension UI **and** the `studio` agent (MCP +
+> conversational). The agent is therefore **not a separate plan**: its action
+> surface is catalogued in [STUDIO-AGENT.md](./STUDIO-AGENT.md), and its build
+> phases (S0–S5) are sequenced inside §11 of this plan. Interaction modes
+> (human / AI-agent / hybrid) are described in [USER-STORY.md](./USER-STORY.md).
 >
 > **Convention:** Type definitions are TypeScript-shaped pseudo-code. They are illustrative; the real types ship in `typeagent-core` and are the single source of truth.
 
@@ -25,11 +36,13 @@ ts/
         collisions/              # F0.6
         replay/                  # F4.1
         onboardingBridge/        # F1.1 backend
+        runtime/                 # S0: context-agnostic Studio runtime
+                                 #     (both presenters consume this)
         index.ts
       package.json
       tsconfig.json
 
-    typeagent-studio/            [NEW — main extension]
+    typeagent-studio/            [NEW — main extension; UI presenter]
       src/
         extension.ts             # activation
         sandbox/                 # tree + status bar
@@ -44,6 +57,11 @@ ts/
       media/                     # webview assets
       package.json
       tsconfig.json
+
+    agents/studio/               [NEW — agent presenter; S0+]
+      # depends on typeagent-core/runtime
+      # thin dispatchable/MCP presenter over the same primitives as the extension
+      # action surface catalogued in STUDIO-AGENT.md (groups A–F)
 
     agr-language/                [REFACTORED]
       # depends on typeagent-core
@@ -581,7 +599,13 @@ Gate C of MVP is evaluated with `needs-explanation`. The other policies exist bu
 
 ---
 
-## 10. UI layer — webview infrastructure
+## 10. Presentation layer — two thin presenters
+
+Both surfaces are **thin presenters over `typeagent-core`** (DESIGN §3.0): the
+extension UI for humans, the `studio` agent for AI / conversational / hybrid
+callers. Neither owns capability logic.
+
+### 10.1 UI presenter — webview infrastructure
 
 Five webviews. All share a common module:
 
@@ -603,17 +627,62 @@ Each webview:
 
 **No direct dispatcher calls from inside a webview.** Always: webview → extension host → `typeagent-core` → sandbox.
 
+### 10.2 Agent presenter — the `studio` agent surface
+
+The `studio` agent (`packages/agents/studio/`) exposes the same primitives as
+**typed, dispatchable actions** — automatically available over MCP and
+conversationally, with no new transport code. It follows the `onboarding` agent
+template (manifest + per-group schema/grammar/handler) and constructs the
+**S0 headless runtime** rather than a VS Code context.
+
+The surface is **layered by abstraction** (full catalogue in
+[STUDIO-AGENT.md](./STUDIO-AGENT.md)):
+
+- **Tier 1 — Primitives:** 1:1 with a core function; the typed result is the data.
+- **Tier 2 — Composites:** a few primitives sequenced into a useful unit.
+- **Tier 3 — Goal-oriented:** an LLM-planned loop with structured progress and approval checkpoints.
+
+Action groups (each maps to a build phase in §11):
+
+| Group          | Mutates? | Examples                                                                                               |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| A. Inspect     | no       | `ListAgents`, `DescribeAgent`, `GetSchema`, `ListCollisions`, `GetCoverage`, `QueryEvents`, `GetTrace` |
+| B. Author/edit | yes      | `AddAction`, `AddGrammarRule`, `GenerateGrammarFromSchema`, `BuildAgent` (always `dryRun`-able)        |
+| C. Corpus      | yes      | `SeedInRepoCorpus`, `CaptureSession`, `PromoteCaptures`                                                |
+| D. Run/try     | sandbox  | `StartSandbox`, `LoadAgent`, `RunUtterance(s)`                                                         |
+| E. Validate    | no       | `ScanCollisions`, `HealthGate`, `ReplayCorpus`, `DetectRegressions`, `ValidateChange`                  |
+| F. Orchestrate | composes | `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ReviewAgent`                                         |
+
+**Approval boundary (hybrid mode):** group A and read-only group E are
+autonomous-safe; groups B and C (and anything that commits) require `dryRun` +
+approval, mirroring onboarding's `pending → in-progress → approved` checkpoint
+and the same confirmations the UI uses. Authentic 👍/👎 feedback stays human;
+the agent may only _propose_ labels.
+
+**No direct dispatcher state from the handler.** Always: agent action →
+`typeagent-core/runtime` → sandbox — the same path the webview host takes.
+
 ---
 
 ## 11. Phasing — concrete sequencing
 
 Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
+**One capability, two presenters.** Each phase builds a capability as a headless
+primitive in `typeagent-core` and ships **both** presenters for it in the same
+phase: the extension UI (tree / webview / command) and the `studio` agent action
+(group A–F per §10.2). Read-only agent actions ride along with the UI that
+surfaces the same primitive — zero extra risk. Mutating agent actions ship behind
+the same approval checkpoint as the corresponding UI write. The agent's own
+phases **S0–S5** map onto the phases below (see the table at the end). There is
+one plan; the agent is not a separate track.
+
 ### P-0 Skeleton (week 0–1)
 
 - Create `typeagent-core` package, `typeagent-studio` extension, scaffold files. No behavior.
 - Refactor `agr-language` and `vscode-shell` to import from `typeagent-core` (no consumed APIs yet — just the dependency edge). Full existing test suites must remain green.
-- Exit: `pnpm -r build` clean; both refactored extensions load and behave identically to today.
+- **Agent (S0 — headless runtime):** extract the engine wiring out of the extension's `studioRuntimeCore` into a context-agnostic runtime in `typeagent-core/runtime/` that both presenters consume (no behavior change). Scaffold `packages/agents/studio/` (manifest, schema, handler) with no actions yet.
+- Exit: `pnpm -r build` clean; both refactored extensions load and behave identically to today; `studio` agent loads with an empty surface.
 
 ### P-1 Foundations (weeks 1–4)
 
@@ -621,10 +690,11 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - **F0.1 sandbox.** Implement inmemory mode end-to-end first, subprocess mode second. Sandbox tree + status bar UI.
 - **F0.2 corpus.** Implement service against the on-disk layout. Corpora tree UI. Capture-to-corpus action on vscode-shell bubbles (F4.6 starts here, on purpose, per risk mitigation).
 - **F0.4 feedback.** Thin wrappers + filter chip components.
-- **F0.5 health.** Eleven MVP rules + UI in Sandbox tree.
+- **F0.5 health.** Ten MVP rules + UI in Sandbox tree.
 - **F0.6 collisions.** Wire detectors → events → diagnostics.
 - **F0.7 conversational, F0.8 miss-policy, F0.9 workflow view, F0.10 reasoning view.** Land at end of P-1; they are mostly small.
-- Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data.
+- **Agent (S1 — Inspect, group A):** `ListAgents`, `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`, `SearchCorpus`, `ListCollisions`, `QueryEvents` — each wraps the same primitive the P-1 UI surfaces. Read-only; proves MCP/conversational drivability with zero mutation risk. Register `studio` in `defaultAgentProvider` (the dispatcher load path, not Studio's discovery).
+- Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data; the Inspect surface is callable over MCP / conversationally.
 
 ### P-2 J1 vertical (weeks 4–6)
 
@@ -633,6 +703,7 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F1.3 install-into-sandbox.
 - F1.4 health gate on phase 7.
 - F1.5 reconciliation prompts.
+- **Agent:** `ScaffoldAgent` delegates to the `onboarding` agent (no duplication of J1); `studio` picks the loop up at install.
 - Exit: **Gate A passes** with a stranger walking the script.
 
 ### P-3 J4 vertical (weeks 4–9, runs partly in parallel with P-2)
@@ -644,7 +715,9 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F4.4 predicate, configurable.
 - F4.5 export.
 - In parallel: **J5 trace viewer module (F5.1, F5.2, F5.3, F5.4)** so J4 drill-in is real at demo time.
-- Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.**
+- **Agent (S2 — Run/try + Corpus, groups D, C):** `StartSandbox`/`LoadAgent`/`RunUtterance(s)`; corpus `SeedInRepoCorpus`/`AddExternalCorpus`/`CaptureSession`/`PromoteCaptures` (writes behind `dryRun` + approval).
+- **Agent (S3 — Validate, group E):** `ScanCollisions`, `HealthGate`, `DiffGrammars`, `CoverageDelta`, `CollisionsDelta`; then `ReplayCorpus` / `DetectRegressions` / `ValidateChange` as `replayCorpus()` lands — emitting the same `ActionDelta[]` contract the Impact Report webview renders.
+- Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.** `ValidateChange` returns an Impact-Report-shaped verdict headlessly.
 
 ### P-4 J2 + J3 verticals (weeks 6–9)
 
@@ -655,12 +728,14 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F2.5 feedback chips.
 - F2.6 live re-evaluation.
 - F3.\* AGR refactor + new features.
+- **Agent (S4 — Author/edit, group B):** `ProposeActionsFromUtterances`, `AddAction`/`EditAction`, `ProposeGrammarVariations`, `AddGrammarRule`/`EditGrammarRule`, `GenerateGrammarFromSchema`, `BuildAgent`/`CompileGrammar` — mutating, always `dryRun`-able, behind the approval checkpoint shared with the Schema Studio UI.
 - Exit: **Gate B passes.**
 
 ### P-5 J6 vertical (week 9)
 
 - F6.1 Live Trace panel (reuses Trace Viewer renderer in tail mode).
 - F6.2 status-bar item.
+- **Agent:** `GetTrace` (group A) over the same structured event stream the Live Trace panel tails.
 - Exit: **Gate E passes.**
 
 ### P-6 Validation & hardening (week 9–10)
@@ -668,9 +743,23 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - Run all five gates on a clean laptop.
 - Performance budgets.
 - dblogging-default-on privacy indicator polish.
+- **Agent (S5 — Orchestrate, group F):** `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ValidateChange`, `ReviewAgent` — Tier-3 goal-oriented loops that compose S1–S4 and pause at each mutation checkpoint. Lands here because it can only compose primitives that already exist.
+- **Agent-mode gate:** a scripted MCP/conversational run of the Inspect→Run→Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C), so agent-drivability is validated like the human gates.
 - Documentation: this plan series + a Studio README + a Demo runbook.
 
 (Weeks are relative; this is sequencing, not a calendar commitment.)
+
+#### Agent phase ↔ plan phase
+
+| Agent phase         | Action group   | Lands in |
+| ------------------- | -------------- | -------- |
+| S0 headless runtime | —              | P-0      |
+| S1 Inspect          | A              | P-1      |
+| S2 Run/try + Corpus | D, C           | P-3      |
+| S3 Validate         | E              | P-3      |
+| S4 Author/edit      | B              | P-4      |
+| (Trace)             | A (`GetTrace`) | P-5      |
+| S5 Orchestrate      | F              | P-6      |
 
 ---
 
@@ -690,6 +779,11 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
 - `typeagent-studio` uses the standard `@vscode/test-electron` harness for activation + command palette tests.
 - One end-to-end test per gate (A–E) using a scripted scenario — long runtime, run in a separate CI job.
+
+### Agent (`studio`)
+
+- Action handlers are thin over `typeagent-core/runtime`, so most logic is already covered by core unit/integration tests; handler tests assert routing + the typed result shape + `dryRun` behavior for mutations.
+- Agent-mode gate (P-6): a scripted MCP/conversational run of the Inspect → Run → Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C).
 
 ### Validation gate (Gate C) test
 
@@ -727,6 +821,7 @@ Before kicking off P-0, confirm:
 - [ ] §6 health rule set covers the right invariants; nothing critical missing.
 - [ ] §9 `replayCorpus()` execution model (transient inmemory sandboxes, two of them per run) is acceptable.
 - [ ] §11 phasing puts F4.6 corpus capture in P-1 (not P-3) per the risk-register mitigation.
+- [ ] §10 + §11 deliver each capability through **both** presenters (UI + `studio` agent) over one core primitive, and the S0–S5 ↔ P-phase mapping is right.
 - [ ] §13 open decisions are the right ones to track; their defaults are sane.
 
 ---

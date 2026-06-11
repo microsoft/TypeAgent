@@ -1,13 +1,18 @@
-# TypeAgent Studio — `studio` Agent Plan
+# TypeAgent Studio — `studio` Agent: Action-Surface Reference
 
-> **Status:** Draft. Proposes a new first-party TypeAgent agent (`studio`) that
+> **Status:** Reference for the `studio` agent presenter. This is **not a
+> separate plan** — the agent's build phases are sequenced inside the single
+> implementation plan ([`05-implementation-plan.md`](./05-implementation-plan.md)
+> §11, phases S0–S5). This doc is the **detailed action catalogue** (groups
+> A–F, tiers, approval boundary) that §10.2 of that plan summarizes. The agent
 > exposes the Studio authoring/tuning/validation loop as dispatchable actions,
-> making it drivable by an AI orchestrator (and conversationally) — not only by
-> the VS Code extension UI.
+> making it drivable by an AI orchestrator (and conversationally) — a thin
+> presenter over the same `@typeagent/core` primitives as the VS Code UI.
 >
-> **Reads with:** [`USER-STORY.md`](./USER-STORY.md) (interaction modes),
-> [`STATUS.md`](./STATUS.md) (what's built; agent-drivability direction),
-> [`DESIGN.md`](./DESIGN.md) (architecture).
+> **Reads with:** [`05-implementation-plan.md`](./05-implementation-plan.md)
+> (the unified plan + phasing), [`USER-STORY.md`](./USER-STORY.md) (interaction
+> modes), [`STATUS.md`](./STATUS.md) (what's built), [`DESIGN.md`](./DESIGN.md)
+> §3.0 (headless-core / thin-presenter principle).
 
 ## 1. Why a `studio` agent
 
@@ -231,30 +236,30 @@ Registration: add `"studio": { "name": "studio-agent" }` to
 `packages/defaultAgentProvider/data/config.json`. Package declares the standard
 `./agent/manifest` + `./agent/handlers` exports. MCP exposure is then automatic.
 
-## 7. Phasing
+## 7. Phasing — see the unified plan
 
-Ordered to ship the most agent-drivable, lowest-risk surface first; each phase
-maps to the §3 capability groups.
+The agent's S0–S5 phases are **sequenced inside the single implementation plan**,
+[`05-implementation-plan.md` §11](./05-implementation-plan.md#11-phasing--concrete-sequencing),
+interleaved with the extension phases so each capability ships as one core
+primitive + both presenters. The "agent phase ↔ plan phase" table there is the
+source of truth. Summary of what each agent phase delivers (groups from §3):
 
-- **S0 — headless runtime extraction.** Lift the engine wiring out of the
+- **S0 — headless runtime extraction (P-0).** Lift the engine wiring out of the
   extension's `studioRuntimeCore` into a context-agnostic runtime in
-  `@typeagent/core` (or a small shared package); the extension switches to it.
-  No behavior change; unblocks a second consumer.
-- **S1 — Inspect (group A).** `ListAgents`, `DescribeAgent`, `GetSchema`/
-  `GetGrammar`, `ListActions`, `GetCoverage`, `SearchCorpus`, `ListCollisions`,
-  `QueryEvents`. Read-only; proves MCP/conversational drivability with zero
-  mutation risk. **This is the fast proof-of-concept for modes B/C.**
-- **S2 — Run/try + Corpus (groups D, C).** Sandbox lifecycle, `RunUtterance(s)`,
-  corpus seed/add/capture/promote (writes behind the approval checkpoint).
-- **S3 — Validate (group E).** `ScanCollisions`, `HealthGate`, `DiffGrammars`,
-  `CoverageDelta`; then `ReplayCorpus` / `DetectRegressions` / `ValidateChange`
-  once the real two-version replay lands — the headline agent actions and the
-  shared `ActionDelta[]` contract the Impact Report webview also renders.
-- **S4 — Author/edit (group B).** `Propose*`, `Add/Edit*`, `GenerateGrammarFromSchema`,
-  build actions — the mutating authoring surface, always `dryRun`-able.
-- **S5 — Orchestrate (group F).** `ImproveCoverage`, `FixRegression`,
-  `TuneAgent`, `ValidateChange`, `ReviewAgent` — the goal-oriented loops that
-  compose S1–S4 and turn the agent from scriptable into autonomous.
+  `@typeagent/core` that both presenters consume. No behavior change.
+- **S1 — Inspect, group A (P-1).** Read-only; proves MCP/conversational
+  drivability with zero mutation risk. **The fast proof-of-concept for modes B/C.**
+- **S2 — Run/try + Corpus, groups D, C (P-3).** Sandbox lifecycle,
+  `RunUtterance(s)`, corpus seed/add/capture/promote (writes behind approval).
+- **S3 — Validate, group E (P-3).** `ScanCollisions`, `HealthGate`,
+  `DiffGrammars`, `CoverageDelta`; then `ReplayCorpus` / `DetectRegressions` /
+  `ValidateChange` once two-version replay lands — the shared `ActionDelta[]`
+  contract the Impact Report webview also renders.
+- **S4 — Author/edit, group B (P-4).** `Propose*`, `Add/Edit*`,
+  `GenerateGrammarFromSchema`, build actions — mutating, always `dryRun`-able.
+- **S5 — Orchestrate, group F (P-6).** `ImproveCoverage`, `FixRegression`,
+  `TuneAgent`, `ValidateChange`, `ReviewAgent` — goal-oriented loops that compose
+  S1–S4 and turn the agent from scriptable into autonomous.
 
 ## 8. Open questions
 

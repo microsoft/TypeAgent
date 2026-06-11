@@ -1,7 +1,9 @@
 # TypeAgent Studio — Design Overview
 
-> A consolidated, human-readable design for **TypeAgent Studio**, the VS Code
-> developer experience for authoring, tuning, and validating TypeAgent agents.
+> A consolidated, human-readable design for **TypeAgent Studio**, the developer
+> experience for authoring, tuning, and validating TypeAgent agents — surfaced
+> both as a VS Code extension pack (for humans) and as a `studio` TypeAgent agent
+> (for AI / conversational / hybrid callers) over one headless core.
 >
 > This document describes the final system. It is intended as the canonical
 > introduction; the numbered planning docs in this folder remain as the deep
@@ -84,16 +86,17 @@ makes possible), and [`STATUS.md`](./STATUS.md) ("Interaction modes &
 agent-drivability"). When implementing any new surface, **check it against this
 principle before writing UI-only code.**
 
-### 3.1 Four extensions, one shared library
+### 3.1 Four extensions and an agent, one shared library
 
-| Package                | Purpose                                                                                                                                                                                                                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, command-line tools, and tests all consume it. |
-| **`typeagent-studio`** | The main VS Code extension. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`.                                                                                                                                                                      |
-| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                               |
-| **`vscode-shell`**     | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                  |
+| Package                | Purpose                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, the `studio` agent, command-line tools, and tests all consume it.                                |
+| **`typeagent-studio`** | The main VS Code extension — the **human presenter**. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`.                                                                                                                                                                                               |
+| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                                                                                  |
+| **`vscode-shell`**     | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                                                                     |
+| **`agents/studio`**    | A first-party TypeAgent agent — the **AI / conversational presenter**. Exposes the same core primitives as typed, dispatchable actions (auto-available over MCP), so an AI orchestrator or a human in chat can drive the loop. A thin layer on `typeagent-core` (via its `runtime` module), peer to the extension. See [`STUDIO-AGENT.md`](./STUDIO-AGENT.md). |
 
-Together these are the "TypeAgent Studio extension pack." A user installs the
+Together the four VS Code packages are the "TypeAgent Studio extension pack." A user installs the
 pack; each component activates on demand.
 
 ### 3.2 Six engine primitives
@@ -172,45 +175,40 @@ because that's how a developer naturally encounters them.
 ## 4. Architecture in a single picture
 
 ```
-┌──────────────────────────── VS Code ────────────────────────────┐
-│                                                                  │
-│   typeagent-studio                  agr-language                 │
-│   ┌────────────────────┐            ┌────────────────────┐       │
-│   │ Activity bar       │            │ LSP for .agr       │       │
-│   │  • Sandboxes       │            │ Debug panel        │       │
-│   │  • Corpora         │            │  + miss-cluster    │       │
-│   │  • Event Log       │            │ Code lenses        │       │
-│   │  • Collisions      │            └─────────┬──────────┘       │
-│   │ Webviews:          │                      │                  │
-│   │  • Wizard          │      vscode-shell    │                  │
-│   │  • Schema Studio   │      ┌───────────────┴───────┐          │
-│   │  • Impact Report   │      │ Chat UI               │          │
-│   │  • Trace / Live    │      │  + capture-to-corpus  │          │
-│   │ Status bar         │      └───────────┬───────────┘          │
-│   └─────────┬──────────┘                  │                      │
-│             │                             │                      │
-│             ▼                             ▼                      │
-│   ┌──────────────────────────────────────────────────────────┐   │
-│   │                @typeagent/core                           │   │
-│   │  sandbox │ corpus │ events │ feedback │ health           │   │
-│   │  collisions │ replay │ onboardingBridge                  │   │
-│   └──────────────────────────────┬───────────────────────────┘   │
-│                                  │                               │
-└──────────────────────────────────┼───────────────────────────────┘
-                                   │  in-memory or
-                                   │  IPC (socket / named pipe)
-                                   ▼
-                       ┌──────────────────────┐
-                       │  Sandboxed dispatcher│
-                       │  (player + others    │
-                       │  loaded under the    │
-                       │  Studio profile dir) │
-                       └──────────────────────┘
+   ┌──────────────── VS Code — human presenter ────────────────┐
+   │  typeagent-studio        agr-language       vscode-shell   │
+   │  trees · webviews ·      LSP · debug ·      chat ·          │
+   │  status bar              miss-cluster ·     capture-to-     │
+   │  (Sandboxes, Corpora,    code lenses        corpus          │
+   │   Impact Report, …)                                        │
+   └───────────────────────────────┬────────────────────────────┘
+                                    │
+   ┌──────── studio agent — AI / conversational presenter ───────┐
+   │  dispatchable actions, groups A–F  ·  MCP  ·  @studio …      │
+   │  (Inspect / Run / Validate / Author / Orchestrate)          │
+   └───────────────────────────────┬────────────────────────────┘
+                                    │  both are thin presenters
+                                    ▼
+        ┌────────────────────────────────────────────────────┐
+        │                   @typeagent/core                   │
+        │  sandbox · corpus · events · feedback · health ·    │
+        │  collisions · replay · onboardingBridge · runtime   │
+        └───────────────────────────┬─────────────────────────┘
+                                    │  in-memory or
+                                    │  IPC (socket / named pipe)
+                                    ▼
+                        ┌──────────────────────┐
+                        │  Sandboxed dispatcher │
+                        │  (player + others     │
+                        │  loaded under the     │
+                        │  Studio profile dir)  │
+                        └──────────────────────┘
 ```
 
-The sandboxed dispatcher runs the user's actual agents. The Studio profile
-directory is **always separate** from the developer's personal TypeAgent
-profile.
+Both presenters are thin layers over the same `@typeagent/core` primitives —
+one source of truth, two surfaces. The sandboxed dispatcher runs the user's
+actual agents. The Studio profile directory is **always separate** from the
+developer's personal TypeAgent profile.
 
 ---
 
@@ -420,14 +418,17 @@ reach for the test runner.
 This document consolidates the five-part planning series. For deeper detail
 on any topic, the source docs remain canonical:
 
-| Doc                                                        | What it covers                                                                                                      |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| [`README.md`](./README.md)                                 | Series index, locked and open decisions, demo-script reference.                                                     |
-| [`01-inventory.md`](./01-inventory.md)                     | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions. |
-| [`02-journeys.md`](./02-journeys.md)                       | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure.          |
-| [`03-features.md`](./03-features.md)                       | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map.              |
-| [`04-mvp-slice.md`](./04-mvp-slice.md)                     | The vertical slice that defines the first release. Acceptance gates, risk register, demo script.                    |
-| [`05-implementation-plan.md`](./05-implementation-plan.md) | Workspace layout, API type surfaces, transport choices, sequencing, named open decisions.                           |
+| Doc                                                        | What it covers                                                                                                                                                                   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`README.md`](./README.md)                                 | Series index, locked and open decisions, demo-script reference.                                                                                                                  |
+| [`01-inventory.md`](./01-inventory.md)                     | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions.                                                              |
+| [`02-journeys.md`](./02-journeys.md)                       | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure.                                                                       |
+| [`03-features.md`](./03-features.md)                       | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map.                                                                           |
+| [`04-mvp-slice.md`](./04-mvp-slice.md)                     | The vertical slice that defines the first release. Acceptance gates, risk register, demo script.                                                                                 |
+| [`05-implementation-plan.md`](./05-implementation-plan.md) | The single build plan for both presenters: workspace layout, API type surfaces, transport choices, sequencing (P-0…P-6 with agent phases S0–S5 mapped in), named open decisions. |
+| [`USER-STORY.md`](./USER-STORY.md)                         | The authoring loop and the three interaction modes (human / AI-agent / hybrid).                                                                                                  |
+| [`STUDIO-AGENT.md`](./STUDIO-AGENT.md)                     | The `studio` agent action-surface reference (groups A–F, tiers, approval boundary).                                                                                              |
+| [`STATUS.md`](./STATUS.md)                                 | What's built, known issues, and the ready-to-start next slices.                                                                                                                  |
 
 ---
 

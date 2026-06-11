@@ -10,13 +10,23 @@
 
 ## Read in order
 
-| #   | Doc                                                      | What it answers                                                                                                                        |
-| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | [01-inventory.md](./01-inventory.md)                     | What exists today, gaps, in-flight work (collisions §10, MCP §11, feedback PR #2341 §12), and Phase 2 open-question resolutions (§13). |
-| 2   | [02-journeys.md](./02-journeys.md)                       | Six personas, six journeys (J1–J6), MVP depth per journey, success criteria, cross-journey infrastructure.                             |
-| 3   | [03-features.md](./03-features.md)                       | Per-journey features at three layers (editor / panels / commands+RPCs). Six new engine primitives. Five webviews.                      |
-| 4   | [04-mvp-slice.md](./04-mvp-slice.md)                     | The vertical slice that _is_ MVP. Five acceptance gates (A–E). Risk register. **13-step demo script** in §8.                           |
-| 5   | [05-implementation-plan.md](./05-implementation-plan.md) | Package layout, API surfaces, transport choices, sequencing P-0 → P-6, test strategy, 10 named open decisions (D1–D10).                |
+| #   | Doc                                                      | What it answers                                                                                                                                                                                                                  |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | [01-inventory.md](./01-inventory.md)                     | What exists today, gaps, in-flight work (collisions §10, MCP §11, feedback PR #2341 §12), and Phase 2 open-question resolutions (§13).                                                                                           |
+| 2   | [02-journeys.md](./02-journeys.md)                       | Six personas, six journeys (J1–J6), MVP depth per journey, success criteria, cross-journey infrastructure.                                                                                                                       |
+| 3   | [03-features.md](./03-features.md)                       | Per-journey features at three layers (editor / panels / commands+RPCs). Six new engine primitives. Five webviews.                                                                                                                |
+| 4   | [04-mvp-slice.md](./04-mvp-slice.md)                     | The vertical slice that _is_ MVP. Five acceptance gates (A–E). Risk register. **13-step demo script** in §8.                                                                                                                     |
+| 5   | [05-implementation-plan.md](./05-implementation-plan.md) | The **single build plan for both presenters** (UI + `studio` agent): package layout, API surfaces, transport choices, sequencing P-0 → P-6 (with agent phases S0–S5 mapped in), test strategy, 10 named open decisions (D1–D10). |
+
+### Companion docs (architecture, agent-drivability, status)
+
+| Doc                                  | What it answers                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| [DESIGN.md](./DESIGN.md)             | Architecture; **§3.0** the guiding principle — headless core, thin presenters, three audiences.              |
+| [USER-STORY.md](./USER-STORY.md)     | The authoring loop and the three interaction modes (human / AI-agent / hybrid).                              |
+| [STUDIO-AGENT.md](./STUDIO-AGENT.md) | The `studio` agent **action-surface reference** (groups A–F, tiers, approval boundary). Phasing lives in 05. |
+| [STATUS.md](./STATUS.md)             | What's built, known issues, and the ready-to-start next slices (pointing into the 05 §11 phasing).           |
+| [QUICKSTART.md](./QUICKSTART.md)     | Build/test/run commands and where each piece lives.                                                          |
 
 ---
 

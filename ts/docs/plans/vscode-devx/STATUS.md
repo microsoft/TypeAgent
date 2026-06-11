@@ -72,39 +72,39 @@ Impact Report) is **not** closed:
 
 ## Next slice candidates
 
-Smallest → larger.
+The build sequence now lives in **one unified plan** —
+[`05-implementation-plan.md` §11](./05-implementation-plan.md#11-phasing--concrete-sequencing)
+— where each capability ships as a core primitive + both presenters (UI +
+`studio` agent), and the agent's S0–S5 phases are mapped onto P-0…P-6. The
+candidates below are the immediate ready-to-start slices; pick per that plan.
 
-1. **Configurable agent search paths** (next follow-up PR). Add a
-   `typeagentStudio.agentSearchPaths: string[]` setting — directories that
-   contain agent subdirectories (peer to `packages/agents`), relative entries
-   resolved against the repo root. Generalize the single hardcoded
-   `packages/agents` assumption into an ordered list of agent roots threaded
-   through health (`discoverAgentFiles` / `FileHealthService`), the sandbox
-   loader (`createRepoAgentLoader`), and the collision scanner
-   (`createRepoGrammarScanner`), plus discovery (`listAvailableAgents`), so
-   agents outside `packages/agents` (e.g. a sibling `agents/` directory in a
-   submodule) fully load, report health, and participate in collisions. Keep
-   `packages/agents` + the registry config as implicit defaults; the setting is
-   additive and generic (no hardcoded paths).
-2. **Loader parity for registry entries** — the Load agent picker lists the
-   `defaultAgentProvider` registry keys, but the loader still resolves by
-   `packages/agents/<name>`, so keys whose folder differs (e.g. `localPlayer`,
-   `workflow`) load with `health: unknown`. Resolve registry entries by their
-   package `name` like the dispatcher does. (Folds naturally into item 1.)
-3. **Split `studioRuntimeCore.ts`** into bounded runtime modules
-   (sandbox/corpus/collision/replay/onboarding) before webviews land — it is
-   already a god/facade object.
-4. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
+Done / superseded:
+
+- ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
+  `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
+  directory commands, user-settings persistence.
+- ~~**Loader parity for registry entries**~~ — **moot**: discovery is now
+  filesystem-only (we removed the `defaultAgentProvider` config.json source and
+  the `provider.registers` health rule), so there are no registry-only picker
+  entries to reconcile.
+
+Ready to start (smallest → larger):
+
+1. **S0 — split `studioRuntimeCore.ts` into a headless `typeagent-core/runtime`**
+   (sandbox/corpus/collision/replay/onboarding modules), context-agnostic, so it
+   has a second consumer. This is the prerequisite for the `studio` agent and
+   unblocks webviews; it is plan phase **P-0 / S0**.
+2. **S1 — `studio` agent, Inspect slice (read-only, group A)** — `ListAgents`,
+   `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`,
+   `SearchCorpus`, `ListCollisions`, `QueryEvents` over the S0 runtime. Zero
+   mutation risk; proves MCP/conversational drivability. Plan phase **P-1 / S1**.
+3. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
-5. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+4. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-6. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
-   real dispatch; validate the Impact Report contract.
-7. **Agent-drivable surfaces** (cross-cutting; see "Interaction modes" below).
-   Publish stable typed result contracts for the headline primitives
-   (`replayCorpus` → `ActionDelta[]` + summary, health findings, collision
-   reports) and a headless entry point (CLI and/or Studio-as-MCP-host) so an
-   AI agent — not just the webview — can drive author → tune → replay → judge.
+5. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+   real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
+   agent's `ValidateChange` and the webview both consume).
 
 ## Interaction modes & agent-drivability
 
