@@ -222,28 +222,29 @@ export function activate(context: vscode.ExtensionContext): void {
                 const dir = picked[0].fsPath;
                 const config =
                     vscode.workspace.getConfiguration("typeagentStudio");
+                // Read the effective value, but persist to USER (global)
+                // settings: agent search paths are machine-specific absolute
+                // paths and must not land in a tracked workspace settings file
+                // (e.g. ts/.vscode/settings.json) or get committed.
                 const current =
-                    config.get<string[]>("agentSearchPaths", []) ?? [];
+                    config.inspect<string[]>("agentSearchPaths")?.globalValue ??
+                    [];
                 if (current.includes(dir)) {
                     vscode.window.showInformationMessage(
                         `'${dir}' is already an agent search path.`,
                     );
                     return;
                 }
-                const target =
-                    (vscode.workspace.workspaceFolders?.length ?? 0) > 0
-                        ? vscode.ConfigurationTarget.Workspace
-                        : vscode.ConfigurationTarget.Global;
                 await config.update(
                     "agentSearchPaths",
                     [...current, dir],
-                    target,
+                    vscode.ConfigurationTarget.Global,
                 );
                 // The runtime reads agentSearchPaths at construction, so a
                 // reload is needed for the new directory's agents to be
                 // discoverable and loadable.
                 const choice = await vscode.window.showInformationMessage(
-                    `Added '${dir}' to agent search paths. Reload the window to use it now?`,
+                    `Added '${dir}' to your agent search paths (user settings). Reload the window to use it now?`,
                     "Reload Window",
                 );
                 if (choice === "Reload Window") {
