@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
+import type { AvailableAgent } from "./studioRuntimeCore.js";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
@@ -649,27 +650,30 @@ function describeError(error: unknown): string {
 }
 
 /**
- * Filterable agent picker: type-to-filter over the discovered agents, while
- * still allowing a free-text reference (a module specifier or path) that isn't
- * in the list. Returns the chosen reference, or undefined if cancelled.
+ * Filterable agent picker: type-to-filter over the discovered agents (shown
+ * with their manifest emoji), while still allowing a free-text reference (a
+ * module specifier or path) that isn't in the list. Returns the chosen agent
+ * name/reference, or undefined if cancelled.
  */
 function pickAgentRef(
-    available: readonly string[],
+    available: readonly AvailableAgent[],
     sandboxId: string,
 ): Promise<string | undefined> {
+    type AgentItem = vscode.QuickPickItem & { agentName?: string };
     return new Promise((resolve) => {
-        const qp = vscode.window.createQuickPick();
+        const qp = vscode.window.createQuickPick<AgentItem>();
         qp.title = `Load agent into '${sandboxId}'`;
         qp.placeholder =
             "Pick an agent, or type a name / module specifier / path";
-        qp.items = available.map((name) => ({
-            label: name,
-            iconPath: new vscode.ThemeIcon("package"),
+        qp.items = available.map((agent) => ({
+            label: agent.emoji ? `${agent.emoji} ${agent.name}` : agent.name,
+            agentName: agent.name,
         }));
         qp.ignoreFocusOut = true;
         let accepted = false;
         qp.onDidAccept(() => {
-            const picked = qp.selectedItems[0]?.label ?? qp.value.trim();
+            // Selected item → its agent name; otherwise the typed free text.
+            const picked = qp.selectedItems[0]?.agentName ?? qp.value.trim();
             accepted = true;
             qp.hide();
             resolve(picked.length > 0 ? picked : undefined);

@@ -135,6 +135,13 @@ export interface StudioCollisionScanResult {
     collisionCount: number;
 }
 
+/** An agent discoverable in the Load agent UI. */
+export interface AvailableAgent {
+    name: string;
+    /** Emoji from the agent's manifest (`emojiChar`), when resolvable. */
+    emoji?: string;
+}
+
 export interface StudioRuntime {
     /**
      * Repo root used for agent discovery and whether a `packages/agents`
@@ -198,13 +205,13 @@ export interface StudioRuntime {
     };
     listSandboxes(): Promise<SandboxStatus[]>;
     /**
-     * Names of agents available to load. Merges the curated registry
-     * (`defaultAgentProvider/data/config.json` agent keys — what the shell
-     * loads) with `packages/agents/*` directories declaring the dispatcher
-     * `./agent/manifest` export. Used to offer autocomplete in the Load agent
-     * UI.
+     * Agents available to load (name + manifest emoji when known). Merges the
+     * curated registry (`defaultAgentProvider/data/config.json` agent keys —
+     * what the shell loads) with `packages/agents/*` directories declaring the
+     * dispatcher `./agent/manifest` export. Used to offer autocomplete in the
+     * Load agent UI.
      */
-    listAvailableAgents(): Promise<string[]>;
+    listAvailableAgents(): Promise<AvailableAgent[]>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -1031,25 +1038,31 @@ function stripAgentSuffix(agentName: string): string {
 }
 
 /**
- * Discover loadable agent names. Merges two sources so the picker matches what
- * the shell offers without being limited to physical directories:
+ * Discover agents available to load. Merges two sources so the picker matches
+ * what the shell offers without being limited to physical directories:
  *  1. the curated registry at
  *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
  *     keys — the same set the shell loads), and
  *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
  *     declares the dispatcher `./agent/manifest` export (catches agents not yet
  *     in the registry, e.g. freshly scaffolded ones).
+ * Each agent carries its manifest emoji when one can be resolved from disk.
  * Returns the sorted, de-duplicated union; empty when nothing can be read.
  */
-async function listAvailableAgentNames(repoRoot: string): Promise<string[]> {
-    const names = new Set<string>();
-    for (const name of await readConfiguredAgentNames(repoRoot)) {
-        names.add(name);
-    }
-    for (const name of await readAgentDirNames(repoRoot)) {
-        names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
+async function listAvailableAgentNames(
+    repoRoot: string,
+): Promise<AvailableAgent[]> {
+    const emojiByName = await readAgentDirEmojis(repoRoot);
+    const names = new Set<string>([
+        ...(await readConfiguredAgentNames(repoRoot)),
+        ...emojiByName.keys(),
+    ]);
+    return [...names]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => {
+            const emoji = emojiByName.get(name);
+            return emoji !== undefined ? { name, emoji } : { name };
+        });
 }
 
 /** Agent keys from the defaultAgentProvider registry config. */
@@ -1073,38 +1086,83 @@ async function readConfiguredAgentNames(repoRoot: string): Promise<string[]> {
     }
 }
 
-/** Agent directory names declaring the dispatcher `./agent/manifest` export. */
-async function readAgentDirNames(repoRoot: string): Promise<string[]> {
+/**
+ * Map of agent directory name → manifest emoji, for `packages/agents`
+ * directories declaring the dispatcher `./agent/manifest` export. The emoji is
+ * undefined when the manifest has none (or can't be read).
+ */
+async function readAgentDirEmojis(
+    repoRoot: string,
+): Promise<Map<string, string | undefined>> {
     const agentsDir = path.join(repoRoot, "packages", "agents");
+    const result = new Map<string, string | undefined>();
     let entries;
     try {
         entries = await fs.readdir(agentsDir, { withFileTypes: true });
     } catch {
-        return [];
+        return result;
     }
-    const names: string[] = [];
     for (const entry of entries) {
         if (!entry.isDirectory() || entry.name === "dist") {
             continue;
         }
+        const packageDir = path.join(agentsDir, entry.name);
         try {
-            const raw = await fs.readFile(
-                path.join(agentsDir, entry.name, "package.json"),
-                "utf8",
-            );
-            const exp = (JSON.parse(raw) as { exports?: unknown }).exports;
-            if (
-                typeof exp === "object" &&
-                exp !== null &&
-                "./agent/manifest" in exp
-            ) {
-                names.push(entry.name);
+            const pkg = JSON.parse(
+                await fs.readFile(
+                    path.join(packageDir, "package.json"),
+                    "utf8",
+                ),
+            ) as { exports?: Record<string, unknown> };
+            const manifestRef = resolveManifestExport(pkg.exports);
+            if (manifestRef === undefined) {
+                continue; // not a loadable agent package
             }
+            result.set(
+                entry.name,
+                await readManifestEmoji(packageDir, manifestRef),
+            );
         } catch {
             // not an agent package (no/invalid package.json) — skip
         }
     }
-    return names;
+    return result;
+}
+
+/** Resolve the `./agent/manifest` export to a relative file path, if present. */
+function resolveManifestExport(
+    exports?: Record<string, unknown>,
+): string | undefined {
+    const entry = exports?.["./agent/manifest"];
+    if (typeof entry === "string") {
+        return entry;
+    }
+    if (entry && typeof entry === "object") {
+        const cond = entry as Record<string, unknown>;
+        for (const key of ["default", "import", "require"]) {
+            if (typeof cond[key] === "string") {
+                return cond[key] as string;
+            }
+        }
+    }
+    return undefined;
+}
+
+/** Read `emojiChar` from an agent manifest JSON referenced from its package. */
+async function readManifestEmoji(
+    packageDir: string,
+    manifestRef: string,
+): Promise<string | undefined> {
+    try {
+        const manifest = JSON.parse(
+            await fs.readFile(path.join(packageDir, manifestRef), "utf8"),
+        ) as { emojiChar?: unknown };
+        return typeof manifest.emojiChar === "string"
+            ? manifest.emojiChar
+            : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 /**

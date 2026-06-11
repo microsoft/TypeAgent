@@ -747,25 +747,41 @@ test("startSandbox mints unique ids so multiple sandboxes can coexist", async ()
     assert.equal(named.id, "experiment-1");
 });
 
-test("listAvailableAgents merges the registry config with packages/agents dirs", async () => {
+test("listAvailableAgents merges the registry config with packages/agents dirs and reads manifest emojis", async () => {
     const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-agents-"));
     try {
         const agentsDir = path.join(repoRoot, "packages", "agents");
-        const mkAgent = async (name: string, withExport: boolean) => {
-            await fs.mkdir(path.join(agentsDir, name), { recursive: true });
+        const mkAgent = async (
+            name: string,
+            opts: { manifestRef?: string; emoji?: string } = {},
+        ) => {
+            const dir = path.join(agentsDir, name);
+            await fs.mkdir(path.join(dir, "src"), { recursive: true });
             await fs.writeFile(
-                path.join(agentsDir, name, "package.json"),
+                path.join(dir, "package.json"),
                 JSON.stringify({
                     name,
-                    ...(withExport
-                        ? { exports: { "./agent/manifest": "./dist/m.js" } }
+                    ...(opts.manifestRef
+                        ? { exports: { "./agent/manifest": opts.manifestRef } }
                         : {}),
                 }),
             );
+            if (opts.manifestRef) {
+                await fs.writeFile(
+                    path.join(dir, opts.manifestRef),
+                    JSON.stringify({ emojiChar: opts.emoji }),
+                );
+            }
         };
-        await mkAgent("player", true);
-        await mkAgent("calendar", true);
-        await mkAgent("agentUtils", false); // a lib, not an agent
+        await mkAgent("player", {
+            manifestRef: "./src/playerManifest.json",
+            emoji: "🎵",
+        });
+        await mkAgent("calendar", {
+            manifestRef: "./src/calendarManifest.json",
+            emoji: "📅",
+        });
+        await mkAgent("agentUtils"); // a lib, not an agent (no manifest export)
         await fs.mkdir(path.join(agentsDir, "dist"), { recursive: true });
 
         // Registry adds a curated entry with no matching dir (localPlayer) and
@@ -791,9 +807,9 @@ test("listAvailableAgents merges the registry config with packages/agents dirs",
         const runtime = createStudioRuntimeCore(context);
 
         assert.deepEqual(await runtime.listAvailableAgents(), [
-            "calendar",
-            "localPlayer",
-            "player",
+            { name: "calendar", emoji: "📅" },
+            { name: "localPlayer" }, // registry-only, no dir → no emoji
+            { name: "player", emoji: "🎵" },
         ]);
     } finally {
         await fs.rm(repoRoot, { recursive: true, force: true });
