@@ -58,6 +58,32 @@ rows, or mirrors it live.
 
 ## 3. The shape of the solution
 
+### 3.0 Guiding principle — headless core, thin presenters, three audiences
+
+> **Every Studio capability is a headless, typed core primitive; every surface
+> over it (the VS Code UI, a `studio` TypeAgent agent, a CLI/MCP entry) is a
+> thin presenter.** Design each capability for three audiences from day one:
+> a **human** (mode A, the UI), an **AI agent** (mode B, consuming the typed
+> result as data), and a **human+AI hybrid** (mode C, the agent proposes / the
+> human approves).
+
+This is not a future nicety — it is a constraint on _how_ each primitive is
+built. Concretely:
+
+- A capability's logic lives in `typeagent-core` (no VS Code dependency) and
+  returns a **typed, documented result**; the UI renders that result, it does
+  not _own_ the logic.
+- Mutations expose a **`dryRun`** that returns the proposed diff/plan, so an
+  agent (or a cautious human) can preview before applying.
+- The same typed result an agent consumes is the one the webview renders — one
+  source of truth, not two code paths.
+
+See [`USER-STORY.md`](./USER-STORY.md) §5 (the three interaction modes),
+[`STUDIO-AGENT.md`](./STUDIO-AGENT.md) (the agent surface that this principle
+makes possible), and [`STATUS.md`](./STATUS.md) ("Interaction modes &
+agent-drivability"). When implementing any new surface, **check it against this
+principle before writing UI-only code.**
+
 ### 3.1 Four extensions, one shared library
 
 | Package                | Purpose                                                                                                                                                                                                                                                                                                     |
