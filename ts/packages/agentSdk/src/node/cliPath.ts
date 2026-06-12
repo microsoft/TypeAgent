@@ -23,9 +23,10 @@ const cache = new Map<string, string | undefined>();
  *
  *   query({ prompt, options: { ...claudeExecutableOption() } })
  *
- * and get the PATH-installed `claude` when present (e.g. on an Agency machine,
- * letting us prune the bundled binary from that artifact) while transparently
- * falling back to the bundled binary in dev/CI where `claude` is not on PATH.
+ * and get the PATH-installed `claude` when present (e.g. where the CLI has been
+ * provisioned, letting us prune the bundled binary from that artifact) while
+ * transparently falling back to the bundled binary in dev/CI where `claude` is
+ * not on PATH.
  * No configuration is involved — the executable name is install-invariant.
  *
  * Result is cached per name for the life of the process.

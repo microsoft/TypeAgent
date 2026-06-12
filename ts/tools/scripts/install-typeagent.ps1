@@ -3,8 +3,8 @@
 
 <#
 .SYNOPSIS
-  Install the TypeAgent agent-server (and prerequisites) on a machine WITHOUT
-  the TypeAgent repo or Agency — the non-agency standalone installer.
+  Install the TypeAgent agent-server (and prerequisites) on a bare machine
+  WITHOUT the TypeAgent repo — the standalone installer.
 
 .DESCRIPTION
   Complements typeagent-serve.mjs (which assumes the artifact is already present
