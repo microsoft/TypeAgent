@@ -39,7 +39,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "aiclient";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:email:kp");

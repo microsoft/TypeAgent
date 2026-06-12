@@ -1,10 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Node-only helpers. Exposed via the "@typeagent/agent-sdk/node" subpath so the
+// `node:child_process` dependency is isolated from the package's main entry,
+// which is also consumed by browser/renderer bundles.
+
 import { execSync } from "node:child_process";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:aiclient:cliPath");
+const debug = registerDebug("typeagent:agent-sdk:cliPath");
 
 const cache = new Map<string, string | undefined>();
 
@@ -17,7 +21,7 @@ const cache = new Map<string, string | undefined>();
  * native CLI as an optional dependency and use it when no executable path is
  * supplied. So a caller can do:
  *
- *   query({ prompt, options: { pathToClaudeCodeExecutable: resolveCliOnPath("claude") } })
+ *   query({ prompt, options: { ...claudeExecutableOption() } })
  *
  * and get the PATH-installed `claude` when present (e.g. on an Agency machine,
  * letting us prune the bundled binary from that artifact) while transparently

@@ -7,7 +7,7 @@ import {
     query,
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "aiclient";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import { z } from "zod/v4";
 import { WebFlowBrowserAPI } from "../webFlowBrowserApi.mjs";
 import {
