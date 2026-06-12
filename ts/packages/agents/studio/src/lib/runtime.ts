@@ -6,28 +6,11 @@ import * as path from "node:path";
 import {
     createStudioRuntimeCore,
     type StudioRuntime,
-    type StudioWorkspaceState,
 } from "@typeagent/core/runtime";
-
-/**
- * In-memory key/value store backing the headless runtime's workspace state.
- *
- * The S1 Inspect surface is read-only and does not persist sandboxes, so an
- * ephemeral store is sufficient. When the agent gains mutating/run actions
- * (S2+), this should be replaced with a durable store under the Studio profile
- * directory.
- */
-class MemoryWorkspaceState implements StudioWorkspaceState {
-    private readonly store = new Map<string, unknown>();
-
-    get<T>(key: string): T | undefined {
-        return this.store.get(key) as T | undefined;
-    }
-
-    async update(key: string, value: unknown): Promise<void> {
-        this.store.set(key, value);
-    }
-}
+import {
+    FileWorkspaceState,
+    studioWorkspaceStateFile,
+} from "./fileWorkspaceState.js";
 
 /**
  * Candidate repository roots for Studio to inspect, most-specific first. The
@@ -81,7 +64,9 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
     let runtime = runtimeCache.get(key);
     if (runtime === undefined) {
         runtime = createStudioRuntimeCore({
-            workspaceState: new MemoryWorkspaceState(),
+            workspaceState: new FileWorkspaceState(
+                studioWorkspaceStateFile(studioProfileDir(), key),
+            ),
             globalStorageFsPath: studioProfileDir(),
             workspaceFolderFsPaths: candidates,
         });

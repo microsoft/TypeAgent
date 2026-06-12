@@ -11,6 +11,7 @@ import type {
 } from "@typeagent/core/runtime";
 import type { StudioEvent } from "@typeagent/core/events";
 import { createWebSocketRpcChannel } from "../studioServiceClient.js";
+import { stubInvokeHandlers } from "./stubInvokeHandlers.js";
 import { StudioServiceCollisionsSource } from "../collisionsSource.js";
 import { StudioServiceConnection } from "../studioServiceConnection.js";
 
@@ -27,24 +28,11 @@ async function startStubServer(): Promise<{
     await new Promise<void>((resolve) => server.once("listening", resolve));
     server.on("connection", (socket) => {
         let push: (e: StudioEvent) => void = () => {};
-        const handlers: StudioServiceInvokeFunctions = {
-            getStudioInfo: async () => ({
-                repoRootInfo: { repoRoot: "/repo/ts", agentsDirFound: true },
-                agentLocations: [],
-            }),
-            listCollisions: async () => [],
+        const handlers = stubInvokeHandlers({
             scanGrammarCollisions: async () => ({
                 scanned: ["player"],
                 skipped: [],
                 collisionCount: 0,
-            }),
-            clearCollisions: async () => 0,
-            queryRecentEvents: async () => [],
-            listCorpusAgents: async () => [],
-            replayCorpus: async () => ({
-                runId: "r",
-                summary: {} as never,
-                rows: [],
             }),
             subscribeEvents: async () => {
                 setTimeout(() => {
@@ -55,8 +43,7 @@ async function startStubServer(): Promise<{
                     } as StudioEvent);
                 }, 20);
             },
-            unsubscribeEvents: async () => {},
-        };
+        });
         const rpc = createRpc<
             Record<string, never>,
             StudioClientCallFunctions,

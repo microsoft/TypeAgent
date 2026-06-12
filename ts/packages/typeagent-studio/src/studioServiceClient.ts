@@ -13,6 +13,7 @@ import type {
     StudioReplayResult,
     StudioCollisionScanRequest,
     StudioCollisionScanResult,
+    AvailableAgent,
 } from "@typeagent/core/runtime";
 import { readStudioServiceToken } from "@typeagent/core/runtime";
 import type {
@@ -20,6 +21,7 @@ import type {
     CollisionDetectedEvent,
 } from "@typeagent/core/events";
 import type { CollisionFilter } from "@typeagent/core/collisions";
+import type { SandboxStatus } from "@typeagent/core/sandbox";
 
 /**
  * Client for the `studio` agent's typed service channel (the rich-client side of
@@ -230,6 +232,52 @@ export class StudioServiceClient {
     /** Cancel this connection's live event subscription (idempotent). */
     unsubscribeEvents(): Promise<void> {
         return this.rpc.invoke("unsubscribeEvents");
+    }
+
+    // --- Sandbox lifecycle ---
+
+    listSandboxes(): Promise<SandboxStatus[]> {
+        return this.rpc.invoke("listSandboxes", this.repoRoot);
+    }
+
+    listAvailableAgents(): Promise<AvailableAgent[]> {
+        return this.rpc.invoke("listAvailableAgents", this.repoRoot);
+    }
+
+    startSandbox(options?: {
+        id?: string;
+        agents?: string[];
+    }): Promise<SandboxStatus> {
+        return this.rpc.invoke("startSandbox", this.repoRoot, options);
+    }
+
+    stopSandbox(id: string): Promise<void> {
+        return this.rpc.invoke("stopSandbox", this.repoRoot, id);
+    }
+
+    restartSandbox(id: string): Promise<void> {
+        return this.rpc.invoke("restartSandbox", this.repoRoot, id);
+    }
+
+    loadSandboxAgent(id: string, agentRef: string): Promise<SandboxStatus> {
+        return this.rpc.invoke("loadSandboxAgent", this.repoRoot, id, agentRef);
+    }
+
+    unloadSandboxAgent(id: string, agentName: string): Promise<SandboxStatus> {
+        return this.rpc.invoke(
+            "unloadSandboxAgent",
+            this.repoRoot,
+            id,
+            agentName,
+        );
+    }
+
+    refreshSandboxAgent(agentName: string): Promise<number> {
+        return this.rpc.invoke("refreshSandboxAgent", this.repoRoot, agentName);
+    }
+
+    restoreSandboxes(): Promise<void> {
+        return this.rpc.invoke("restoreSandboxes", this.repoRoot);
     }
 
     close(): void {

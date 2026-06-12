@@ -3,9 +3,11 @@
 
 import type { StudioEvent, CollisionDetectedEvent } from "../events/index.js";
 import type { CollisionFilter } from "../collisions/index.js";
+import type { SandboxStatus } from "../sandbox/index.js";
 import type { RepoRootResolution } from "./repoRootResolver.js";
 import type {
     AgentLocation,
+    AvailableAgent,
     StudioReplayRequest,
     StudioReplayResult,
     StudioCollisionScanRequest,
@@ -90,6 +92,38 @@ export type StudioServiceInvokeFunctions = {
      * no-op when not subscribed.
      */
     unsubscribeEvents(): Promise<void>;
+
+    // --- Sandbox lifecycle (mutating; the channel is capability-token gated and
+    // the extension client represents a human action, so no per-call approval —
+    // the AI/MCP action surface is where the dryRun/approval boundary lives). ---
+
+    /** Sandboxes currently running in the agent runtime. */
+    listSandboxes(repoRoot?: string): Promise<SandboxStatus[]>;
+    /** Agents available to load (name + manifest emoji), discovered from disk. */
+    listAvailableAgents(repoRoot?: string): Promise<AvailableAgent[]>;
+    startSandbox(
+        repoRoot: string | undefined,
+        options?: { id?: string; agents?: string[] },
+    ): Promise<SandboxStatus>;
+    stopSandbox(repoRoot: string | undefined, id: string): Promise<void>;
+    restartSandbox(repoRoot: string | undefined, id: string): Promise<void>;
+    loadSandboxAgent(
+        repoRoot: string | undefined,
+        id: string,
+        agentRef: string,
+    ): Promise<SandboxStatus>;
+    unloadSandboxAgent(
+        repoRoot: string | undefined,
+        id: string,
+        agentName: string,
+    ): Promise<SandboxStatus>;
+    /** Re-load a named agent everywhere it's loaded; returns sandboxes touched. */
+    refreshSandboxAgent(
+        repoRoot: string | undefined,
+        agentName: string,
+    ): Promise<number>;
+    /** Re-create sandboxes from the agent runtime's persisted snapshot. */
+    restoreSandboxes(repoRoot?: string): Promise<void>;
 };
 
 /** Server → client pushes. */

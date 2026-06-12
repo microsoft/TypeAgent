@@ -11,6 +11,7 @@ import type {
 } from "@typeagent/core/runtime";
 import type { StudioEvent } from "@typeagent/core/events";
 import { createWebSocketRpcChannel } from "../studioServiceClient.js";
+import { stubInvokeHandlers } from "./stubInvokeHandlers.js";
 import { StudioServiceEventSource } from "../eventLogSource.js";
 import { StudioServiceConnection } from "../studioServiceConnection.js";
 
@@ -31,12 +32,7 @@ async function startStubServer(): Promise<{
     await new Promise<void>((resolve) => server.once("listening", resolve));
     server.on("connection", (socket) => {
         let push: (e: StudioEvent) => void = () => {};
-        const handlers: StudioServiceInvokeFunctions = {
-            getStudioInfo: async () => ({
-                repoRootInfo: { repoRoot: "/repo/ts", agentsDirFound: true },
-                agentLocations: [],
-            }),
-            listCollisions: async () => [],
+        const handlers = stubInvokeHandlers({
             queryRecentEvents: async () => SEED,
             subscribeEvents: async () => {
                 // Push a live event a beat after subscription (a real agent
@@ -50,8 +46,7 @@ async function startStubServer(): Promise<{
                     20,
                 );
             },
-            unsubscribeEvents: async () => {},
-        };
+        });
         const rpc = createRpc<
             Record<string, never>,
             StudioClientCallFunctions,

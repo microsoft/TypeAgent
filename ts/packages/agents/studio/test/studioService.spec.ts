@@ -129,6 +129,29 @@ function createRuntimeStub(): {
             listeners.add(listener);
             return { dispose: () => listeners.delete(listener) };
         },
+        listSandboxes: async () => [
+            { id: "studio-default", agents: [], state: "running" },
+        ],
+        listAvailableAgents: async () => [{ name: "player" }],
+        startSandbox: async (options?: { id?: string }) => ({
+            id: options?.id ?? "studio-default",
+            agents: [],
+            state: "running",
+        }),
+        stopSandbox: async () => {},
+        restartSandbox: async () => {},
+        loadSandboxAgent: async (id: string, agentRef: string) => ({
+            id,
+            agents: [{ name: agentRef }],
+            state: "running",
+        }),
+        unloadSandboxAgent: async (id: string) => ({
+            id,
+            agents: [],
+            state: "running",
+        }),
+        refreshSandboxAgent: async () => 1,
+        restoreSandboxes: async () => {},
     } as unknown as StudioRuntime;
     return {
         runtime,
@@ -227,6 +250,31 @@ describe("studio service channel (in-memory rpc)", () => {
         expect(result.summary.agent).toBe("player");
         expect(result.rows).toHaveLength(1);
         expect(result.rows[0].utterance).toBe("play jazz");
+    });
+
+    it("sandbox lifecycle methods round-trip", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        expect(await client.invoke("listSandboxes", undefined)).toHaveLength(1);
+        expect(await client.invoke("listAvailableAgents", undefined)).toEqual([
+            { name: "player" },
+        ]);
+        const started = await client.invoke("startSandbox", undefined, {
+            id: "s1",
+        });
+        expect(started.id).toBe("s1");
+        const loaded = await client.invoke(
+            "loadSandboxAgent",
+            undefined,
+            "s1",
+            "player",
+        );
+        expect(loaded.agents).toEqual([{ name: "player" }]);
+        expect(await client.invoke("refreshSandboxAgent", undefined, "player")).toBe(
+            1,
+        );
+        await client.invoke("stopSandbox", undefined, "s1");
+        await client.invoke("restoreSandboxes", undefined);
     });
 
     it("subscribeEvents pushes live events to the client", async () => {

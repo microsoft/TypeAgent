@@ -15,6 +15,7 @@ import {
     StudioServiceClient,
     createWebSocketRpcChannel,
 } from "../studioServiceClient.js";
+import { stubInvokeHandlers } from "./stubInvokeHandlers.js";
 
 const STUB_INFO: StudioInfo = {
     repoRootInfo: { repoRoot: "/repo/ts", agentsDirFound: true },
@@ -36,10 +37,8 @@ async function startStubServer(): Promise<{
     await new Promise<void>((resolve) => server.once("listening", resolve));
     server.on("connection", (socket) => {
         let push: (e: StudioEvent) => void = () => {};
-        const handlers: StudioServiceInvokeFunctions = {
+        const handlers = stubInvokeHandlers({
             getStudioInfo: async () => STUB_INFO,
-            listCollisions: async () => [],
-            queryRecentEvents: async () => [],
             subscribeEvents: async () => {
                 // Emit one event shortly after subscription.
                 setTimeout(
@@ -51,8 +50,7 @@ async function startStubServer(): Promise<{
                     0,
                 );
             },
-            unsubscribeEvents: async () => {},
-        };
+        });
         const rpc = createRpc<
             Record<string, never>,
             StudioClientCallFunctions,
@@ -127,13 +125,9 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
     });
     await new Promise<void>((resolve) => server.once("listening", resolve));
     server.on("connection", (socket) => {
-        const handlers: StudioServiceInvokeFunctions = {
+        const handlers = stubInvokeHandlers({
             getStudioInfo: async () => STUB_INFO,
-            listCollisions: async () => [],
-            queryRecentEvents: async () => [],
-            subscribeEvents: async () => {},
-            unsubscribeEvents: async () => {},
-        };
+        });
         createRpc<
             Record<string, never>,
             StudioClientCallFunctions,

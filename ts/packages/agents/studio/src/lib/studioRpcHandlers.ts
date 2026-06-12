@@ -87,5 +87,32 @@ export function createStudioInvokeHandlers(
         async unsubscribeEvents() {
             conn.setEventSubscription(undefined);
         },
+        async listSandboxes(repoRoot) {
+            return conn.getRuntime(repoRoot).listSandboxes();
+        },
+        async listAvailableAgents(repoRoot) {
+            return conn.getRuntime(repoRoot).listAvailableAgents();
+        },
+        async startSandbox(repoRoot, options) {
+            return conn.getRuntime(repoRoot).startSandbox(options ?? undefined);
+        },
+        async stopSandbox(repoRoot, id) {
+            return conn.getRuntime(repoRoot).stopSandbox(id);
+        },
+        async restartSandbox(repoRoot, id) {
+            return conn.getRuntime(repoRoot).restartSandbox(id);
+        },
+        async loadSandboxAgent(repoRoot, id, agentRef) {
+            return conn.getRuntime(repoRoot).loadSandboxAgent(id, agentRef);
+        },
+        async unloadSandboxAgent(repoRoot, id, agentName) {
+            return conn.getRuntime(repoRoot).unloadSandboxAgent(id, agentName);
+        },
+        async refreshSandboxAgent(repoRoot, agentName) {
+            return conn.getRuntime(repoRoot).refreshSandboxAgent(agentName);
+        },
+        async restoreSandboxes(repoRoot) {
+            return conn.getRuntime(repoRoot).restoreSandboxes();
+        },
     };
 }
