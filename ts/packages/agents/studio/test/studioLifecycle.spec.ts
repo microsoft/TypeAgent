@@ -15,9 +15,12 @@ import {
 async function makeCtx(): Promise<{
     ctx: SessionContext<StudioActionContext>;
     released: () => number;
+    lastCount: () => number | undefined;
+    counts: () => number[];
 }> {
     const agentContext = await initializeStudioContext();
     let releaseCount = 0;
+    const reportedCounts: number[] = [];
     const ctx = {
         agentContext,
         registerPort: (_role: string, _port: number) => ({
@@ -25,8 +28,30 @@ async function makeCtx(): Promise<{
                 releaseCount++;
             },
         }),
+        notifyClientCountChanged: async (_role: string, count: number) => {
+            reportedCounts.push(count);
+        },
     } as unknown as SessionContext<StudioActionContext>;
-    return { ctx, released: () => releaseCount };
+    return {
+        ctx,
+        released: () => releaseCount,
+        lastCount: () => reportedCounts[reportedCounts.length - 1],
+        counts: () => reportedCounts,
+    };
+}
+
+/** Poll until `predicate` is true or the timeout elapses. */
+async function waitFor(
+    predicate: () => boolean,
+    timeoutMs = 2000,
+): Promise<void> {
+    const start = Date.now();
+    while (!predicate()) {
+        if (Date.now() - start > timeoutMs) {
+            throw new Error("waitFor timed out");
+        }
+        await new Promise((r) => setTimeout(r, 10));
+    }
 }
 
 describe("studio service lifecycle", () => {
@@ -69,6 +94,39 @@ describe("studio service lifecycle", () => {
         await updateStudioContext(true, s.ctx, "studioActions");
         expect(getSharedStudioPort()).toBeDefined();
         await closeStudioContext(s.ctx);
+        expect(getSharedStudioPort()).toBeUndefined();
+    });
+
+    it("reports the live client count for `@system ports`", async () => {
+        const s1 = await makeCtx();
+        await updateStudioContext(true, s1.ctx, "studioActions");
+        const port = getSharedStudioPort()!;
+        // Initial registration publishes a baseline count of 0.
+        expect(s1.lastCount()).toBe(0);
+
+        // Second session is non-primary: it reports 0 to avoid the
+        // `@system ports` per-session sum double-counting the shared server.
+        const s2 = await makeCtx();
+        await updateStudioContext(true, s2.ctx, "studioActions");
+        expect(s2.lastCount()).toBe(0);
+
+        // A client connects → primary (s1) reports 1, non-primary stays 0.
+        const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+        await new Promise<void>((resolve, reject) => {
+            socket.on("open", () => resolve());
+            socket.on("error", reject);
+        });
+        await waitFor(() => s1.lastCount() === 1);
+        expect(s1.lastCount()).toBe(1);
+        expect(s2.lastCount()).toBe(0);
+
+        // Client disconnects → primary returns to 0.
+        socket.close();
+        await waitFor(() => s1.lastCount() === 0);
+        expect(s1.lastCount()).toBe(0);
+
+        await closeStudioContext(s1.ctx);
+        await closeStudioContext(s2.ctx);
         expect(getSharedStudioPort()).toBeUndefined();
     });
 });

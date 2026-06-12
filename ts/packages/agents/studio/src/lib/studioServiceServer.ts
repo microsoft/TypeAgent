@@ -34,6 +34,21 @@ export type StudioRuntimeResolver = (repoRoot?: string) => StudioRuntime;
  * and a server→client event push. Binds to loopback only.
  */
 export class StudioServiceServer {
+    // Deterministic connect/disconnect counter (incremented on connection,
+    // decremented on close) so the count reported to `@system ports` never
+    // depends on `ws`'s internal client-set mutation timing.
+    private connectionCount = 0;
+
+    /**
+     * Fired after {@link connectionCount} is mutated for any connect /
+     * disconnect, with the post-mutation total. The lifecycle uses this to
+     * push counts up via `SessionContext.notifyClientCountChanged` so
+     * `@system ports` can surface them. NOTE: this server has no per-session
+     * client identity, so the count is global across every session sharing
+     * the bound port — not per-session.
+     */
+    public onClientCountChanged?: (count: number) => void;
+
     private constructor(
         private readonly server: WebSocketServer,
         public readonly port: number,
@@ -89,6 +104,9 @@ export class StudioServiceServer {
         const disposables: { dispose(): void }[] = [];
         const channel = createWebSocketRpcChannel(socket);
 
+        this.connectionCount++;
+        this.onClientCountChanged?.(this.connectionCount);
+
         // `pushEvent` is wired after `rpc` exists (the handler closure must not
         // reference `rpc` inside its own initializer). It's only ever called
         // later, when the client invokes `subscribeEvents`.
@@ -112,6 +130,8 @@ export class StudioServiceServer {
         pushEvent = (event: StudioEvent) => rpc.send("studioEvent", event);
 
         socket.on("close", () => {
+            this.connectionCount = Math.max(0, this.connectionCount - 1);
+            this.onClientCountChanged?.(this.connectionCount);
             for (const d of disposables.splice(0)) {
                 try {
                     d.dispose();
@@ -123,7 +143,7 @@ export class StudioServiceServer {
     }
 
     public getConnectedCount(): number {
-        return this.server.clients.size;
+        return this.connectionCount;
     }
 
     public close(): Promise<void> {
