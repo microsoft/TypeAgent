@@ -74,7 +74,7 @@ const runtimeCache = new Map<string, StudioRuntime>();
  */
 export function getStudioRuntime(repoRoot?: string): StudioRuntime {
     const candidates =
-        repoRoot !== undefined && repoRoot.trim().length > 0
+        repoRoot != null && repoRoot.trim().length > 0
             ? [repoRoot]
             : resolveStudioRepoRootCandidates();
     const key = candidates.join(path.delimiter);

@@ -144,4 +144,12 @@ describe("getStudioRuntime", () => {
         const second = getStudioRuntime();
         expect(first).toBe(second);
     });
+
+    it("treats a null repoRoot like undefined (JSON sends undefined as null)", () => {
+        // Over the WS channel, `undefined` args arrive as `null`; the guard
+        // must not call `.trim()` on it. Should behave like the no-arg case.
+        const viaNull = getStudioRuntime(null as unknown as string);
+        const viaUndefined = getStudioRuntime();
+        expect(viaNull).toBe(viaUndefined);
+    });
 });
