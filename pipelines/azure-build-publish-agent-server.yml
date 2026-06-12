@@ -4,7 +4,7 @@
 # Builds the self-contained agent-server artifact per platform (RID) and
 # publishes it (and the optional-agent bundles) as Azure Artifacts Universal
 # packages to the `typeagent` feed, for install on repo-less machines and for
-# `agency artifact` consumption.
+# artifact-feed consumption (download + bootstrap).
 #
 # Manual / scheduled, not per-PR. Models azure-build-ts.yml / -package-shell.yml.
 
@@ -16,9 +16,9 @@ pr:
       - "*"
 
 parameters:
-  # "external" = lean artifact that resolves claude/copilot from PATH (Agency
-  # machines / the install-typeagent provisioner). "full" = bundles the CLIs
-  # (works anywhere; larger).
+  # "external" = lean artifact that resolves claude/copilot from PATH (machines
+  # where they're already provisioned / the install-typeagent provisioner).
+  # "full" = bundles the CLIs (works anywhere; larger).
   - name: variant
     type: string
     default: external

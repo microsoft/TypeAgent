@@ -142,8 +142,8 @@ function main() {
     }
 
     // 2c. External-CLI variant: drop the bundled Claude/Copilot runtimes. Only
-    //     valid where `claude`/`copilot` are on PATH (Agency machines / the
-    //     non-agency installer); the runtime query() callers are wired to resolve
+    //     valid where `claude`/`copilot` are on PATH (managed machines / the
+    //     standalone installer); the runtime query() callers are wired to resolve
     //     the PATH binary (claudeExecutableOption), so they don't need the bundle.
     if (args.externalCli) {
         run(

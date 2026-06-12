@@ -6,13 +6,13 @@
  * Build the TypeAgent MCP server as a single-file executable (`typeagent-mcp`
  * / `typeagent-mcp.exe`) via Node's Single Executable Application (SEA) feature.
  *
- * Why an exe (vs the dist/mcp/server.js used for local dev): the Agency
- * playground only allows `.mcp.json` commands from its allowlist (notably
- * `agency` and `~/.agency/*`), not bare `node`. So the plugin launches the MCP
- * server via `agency artifact exec ... -- typeagent-mcp`, and agency resolves
- * the `--` command to a binary *inside* the downloaded artifact. This produces
- * that binary. The MCP server is a thin stdio client (lazy WebSocket connect to
- * the daemon), so single-file bundling is safe — unlike the agent-server daemon.
+ * Why an exe (vs the dist/mcp/server.js used for local dev): the target plugin
+ * marketplace only allows `.mcp.json` commands from an allowlist, not bare
+ * `node`. So the plugin launches the MCP server via an allowlisted artifact-exec
+ * launcher that resolves the `--` command to a binary *inside* the downloaded
+ * artifact. This produces that binary. The MCP server is a thin stdio client
+ * (lazy WebSocket connect to the daemon), so single-file bundling is safe —
+ * unlike the agent-server daemon.
  *
  * Per-platform: SEA injects into the running platform's `node` binary, so the
  * publish pipeline runs this on each OS image to produce each RID's exe.

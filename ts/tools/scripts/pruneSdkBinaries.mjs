@@ -11,7 +11,7 @@
  *   (1) every runtime `query()` caller passes pathToClaudeCodeExecutable (we wire
  *       them via claudeExecutableOption()), AND
  *   (2) `claude` and `copilot` are guaranteed on PATH in the target environment
- *       (Agency machines; the non-agency installer provisions them).
+ *       (managed machines; the standalone installer provisions them).
  * Otherwise the SDKs lose their bundled binary with no fallback. This is why it
  * is opt-in (deployAgentServer --external-cli), never the default artifact.
  *

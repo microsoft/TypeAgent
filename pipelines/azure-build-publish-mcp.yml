@@ -3,11 +3,12 @@
 
 # Builds the TypeAgent MCP server as a single-file executable per platform and
 # publishes it as `typeagent-mcp.<rid>` Universal packages to the `typeagent`
-# feed, so the Agency playground plugin can launch it via:
-#   agency artifact exec --name typeagent-mcp -- typeagent-mcp
+# feed, so the plugin marketplace entry can launch it on demand via an
+# allowlisted artifact-exec launcher that resolves a binary inside the
+# downloaded artifact (per platform).
 #
-# RID naming follows Agency's `--rid auto` convention (.NET-style: win-x64,
-# osx-x64, linux-x64 — NOT Node's win32/darwin), so resolution works.
+# RID naming follows the .NET-style convention (win-x64, osx-x64, linux-x64 —
+# NOT Node's win32/darwin) expected by the launcher's `--rid auto` resolution.
 # Manual / scheduled, not per-PR.
 
 trigger: none
