@@ -1264,7 +1264,10 @@ async function executeReasoningWithTracing(
                 context,
                 fallbackContext,
             ),
-            options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
+            options: {
+                ...getClaudeOptions(context),
+                ...claudeExecutableOption(),
+            },
         });
 
         let finalResult: string | undefined = undefined;

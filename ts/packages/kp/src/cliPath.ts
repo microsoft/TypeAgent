@@ -51,7 +51,9 @@ export function resolveCliOnPath(name: string): string | undefined {
  * contributes nothing otherwise (bundled-binary fallback). Spread-safe under
  * `exactOptionalPropertyTypes`.
  */
-export function claudeExecutableOption(): { pathToClaudeCodeExecutable?: string } {
+export function claudeExecutableOption(): {
+    pathToClaudeCodeExecutable?: string;
+} {
     const resolved = resolveCliOnPath("claude");
     return resolved ? { pathToClaudeCodeExecutable: resolved } : {};
 }

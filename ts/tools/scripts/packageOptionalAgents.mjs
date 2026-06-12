@@ -60,7 +60,8 @@ function run(cmd, cmdArgs, cwd) {
         stdio: "inherit",
         shell: process.platform === "win32",
     });
-    if (res.status !== 0) throw new Error(`Command failed (${res.status}): ${cmd}`);
+    if (res.status !== 0)
+        throw new Error(`Command failed (${res.status}): ${cmd}`);
 }
 
 function readJson(f) {
@@ -99,7 +100,11 @@ function validateAgentBundle(dir, npmName) {
     }
     // The handler module must be present with deps resolvable: at least confirm
     // node_modules exists and the agent SDK is bundled.
-    if (!fs.existsSync(path.join(dir, "node_modules", "@typeagent", "agent-sdk"))) {
+    if (
+        !fs.existsSync(
+            path.join(dir, "node_modules", "@typeagent", "agent-sdk"),
+        )
+    ) {
         throw new Error(`${npmName}: @typeagent/agent-sdk not bundled`);
     }
     return true;
@@ -107,7 +112,12 @@ function validateAgentBundle(dir, npmName) {
 
 function main() {
     const args = parseArgs(process.argv);
-    const dataDir = path.join(tsRoot, "packages", "defaultAgentProvider", "data");
+    const dataDir = path.join(
+        tsRoot,
+        "packages",
+        "defaultAgentProvider",
+        "data",
+    );
     const full = readJson(path.join(dataDir, "config.json"));
     const prof = readJson(path.join(dataDir, `config.${args.profile}.json`));
     const profileNames = new Set(agentNames(prof));
@@ -153,7 +163,9 @@ function main() {
             );
         }
         validateAgentBundle(dest, npmName);
-        console.log(`[${npmName}] validated (manifest + handlers + agent-sdk present).`);
+        console.log(
+            `[${npmName}] validated (manifest + handlers + agent-sdk present).`,
+        );
         results.push(npmName);
     }
 

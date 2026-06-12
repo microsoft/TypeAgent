@@ -114,11 +114,15 @@ function fmt(bytes) {
 // { name, dir } for each, skipping dot-entries (.bin/.pnpm/...).
 function listInstalledPackages(nodeModulesDir, acc = []) {
     if (!fs.existsSync(nodeModulesDir)) return acc;
-    for (const entry of fs.readdirSync(nodeModulesDir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(nodeModulesDir, {
+        withFileTypes: true,
+    })) {
         if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
         if (entry.name.startsWith("@")) {
             const scopeDir = path.join(nodeModulesDir, entry.name);
-            for (const sub of fs.readdirSync(scopeDir, { withFileTypes: true })) {
+            for (const sub of fs.readdirSync(scopeDir, {
+                withFileTypes: true,
+            })) {
                 if (!sub.isDirectory()) continue;
                 const dir = path.join(scopeDir, sub.name);
                 acc.push({ name: `${entry.name}/${sub.name}`, dir });

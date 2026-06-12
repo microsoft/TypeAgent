@@ -39,10 +39,14 @@ const getKeysEntry = path.join(artifactDir, "tools", "getKeys.mjs");
 // Profile recorded by deployAgentServer when the artifact was profile-pruned.
 function readProfileMarker() {
     try {
-        return fs.readFileSync(
-            path.join(artifactDir, ".typeagent-profile"),
-            "utf8",
-        ).trim() || undefined;
+        return (
+            fs
+                .readFileSync(
+                    path.join(artifactDir, ".typeagent-profile"),
+                    "utf8",
+                )
+                .trim() || undefined
+        );
     } catch {
         return undefined;
     }
@@ -118,7 +122,9 @@ function spawnDaemon(port) {
     // (the pruned artifact CANNOT load excluded agents, so this default is
     // required for it to start). Unset everywhere = the full default config.json.
     const profile =
-        arg("--config") ?? process.env.TYPEAGENT_AGENT_PROFILE ?? readProfileMarker();
+        arg("--config") ??
+        process.env.TYPEAGENT_AGENT_PROFILE ??
+        readProfileMarker();
     if (profile) args.push("--config", profile);
     const isWindows = process.platform === "win32";
     const child = spawn(process.execPath, args, {

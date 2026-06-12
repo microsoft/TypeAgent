@@ -136,7 +136,9 @@ function main() {
             args.profile,
             "utf8",
         );
-        console.log(`  recorded profile '${args.profile}' (.typeagent-profile)`);
+        console.log(
+            `  recorded profile '${args.profile}' (.typeagent-profile)`,
+        );
     }
 
     // 2c. External-CLI variant: drop the bundled Claude/Copilot runtimes. Only
@@ -146,11 +148,7 @@ function main() {
     if (args.externalCli) {
         run(
             "node",
-            [
-                path.join(scriptsDir, "pruneSdkBinaries.mjs"),
-                "--dir",
-                args.out,
-            ],
+            [path.join(scriptsDir, "pruneSdkBinaries.mjs"), "--dir", args.out],
             tsRoot,
         );
         fs.writeFileSync(

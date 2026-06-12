@@ -67,7 +67,9 @@ export function resolveCliOnPath(name: string): string | undefined {
  *
  *   query({ prompt, options: { model, ...claudeExecutableOption() } })
  */
-export function claudeExecutableOption(): { pathToClaudeCodeExecutable?: string } {
+export function claudeExecutableOption(): {
+    pathToClaudeCodeExecutable?: string;
+} {
     const resolved = resolveCliOnPath("claude");
     return resolved ? { pathToClaudeCodeExecutable: resolved } : {};
 }
