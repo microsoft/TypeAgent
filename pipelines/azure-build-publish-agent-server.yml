@@ -84,9 +84,12 @@ jobs:
           buildDirectory: $(buildDirectory)
           prerelease: ci.$(Build.BuildId)
 
+      # Build agent-server and its dependency closure (the same set pnpm deploy
+      # bundles) via fluid-build. Targeted (not a full `npm run build`) so it is
+      # faster and not blocked by unrelated packages.
       - script: |
-          npm run build
-        displayName: Build
+          pnpm run build agent-server
+        displayName: Build agent-server (+ deps)
         workingDirectory: $(buildDirectory)
 
       # Produce the self-contained agent-server folder: pnpm deploy + foreign-arch
