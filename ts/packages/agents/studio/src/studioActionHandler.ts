@@ -14,6 +14,11 @@ import {
 import { StudioActions } from "./studioSchema.js";
 import { getStudioRuntime } from "./lib/runtime.js";
 import {
+    initializeStudioContext,
+    updateStudioContext,
+    closeStudioContext,
+} from "./lib/studioServiceLifecycle.js";
+import {
     formatStudioInfo,
     formatCollisions,
     formatEvents,
@@ -21,6 +26,9 @@ import {
 
 export function instantiate(): AppAgent {
     return {
+        initializeAgentContext: initializeStudioContext,
+        updateAgentContext: updateStudioContext,
+        closeAgentContext: closeStudioContext,
         executeAction,
     };
 }
