@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ScriptRecipe } from "../types/scriptRecipe.js";
 import { basename } from "path";
 import registerDebug from "debug";
@@ -36,6 +37,7 @@ export class ScriptAnalyzer {
             options: {
                 model: ANALYSIS_MODEL,
                 maxTurns: 1,
+                ...claudeExecutableOption(),
             },
         });
 

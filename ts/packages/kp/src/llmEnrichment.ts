@@ -15,6 +15,7 @@
 import { openai, ChatModel } from "aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "./cliPath.js";
 import { DictionaryEntry, RelatedTerm, RelationType } from "./types.js";
 import { ExtractedKeyword } from "./keywordExtractor.js";
 
@@ -141,6 +142,7 @@ async function enrichBatchAgentSdk(
         prompt: `${ENRICHMENT_SYSTEM_PROMPT}\n\n${userPrompt}`,
         options: {
             model: agentModel,
+            ...claudeExecutableOption(),
         },
     });
 

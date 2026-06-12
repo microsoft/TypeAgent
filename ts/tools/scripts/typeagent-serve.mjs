@@ -36,6 +36,22 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const serverEntry = path.join(artifactDir, "dist", "server.js");
 const getKeysEntry = path.join(artifactDir, "tools", "getKeys.mjs");
 
+// Profile recorded by deployAgentServer when the artifact was profile-pruned.
+function readProfileMarker() {
+    try {
+        return (
+            fs
+                .readFileSync(
+                    path.join(artifactDir, ".typeagent-profile"),
+                    "utf8",
+                )
+                .trim() || undefined
+        );
+    } catch {
+        return undefined;
+    }
+}
+
 function arg(name) {
     const i = process.argv.indexOf(name);
     return i !== -1 ? process.argv[i + 1] : undefined;
@@ -99,6 +115,17 @@ function spawnDaemon(port) {
     const idle = arg("--idle-timeout");
     const args = [serverEntry, "--port", String(port)];
     if (idle) args.push("--idle-timeout", idle);
+    // Agent profile: a reduced provider config (e.g. "service" ->
+    // data/config.service.json) so the daemon loads only the agents this
+    // deployment ships. Precedence: --config arg > env > the .typeagent-profile
+    // marker written by deployAgentServer when the artifact was profile-pruned
+    // (the pruned artifact CANNOT load excluded agents, so this default is
+    // required for it to start). Unset everywhere = the full default config.json.
+    const profile =
+        arg("--config") ??
+        process.env.TYPEAGENT_AGENT_PROFILE ??
+        readProfileMarker();
+    if (profile) args.push("--config", profile);
     const isWindows = process.platform === "win32";
     const child = spawn(process.execPath, args, {
         detached: !isWindows,

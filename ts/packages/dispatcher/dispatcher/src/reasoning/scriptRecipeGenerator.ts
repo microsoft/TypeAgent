@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ReasoningTrace } from "./tracing/types.js";
 import registerDebug from "debug";
 
@@ -197,6 +198,7 @@ export class ScriptRecipeGenerator {
             options: {
                 model: RECIPE_MODEL,
                 maxTurns: 1,
+                ...claudeExecutableOption(),
             },
         });
 
