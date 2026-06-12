@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import type { StudioRuntime } from "@typeagent/core/runtime";
 import {
     buildSandboxAgentNodes,
+    buildSandboxDisconnectedNodes,
     buildSandboxRootNodes,
     type SandboxTreeNode,
 } from "./sandboxTreePresentation.js";
+import type { SandboxSource } from "./sandboxSource.js";
 
 /** View id contributed in package.json. */
 export const SANDBOX_VIEW_ID = "typeagentStudioSandboxes";
@@ -15,7 +16,9 @@ export const SANDBOX_VIEW_ID = "typeagentStudioSandboxes";
 /**
  * Thin VS Code adapter over the pure `sandboxTreePresentation` descriptors.
  * Structuring/labelling lives in that vscode-free module; this class only
- * resolves children from the runtime and maps descriptors to `TreeItem`s.
+ * resolves children from a {@link SandboxSource} (the studio service channel)
+ * and maps descriptors to `TreeItem`s. Sandboxes have no in-process fallback —
+ * when the service is disconnected the view shows a single explanatory row.
  */
 export class SandboxTreeProvider
     implements vscode.TreeDataProvider<SandboxTreeNode>, vscode.Disposable
@@ -25,9 +28,19 @@ export class SandboxTreeProvider
     >();
     readonly onDidChangeTreeData = this.emitter.event;
     private readonly subscription: { dispose(): void };
+    private connected = false;
 
-    constructor(private readonly runtime: StudioRuntime) {
-        this.subscription = runtime.onSandboxChanged(() => this.refresh());
+    constructor(private readonly source: SandboxSource) {
+        this.subscription = source.onSandboxChanged(() => this.refresh());
+    }
+
+    /** Reflect the studio service connection state (drives the empty view). */
+    setConnected(connected: boolean): void {
+        if (connected === this.connected) {
+            return;
+        }
+        this.connected = connected;
+        this.refresh();
     }
 
     refresh(): void {
@@ -51,10 +64,13 @@ export class SandboxTreeProvider
 
     async getChildren(node?: SandboxTreeNode): Promise<SandboxTreeNode[]> {
         if (!node) {
-            return buildSandboxRootNodes(await this.runtime.listSandboxes());
+            if (!this.connected) {
+                return buildSandboxDisconnectedNodes();
+            }
+            return buildSandboxRootNodes(await this.source.listSandboxes());
         }
         if (node.kind === "sandbox" && node.sandboxId) {
-            const sandboxes = await this.runtime.listSandboxes();
+            const sandboxes = await this.source.listSandboxes();
             const match = sandboxes.find((s) => s.id === node.sandboxId);
             return match ? buildSandboxAgentNodes(match) : [];
         }

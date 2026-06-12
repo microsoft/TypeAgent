@@ -11,6 +11,8 @@ import { createStudioRuntime } from "./studioRuntime.js";
 import type { AvailableAgent } from "@typeagent/core/runtime";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
+import { StudioServiceSandboxSource } from "./sandboxSource.js";
+import type { SandboxSource } from "./sandboxSource.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
 import type { CorpusTreeNode } from "./corpusTreePresentation.js";
 import {
@@ -65,18 +67,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
     registerStudioCommands(context, runtime);
 
-    const sandboxTree = new SandboxTreeProvider(runtime);
+    // One shared connection to the studio service for all channel-backed views.
+    // Created early because the Sandbox view reads only through it (no in-process
+    // fallback — the agent runtime is the single source of truth for sandboxes).
+    const connection = new StudioServiceConnection(repoRootInfo.repoRoot);
+    const sandboxSource = new StudioServiceSandboxSource(connection);
 
-    // Replay the persisted sandbox set asynchronously so activation stays
-    // synchronous; the sandbox tree refreshes via the lifecycle event
-    // subscription as each sandbox comes back online.
-    runtime.restoreSandboxes().catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn(
-            "[typeagent-studio] Failed to restore persisted sandboxes:",
-            err,
-        );
-    });
+    const sandboxTree = new SandboxTreeProvider(sandboxSource);
+
+    // Sandboxes are restored from the agent runtime's persisted snapshot on the
+    // first successful connect (wired in the connection state handler below),
+    // not at activation — the agent-server may not be up yet.
     context.subscriptions.push(
         sandboxTree,
         vscode.window.registerTreeDataProvider(SANDBOX_VIEW_ID, sandboxTree),
@@ -113,7 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         options =
                             trimmed.length > 0 ? { id: trimmed } : undefined;
                     }
-                    const status = await runtime.startSandbox(options);
+                    const status = await sandboxSource.startSandbox(options);
                     vscode.window.showInformationMessage(
                         `Sandbox '${status.id}' started.`,
                     );
@@ -127,12 +128,12 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.stopSandbox",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 try {
-                    await runtime.stopSandbox(id);
+                    await sandboxSource.stopSandbox(id);
                     vscode.window.showInformationMessage(
                         `Sandbox '${id}' stopped.`,
                     );
@@ -146,12 +147,12 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.restartSandbox",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 try {
-                    await runtime.restartSandbox(id);
+                    await sandboxSource.restartSandbox(id);
                     vscode.window.showInformationMessage(
                         `Sandbox '${id}' restarted.`,
                     );
@@ -165,18 +166,18 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.loadAgent",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 // Exclude agents already loaded in this sandbox from the
                 // suggestions (loading a duplicate is a no-op / confusing).
                 const loaded = new Set(
-                    (await runtime.listSandboxes())
+                    (await sandboxSource.listSandboxes())
                         .find((s) => s.id === id)
                         ?.agents.map((a) => a.name) ?? [],
                 );
-                const available = (await runtime.listAvailableAgents()).filter(
+                const available = (await sandboxSource.listAvailableAgents()).filter(
                     (a) => !loaded.has(a.name),
                 );
                 const agentRef =
@@ -202,7 +203,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    const status = await runtime.loadSandboxAgent(
+                    const status = await sandboxSource.loadSandboxAgent(
                         id,
                         agentRef.trim(),
                     );
@@ -298,7 +299,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    await runtime.unloadSandboxAgent(id, agentName);
+                    await sandboxSource.unloadSandboxAgent(id, agentName);
                     vscode.window.showInformationMessage(
                         `Unloaded agent '${agentName}' from '${id}'.`,
                     );
@@ -492,13 +493,8 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // One shared connection to the studio service for all channel-backed views
-    // (Event Log + Collisions). Auto-connects with backoff and reconnects on
-    // drop; a single socket means `@system ports` shows one client. The Impact
-    // Report keeps its own dedicated client for the heavier replay path.
-    const connection = new StudioServiceConnection(repoRootInfo.repoRoot);
-
-    // Service connection status bar (clicking re-attempts the connection).
+    // Service connection status bar (clicking re-attempts the connection). The
+    // shared `connection` is created earlier (the Sandbox view depends on it).
     const SERVICE_CONNECT_COMMAND = "typeagent-studio.connectStudioService";
     const serviceStatusBar = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Left,
@@ -701,7 +697,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     // re-evaluate against the freshly built grammar; this also
                     // emits sandbox.agent.loaded, which refreshes the trees and
                     // triggers the collision auto-scan.
-                    await runtime.refreshSandboxAgent(agent);
+                    await sandboxSource.refreshSandboxAgent(agent);
                     const scan = await runCollisionScan();
                     const stillUnbuilt = scan.skipped.some(
                         (s) =>
@@ -781,10 +777,12 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // React to the shared connection's state: swap both views between the
-    // channel (connected) and the in-process runtime (otherwise), and reflect
-    // it in the status bar + view descriptions. Fires immediately with the
-    // current ("disconnected") state, seeding the local-runtime sources.
+    // React to the shared connection's state: Event Log + Collisions swap
+    // between the channel (connected) and the in-process runtime (otherwise);
+    // the Sandbox view has no in-process fallback (it shows a disconnected row).
+    // Restores the agent runtime's persisted sandboxes on the first connect.
+    // Fires immediately with the current ("disconnected") state.
+    let sandboxesRestored = false;
     context.subscriptions.push(
         connection.onStateChanged((state) => {
             renderServiceStatus(state);
@@ -800,6 +798,21 @@ export function activate(context: vscode.ExtensionContext): void {
             collisions.setSource(currentCollisionsSource);
             rebindAgentLoad();
             collisionsView.description = label;
+
+            sandboxTree.setConnected(connected);
+            if (connected && !sandboxesRestored) {
+                sandboxesRestored = true;
+                // Replay the agent runtime's persisted sandboxes once connected.
+                void sandboxSource
+                    .restoreSandboxes()
+                    .then(() => sandboxTree.refresh())
+                    .catch((err) =>
+                        console.warn(
+                            "[typeagent-studio] Failed to restore sandboxes:",
+                            describeError(err),
+                        ),
+                    );
+            }
         }),
         vscode.commands.registerCommand(SERVICE_CONNECT_COMMAND, async () => {
             const ok = await connection.connect();
@@ -841,13 +854,13 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 async function resolveSandboxId(
-    runtime: ReturnType<typeof createStudioRuntime>,
+    source: SandboxSource,
     node: SandboxTreeNode | undefined,
 ): Promise<string | undefined> {
     if (node?.sandboxId) {
         return node.sandboxId;
     }
-    const sandboxes = await runtime.listSandboxes();
+    const sandboxes = await source.listSandboxes();
     if (sandboxes.length === 0) {
         vscode.window.showInformationMessage("No sandboxes are running.");
         return undefined;

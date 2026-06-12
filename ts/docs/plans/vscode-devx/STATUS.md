@@ -15,7 +15,7 @@ than an in-memory stand-in.
 
 | Capability                                                     | Core logic                                   | UI                                       | Wired to dispatcher                                   | Tested |
 | -------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------- | ----------------------------------------------------- | ------ |
-| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view                             | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
+| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view (channel-backed; agent runtime is source of truth) | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
 | Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                        | n/a                                                   | ✅     |
 | Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                             | n/a                                                   | ✅     |
 | Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view (+ channel-backed source)   | ❌ most emit sites unwired                            | ✅     |
