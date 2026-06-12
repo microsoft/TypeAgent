@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "./cliPath.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import {
     ScenarioTemplate,
@@ -308,6 +309,7 @@ export class ScenarioBasedGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -1036,6 +1038,7 @@ Return the complete corrected grammar, starting with the copyright header.`;
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 

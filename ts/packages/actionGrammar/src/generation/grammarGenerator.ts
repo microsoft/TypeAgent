@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "./cliPath.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import { globalPhraseSetRegistry } from "../builtInPhraseMatchers.js";
@@ -354,6 +355,7 @@ Generate a corrected rule now.`;
             prompt: fullPrompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
