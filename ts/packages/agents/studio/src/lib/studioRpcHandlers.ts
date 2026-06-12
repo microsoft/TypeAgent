@@ -44,16 +44,24 @@ export function createStudioInvokeHandlers(
             };
         },
         async listCollisions(repoRoot, filter) {
-            return conn.getRuntime(repoRoot).listCollisions(filter);
+            // JSON coerces a trailing `undefined` arg to `null` on the wire;
+            // map it back so runtime default-parameter values apply.
+            return conn.getRuntime(repoRoot).listCollisions(filter ?? undefined);
         },
         async scanGrammarCollisions(repoRoot, request) {
-            return conn.getRuntime(repoRoot).scanGrammarCollisions(request);
+            return conn
+                .getRuntime(repoRoot)
+                .scanGrammarCollisions(request ?? undefined);
         },
         async clearCollisions(repoRoot, filter) {
-            return conn.getRuntime(repoRoot).clearCollisions(filter);
+            return conn
+                .getRuntime(repoRoot)
+                .clearCollisions(filter ?? undefined);
         },
         async queryRecentEvents(repoRoot, limit) {
-            return conn.getRuntime(repoRoot).queryRecentEvents(limit);
+            return conn
+                .getRuntime(repoRoot)
+                .queryRecentEvents(limit ?? undefined);
         },
         async listCorpusAgents(repoRoot) {
             return conn.getRuntime(repoRoot).listCorpusAgents();

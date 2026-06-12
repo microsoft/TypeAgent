@@ -76,11 +76,20 @@ function createRuntimeStub(): {
         ],
         listCollisions: async () => [],
         clearCollisions: async () => 0,
-        scanGrammarCollisions: async () => ({
-            scanned: ["player", "calendar"],
-            skipped: [],
-            collisionCount: 0,
-        }),
+        scanGrammarCollisions: async (request?: unknown) => {
+            // Regression guard: JSON coerces a trailing `undefined` arg to
+            // `null` on the wire; the handler must map it back to `undefined`
+            // so the runtime's `request = {}` default applies (otherwise
+            // `request.sandboxId` throws on null).
+            if (request === null) {
+                throw new Error("scanGrammarCollisions received null request");
+            }
+            return {
+                scanned: ["player", "calendar"],
+                skipped: [],
+                collisionCount: 0,
+            };
+        },
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => ["player", "calendar"],
         replayCorpus: async (request: { agent: string }) => ({
@@ -191,7 +200,13 @@ describe("studio service channel (in-memory rpc)", () => {
     it("scanGrammarCollisions and clearCollisions round-trip", async () => {
         const stub = createRuntimeStub();
         const { client } = wireClientServer(stub);
-        const scan = await client.invoke("scanGrammarCollisions", undefined);
+        // Pass the request arg explicitly as undefined → arrives as null on the
+        // wire; the handler must coerce it back so the stub doesn't reject it.
+        const scan = await client.invoke(
+            "scanGrammarCollisions",
+            undefined,
+            undefined,
+        );
         expect(scan.scanned).toEqual(["player", "calendar"]);
         expect(scan.collisionCount).toBe(0);
         expect(await client.invoke("clearCollisions", undefined)).toBe(0);
