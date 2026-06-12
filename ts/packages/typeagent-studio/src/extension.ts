@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
-import type { AvailableAgent } from "@typeagent/core/runtime";
+import type { AvailableAgent, StudioInfo } from "@typeagent/core/runtime";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
@@ -36,6 +36,7 @@ import {
     EVENT_LOG_VIEW_ID,
     EventLogTreeProvider,
 } from "./eventLogTreeProvider.js";
+import { StudioServiceEventSource } from "./eventLogSource.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
@@ -482,15 +483,115 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
+    // Event Log starts on the in-process runtime (no startup dependency on a
+    // running agent-server) and can cut over to the `studio` agent's service
+    // channel — the Option B "one runtime, one source of truth" path. The
+    // command below performs the swap; a dropped connection falls back to the
+    // in-process runtime. `createTreeView` (vs registerTreeDataProvider) lets us
+    // surface the active source in the view's description.
     const eventLog = new EventLogTreeProvider(runtime);
+    const eventLogView = vscode.window.createTreeView(EVENT_LOG_VIEW_ID, {
+        treeDataProvider: eventLog,
+    });
+    eventLogView.description = "local";
+
+    let eventChannelSource: StudioServiceEventSource | undefined;
+
+    const fallbackEventLogToRuntime = () => {
+        const dead = eventChannelSource;
+        eventChannelSource = undefined; // mark inactive before disposing
+        dead?.dispose();
+        eventLog.setSource(runtime);
+        eventLogView.description = "local";
+    };
+
+    // Connect (or reconnect) the Event Log to the studio service channel.
+    // Idempotent: a prior channel source is dropped first. Returns whether a
+    // connection was established (and the service info when available — a failed
+    // info fetch after a successful connect is NOT treated as "not connected").
+    const connectEventLogToService = async (): Promise<
+        { connected: false } | { connected: true; info?: StudioInfo }
+    > => {
+        // Drop any prior source first; null out the active ref so its `onClosed`
+        // (fired by the close we're about to cause) doesn't trigger a fallback.
+        const prior = eventChannelSource;
+        eventChannelSource = undefined;
+        prior?.dispose();
+
+        const repoRoot = runtime.getRepoRootInfo().repoRoot;
+        const source = await StudioServiceEventSource.connect({
+            ...(repoRoot !== undefined ? { repoRoot } : {}),
+            onClosed: () => {
+                // Only fall back if this is still the active source (ignore the
+                // close caused by a deliberate dispose/reconnect).
+                if (eventChannelSource === source) {
+                    fallbackEventLogToRuntime();
+                }
+            },
+        });
+        if (source === undefined) {
+            // Stay on / return to the in-process runtime.
+            eventLog.setSource(runtime);
+            eventLogView.description = "local";
+            return { connected: false };
+        }
+        eventChannelSource = source;
+        eventLog.setSource(source);
+        eventLogView.description = "studio service";
+        try {
+            return { connected: true, info: await source.getStudioInfo() };
+        } catch {
+            return { connected: true };
+        }
+    };
+
     context.subscriptions.push(
         eventLog,
-        vscode.window.registerTreeDataProvider(EVENT_LOG_VIEW_ID, eventLog),
+        eventLogView,
+        {
+            dispose: () => {
+                const s = eventChannelSource;
+                eventChannelSource = undefined;
+                s?.dispose();
+            },
+        },
         vscode.commands.registerCommand("typeagent-studio.refreshEvents", () =>
             eventLog.refresh(),
         ),
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
+        ),
+        // Cut the Event Log over to the studio agent's runtime over the service
+        // channel (Option B). Degrades gracefully when no agent-server is up.
+        vscode.commands.registerCommand(
+            "typeagent-studio.connectStudioService",
+            async () => {
+                try {
+                    const result = await connectEventLogToService();
+                    if (!result.connected) {
+                        void vscode.window.showWarningMessage(
+                            "TypeAgent Studio service not found — start an agent-server with the studio agent enabled, then retry.",
+                        );
+                        return;
+                    }
+                    const info = result.info;
+                    const detail =
+                        info === undefined
+                            ? ""
+                            : ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${info.agentLocations.reduce(
+                                  (n, l) => n + l.agentCount,
+                                  0,
+                              )} agent(s)`;
+                    void vscode.window.showInformationMessage(
+                        `Event Log connected to the studio service${detail}.`,
+                    );
+                } catch (error) {
+                    fallbackEventLogToRuntime();
+                    void vscode.window.showErrorMessage(
+                        `Failed to connect to the studio service: ${describeError(error)}`,
+                    );
+                }
+            },
         ),
     );
 

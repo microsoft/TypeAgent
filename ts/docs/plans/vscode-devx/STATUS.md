@@ -18,7 +18,7 @@ than an in-memory stand-in.
 | Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view                             | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
 | Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                        | n/a                                                   | ✅     |
 | Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                             | n/a                                                   | ✅     |
-| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view                             | ❌ most emit sites unwired                            | ✅     |
+| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view (+ channel-backed source)   | ❌ most emit sites unwired                            | ✅     |
 | Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                            | ❌ no real schema parse / grammar compile             | ✅     |
 | Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars)                         | ✅     |
 | Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                               | n/a                                                   | ✅     |
@@ -113,14 +113,18 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **Studio service channel (the Option B migration; plan phase P-1.5)** — the
-   typed `StudioRequest/Response<T>` + `StudioEvent` subscription served by the
-   `studio` agent's **own WebSocket** (the `code`↔`coda` pattern: port via
-   `registerPort`, client discovers via `discoverPort("studio")`), with
-   `agent-rpc` `createRpc` framing and capability-token authorization. This is
-   the prerequisite for any rich client and the step that unifies
-   collisions/events across the UI, chat, and MCP (one runtime). Build it
-   **before** the webview so the webview is its first, greenfield client.
+1. **Studio service channel (the Option B migration; plan phase P-1.5)** —
+   **mostly done.** The typed service channel served by the `studio` agent's
+   **own WebSocket** (the `code`↔`coda` pattern: port via `registerPort`, client
+   discovers via `discoverPort("studio")`, `agent-rpc` `createRpc` framing) is
+   built and verified end-to-end, and the **Event Log tree now reads through the
+   channel** (the "Connect Event Log to studio service" command swaps it from the
+   in-process runtime to the agent's runtime, with graceful fallback on
+   disconnect) — satisfying the "≥1 existing tree over the channel" half of the
+   P-1.5 exit. Also wired: the `studio` agent reports its live client count to
+   `@system ports`. **Remaining for P-1.5 exit:** the Impact Report webview shell
+   as the greenfield first client (item 2), and the channel guardrails
+   (capability-token auth; subscription cancellation/backpressure).
 2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
    restore, CSP/assets, message protocol, theming before full replay exists.
    Built as a **client of the `studio` agent over the channel**, not on the

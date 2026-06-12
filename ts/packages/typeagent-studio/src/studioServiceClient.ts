@@ -42,6 +42,12 @@ export class StudioServiceClient {
     static async connect(options: {
         repoRoot?: string;
         onEvent?: (event: StudioEvent) => void;
+        /**
+         * Invoked once when the underlying socket closes (agent-server stopped,
+         * studio agent disabled, network drop). Lets a client fall back instead
+         * of silently treating a dead connection as "no events".
+         */
+        onClose?: () => void;
         /** Override discovery with an explicit `ws://host:port` (tests). */
         endpoint?: string;
         /** Where to reach the agent-server discovery channel. */
@@ -58,6 +64,9 @@ export class StudioServiceClient {
             socket.once("open", () => resolve());
             socket.once("error", reject);
         });
+        if (options.onClose) {
+            socket.on("close", options.onClose);
+        }
         const callHandlers: StudioClientCallFunctions = {
             studioEvent: (event: StudioEvent) => options.onEvent?.(event),
         };

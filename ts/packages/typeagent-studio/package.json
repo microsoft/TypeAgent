@@ -31,7 +31,7 @@
     "commands": [
       {
         "command": "typeagent-studio.connectStudioService",
-        "title": "Connect to studio service (show info + events)",
+        "title": "Connect Event Log to studio service",
         "category": "TypeAgent Studio"
       },
       {
