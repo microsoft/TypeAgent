@@ -105,7 +105,9 @@ execFileSync("npx", postjectArgs, { stdio: "inherit", shell: isWin });
 // 6. Re-sign on macOS (ad-hoc) so the OS will run the modified binary.
 if (isMac) {
     try {
-        execFileSync("codesign", ["--sign", "-", exePath], { stdio: "inherit" });
+        execFileSync("codesign", ["--sign", "-", exePath], {
+            stdio: "inherit",
+        });
     } catch {
         /* best-effort; CI signs for release */
     }
