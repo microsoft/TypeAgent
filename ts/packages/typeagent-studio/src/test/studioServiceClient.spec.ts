@@ -51,6 +51,7 @@ async function startStubServer(): Promise<{
                     0,
                 );
             },
+            unsubscribeEvents: async () => {},
         };
         const rpc = createRpc<
             Record<string, never>,
@@ -112,3 +113,55 @@ test("StudioServiceClient.connect returns undefined when discovery finds nothing
     });
     assert.equal(client, undefined);
 });
+
+test("StudioServiceClient presents the capability token as a Bearer header", async () => {
+    const TOKEN = "a".repeat(64);
+    // A server that only accepts the right Bearer token.
+    const server = new WebSocketServer({
+        host: "127.0.0.1",
+        port: 0,
+        verifyClient: (info, cb) => {
+            const auth = info.req.headers.authorization;
+            cb(auth === `Bearer ${TOKEN}`, 401, "Unauthorized");
+        },
+    });
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    server.on("connection", (socket) => {
+        const handlers: StudioServiceInvokeFunctions = {
+            getStudioInfo: async () => STUB_INFO,
+            listCollisions: async () => [],
+            queryRecentEvents: async () => [],
+            subscribeEvents: async () => {},
+            unsubscribeEvents: async () => {},
+        };
+        createRpc<
+            Record<string, never>,
+            StudioClientCallFunctions,
+            StudioServiceInvokeFunctions
+        >("test:auth-server", createWebSocketRpcChannel(socket), handlers);
+    });
+    const port = (server.address() as { port: number }).port;
+    const endpoint = `ws://127.0.0.1:${port}`;
+    const close = () =>
+        new Promise<void>((resolve) => {
+            for (const c of server.clients) c.terminate();
+            server.close(() => resolve());
+        });
+    try {
+        // Correct token → connects and round-trips.
+        const ok = await StudioServiceClient.connect({ endpoint, token: TOKEN });
+        assert.ok(ok, "should connect with the correct token");
+        assert.equal((await ok!.getStudioInfo()).repoRootInfo.repoRoot, "/repo/ts");
+        ok!.close();
+
+        // Wrong token → upgrade rejected → undefined (graceful).
+        const bad = await StudioServiceClient.connect({
+            endpoint,
+            token: "b".repeat(64),
+        });
+        assert.equal(bad, undefined);
+    } finally {
+        await close();
+    }
+});
+

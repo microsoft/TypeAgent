@@ -19,6 +19,13 @@ export interface StudioServiceConnection {
     pushEvent(event: StudioEvent): void;
     /** Register a disposable released when the connection closes. */
     addDisposable(disposable: { dispose(): void }): void;
+    /**
+     * Install this connection's single live event subscription, disposing any
+     * prior one. Pass `undefined` to cancel. The server owns exactly one such
+     * subscription per connection (so `subscribeEvents` is idempotent and
+     * `unsubscribeEvents` is a clean cancellation).
+     */
+    setEventSubscription(disposable: { dispose(): void } | undefined): void;
 }
 
 /**
@@ -43,13 +50,16 @@ export function createStudioInvokeHandlers(
             return conn.getRuntime(repoRoot).queryRecentEvents(limit);
         },
         async subscribeEvents(repoRoot) {
-            // Subscribe this connection to the repo's event stream; the
-            // disposable is released when the socket closes so we don't leak
-            // listeners or cross repos.
+            // Subscribe this connection to the repo's event stream. Installing
+            // replaces any prior subscription (idempotent — never stacks
+            // duplicate listeners) and the server releases it on socket close.
             const disposable = conn
                 .getRuntime(repoRoot)
                 .onAnyEvent((event: StudioEvent) => conn.pushEvent(event));
-            conn.addDisposable(disposable);
+            conn.setEventSubscription(disposable);
+        },
+        async unsubscribeEvents() {
+            conn.setEventSubscription(undefined);
         },
     };
 }

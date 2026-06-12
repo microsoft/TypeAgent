@@ -12,10 +12,19 @@ import type {
     StudioClientCallFunctions,
     StudioServiceInvokeFunctions,
 } from "@typeagent/core/runtime";
+import { studioServiceTokenMatches } from "@typeagent/core/runtime";
 import type { StudioEvent } from "@typeagent/core/events";
 import { createStudioInvokeHandlers } from "./studioRpcHandlers.js";
 
 const debug = registerDebug("typeagent:studio:websocket");
+
+/**
+ * Per-connection live-event backpressure: if the socket's outbound buffer grows
+ * past this many bytes (slow/stuck client), drop further live events rather than
+ * queue them unboundedly. The event log is best-effort "recent activity" and the
+ * client can recover the full picture via `queryRecentEvents` on refresh.
+ */
+const BACKPRESSURE_BYTES = 1024 * 1024;
 
 // Loopback web clients (the VS Code extension host connects as a Node `ws`
 // client and sends no Origin, which is allowed; the webview origin is allowed
@@ -61,10 +70,15 @@ export class StudioServiceServer {
     /**
      * Bind a new server on `port` (0 = OS-assigned). Resolves only after the
      * `listening` event so callers can read {@link port}; rejects on bind error.
+     *
+     * `expectedToken`, when provided, gates every upgrade: the client must send
+     * `Authorization: Bearer <token>` matching it (checked alongside the Origin
+     * allowlist). Pass `undefined` to skip the token check (in-process tests).
      */
     public static start(
         resolveRuntime: StudioRuntimeResolver,
         port: number = 0,
+        expectedToken?: string,
     ): Promise<StudioServiceServer> {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({
@@ -74,12 +88,25 @@ export class StudioServiceServer {
                     const origin = info.req.headers.origin as
                         | string
                         | undefined;
-                    if (isAllowedOrigin(origin)) {
-                        cb(true);
-                    } else {
+                    if (!isAllowedOrigin(origin)) {
                         debug(`Rejecting WS upgrade from origin ${origin}`);
                         cb(false, 403, "Origin not allowed");
+                        return;
                     }
+                    if (expectedToken !== undefined) {
+                        const presented = parseBearerToken(
+                            info.req.headers.authorization,
+                        );
+                        if (
+                            !studioServiceTokenMatches(presented, expectedToken)
+                        ) {
+                            // Generic 401: don't distinguish missing vs wrong.
+                            debug("Rejecting WS upgrade: bad capability token");
+                            cb(false, 401, "Unauthorized");
+                            return;
+                        }
+                    }
+                    cb(true);
                 },
             });
             let settled = false;
@@ -102,6 +129,10 @@ export class StudioServiceServer {
 
     private onConnection(socket: WebSocket): void {
         const disposables: { dispose(): void }[] = [];
+        // This connection's single live-event subscription (idempotent
+        // subscribe / cancellation); owned here, never added to `disposables`.
+        let eventSubscription: { dispose(): void } | undefined;
+        let droppedEvents = 0;
         const channel = createWebSocketRpcChannel(socket);
 
         this.connectionCount++;
@@ -125,13 +156,36 @@ export class StudioServiceServer {
                 getRuntime: this.resolveRuntime,
                 pushEvent: (event: StudioEvent) => pushEvent(event),
                 addDisposable: (d) => disposables.push(d),
+                setEventSubscription: (d) => {
+                    // Replace (idempotent subscribe) / clear (cancellation).
+                    eventSubscription?.dispose();
+                    eventSubscription = d;
+                },
             }),
         );
-        pushEvent = (event: StudioEvent) => rpc.send("studioEvent", event);
+        pushEvent = (event: StudioEvent) => {
+            if (socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            // Backpressure: under a slow/stuck client, drop rather than queue
+            // unboundedly (recoverable via queryRecentEvents on refresh).
+            if (socket.bufferedAmount > BACKPRESSURE_BYTES) {
+                droppedEvents++;
+                return;
+            }
+            rpc.send("studioEvent", event);
+        };
 
         socket.on("close", () => {
             this.connectionCount = Math.max(0, this.connectionCount - 1);
             this.onClientCountChanged?.(this.connectionCount);
+            if (droppedEvents > 0) {
+                debug(
+                    `connection closed after dropping ${droppedEvents} live event(s) under backpressure`,
+                );
+            }
+            eventSubscription?.dispose();
+            eventSubscription = undefined;
             for (const d of disposables.splice(0)) {
                 try {
                     d.dispose();
@@ -154,6 +208,17 @@ export class StudioServiceServer {
             this.server.close(() => resolve());
         });
     }
+}
+
+/** Extract the token from an `Authorization: Bearer <token>` header, if present. */
+function parseBearerToken(
+    header: string | string[] | undefined,
+): string | undefined {
+    if (typeof header !== "string") {
+        return undefined; // missing, or duplicated (string[]) — reject
+    }
+    const match = /^Bearer (\S+)$/.exec(header);
+    return match ? match[1] : undefined;
 }
 
 /** Adapt a `ws` WebSocket to the `agent-rpc` {@link RpcChannel} interface. */

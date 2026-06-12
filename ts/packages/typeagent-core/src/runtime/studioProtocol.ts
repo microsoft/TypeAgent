@@ -48,10 +48,17 @@ export type StudioServiceInvokeFunctions = {
     ): Promise<StudioEvent[]>;
     /**
      * Start pushing live `studioEvent` calls to *this* connection for the given
-     * repo. Idempotent per connection; the subscription is released when the
-     * connection closes.
+     * repo. Idempotent per connection: a second call replaces the connection's
+     * single subscription (it never stacks duplicate listeners). The
+     * subscription is released when the connection closes or via
+     * {@link unsubscribeEvents}.
      */
     subscribeEvents(repoRoot?: string): Promise<void>;
+    /**
+     * Cancel this connection's live event subscription, if any. Idempotent — a
+     * no-op when not subscribed.
+     */
+    unsubscribeEvents(): Promise<void>;
 };
 
 /** Server → client pushes. */

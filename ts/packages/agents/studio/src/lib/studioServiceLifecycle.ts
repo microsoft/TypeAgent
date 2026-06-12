@@ -3,6 +3,11 @@
 
 import type { SessionContext } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
+import {
+    generateStudioServiceToken,
+    writeStudioServiceToken,
+    clearStudioServiceToken,
+} from "@typeagent/core/runtime";
 import { StudioServiceServer } from "./studioServiceServer.js";
 import { getStudioRuntime } from "./runtime.js";
 
@@ -35,6 +40,11 @@ let sharedRefCount = 0;
 // agent).
 const sharedActiveSessions = new Set<SessionContext<StudioActionContext>>();
 
+// Capability token for the currently-bound shared server (undefined when not
+// running). Minted per bind and published to a per-port file the extension
+// reads; cleared when the server stops.
+let sharedToken: string | undefined;
+
 /** `STUDIO_WEBSOCKET_PORT` pins the port (debugging); otherwise OS-assigned. */
 function getStudioBindPort(): number {
     const raw = process.env["STUDIO_WEBSOCKET_PORT"];
@@ -58,10 +68,23 @@ async function ensureSharedServer(): Promise<StudioServiceServer> {
     }
     sharedStarting = (async () => {
         try {
+            const token = generateStudioServiceToken();
             const server = await StudioServiceServer.start(
                 (repoRoot) => getStudioRuntime(repoRoot),
                 getStudioBindPort(),
+                token,
             );
+            // Publish the capability token to a per-port file the extension
+            // reads. Fail closed: if we can't write it, no client could
+            // authenticate, so tear the server down rather than register an
+            // unreachable port.
+            try {
+                await writeStudioServiceToken(server.port, token);
+            } catch (e) {
+                await server.close();
+                throw e;
+            }
+            sharedToken = token;
             // Fan out client-count updates to active sessions. Attribute the
             // global count to the primary session (first in insertion order)
             // and 0 to the rest so `@system ports` summing doesn't
@@ -87,6 +110,11 @@ async function ensureSharedServer(): Promise<StudioServiceServer> {
 /** The bound port of the shared Studio service server, if running. */
 export function getSharedStudioPort(): number | undefined {
     return sharedServer?.port;
+}
+
+/** The capability token of the shared Studio service server, if running. */
+export function getSharedStudioToken(): string | undefined {
+    return sharedToken;
 }
 
 export async function initializeStudioContext(): Promise<StudioActionContext> {
@@ -172,10 +200,15 @@ async function releaseSession(
     sharedRefCount = Math.max(0, sharedRefCount - 1);
     if (sharedRefCount === 0 && sharedServer !== undefined) {
         const server = sharedServer;
+        const port = server.port;
         sharedServer = undefined;
-        sharedClosing = server.close().finally(() => {
-            sharedClosing = undefined;
-        });
+        sharedToken = undefined;
+        sharedClosing = server
+            .close()
+            .then(() => clearStudioServiceToken(port))
+            .finally(() => {
+                sharedClosing = undefined;
+            });
         await sharedClosing;
         debug("studio service stopped (no sessions remaining)");
     } else if (wasPrimary && sharedServer !== undefined) {

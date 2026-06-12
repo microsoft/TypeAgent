@@ -8,8 +8,16 @@ import {
     updateStudioContext,
     closeStudioContext,
     getSharedStudioPort,
+    getSharedStudioToken,
     type StudioActionContext,
 } from "../src/lib/studioServiceLifecycle.js";
+
+/** Open an authenticated socket to the shared server (Bearer capability token). */
+function connectAuthed(port: number): WebSocket {
+    return new WebSocket(`ws://127.0.0.1:${port}`, {
+        headers: { Authorization: `Bearer ${getSharedStudioToken()}` },
+    });
+}
 
 /** Build a fake SessionContext exposing only what the lifecycle touches. */
 async function makeCtx(): Promise<{
@@ -64,8 +72,8 @@ describe("studio service lifecycle", () => {
         const port = getSharedStudioPort();
         expect(typeof port).toBe("number");
 
-        // The bound port is actually accepting connections.
-        const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+        // The bound port is actually accepting (authenticated) connections.
+        const socket = connectAuthed(port!);
         await new Promise<void>((resolve, reject) => {
             socket.on("open", () => resolve());
             socket.on("error", reject);
@@ -111,7 +119,7 @@ describe("studio service lifecycle", () => {
         expect(s2.lastCount()).toBe(0);
 
         // A client connects → primary (s1) reports 1, non-primary stays 0.
-        const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+        const socket = connectAuthed(port);
         await new Promise<void>((resolve, reject) => {
             socket.on("open", () => resolve());
             socket.on("error", reject);
@@ -128,5 +136,48 @@ describe("studio service lifecycle", () => {
         await closeStudioContext(s1.ctx);
         await closeStudioContext(s2.ctx);
         expect(getSharedStudioPort()).toBeUndefined();
+    });
+
+    it("rejects connections without a valid capability token", async () => {
+        const s = await makeCtx();
+        await updateStudioContext(true, s.ctx, "studioActions");
+        const port = getSharedStudioPort()!;
+        try {
+            // No Authorization header → upgrade rejected (401).
+            const noToken = new WebSocket(`ws://127.0.0.1:${port}`);
+            const noTokenStatus = await new Promise<number | "open">(
+                (resolve) => {
+                    noToken.on("open", () => resolve("open"));
+                    noToken.on("unexpected-response", (_req, res) =>
+                        resolve(res.statusCode ?? 0),
+                    );
+                    noToken.on("error", () => resolve(0));
+                },
+            );
+            expect(noTokenStatus).toBe(401);
+
+            // Wrong token → also rejected.
+            const badToken = new WebSocket(`ws://127.0.0.1:${port}`, {
+                headers: { Authorization: `Bearer ${"0".repeat(64)}` },
+            });
+            const badStatus = await new Promise<number | "open">((resolve) => {
+                badToken.on("open", () => resolve("open"));
+                badToken.on("unexpected-response", (_req, res) =>
+                    resolve(res.statusCode ?? 0),
+                );
+                badToken.on("error", () => resolve(0));
+            });
+            expect(badStatus).toBe(401);
+
+            // Correct token → connects.
+            const good = connectAuthed(port);
+            await new Promise<void>((resolve, reject) => {
+                good.on("open", () => resolve());
+                good.on("error", reject);
+            });
+            good.close();
+        } finally {
+            await closeStudioContext(s.ctx);
+        }
     });
 });

@@ -49,6 +49,7 @@ async function startStubServer(): Promise<{
                     20,
                 );
             },
+            unsubscribeEvents: async () => {},
         };
         const rpc = createRpc<
             Record<string, never>,

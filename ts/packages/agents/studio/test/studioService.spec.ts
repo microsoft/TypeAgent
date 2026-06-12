@@ -91,6 +91,8 @@ function wireClientServer(stub: { runtime: StudioRuntime }) {
     const [clientChannel, serverChannel] = createChannelPair();
     const received: StudioEvent[] = [];
     const disposables: { dispose(): void }[] = [];
+    // Mirror the real server: a single owned event subscription per connection.
+    let eventSubscription: { dispose(): void } | undefined;
     let pushEvent: (e: StudioEvent) => void = () => {};
 
     const server = createRpc<
@@ -104,6 +106,10 @@ function wireClientServer(stub: { runtime: StudioRuntime }) {
             getRuntime: () => stub.runtime,
             pushEvent: (e) => pushEvent(e),
             addDisposable: (d) => disposables.push(d),
+            setEventSubscription: (d) => {
+                eventSubscription?.dispose();
+                eventSubscription = d;
+            },
         }),
     );
     pushEvent = (e) => server.send("studioEvent", e);
@@ -151,5 +157,34 @@ describe("studio service channel (in-memory rpc)", () => {
         await new Promise((r) => setTimeout(r, 0));
         expect(received).toHaveLength(1);
         expect(received[0].type).toBe("collision.detected");
+    });
+
+    it("subscribeEvents is idempotent — a second call doesn't duplicate pushes", async () => {
+        const stub = createRuntimeStub();
+        const { client, received } = wireClientServer(stub);
+        await client.invoke("subscribeEvents", undefined);
+        await client.invoke("subscribeEvents", undefined);
+        stub.fireEvent({ type: "collision.detected", ts: 1 } as StudioEvent);
+        await new Promise((r) => setTimeout(r, 0));
+        // One event in → exactly one push out (no stacked listeners).
+        expect(received).toHaveLength(1);
+    });
+
+    it("unsubscribeEvents stops further pushes", async () => {
+        const stub = createRuntimeStub();
+        const { client, received } = wireClientServer(stub);
+        await client.invoke("subscribeEvents", undefined);
+        await client.invoke("unsubscribeEvents");
+        stub.fireEvent({ type: "collision.detected", ts: 1 } as StudioEvent);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(received).toHaveLength(0);
+    });
+
+    it("unsubscribeEvents is a no-op when not subscribed", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        await expect(
+            client.invoke("unsubscribeEvents"),
+        ).resolves.toBeUndefined();
     });
 });
