@@ -8,7 +8,10 @@
 #
 # Manual / scheduled, not per-PR. Models azure-build-ts.yml / -package-shell.yml.
 
-trigger: none
+trigger: 
+  branches:
+    include:
+      - main
 
 pr:
   branches:

@@ -11,7 +11,10 @@
 # NOT Node's win32/darwin) expected by the launcher's `--rid auto` resolution.
 # Manual / scheduled, not per-PR.
 
-trigger: none
+trigger:
+  branches:
+    include:
+      - main
 
 pr:
   branches:
