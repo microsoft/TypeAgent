@@ -46,6 +46,12 @@ export function createStudioInvokeHandlers(
         async listCollisions(repoRoot, filter) {
             return conn.getRuntime(repoRoot).listCollisions(filter);
         },
+        async scanGrammarCollisions(repoRoot, request) {
+            return conn.getRuntime(repoRoot).scanGrammarCollisions(request);
+        },
+        async clearCollisions(repoRoot, filter) {
+            return conn.getRuntime(repoRoot).clearCollisions(filter);
+        },
         async queryRecentEvents(repoRoot, limit) {
             return conn.getRuntime(repoRoot).queryRecentEvents(limit);
         },

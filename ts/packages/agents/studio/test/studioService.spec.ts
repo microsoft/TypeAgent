@@ -75,6 +75,12 @@ function createRuntimeStub(): {
             { root: "/repo/ts/packages/agents", exists: true, agentCount: 2 },
         ],
         listCollisions: async () => [],
+        clearCollisions: async () => 0,
+        scanGrammarCollisions: async () => ({
+            scanned: ["player", "calendar"],
+            skipped: [],
+            collisionCount: 0,
+        }),
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => ["player", "calendar"],
         replayCorpus: async (request: { agent: string }) => ({
@@ -180,6 +186,15 @@ describe("studio service channel (in-memory rpc)", () => {
         expect(await client.invoke("queryRecentEvents", undefined, 5)).toEqual(
             [],
         );
+    });
+
+    it("scanGrammarCollisions and clearCollisions round-trip", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        const scan = await client.invoke("scanGrammarCollisions", undefined);
+        expect(scan.scanned).toEqual(["player", "calendar"]);
+        expect(scan.collisionCount).toBe(0);
+        expect(await client.invoke("clearCollisions", undefined)).toBe(0);
     });
 
     it("listCorpusAgents and replayCorpus round-trip", async () => {

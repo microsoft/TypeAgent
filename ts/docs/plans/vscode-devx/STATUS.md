@@ -20,7 +20,7 @@ than an in-memory stand-in.
 | Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                             | n/a                                                   | ✅     |
 | Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view (+ channel-backed source)   | ❌ most emit sites unwired                            | ✅     |
 | Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                            | ❌ no real schema parse / grammar compile             | ✅     |
-| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars)                         | ✅     |
+| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                         | ✅     |
 | Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                               | n/a                                                   | ✅     |
 | Replay / compare engine                                        | 🟡 engine + command                          | 🟡 quick-pick (no Impact Report)         | ❌ identity resolver (no two-version build/dispatch)  | ✅     |
 | Onboarding bridge (snapshot/restore, stale detection)          | ✅                                           | ✅ commands                              | ❌ in-memory bridge                                   | ✅     |
@@ -123,8 +123,11 @@ Ready to start (smallest → larger):
    Log tree** (swappable source, graceful fallback) and the **Impact Report
    webview** (replay over the channel). The agent also reports its live client
    count to `@system ports`. **Cleanup remaining (not blocking):** migrate the
-   other trees (Sandboxes / Corpora / Collisions) and delete the transitional
-   in-process `createStudioRuntime`.
+   remaining trees (Sandboxes / Corpora) and the onboarding surface, then delete
+   the transitional in-process `createStudioRuntime`. **Done so far:** the Event
+   Log **and Collisions** trees both read through the channel (swappable
+   sources, graceful fallback; Collisions scan/list are read-only analysis over
+   the channel).
 2. **`webviewKit` + Impact Report shell** — **done.** A minimal, reusable
    `webviewKit` (strict CSP/nonce HTML builder, singleton-panel host, typed
    host↔webview message protocol, browser-neutral replay view model) and an

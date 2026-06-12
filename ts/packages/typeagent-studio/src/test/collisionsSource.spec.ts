@@ -1,0 +1,112 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { WebSocketServer } from "ws";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type {
+    StudioServiceInvokeFunctions,
+    StudioClientCallFunctions,
+} from "@typeagent/core/runtime";
+import type { StudioEvent } from "@typeagent/core/events";
+import { createWebSocketRpcChannel } from "../studioServiceClient.js";
+import { StudioServiceCollisionsSource } from "../collisionsSource.js";
+
+/**
+ * Real ws server speaking the Studio protocol. `subscribeEvents` pushes a
+ * `collision.detected` then a `sandbox.agent.loaded` event a beat later so the
+ * source's listener fanout can be observed.
+ */
+async function startStubServer(): Promise<{
+    endpoint: string;
+    close: () => Promise<void>;
+}> {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    server.on("connection", (socket) => {
+        let push: (e: StudioEvent) => void = () => {};
+        const handlers: StudioServiceInvokeFunctions = {
+            getStudioInfo: async () => ({
+                repoRootInfo: { repoRoot: "/repo/ts", agentsDirFound: true },
+                agentLocations: [],
+            }),
+            listCollisions: async () => [],
+            scanGrammarCollisions: async () => ({
+                scanned: ["player"],
+                skipped: [],
+                collisionCount: 0,
+            }),
+            clearCollisions: async () => 0,
+            queryRecentEvents: async () => [],
+            listCorpusAgents: async () => [],
+            replayCorpus: async () => ({
+                runId: "r",
+                summary: {} as never,
+                rows: [],
+            }),
+            subscribeEvents: async () => {
+                setTimeout(() => {
+                    push({ type: "collision.detected", ts: 1 } as StudioEvent);
+                    push({
+                        type: "sandbox.agent.loaded",
+                        ts: 2,
+                    } as StudioEvent);
+                }, 20);
+            },
+            unsubscribeEvents: async () => {},
+        };
+        const rpc = createRpc<
+            Record<string, never>,
+            StudioClientCallFunctions,
+            StudioServiceInvokeFunctions
+        >("test:stub-server", createWebSocketRpcChannel(socket), handlers);
+        push = (e) => {
+            if (socket.readyState === socket.OPEN) {
+                rpc.send("studioEvent", e);
+            }
+        };
+    });
+    const port = (server.address() as { port: number }).port;
+    return {
+        endpoint: `ws://127.0.0.1:${port}`,
+        close: () =>
+            new Promise<void>((resolve) => {
+                for (const c of server.clients) c.terminate();
+                server.close(() => resolve());
+            }),
+    };
+}
+
+test("StudioServiceCollisionsSource delegates scan/clear and routes events", async () => {
+    const stub = await startStubServer();
+    const source = await StudioServiceCollisionsSource.connect({
+        endpoint: stub.endpoint,
+    });
+    assert.ok(source, "source should connect");
+    try {
+        const scan = await source!.scanGrammarCollisions();
+        assert.deepEqual(scan.scanned, ["player"]);
+        assert.equal(await source!.clearCollisions(), 0);
+
+        let collisions = 0;
+        let agentLoads = 0;
+        source!.onCollisionDetected(() => (collisions += 1));
+        source!.onAgentLoadChanged(() => (agentLoads += 1));
+        // The stub pushes one of each ~20ms after subscribe (done at connect);
+        // listeners attached above fire before then.
+        await new Promise((r) => setTimeout(r, 80));
+        assert.equal(collisions, 1, "collision.detected routed");
+        assert.equal(agentLoads, 1, "sandbox.agent.loaded routed");
+    } finally {
+        source!.dispose();
+        await stub.close();
+    }
+});
+
+test("StudioServiceCollisionsSource.connect returns undefined when discovery finds nothing", async () => {
+    const source = await StudioServiceCollisionsSource.connect({
+        agentServerUrl: "ws://127.0.0.1:1",
+    });
+    assert.equal(source, undefined);
+});

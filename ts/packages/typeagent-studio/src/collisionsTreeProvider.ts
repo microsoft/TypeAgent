@@ -4,7 +4,6 @@
 import * as vscode from "vscode";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import type { GrammarScanSkip } from "@typeagent/core/collisionScanner";
-import type { StudioRuntime } from "@typeagent/core/runtime";
 import {
     buildCollisionChildRows,
     buildCollisionRows,
@@ -12,6 +11,7 @@ import {
     type CollisionEntry,
     type CollisionRow,
 } from "./collisionsPresentation.js";
+import type { CollisionsSource } from "./collisionsSource.js";
 
 /** View id contributed in package.json. */
 export const COLLISIONS_VIEW_ID = "typeagentStudioCollisions";
@@ -21,8 +21,13 @@ export const COLLISIONS_CAPACITY = 200;
 
 /**
  * Thin VS Code adapter over the pure `collisionsPresentation` descriptors. It
- * owns a bounded, newest-first list of collisions fed by the runtime's
- * collision subscription; summarization/labelling lives in the pure module.
+ * owns a bounded, newest-first list of collisions fed by a
+ * {@link CollisionsSource}; summarization/labelling lives in the pure module.
+ *
+ * The source can be swapped at runtime via {@link setSource} (cutting over from
+ * the in-process runtime to the `studio` agent's service channel, with graceful
+ * fallback). Each swap is fenced by a monotonic generation so a stale source's
+ * in-flight reload or late collision event can't repopulate the tree.
  */
 export class CollisionsTreeProvider
     implements vscode.TreeDataProvider<CollisionRow>, vscode.Disposable
@@ -31,27 +36,42 @@ export class CollisionsTreeProvider
         CollisionRow | undefined
     >();
     readonly onDidChangeTreeData = this.emitter.event;
-    private readonly subscription: { dispose(): void };
+    private source: CollisionsSource;
+    private subscription: { dispose(): void } | undefined;
     private entries: CollisionEntry[] = [];
     private readonly entryBySeq = new Map<number, CollisionEntry>();
     private skipped: GrammarScanSkip[] = [];
     private seq = 0;
+    private generation = 0;
 
-    constructor(private readonly runtime: StudioRuntime) {
-        this.subscription = runtime.onCollisionDetected(() => {
-            void this.reload();
-        });
-        void this.reload();
+    constructor(source: CollisionsSource) {
+        this.source = source;
+        this.install(++this.generation);
+    }
+
+    /**
+     * Replace the backing source: dispose the prior subscription, clear the
+     * list (the new source is a different runtime), and re-read. Safe to call
+     * repeatedly.
+     */
+    setSource(source: CollisionsSource): void {
+        this.subscription?.dispose();
+        this.subscription = undefined;
+        this.entries = [];
+        this.entryBySeq.clear();
+        this.skipped = [];
+        this.refresh();
+        this.source = source;
+        this.install(++this.generation);
     }
 
     refresh(): void {
         this.emitter.fire(undefined);
     }
 
-    /** Re-read collisions from the runtime (e.g. after a scan that may have
-     *  cleared prior entries without emitting). */
-    async reloadFromRuntime(): Promise<void> {
-        await this.reload();
+    /** Re-read collisions from the active source (e.g. after a scan). */
+    async reload(): Promise<void> {
+        await this.reloadFenced(this.generation);
     }
 
     /**
@@ -65,7 +85,7 @@ export class CollisionsTreeProvider
     }
 
     async clear(): Promise<void> {
-        await this.runtime.clearCollisions();
+        await this.source.clearCollisions();
         this.entries = [];
         this.entryBySeq.clear();
         this.skipped = [];
@@ -109,8 +129,26 @@ export class CollisionsTreeProvider
         return entry ? buildCollisionChildRows(entry) : [];
     }
 
-    private async reload(): Promise<void> {
-        const collisions = await this.runtime.listCollisions();
+    private install(gen: number): void {
+        this.subscription = this.source.onCollisionDetected(() => {
+            if (gen !== this.generation) {
+                return; // stale source
+            }
+            void this.reloadFenced(gen);
+        });
+        void this.reloadFenced(gen);
+    }
+
+    private async reloadFenced(gen: number): Promise<void> {
+        let collisions: CollisionDetectedEvent[];
+        try {
+            collisions = await this.source.listCollisions();
+        } catch {
+            return; // source unreachable; leave the current view
+        }
+        if (gen !== this.generation) {
+            return; // superseded by a newer setSource
+        }
         // listCollisions returns newest-first; keep the most recent within cap.
         const capped = collisions.slice(0, COLLISIONS_CAPACITY);
         this.entries = [];
@@ -129,7 +167,9 @@ export class CollisionsTreeProvider
     }
 
     dispose(): void {
-        this.subscription.dispose();
+        this.generation++; // invalidate any in-flight reload
+        this.subscription?.dispose();
+        this.subscription = undefined;
         this.emitter.dispose();
     }
 }

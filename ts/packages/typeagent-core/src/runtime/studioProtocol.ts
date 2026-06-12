@@ -8,6 +8,8 @@ import type {
     AgentLocation,
     StudioReplayRequest,
     StudioReplayResult,
+    StudioCollisionScanRequest,
+    StudioCollisionScanResult,
 } from "./studioRuntimeCore.js";
 
 /**
@@ -45,6 +47,20 @@ export type StudioServiceInvokeFunctions = {
         repoRoot?: string,
         filter?: CollisionFilter,
     ): Promise<CollisionDetectedEvent[]>;
+    /**
+     * Scan agents' compiled grammars for cross-schema collisions (read-only
+     * analysis — reads compiled grammars, reports into the collision store; no
+     * agent/sandbox mutation).
+     */
+    scanGrammarCollisions(
+        repoRoot?: string,
+        request?: StudioCollisionScanRequest,
+    ): Promise<StudioCollisionScanResult>;
+    /** Remove stored collisions matching the filter (all when omitted). */
+    clearCollisions(
+        repoRoot?: string,
+        filter?: CollisionFilter,
+    ): Promise<number>;
     /** Most recent structured Studio events, oldest-to-newest. */
     queryRecentEvents(
         repoRoot?: string,

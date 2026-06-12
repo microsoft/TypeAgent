@@ -11,12 +11,15 @@ import type {
     StudioClientCallFunctions,
     StudioReplayRequest,
     StudioReplayResult,
+    StudioCollisionScanRequest,
+    StudioCollisionScanResult,
 } from "@typeagent/core/runtime";
 import { readStudioServiceToken } from "@typeagent/core/runtime";
 import type {
     StudioEvent,
     CollisionDetectedEvent,
 } from "@typeagent/core/events";
+import type { CollisionFilter } from "@typeagent/core/collisions";
 
 /**
  * Client for the `studio` agent's typed service channel (the rich-client side of
@@ -191,6 +194,18 @@ export class StudioServiceClient {
 
     listCollisions(): Promise<CollisionDetectedEvent[]> {
         return this.rpc.invoke("listCollisions", this.repoRoot);
+    }
+
+    /** Scan compiled grammars for collisions (read-only analysis). */
+    scanGrammarCollisions(
+        request?: StudioCollisionScanRequest,
+    ): Promise<StudioCollisionScanResult> {
+        return this.rpc.invoke("scanGrammarCollisions", this.repoRoot, request);
+    }
+
+    /** Remove stored collisions matching `filter` (all when omitted). */
+    clearCollisions(filter?: CollisionFilter): Promise<number> {
+        return this.rpc.invoke("clearCollisions", this.repoRoot, filter);
     }
 
     queryRecentEvents(limit?: number): Promise<StudioEvent[]> {

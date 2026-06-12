@@ -27,6 +27,10 @@ import {
     COLLISIONS_VIEW_ID,
     CollisionsTreeProvider,
 } from "./collisionsTreeProvider.js";
+import {
+    StudioServiceCollisionsSource,
+    type CollisionsSource,
+} from "./collisionsSource.js";
 import type { CollisionRow } from "./collisionsPresentation.js";
 import {
     STUDIO_STATUS_BAR_COMMAND,
@@ -562,38 +566,6 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
         ),
-        // Cut the Event Log over to the studio agent's runtime over the service
-        // channel (Option B). Degrades gracefully when no agent-server is up.
-        vscode.commands.registerCommand(
-            "typeagent-studio.connectStudioService",
-            async () => {
-                try {
-                    const result = await connectEventLogToService();
-                    if (!result.connected) {
-                        void vscode.window.showWarningMessage(
-                            "TypeAgent Studio service not found — start an agent-server with the studio agent enabled, then retry.",
-                        );
-                        return;
-                    }
-                    const info = result.info;
-                    const detail =
-                        info === undefined
-                            ? ""
-                            : ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${info.agentLocations.reduce(
-                                  (n, l) => n + l.agentCount,
-                                  0,
-                              )} agent(s)`;
-                    void vscode.window.showInformationMessage(
-                        `Event Log connected to the studio service${detail}.`,
-                    );
-                } catch (error) {
-                    fallbackEventLogToRuntime();
-                    void vscode.window.showErrorMessage(
-                        `Failed to connect to the studio service: ${describeError(error)}`,
-                    );
-                }
-            },
-        ),
         // Open the Impact Report webview — the first greenfield client of the
         // service channel (replay over the channel; webview never opens a
         // socket).
@@ -604,6 +576,16 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const collisions = new CollisionsTreeProvider(runtime);
+    const collisionsView = vscode.window.createTreeView(COLLISIONS_VIEW_ID, {
+        treeDataProvider: collisions,
+    });
+    collisionsView.description = "local";
+
+    // The Collisions view, like the Event Log, can read through the studio
+    // service channel (scan + list are read-only analysis) and falls back to
+    // the in-process runtime on disconnect.
+    let currentCollisionsSource: CollisionsSource = runtime;
+    let collisionsChannelSource: StudioServiceCollisionsSource | undefined;
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an
@@ -617,14 +599,14 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     };
 
-    // subscription: run the grammar collision scan, then push fresh results
-    // and the skipped set into the tree.
+    // subscription: run the grammar collision scan against the active source,
+    // then push fresh results and the skipped set into the tree.
     const runCollisionScan = async () => {
         // An explicit scan makes any queued debounced auto-scan redundant
         // (e.g. the one refreshSandboxAgent triggers after Build grammar).
         cancelPendingAutoScan();
-        const result = await runtime.scanGrammarCollisions();
-        await collisions.reloadFromRuntime();
+        const result = await currentCollisionsSource.scanGrammarCollisions();
+        await collisions.reload();
         collisions.setSkipped(result.skipped);
         return result;
     };
@@ -651,13 +633,69 @@ export function activate(context: vscode.ExtensionContext): void {
             });
         }, AUTO_SCAN_DEBOUNCE_MS);
     };
-    const agentLoadSubscription = runtime.onAgentLoadChanged(scheduleAutoScan);
+
+    // The agent-load subscription follows the active source (re-bound on swap).
+    let agentLoadSubscription =
+        currentCollisionsSource.onAgentLoadChanged(scheduleAutoScan);
+    const rebindAgentLoad = () => {
+        agentLoadSubscription.dispose();
+        agentLoadSubscription =
+            currentCollisionsSource.onAgentLoadChanged(scheduleAutoScan);
+    };
+
+    const fallbackCollisionsToRuntime = () => {
+        const dead = collisionsChannelSource;
+        collisionsChannelSource = undefined;
+        dead?.dispose();
+        currentCollisionsSource = runtime;
+        collisions.setSource(runtime);
+        rebindAgentLoad();
+        collisionsView.description = "local";
+    };
+
+    // Connect (or reconnect) the Collisions view to the studio service channel.
+    // Idempotent; returns whether a connection was established.
+    const connectCollisionsToService = async (): Promise<boolean> => {
+        const prior = collisionsChannelSource;
+        collisionsChannelSource = undefined;
+        prior?.dispose();
+
+        const repoRoot = runtime.getRepoRootInfo().repoRoot;
+        const source = await StudioServiceCollisionsSource.connect({
+            ...(repoRoot !== undefined ? { repoRoot } : {}),
+            onClosed: () => {
+                if (collisionsChannelSource === source) {
+                    fallbackCollisionsToRuntime();
+                }
+            },
+        });
+        if (source === undefined) {
+            currentCollisionsSource = runtime;
+            collisions.setSource(runtime);
+            rebindAgentLoad();
+            collisionsView.description = "local";
+            return false;
+        }
+        collisionsChannelSource = source;
+        currentCollisionsSource = source;
+        collisions.setSource(source);
+        rebindAgentLoad();
+        collisionsView.description = "studio service";
+        return true;
+    };
 
     context.subscriptions.push(
         collisions,
-        agentLoadSubscription,
+        collisionsView,
+        { dispose: () => agentLoadSubscription.dispose() },
         { dispose: cancelPendingAutoScan },
-        vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
+        {
+            dispose: () => {
+                const s = collisionsChannelSource;
+                collisionsChannelSource = undefined;
+                s?.dispose();
+            },
+        },
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
             () => collisions.refresh(),
@@ -806,6 +844,46 @@ export function activate(context: vscode.ExtensionContext): void {
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Failed to replay corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+    );
+
+    // Connect both channel-backed views (Event Log + Collisions) to the studio
+    // service over the channel (Option B). Degrades gracefully when no
+    // agent-server is up; each view independently falls back on disconnect.
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.connectStudioService",
+            async () => {
+                try {
+                    const result = await connectEventLogToService();
+                    // Collisions rides the same connect gesture (its own
+                    // channel client + fallback).
+                    void connectCollisionsToService();
+                    if (!result.connected) {
+                        void vscode.window.showWarningMessage(
+                            "TypeAgent Studio service not found — start an agent-server with the studio agent enabled, then retry.",
+                        );
+                        return;
+                    }
+                    const info = result.info;
+                    const detail =
+                        info === undefined
+                            ? ""
+                            : ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${info.agentLocations.reduce(
+                                  (n, l) => n + l.agentCount,
+                                  0,
+                              )} agent(s)`;
+                    void vscode.window.showInformationMessage(
+                        `Connected the Event Log and Collisions views to the studio service${detail}.`,
+                    );
+                } catch (error) {
+                    fallbackEventLogToRuntime();
+                    fallbackCollisionsToRuntime();
+                    void vscode.window.showErrorMessage(
+                        `Failed to connect to the studio service: ${describeError(error)}`,
                     );
                 }
             },
