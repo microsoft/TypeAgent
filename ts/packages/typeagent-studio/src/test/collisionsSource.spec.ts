@@ -12,6 +12,7 @@ import type {
 import type { StudioEvent } from "@typeagent/core/events";
 import { createWebSocketRpcChannel } from "../studioServiceClient.js";
 import { StudioServiceCollisionsSource } from "../collisionsSource.js";
+import { StudioServiceConnection } from "../studioServiceConnection.js";
 
 /**
  * Real ws server speaking the Studio protocol. `subscribeEvents` pushes a
@@ -80,33 +81,47 @@ async function startStubServer(): Promise<{
 
 test("StudioServiceCollisionsSource delegates scan/clear and routes events", async () => {
     const stub = await startStubServer();
-    const source = await StudioServiceCollisionsSource.connect({
+    const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
     });
-    assert.ok(source, "source should connect");
+    const source = new StudioServiceCollisionsSource(connection);
     try {
-        const scan = await source!.scanGrammarCollisions();
-        assert.deepEqual(scan.scanned, ["player"]);
-        assert.equal(await source!.clearCollisions(), 0);
-
+        assert.equal(await connection.connect(), true);
+        // Register listeners BEFORE any awaited round-trips so the one-shot
+        // push (~20ms after subscribe) isn't missed.
         let collisions = 0;
         let agentLoads = 0;
-        source!.onCollisionDetected(() => (collisions += 1));
-        source!.onAgentLoadChanged(() => (agentLoads += 1));
-        // The stub pushes one of each ~20ms after subscribe (done at connect);
-        // listeners attached above fire before then.
-        await new Promise((r) => setTimeout(r, 80));
+        source.onCollisionDetected(() => (collisions += 1));
+        source.onAgentLoadChanged(() => (agentLoads += 1));
+
+        const scan = await source.scanGrammarCollisions();
+        assert.deepEqual(scan.scanned, ["player"]);
+        assert.equal(await source.clearCollisions(), 0);
+
+        const start = Date.now();
+        while ((collisions < 1 || agentLoads < 1) && Date.now() - start < 2000) {
+            await new Promise((r) => setTimeout(r, 10));
+        }
         assert.equal(collisions, 1, "collision.detected routed");
         assert.equal(agentLoads, 1, "sandbox.agent.loaded routed");
     } finally {
-        source!.dispose();
+        connection.dispose();
         await stub.close();
     }
 });
 
-test("StudioServiceCollisionsSource.connect returns undefined when discovery finds nothing", async () => {
-    const source = await StudioServiceCollisionsSource.connect({
-        agentServerUrl: "ws://127.0.0.1:1",
+test("StudioServiceCollisionsSource lists empty / throws on scan when disconnected", async () => {
+    const connection = new StudioServiceConnection(undefined, {
+        endpoint: "ws://127.0.0.1:1",
+        backoffMs: [10_000],
     });
-    assert.equal(source, undefined);
+    const source = new StudioServiceCollisionsSource(connection);
+    try {
+        assert.equal(await connection.connect(), false);
+        assert.deepEqual(await source.listCollisions(), []);
+        assert.equal(await source.clearCollisions(), 0);
+        await assert.rejects(() => source.scanGrammarCollisions());
+    } finally {
+        connection.dispose();
+    }
 });

@@ -12,6 +12,7 @@ import type {
 import type { StudioEvent } from "@typeagent/core/events";
 import { createWebSocketRpcChannel } from "../studioServiceClient.js";
 import { StudioServiceEventSource } from "../eventLogSource.js";
+import { StudioServiceConnection } from "../studioServiceConnection.js";
 
 const SEED: StudioEvent[] = [
     { type: "sandbox.start", ts: 1 } as StudioEvent,
@@ -73,58 +74,53 @@ async function startStubServer(): Promise<{
     };
 }
 
-test("StudioServiceEventSource seeds via queryRecentEvents and fans out live events", async () => {
+/** Wait until `predicate` is true or time out. */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
+    const start = Date.now();
+    while (!predicate()) {
+        if (Date.now() - start > timeoutMs) throw new Error("waitFor timed out");
+        await new Promise((r) => setTimeout(r, 10));
+    }
+}
+
+test("StudioServiceEventSource (over the shared connection) seeds + fans out live events", async () => {
     const stub = await startStubServer();
-    const source = await StudioServiceEventSource.connect({
+    const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
     });
-    assert.ok(source, "source should connect to the stub endpoint");
+    const source = new StudioServiceEventSource(connection);
     try {
-        const seed = await source!.queryRecentEvents(200);
+        assert.equal(await connection.connect(), true);
+        const received: StudioEvent[] = [];
+        // Register before any awaited round-trip so the one-shot push isn't missed.
+        const sub = source.onAnyEvent((e) => received.push(e));
+
+        const seed = await source.queryRecentEvents(200);
         assert.deepEqual(
             seed.map((e) => e.type),
             ["sandbox.start", "sandbox.stop"],
         );
 
-        const received: StudioEvent[] = [];
-        const sub = source!.onAnyEvent((e) => received.push(e));
-        // The live event is pushed ~20ms after subscribeEvents (done at
-        // connect); the listener is attached above before it fires.
-        await new Promise((r) => setTimeout(r, 80));
-        assert.equal(received.length, 1);
+        // The live event is pushed ~20ms after subscribeEvents (done at connect).
+        await waitFor(() => received.length === 1);
         assert.equal(received[0].type, "collision.detected");
-
-        // Disposing the listener stops further fanout.
         sub.dispose();
     } finally {
-        source!.dispose();
+        connection.dispose();
         await stub.close();
     }
 });
 
-test("StudioServiceEventSource.connect returns undefined when discovery finds nothing", async () => {
-    const source = await StudioServiceEventSource.connect({
-        agentServerUrl: "ws://127.0.0.1:1", // nothing listening
+test("StudioServiceEventSource returns empty when the connection is down", async () => {
+    const connection = new StudioServiceConnection(undefined, {
+        endpoint: "ws://127.0.0.1:1", // nothing listening
+        backoffMs: [10_000],
     });
-    assert.equal(source, undefined);
-});
-
-test("StudioServiceEventSource invokes onClosed when the socket drops", async () => {
-    const stub = await startStubServer();
-    let closed = false;
-    const source = await StudioServiceEventSource.connect({
-        endpoint: stub.endpoint,
-        onClosed: () => {
-            closed = true;
-        },
-    });
-    assert.ok(source);
+    const source = new StudioServiceEventSource(connection);
     try {
-        // Server-side close should propagate to the client's onClose.
-        await stub.close();
-        await new Promise((r) => setTimeout(r, 50));
-        assert.equal(closed, true);
+        assert.equal(await connection.connect(), false);
+        assert.deepEqual(await source.queryRecentEvents(10), []);
     } finally {
-        source!.dispose();
+        connection.dispose();
     }
 });

@@ -3,7 +3,7 @@
 
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import type { StudioCollisionScanResult } from "@typeagent/core/runtime";
-import { StudioServiceClient } from "./studioServiceClient.js";
+import type { StudioServiceConnection } from "./studioServiceConnection.js";
 
 /**
  * The collisions surface the Collisions tree + its scan/auto-scan flow need.
@@ -26,80 +26,49 @@ export interface CollisionsSource {
 }
 
 /**
- * Channel-backed {@link CollisionsSource}: the Option-B path where the
- * Collisions view reads from the `studio` agent's runtime over the service
- * channel. Live `collision.detected` and `sandbox.agent.loaded/unloaded` pushes
- * arrive on the single per-connection event subscription and are fanned out to
- * the right local listeners. Owns its {@link StudioServiceClient}; {@link
- * dispose} closes the socket.
+ * Channel-backed {@link CollisionsSource}: the Collisions view reads from the
+ * `studio` agent's runtime over the shared service connection. Live
+ * `collision.detected` and `sandbox.agent.loaded/unloaded` pushes arrive on the
+ * shared connection's event fanout and are filtered to the right local
+ * listeners. A thin adapter — the {@link StudioServiceConnection} owns the
+ * socket and subscription.
  */
 export class StudioServiceCollisionsSource implements CollisionsSource {
-    private constructor(
-        private readonly client: StudioServiceClient,
-        private readonly collisionListeners: Set<() => void>,
-        private readonly agentLoadListeners: Set<() => void>,
-    ) {}
+    constructor(private readonly connection: StudioServiceConnection) {}
 
-    static async connect(options: {
-        repoRoot?: string;
-        agentServerUrl?: string;
-        endpoint?: string;
-        onClosed?: () => void;
-    }): Promise<StudioServiceCollisionsSource | undefined> {
-        const collisionListeners = new Set<() => void>();
-        const agentLoadListeners = new Set<() => void>();
-        const client = await StudioServiceClient.connect({
-            repoRoot: options.repoRoot,
-            agentServerUrl: options.agentServerUrl,
-            endpoint: options.endpoint,
-            onEvent: (event) => {
-                if (event.type === "collision.detected") {
-                    for (const l of collisionListeners) l();
-                } else if (
-                    event.type === "sandbox.agent.loaded" ||
-                    event.type === "sandbox.agent.unloaded"
-                ) {
-                    for (const l of agentLoadListeners) l();
-                }
-            },
-            onClose: options.onClosed,
-        });
+    async listCollisions(): Promise<CollisionDetectedEvent[]> {
+        return (await this.connection.getClient()?.listCollisions()) ?? [];
+    }
+
+    async scanGrammarCollisions(): Promise<StudioCollisionScanResult> {
+        const client = this.connection.getClient();
         if (client === undefined) {
-            return undefined;
+            throw new Error("Studio service is not connected.");
         }
-        await client.subscribeEvents();
-        return new StudioServiceCollisionsSource(
-            client,
-            collisionListeners,
-            agentLoadListeners,
-        );
+        return client.scanGrammarCollisions();
     }
 
-    listCollisions(): Promise<CollisionDetectedEvent[]> {
-        return this.client.listCollisions();
-    }
-
-    scanGrammarCollisions(): Promise<StudioCollisionScanResult> {
-        return this.client.scanGrammarCollisions();
-    }
-
-    clearCollisions(): Promise<number> {
-        return this.client.clearCollisions();
+    async clearCollisions(): Promise<number> {
+        return (await this.connection.getClient()?.clearCollisions()) ?? 0;
     }
 
     onCollisionDetected(listener: () => void): { dispose(): void } {
-        this.collisionListeners.add(listener);
-        return { dispose: () => this.collisionListeners.delete(listener) };
+        return this.connection.onEvent((event) => {
+            if (event.type === "collision.detected") {
+                listener();
+            }
+        });
     }
 
     onAgentLoadChanged(listener: () => void): { dispose(): void } {
-        this.agentLoadListeners.add(listener);
-        return { dispose: () => this.agentLoadListeners.delete(listener) };
-    }
-
-    dispose(): void {
-        this.collisionListeners.clear();
-        this.agentLoadListeners.clear();
-        this.client.close();
+        return this.connection.onEvent((event) => {
+            if (
+                event.type === "sandbox.agent.loaded" ||
+                event.type === "sandbox.agent.unloaded"
+            ) {
+                listener();
+            }
+        });
     }
 }
+

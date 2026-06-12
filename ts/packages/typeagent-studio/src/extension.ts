@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
-import type { AvailableAgent, StudioInfo } from "@typeagent/core/runtime";
+import type { AvailableAgent } from "@typeagent/core/runtime";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
@@ -41,6 +41,10 @@ import {
     EventLogTreeProvider,
 } from "./eventLogTreeProvider.js";
 import { StudioServiceEventSource } from "./eventLogSource.js";
+import {
+    StudioServiceConnection,
+    type StudioConnectionState,
+} from "./studioServiceConnection.js";
 import { openImpactReport } from "./impactReportView.js";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -488,78 +492,51 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
+    // One shared connection to the studio service for all channel-backed views
+    // (Event Log + Collisions). Auto-connects with backoff and reconnects on
+    // drop; a single socket means `@system ports` shows one client. The Impact
+    // Report keeps its own dedicated client for the heavier replay path.
+    const connection = new StudioServiceConnection(repoRootInfo.repoRoot);
+
+    // Service connection status bar (clicking re-attempts the connection).
+    const SERVICE_CONNECT_COMMAND = "typeagent-studio.connectStudioService";
+    const serviceStatusBar = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        99,
+    );
+    serviceStatusBar.command = SERVICE_CONNECT_COMMAND;
+    const renderServiceStatus = (state: StudioConnectionState) => {
+        if (state === "connected") {
+            serviceStatusBar.text = "$(plug) Studio: connected";
+            serviceStatusBar.tooltip =
+                "Connected to the studio service (views read the agent runtime).";
+        } else if (state === "connecting") {
+            serviceStatusBar.text = "$(sync~spin) Studio: connecting…";
+            serviceStatusBar.tooltip = "Connecting to the studio service…";
+        } else {
+            serviceStatusBar.text = "$(debug-disconnect) Studio: local";
+            serviceStatusBar.tooltip =
+                "Studio service not connected — views use the in-process runtime. Click to connect.";
+        }
+        serviceStatusBar.show();
+    };
+
     // Event Log starts on the in-process runtime (no startup dependency on a
-    // running agent-server) and can cut over to the `studio` agent's service
-    // channel — the Option B "one runtime, one source of truth" path. The
-    // command below performs the swap; a dropped connection falls back to the
-    // in-process runtime. `createTreeView` (vs registerTreeDataProvider) lets us
-    // surface the active source in the view's description.
+    // running agent-server) and swaps to the shared channel connection when it
+    // connects (and back on disconnect). `createTreeView` surfaces the active
+    // source in the view's description.
     const eventLog = new EventLogTreeProvider(runtime);
     const eventLogView = vscode.window.createTreeView(EVENT_LOG_VIEW_ID, {
         treeDataProvider: eventLog,
     });
     eventLogView.description = "local";
-
-    let eventChannelSource: StudioServiceEventSource | undefined;
-
-    const fallbackEventLogToRuntime = () => {
-        const dead = eventChannelSource;
-        eventChannelSource = undefined; // mark inactive before disposing
-        dead?.dispose();
-        eventLog.setSource(runtime);
-        eventLogView.description = "local";
-    };
-
-    // Connect (or reconnect) the Event Log to the studio service channel.
-    // Idempotent: a prior channel source is dropped first. Returns whether a
-    // connection was established (and the service info when available — a failed
-    // info fetch after a successful connect is NOT treated as "not connected").
-    const connectEventLogToService = async (): Promise<
-        { connected: false } | { connected: true; info?: StudioInfo }
-    > => {
-        // Drop any prior source first; null out the active ref so its `onClosed`
-        // (fired by the close we're about to cause) doesn't trigger a fallback.
-        const prior = eventChannelSource;
-        eventChannelSource = undefined;
-        prior?.dispose();
-
-        const repoRoot = runtime.getRepoRootInfo().repoRoot;
-        const source = await StudioServiceEventSource.connect({
-            ...(repoRoot !== undefined ? { repoRoot } : {}),
-            onClosed: () => {
-                // Only fall back if this is still the active source (ignore the
-                // close caused by a deliberate dispose/reconnect).
-                if (eventChannelSource === source) {
-                    fallbackEventLogToRuntime();
-                }
-            },
-        });
-        if (source === undefined) {
-            // Stay on / return to the in-process runtime.
-            eventLog.setSource(runtime);
-            eventLogView.description = "local";
-            return { connected: false };
-        }
-        eventChannelSource = source;
-        eventLog.setSource(source);
-        eventLogView.description = "studio service";
-        try {
-            return { connected: true, info: await source.getStudioInfo() };
-        } catch {
-            return { connected: true };
-        }
-    };
+    const eventChannelSource = new StudioServiceEventSource(connection);
 
     context.subscriptions.push(
         eventLog,
         eventLogView,
-        {
-            dispose: () => {
-                const s = eventChannelSource;
-                eventChannelSource = undefined;
-                s?.dispose();
-            },
-        },
+        serviceStatusBar,
+        { dispose: () => connection.dispose() },
         vscode.commands.registerCommand("typeagent-studio.refreshEvents", () =>
             eventLog.refresh(),
         ),
@@ -581,11 +558,13 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     collisionsView.description = "local";
 
-    // The Collisions view, like the Event Log, can read through the studio
-    // service channel (scan + list are read-only analysis) and falls back to
-    // the in-process runtime on disconnect.
+    // The Collisions view reads through the same shared connection when
+    // connected (scan + list are read-only analysis) and falls back to the
+    // in-process runtime on disconnect.
     let currentCollisionsSource: CollisionsSource = runtime;
-    let collisionsChannelSource: StudioServiceCollisionsSource | undefined;
+    const collisionsChannelSource = new StudioServiceCollisionsSource(
+        connection,
+    );
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an
@@ -643,59 +622,11 @@ export function activate(context: vscode.ExtensionContext): void {
             currentCollisionsSource.onAgentLoadChanged(scheduleAutoScan);
     };
 
-    const fallbackCollisionsToRuntime = () => {
-        const dead = collisionsChannelSource;
-        collisionsChannelSource = undefined;
-        dead?.dispose();
-        currentCollisionsSource = runtime;
-        collisions.setSource(runtime);
-        rebindAgentLoad();
-        collisionsView.description = "local";
-    };
-
-    // Connect (or reconnect) the Collisions view to the studio service channel.
-    // Idempotent; returns whether a connection was established.
-    const connectCollisionsToService = async (): Promise<boolean> => {
-        const prior = collisionsChannelSource;
-        collisionsChannelSource = undefined;
-        prior?.dispose();
-
-        const repoRoot = runtime.getRepoRootInfo().repoRoot;
-        const source = await StudioServiceCollisionsSource.connect({
-            ...(repoRoot !== undefined ? { repoRoot } : {}),
-            onClosed: () => {
-                if (collisionsChannelSource === source) {
-                    fallbackCollisionsToRuntime();
-                }
-            },
-        });
-        if (source === undefined) {
-            currentCollisionsSource = runtime;
-            collisions.setSource(runtime);
-            rebindAgentLoad();
-            collisionsView.description = "local";
-            return false;
-        }
-        collisionsChannelSource = source;
-        currentCollisionsSource = source;
-        collisions.setSource(source);
-        rebindAgentLoad();
-        collisionsView.description = "studio service";
-        return true;
-    };
-
     context.subscriptions.push(
         collisions,
         collisionsView,
         { dispose: () => agentLoadSubscription.dispose() },
         { dispose: cancelPendingAutoScan },
-        {
-            dispose: () => {
-                const s = collisionsChannelSource;
-                collisionsChannelSource = undefined;
-                s?.dispose();
-            },
-        },
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
             () => collisions.refresh(),
@@ -850,45 +781,55 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // Connect both channel-backed views (Event Log + Collisions) to the studio
-    // service over the channel (Option B). Degrades gracefully when no
-    // agent-server is up; each view independently falls back on disconnect.
+    // React to the shared connection's state: swap both views between the
+    // channel (connected) and the in-process runtime (otherwise), and reflect
+    // it in the status bar + view descriptions. Fires immediately with the
+    // current ("disconnected") state, seeding the local-runtime sources.
     context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-studio.connectStudioService",
-            async () => {
-                try {
-                    const result = await connectEventLogToService();
-                    // Collisions rides the same connect gesture (its own
-                    // channel client + fallback).
-                    void connectCollisionsToService();
-                    if (!result.connected) {
-                        void vscode.window.showWarningMessage(
-                            "TypeAgent Studio service not found — start an agent-server with the studio agent enabled, then retry.",
-                        );
-                        return;
-                    }
-                    const info = result.info;
-                    const detail =
-                        info === undefined
-                            ? ""
-                            : ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${info.agentLocations.reduce(
-                                  (n, l) => n + l.agentCount,
-                                  0,
-                              )} agent(s)`;
-                    void vscode.window.showInformationMessage(
-                        `Connected the Event Log and Collisions views to the studio service${detail}.`,
+        connection.onStateChanged((state) => {
+            renderServiceStatus(state);
+            const connected = state === "connected";
+            const label = connected ? "studio service" : "local";
+
+            eventLog.setSource(connected ? eventChannelSource : runtime);
+            eventLogView.description = label;
+
+            currentCollisionsSource = connected
+                ? collisionsChannelSource
+                : runtime;
+            collisions.setSource(currentCollisionsSource);
+            rebindAgentLoad();
+            collisionsView.description = label;
+        }),
+        vscode.commands.registerCommand(SERVICE_CONNECT_COMMAND, async () => {
+            const ok = await connection.connect();
+            if (!ok) {
+                void vscode.window.showWarningMessage(
+                    "TypeAgent Studio service not found — start an agent-server with the studio agent enabled. Studio will keep retrying.",
+                );
+                return;
+            }
+            let detail = "";
+            try {
+                const info = await connection.getClient()?.getStudioInfo();
+                if (info) {
+                    const total = info.agentLocations.reduce(
+                        (n, l) => n + l.agentCount,
+                        0,
                     );
-                } catch (error) {
-                    fallbackEventLogToRuntime();
-                    fallbackCollisionsToRuntime();
-                    void vscode.window.showErrorMessage(
-                        `Failed to connect to the studio service: ${describeError(error)}`,
-                    );
+                    detail = ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${total} agent(s)`;
                 }
-            },
-        ),
+            } catch {
+                // Service info is best-effort decoration on the toast.
+            }
+            void vscode.window.showInformationMessage(
+                `Connected the Event Log and Collisions views to the studio service${detail}.`,
+            );
+        }),
     );
+
+    // Begin auto-connecting (and reconnecting) in the background.
+    connection.startAutoConnect();
 
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-studio.hello", () => {
