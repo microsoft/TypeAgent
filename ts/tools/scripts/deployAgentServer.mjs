@@ -42,6 +42,7 @@ function parseArgs(argv) {
         else if (a === "--skip-deploy") args.skipDeploy = true;
         else if (a === "--skip-prune") args.skipPrune = true;
         else if (a === "--profile") args.profile = argv[++i];
+        else if (a === "--external-cli") args.externalCli = true;
         else throw new Error(`Unknown argument: ${a}`);
     }
     if (!args.out) throw new Error("Missing --out <dir>.");
@@ -136,6 +137,28 @@ function main() {
             "utf8",
         );
         console.log(`  recorded profile '${args.profile}' (.typeagent-profile)`);
+    }
+
+    // 2c. External-CLI variant: drop the bundled Claude/Copilot runtimes. Only
+    //     valid where `claude`/`copilot` are on PATH (Agency machines / the
+    //     non-agency installer); the runtime query() callers are wired to resolve
+    //     the PATH binary (claudeExecutableOption), so they don't need the bundle.
+    if (args.externalCli) {
+        run(
+            "node",
+            [
+                path.join(scriptsDir, "pruneSdkBinaries.mjs"),
+                "--dir",
+                args.out,
+            ],
+            tsRoot,
+        );
+        fs.writeFileSync(
+            path.join(args.out, ".typeagent-external-cli"),
+            "claude,copilot must be on PATH\n",
+            "utf8",
+        );
+        console.log("  recorded external-cli mode (.typeagent-external-cli)");
     }
 
     // 3. Copy the config-provisioning tool (getKeys + its config/lib) and the

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:validation:timeout");
@@ -45,7 +46,7 @@ export async function runQueryWithTimeout(
 
     const queryInstance = query({
         prompt,
-        options: { ...options, abortController },
+        options: { ...options, abortController, ...claudeExecutableOption() },
     });
 
     const consume = (async (): Promise<string> => {

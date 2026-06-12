@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "action-grammar/generation";
 import { SchemaInfo, ActionInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { loadGrammarRulesNoThrow } from "action-grammar";
@@ -305,6 +306,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -360,6 +362,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -423,6 +426,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -533,6 +537,7 @@ Return the complete corrected grammar, starting with the copyright header.`;
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 

@@ -7,6 +7,7 @@ import {
     query,
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import {
     ActionContext,
     AppAction,
@@ -1061,7 +1062,7 @@ async function executeReasoningWithoutPlanning(
             context,
             fallbackContext,
         ),
-        options: getClaudeOptions(context),
+        options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
     });
 
     let finalResult: string | undefined = undefined;
@@ -1263,7 +1264,7 @@ async function executeReasoningWithTracing(
                 context,
                 fallbackContext,
             ),
-            options: getClaudeOptions(context),
+            options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
         });
 
         let finalResult: string | undefined = undefined;
