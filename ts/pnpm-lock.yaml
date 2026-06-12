@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -550,7 +550,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5753,12 +5753,21 @@ importers:
 
   packages/typeagent-studio:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
       '@typeagent/core':
         specifier: workspace:*
         version: link:../typeagent-core
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -5766,6 +5775,9 @@ importers:
       '@types/vscode':
         specifier: ^1.90.0
         version: 1.100.0
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       '@vscode/vsce':
         specifier: ^3.2.1
         version: 3.4.0

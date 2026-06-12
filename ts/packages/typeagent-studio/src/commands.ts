@@ -5,6 +5,7 @@ import * as fs from "node:fs/promises";
 import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
 import type { StudioRuntime } from "./studioRuntime.js";
+import { StudioServiceClient } from "./studioServiceClient.js";
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshotMarkdown,
@@ -654,6 +655,64 @@ export function registerStudioCommands(
                 if (rerunResult.rerunPhases.includes("Packaging")) {
                     await showPackagingHealthGateStatus(runtime);
                 }
+            }),
+        ),
+    );
+
+    // Connect to the `studio` agent's service channel and show its info + a
+    // live event stream. This drives the agent's runtime over the agent-server
+    // (the Option B path) rather than the extension's in-process runtime — a
+    // proof of the typed channel end-to-end. Degrades gracefully when no
+    // agent-server is running.
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.connectStudioService",
+            withErrors(async () => {
+                const channel = vscode.window.createOutputChannel(
+                    "TypeAgent Studio Service",
+                );
+                context.subscriptions.push(channel);
+                channel.show(true);
+                channel.appendLine("Discovering the studio agent service…");
+
+                const repoRoot = runtime.getRepoRootInfo().repoRoot;
+                const client = await StudioServiceClient.connect({
+                    repoRoot,
+                    onEvent: (event) =>
+                        channel.appendLine(
+                            `event · ${event.type} @ ${new Date(event.ts).toISOString()}`,
+                        ),
+                });
+                if (client === undefined) {
+                    channel.appendLine(
+                        "Not connected: no studio service found. Start an agent-server with the studio agent enabled, then retry.",
+                    );
+                    void vscode.window.showWarningMessage(
+                        "TypeAgent Studio service not found — start an agent-server with the studio agent enabled.",
+                    );
+                    return;
+                }
+                // Keep the connection open to stream events; close on deactivate.
+                context.subscriptions.push({ dispose: () => client.close() });
+
+                const info = await client.getStudioInfo();
+                const total = info.agentLocations.reduce(
+                    (n, l) => n + l.agentCount,
+                    0,
+                );
+                channel.appendLine(
+                    `Connected. Repo root: ${info.repoRootInfo.repoRoot}`,
+                );
+                for (const loc of info.agentLocations) {
+                    channel.appendLine(
+                        `  ${loc.exists ? "✓" : "✗"} ${loc.root} — ${loc.agentCount} agent(s)`,
+                    );
+                }
+                await client.subscribeEvents();
+                channel.appendLine("Subscribed to live studio events.");
+                void vscode.window.showInformationMessage(
+                    `Connected to the studio service (${total} agents discovered).`,
+                );
             }),
         ),
     );

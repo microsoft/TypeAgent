@@ -30,6 +30,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "typeagent-studio.connectStudioService",
+        "title": "Connect to studio service (show info + events)",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.hello",
         "title": "Hello (skeleton)",
         "category": "TypeAgent Studio"
@@ -443,6 +448,7 @@
     "onView:typeagentStudioCorpora",
     "onView:typeagentStudioEvents",
     "onView:typeagentStudioCollisions",
+    "onCommand:typeagent-studio.connectStudioService",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
@@ -482,12 +488,16 @@
     "onCommand:typeagent-studio.buildAgentGrammar"
   ],
   "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/core": "workspace:*",
-    "debug": "^4.4.0"
+    "debug": "^4.4.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",
     "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.10",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "mkdirp": "^3.0.1",
