@@ -76,6 +76,40 @@ function createRuntimeStub(): {
         ],
         listCollisions: async () => [],
         queryRecentEvents: async () => [],
+        listCorpusAgents: async () => ["player", "calendar"],
+        replayCorpus: async (request: { agent: string }) => ({
+            runId: "run-1",
+            summary: {
+                runId: "run-1",
+                agent: request.agent,
+                versionA: { kind: "workingTree" },
+                versionB: { kind: "workingTree" },
+                corpusSize: 1,
+                rowCount: 1,
+                equalCount: 1,
+                changedCount: 0,
+                newMatchCount: 0,
+                lostMatchCount: 0,
+                collisionDelta: 0,
+                duration: 5,
+            },
+            rows: [
+                {
+                    utterance: "play jazz",
+                    source: "in-repo",
+                    utteranceId: "u1",
+                    equal: true,
+                    cacheStateA: "hit",
+                    cacheStateB: "hit",
+                    collisionsA: [],
+                    collisionsB: [],
+                    latencyA: 1,
+                    latencyB: 1,
+                    requestIdA: "a",
+                    requestIdB: "b",
+                },
+            ],
+        }),
         onAnyEvent: (listener: (e: StudioEvent) => void) => {
             listeners.add(listener);
             return { dispose: () => listeners.delete(listener) };
@@ -146,6 +180,23 @@ describe("studio service channel (in-memory rpc)", () => {
         expect(await client.invoke("queryRecentEvents", undefined, 5)).toEqual(
             [],
         );
+    });
+
+    it("listCorpusAgents and replayCorpus round-trip", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        expect(await client.invoke("listCorpusAgents", undefined)).toEqual([
+            "player",
+            "calendar",
+        ]);
+        const result = await client.invoke("replayCorpus", undefined, {
+            agent: "player",
+            missPolicy: "needs-explanation",
+        });
+        expect(result.runId).toBe("run-1");
+        expect(result.summary.agent).toBe("player");
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].utterance).toBe("play jazz");
     });
 
     it("subscribeEvents pushes live events to the client", async () => {

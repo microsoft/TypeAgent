@@ -9,6 +9,8 @@ import type {
     StudioInfo,
     StudioServiceInvokeFunctions,
     StudioClientCallFunctions,
+    StudioReplayRequest,
+    StudioReplayResult,
 } from "@typeagent/core/runtime";
 import { readStudioServiceToken } from "@typeagent/core/runtime";
 import type {
@@ -193,6 +195,16 @@ export class StudioServiceClient {
 
     queryRecentEvents(limit?: number): Promise<StudioEvent[]> {
         return this.rpc.invoke("queryRecentEvents", this.repoRoot, limit);
+    }
+
+    /** Corpus agents available for replay in this workspace. */
+    listCorpusAgents(): Promise<string[]> {
+        return this.rpc.invoke("listCorpusAgents", this.repoRoot);
+    }
+
+    /** Replay an agent's corpus comparing two versions (Impact Report data). */
+    replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult> {
+        return this.rpc.invoke("replayCorpus", this.repoRoot, request);
     }
 
     /** Start receiving live `studioEvent` pushes for this connection's repo. */

@@ -49,6 +49,18 @@ export function createStudioInvokeHandlers(
         async queryRecentEvents(repoRoot, limit) {
             return conn.getRuntime(repoRoot).queryRecentEvents(limit);
         },
+        async listCorpusAgents(repoRoot) {
+            return conn.getRuntime(repoRoot).listCorpusAgents();
+        },
+        async replayCorpus(repoRoot, request) {
+            const result = await conn.getRuntime(repoRoot).replayCorpus(request);
+            // Bound the rows crossing the wire; `summary` keeps the full totals
+            // so the client can show "first N of M".
+            const MAX_ROWS = 1000;
+            return result.rows.length > MAX_ROWS
+                ? { ...result, rows: result.rows.slice(0, MAX_ROWS) }
+                : result;
+        },
         async subscribeEvents(repoRoot) {
             // Subscribe this connection to the repo's event stream. Installing
             // replaces any prior subscription (idempotent — never stacks

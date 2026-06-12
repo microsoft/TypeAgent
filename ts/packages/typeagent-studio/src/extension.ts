@@ -37,6 +37,7 @@ import {
     EventLogTreeProvider,
 } from "./eventLogTreeProvider.js";
 import { StudioServiceEventSource } from "./eventLogSource.js";
+import { openImpactReport } from "./impactReportView.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     const runtime = createStudioRuntime(context);
@@ -592,6 +593,13 @@ export function activate(context: vscode.ExtensionContext): void {
                     );
                 }
             },
+        ),
+        // Open the Impact Report webview — the first greenfield client of the
+        // service channel (replay over the channel; webview never opens a
+        // socket).
+        vscode.commands.registerCommand(
+            "typeagent-studio.openImpactReport",
+            () => openImpactReport(context, runtime.getRepoRootInfo().repoRoot),
         ),
     );
 

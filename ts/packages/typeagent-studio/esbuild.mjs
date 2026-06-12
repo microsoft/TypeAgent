@@ -30,10 +30,30 @@ const extensionConfig = {
     },
 };
 
+/**
+ * The Impact Report webview client bundle. Runs inside the webview iframe, so
+ * it targets the browser and must NOT pull in `vscode`, `ws`, or node built-ins
+ * (the bundle smoke test asserts this).
+ * @type {import('esbuild').BuildOptions}
+ */
+const webviewConfig = {
+    entryPoints: ["src/webviewKit/client/impactReport.ts"],
+    bundle: true,
+    outfile: "dist/webview/impactReport.js",
+    format: "iife",
+    platform: "browser",
+    target: "es2020",
+    sourcemap: true,
+    minify: !watch,
+};
+
 if (watch) {
     const ctx = await esbuild.context(extensionConfig);
+    const webviewCtx = await esbuild.context(webviewConfig);
     await ctx.watch();
+    await webviewCtx.watch();
     console.log("typeagent-studio: watching…");
 } else {
     await esbuild.build(extensionConfig);
+    await esbuild.build(webviewConfig);
 }

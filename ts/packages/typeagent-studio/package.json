@@ -35,6 +35,11 @@
         "category": "TypeAgent Studio"
       },
       {
+        "command": "typeagent-studio.openImpactReport",
+        "title": "Open Impact Report",
+        "category": "TypeAgent Studio"
+      },
+      {
         "command": "typeagent-studio.hello",
         "title": "Hello (skeleton)",
         "category": "TypeAgent Studio"
@@ -449,6 +454,7 @@
     "onView:typeagentStudioEvents",
     "onView:typeagentStudioCollisions",
     "onCommand:typeagent-studio.connectStudioService",
+    "onCommand:typeagent-studio.openImpactReport",
     "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",

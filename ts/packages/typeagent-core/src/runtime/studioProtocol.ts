@@ -4,7 +4,11 @@
 import type { StudioEvent, CollisionDetectedEvent } from "../events/index.js";
 import type { CollisionFilter } from "../collisions/index.js";
 import type { RepoRootResolution } from "./repoRootResolver.js";
-import type { AgentLocation } from "./studioRuntimeCore.js";
+import type {
+    AgentLocation,
+    StudioReplayRequest,
+    StudioReplayResult,
+} from "./studioRuntimeCore.js";
 
 /**
  * Wire types for the Studio service channel — the typed protocol the `studio`
@@ -46,6 +50,17 @@ export type StudioServiceInvokeFunctions = {
         repoRoot?: string,
         limit?: number,
     ): Promise<StudioEvent[]>;
+    /** Corpus agents available for replay in this workspace. */
+    listCorpusAgents(repoRoot?: string): Promise<string[]>;
+    /**
+     * Replay an agent's corpus comparing two versions (read-only analysis — the
+     * Impact Report contract). `request.agent` is required; the rows array is
+     * bounded for transport while `summary` retains the full totals.
+     */
+    replayCorpus(
+        repoRoot: string | undefined,
+        request: StudioReplayRequest,
+    ): Promise<StudioReplayResult>;
     /**
      * Start pushing live `studioEvent` calls to *this* connection for the given
      * repo. Idempotent per connection: a second call replaces the connection's

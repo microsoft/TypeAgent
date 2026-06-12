@@ -114,21 +114,23 @@ Done / superseded:
 Ready to start (smallest → larger):
 
 1. **Studio service channel (the Option B migration; plan phase P-1.5)** —
-   **mostly done.** The typed service channel served by the `studio` agent's
-   **own WebSocket** (the `code`↔`coda` pattern: port via `registerPort`, client
-   discovers via `discoverPort("studio")`, `agent-rpc` `createRpc` framing) is
-   built and verified end-to-end, and the **Event Log tree now reads through the
-   channel** (the "Connect Event Log to studio service" command swaps it from the
-   in-process runtime to the agent's runtime, with graceful fallback on
-   disconnect) — satisfying the "≥1 existing tree over the channel" half of the
-   P-1.5 exit. Also wired: the `studio` agent reports its live client count to
-   `@system ports`. **Remaining for P-1.5 exit:** the Impact Report webview shell
-   as the greenfield first client (item 2), and the channel guardrails
-   (capability-token auth; subscription cancellation/backpressure).
-2. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
-   restore, CSP/assets, message protocol, theming before full replay exists.
-   Built as a **client of the `studio` agent over the channel**, not on the
-   extension's in-process runtime.
+   **done (exit criteria met).** The typed service channel served by the
+   `studio` agent's **own WebSocket** (the `code`↔`coda` pattern: port via
+   `registerPort`, client discovers via `discoverPort("studio")`, `agent-rpc`
+   `createRpc` framing) is built and verified end-to-end, with guardrails
+   (capability-token auth on every connection, idempotent subscribe +
+   `unsubscribeEvents`, backpressure). Two clients read through it: the **Event
+   Log tree** (swappable source, graceful fallback) and the **Impact Report
+   webview** (replay over the channel). The agent also reports its live client
+   count to `@system ports`. **Cleanup remaining (not blocking):** migrate the
+   other trees (Sandboxes / Corpora / Collisions) and delete the transitional
+   in-process `createStudioRuntime`.
+2. **`webviewKit` + Impact Report shell** — **done.** A minimal, reusable
+   `webviewKit` (strict CSP/nonce HTML builder, singleton-panel host, typed
+   host↔webview message protocol, browser-neutral replay view model) and an
+   Impact Report webview that drives `replayCorpus` over the service channel and
+   renders the `ActionDelta[]` contract. The webview never opens a socket
+   (webview → extension host → channel → agent runtime).
 3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
 4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
