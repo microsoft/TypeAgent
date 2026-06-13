@@ -100,10 +100,11 @@ export function getSharedStudioPort(): number | undefined {
 /**
  * Resolve the live standalone Studio service for `repoRoot` (or the agent's
  * default workspace) via the in-process registry. Returns `undefined` when no
- * service has announced itself — the action surface then reports an honest
- * "not running" rather than guessing. Falls back to the sole live service when
- * exactly one is announced (the common single-workspace case where the agent's
- * resolved root may not match the service's byte-for-byte).
+ * service has announced itself for *this* workspace — the action surface then
+ * reports an honest "not running". Matching is exact on the canonical workspace
+ * key: proxying to a service for a *different* workspace (e.g. via a
+ * "use the only one" guess) would be worse than reporting "not running", so we
+ * never guess.
  */
 export function lookupStudioServiceEntry(
     repoRoot?: string,
@@ -116,12 +117,7 @@ export function lookupStudioServiceEntry(
             ? repoRoot
             : resolveRepoRoot(resolveStudioRepoRootCandidates(), process.cwd())
                   .repoRoot;
-    const exact = sharedRegistry.lookup(studioWorkspaceKey(root));
-    if (exact !== undefined) {
-        return exact;
-    }
-    const all = sharedRegistry.list();
-    return all.length === 1 ? all[0] : undefined;
+    return sharedRegistry.lookup(studioWorkspaceKey(root));
 }
 
 export async function initializeStudioContext(): Promise<StudioActionContext> {

@@ -23,6 +23,9 @@ import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import {
     STUDIO_REGISTRY_ROLE,
+    STUDIO_REGISTRY_PROTOCOL_VERSION,
+    studioWorkspaceKey,
+    isValidStudioServiceTokenFormat,
     type StudioRegistryInvokeFunctions,
     type StudioServiceEntry,
 } from "@typeagent/core/runtime";
@@ -33,6 +36,29 @@ const debug = registerDebug("typeagent:studio:registry");
 const isAllowedOrigin = createAgentOriginAllowlist({
     extensionSchemes: ["vscode-webview://"],
 });
+
+/**
+ * Validate an announcement before trusting it: structural sanity, a current
+ * protocol version, and — crucially — that `workspaceKey` actually derives from
+ * the announced `repoRoot`, so a service can only claim its own workspace.
+ * (The registry is loopback + origin-gated but token-less, so this is the line
+ * that keeps a malformed/incompatible announce out of the table.)
+ */
+function isValidAnnouncement(entry: StudioServiceEntry): boolean {
+    return (
+        entry !== null &&
+        typeof entry === "object" &&
+        Number.isInteger(entry.port) &&
+        entry.port > 0 &&
+        entry.port < 65536 &&
+        typeof entry.token === "string" &&
+        isValidStudioServiceTokenFormat(entry.token) &&
+        entry.protocolVersion === STUDIO_REGISTRY_PROTOCOL_VERSION &&
+        typeof entry.repoRoot === "string" &&
+        entry.repoRoot.length > 0 &&
+        entry.workspaceKey === studioWorkspaceKey(entry.repoRoot)
+    );
+}
 
 /**
  * The agent-hosted registry: tracks the live standalone Studio service per
@@ -109,6 +135,12 @@ export class StudioRegistryServer {
         const channel = createWebSocketRpcChannel(socket);
         const handlers: StudioRegistryInvokeFunctions = {
             announce: async (entry: StudioServiceEntry) => {
+                if (!isValidAnnouncement(entry)) {
+                    debug(
+                        `rejecting invalid announce for ${entry?.workspaceKey} (port ${entry?.port}, v${entry?.protocolVersion})`,
+                    );
+                    throw new Error("invalid studio service announcement");
+                }
                 // Newest-wins: a re-announce (service restart) for the same
                 // workspace replaces the prior entry and re-tags ownership.
                 this.entries.set(entry.workspaceKey, {

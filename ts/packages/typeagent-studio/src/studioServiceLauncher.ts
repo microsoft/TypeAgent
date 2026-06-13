@@ -111,30 +111,40 @@ function spawnService(repoRoot: string): Promise<ServiceTarget | undefined> {
         let buffer = "";
         child.stdout?.setEncoding("utf8");
         child.stdout?.on("data", (chunk: string) => {
-            buffer += chunk;
-            const newline = buffer.indexOf("\n");
-            if (newline < 0 || settled) {
+            if (settled) {
                 return;
             }
-            const line = buffer.slice(0, newline).trim();
-            try {
-                const parsed = JSON.parse(line) as { port?: unknown };
-                if (typeof parsed.port === "number") {
-                    const port = parsed.port;
-                    void readStudioServiceToken(port).then((token) => {
-                        clearTimeout(timeout);
-                        settle(
-                            token !== undefined
-                                ? {
-                                      endpoint: `ws://127.0.0.1:${port}`,
-                                      token,
-                                  }
-                                : undefined,
-                        );
-                    });
+            buffer += chunk;
+            // Scan each complete line; the service prints `{"port":N}` as its
+            // only stdout output, but tolerate any preceding banner lines.
+            let newline = buffer.indexOf("\n");
+            while (newline >= 0) {
+                const line = buffer.slice(0, newline).trim();
+                buffer = buffer.slice(newline + 1);
+                newline = buffer.indexOf("\n");
+                if (line.length === 0) {
+                    continue;
                 }
-            } catch {
-                // Not the JSON port line yet — keep reading.
+                try {
+                    const parsed = JSON.parse(line) as { port?: unknown };
+                    if (typeof parsed.port === "number") {
+                        const port = parsed.port;
+                        void readStudioServiceToken(port).then((token) => {
+                            clearTimeout(timeout);
+                            settle(
+                                token !== undefined
+                                    ? {
+                                          endpoint: `ws://127.0.0.1:${port}`,
+                                          token,
+                                      }
+                                    : undefined,
+                            );
+                        });
+                        return;
+                    }
+                } catch {
+                    // Not the JSON port line — keep scanning.
+                }
             }
         });
     });

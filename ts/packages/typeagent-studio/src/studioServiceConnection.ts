@@ -149,9 +149,16 @@ export class StudioServiceConnection {
                 onEvent: (event) => this.fanout(event),
                 onClose: () => this.handleClose(gen),
             });
-            // Superseded (disposed or a newer attempt won) — drop this client.
+            // Superseded (disposed or a newer generation, e.g. setTarget) —
+            // drop this client. The superseding change may not have started its
+            // own attempt (connect() coalesces onto this in-flight one), so when
+            // auto-retry is on, schedule a fresh attempt for the new target;
+            // otherwise the connection can stall with nothing pending.
             if (this.disposed || gen !== this.generation) {
                 client?.close();
+                if (!this.disposed && this.client === undefined) {
+                    this.scheduleRetry();
+                }
                 return this.client !== undefined;
             }
             if (client === undefined) {

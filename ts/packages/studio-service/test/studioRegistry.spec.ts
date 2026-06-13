@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { STUDIO_REGISTRY_PROTOCOL_VERSION } from "@typeagent/core/runtime";
+import {
+    STUDIO_REGISTRY_PROTOCOL_VERSION,
+    studioWorkspaceKey,
+} from "@typeagent/core/runtime";
 import type { StudioServiceEntry } from "@typeagent/core/runtime";
 import {
     StudioRegistryServer,
@@ -9,18 +12,27 @@ import {
     lookupStudioService,
 } from "../src/studioRegistry.js";
 
+// The registry validates that workspaceKey derives from repoRoot, so build
+// valid entries: pick the repoRoot and derive the key.
 function makeEntry(over: Partial<StudioServiceEntry> = {}): StudioServiceEntry {
+    const repoRoot = over.repoRoot ?? "/repo/ts";
     return {
-        workspaceKey: "ws-aaa",
-        repoRoot: "/repo/ts",
+        workspaceKey: studioWorkspaceKey(repoRoot),
+        repoRoot,
         port: 12345,
         token: "a".repeat(64),
         pid: 4242,
         protocolVersion: STUDIO_REGISTRY_PROTOCOL_VERSION,
         startedAt: Date.now(),
         ...over,
+        // Ensure the key matches the (possibly overridden) repoRoot.
+        ...(over.workspaceKey === undefined
+            ? { workspaceKey: studioWorkspaceKey(over.repoRoot ?? repoRoot) }
+            : {}),
     };
 }
+
+const KEY_TS = studioWorkspaceKey("/repo/ts");
 
 /** Let queued socket close handlers (eviction) run. */
 function tick(ms = 25): Promise<void> {
@@ -84,13 +96,13 @@ describe("studio service registry relay", () => {
         try {
             // The second announce owns the key now.
             expect(
-                (await lookupStudioService("ws-aaa", { endpoint }))?.port,
+                (await lookupStudioService(KEY_TS, { endpoint }))?.port,
             ).toBe(2222);
             // Closing the first (stale) announcer must NOT evict the live entry.
             first.close();
             await tick();
             expect(
-                (await lookupStudioService("ws-aaa", { endpoint }))?.port,
+                (await lookupStudioService(KEY_TS, { endpoint }))?.port,
             ).toBe(2222);
         } finally {
             second.close();
@@ -99,24 +111,45 @@ describe("studio service registry relay", () => {
 
     it("tracks independent workspaces separately", async () => {
         const a = await announceStudioService(
-            makeEntry({ workspaceKey: "ws-a", port: 1 }),
+            makeEntry({ repoRoot: "/repo/a", port: 1 }),
             { endpoint },
         );
         const b = await announceStudioService(
-            makeEntry({ workspaceKey: "ws-b", port: 2 }),
+            makeEntry({ repoRoot: "/repo/b", port: 2 }),
             { endpoint },
         );
         try {
-            expect(
-                (await lookupStudioService("ws-a", { endpoint }))?.port,
-            ).toBe(1);
-            expect(
-                (await lookupStudioService("ws-b", { endpoint }))?.port,
-            ).toBe(2);
+            const keyA = studioWorkspaceKey("/repo/a");
+            const keyB = studioWorkspaceKey("/repo/b");
+            expect((await lookupStudioService(keyA, { endpoint }))?.port).toBe(
+                1,
+            );
+            expect((await lookupStudioService(keyB, { endpoint }))?.port).toBe(
+                2,
+            );
             expect(server.size()).toBe(2);
         } finally {
             a.close();
             b.close();
+        }
+    });
+
+    it("rejects an announcement whose key doesn't match its repoRoot", async () => {
+        const spoof = makeEntry({ workspaceKey: "not-the-real-key" });
+        // The announcer terminates + retries on the rejected invoke, so just
+        // confirm the registry never stored it.
+        const announcement = await announceStudioService(spoof, {
+            endpoint,
+            firstAttemptTimeoutMs: 300,
+        });
+        try {
+            await tick(100);
+            expect(server.size()).toBe(0);
+            expect(
+                await lookupStudioService(spoof.workspaceKey, { endpoint }),
+            ).toBeNull();
+        } finally {
+            announcement.close();
         }
     });
 });
