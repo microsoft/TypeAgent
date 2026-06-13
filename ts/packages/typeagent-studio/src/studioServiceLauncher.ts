@@ -1,0 +1,160 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { studioWorkspaceKey } from "@typeagent/core/runtime";
+import { lookupStudioService } from "./studioRegistryLookup.js";
+
+/** A resolved, reachable standalone Studio service for a workspace. */
+export interface ServiceTarget {
+    endpoint: string;
+    token: string;
+}
+
+const STUDIO_DIR = path.join(os.homedir(), ".typeagent", "studio");
+
+/** Per-workspace launch lock so two windows don't spawn duplicate services. */
+function lockPath(workspaceKey: string): string {
+    return path.join(STUDIO_DIR, `service-${workspaceKey}.lock`);
+}
+
+/** Stale launch locks (crash mid-launch) are reclaimed after this long. */
+const LOCK_STALE_MS = 30_000;
+/** How long to wait for a freshly-spawned/peer service to announce itself. */
+const ANNOUNCE_TIMEOUT_MS = 20_000;
+const POLL_INTERVAL_MS = 400;
+
+function delay(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Translate a live registry entry into a connection target. */
+function toTarget(entry: { port: number; token: string }): ServiceTarget {
+    return { endpoint: `ws://127.0.0.1:${entry.port}`, token: entry.token };
+}
+
+/** Poll the registry until a service for `workspaceKey` is live, or timeout. */
+async function waitForService(
+    workspaceKey: string,
+    agentServerUrl: string | undefined,
+    timeoutMs: number,
+): Promise<ServiceTarget | undefined> {
+    const deadline = Date.now() + timeoutMs;
+    do {
+        const entry = await lookupStudioService(
+            workspaceKey,
+            agentServerUrl !== undefined ? { agentServerUrl } : {},
+        );
+        if (entry !== null) {
+            return toTarget(entry);
+        }
+        await delay(POLL_INTERVAL_MS);
+    } while (Date.now() < deadline);
+    return undefined;
+}
+
+/** Resolve the `typeagent-studio serve` entrypoint (studio-service `main.js`). */
+function resolveServiceMain(): string {
+    // `studio-service` is an external dependency (not bundled): resolve its
+    // package entry at runtime and sit `main.js` next to it in `dist/`. The
+    // extension bundle is CommonJS, so `require` is available directly.
+    const indexPath = require.resolve("studio-service");
+    return path.join(path.dirname(indexPath), "main.js");
+}
+
+/** Spawn a detached-from-stdio service for `repoRoot` (child dies with us). */
+function spawnService(repoRoot: string): void {
+    const main = resolveServiceMain();
+    const child = spawn(
+        process.execPath,
+        [main, "--workspace", repoRoot],
+        // Not detached: the service is tied to this extension host so it doesn't
+        // outlive VS Code. stdio ignored — readiness is signalled via the
+        // registry, not stdout.
+        { stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+    child.on("error", (err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[typeagent-studio] failed to spawn service:", err);
+    });
+}
+
+/** Acquire the per-workspace launch lock, reclaiming a stale one. */
+async function acquireLock(workspaceKey: string): Promise<boolean> {
+    const file = lockPath(workspaceKey);
+    await fs.mkdir(STUDIO_DIR, { recursive: true });
+    try {
+        const handle = await fs.open(file, "wx");
+        await handle.writeFile(
+            JSON.stringify({ pid: process.pid, at: Date.now() }),
+        );
+        await handle.close();
+        return true;
+    } catch {
+        // Lock exists — reclaim it if stale (a crashed launcher).
+        try {
+            const stat = await fs.stat(file);
+            if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+                await fs.rm(file, { force: true });
+                return acquireLock(workspaceKey);
+            }
+        } catch {
+            // Raced away — treat as not acquired.
+        }
+        return false;
+    }
+}
+
+async function releaseLock(workspaceKey: string): Promise<void> {
+    try {
+        await fs.rm(lockPath(workspaceKey), { force: true });
+    } catch {
+        // Non-fatal.
+    }
+}
+
+/**
+ * Ensure a single standalone Studio service is running for `repoRoot` and return
+ * a target to connect to it (single-instance per canonical workspace):
+ *
+ * 1. **Attach** if one is already announced (this window, another window, or a
+ *    `typeagent-studio serve` CLI).
+ * 2. Otherwise take a per-workspace launch lock and **spawn** one, waiting for
+ *    it to announce. A peer that lost the lock race instead waits for the
+ *    winner's service.
+ *
+ * Returns `undefined` when no service could be reached (agent-server down, or
+ * the spawn didn't announce in time) — the caller surfaces a retry/CLI hint.
+ */
+export async function ensureStudioService(
+    repoRoot: string,
+    options: { agentServerUrl?: string } = {},
+): Promise<ServiceTarget | undefined> {
+    const key = studioWorkspaceKey(repoRoot);
+    const agentServerUrl = options.agentServerUrl;
+
+    // 1. Attach to an already-running service.
+    const existing = await lookupStudioService(
+        key,
+        agentServerUrl !== undefined ? { agentServerUrl } : {},
+    );
+    if (existing !== null) {
+        return toTarget(existing);
+    }
+
+    // 2. Launch under a per-workspace lock (else wait for the winner).
+    const owned = await acquireLock(key);
+    if (!owned) {
+        return waitForService(key, agentServerUrl, ANNOUNCE_TIMEOUT_MS);
+    }
+    try {
+        spawnService(repoRoot);
+        return await waitForService(key, agentServerUrl, ANNOUNCE_TIMEOUT_MS);
+    } finally {
+        await releaseLock(key);
+    }
+}

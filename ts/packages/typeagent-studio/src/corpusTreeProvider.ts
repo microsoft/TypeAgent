@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import type { StudioRuntime } from "@typeagent/core/runtime";
+import type { CorpusSource } from "./serviceRuntimeFacade.js";
 import {
     buildCorpusAgentNodes,
     buildCorpusEntryNodes,
@@ -27,10 +27,10 @@ export class CorpusTreeProvider
     readonly onDidChangeTreeData = this.emitter.event;
     private readonly subscription: { dispose(): void };
 
-    constructor(private readonly runtime: StudioRuntime) {
+    constructor(private readonly source: CorpusSource) {
         // Loaded-agent set drives the agent rows, so refresh on sandbox
         // lifecycle changes (agent load/unload) as well as manual refresh.
-        this.subscription = runtime.onSandboxChanged(() => this.refresh());
+        this.subscription = source.onSandboxChanged(() => this.refresh());
     }
 
     refresh(): void {
@@ -60,14 +60,14 @@ export class CorpusTreeProvider
 
     async getChildren(node?: CorpusTreeNode): Promise<CorpusTreeNode[]> {
         if (!node) {
-            return buildCorpusAgentNodes(await this.runtime.listCorpusAgents());
+            return buildCorpusAgentNodes(await this.source.listCorpusAgents());
         }
         if (node.kind === "agent" && node.agent) {
-            const entries = await this.runtime.listCorpusEntries(node.agent);
+            const entries = await this.source.listCorpusEntries(node.agent);
             return buildCorpusSourceNodes(node.agent, entries);
         }
         if (node.kind === "source" && node.agent && node.source) {
-            const entries = await this.runtime.listCorpusEntries(node.agent);
+            const entries = await this.source.listCorpusEntries(node.agent);
             return buildCorpusEntryNodes(node.agent, node.source, entries);
         }
         return [];

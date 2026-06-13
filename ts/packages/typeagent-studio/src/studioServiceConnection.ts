@@ -4,10 +4,7 @@
 import type { StudioEvent } from "@typeagent/core/events";
 import { StudioServiceClient } from "./studioServiceClient.js";
 
-export type StudioConnectionState =
-    | "disconnected"
-    | "connecting"
-    | "connected";
+export type StudioConnectionState = "disconnected" | "connecting" | "connected";
 
 /**
  * One shared connection to the `studio` service channel for all of the
@@ -48,9 +45,37 @@ export class StudioServiceConnection {
             backoffMs?: number[];
             /** Explicit `ws://host:port` (tests); bypasses discovery. */
             endpoint?: string;
+            /** Capability token presented on connect (with `endpoint`). */
+            token?: string;
         } = {},
     ) {
         this.backoffMs = options.backoffMs ?? [2000, 4000, 8000, 15000];
+        this.endpoint = options.endpoint;
+        this.token = options.token;
+    }
+
+    /** The launcher-resolved target (set before {@link startAutoConnect}). */
+    private endpoint: string | undefined;
+    private token: string | undefined;
+
+    /**
+     * Point the connection at the launched/attached standalone service. The
+     * agent no longer hosts the runtime, so the endpoint + capability token come
+     * from the launcher (not discovery). Triggers a (re)connect when changed.
+     */
+    setTarget(target: { endpoint: string; token: string }): void {
+        if (this.endpoint === target.endpoint && this.token === target.token) {
+            return;
+        }
+        this.endpoint = target.endpoint;
+        this.token = target.token;
+        // Drop any current client so the next connect uses the new target.
+        this.generation++;
+        this.client?.close();
+        this.client = undefined;
+        if (this.autoRetry) {
+            void this.connect();
+        }
     }
 
     get currentState(): StudioConnectionState {
@@ -106,9 +131,10 @@ export class StudioServiceConnection {
                 ...(this.repoRoot !== undefined
                     ? { repoRoot: this.repoRoot }
                     : {}),
-                ...(this.options.endpoint !== undefined
-                    ? { endpoint: this.options.endpoint }
+                ...(this.endpoint !== undefined
+                    ? { endpoint: this.endpoint }
                     : {}),
+                ...(this.token !== undefined ? { token: this.token } : {}),
                 onEvent: (event) => this.fanout(event),
                 onClose: () => this.handleClose(gen),
             });

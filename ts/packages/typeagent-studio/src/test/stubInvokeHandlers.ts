@@ -4,8 +4,11 @@
 import type { StudioServiceInvokeFunctions } from "@typeagent/core/runtime";
 import type { SandboxStatus } from "@typeagent/core/sandbox";
 
-const RUNNING = { id: "studio-default", agents: [], state: "running" } as
-    unknown as SandboxStatus;
+const RUNNING = {
+    id: "studio-default",
+    agents: [],
+    state: "running",
+} as unknown as SandboxStatus;
 
 /**
  * Full {@link StudioServiceInvokeFunctions} with harmless defaults, so test
@@ -29,6 +32,13 @@ export function stubInvokeHandlers(
         clearCollisions: async () => 0,
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => [],
+        listCorpusEntries: async () => [],
+        seedInRepoCorpus: async () => ({
+            path: "/repo/ts/corpus",
+            created: false,
+        }),
+        addExternalCorpusSource: async () => {},
+        recordFeedback: async () => {},
         replayCorpus: async () => ({
             runId: "r",
             summary: {} as never,
