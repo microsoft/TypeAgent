@@ -181,39 +181,45 @@ Then **D (Run/try)** and **C (Corpus)**, then **E (Validate)** once real
 two-version replay lands, then **B (Author/edit)** and finally **F
 (Orchestrate)**, which composes everything. The phasing in §7 reflects this.
 
-## 4. Architecture — the agent hosts the one runtime
+## 4. Architecture — the agent is a thin proxy to the Studio service
 
-> **Decision (Option B).** The Studio runtime is instantiated **once, inside this
-> agent**, in the agent-server. The `typeagent-studio` extension, the
-> `vscode-shell` canvas, an AI orchestrator (MCP), and the CLI are all
-> **clients** of it — none builds its own runtime. This is the same shape as the
-> rest of the system: `code` : `coda` :: `studio` : `typeagent-studio` (the agent
-> holds the capability + a channel; the extension is the rich client/view). See
-> [`DESIGN.md` §3.5](./DESIGN.md).
+> **Decision.** The Studio runtime runs in a **standalone, per-workspace Studio
+> service** (a host-agnostic library + small process entrypoint), launched by the
+> `typeagent-studio` extension or a `typeagent-studio serve` CLI. This `studio`
+> agent is a **thin proxy/client** of that service — it does **not** host the
+> runtime. The extension, the `vscode-shell` canvas, an AI orchestrator (MCP), and
+> the CLI are likewise **clients** of the same service for a given workspace. See
+> [`DESIGN.md` §3.5](./DESIGN.md). _(An earlier iteration hosted the runtime inside
+> this agent — "Option B"; it is being migrated out — see §8 and the
+> implementation plan's phasing.)_
 
-- **The agent owns the runtime.** Its handler constructs the context-agnostic
-  Studio runtime from `@typeagent/core/runtime` (`createStudioRuntimeCore`),
-  which wires `InMemorySandboxManager` + `createRepoAgentLoader`,
-  `FileHealthService`, `FileCorpusService`, `InProcessCollisionService`,
-  `createRepoGrammarScanner`, and `replayCorpus`.
-- **The shared engine is already extracted.** `@typeagent/core/runtime` is the
-  context-agnostic runtime (the former extension `studioRuntimeCore`, now in
-  core). The agent consumes it directly; the extension consumes it **only as a
-  transitional bootstrap** and migrates to driving this agent over the
-  agent-server (see §8 and the implementation plan's phasing).
+- **The agent forwards; it does not own.** Its handler discovers the workspace's
+  Studio service (`discoverPort("studio", workspaceId)`) and forwards its
+  read-only actions over the typed channel. When no service is running it returns
+  an honest _"Studio isn't running for `<workspace>` — open it in VS Code or run
+  `typeagent-studio serve`."_
+- **The shared engine.** The runtime is `@typeagent/core/runtime`
+  (`createStudioRuntimeCore`, wiring `InMemorySandboxManager` +
+  `createRepoAgentLoader`, `FileHealthService`, `FileCorpusService`,
+  `InProcessCollisionService`, `createRepoGrammarScanner`, `replayCorpus`) — hosted
+  by the **Studio service**; the agent and the extension consume it as **clients**.
 - **Typed result / event channel.** Rich clients need typed results (not chat
-  markdown) and a live event stream (health changed, replay rows, trace tail).
-  The agent exposes a structured channel for this — mirroring how the `code`
-  agent serves `coda`. Results flow client←agent; events flow agent→client.
-- **Repo root / search paths.** A single place resolves the repo root (the
-  agent), so clients never diverge. The inspect/run actions accept the target
-  explicitly where it matters (an orchestrator supplies it); the agent falls
-  back to a configured root / `TYPEAGENT_STUDIO_REPO_ROOT` / cwd. Clients that
-  know the workspace (the extension) pass it in rather than letting the agent
-  guess.
-- **State / profile.** Follow the onboarding agent's convention
-  (`~/.typeagent/studio/...`) for any persisted state (e.g. replay run history),
-  via an `AGENTS.md`-style `workspace.ts`.
+  markdown) and a live event stream (health changed, replay rows, trace tail). The
+  **Studio service** exposes the structured `agent-rpc` channel; this agent
+  proxies a subset (the read-only inspect actions) for the chat/MCP surface.
+  Results flow client←service; events flow service→client.
+- **Repo root / workspace identity.** Clients that know the workspace (the
+  extension) pass it in; the agent forwards it. The service resolves and holds the
+  per-workspace runtime, so clients never diverge on repo root / sandbox set /
+  corpus state.
+- **Registration / discovery.** The service announces its `{port, token}` to this
+  agent, which relays it into the registrar via `SessionContext.registerPort` (the
+  pattern where an agent registers a _separate process's_ port — cf. the
+  `montage`/`markdown` view servers), releasing on disconnect — so other clients
+  discover it via `discoverPort`. Evolves to authenticated external
+  self-registration (§8, [`DESIGN.md` §3.5](./DESIGN.md)).
+- **State / profile.** `~/.typeagent/studio/...` for persisted state (e.g. replay
+  run history, sandbox snapshot), owned by the **service**.
 
 ## 5. Human-in-the-loop / approval boundary (hybrid mode)
 
@@ -287,34 +293,39 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
 
 ## 8. Open questions
 
-- ~~**Typed result / event channel shape.**~~ **Decided (dedicated WS, the
-  `code`↔`coda` pattern, with guardrails):** the `studio` agent runs its **own
-  WebSocket server** and registers the port via `SessionContext.registerPort`
-  (from `updateAgentContext` — there is no `SessionContext` at
-  `initializeAgentContext` time); the `typeagent-studio` extension discovers it
-  through the agent-server `discovery` channel (`discoverPort("studio")`) and
-  connects. The **`agent-rpc` `createRpc` framing** rides on top — `invoke` for
-  typed results (e.g. `AvailableAgent[]`, `ActionDelta[]`, health findings) + a
-  server→client subscription that pushes the **existing `StudioEvent` union**
-  from `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row`
-  / `replay.summary`, `feedback.recorded`, …) — reuse that type, don't invent a
-  parallel one. That WS protocol is the **canonical typed Studio API**; `studio`
-  actions and MCP tools are thin wrappers over the **same typed runtime
-  methods**, so it's never VS-Code-only and the AI/CLI audiences get identical
-  data; `ActionResult.displayContent` is chat-summary-only.
-  - _Repo scoping from day one:_ the runtime is per-workspace (cached by repo
-    root), so every `invoke` and the event subscription carry `repoRoot`, and
-    subscriptions are per-connection — repo A's window must never receive repo
-    B's events. A single shared broker port is fine because every message is
-    repo-scoped (`PortRegistrar.lookup`/`discoverPort` are last-writer-wins on
-    `(agent, role)`, so don't rely on the port to disambiguate repos).
-  - _Why a dedicated WS and not an agent-server channel:_ an AppAgent only gets
-    `SessionContext` — **no** `ChannelProvider`/transport handle — and only the
-    agent-server's `connectionHandler` creates connection channels. So an agent
-    **cannot** add a multiplexed channel to that connection; its own WS is the
-    available, proven pattern (this is exactly why `code` does it). The
-    "agent-rpc channel over the agent-server, no new port" idea is infeasible
-    without a platform change to the agent-server.
+- ~~**Typed result / event channel shape.**~~ **Decided (typed `agent-rpc`
+  channel over the Studio service's WebSocket, with guardrails):** the
+  **standalone Studio service** — not the agent (see §4 and [`DESIGN.md`
+  §3.5](./DESIGN.md)) — hosts its own WebSocket; the `typeagent-studio` extension
+  and this `studio` agent discover it via the agent-server `discovery` channel
+  (`discoverPort("studio", workspaceId)`) and connect as clients. The **`agent-rpc`
+  `createRpc` framing** rides on top — `invoke` for typed results (e.g.
+  `AvailableAgent[]`, `ActionDelta[]`, health findings) + a server→client
+  subscription that pushes the **existing `StudioEvent` union** from
+  `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
+  `replay.summary`, `feedback.recorded`, …) — reuse that type, don't invent a
+  parallel one. That protocol is the **canonical typed Studio API**; `studio`
+  actions and MCP tools are thin proxies over the **same typed runtime methods**,
+  so it's never VS-Code-only and the AI/CLI audiences get identical data;
+  `ActionResult.displayContent` is chat-summary-only.
+  - _Repo scoping from day one:_ the runtime is per-workspace, so every `invoke`
+    and the event subscription carry the workspace identity, and subscriptions are
+    per-connection — repo A's window must never receive repo B's events.
+    Per-workspace lookup rides the `PortRegistrar` **role** dimension
+    (`discoverPort("studio", workspaceId)`).
+  - _Why a standalone service with its own WS (not a channel on the agent-server
+    connection):_ an AppAgent only gets `SessionContext` — **no**
+    `ChannelProvider`/transport handle — and only the agent-server's
+    `connectionHandler` creates connection channels, so an agent **cannot** add a
+    multiplexed channel to that connection. More fundamentally, the runtime's
+    affinity is to the **workspace**, not an agent-server session, so it lives in
+    its own per-workspace process ([`DESIGN.md` §3.5](./DESIGN.md)).
+  - _Registration:_ the discovery channel is read-only (only in-process agents can
+    `registerPort`), so the service announces its `{port, token}` to the `studio`
+    agent, which relays it into the registrar via `registerPort` (cf. the
+    `montage`/`markdown` view servers), releasing on disconnect — evolving to
+    authenticated external self-registration. The token rides the announcement, so
+    there is no shared token file.
   - _Why not "structured data on `ActionResult`":_ `ActionResult` carries no
     generic typed payload, and clients receive a `CommandResult` (errors /
     executed actions / metrics / tokens), **not** the raw `ActionResult<T>` — a
@@ -323,18 +334,19 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
     message carries session/repo identity (per-workspace scoping can't bleed
     across windows); connections present a capability token beyond an Origin
     check; explicit subscription ids, cancellation, and backpressure/paging.
-- **Authorization on the service channel.** Because the agent now owns the
+- **Authorization on the service channel.** Because the **service** owns the
   runtime, any local client that connects to its WS could invoke it. Mutating
   actions must stay behind `dryRun` + approval **and** the channel's
   capability-token check — see §5.
 - **One agent or two?** Fold tune+validate into a single `studio` agent (simpler
   discovery) vs. separate `studio-tune` / `studio-validate` agents (smaller
   surfaces). Leaning single agent with sub-action groups, like onboarding.
-- ~~**Sandbox sharing.**~~ **Resolved by Option B:** there is one runtime **per
-  target workspace** (in the agent, keyed by resolved repo root), so there is one
-  sandbox set per workspace; the extension and orchestrator are clients of it.
-  Hybrid mode (human watches in the UI what the agent does) falls out for free —
-  no cross-process sandbox reconciliation needed.
+- ~~**Sandbox sharing.**~~ **Resolved by the per-workspace service:** there is one
+  runtime **per target workspace** (in the Studio service, keyed by canonical
+  workspace identity), so one sandbox set per workspace; the extension, this agent,
+  and any orchestrator are clients of it. Hybrid mode (human watches in the UI what
+  the agent does) falls out for free — no cross-process sandbox reconciliation
+  needed.
 - **Where the driving orchestrator runs** (in-editor Copilot, external MCP
   client, CI) — affects auth and which actions are allow-listed autonomous.
 - **Relationship to a possible "Studio as MCP host"** (STATUS open decision):

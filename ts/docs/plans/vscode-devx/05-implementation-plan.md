@@ -637,13 +637,16 @@ extension renders typed results and subscribes to the agent's event stream; it
 does not own the runtime. (The current in-process `createStudioRuntime` is a
 transitional bootstrap — see §11.)
 
-### 10.2 Agent — host of the runtime; the AI / conversational surface
+### 10.2 Agent — proxy to the runtime; the AI / conversational surface
 
-The `studio` agent (`packages/agents/studio/`) **hosts the runtime** and exposes
-the Studio loop as **typed, dispatchable actions** — automatically available over
-MCP and conversationally, with no new transport code. It follows the `onboarding`
-agent template (manifest + per-group schema/handler) and constructs the
-**S0 headless runtime** (`@typeagent/core/runtime`) rather than a VS Code context.
+The `studio` agent (`packages/agents/studio/`) exposes the Studio loop as
+**typed, dispatchable actions** — automatically available over MCP and
+conversationally, with no new transport code. It follows the `onboarding` agent
+template (manifest + per-group schema/handler). It currently **hosts** the
+**S0 headless runtime** (`@typeagent/core/runtime`); per the runtime-placement
+decision ([DESIGN.md §3.5](./DESIGN.md), §11 "Runtime extraction" below) it is
+being migrated to a **thin proxy** that forwards to a standalone per-workspace
+Studio service.
 
 The surface is **layered by abstraction** (full catalogue in
 [STUDIO-AGENT.md](./STUDIO-AGENT.md)):
@@ -682,11 +685,12 @@ Studio MCP host in scope (locked decision Q8). The `studio` agent's actions
 become available over MCP and `list_commands` automatically by virtue of being a
 registered TypeAgent agent, the same way the `onboarding` agent's are.
 
-**The agent owns the runtime; clients reach it through the dispatcher.** The
-agent's handler calls its hosted runtime directly (agent action → runtime →
-sandbox). The `typeagent-studio` webview host reaches that **same** runtime by
-calling the `studio` agent's actions over the agent-server — it does not hold a
-runtime of its own.
+**One runtime per workspace; clients reach it through the Studio service.** The
+runtime lives in a standalone, per-workspace Studio service ([DESIGN.md
+§3.5](./DESIGN.md)); the `studio` agent **forwards** its actions to that service
+for the chat/MCP surface (agent action → service → runtime → sandbox), and the
+`typeagent-studio` webview/extension launches and connects to that **same**
+service — neither holds a runtime of its own.
 
 ---
 
@@ -696,13 +700,15 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
 **One capability, one runtime, many clients — by P-6.** Each capability is a
 headless primitive in `typeagent-core`, assembled into the Studio runtime that is
-hosted **once, in the `studio` agent** (DESIGN §3.5). Every surface is a client
-of that runtime: the `studio` agent's own dispatchable actions (groups A–F per
-§10.2), the `typeagent-studio` UI, the `vscode-shell` canvas, an AI orchestrator
-(MCP), and the CLI. The invariant is that **no capability is permanently UI-only
-or agent-only** — every one is reachable as a typed action by MVP. It does **not**
-mean every surface lands the same week: **read-only** actions (the Inspect slice
-S1) ride along in P-1; the **mutating / sandbox-executing** actions (Run, Corpus,
+hosted **once per workspace, in a standalone Studio service** ([DESIGN.md
+§3.5](./DESIGN.md)). Every surface is a client of that runtime: the `studio`
+agent (a thin proxy whose dispatchable actions, groups A–F per §10.2, forward to
+the service), the `typeagent-studio` UI, the `vscode-shell` canvas, an AI
+orchestrator (MCP), and the CLI. The invariant is that **no capability is
+permanently UI-only or agent-only** — every one is reachable as a typed action by
+MVP. It does **not** mean every surface lands the same week: **read-only**
+actions (the Inspect slice S1) ride along in P-1; the **mutating /
+sandbox-executing** actions (Run, Corpus,
 Validate, Author) land in P-3/P-4 behind the approval checkpoint. The agent's own
 phases **S0–S5** map onto the phases below (see the table at the end). There is
 one plan; the agent is not a separate track.
@@ -729,6 +735,13 @@ one plan; the agent is not a separate track.
 
 ### P-1.5 Studio service channel (Option B migration — the typed result/event channel)
 
+> **Note:** P-1.5 stood up the typed channel with the runtime **hosted in the
+> `studio` agent** (the interim Option-B placement). That transport detail is
+> **superseded by P-1.6** (the runtime moves to a standalone per-workspace
+> service); the **typed protocol, guardrails, and client work below carry over
+> unchanged** — only the channel's _host_ moves. Kept here as the record of what
+> was built.
+
 The pivotal Option-B step: stand up the **typed `studio` service channel** so rich
 clients consume the agent's runtime instead of hosting their own. This is its own
 milestone because everything stateful downstream (Impact Report, sandbox/replay
@@ -741,6 +754,56 @@ the extension's transitional in-process runtime.
 - **First client = the new Impact Report webview** (P-3's `webviewKit` shell): greenfield, so it proves the channel end-to-end with zero migration risk. **Done:** a minimal `webviewKit` (secure CSP/nonce HTML builder, singleton-panel host, typed host↔webview protocol) + an Impact Report webview that runs `replayCorpus` over the channel (`listCorpusAgents` + `replayCorpus` added to the protocol; rows bounded for transport) and renders the `ActionDelta[]` contract. The webview never opens a socket — webview → extension host → channel → agent runtime.
 - **Cut over existing trees view-by-view** (Sandboxes / Corpora / Event Log / Collisions) from the in-process runtime to channel calls, as each view's backing actions land (rides S2–S3). The extension must gain **no new** in-process runtime logic in the meantime. **Done so far:** the **Event Log** and **Collisions** trees read through the channel (swappable sources; the "Connect … to studio service" command cuts them over to the agent's runtime, with graceful fallback on disconnect). Collisions' scan/list/clear are read-only analysis (`scanGrammarCollisions`/`listCollisions`/`clearCollisions` on the channel; live `collision.detected` + `sandbox.agent.loaded/unloaded` ride the event push). The agent also reports its live client count to `@system ports`.
 - Exit: the Impact Report shell and at least one existing tree read through the `studio` agent over the channel; a collision scan or sandbox action is visible identically from the UI, chat, and MCP (one runtime, one source of truth); the extension's in-process `createStudioRuntime` is on a path to deletion. **Status: MET** — the Impact Report webview (replay over the channel) and the Event Log tree both read through the agent over the channel; the channel has capability-token auth, subscription cancellation, and backpressure guardrails. Remaining cleanup (not blocking exit): migrate the other trees (Sandboxes/Corpora/Collisions) and delete the transitional in-process `createStudioRuntime`.
+
+### P-1.6 Runtime extraction — standalone per-workspace Studio service
+
+> Supersedes the "Option B" placement (runtime hosted **inside** the `studio`
+> agent). Decision + rationale: [DESIGN.md §3.5](./DESIGN.md),
+> [STUDIO-AGENT.md §4/§8](./STUDIO-AGENT.md). The work of P-1.5 (typed protocol in
+> `@typeagent/core`, WS server, capability token, durable `FileWorkspaceState`,
+> the extension client stack, sandbox/event/collision over the channel) carries
+> over unchanged — only the runtime's **host** and the **launch/registration**
+> path move.
+
+The runtime's affinity is to the developer's **workspace**, not to an
+agent-server session, so it moves out of the `studio` agent into a **standalone,
+per-workspace Studio service** (a host-agnostic library + a small process
+entrypoint). **Single mode**: the service is launched by the extension (common
+case) or a `typeagent-studio serve` CLI (headless/CI); the `studio` agent is a
+**thin proxy**; the extension is a client; **one service per canonical workspace
+identity** (a second launcher discovers and attaches). No agent-hosted fallback
+("dual-mode" rejected — the CLI covers the headless case).
+
+- **Discovery: reuse the `PortRegistrar`** (`discoverPort("studio", workspaceId)`
+  — per-workspace via the role dimension). Do not invent a new lookup mechanism.
+- **Registration (the one gap — the discovery channel is read-only):** v1, the
+  service announces its `{port, token}` to the `studio` agent, which relays it
+  into the registrar via `registerPort` and releases on disconnect (the pattern
+  where an agent registers a _separate process's_ port — cf. `montage`/`markdown`
+  view servers); the token rides the announcement (no token file). Evolution:
+  authenticated external `registerPort` on the discovery channel so the service
+  self-registers and the agent keeps no endpoint at all.
+- Phases: **P1** extract the runtime host into the service (relocate
+  `StudioServiceServer` + capability token + `FileWorkspaceState` +
+  `getStudioRuntime`; add the process entrypoint + `typeagent-studio serve` CLI);
+  **P2** re-point the extension to launch + connect (single-instance; discovery
+  via the registrar); **P3** make the `studio` agent a thin proxy (forward the
+  read-only actions; relay registration) and delete its runtime-hosting code;
+  **P4** cleanup + docs.
+- **Risks:** canonical **workspace identity** (symlinks/multi-root/WSL/remote —
+  verify at the protocol level); **sandbox/agent-loading fidelity** (keep agent
+  loading a shared library + a conformance test vs. agent-server behavior);
+  **lifecycle/diagnostics** ("which service am I connected to," restart, health,
+  stale cleanup); the token is **local capability auth**, not real security (keep
+  it behind a replaceable auth provider for remote/cloud).
+- **Open decision (resolved → relay v1).** Registration mechanism: **start with
+  the registrar relay** (no platform change, reuses `registerPort`, matches the
+  `montage`/`markdown` precedent). External authenticated registration on the
+  discovery channel — which also removes the agent's last hosted endpoint and the
+  token file — is the documented **follow-up evolution**, not a prerequisite.
+- Exit: the runtime no longer lives in the `studio` agent; the extension launches
+  + connects to the workspace service; `@studio` forwards to it (honest "not
+  running — open the workspace or run `typeagent-studio serve`" when absent).
 
 ### P-2 J1 vertical (weeks 4–6)
 

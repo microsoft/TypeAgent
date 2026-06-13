@@ -173,121 +173,146 @@ don't build a webview when a code lens would do:
 Most capabilities show up on all three layers — a lens, a panel, a command —
 because that's how a developer naturally encounters them.
 
-### 3.5 Where the runtime runs — the `studio` agent, one runtime per workspace
+### 3.5 Where the runtime runs — a standalone per-workspace Studio service
 
 The §3.0 principle says capability logic is a headless core primitive with thin
-presenters. This section pins down the consequence the rest of the system
-already follows: **the Studio runtime is hosted inside the `studio` agent in the
-agent-server — not separately inside each UI.** There is **one runtime per target
-repository/workspace** (keyed by resolved repo root), not one global singleton
-and not one-per-presenter.
+presenters. This section pins down where that primitive is _hosted_: **the Studio
+runtime runs as a standalone, per-workspace _Studio service_ — a host-agnostic
+library (`@typeagent/core/runtime`) plus a small process entrypoint — not inside
+any UI and not inside the `studio` agent.** There is **one runtime per target
+repository/workspace** (keyed by canonical workspace identity), and **every
+presenter is a client of it**: the `typeagent-studio` extension, an AI
+orchestrator (MCP) via a thin `studio` agent, the CLI, and the `vscode-shell`
+canvas.
 
-This matches how TypeAgent is built everywhere else:
+**Why a standalone service and not the `studio` agent.** An earlier iteration
+hosted the runtime _inside_ the `studio` agent (the `code`↔`coda` pattern). On
+reflection that is the wrong layer: the runtime's affinity is to the developer's
+**repo/workspace**, not to an agent-server session. It is a **language/build
+server** (LSP-like), not an agent — agents handle end-user requests at runtime,
+whereas this runtime is build-time tooling that operates _on other agents_.
+Hosting it in an agent produced a layer inversion (an agent loading sibling
+agents into its own host), a loopback-WebSocket workaround (an agent cannot
+expose a first-class endpoint — a platform smell), a lifecycle mismatch
+(request-serving vs. developer-iterating), and a cloud mismatch (the runtime
+needs the repo on local disk; a multi-tenant agent-server is the wrong host).
 
-- **Capability = an agent in the agent-server.** Every capability (`code`,
-  `calendar`, `onboarding`, …) is an agent reached through the dispatcher.
-  Studio is no exception: the `studio` agent owns the runtime.
-- **VS Code = a thin client of the agent-server.** `vscode-shell` is the generic
-  canvas (connects via an agent-server bridge, routes to any agent). `coda` is a
-  rich, bespoke client of the `code` agent: the **`code` agent hosts a channel;
-  `coda` renders/executes**. The relationship we adopt is the direct analogue:
-
-  > **`studio` : `typeagent-studio` :: `code` : `coda`** — the agent holds the
-  > capability and a channel; the extension is the rich client/view.
+**Who launches it (single mode).** The **extension** launches the service (the
+common case); a **CLI** (`typeagent-studio serve --workspace <root>`) launches it
+headlessly (CI / agent-only). The **`studio` agent is a thin proxy** — never the
+host: it forwards its read-only actions to the workspace's service. There is
+**exactly one service per canonical workspace identity**; a second launcher
+discovers and attaches. We deliberately do **not** add an agent-hosted fallback
+("dual-mode"): its only benefit is `@studio` working with no service running,
+which a dev tool doesn't need and the CLI covers explicitly.
 
 Concretely:
 
-- The `studio` agent constructs the runtime (`@typeagent/core/runtime`) — one
-  per target workspace, cached by resolved repo root.
-- The `typeagent-studio` extension does **not** build its own runtime. It
-  connects to the agent-server, drives the agent's typed actions, and renders
-  the rich UI (trees, Impact Report webview, status bar) from the results.
-- An AI orchestrator (MCP), the CLI, and the `vscode-shell` canvas are peers of
-  the extension — all clients of the same runtime for a given workspace, so they
-  never diverge on repo root, sandbox set, or corpus state.
+- The **Studio service** constructs the runtime — one per workspace — and hosts
+  the typed channel (below).
+- The **`typeagent-studio` extension** launches/connects to the service and
+  renders the rich UI (trees, Impact Report webview, status bar) from typed
+  results + the event stream.
+- The **`studio` agent**, MCP, the CLI, and `vscode-shell` are peers — all
+  clients of the same service for a given workspace, so they never diverge on repo
+  root, sandbox set, or corpus state.
 
-**The new design surface this introduces** (vs. today's chat agents, which only
-render `ActionResult` display content): the rich views need **typed results and
-an event stream**, not rendered markdown. The decided shape (see
-[`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md)):
+**The typed channel (unchanged in shape; only the host moved).** The rich views
+need typed results and an event stream, not rendered markdown:
 
-- **A typed `studio` service channel — the `studio` agent runs its own
-  WebSocket server** (the proven `code`↔`coda` pattern), with the `agent-rpc`
-  `createRpc` framing on top: request/response `invoke` for typed results + a
-  server→client subscription that pushes the existing `StudioEvent` union from
-  `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
-  `replay.summary`, `feedback.recorded`, …). The agent registers its port via
-  `SessionContext.registerPort` (from `updateAgentContext`, not init — there's no
-  `SessionContext` at init time); the `typeagent-studio` extension discovers it
-  via the agent-server `discovery` channel (`discoverPort("studio")`) and
-  connects as a client.
-  - _Repo scoping from day one:_ the runtime is per-workspace (cached by repo
-    root), so **every `invoke` and event subscription carries `repoRoot`** and
-    event subscriptions are per-connection — a window for repo A must never
-    receive repo B's events. (A single shared broker port is fine _because_ every
-    message is repo-scoped.)
-  - _Why its own WS, not a channel on the agent-server connection:_ an AppAgent
-    only receives `SessionContext` — it has **no** `ChannelProvider`/transport
-    handle, and only the agent-server's `connectionHandler` creates connection
-    channels. So an agent **cannot** add a multiplexed channel to that
-    connection; running its own WS (like `code`) is the available pattern.
-- **The WS protocol is the canonical typed Studio API** — `studio` actions and
-  MCP tools are thin wrappers over the **same typed runtime methods**, so the
-  AI/conversational/CLI audiences get the same data and the channel is never a
-  VS-Code-only side path. `ActionResult.displayContent` is used only for chat
-  summaries/links, never as the UI data plane.
-- **Guardrails (carried from the channel review):** every message carries
-  **session/repo identity** (so per-workspace repo root / sandbox set / approval
-  scope can't bleed across windows); connections present a **capability token**
-  beyond an Origin check; the protocol has explicit **subscription ids,
-  cancellation, and backpressure/paging**.
+- A typed **`agent-rpc`** channel over the service's WebSocket: `invoke` for typed
+  results + a server→client subscription pushing the existing `StudioEvent` union
+  from `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
+  `replay.summary`, `feedback.recorded`, …). The protocol types are **pure** in
+  `@typeagent/core` (no transport dependency).
+- _Repo scoping from day one:_ every `invoke` and the subscription carry the
+  workspace identity; subscriptions are per-connection — a window for repo A must
+  never receive repo B's events.
+- _Guardrails:_ a **capability token** (beyond an Origin check), session/repo
+  identity on every message, and explicit **subscription ids / cancellation /
+  backpressure**.
 
-**Security / approval boundary.** Because the agent now _owns_ the runtime, any
-local client that connects to its WS could in principle invoke it. Mutating
-actions (sandbox lifecycle, corpus/schema/grammar writes, costly replays) must
-stay behind the `dryRun` + approval model (§3.0, STUDIO-AGENT §5) and the
-channel's capability-token authorization — not be silently invokable.
+**Discovery & registration — reuse the platform registrar, don't reinvent.**
 
-> **Transitional note.** The extension today still builds an in-process runtime
-> via `createStudioRuntime`. That is a bootstrap; it is migrated to an
-> agent-server client + the typed result/event channel as the `studio` agent's
-> action surface grows (see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md) and the
-> implementation plan's phasing).
+- _Lookup:_ clients find the service through the agent-server's **`PortRegistrar`**
+  (`discoverPort("studio", workspaceId)` — per-workspace scoping rides the
+  existing **role** dimension).
+- _Registration:_ the discovery channel is read-only (only in-process agents can
+  `registerPort`). **v1:** the service announces its `{port, token}` to the
+  `studio` agent, which relays it into the registrar via `registerPort` and
+  releases it on disconnect — the established pattern in which an agent registers
+  a _separate process's_ port (cf. the `montage`/`markdown` view servers).
+  **Evolution:** an authenticated external `registerPort` on the discovery channel
+  so the service self-registers and the agent keeps no endpoint at all. The token
+  rides the announcement, so there is no shared token file.
+
+**Security / approval boundary.** Mutating actions (sandbox lifecycle,
+corpus/schema/grammar writes, costly replays) stay behind the `dryRun` + approval
+model (§3.0, STUDIO-AGENT §5) and the channel's capability-token check. The
+human-driven channel client (the extension) represents a person clicking a
+button; the per-action approval boundary applies to the AI/MCP action surface.
+
+**Consequence.** `@studio` chat/MCP works only when the workspace's service is
+running (open the workspace in VS Code, or run `typeagent-studio serve`) — an
+acceptable, honest stance for a workspace-scoped dev tool.
+
+**Cloud readiness.** This design is local / co-located today: loopback bind,
+ephemeral port, `127.0.0.1` connect, a local capability token, and —
+fundamentally — the **repo on local disk**. What ports cleanly to a future
+cloud/remote agent-server is the **thin-client shape**, the **transport-agnostic
+typed protocol** (pure types in `@typeagent/core`), and **`repoRoot` → workspace
+id**. The target model is **"the runtime lives where the repo lives"** (local /
+devcontainer / Codespace), with a cloud surface **proxying** to it — _not_ a
+multi-tenant agent-server hosting a developer's repo-bound runtime. The cloud move
+swaps the local transport (loopback + file/relay token) for `wss` + a real auth
+provider behind the discovery/auth abstraction; the runtime, protocol, and
+client stack are unchanged.
+
+> **Transitional note.** The current code still hosts the runtime inside the
+> `studio` agent, and the extension still builds an in-process
+> `createStudioRuntime` as a bootstrap. Both are migrated to the standalone-service
+> topology per the implementation plan's phasing (extract the host → re-point the
+> extension → thin agent proxy → cleanup).
 
 ---
 
 ## 4. Architecture in a single picture
 
 ```
-   Presenters (clients) ─ all drive the same runtime, none host it:
+   Presenters (clients) ─ all drive the same runtime; none host it:
 
-   ┌─────────────────────┬────────────────────┬──────────────────────┐
-   │ typeagent-studio     │ vscode-shell        │ AI orchestrator (MCP)│
-   │ rich VS Code UI:     │ generic chat        │ · CLI                │
-   │ trees · webviews ·   │ canvas (any agent)  │                      │
-   │ status bar           │                     │                      │
-   └──────────┬───────────┴──────────┬──────────┴───────────┬──────────┘
-              │   agent-server connection (RPC + typed result/event channel)
-              ▼                       ▼                       ▼
-   ┌──────────────────────────── agent-server ─────────────────────────┐
-   │  dispatcher + agents                                              │
-   │  ┌──────────────────────── studio agent ───────────────────────┐ │
-   │  │ dispatchable actions A–F  +  the Studio runtime, built on    │ │
-   │  │ @typeagent/core: sandbox · corpus · events · feedback ·      │ │
-   │  │ health · collisions · replay · onboardingBridge              │ │
-   │  └───────────────────────────────┬──────────────────────────────┘ │
-   └──────────────────────────────────┼─────────────────────────────────┘
-                                       │  spins up (in-memory or IPC)
-                                       ▼
-                           ┌──────────────────────┐
-                           │  Sandboxed dispatcher │
-                           │  (agents under the    │
-                           │  Studio profile dir)  │
-                           └──────────────────────┘
+   ┌──────────────────┬───────────────────┬───────────────────────────┐
+   │ typeagent-studio  │ vscode-shell       │ AI orchestrator (MCP)/CLI │
+   │ rich VS Code UI:  │ generic chat       │                           │
+   │ trees · webviews  │ canvas (any agent) │                           │
+   └───────┬──────────┴─────────┬──────────┴─────────────┬─────────────┘
+           │ typed result/       │ @studio (chat)         │ @studio (MCP)
+           │ event channel       ▼                        ▼
+           │             ┌──────────── agent-server ──────────────┐
+           │             │  studio agent = THIN PROXY:            │
+           │             │  forwards actions to the service +     │
+           │             │  relays its port into the registrar    │
+           │             └────────────────────┬───────────────────┘
+           │                                  │ discoverPort → connect
+           ▼                                  ▼
+   ┌──────────── Studio service · one per workspace ───────────────────┐
+   │  the Studio runtime, built on @typeagent/core: sandbox · corpus · │
+   │  events · feedback · health · collisions · replay · onboarding    │
+   │  launched by the extension (or `typeagent-studio serve` CLI)      │
+   └───────────────────────────────┬───────────────────────────────────┘
+                                   │  spins up (in-memory or IPC)
+                                   ▼
+                        ┌──────────────────────┐
+                        │  Sandboxed dispatcher │
+                        │  (agents under the    │
+                        │  Studio profile dir)  │
+                        └──────────────────────┘
 ```
 
 `@typeagent/core` is the shared engine **library**; the runtime **instance**
-lives in the `studio` agent, and every presenter is a client of it (§3.5). The
+lives in the standalone **per-workspace Studio service** (launched by the
+extension or the `typeagent-studio serve` CLI), and every presenter — including
+the `studio` agent, which is a thin proxy — is a client of it (§3.5). The
 sandboxed dispatcher runs the user's actual agents. The Studio profile directory
 is **always separate** from the developer's personal TypeAgent profile.
 

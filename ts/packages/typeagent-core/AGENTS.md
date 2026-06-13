@@ -11,12 +11,14 @@ onboarding bridge. The `runtime/` module wires these primitives into the
 context-agnostic Studio runtime (`createStudioRuntimeCore` → `StudioRuntime`)
 via a host-supplied `StudioRuntimeContext`.
 
-**Where the runtime instance lives:** the runtime is hosted **once, inside the
-`studio` agent** (`packages/agents/studio`), in the agent-server. The
-`typeagent-studio` extension, the `vscode-shell` canvas, an AI orchestrator
-(MCP), and the CLI are all **clients** of that one runtime — they call the
-agent's typed actions, they do not each build a runtime. (The extension's
-in-process construction is a transitional bootstrap being migrated out.) See
+**Where the runtime instance lives:** the runtime runs **once per workspace, in a
+standalone Studio service** — a host-agnostic library (this `runtime/` module) +
+a small process entrypoint, launched by the `typeagent-studio` extension or a
+`typeagent-studio serve` CLI. The extension, the `vscode-shell` canvas, an AI
+orchestrator (MCP, via a thin `studio` agent), and the CLI are all **clients** of
+that one runtime — they do not each build a runtime. (Earlier the runtime was
+hosted inside the `studio` agent — "Option B"; it is migrating out, and the
+extension's in-process construction is likewise a transitional bootstrap.) See
 [`DESIGN.md` §3.5](../../docs/plans/vscode-devx/DESIGN.md).
 
 ## Design principle you MUST preserve — headless core, thin presenters

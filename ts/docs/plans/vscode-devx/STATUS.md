@@ -170,41 +170,51 @@ once (the webview renders the result; an agent consumes the same shape). A
 concrete vehicle for the agent surface is a new first-party **`studio` TypeAgent
 agent** — see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).
 
-**Architecture decision — where the runtime runs (Option B; decided).** The
-Studio runtime is hosted **in the `studio` agent** (in the agent-server) — **one
-runtime per target workspace** (keyed by resolved repo root), not a global
-singleton — and every UI is a **client** of it, the same shape as the rest of the
-system (`code` : `coda` :: `studio` : `typeagent-studio`). The `typeagent-studio`
-extension does **not** host its own runtime; it drives the agent's typed actions
-and renders the results. See [`DESIGN.md` §3.5](./DESIGN.md). The extension's
-current in-process `createStudioRuntime` is a **transitional bootstrap** to be
-migrated to an agent-server client as the agent's action surface grows.
+**Architecture decision — where the runtime runs (standalone per-workspace
+service; supersedes "Option B").** The Studio runtime's affinity is to the
+developer's **workspace**, not to an agent-server session, so it runs in a
+**standalone, per-workspace Studio service** (a host-agnostic library + a small
+process entrypoint) launched by the extension or a `typeagent-studio serve` CLI.
+The **`studio` agent is a thin proxy** — never the runtime host; the
+`typeagent-studio` extension, the `vscode-shell` canvas, MCP, and the CLI are all
+**clients** of the service for a given workspace. **Single mode** (no agent-hosted
+fallback — the CLI covers the headless case). See [`DESIGN.md` §3.5](./DESIGN.md)
+and [`STUDIO-AGENT.md` §4](./STUDIO-AGENT.md).
 
-**Typed result / event channel (decided).** For rich (non-chat) clients, the
-`studio` agent serves a **typed service channel over its own WebSocket** — the
-proven `code`↔`coda` pattern: port registered via `registerPort`, the
-`typeagent-studio` client discovers it via `discoverPort("studio")`. On top runs
-`agent-rpc` `createRpc`: `invoke` for typed results + a server→client
-subscription that pushes the existing `StudioEvent` union from
-`@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
-`replay.summary`, `feedback.recorded`, …) — reuse that type. That WS
-protocol is the **canonical typed API**; `studio` actions and MCP tools wrap the
-**same typed runtime methods**; `ActionResult.displayContent` is
+> _Earlier this was "Option B" (the runtime hosted **inside** the `studio` agent,
+> the `code`↔`coda` pattern). The **current code still implements Option B** and
+> is being migrated to the standalone service per the implementation plan's
+> phasing (extract the host → re-point the extension → thin agent proxy →
+> cleanup). The extension's in-process `createStudioRuntime` is likewise a
+> transitional bootstrap._
+
+**Typed result / event channel (decided).** Rich (non-chat) clients consume a
+**typed `agent-rpc` channel over the Studio service's WebSocket**: `invoke` for
+typed results + a server→client subscription pushing the existing `StudioEvent`
+union from `@typeagent/core/events` (`sandbox.*`, `collision.detected`,
+`replay.row` / `replay.summary`, `feedback.recorded`, …) — reuse that type.
+Clients **look up** the service via `discoverPort("studio", workspaceId)`
+(per-workspace via the `PortRegistrar` **role** dimension — reuse the registrar,
+don't reinvent it). Because the discovery channel is read-only, the service
+**registers** by announcing its `{port, token}` to the `studio` agent, which
+relays it into the registrar via `registerPort` (the pattern where an agent
+registers a _separate process's_ port — cf. `montage`/`markdown`); evolving to
+authenticated external self-registration (which also removes the shared token
+file). That protocol is the **canonical typed API**; `studio` actions and MCP
+tools proxy the **same typed runtime methods**; `ActionResult.displayContent` is
 chat-summary-only. Guardrails: session/repo identity on every message, a
 capability token, and subscription/cancellation/backpressure. Rejected:
 "structured data on `ActionResult`" (clients get a `CommandResult`, not the raw
-`ActionResult<T>` — a platform change) **and** "an `agent-rpc` channel on the
-existing agent-server connection, no new port" — **infeasible**: an AppAgent gets
-only `SessionContext` (no `ChannelProvider`/transport), and only the
-agent-server's `connectionHandler` creates channels, so an agent can't add one
-(this is exactly why `code` runs its own WS). See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
+`ActionResult<T>` — a platform change). See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
 Mutating actions must sit behind `dryRun` + approval **and** the channel's
 capability-token check.
 
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
-- ~~Where does the Studio **runtime** live?~~ **Resolved (Option B):** in the
-  `studio` agent (one per workspace); UIs are clients (see the note above).
+- ~~Where does the Studio **runtime** live?~~ **Resolved:** a **standalone,
+  per-workspace Studio service**; the `studio` agent and the UIs are clients (see
+  the note above). _(Earlier "Option B" placed it inside the agent; migrating
+  out.)_
 - ~~**Typed result / event channel** for rich clients.~~ **Resolved:** the
   `studio` agent's own WebSocket (`code`↔`coda` pattern: `registerPort` /
   `discoverPort`) with `agent-rpc` framing; actions/MCP wrap the same methods
