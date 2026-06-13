@@ -12,6 +12,12 @@
  */
 
 import { startStudioService } from "./studioService.js";
+import { getStudioRuntime } from "./runtime.js";
+import { announceStudioService } from "./studioRegistry.js";
+import {
+    studioWorkspaceKey,
+    STUDIO_REGISTRY_PROTOCOL_VERSION,
+} from "@typeagent/core/runtime";
 
 function parseArgs(argv: string[]): { workspace?: string; port?: number } {
     const out: { workspace?: string; port?: number } = {};
@@ -41,10 +47,25 @@ async function main(): Promise<void> {
     // One machine-readable line for the launcher; the token is in the token file.
     process.stdout.write(`${JSON.stringify({ port: handle.port })}\n`);
 
+    // Announce ourselves to the `studio` agent's registry so the agent proxy
+    // (and any extra extension window) can discover this workspace's service.
+    // Best-effort + self-retrying: a not-yet-running agent doesn't block start.
+    const repoRoot = getStudioRuntime().getRepoRootInfo().repoRoot;
+    const announcement = await announceStudioService({
+        workspaceKey: studioWorkspaceKey(repoRoot),
+        repoRoot,
+        port: handle.port,
+        token: handle.token,
+        pid: process.pid,
+        protocolVersion: STUDIO_REGISTRY_PROTOCOL_VERSION,
+        startedAt: Date.now(),
+    });
+
     let shuttingDown = false;
     const shutdown = () => {
         if (shuttingDown) return;
         shuttingDown = true;
+        announcement.close();
         void handle.close().finally(() => process.exit(0));
     };
     process.on("SIGINT", shutdown);

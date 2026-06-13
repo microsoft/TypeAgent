@@ -33,3 +33,11 @@ export {
     startStudioService,
     type StudioServiceHandle,
 } from "./studioService.js";
+export {
+    StudioRegistryServer,
+    announceStudioService,
+    lookupStudioService,
+    discoverRegistryEndpoint,
+    type StudioServiceAnnouncement,
+    type RegistryClientOptions,
+} from "./studioRegistry.js";

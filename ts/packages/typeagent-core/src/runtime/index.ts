@@ -12,5 +12,7 @@
 export * from "./studioRuntimeCore.js";
 export * from "./repoRootResolver.js";
 export * from "./studioProtocol.js";
+export * from "./studioRegistryProtocol.js";
 export * from "./studioServiceAuth.js";
+export * from "./studioWorkspaceId.js";
 export { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";

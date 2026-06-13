@@ -5586,6 +5586,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
       '@typeagent/core':
         specifier: workspace:*
         version: link:../typeagent-core
