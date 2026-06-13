@@ -41,3 +41,4 @@ export {
     type StudioServiceAnnouncement,
     type RegistryClientOptions,
 } from "./studioRegistry.js";
+export { StudioServiceProxyClient } from "./studioServiceProxyClient.js";

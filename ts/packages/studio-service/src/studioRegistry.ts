@@ -46,6 +46,14 @@ export class StudioRegistryServer {
         { entry: StudioServiceEntry; ownerId: number }
     >();
     private nextConnectionId = 0;
+    private connectionCount = 0;
+
+    /**
+     * Fired after {@link connectionCount} changes (connect/disconnect) with the
+     * new total, so the agent lifecycle can surface it to `@system ports`. The
+     * connections are services announcing + brief lookups — not runtime clients.
+     */
+    public onClientCountChanged?: (count: number) => void;
 
     private constructor(
         private readonly server: WebSocketServer,
@@ -96,6 +104,8 @@ export class StudioRegistryServer {
 
     private onConnection(socket: WebSocket): void {
         const connectionId = this.nextConnectionId++;
+        this.connectionCount++;
+        this.onClientCountChanged?.(this.connectionCount);
         const channel = createWebSocketRpcChannel(socket);
         const handlers: StudioRegistryInvokeFunctions = {
             announce: async (entry: StudioServiceEntry) => {
@@ -120,6 +130,8 @@ export class StudioRegistryServer {
         >("studio:registry", channel, handlers);
 
         socket.on("close", () => {
+            this.connectionCount = Math.max(0, this.connectionCount - 1);
+            this.onClientCountChanged?.(this.connectionCount);
             // Evict only entries this socket still owns (a later re-announce
             // from another connection may have taken over the key).
             for (const [key, value] of this.entries) {
@@ -136,6 +148,21 @@ export class StudioRegistryServer {
     /** Live entry count (diagnostics/tests). */
     public size(): number {
         return this.entries.size;
+    }
+
+    /** In-process lookup of the live service for `workspaceKey` (for the agent). */
+    public lookup(workspaceKey: string): StudioServiceEntry | undefined {
+        return this.entries.get(workspaceKey)?.entry;
+    }
+
+    /** All live services (diagnostics / single-service fallback). */
+    public list(): StudioServiceEntry[] {
+        return [...this.entries.values()].map((v) => v.entry);
+    }
+
+    /** Open registry connections (services + lookups) — for `@system ports`. */
+    public getConnectedCount(): number {
+        return this.connectionCount;
     }
 
     public close(): Promise<void> {
