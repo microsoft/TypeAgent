@@ -202,6 +202,8 @@ export type BridgeFromWebviewMessage =
     | { type: "switchSession"; sessionId: string }
     | { type: "renameCurrentSession"; name: string }
     | { type: "deleteCurrentSession" }
+    | { type: "renameSession"; sessionId: string; name: string }
+    | { type: "deleteSession"; sessionId: string }
     | { type: "focus"; focused: boolean }
     | { type: "pcUpdate"; input: string; direction: CompletionDirection }
     | { type: "pcAccept" }

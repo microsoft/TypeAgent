@@ -301,6 +301,12 @@ body {
   overflow-y: auto;
 }
 
+.session-search-result-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .session-search-result {
   display: flex;
   align-items: center;
@@ -314,6 +320,10 @@ body {
   padding: 5px 6px;
   text-align: left;
   font-family: var(--vscode-font-family);
+}
+
+.session-search-result.hidden {
+  display: none;
 }
 
 .session-search-result:hover,
@@ -344,6 +354,77 @@ body {
 
 .session-search-result.current .session-search-result-count {
   color: inherit;
+}
+
+.session-search-result-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.session-search-result-actions.hidden {
+  display: none;
+}
+
+.session-search-item-btn {
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-search-item-btn:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
+.session-search-item-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.session-search-inline-rename {
+  min-width: 0;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-search-inline-rename.hidden {
+  display: none;
+}
+
+.session-search-inline-rename input {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+.session-search-inline-rename input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.session-search-inline-rename input.conflict {
+  border-color: var(--vscode-errorForeground, #f14c4c);
 }
 
 .session-search-empty {

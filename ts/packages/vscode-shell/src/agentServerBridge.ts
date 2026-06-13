@@ -1235,6 +1235,12 @@ export class AgentServerBridge {
             case "deleteCurrentSession":
                 await this.deleteCurrentSessionFromWebview();
                 break;
+            case "renameSession":
+                await this.renameSessionFromWebview(msg.sessionId, msg.name);
+                break;
+            case "deleteSession":
+                await this.deleteSessionFromWebview(msg.sessionId);
+                break;
             case "focus":
                 this.onWebviewFocusChanged?.(msg.focused);
                 break;
@@ -2251,6 +2257,94 @@ export class AgentServerBridge {
         vscode.window.showInformationMessage(
             `Deleted conversation "${currentName}"`,
         );
+        await this.postSessionList();
+    }
+
+    private async renameSessionFromWebview(
+        sessionId: string,
+        newName: string,
+    ): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        const trimmed = newName.trim();
+        if (!trimmed) {
+            vscode.window.showWarningMessage("Conversation name cannot be empty.");
+            return;
+        }
+
+        const sessions = await this.connection.listSessions();
+        const target = sessions.find((s) => s.sessionId === sessionId);
+        if (!target) {
+            vscode.window.showWarningMessage(
+                "Selected conversation no longer exists.",
+            );
+            await this.postSessionList();
+            return;
+        }
+
+        const collision = sessions.find(
+            (s) =>
+                s.sessionId !== sessionId &&
+                s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (collision) {
+            vscode.window.showWarningMessage(
+                `A conversation named "${trimmed}" already exists.`,
+            );
+            await this.postSessionList();
+            return;
+        }
+
+        await this.connection.renameSession(sessionId, trimmed);
+        if (this.session?.sessionId === sessionId) {
+            this.nameOverride = trimmed;
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId,
+                sessionName: this.getDisplayName(),
+            });
+            this.onStatusChanged?.();
+        }
+        await this.postSessionList();
+    }
+
+    private async deleteSessionFromWebview(sessionId: string): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        if (!sessionId) {
+            return;
+        }
+        if (this.session?.sessionId === sessionId) {
+            await this.deleteCurrentSessionFromWebview();
+            return;
+        }
+
+        const sessions = await this.connection.listSessions();
+        const target = sessions.find((s) => s.sessionId === sessionId);
+        if (!target) {
+            vscode.window.showWarningMessage(
+                "Selected conversation no longer exists.",
+            );
+            await this.postSessionList();
+            return;
+        }
+
+        const targetName = target.name || target.sessionId.substring(0, 8);
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete conversation "${targetName}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
+        );
+        if (confirm !== "Delete") {
+            return;
+        }
+
+        await this.connection.deleteSession(sessionId);
         await this.postSessionList();
     }
 

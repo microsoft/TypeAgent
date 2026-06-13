@@ -93,6 +93,7 @@ let currentSessionName = "";
 let currentSessionClientCount: number | undefined;
 let transitionStatusLabel: "Creating" | "Connecting" | undefined;
 let knownSessions: SessionListEntry[] = [];
+let searchRenameSessionId: string | undefined;
 type SessionListEntry = {
     sessionId: string;
     name: string;
@@ -484,6 +485,7 @@ function setPopoverVisible(popover: HTMLElement, visible: boolean): void {
 function hideSessionPopovers(): void {
     setPopoverVisible(sessionCreatePopoverEl, false);
     setPopoverVisible(sessionSearchPopoverEl, false);
+    searchRenameSessionId = undefined;
 }
 
 function isSessionPopoverVisible(): boolean {
@@ -498,6 +500,14 @@ function hasRenameConflict(name: string): boolean {
     const lower = name.toLowerCase();
     return knownSessions.some(
         (s) => s.sessionId !== currentSessionId && s.name.toLowerCase() === lower,
+    );
+}
+
+function hasSessionRenameConflict(sessionId: string, name: string): boolean {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return knownSessions.some(
+        (s) => s.sessionId !== sessionId && s.name.toLowerCase() === lower,
     );
 }
 
@@ -622,6 +632,13 @@ function renderSessionSearchResults(): void {
             session.sessionId.toLowerCase().includes(query),
     );
 
+    if (
+        searchRenameSessionId &&
+        !knownSessions.some((s) => s.sessionId === searchRenameSessionId)
+    ) {
+        searchRenameSessionId = undefined;
+    }
+
     sessionSearchResultsEl.innerHTML = "";
     if (matches.length === 0) {
         const emptyEl = document.createElement("div");
@@ -632,6 +649,9 @@ function renderSessionSearchResults(): void {
     }
 
     for (const session of matches) {
+        const rowEl = document.createElement("div");
+        rowEl.className = "session-search-result-row";
+
         const resultBtn = document.createElement("button");
         resultBtn.type = "button";
         resultBtn.className = "session-search-result";
@@ -639,6 +659,8 @@ function renderSessionSearchResults(): void {
         const isCurrent = session.sessionId === currentSessionId;
         resultBtn.setAttribute("aria-selected", String(isCurrent));
         if (isCurrent) resultBtn.classList.add("current");
+        const isRenameRow = searchRenameSessionId === session.sessionId;
+        if (isRenameRow) resultBtn.classList.add("hidden");
 
         const nameEl = document.createElement("span");
         nameEl.className = "session-search-result-name";
@@ -664,13 +686,147 @@ function renderSessionSearchResults(): void {
             }
             hideSessionPopovers();
         });
-        sessionSearchResultsEl.appendChild(resultBtn);
+
+        const actionsEl = document.createElement("div");
+        actionsEl.className = "session-search-result-actions";
+        if (isRenameRow) actionsEl.classList.add("hidden");
+
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "session-search-item-btn";
+        editBtn.title = "Rename conversation";
+        editBtn.setAttribute("aria-label", "Rename conversation");
+        editBtn.innerHTML =
+            '<span class="codicon codicon-edit session-action-icon" aria-hidden="true"></span>';
+        editBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (!isConnected || isSwitching) return;
+            searchRenameSessionId = session.sessionId;
+            renderSessionSearchResults();
+            const input = sessionSearchResultsEl.querySelector(
+                `input[data-session-id="${session.sessionId}"]`,
+            ) as HTMLInputElement | null;
+            input?.focus();
+            input?.select();
+        });
+        actionsEl.appendChild(editBtn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "session-search-item-btn";
+        deleteBtn.title = "Delete conversation";
+        deleteBtn.setAttribute("aria-label", "Delete conversation");
+        deleteBtn.innerHTML =
+            '<span class="codicon codicon-trash session-action-icon" aria-hidden="true"></span>';
+        deleteBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (!isConnected || isSwitching) return;
+            vscode.postMessage({
+                type: "deleteSession",
+                sessionId: session.sessionId,
+            });
+        });
+        actionsEl.appendChild(deleteBtn);
+
+        const renameEditorEl = document.createElement("div");
+        renameEditorEl.className = "session-search-inline-rename";
+        if (!isRenameRow) renameEditorEl.classList.add("hidden");
+
+        const renameInputEl = document.createElement("input");
+        renameInputEl.type = "text";
+        renameInputEl.value = session.name;
+        renameInputEl.title = "Rename conversation";
+        renameInputEl.setAttribute("aria-label", "Rename conversation");
+        renameInputEl.setAttribute("data-session-id", session.sessionId);
+        renameEditorEl.appendChild(renameInputEl);
+
+        const renameSaveBtn = document.createElement("button");
+        renameSaveBtn.type = "button";
+        renameSaveBtn.className = "session-search-item-btn";
+        renameSaveBtn.title = "Save conversation name";
+        renameSaveBtn.setAttribute("aria-label", "Save conversation name");
+        renameSaveBtn.innerHTML =
+            '<span class="codicon codicon-check session-action-icon" aria-hidden="true"></span>';
+        renameEditorEl.appendChild(renameSaveBtn);
+
+        const renameCancelBtn = document.createElement("button");
+        renameCancelBtn.type = "button";
+        renameCancelBtn.className = "session-search-item-btn";
+        renameCancelBtn.title = "Cancel rename";
+        renameCancelBtn.setAttribute("aria-label", "Cancel rename");
+        renameCancelBtn.innerHTML =
+            '<span class="codicon codicon-close session-action-icon" aria-hidden="true"></span>';
+        renameEditorEl.appendChild(renameCancelBtn);
+
+        const syncRenameState = () => {
+            const name = renameInputEl.value.trim();
+            const conflict = hasSessionRenameConflict(session.sessionId, name);
+            const unchanged = name.toLowerCase() === session.name.toLowerCase();
+            renameSaveBtn.disabled =
+                !isConnected || isSwitching || !name || conflict || unchanged;
+            renameInputEl.classList.toggle("conflict", conflict);
+            if (conflict) {
+                renameInputEl.setAttribute("aria-invalid", "true");
+                renameInputEl.title =
+                    "A conversation with this name already exists.";
+            } else {
+                renameInputEl.removeAttribute("aria-invalid");
+                renameInputEl.title = "Rename conversation";
+            }
+        };
+
+        const cancelInlineRename = () => {
+            searchRenameSessionId = undefined;
+            renderSessionSearchResults();
+        };
+
+        const submitInlineRename = () => {
+            if (!isConnected || isSwitching) return;
+            const name = renameInputEl.value.trim();
+            const conflict = hasSessionRenameConflict(session.sessionId, name);
+            const unchanged = name.toLowerCase() === session.name.toLowerCase();
+            if (!name || conflict || unchanged) return;
+            searchRenameSessionId = undefined;
+            vscode.postMessage({
+                type: "renameSession",
+                sessionId: session.sessionId,
+                name,
+            });
+        };
+
+        renameInputEl.addEventListener("input", syncRenameState);
+        renameInputEl.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                submitInlineRename();
+                return;
+            }
+            if (event.key === "Escape") {
+                event.preventDefault();
+                cancelInlineRename();
+            }
+        });
+        renameSaveBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            submitInlineRename();
+        });
+        renameCancelBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            cancelInlineRename();
+        });
+        syncRenameState();
+
+        rowEl.appendChild(resultBtn);
+        rowEl.appendChild(actionsEl);
+        rowEl.appendChild(renameEditorEl);
+        sessionSearchResultsEl.appendChild(rowEl);
     }
 }
 
 function showSessionSearchPopover(): void {
     if (!isConnected || isSwitching) return;
     setPopoverVisible(sessionCreatePopoverEl, false);
+    searchRenameSessionId = undefined;
     sessionSearchInputEl.value = "";
     renderSessionSearchResults();
     setPopoverVisible(sessionSearchPopoverEl, true);
