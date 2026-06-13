@@ -5,7 +5,10 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { studioWorkspaceKey } from "@typeagent/core/runtime";
+import {
+    studioWorkspaceKey,
+    readStudioServiceToken,
+} from "@typeagent/core/runtime";
 import { lookupStudioService } from "./studioRegistryLookup.js";
 
 /** A resolved, reachable standalone Studio service for a workspace. */
@@ -65,21 +68,75 @@ function resolveServiceMain(): string {
     return path.join(path.dirname(indexPath), "main.js");
 }
 
-/** Spawn a detached-from-stdio service for `repoRoot` (child dies with us). */
-function spawnService(repoRoot: string): void {
+/** Spawn a service for `repoRoot` and resolve its target from stdout + token file.
+ *
+ * The child prints `{"port":N}` on stdout once bound and writes its capability
+ * token to the per-port file; reading both directly means the launching window
+ * connects to its own service WITHOUT needing the agent-server (the registry is
+ * only for the agent proxy and cross-window attach). The child is tied to this
+ * extension host (not detached) so it doesn't outlive VS Code.
+ */
+function spawnService(repoRoot: string): Promise<ServiceTarget | undefined> {
     const main = resolveServiceMain();
-    const child = spawn(
-        process.execPath,
-        [main, "--workspace", repoRoot],
-        // Not detached: the service is tied to this extension host so it doesn't
-        // outlive VS Code. stdio ignored — readiness is signalled via the
-        // registry, not stdout.
-        { stdio: "ignore", windowsHide: true },
-    );
-    child.unref();
-    child.on("error", (err) => {
-        // eslint-disable-next-line no-console
-        console.warn("[typeagent-studio] failed to spawn service:", err);
+    return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value: ServiceTarget | undefined) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+        };
+        let child: ReturnType<typeof spawn>;
+        try {
+            child = spawn(process.execPath, [main, "--workspace", repoRoot], {
+                stdio: ["ignore", "pipe", "ignore"],
+                windowsHide: true,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn("[typeagent-studio] failed to spawn service:", err);
+            settle(undefined);
+            return;
+        }
+        child.unref();
+        child.on("error", (err) => {
+            // eslint-disable-next-line no-console
+            console.warn("[typeagent-studio] service spawn error:", err);
+            settle(undefined);
+        });
+        const timeout = setTimeout(
+            () => settle(undefined),
+            ANNOUNCE_TIMEOUT_MS,
+        );
+        timeout.unref?.();
+        let buffer = "";
+        child.stdout?.setEncoding("utf8");
+        child.stdout?.on("data", (chunk: string) => {
+            buffer += chunk;
+            const newline = buffer.indexOf("\n");
+            if (newline < 0 || settled) {
+                return;
+            }
+            const line = buffer.slice(0, newline).trim();
+            try {
+                const parsed = JSON.parse(line) as { port?: unknown };
+                if (typeof parsed.port === "number") {
+                    const port = parsed.port;
+                    void readStudioServiceToken(port).then((token) => {
+                        clearTimeout(timeout);
+                        settle(
+                            token !== undefined
+                                ? {
+                                      endpoint: `ws://127.0.0.1:${port}`,
+                                      token,
+                                  }
+                                : undefined,
+                        );
+                    });
+                }
+            } catch {
+                // Not the JSON port line yet — keep reading.
+            }
+        });
     });
 }
 
@@ -152,7 +209,11 @@ export async function ensureStudioService(
         return waitForService(key, agentServerUrl, ANNOUNCE_TIMEOUT_MS);
     }
     try {
-        spawnService(repoRoot);
+        const spawned = await spawnService(repoRoot);
+        if (spawned !== undefined) {
+            return spawned;
+        }
+        // Fallback: the child may still announce via the registry shortly.
         return await waitForService(key, agentServerUrl, ANNOUNCE_TIMEOUT_MS);
     } finally {
         await releaseLock(key);
