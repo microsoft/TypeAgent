@@ -81,6 +81,9 @@ jobs:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
           registry: $(REGISTRY)
+          # Manual/scheduled; skip store caching (the Windows post-job cache save
+          # can exceed its timeout and fail the job after a successful publish).
+          enableCache: false
 
       - template: include-update-package-version.yml
         parameters:
