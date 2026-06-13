@@ -62,10 +62,14 @@ jobs:
           nodeVersion: $(nodeVersion)
           registry: $(REGISTRY)
 
-      # Build the plugin (compiles + bundles the MCP server's deps).
+      # Build the plugin AND its workspace dependencies. `pnpm --filter <pkg> run
+      # build` would build only the plugin, leaving @typeagent/agent-sdk /
+      # agent-server-client / dispatcher-types unbuilt (TS2307). `pnpm run build
+      # <regexp>` routes through fluid-build, which builds the matched package and
+      # its dependencies in topological order.
       - script: |
-          pnpm --filter @typeagent/copilot-plugin run build
-        displayName: Build copilot-plugin
+          pnpm run build copilot-plugin
+        displayName: Build copilot-plugin (+ deps)
         workingDirectory: $(buildDirectory)
 
       # Compile the MCP server into a single-file executable (Node SEA) for this
