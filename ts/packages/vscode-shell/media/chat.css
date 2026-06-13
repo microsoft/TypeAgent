@@ -121,8 +121,14 @@ body {
 .session-action-btn {
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 4px;
-  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
   cursor: pointer;
   width: 24px;
   height: 24px;
@@ -203,7 +209,10 @@ body {
   border: 1px solid var(--vscode-input-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
-  background: var(--vscode-dropdown-background, var(--vscode-sideBar-background));
+  background: var(
+    --vscode-dropdown-background,
+    var(--vscode-sideBar-background)
+  );
 }
 
 .session-popover.hidden {
@@ -270,8 +279,14 @@ body {
   min-width: 26px;
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 4px;
-  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
   cursor: pointer;
   font-family: var(--vscode-font-family);
   font-size: 14px;
@@ -370,8 +385,14 @@ body {
 .session-search-item-btn {
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 4px;
-  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
   cursor: pointer;
   width: 22px;
   height: 22px;

@@ -165,7 +165,9 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "vscode-shell.newSidebarSession",
             async () => {
-                await vscode.commands.executeCommand("vscode-shell.chatView.focus");
+                await vscode.commands.executeCommand(
+                    "vscode-shell.chatView.focus",
+                );
                 provider.activateNewSessionInput();
             },
         ),
