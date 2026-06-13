@@ -21,6 +21,8 @@ import type {
     CollisionDetectedEvent,
 } from "@typeagent/core/events";
 import type { CollisionFilter } from "@typeagent/core/collisions";
+import type { CorpusEntry, ExternalSourceSpec } from "@typeagent/core/corpus";
+import type { FeedbackRecordInput } from "@typeagent/core/feedback";
 import type { SandboxStatus } from "@typeagent/core/sandbox";
 
 /**
@@ -143,7 +145,10 @@ export class StudioServiceClient {
                     : undefined,
             );
             let settled = false;
-            const settle = (result: { socket?: WebSocket; status?: number }) => {
+            const settle = (result: {
+                socket?: WebSocket;
+                status?: number;
+            }) => {
                 if (settled) return;
                 settled = true;
                 resolve(result);
@@ -217,6 +222,28 @@ export class StudioServiceClient {
     /** Corpus agents available for replay in this workspace. */
     listCorpusAgents(): Promise<string[]> {
         return this.rpc.invoke("listCorpusAgents", this.repoRoot);
+    }
+
+    /** Federated corpus entries for an agent (Corpus tree expansion). */
+    listCorpusEntries(agent: string): Promise<CorpusEntry[]> {
+        return this.rpc.invoke("listCorpusEntries", this.repoRoot, agent);
+    }
+
+    /** Ensure an agent's in-repo corpus file exists; returns path + created. */
+    seedInRepoCorpus(
+        agent: string,
+    ): Promise<{ path: string; created: boolean }> {
+        return this.rpc.invoke("seedInRepoCorpus", this.repoRoot, agent);
+    }
+
+    /** Register an external JSONL corpus source for an agent. */
+    addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void> {
+        return this.rpc.invoke("addExternalCorpusSource", this.repoRoot, spec);
+    }
+
+    /** Record a thumbs-up/down feedback row. */
+    recordFeedback(input: FeedbackRecordInput): Promise<void> {
+        return this.rpc.invoke("recordFeedback", this.repoRoot, input);
     }
 
     /** Replay an agent's corpus comparing two versions (Impact Report data). */

@@ -92,6 +92,15 @@ function createRuntimeStub(): {
         },
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => ["player", "calendar"],
+        listCorpusEntries: async (agent: string) => [
+            { utterance: `hello ${agent}`, source: "in-repo" },
+        ],
+        seedInRepoCorpus: async (agent: string) => ({
+            path: `/repo/ts/packages/agents/${agent}/corpus.jsonl`,
+            created: true,
+        }),
+        addExternalCorpusSource: async () => {},
+        recordFeedback: async () => {},
         replayCorpus: async (request: { agent: string }) => ({
             runId: "run-1",
             summary: {
@@ -252,6 +261,40 @@ describe("studio service channel (in-memory rpc)", () => {
         expect(result.rows[0].utterance).toBe("play jazz");
     });
 
+    it("corpus/feedback methods round-trip", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        const entries = await client.invoke(
+            "listCorpusEntries",
+            undefined,
+            "player",
+        );
+        expect(entries).toEqual([
+            { utterance: "hello player", source: "in-repo" },
+        ]);
+        const seeded = await client.invoke(
+            "seedInRepoCorpus",
+            undefined,
+            "player",
+        );
+        expect(seeded.created).toBe(true);
+        await expect(
+            client.invoke("addExternalCorpusSource", undefined, {
+                name: "ext",
+                agent: "player",
+                kind: "jsonl-file",
+                filePath: "/tmp/ext.jsonl",
+            }),
+        ).resolves.toBeUndefined();
+        await expect(
+            client.invoke("recordFeedback", undefined, {
+                requestId: "req-1",
+                agent: "player",
+                rating: "up",
+            }),
+        ).resolves.toBeUndefined();
+    });
+
     it("sandbox lifecycle methods round-trip", async () => {
         const stub = createRuntimeStub();
         const { client } = wireClientServer(stub);
@@ -270,9 +313,9 @@ describe("studio service channel (in-memory rpc)", () => {
             "player",
         );
         expect(loaded.agents).toEqual([{ name: "player" }]);
-        expect(await client.invoke("refreshSandboxAgent", undefined, "player")).toBe(
-            1,
-        );
+        expect(
+            await client.invoke("refreshSandboxAgent", undefined, "player"),
+        ).toBe(1);
         await client.invoke("stopSandbox", undefined, "s1");
         await client.invoke("restoreSandboxes", undefined);
     });

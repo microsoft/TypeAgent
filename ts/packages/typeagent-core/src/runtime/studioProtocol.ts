@@ -4,6 +4,8 @@
 import type { StudioEvent, CollisionDetectedEvent } from "../events/index.js";
 import type { CollisionFilter } from "../collisions/index.js";
 import type { SandboxStatus } from "../sandbox/index.js";
+import type { CorpusEntry, ExternalSourceSpec } from "../corpus/index.js";
+import type { FeedbackRecordInput } from "../feedback/index.js";
 import type { RepoRootResolution } from "./repoRootResolver.js";
 import type {
     AgentLocation,
@@ -70,6 +72,38 @@ export type StudioServiceInvokeFunctions = {
     ): Promise<StudioEvent[]>;
     /** Corpus agents available for replay in this workspace. */
     listCorpusAgents(repoRoot?: string): Promise<string[]>;
+    /**
+     * Federated corpus entries for an agent (in-repo, captures, external,
+     * feedback) — what the Corpus tree expands.
+     */
+    listCorpusEntries(
+        repoRoot: string | undefined,
+        agent: string,
+    ): Promise<CorpusEntry[]>;
+    /**
+     * Ensure an agent's in-repo corpus file exists so it can be populated;
+     * returns its path and whether it was newly created.
+     */
+    seedInRepoCorpus(
+        repoRoot: string | undefined,
+        agent: string,
+    ): Promise<{ path: string; created: boolean }>;
+    /**
+     * Register an external JSONL corpus source for an agent. Throws if a source
+     * with the same name already exists for the agent.
+     */
+    addExternalCorpusSource(
+        repoRoot: string | undefined,
+        spec: ExternalSourceSpec,
+    ): Promise<void>;
+    /**
+     * Record a thumbs-up/down feedback row (emits `feedback.recorded`; surfaces
+     * in the agent's federated corpus when an utterance is supplied).
+     */
+    recordFeedback(
+        repoRoot: string | undefined,
+        input: FeedbackRecordInput,
+    ): Promise<void>;
     /**
      * Replay an agent's corpus comparing two versions (read-only analysis — the
      * Impact Report contract). `request.agent` is required; the rows array is

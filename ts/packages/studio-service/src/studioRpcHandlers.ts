@@ -46,7 +46,9 @@ export function createStudioInvokeHandlers(
         async listCollisions(repoRoot, filter) {
             // JSON coerces a trailing `undefined` arg to `null` on the wire;
             // map it back so runtime default-parameter values apply.
-            return conn.getRuntime(repoRoot).listCollisions(filter ?? undefined);
+            return conn
+                .getRuntime(repoRoot)
+                .listCollisions(filter ?? undefined);
         },
         async scanGrammarCollisions(repoRoot, request) {
             return conn
@@ -66,8 +68,22 @@ export function createStudioInvokeHandlers(
         async listCorpusAgents(repoRoot) {
             return conn.getRuntime(repoRoot).listCorpusAgents();
         },
+        async listCorpusEntries(repoRoot, agent) {
+            return conn.getRuntime(repoRoot).listCorpusEntries(agent);
+        },
+        async seedInRepoCorpus(repoRoot, agent) {
+            return conn.getRuntime(repoRoot).seedInRepoCorpus(agent);
+        },
+        async addExternalCorpusSource(repoRoot, spec) {
+            return conn.getRuntime(repoRoot).addExternalCorpusSource(spec);
+        },
+        async recordFeedback(repoRoot, input) {
+            return conn.getRuntime(repoRoot).recordFeedback(input);
+        },
         async replayCorpus(repoRoot, request) {
-            const result = await conn.getRuntime(repoRoot).replayCorpus(request);
+            const result = await conn
+                .getRuntime(repoRoot)
+                .replayCorpus(request);
             // Bound the rows crossing the wire; `summary` keeps the full totals
             // so the client can show "first N of M".
             const MAX_ROWS = 1000;
