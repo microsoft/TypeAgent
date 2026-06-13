@@ -166,7 +166,6 @@ body {
   font-weight: 500;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
-  order: -1;
 }
 
 .session-status-summary.connected {
