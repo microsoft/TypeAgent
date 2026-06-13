@@ -99,6 +99,12 @@ type SessionListEntry = {
     name: string;
     clientCount: number;
 };
+type SessionSnapshot = {
+    sessionId: string | undefined;
+    name: string;
+    clientCount: number | undefined;
+};
+let optimisticSessionBeforeTransition: SessionSnapshot | undefined;
 
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
@@ -560,6 +566,29 @@ function updateSessionSummary(): void {
     renderStatus();
 }
 
+function beginOptimisticSessionTransition(
+    targetName: string,
+    statusLabel: "Creating" | "Connecting",
+): void {
+    optimisticSessionBeforeTransition ??= {
+        sessionId: currentSessionId,
+        name: currentSessionName,
+        clientCount: currentSessionClientCount,
+    };
+    currentSessionName = targetName;
+    currentSessionClientCount = undefined;
+    transitionStatusLabel = statusLabel;
+    updateSessionSummary();
+}
+
+function restoreOptimisticSessionTransition(): void {
+    if (!optimisticSessionBeforeTransition) return;
+    currentSessionId = optimisticSessionBeforeTransition.sessionId;
+    currentSessionName = optimisticSessionBeforeTransition.name;
+    currentSessionClientCount = optimisticSessionBeforeTransition.clientCount;
+    optimisticSessionBeforeTransition = undefined;
+}
+
 function updateSessionControlsEnabled(): void {
     const enabled = isConnected && !isSwitching;
     const hasCurrentSession = currentSessionId !== undefined;
@@ -674,11 +703,7 @@ function renderSessionSearchResults(): void {
 
         resultBtn.addEventListener("click", () => {
             if (session.sessionId !== currentSessionId) {
-                currentSessionId = session.sessionId;
-                currentSessionName = session.name;
-                currentSessionClientCount = undefined;
-                transitionStatusLabel = "Connecting";
-                updateSessionSummary();
+                beginOptimisticSessionTransition(session.name, "Connecting");
                 vscode.postMessage({
                     type: "switchSession",
                     sessionId: session.sessionId,
@@ -837,10 +862,7 @@ function showSessionSearchPopover(): void {
 function createSessionFromInput(): void {
     const name = sessionNewNameEl.value.trim();
     if (!name || !isConnected || isSwitching) return;
-    currentSessionName = name;
-    currentSessionClientCount = undefined;
-    transitionStatusLabel = "Creating";
-    updateSessionSummary();
+    beginOptimisticSessionTransition(name, "Creating");
     vscode.postMessage({ type: "createSession", name });
     sessionNewNameEl.value = "";
     hideSessionPopovers();
@@ -1002,6 +1024,7 @@ window.addEventListener("message", (event) => {
             chatPanel.setUserInfo(msg.name);
             break;
         case "sessionChanged":
+            optimisticSessionBeforeTransition = undefined;
             currentSessionId = msg.sessionId;
             currentSessionName = msg.sessionName || msg.sessionId.substring(0, 8);
             currentSessionClientCount = undefined;
@@ -1147,6 +1170,7 @@ window.addEventListener("message", (event) => {
                 transitionStatusLabel = msg.statusLabel ?? "Connecting";
             } else {
                 transitionStatusLabel = undefined;
+                restoreOptimisticSessionTransition();
             }
             updateSessionSummary();
             chatPanel.setSwitching(msg.switching, msg.targetName);
