@@ -8,8 +8,7 @@ import {
     writeStudioServiceToken,
     clearStudioServiceToken,
 } from "@typeagent/core/runtime";
-import { StudioServiceServer } from "./studioServiceServer.js";
-import { getStudioRuntime } from "./runtime.js";
+import { StudioServiceServer, getStudioRuntime } from "studio-service";
 
 const debug = registerDebug("typeagent:studio:lifecycle");
 

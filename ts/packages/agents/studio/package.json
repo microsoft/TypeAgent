@@ -32,6 +32,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/core": "workspace:*",
     "debug": "^4.4.0",
+    "studio-service": "workspace:*",
     "websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },

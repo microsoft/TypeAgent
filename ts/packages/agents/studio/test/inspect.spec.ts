@@ -14,7 +14,7 @@ import {
 import {
     resolveStudioRepoRootCandidates,
     getStudioRuntime,
-} from "../src/lib/runtime.js";
+} from "studio-service";
 
 describe("studio inspect formatters", () => {
     it("formatStudioInfo lists agent locations with per-root counts and a total", () => {

@@ -10,7 +10,7 @@ import type {
     StudioInfo,
 } from "@typeagent/core/runtime";
 import type { StudioEvent } from "@typeagent/core/events";
-import { createStudioInvokeHandlers } from "../src/lib/studioRpcHandlers.js";
+import { createStudioInvokeHandlers } from "../src/studioRpcHandlers.js";
 
 /**
  * A pair of in-memory RpcChannels wired to each other. Delivery is async

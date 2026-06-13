@@ -12,7 +12,7 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { StudioActions } from "./studioSchema.js";
-import { getStudioRuntime } from "./lib/runtime.js";
+import { getStudioRuntime } from "studio-service";
 import {
     initializeStudioContext,
     updateStudioContext,

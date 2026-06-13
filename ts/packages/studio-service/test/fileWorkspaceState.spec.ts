@@ -7,7 +7,7 @@ import * as path from "node:path";
 import {
     FileWorkspaceState,
     studioWorkspaceStateFile,
-} from "../src/lib/fileWorkspaceState.js";
+} from "../src/fileWorkspaceState.js";
 
 describe("FileWorkspaceState", () => {
     let dir: string;
