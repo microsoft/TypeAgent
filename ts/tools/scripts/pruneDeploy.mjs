@@ -188,6 +188,44 @@ function main() {
     console.log(
         `${args.dryRun ? "Would free" : "Freed"} ${fmt(freed)} across ${removed.length} package(s).`,
     );
+
+    // Remove `node_modules/.bin` directories. They contain symlink shims that the
+    // Azure Artifacts Universal publish (artifacttool) cannot hash on macOS/Linux
+    // ("Unable to load symbolic/hard linked file"), and the runtime never uses
+    // them (the daemon/agents run via `node dist/...`). On Windows .bin holds
+    // .cmd shims (no symlink), which is why win-x64 published fine without this.
+    const binDirs = removeBinDirs(nodeModulesDir, args.dryRun);
+    if (binDirs > 0) {
+        console.log(
+            `${args.dryRun ? "Would remove" : "Removed"} ${binDirs} node_modules/.bin director(ies).`,
+        );
+    }
+}
+
+// Recursively remove every `.bin` directory under a node_modules tree.
+function removeBinDirs(root, dryRun) {
+    let count = 0;
+    const stack = [root];
+    while (stack.length > 0) {
+        const dir = stack.pop();
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const e of entries) {
+            if (!e.isDirectory()) continue; // symlinks report false — skip
+            const full = path.join(dir, e.name);
+            if (e.name === ".bin") {
+                count++;
+                if (!dryRun) fs.rmSync(full, { recursive: true, force: true });
+            } else {
+                stack.push(full);
+            }
+        }
+    }
+    return count;
 }
 
 main();

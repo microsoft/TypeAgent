@@ -16,17 +16,21 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawnSync } = require("child_process");
 
 const expectedABI = process.versions.modules; // e.g. "127" for Node 22
 
+// Probe binary compatibility in a CHILD process. Loading a native addon built
+// for a different ABI (e.g. Electron) can SIGSEGV the loader rather than throw,
+// which an in-process try/catch cannot recover from. Isolating the dlopen in a
+// child turns a crash into a non-zero exit we can detect safely.
 function isNodeCompatible(binaryPath) {
-    try {
-        process.dlopen({ exports: {} }, binaryPath);
-        return true;
-    } catch {
-        return false;
-    }
+    const res = spawnSync(
+        process.execPath,
+        ["-e", "process.dlopen({ exports: {} }, process.argv[1])", binaryPath],
+        { stdio: "ignore" },
+    );
+    return res.status === 0;
 }
 
 // Find all better-sqlite3 installations in the pnpm store

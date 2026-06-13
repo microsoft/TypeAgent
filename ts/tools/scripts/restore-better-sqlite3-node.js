@@ -17,14 +17,20 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
+// Probe binary compatibility in a CHILD process. Loading a native addon built
+// for a different ABI (e.g. Electron) can SIGSEGV the loader rather than throw,
+// which an in-process try/catch cannot recover from (and crashes this script —
+// seen during `pnpm deploy`'s postinstall re-run on Linux). Isolating the
+// dlopen in a child turns a crash into a non-zero exit we can detect safely.
 function isNodeCompatible(binaryPath) {
-    try {
-        process.dlopen({ exports: {} }, binaryPath);
-        return true;
-    } catch {
-        return false;
-    }
+    const res = spawnSync(
+        process.execPath,
+        ["-e", "process.dlopen({ exports: {} }, process.argv[1])", binaryPath],
+        { stdio: "ignore" },
+    );
+    return res.status === 0;
 }
 
 const pnpmDir = path.resolve(__dirname, "..", "..", "node_modules", ".pnpm");
