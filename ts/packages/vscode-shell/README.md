@@ -78,11 +78,12 @@ code --install-extension dist-pub/vscode-shell.vsix --force
 
 ### Managing conversations
 
-Each chat now includes a **conversation bar** under the connection status:
+The sidebar chat shows conversation controls in the VS Code view title and session bar:
 
-- Use the **Conversation** dropdown to list all sessions and switch instantly.
-- Type a name in **New conversation name** and press **`+`** to create/switch.
-- Click **`↻`** to refresh the session list from the server.
+- Click the native **`+`** action in the view title to activate the new conversation name box in the webview.
+- The session bar labels the current conversation name on the left and shows connection/client status in a pill on the right.
+- Click the conversation name to search matching sessions and switch.
+- While creating or switching conversations, the session bar updates immediately and shows **Creating** or **Connecting**.
 
 The sidebar lands on a conversation named **`"VS Code"`** by default — it's created automatically the first time you connect to a fresh agent server (mirroring the CLI's `"CLI"` and the Electron shell's `"Shell"` defaults). On subsequent reloads, the sidebar restores whichever conversation it was last on; the `"VS Code"` find-or-create only fires when that saved conversation is gone (deleted, server wiped, etc.).
 

@@ -20,7 +20,8 @@
   "scripts": {
     "build:ext:vscode": "npm run package",
     "clean": "rimraf --glob dist dist-pub *.vsix",
-    "compile": "node esbuild.mjs",
+    "compile": "npm run copy:codicons && node esbuild.mjs",
+    "copy:codicons": "copyfiles -f ../../node_modules/.pnpm/@vscode+codicons@*/node_modules/@vscode/codicons/dist/codicon.css ../../node_modules/.pnpm/@vscode+codicons@*/node_modules/@vscode/codicons/dist/codicon.ttf media",
     "deploy:local": "npm run package && code --install-extension dist-pub/vscode-shell.vsix --force",
     "install:ext:vscode": "code --install-extension dist-pub/vscode-shell.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-shell.vsix",
@@ -53,6 +54,12 @@
         "command": "vscode-shell.newSession",
         "title": "New Conversation",
         "category": "TypeAgent"
+      },
+      {
+        "command": "vscode-shell.newSidebarSession",
+        "title": "New Conversation",
+        "category": "TypeAgent",
+        "icon": "$(plus)"
       },
       {
         "command": "vscode-shell.renameSession",
@@ -155,6 +162,15 @@
         }
       ]
     },
+    "menus": {
+      "view/title": [
+        {
+          "command": "vscode-shell.newSidebarSession",
+          "when": "view == vscode-shell.chatView",
+          "group": "navigation"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -187,11 +203,13 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@vscode/codicons": "^0.0.42",
     "@types/debug": "^4.1.0",
     "@types/markdown-it": "^14.1.2",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.0",
     "@vscode/vsce": "^3.2.1",
+    "copyfiles": "^2.4.1",
     "esbuild": "^0.25.12",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1"

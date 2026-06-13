@@ -5,8 +5,7 @@
 // Communicates with the extension host via postMessage.
 // The extension host manages the actual RPC connection to the agent server.
 //
-// Renders the shared `chat-ui` ChatPanel; the only host-managed UI element
-// is the connection status ribbon at the top (#status-bar).
+// Renders the shared `chat-ui` ChatPanel plus the host-managed session bar.
 
 import { ChatPanel, HistoryEntry } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
@@ -35,19 +34,51 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 
-const statusEl = document.getElementById("status-bar")!;
-const sessionSelectEl = document.getElementById(
-    "session-select",
-) as HTMLSelectElement;
-const sessionRefreshBtn = document.getElementById(
-    "session-refresh-btn",
+const sessionNameBtn = document.getElementById(
+    "session-name-btn",
 ) as HTMLButtonElement;
+const sessionRenameEditorEl = document.getElementById(
+    "session-rename-editor",
+) as HTMLDivElement;
+const sessionRenameInputEl = document.getElementById(
+    "session-rename-input",
+) as HTMLInputElement;
+const sessionRenameSaveBtn = document.getElementById(
+    "session-rename-save-btn",
+) as HTMLButtonElement;
+const sessionRenameCancelBtn = document.getElementById(
+    "session-rename-cancel-btn",
+) as HTMLButtonElement;
+const sessionRenameBtn = document.getElementById(
+    "session-rename-btn",
+) as HTMLButtonElement;
+const sessionDeleteBtn = document.getElementById(
+    "session-delete-btn",
+) as HTMLButtonElement;
+const sessionStatusSummaryEl = document.getElementById(
+    "session-status-summary",
+)!;
+const sessionCreatePopoverEl = document.getElementById(
+    "session-create-popover",
+)!;
 const sessionNewNameEl = document.getElementById(
     "session-new-name",
 ) as HTMLInputElement;
 const sessionCreateBtn = document.getElementById(
     "session-create-btn",
 ) as HTMLButtonElement;
+const sessionCreateHintEl = document.getElementById(
+    "session-create-hint",
+)!;
+const sessionSearchPopoverEl = document.getElementById(
+    "session-search-popover",
+)!;
+const sessionSearchInputEl = document.getElementById(
+    "session-search-input",
+) as HTMLInputElement;
+const sessionSearchResultsEl = document.getElementById(
+    "session-search-results",
+)!;
 const rootEl = document.getElementById("chat-root")!;
 
 // Track the higher-level disabled reasons so we can reconcile them when
@@ -56,8 +87,12 @@ const rootEl = document.getElementById("chat-root")!;
 // connected before the input is enabled.
 let isConnected = false;
 let isSwitching = false;
+let isRenaming = false;
 let currentSessionId: string | undefined;
-let suppressSessionSelectChange = false;
+let currentSessionName = "";
+let currentSessionClientCount: number | undefined;
+let transitionStatusLabel: "Creating" | "Connecting" | undefined;
+let knownSessions: SessionListEntry[] = [];
 type SessionListEntry = {
     sessionId: string;
     name: string;
@@ -406,11 +441,10 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
     return out;
 }
 
-// Last-known connection label parts so demoPaused can re-render the
-// status ribbon with a "[Demo paused]" suffix without re-issuing a
-// status broadcast from the host.
+// Last-known connection state so demoPaused can re-render the status
+// ribbon with a "[Demo paused]" suffix without re-issuing a status
+// broadcast from the host.
 let lastConnected = false;
-let lastSessionLabel = "";
 let demoSuffix: string | undefined;
 // Reconnect ribbon overlay shown while disconnected. Replaces the old
 // per-attempt error spam in the chat area with a single in-place
@@ -418,15 +452,19 @@ let demoSuffix: string | undefined;
 let reconnectText: string | undefined;
 
 function renderStatus(): void {
-    if (lastConnected) {
-        statusEl.className = "status connected";
-        const base = lastSessionLabel
-            ? `Connected · ${lastSessionLabel}`
-            : "Connected to TypeAgent";
-        statusEl.textContent = demoSuffix ? `${base} · ${demoSuffix}` : base;
+    if (transitionStatusLabel) {
+        sessionStatusSummaryEl.className = "session-status-summary switching";
+        sessionStatusSummaryEl.textContent = transitionStatusLabel;
+    } else if (lastConnected) {
+        sessionStatusSummaryEl.className = "session-status-summary connected";
+        const parts = ["Connected"];
+        const clientCount = formatClientCount(currentSessionClientCount);
+        if (clientCount) parts.push(clientCount);
+        if (demoSuffix) parts.push(demoSuffix);
+        sessionStatusSummaryEl.textContent = parts.join(" · ");
     } else {
-        statusEl.className = "status disconnected";
-        statusEl.textContent = reconnectText ?? "Disconnected";
+        sessionStatusSummaryEl.className = "session-status-summary disconnected";
+        sessionStatusSummaryEl.textContent = reconnectText ?? "Disconnected";
     }
 }
 
@@ -434,12 +472,130 @@ function requestSessionList(): void {
     vscode.postMessage({ type: "requestSessions" });
 }
 
+function formatClientCount(count: number | undefined): string {
+    if (count === undefined) return "";
+    return count === 1 ? "1 client" : `${count} clients`;
+}
+
+function setPopoverVisible(popover: HTMLElement, visible: boolean): void {
+    popover.classList.toggle("hidden", !visible);
+}
+
+function hideSessionPopovers(): void {
+    setPopoverVisible(sessionCreatePopoverEl, false);
+    setPopoverVisible(sessionSearchPopoverEl, false);
+}
+
+function isSessionPopoverVisible(): boolean {
+    return (
+        !sessionCreatePopoverEl.classList.contains("hidden") ||
+        !sessionSearchPopoverEl.classList.contains("hidden")
+    );
+}
+
+function hasRenameConflict(name: string): boolean {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return knownSessions.some(
+        (s) => s.sessionId !== currentSessionId && s.name.toLowerCase() === lower,
+    );
+}
+
+function setRenameMode(renaming: boolean): void {
+    isRenaming = renaming;
+    sessionNameBtn.classList.toggle("hidden", renaming);
+    sessionRenameEditorEl.classList.toggle("hidden", !renaming);
+    if (!renaming) {
+        sessionRenameInputEl.classList.remove("conflict");
+        sessionRenameInputEl.removeAttribute("aria-invalid");
+    }
+}
+
+function beginRenameCurrentSession(): void {
+    if (!isConnected || isSwitching || !currentSessionId) return;
+    hideSessionPopovers();
+    sessionRenameInputEl.value =
+        currentSessionName || currentSessionId.substring(0, 8);
+    setRenameMode(true);
+    updateSessionControlsEnabled();
+    sessionRenameInputEl.focus();
+    sessionRenameInputEl.select();
+}
+
+function cancelRenameCurrentSession(): void {
+    setRenameMode(false);
+    updateSessionControlsEnabled();
+}
+
+function submitRenameCurrentSession(): void {
+    if (!isConnected || isSwitching || !currentSessionId || !isRenaming) return;
+    const name = sessionRenameInputEl.value.trim();
+    const conflict = hasRenameConflict(name);
+    const unchanged =
+        name !== "" &&
+        currentSessionName.trim().toLowerCase() === name.toLowerCase();
+    if (!name || conflict || unchanged) return;
+
+    currentSessionName = name;
+    updateSessionSummary();
+    setRenameMode(false);
+    updateSessionControlsEnabled();
+    vscode.postMessage({ type: "renameCurrentSession", name });
+}
+
+function updateSessionSummary(): void {
+    const displayName =
+        currentSessionName || currentSessionId?.substring(0, 8) || "Conversation";
+    sessionNameBtn.textContent = displayName;
+    renderStatus();
+}
+
 function updateSessionControlsEnabled(): void {
     const enabled = isConnected && !isSwitching;
-    sessionSelectEl.disabled = !enabled;
-    sessionRefreshBtn.disabled = !enabled;
+    const hasCurrentSession = currentSessionId !== undefined;
+    const inputValue = sessionNewNameEl.value.trim();
+    const renameValue = sessionRenameInputEl.value.trim();
+    const sessionExists =
+        inputValue !== "" &&
+        knownSessions.some(
+            (s) => s.name.toLowerCase() === inputValue.toLowerCase(),
+        );
+    const renameConflict = hasRenameConflict(renameValue);
+    const renameUnchanged =
+        renameValue !== "" &&
+        currentSessionName.trim().toLowerCase() === renameValue.toLowerCase();
+
+    sessionNameBtn.disabled = !enabled;
+    sessionRenameBtn.disabled = !enabled || !hasCurrentSession || isRenaming;
+    sessionDeleteBtn.disabled = !enabled || !hasCurrentSession;
     sessionNewNameEl.disabled = !enabled;
-    sessionCreateBtn.disabled = !enabled || sessionNewNameEl.value.trim() === "";
+    sessionCreateBtn.disabled = !enabled || inputValue === "" || sessionExists;
+    sessionRenameInputEl.disabled = !enabled || !isRenaming;
+    sessionRenameSaveBtn.disabled =
+        !enabled ||
+        !isRenaming ||
+        renameValue === "" ||
+        renameConflict ||
+        renameUnchanged;
+    sessionRenameCancelBtn.disabled = !enabled || !isRenaming;
+    sessionRenameInputEl.classList.toggle("conflict", renameConflict);
+    if (renameConflict) {
+        sessionRenameInputEl.setAttribute("aria-invalid", "true");
+        sessionRenameInputEl.title =
+            "A conversation with this name already exists.";
+    } else {
+        sessionRenameInputEl.removeAttribute("aria-invalid");
+        sessionRenameInputEl.title = "Rename conversation";
+    }
+
+    // Show/hide hint based on whether session exists
+    if (sessionExists) {
+        sessionCreateHintEl.classList.remove("hidden");
+    } else {
+        sessionCreateHintEl.classList.add("hidden");
+    }
+
+    sessionSearchInputEl.disabled = !enabled;
 }
 
 function renderSessionList(
@@ -447,30 +603,100 @@ function renderSessionList(
     selectedSessionId?: string,
 ): void {
     const selectedId = selectedSessionId ?? currentSessionId;
-    suppressSessionSelectChange = true;
-    sessionSelectEl.innerHTML = "";
-    for (const session of sessions) {
-        const option = document.createElement("option");
-        option.value = session.sessionId;
-        const countLabel = session.clientCount === 1 ? "1 client" : `${session.clientCount} clients`;
-        option.textContent = `${session.name} (${countLabel})`;
-        sessionSelectEl.appendChild(option);
+    knownSessions = sessions;
+    const selected = sessions.find((session) => session.sessionId === selectedId);
+    if (selected) {
+        currentSessionId = selected.sessionId;
+        currentSessionName = selected.name;
+        currentSessionClientCount = selected.clientCount;
     }
-    if (selectedId) {
-        sessionSelectEl.value = selectedId;
+    updateSessionSummary();
+    renderSessionSearchResults();
+}
+
+function renderSessionSearchResults(): void {
+    const query = sessionSearchInputEl.value.trim().toLowerCase();
+    const matches = knownSessions.filter(
+        (session) =>
+            session.name.toLowerCase().includes(query) ||
+            session.sessionId.toLowerCase().includes(query),
+    );
+
+    sessionSearchResultsEl.innerHTML = "";
+    if (matches.length === 0) {
+        const emptyEl = document.createElement("div");
+        emptyEl.className = "session-search-empty";
+        emptyEl.textContent = "No conversations found";
+        sessionSearchResultsEl.appendChild(emptyEl);
+        return;
     }
-    if (!sessionSelectEl.value && sessionSelectEl.options.length > 0) {
-        sessionSelectEl.selectedIndex = 0;
+
+    for (const session of matches) {
+        const resultBtn = document.createElement("button");
+        resultBtn.type = "button";
+        resultBtn.className = "session-search-result";
+        resultBtn.setAttribute("role", "option");
+        const isCurrent = session.sessionId === currentSessionId;
+        resultBtn.setAttribute("aria-selected", String(isCurrent));
+        if (isCurrent) resultBtn.classList.add("current");
+
+        const nameEl = document.createElement("span");
+        nameEl.className = "session-search-result-name";
+        nameEl.textContent = session.name;
+        resultBtn.appendChild(nameEl);
+
+        const countEl = document.createElement("span");
+        countEl.className = "session-search-result-count";
+        countEl.textContent = formatClientCount(session.clientCount);
+        resultBtn.appendChild(countEl);
+
+        resultBtn.addEventListener("click", () => {
+            if (session.sessionId !== currentSessionId) {
+                currentSessionId = session.sessionId;
+                currentSessionName = session.name;
+                currentSessionClientCount = undefined;
+                transitionStatusLabel = "Connecting";
+                updateSessionSummary();
+                vscode.postMessage({
+                    type: "switchSession",
+                    sessionId: session.sessionId,
+                });
+            }
+            hideSessionPopovers();
+        });
+        sessionSearchResultsEl.appendChild(resultBtn);
     }
-    suppressSessionSelectChange = false;
+}
+
+function showSessionSearchPopover(): void {
+    if (!isConnected || isSwitching) return;
+    setPopoverVisible(sessionCreatePopoverEl, false);
+    sessionSearchInputEl.value = "";
+    renderSessionSearchResults();
+    setPopoverVisible(sessionSearchPopoverEl, true);
+    requestSessionList();
+    sessionSearchInputEl.focus();
 }
 
 function createSessionFromInput(): void {
     const name = sessionNewNameEl.value.trim();
     if (!name || !isConnected || isSwitching) return;
+    currentSessionName = name;
+    currentSessionClientCount = undefined;
+    transitionStatusLabel = "Creating";
+    updateSessionSummary();
     vscode.postMessage({ type: "createSession", name });
     sessionNewNameEl.value = "";
+    hideSessionPopovers();
     updateSessionControlsEnabled();
+}
+
+function showCreateSessionPopover(): void {
+    if (!isConnected || isSwitching) return;
+    setPopoverVisible(sessionSearchPopoverEl, false);
+    setPopoverVisible(sessionCreatePopoverEl, true);
+    sessionNewNameEl.focus();
+    sessionNewNameEl.select();
 }
 
 function setStatus(
@@ -481,36 +707,105 @@ function setStatus(
     isConnected = connected;
     lastConnected = connected;
     currentSessionId = sessionId ?? currentSessionId;
-    lastSessionLabel = sessionName || sessionId?.substring(0, 8) || "";
-    renderStatus();
+    if (sessionName) currentSessionName = sessionName;
+    updateSessionSummary();
     chatPanel.setEnabled(connected);
     updateSessionControlsEnabled();
 }
 
-sessionRefreshBtn.addEventListener("click", () => {
-    if (!isConnected || isSwitching) return;
-    requestSessionList();
+sessionNameBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (isRenaming) return;
+    const willShow = sessionSearchPopoverEl.classList.contains("hidden");
+    if (willShow) {
+        showSessionSearchPopover();
+    } else {
+        setPopoverVisible(sessionSearchPopoverEl, false);
+    }
 });
 
-sessionCreateBtn.addEventListener("click", () => {
-    createSessionFromInput();
+sessionRenameBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    beginRenameCurrentSession();
+});
+
+sessionDeleteBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!isConnected || isSwitching || !currentSessionId) return;
+    hideSessionPopovers();
+    vscode.postMessage({ type: "deleteCurrentSession" });
+});
+
+sessionSearchInputEl.addEventListener("input", () => {
+    renderSessionSearchResults();
 });
 
 sessionNewNameEl.addEventListener("input", () => {
     updateSessionControlsEnabled();
 });
 
-sessionNewNameEl.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
+sessionNewNameEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
     createSessionFromInput();
 });
 
-sessionSelectEl.addEventListener("change", () => {
-    if (suppressSessionSelectChange || !isConnected || isSwitching) return;
-    const sessionId = sessionSelectEl.value;
-    if (!sessionId || sessionId === currentSessionId) return;
-    vscode.postMessage({ type: "switchSession", sessionId });
+sessionCreateBtn.addEventListener("click", () => {
+    createSessionFromInput();
+});
+
+sessionRenameInputEl.addEventListener("input", () => {
+    updateSessionControlsEnabled();
+});
+
+sessionRenameInputEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        submitRenameCurrentSession();
+        return;
+    }
+    if (event.key === "Escape") {
+        event.preventDefault();
+        cancelRenameCurrentSession();
+    }
+});
+
+sessionRenameSaveBtn.addEventListener("click", () => {
+    submitRenameCurrentSession();
+});
+
+sessionRenameCancelBtn.addEventListener("click", () => {
+    cancelRenameCurrentSession();
+});
+
+document.addEventListener("click", (event) => {
+    const target = event.target as Node | null;
+    if (!target) return;
+    if (
+        sessionCreatePopoverEl.contains(target) ||
+        sessionSearchPopoverEl.contains(target) ||
+        sessionRenameEditorEl.contains(target) ||
+        sessionNameBtn.contains(target) ||
+        sessionRenameBtn.contains(target) ||
+        sessionDeleteBtn.contains(target)
+    ) {
+        return;
+    }
+    hideSessionPopovers();
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (isRenaming) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        cancelRenameCurrentSession();
+        return;
+    }
+    if (!isSessionPopoverVisible()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    hideSessionPopovers();
 });
 
 window.addEventListener("message", (event) => {
@@ -526,6 +821,9 @@ window.addEventListener("message", (event) => {
                 });
                 requestSessionList();
             }
+            break;
+        case "activateNewSessionInput":
+            showCreateSessionPopover();
             break;
         case "reconnectStatus": {
             // Single in-place reconnect indicator. Phases:
@@ -549,6 +847,11 @@ window.addEventListener("message", (event) => {
             break;
         case "sessionChanged":
             currentSessionId = msg.sessionId;
+            currentSessionName = msg.sessionName || msg.sessionId.substring(0, 8);
+            currentSessionClientCount = undefined;
+            transitionStatusLabel = undefined;
+            if (isRenaming) setRenameMode(false);
+            updateSessionSummary();
             chatPanel.clear();
             cancelledRequests.clear();
             cancelledRendered.clear();
@@ -681,6 +984,15 @@ window.addEventListener("message", (event) => {
         }
         case "switching":
             isSwitching = msg.switching;
+            if (msg.switching) {
+                if (isRenaming) setRenameMode(false);
+                if (msg.targetName) currentSessionName = msg.targetName;
+                currentSessionClientCount = undefined;
+                transitionStatusLabel = msg.statusLabel ?? "Connecting";
+            } else {
+                transitionStatusLabel = undefined;
+            }
+            updateSessionSummary();
             chatPanel.setSwitching(msg.switching, msg.targetName);
             // Re-apply connection-derived enable state when the switch ends.
             if (!msg.switching) chatPanel.setEnabled(isConnected);

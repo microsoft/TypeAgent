@@ -639,6 +639,12 @@ export class AgentServerBridge {
         }
 
         const trimmed = name.trim();
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName: trimmed,
+            statusLabel: "Creating",
+        });
         const info = await this.connection.createSession(trimmed);
         await this.joinSpecificSession(info.sessionId, trimmed);
         vscode.window.showInformationMessage(
@@ -650,7 +656,7 @@ export class AgentServerBridge {
     /**
      * Rename the current conversation.
      */
-    async renameCurrentSession(): Promise<void> {
+    async renameCurrentSession(newNameFromWebview?: string): Promise<void> {
         if (!this.connection || !this.session) {
             vscode.window.showWarningMessage("No active conversation.");
             return;
@@ -663,29 +669,49 @@ export class AgentServerBridge {
                 .map((s) => s.name.toLowerCase()),
         );
 
-        const newName = await vscode.window.showInputBox({
-            prompt: "New name for the current conversation",
-            placeHolder: "My Conversation",
-            validateInput: (value) => {
-                if (!value.trim()) {
-                    return "Conversation name cannot be empty";
-                }
-                if (existingNames.has(value.trim().toLowerCase())) {
-                    return `A conversation named "${value.trim()}" already exists`;
-                }
-                return undefined;
-            },
-        });
+        const newName =
+            newNameFromWebview ??
+            (await vscode.window.showInputBox({
+                prompt: "New name for the current conversation",
+                placeHolder: "My Conversation",
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return "Conversation name cannot be empty";
+                    }
+                    if (existingNames.has(value.trim().toLowerCase())) {
+                        return `A conversation named "${value.trim()}" already exists`;
+                    }
+                    return undefined;
+                },
+            }));
 
         if (!newName) {
             return;
         }
 
+        const trimmed = newName.trim();
+        if (!trimmed) {
+            if (newNameFromWebview !== undefined) {
+                vscode.window.showWarningMessage(
+                    "Conversation name cannot be empty.",
+                );
+            }
+            return;
+        }
+        if (existingNames.has(trimmed.toLowerCase())) {
+            if (newNameFromWebview !== undefined) {
+                vscode.window.showWarningMessage(
+                    `A conversation named "${trimmed}" already exists.`,
+                );
+            }
+            return;
+        }
+
         await this.connection.renameSession(
             this.session.sessionId,
-            newName.trim(),
+            trimmed,
         );
-        this.nameOverride = newName.trim();
+        this.nameOverride = trimmed;
         this.broadcastToWebviews({
             type: "status",
             connected: true,
@@ -694,9 +720,11 @@ export class AgentServerBridge {
         });
         this.onStatusChanged?.();
         await this.postSessionList();
-        vscode.window.showInformationMessage(
-            `Renamed conversation to "${newName.trim()}"`,
-        );
+        if (newNameFromWebview === undefined) {
+            vscode.window.showInformationMessage(
+                `Renamed conversation to "${trimmed}"`,
+            );
+        }
     }
 
     /**
@@ -763,6 +791,7 @@ export class AgentServerBridge {
     private async joinSpecificSession(
         sessionId: string,
         targetName?: string,
+        suppressStatusBroadcast?: boolean,
     ): Promise<boolean> {
         // Serialize concurrent calls. Two joinSpecificSession invocations
         // overlapping (e.g., user rapid-clicks the session picker) would
@@ -783,7 +812,7 @@ export class AgentServerBridge {
         if (!this.connection) {
             return false;
         }
-        const p = this.joinSpecificSessionImpl(sessionId, targetName);
+        const p = this.joinSpecificSessionImpl(sessionId, targetName, suppressStatusBroadcast);
         this.joinInFlight = p.finally(() => {
             if (this.joinInFlight === p) {
                 this.joinInFlight = undefined;
@@ -795,6 +824,7 @@ export class AgentServerBridge {
     private async joinSpecificSessionImpl(
         sessionId: string,
         targetName?: string,
+        suppressStatusBroadcast?: boolean,
     ): Promise<boolean> {
         if (!this.connection || !this.rawConnection) {
             return false;
@@ -802,11 +832,14 @@ export class AgentServerBridge {
         const rawConnection = this.rawConnection;
 
         this.isSwitching = true;
-        this.broadcastToWebviews({
-            type: "switching",
-            switching: true,
-            targetName,
-        });
+        if (!suppressStatusBroadcast) {
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: true,
+                targetName,
+                statusLabel: "Connecting",
+            });
+        }
         try {
             const clientIO = this.createClientIO();
             const oldSessionId = this.session?.sessionId;
@@ -1195,6 +1228,12 @@ export class AgentServerBridge {
                 break;
             case "switchSession":
                 await this.switchSessionFromWebview(msg.sessionId);
+                break;
+            case "renameCurrentSession":
+                await this.renameCurrentSession(msg.name);
+                break;
+            case "deleteCurrentSession":
+                await this.deleteCurrentSessionFromWebview();
                 break;
             case "focus":
                 this.onWebviewFocusChanged?.(msg.focused);
@@ -1961,6 +2000,7 @@ export class AgentServerBridge {
             this.broadcastToWebviews({
                 type: "switching",
                 switching: true,
+                statusLabel: "Connecting",
             });
         }
 
@@ -2116,12 +2156,24 @@ export class AgentServerBridge {
             (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
         );
         if (existing) {
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: true,
+                targetName: existing.name,
+                statusLabel: "Connecting",
+            });
             await this.joinSpecificSession(existing.sessionId, existing.name);
             await this.postSessionList();
             return;
         }
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName: trimmed,
+            statusLabel: "Creating",
+        });
         const info = await this.connection.createSession(trimmed);
-        await this.joinSpecificSession(info.sessionId, trimmed);
+        await this.joinSpecificSession(info.sessionId, trimmed, true);
         await this.postSessionList();
     }
 
@@ -2142,7 +2194,63 @@ export class AgentServerBridge {
             await this.postSessionList();
             return;
         }
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName: target.name,
+            statusLabel: "Connecting",
+        });
         await this.joinSpecificSession(target.sessionId, target.name);
+        await this.postSessionList();
+    }
+
+    private async deleteCurrentSessionFromWebview(): Promise<void> {
+        if (!this.connection || !this.session) {
+            vscode.window.showWarningMessage("No active conversation.");
+            return;
+        }
+
+        const currentId = this.session.sessionId;
+        const currentName = this.session.name || currentId.substring(0, 8);
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete current conversation "${currentName}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
+        );
+        if (confirm !== "Delete") {
+            return;
+        }
+
+        const sessions = await this.connection.listSessions();
+        const fallback = sessions.find((s) => s.sessionId !== currentId);
+
+        if (fallback) {
+            await this.joinSpecificSession(fallback.sessionId, fallback.name);
+        } else {
+            const taken = new Set(sessions.map((s) => s.name.toLowerCase()));
+            const base = "New Conversation";
+            let name = base;
+            let suffix = 2;
+            while (taken.has(name.toLowerCase())) {
+                name = `${base} ${suffix++}`;
+            }
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: true,
+                targetName: name,
+                statusLabel: "Creating",
+            });
+            const info = await this.connection.createSession(name);
+            await this.joinSpecificSession(info.sessionId, name, true);
+        }
+
+        await this.connection.deleteSession(currentId);
+        if (this.ephemeralSessionId === currentId) {
+            this.ephemeralSessionId = undefined;
+        }
+        vscode.window.showInformationMessage(
+            `Deleted conversation "${currentName}"`,
+        );
         await this.postSessionList();
     }
 

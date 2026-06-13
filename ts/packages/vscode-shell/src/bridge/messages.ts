@@ -95,7 +95,13 @@ export type BridgeToWebviewMessage =
           secondsRemaining?: number;
           error?: string;
       }
-    | { type: "switching"; switching: boolean; targetName?: string }
+    | {
+          type: "switching";
+          switching: boolean;
+          targetName?: string;
+          statusLabel?: "Creating" | "Connecting";
+      }
+    | { type: "activateNewSessionInput" }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
     // Per-conversation queue lifecycle. The bridge forwards the dispatcher's
@@ -194,6 +200,8 @@ export type BridgeFromWebviewMessage =
     | { type: "requestSessions" }
     | { type: "createSession"; name: string }
     | { type: "switchSession"; sessionId: string }
+    | { type: "renameCurrentSession"; name: string }
+    | { type: "deleteCurrentSession" }
     | { type: "focus"; focused: boolean }
     | { type: "pcUpdate"; input: string; direction: CompletionDirection }
     | { type: "pcAccept" }
