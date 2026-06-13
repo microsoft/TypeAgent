@@ -463,3 +463,4 @@ traces/
 test-results-*.md
 ts/packages/agentSdkWrapper/plans/
 /.pnpm-store
+/ts/packages/copilot-plugin/dist-exe

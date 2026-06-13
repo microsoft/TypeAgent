@@ -25,7 +25,10 @@ import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
+import { createRequire } from "node:module";
 import fs from "node:fs";
+
+const require = createRequire(import.meta.url);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = resolve(__dirname, "..");
@@ -87,20 +90,17 @@ if (isMac) {
     }
 }
 
-// 5. Inject the blob with postject (fetched via npx if not installed).
+// 5. Inject the blob with postject. Use its programmatic API (postject is a
+//    devDependency, installed during the authenticated `pnpm install`) rather
+//    than `npx postject`, which fetches the package at build time and fails with
+//    E401 against the authenticated feed registry in CI.
 console.log("[build-mcp-exe] injecting blob (postject) ...");
 const fuse = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
-const postjectArgs = [
-    "--yes",
-    "postject",
-    exePath,
-    "NODE_SEA_BLOB",
-    blob,
-    "--sentinel-fuse",
-    fuse,
-];
-if (isMac) postjectArgs.push("--macho-segment-name", "NODE_SEA");
-execFileSync("npx", postjectArgs, { stdio: "inherit", shell: isWin });
+const { inject } = require("postject");
+await inject(exePath, "NODE_SEA_BLOB", fs.readFileSync(blob), {
+    sentinelFuse: fuse,
+    ...(isMac ? { machoSegmentName: "NODE_SEA" } : {}),
+});
 
 // 6. Re-sign on macOS (ad-hoc) so the OS will run the modified binary.
 if (isMac) {
