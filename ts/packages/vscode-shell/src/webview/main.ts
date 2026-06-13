@@ -67,9 +67,7 @@ const sessionNewNameEl = document.getElementById(
 const sessionCreateBtn = document.getElementById(
     "session-create-btn",
 ) as HTMLButtonElement;
-const sessionCreateHintEl = document.getElementById(
-    "session-create-hint",
-)!;
+const sessionCreateHintEl = document.getElementById("session-create-hint")!;
 const sessionSearchPopoverEl = document.getElementById(
     "session-search-popover",
 )!;
@@ -452,9 +450,14 @@ let demoSuffix: string | undefined;
 // per-attempt error spam in the chat area with a single in-place
 // updating string (countdown + last error).
 let reconnectText: string | undefined;
+let sessionErrorText: string | undefined;
 
 function renderStatus(): void {
-    if (transitionStatusLabel) {
+    if (sessionErrorText) {
+        sessionStatusSummaryEl.className =
+            "session-status-summary disconnected";
+        sessionStatusSummaryEl.textContent = sessionErrorText;
+    } else if (transitionStatusLabel) {
         sessionStatusSummaryEl.className = "session-status-summary switching";
         sessionStatusSummaryEl.textContent = transitionStatusLabel;
     } else if (lastConnected) {
@@ -465,7 +468,8 @@ function renderStatus(): void {
         if (demoSuffix) parts.push(demoSuffix);
         sessionStatusSummaryEl.textContent = parts.join(" · ");
     } else {
-        sessionStatusSummaryEl.className = "session-status-summary disconnected";
+        sessionStatusSummaryEl.className =
+            "session-status-summary disconnected";
         sessionStatusSummaryEl.textContent = reconnectText ?? "Disconnected";
     }
 }
@@ -500,7 +504,8 @@ function hasRenameConflict(name: string): boolean {
     if (!name) return false;
     const lower = name.toLowerCase();
     return knownSessions.some(
-        (s) => s.sessionId !== currentSessionId && s.name.toLowerCase() === lower,
+        (s) =>
+            s.sessionId !== currentSessionId && s.name.toLowerCase() === lower,
     );
 }
 
@@ -553,7 +558,9 @@ function submitRenameCurrentSession(): void {
         currentSessionName.trim().toLowerCase() === name.toLowerCase();
     if (!name || conflict || unchanged) return;
 
+    // Optimistic until the bridge replies with status/sessionList or sessionError.
     currentSessionName = name;
+    sessionErrorText = undefined;
     updateSessionSummary();
     setRenameMode(false);
     updateSessionControlsEnabled();
@@ -563,7 +570,9 @@ function submitRenameCurrentSession(): void {
 function updateSessionSummary(): void {
     const displayName =
         transitionTargetName ||
-        currentSessionName || currentSessionId?.substring(0, 8) || "Conversation";
+        currentSessionName ||
+        currentSessionId?.substring(0, 8) ||
+        "Conversation";
     sessionNameBtn.textContent = displayName;
     renderStatus();
 }
@@ -604,7 +613,8 @@ function updateSessionControlsEnabled(): void {
     sessionNewNameEl.classList.toggle("conflict", createConflict);
     if (createConflict) {
         sessionNewNameEl.setAttribute("aria-invalid", "true");
-        sessionNewNameEl.title = "A conversation with this name already exists.";
+        sessionNewNameEl.title =
+            "A conversation with this name already exists.";
     } else {
         sessionNewNameEl.removeAttribute("aria-invalid");
         sessionNewNameEl.title = "New conversation name";
@@ -626,12 +636,17 @@ function renderSessionList(
 ): void {
     const selectedId = selectedSessionId ?? currentSessionId;
     knownSessions = sessions;
-    const selected = sessions.find((session) => session.sessionId === selectedId);
+    const selected = sessions.find(
+        (session) => session.sessionId === selectedId,
+    );
     if (selected) {
         currentSessionId = selected.sessionId;
         currentSessionName = selected.name;
         currentSessionClientCount = selected.clientCount;
+    } else {
+        currentSessionClientCount = undefined;
     }
+    sessionErrorText = undefined;
     updateSessionSummary();
     renderSessionSearchResults();
 }
@@ -794,6 +809,7 @@ function renderSessionSearchResults(): void {
             const unchanged = name.toLowerCase() === session.name.toLowerCase();
             if (!name || conflict || unchanged) return;
             searchRenameSessionId = undefined;
+            sessionErrorText = undefined;
             vscode.postMessage({
                 type: "renameSession",
                 sessionId: session.sessionId,
@@ -844,6 +860,7 @@ function showSessionSearchPopover(): void {
 function createSessionFromInput(): void {
     const name = sessionNewNameEl.value.trim();
     if (!name || !isConnected || isSwitching || hasCreateConflict(name)) return;
+    sessionErrorText = undefined;
     vscode.postMessage({ type: "createSession", name });
     sessionNewNameEl.value = "";
     hideSessionPopovers();
@@ -867,6 +884,7 @@ function setStatus(
     lastConnected = connected;
     currentSessionId = sessionId ?? currentSessionId;
     if (sessionName) currentSessionName = sessionName;
+    if (connected) sessionErrorText = undefined;
     updateSessionSummary();
     chatPanel.setEnabled(connected);
     updateSessionControlsEnabled();
@@ -892,6 +910,7 @@ sessionDeleteBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     if (!isConnected || isSwitching || !currentSessionId) return;
     hideSessionPopovers();
+    sessionErrorText = undefined;
     vscode.postMessage({ type: "deleteCurrentSession" });
 });
 
@@ -961,6 +980,13 @@ document.addEventListener("keydown", (event) => {
         cancelRenameCurrentSession();
         return;
     }
+    if (searchRenameSessionId) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        searchRenameSessionId = undefined;
+        renderSessionSearchResults();
+        return;
+    }
     if (!isSessionPopoverVisible()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -1006,9 +1032,11 @@ window.addEventListener("message", (event) => {
             break;
         case "sessionChanged":
             currentSessionId = msg.sessionId;
-            currentSessionName = msg.sessionName || msg.sessionId.substring(0, 8);
+            currentSessionName =
+                msg.sessionName || msg.sessionId.substring(0, 8);
             currentSessionClientCount = undefined;
             transitionStatusLabel = undefined;
+            sessionErrorText = undefined;
             if (isRenaming) setRenameMode(false);
             updateSessionSummary();
             chatPanel.clear();
@@ -1020,6 +1048,10 @@ window.addEventListener("message", (event) => {
             break;
         case "sessionList":
             renderSessionList(msg.sessions, msg.currentSessionId);
+            break;
+        case "sessionError":
+            sessionErrorText = msg.message;
+            updateSessionSummary();
             break;
         case "setDisplay":
             // Drop display updates that arrive AFTER cancellation —
@@ -1145,6 +1177,7 @@ window.addEventListener("message", (event) => {
             isSwitching = msg.switching;
             if (msg.switching) {
                 if (isRenaming) setRenameMode(false);
+                sessionErrorText = undefined;
                 transitionStatusLabel = msg.statusLabel ?? "Connecting";
                 transitionTargetName = msg.targetName;
             } else {

@@ -31,9 +31,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
         this._activateNewSessionInputWhenReady = false;
-        this._sidebarView.webview.postMessage({
-            type: "activateNewSessionInput",
-        });
+        this._primaryBridge.activateNewSessionInput(this._sidebarView.webview);
     }
 
     public resolveWebviewView(

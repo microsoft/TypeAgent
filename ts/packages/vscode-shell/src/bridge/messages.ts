@@ -181,7 +181,8 @@ export type BridgeToWebviewMessage =
               clientCount: number;
           }>;
           currentSessionId?: string;
-      };
+      }
+    | { type: "sessionError"; message: string };
 
 /**
  * Messages from webview → extension host

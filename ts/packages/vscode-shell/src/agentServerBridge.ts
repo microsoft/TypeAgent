@@ -541,7 +541,20 @@ export class AgentServerBridge {
         });
     }
 
-    private async postSessionList(targetWebview?: vscode.Webview): Promise<void> {
+    activateNewSessionInput(targetWebview?: vscode.Webview): void {
+        const message: BridgeToWebviewMessage = {
+            type: "activateNewSessionInput",
+        };
+        if (targetWebview) {
+            this.postToWebview(targetWebview, message);
+        } else {
+            this.broadcastToWebviews(message);
+        }
+    }
+
+    private async postSessionList(
+        targetWebview?: vscode.Webview,
+    ): Promise<void> {
         const post = (msg: BridgeToWebviewMessage) => {
             if (targetWebview) {
                 this.postToWebview(targetWebview, msg);
@@ -670,6 +683,16 @@ export class AgentServerBridge {
                 .filter((s) => s.sessionId !== this.session!.sessionId)
                 .map((s) => s.name.toLowerCase()),
         );
+        const validateName = (value: string): string | undefined => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return "Conversation name cannot be empty.";
+            }
+            if (existingNames.has(trimmed.toLowerCase())) {
+                return `A conversation named "${trimmed}" already exists.`;
+            }
+            return undefined;
+        };
 
         const newName =
             newNameFromWebview ??
@@ -677,42 +700,24 @@ export class AgentServerBridge {
                 prompt: "New name for the current conversation",
                 placeHolder: "My Conversation",
                 validateInput: (value) => {
-                    if (!value.trim()) {
-                        return "Conversation name cannot be empty";
-                    }
-                    if (existingNames.has(value.trim().toLowerCase())) {
-                        return `A conversation named "${value.trim()}" already exists`;
-                    }
-                    return undefined;
+                    return validateName(value);
                 },
             }));
 
-        if (!newName) {
+        if (newName === undefined) {
             return;
         }
 
+        const validationError = validateName(newName);
+        if (validationError) {
+            if (newNameFromWebview !== undefined) {
+                throw new Error(validationError);
+            }
+            return;
+        }
         const trimmed = newName.trim();
-        if (!trimmed) {
-            if (newNameFromWebview !== undefined) {
-                vscode.window.showWarningMessage(
-                    "Conversation name cannot be empty.",
-                );
-            }
-            return;
-        }
-        if (existingNames.has(trimmed.toLowerCase())) {
-            if (newNameFromWebview !== undefined) {
-                vscode.window.showWarningMessage(
-                    `A conversation named "${trimmed}" already exists.`,
-                );
-            }
-            return;
-        }
 
-        await this.connection.renameSession(
-            this.session.sessionId,
-            trimmed,
-        );
+        await this.connection.renameSession(this.session.sessionId, trimmed);
         this.nameOverride = trimmed;
         this.broadcastToWebviews({
             type: "status",
@@ -793,7 +798,27 @@ export class AgentServerBridge {
     private async joinSpecificSession(
         sessionId: string,
         targetName?: string,
-        suppressStatusBroadcast?: boolean,
+    ): Promise<boolean> {
+        this.isSwitching = true;
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName,
+            statusLabel: "Connecting",
+        });
+        try {
+            return await this.runSerializedSessionJoin(sessionId);
+        } finally {
+            this.isSwitching = false;
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: false,
+            });
+        }
+    }
+
+    private async runSerializedSessionJoin(
+        sessionId: string,
     ): Promise<boolean> {
         // Serialize concurrent calls. Two joinSpecificSession invocations
         // overlapping (e.g., user rapid-clicks the session picker) would
@@ -814,11 +839,7 @@ export class AgentServerBridge {
         if (!this.connection) {
             return false;
         }
-        const p = this.joinSpecificSessionImpl(
-            sessionId,
-            targetName,
-            suppressStatusBroadcast,
-        );
+        const p = this.performSessionJoin(sessionId);
         this.joinInFlight = p.finally(() => {
             if (this.joinInFlight === p) {
                 this.joinInFlight = undefined;
@@ -827,115 +848,91 @@ export class AgentServerBridge {
         return this.joinInFlight;
     }
 
-    private async joinSpecificSessionImpl(
-        sessionId: string,
-        targetName?: string,
-        suppressStatusBroadcast?: boolean,
-    ): Promise<boolean> {
+    private async performSessionJoin(sessionId: string): Promise<boolean> {
         if (!this.connection || !this.rawConnection) {
             return false;
         }
         const rawConnection = this.rawConnection;
 
-        this.isSwitching = true;
-        if (!suppressStatusBroadcast) {
-            this.broadcastToWebviews({
-                type: "switching",
-                switching: true,
-                targetName,
-                statusLabel: "Connecting",
-            });
-        }
-        try {
-            const clientIO = this.createClientIO();
-            const oldSessionId = this.session?.sessionId;
-            const ephemeralIdAtStart = this.ephemeralSessionId;
-            let newSession: SessionDispatcher | undefined;
+        const clientIO = this.createClientIO();
+        const oldSessionId = this.session?.sessionId;
+        const ephemeralIdAtStart = this.ephemeralSessionId;
+        let newSession: SessionDispatcher | undefined;
 
-            const result = await switchConversationSafe(
-                rawConnection,
-                clientIO,
-                oldSessionId,
-                sessionId,
-                {
-                    onJoined: (joined) => {
-                        newSession = this.applySessionJoinedRebindOnly(
-                            joined,
-                            oldSessionId,
-                        );
-                    },
-                    onLeftOld: async (leftId) => {
-                        await this.deleteEphemeralIfLeft(
-                            leftId,
-                            ephemeralIdAtStart,
-                            sessionId,
-                            rawConnection,
-                        );
-                        // Broadcasts and replay run post-leave so late
-                        // events from the old conversation can't render
-                        // after the UI has switched.
-                        if (newSession) {
-                            this.broadcastToWebviews({
-                                type: "sessionChanged",
-                                sessionId: newSession.sessionId,
-                                sessionName: this.getDisplayName(),
-                            });
-                            this.broadcastToWebviews({
-                                type: "status",
-                                connected: true,
-                                sessionId: newSession.sessionId,
-                                sessionName: this.getDisplayName(),
-                            });
-                            this.onStatusChanged?.();
-                            await this.replayHistory(newSession);
-                            this.lastReplayedSessionId = newSession.sessionId;
-                        }
-                    },
+        const result = await switchConversationSafe(
+            rawConnection,
+            clientIO,
+            oldSessionId,
+            sessionId,
+            {
+                onJoined: (joined) => {
+                    newSession = this.applySessionJoinedRebindOnly(
+                        joined,
+                        oldSessionId,
+                    );
                 },
-                {
-                    clientType: "extension",
-                    filter: false,
+                onLeftOld: async (leftId) => {
+                    await this.deleteEphemeralIfLeft(
+                        leftId,
+                        ephemeralIdAtStart,
+                        sessionId,
+                        rawConnection,
+                    );
+                    // Broadcasts and replay run post-leave so late
+                    // events from the old conversation can't render
+                    // after the UI has switched.
+                    if (newSession) {
+                        this.broadcastToWebviews({
+                            type: "sessionChanged",
+                            sessionId: newSession.sessionId,
+                            sessionName: this.getDisplayName(),
+                        });
+                        this.broadcastToWebviews({
+                            type: "status",
+                            connected: true,
+                            sessionId: newSession.sessionId,
+                            sessionName: this.getDisplayName(),
+                        });
+                        this.onStatusChanged?.();
+                        await this.replayHistory(newSession);
+                        this.lastReplayedSessionId = newSession.sessionId;
+                    }
                 },
+            },
+            {
+                clientType: "extension",
+                filter: false,
+            },
+        );
+
+        if (result.kind === "join-failed") {
+            const e = result.error as { message?: string } | undefined;
+            vscode.window.showErrorMessage(
+                `Failed to switch conversation: ${e?.message ?? String(result.error)}`,
             );
-
-            if (result.kind === "join-failed") {
-                const e = result.error as { message?: string } | undefined;
-                vscode.window.showErrorMessage(
-                    `Failed to switch conversation: ${e?.message ?? String(result.error)}`,
-                );
-                return false;
-            }
-
-            // No-current-session case: switchConversationSafe doesn't
-            // fire onLeftOld when there was nothing to leave, so flush
-            // the broadcasts/replay here.
-            if (oldSessionId === undefined && newSession) {
-                this.broadcastToWebviews({
-                    type: "sessionChanged",
-                    sessionId: newSession.sessionId,
-                    sessionName: this.getDisplayName(),
-                });
-                this.broadcastToWebviews({
-                    type: "status",
-                    connected: true,
-                    sessionId: newSession.sessionId,
-                    sessionName: this.getDisplayName(),
-                });
-                this.onStatusChanged?.();
-                await this.replayHistory(newSession);
-                this.lastReplayedSessionId = newSession.sessionId;
-            }
-            await this.postSessionList();
-            return true;
-        } finally {
-            this.isSwitching = false;
-            if (!suppressStatusBroadcast) {
-                this.broadcastToWebviews({
-                    type: "switching",
-                    switching: false,
-                });
-            }
+            return false;
         }
+
+        // No-current-session case: switchConversationSafe doesn't
+        // fire onLeftOld when there was nothing to leave, so flush
+        // the broadcasts/replay here.
+        if (oldSessionId === undefined && newSession) {
+            this.broadcastToWebviews({
+                type: "sessionChanged",
+                sessionId: newSession.sessionId,
+                sessionName: this.getDisplayName(),
+            });
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId: newSession.sessionId,
+                sessionName: this.getDisplayName(),
+            });
+            this.onStatusChanged?.();
+            await this.replayHistory(newSession);
+            this.lastReplayedSessionId = newSession.sessionId;
+        }
+        return true;
     }
 
     private async joinSpecificSessionOrThrow(
@@ -943,11 +940,7 @@ export class AgentServerBridge {
         targetName?: string,
         failureMessage?: string,
     ): Promise<void> {
-        const switched = await this.joinSpecificSession(
-            sessionId,
-            targetName,
-            true,
-        );
+        const switched = await this.runSerializedSessionJoin(sessionId);
         if (!switched) {
             throw new Error(
                 failureMessage ??
@@ -2211,8 +2204,10 @@ export class AgentServerBridge {
         mode: "create" | "switch",
         sessionId?: string,
         failureMessage?: string,
+        refreshSessionList = true,
     ): Promise<void> {
         const statusLabel = mode === "create" ? "Creating" : "Connecting";
+        this.isSwitching = true;
         this.broadcastToWebviews({
             type: "switching",
             switching: true,
@@ -2234,16 +2229,19 @@ export class AgentServerBridge {
                 failureMessage,
             );
         } finally {
+            this.isSwitching = false;
             this.broadcastToWebviews({
                 type: "switching",
                 switching: false,
             });
-            await this.postSessionList().catch((e) => {
-                console.warn(
-                    "[agentServerBridge] postSessionList after transition failed:",
-                    e,
-                );
-            });
+            if (refreshSessionList) {
+                await this.postSessionList().catch((e) => {
+                    console.warn(
+                        "[agentServerBridge] postSessionList after transition failed:",
+                        e,
+                    );
+                });
+            }
         }
     }
 
@@ -2261,6 +2259,11 @@ export class AgentServerBridge {
                     listError,
                 );
             });
+            this.broadcastToWebviews({
+                type: "sessionError",
+                message,
+            });
+            return;
         }
 
         vscode.window.showWarningMessage(message);
@@ -2331,6 +2334,7 @@ export class AgentServerBridge {
                 "switch",
                 fallback.sessionId,
                 `Failed to switch to conversation "${fallback.name}" before deleting the current conversation.`,
+                false,
             );
         } else {
             const taken = new Set(sessions.map((s) => s.name.toLowerCase()));
@@ -2345,6 +2349,7 @@ export class AgentServerBridge {
                 "create",
                 undefined,
                 `Created conversation "${name}" but failed to switch to it before deleting the current conversation.`,
+                false,
             );
         }
 
