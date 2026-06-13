@@ -2254,13 +2254,6 @@ export class AgentServerBridge {
         const message = e instanceof Error ? e.message : String(e);
         console.warn("[agentServerBridge] webview message failed:", e);
 
-        if (this.isOptimisticSessionTransitionMessage(msg)) {
-            this.broadcastToWebviews({
-                type: "switching",
-                switching: false,
-            });
-        }
-
         if (this.isSessionMutationMessage(msg)) {
             await this.postSessionList().catch((listError) => {
                 console.warn(
@@ -2271,18 +2264,6 @@ export class AgentServerBridge {
         }
 
         vscode.window.showWarningMessage(message);
-    }
-
-    private isOptimisticSessionTransitionMessage(
-        msg: BridgeFromWebviewMessage,
-    ): boolean {
-        switch (msg.type) {
-            case "createSession":
-            case "switchSession":
-                return true;
-            default:
-                return false;
-        }
     }
 
     private isSessionMutationMessage(msg: BridgeFromWebviewMessage): boolean {
