@@ -37,8 +37,8 @@ const isAllowedOrigin = createAgentOriginAllowlist({
 export type StudioRuntimeResolver = (repoRoot?: string) => StudioRuntime;
 
 /**
- * The `studio` agent's own WebSocket server — the rich-client transport (the
- * `code`↔`coda` pattern). Each client connection gets its own `agent-rpc`
+ * The standalone Studio service's WebSocket server — the rich-client transport
+ * (the `code`↔`coda` pattern). Each client connection gets its own `agent-rpc`
  * endpoint exposing the typed Studio service methods (repo-scoped per request)
  * and a server→client event push. Binds to loopback only.
  */

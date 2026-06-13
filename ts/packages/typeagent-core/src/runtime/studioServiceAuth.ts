@@ -4,23 +4,23 @@
 /**
  * Capability-token side channel for the Studio service WebSocket.
  *
- * The `studio` agent's WS server binds to loopback on an OS-assigned port and is
- * Origin-gated, but any local process could otherwise dial that port. As a
- * defense-in-depth capability check (the "loopback + token" model, like
- * Jupyter), the agent mints a random token per bound server and writes it to a
- * per-port file under the user's `~/.typeagent/studio/` directory; the
- * `typeagent-studio` extension reads it and presents it as an
- * `Authorization: Bearer <token>` header on connect.
+ * The standalone Studio service's WS server binds to loopback on an OS-assigned
+ * port and is Origin-gated, but any local process could otherwise dial that
+ * port. As a defense-in-depth capability check (the "loopback + token" model,
+ * like Jupyter), the service mints a random token per bound server and writes it
+ * to a per-port file under the user's `~/.typeagent/studio/` directory; a client
+ * (the launcher reads it after spawning the service, the `studio` agent receives
+ * it in the registry announcement) presents it as an `Authorization: Bearer
+ * <token>` header on connect.
  *
- * The file is **per-port** (`service-token-<port>.json`) so two agent-server
- * processes don't clobber each other's token (`discoverPort` is last-writer-wins
- * on the port, but each server owns its own token file). It is **not** a defense
- * against same-user code (which can read the file) — that is the accepted line,
- * matching the loopback+token model.
+ * The file is **per-port** (`service-token-<port>.json`) so two service
+ * processes don't clobber each other's token (each server owns its own token
+ * file). It is **not** a defense against same-user code (which can read the
+ * file) — that is the accepted line, matching the loopback+token model.
  *
- * Lives in `@typeagent/core` because it is the only package shared by both the
- * agent (server) and the extension (client). It uses only node `fs`/`path`/
- * `os`/`crypto` — no transport dependency — so core stays agent-rpc-free.
+ * Lives in `@typeagent/core` because it is shared by the service (server) and
+ * the extension / agent (clients). It uses only node `fs`/`path`/`os`/`crypto`
+ * — no transport dependency — so core stays agent-rpc-free.
  */
 
 import { promises as fs } from "node:fs";

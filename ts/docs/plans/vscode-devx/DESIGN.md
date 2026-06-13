@@ -90,7 +90,7 @@ principle before writing UI-only code.**
 
 | Package                | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Its `runtime` module assembles these into the Studio runtime, which is **instantiated once, inside the `studio` agent** (see §3.5). The `studio` agent, command-line tools, and tests consume it directly. |
+| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Its `runtime` module assembles these into the Studio runtime, which is **instantiated once per workspace, inside the standalone Studio service** (see §3.5). The service, the `studio` agent proxy, command-line tools, and tests consume it directly. |
 | **`typeagent-studio`** | The bespoke VS Code extension — the **human presenter**. The activity-bar app: tree views, webviews, status bar, commands. A thin **client of the agent-server**: it drives the `studio` agent's typed actions and renders the rich UI from the results — it does **not** host the runtime. This mirrors how `coda` is the rich VS Code client of the `code` agent.                                                                                          |
 | **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                                                                                                                                                                                |
 | **`vscode-shell`**     | The existing chat surface — the **generic canvas**. Connects to the agent-server and can route requests to any agent (including `studio`). Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                                                                                     |
@@ -232,19 +232,31 @@ need typed results and an event stream, not rendered markdown:
   identity on every message, and explicit **subscription ids / cancellation /
   backpressure**.
 
-**Discovery & registration — reuse the platform registrar, don't reinvent.**
+**Discovery & registration — reuse the platform registrar, add a tiny registry relay.**
 
-- _Lookup:_ clients find the service through the agent-server's **`PortRegistrar`**
-  (`discoverPort("studio", workspaceId)` — per-workspace scoping rides the
-  existing **role** dimension).
-- _Registration:_ the discovery channel is read-only (only in-process agents can
-  `registerPort`). **v1:** the service announces its `{port, token}` to the
-  `studio` agent, which relays it into the registrar via `registerPort` and
-  releases it on disconnect — the established pattern in which an agent registers
-  a _separate process's_ port (cf. the `montage`/`markdown` view servers).
-  **Evolution:** an authenticated external `registerPort` on the discovery channel
-  so the service self-registers and the agent keeps no endpoint at all. The token
-  rides the announcement, so there is no shared token file.
+- _Lookup:_ the service is reached in two hops. The agent-server's
+  **`PortRegistrar`** locates the **`studio` agent's registry endpoint**
+  (`discoverPort("studio", "registry")` — the agent registers this endpoint's own
+  port under the `registry` role); a client then asks that registry
+  `lookup(workspaceKey)` for the live service's `{port, token, …}`. Two hops are
+  needed because the registrar maps `(agent, role) → port` only — it can carry
+  neither a per-workspace key nor a token.
+- _Registration (registry relay):_ the discovery channel is read-only (only
+  in-process agents can `registerPort`) and the **extension/CLI — not the agent —
+  spawns the service**, so the agent can't learn the service's `{port, token}` the
+  `montage`/`markdown` way (where the agent spawns its own child). Instead the
+  `studio` agent hosts a small **registry** WebSocket endpoint: a service
+  `announce`s `{workspaceKey, repoRoot, port, token, pid, protocolVersion}` to it
+  on start, the registry validates the announcement (current protocol version and
+  `workspaceKey === studioWorkspaceKey(repoRoot)`, so a service can only claim its
+  own workspace) and ties the entry to the announcing socket — evicting it when
+  that socket closes (socket-based liveness, no stale-file/PID guessing). The
+  agent proxy and any extra extension window resolve the service via `lookup`. The
+  token rides the announcement (and the per-port token file the launcher reads
+  after spawning), so there is no shared token file on the registry path.
+  **Evolution:** an authenticated external `registerPort`/registration on the
+  discovery channel so the service self-registers and the agent keeps no endpoint
+  at all.
 
 **Security / approval boundary.** Mutating actions (sandbox lifecycle,
 corpus/schema/grammar writes, costly replays) stay behind the `dryRun` + approval

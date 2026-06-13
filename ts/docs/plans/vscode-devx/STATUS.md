@@ -113,21 +113,19 @@ Done / superseded:
 
 Ready to start (smallest → larger):
 
-1. **Studio service channel (the Option B migration; plan phase P-1.5)** —
-   **done (exit criteria met).** The typed service channel served by the
-   `studio` agent's **own WebSocket** (the `code`↔`coda` pattern: port via
-   `registerPort`, client discovers via `discoverPort("studio")`, `agent-rpc`
-   `createRpc` framing) is built and verified end-to-end, with guardrails
+1. **Studio service channel (plan phase P-1.5; host moved to the standalone
+   service in P-1.6)** — **done (exit criteria met).** The typed `agent-rpc`
+   service channel — originally served by the `studio` agent's own WebSocket, now
+   served by the **standalone per-workspace Studio service** (P-1.6) with the
+   agent as a thin proxy — is built and verified end-to-end, with guardrails
    (capability-token auth on every connection, idempotent subscribe +
-   `unsubscribeEvents`, backpressure). Two clients read through it: the **Event
-   Log tree** (swappable source, graceful fallback) and the **Impact Report
-   webview** (replay over the channel). The agent also reports its live client
-   count to `@system ports`. **Cleanup remaining (not blocking):** migrate the
-   remaining trees (Sandboxes / Corpora) and the onboarding surface, then delete
-   the transitional in-process `createStudioRuntime`. **Done so far:** the Event
-   Log **and Collisions** trees both read through the channel (swappable
-   sources, graceful fallback; Collisions scan/list are read-only analysis over
-   the channel).
+   `unsubscribeEvents`, backpressure). All channel-backed clients read through it:
+   the Event Log, Collisions, Sandbox, and Corpus trees, the health status bar,
+   and the Impact Report webview. **P-1.6 cleanup done:** all those surfaces are
+   channel-only (no in-process fallback); the in-process `createStudioRuntime`
+   remains only for onboarding (J1). **Remaining:** see the implementation plan's
+   P-1.6 follow-ups (onboarding channelization, service-side workspace binding,
+   lifecycle/security hardening).
 2. **`webviewKit` + Impact Report shell** — **done.** A minimal, reusable
    `webviewKit` (strict CSP/nonce HTML builder, singleton-panel host, typed
    host↔webview message protocol, browser-neutral replay view model) and an
@@ -182,25 +180,27 @@ fallback — the CLI covers the headless case). See [`DESIGN.md` §3.5](./DESIGN
 and [`STUDIO-AGENT.md` §4](./STUDIO-AGENT.md).
 
 > _Earlier this was "Option B" (the runtime hosted **inside** the `studio` agent,
-> the `code`↔`coda` pattern). The **current code still implements Option B** and
-> is being migrated to the standalone service per the implementation plan's
-> phasing (extract the host → re-point the extension → thin agent proxy →
-> cleanup). The extension's in-process `createStudioRuntime` is likewise a
-> transitional bootstrap._
+> the `code`↔`coda` pattern). **P-1.6 has migrated off it** (commits on
+> `dev/talzacc/typeagent_studio_part2`): the runtime now lives in the
+> `studio-service` package, the `studio` agent hosts a registry + proxies its
+> read-only actions (no longer hosts the runtime), and the extension
+> launches/attaches the service and routes its shared live surfaces to it. The
+> extension's in-process `createStudioRuntime` survives **only** for onboarding
+> commands (J1) — channelizing those removes it. Remaining hardening is tracked in
+> the implementation plan's P-1.6 follow-ups._
 
 **Typed result / event channel (decided).** Rich (non-chat) clients consume a
 **typed `agent-rpc` channel over the Studio service's WebSocket**: `invoke` for
 typed results + a server→client subscription pushing the existing `StudioEvent`
 union from `@typeagent/core/events` (`sandbox.*`, `collision.detected`,
 `replay.row` / `replay.summary`, `feedback.recorded`, …) — reuse that type.
-Clients **look up** the service via `discoverPort("studio", workspaceId)`
-(per-workspace via the `PortRegistrar` **role** dimension — reuse the registrar,
-don't reinvent it). Because the discovery channel is read-only, the service
-**registers** by announcing its `{port, token}` to the `studio` agent, which
-relays it into the registrar via `registerPort` (the pattern where an agent
-registers a _separate process's_ port — cf. `montage`/`markdown`); evolving to
-authenticated external self-registration (which also removes the shared token
-file). That protocol is the **canonical typed API**; `studio` actions and MCP
+Clients **look up** the service through the `studio` agent's registry
+(`discoverPort("studio", "registry")` → `lookup(workspaceKey)`). Because the
+discovery channel is read-only and the extension/CLI — not the agent — spawns the
+service, the service **registers** by announcing its `{workspaceKey, repoRoot,
+port, token, …}` to the agent's registry (validated: protocol version +
+`workspaceKey === studioWorkspaceKey(repoRoot)`; entry tied to the announcing
+socket, evicted on close); evolving to authenticated external self-registration. That protocol is the **canonical typed API**; `studio` actions and MCP
 tools proxy the **same typed runtime methods**; `ActionResult.displayContent` is
 chat-summary-only. Guardrails: session/repo identity on every message, a
 capability token, and subscription/cancellation/backpressure. Rejected:

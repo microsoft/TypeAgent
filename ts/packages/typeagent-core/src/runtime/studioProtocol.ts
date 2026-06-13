@@ -17,9 +17,10 @@ import type {
 } from "./studioRuntimeCore.js";
 
 /**
- * Wire types for the Studio service channel — the typed protocol the `studio`
- * agent serves over its own WebSocket and the `typeagent-studio` extension (and
- * any other rich client) consumes.
+ * Wire types for the Studio service channel — the typed protocol the standalone,
+ * per-workspace Studio service serves over its WebSocket and the
+ * `typeagent-studio` extension (and the `studio` agent proxy, and any other rich
+ * client) consumes.
  *
  * These are **pure data / function-map types** with no transport dependency:
  * `@typeagent/core` must not depend on `agent-rpc`. The server and client
@@ -28,8 +29,7 @@ import type {
  * Repo scoping: the Studio runtime is per-workspace (one per resolved repo
  * root), so **every request carries `repoRoot`** and the event subscription is
  * per-connection — a client for one repo must never receive another repo's
- * events. The port alone cannot disambiguate repos (`discoverPort` is
- * last-writer-wins on `(agent, role)`).
+ * events.
  */
 
 /** Result of the service-level `getStudioInfo` (composes two runtime reads). */
@@ -40,7 +40,7 @@ export interface StudioInfo {
 
 /**
  * Client → server requests (request/response). The leading `repoRoot` selects
- * the target workspace runtime; omit to use the agent's default
+ * the target workspace runtime; omit to use the service's default
  * (`TYPEAGENT_STUDIO_REPO_ROOT` / cwd).
  */
 export type StudioServiceInvokeFunctions = {

@@ -193,10 +193,11 @@ two-version replay lands, then **B (Author/edit)** and finally **F
 > this agent — "Option B"; it is being migrated out — see §8 and the
 > implementation plan's phasing.)_
 
-- **The agent forwards; it does not own.** Its handler discovers the workspace's
-  Studio service (`discoverPort("studio", workspaceId)`) and forwards its
-  read-only actions over the typed channel. When no service is running it returns
-  an honest _"Studio isn't running for `<workspace>` — open it in VS Code or run
+- **The agent forwards; it does not own.** Its handler resolves the workspace's
+  Studio service via the in-process registry it hosts (exact canonical
+  `workspaceKey` match) and forwards its read-only actions over the typed channel.
+  When no service has announced for the workspace it returns an honest _"Studio
+  isn't running for `<workspace>` — open it in VS Code or run
   `typeagent-studio serve`."_
 - **The shared engine.** The runtime is `@typeagent/core/runtime`
   (`createStudioRuntimeCore`, wiring `InMemorySandboxManager` +
@@ -212,12 +213,19 @@ two-version replay lands, then **B (Author/edit)** and finally **F
   extension) pass it in; the agent forwards it. The service resolves and holds the
   per-workspace runtime, so clients never diverge on repo root / sandbox set /
   corpus state.
-- **Registration / discovery.** The service announces its `{port, token}` to this
-  agent, which relays it into the registrar via `SessionContext.registerPort` (the
-  pattern where an agent registers a _separate process's_ port — cf. the
-  `montage`/`markdown` view servers), releasing on disconnect — so other clients
-  discover it via `discoverPort`. Evolves to authenticated external
-  self-registration (§8, [`DESIGN.md` §3.5](./DESIGN.md)).
+- **Registration / discovery.** This agent hosts a small **registry** WebSocket
+  endpoint and registers _its own_ port under the `registry` role
+  (`SessionContext.registerPort("registry", …)`), so clients reach it via
+  `discoverPort("studio", "registry")`. The standalone service `announce`s
+  `{workspaceKey, repoRoot, port, token, …}` to that registry on start; the
+  registry validates the announcement (current protocol version +
+  `workspaceKey === studioWorkspaceKey(repoRoot)`) and ties the entry to the
+  announcing socket, evicting it on close. The agent proxy and extra extension
+  windows `lookup(workspaceKey)` to find the live service. (This differs from the
+  `montage`/`markdown` precedent — there the _agent_ spawns the child and knows
+  its port; here the extension/CLI spawns the service, so the agent needs the
+  registry to learn it.) Evolves to authenticated external self-registration
+  (§8, [`DESIGN.md` §3.5](./DESIGN.md)).
 - **State / profile.** `~/.typeagent/studio/...` for persisted state (e.g. replay
   run history, sandbox snapshot), owned by the **service**.
 
@@ -297,8 +305,9 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
   channel over the Studio service's WebSocket, with guardrails):** the
   **standalone Studio service** — not the agent (see §4 and [`DESIGN.md`
   §3.5](./DESIGN.md)) — hosts its own WebSocket; the `typeagent-studio` extension
-  and this `studio` agent discover it via the agent-server `discovery` channel
-  (`discoverPort("studio", workspaceId)`) and connect as clients. The **`agent-rpc`
+  and this `studio` agent reach it via the agent's registry
+  (`discoverPort("studio", "registry")` → `lookup(workspaceKey)`) and connect as
+  clients. The **`agent-rpc`
   `createRpc` framing** rides on top — `invoke` for typed results (e.g.
   `AvailableAgent[]`, `ActionDelta[]`, health findings) + a server→client
   subscription that pushes the **existing `StudioEvent` union** from
@@ -311,8 +320,9 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
   - _Repo scoping from day one:_ the runtime is per-workspace, so every `invoke`
     and the event subscription carry the workspace identity, and subscriptions are
     per-connection — repo A's window must never receive repo B's events.
-    Per-workspace lookup rides the `PortRegistrar` **role** dimension
-    (`discoverPort("studio", workspaceId)`).
+    Per-workspace lookup goes through the agent's registry
+    (`discoverPort("studio", "registry")` → `lookup(workspaceKey)`), keyed by
+    canonical `studioWorkspaceKey`.
   - _Why a standalone service with its own WS (not a channel on the agent-server
     connection):_ an AppAgent only gets `SessionContext` — **no**
     `ChannelProvider`/transport handle — and only the agent-server's
@@ -321,11 +331,14 @@ source of truth. Summary of what each agent phase delivers (groups from §3):
     affinity is to the **workspace**, not an agent-server session, so it lives in
     its own per-workspace process ([`DESIGN.md` §3.5](./DESIGN.md)).
   - _Registration:_ the discovery channel is read-only (only in-process agents can
-    `registerPort`), so the service announces its `{port, token}` to the `studio`
-    agent, which relays it into the registrar via `registerPort` (cf. the
-    `montage`/`markdown` view servers), releasing on disconnect — evolving to
-    authenticated external self-registration. The token rides the announcement, so
-    there is no shared token file.
+    `registerPort`) and the extension/CLI — not the agent — spawns the service, so
+    the agent hosts a small **registry** endpoint (registered under the `registry`
+    role) that the service `announce`s itself to; the registry validates the
+    announcement (protocol version + `workspaceKey === studioWorkspaceKey(repoRoot)`)
+    and ties the entry to the announcing socket (evicted on close) — evolving to
+    authenticated external self-registration. The token rides the announcement (and
+    the per-port token file the launcher reads after spawn), so there is no shared
+    token file on the registry path.
   - _Why not "structured data on `ActionResult`":_ `ActionResult` carries no
     generic typed payload, and clients receive a `CommandResult` (errors /
     executed actions / metrics / tokens), **not** the raw `ActionResult<T>` — a

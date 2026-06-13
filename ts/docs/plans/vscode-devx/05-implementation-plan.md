@@ -774,33 +774,56 @@ case) or a `typeagent-studio serve` CLI (headless/CI); the `studio` agent is a
 identity** (a second launcher discovers and attaches). No agent-hosted fallback
 ("dual-mode" rejected — the CLI covers the headless case).
 
-- **Discovery: reuse the `PortRegistrar`** (`discoverPort("studio", workspaceId)`
-  — per-workspace via the role dimension). Do not invent a new lookup mechanism.
-- **Registration (the one gap — the discovery channel is read-only):** v1, the
-  service announces its `{port, token}` to the `studio` agent, which relays it
-  into the registrar via `registerPort` and releases on disconnect (the pattern
-  where an agent registers a _separate process's_ port — cf. `montage`/`markdown`
-  view servers); the token rides the announcement (no token file). Evolution:
-  authenticated external `registerPort` on the discovery channel so the service
-  self-registers and the agent keeps no endpoint at all.
-- Phases: **P1** extract the runtime host into the service (relocate
+- **Discovery: reuse the `PortRegistrar` + a tiny agent-hosted registry.** Two
+  hops: `discoverPort("studio", "registry")` finds the `studio` agent's registry
+  endpoint (registered under the `registry` role), then `lookup(workspaceKey)`
+  returns the live service's `{port, token, …}`. The registrar maps
+  `(agent, role) → port` only, so it can carry neither a per-workspace key nor a
+  token — hence the registry.
+- **Registration (registry relay):** the discovery channel is read-only and the
+  extension/CLI (not the agent) spawns the service, so the agent can't learn the
+  service's `{port, token}` the `montage`/`markdown` way (agent-spawns-child).
+  Instead the agent hosts a small **registry** WS endpoint; the service
+  `announce`s `{workspaceKey, repoRoot, port, token, pid, protocolVersion}` on
+  start; the registry validates it (current protocol version +
+  `workspaceKey === studioWorkspaceKey(repoRoot)`) and ties the entry to the
+  announcing socket (evicted on close). Token rides the announcement (and the
+  per-port token file the launcher reads after spawn) — no shared token file.
+  Evolution: authenticated external registration on the discovery channel so the
+  service self-registers and the agent keeps no endpoint.
+- Phases: **P1 (done)** extract the runtime host into `studio-service` (relocate
   `StudioServiceServer` + capability token + `FileWorkspaceState` +
-  `getStudioRuntime`; add the process entrypoint + `typeagent-studio serve` CLI);
-  **P2** re-point the extension to launch + connect (single-instance; discovery
-  via the registrar); **P3** make the `studio` agent a thin proxy (forward the
-  read-only actions; relay registration) and delete its runtime-hosting code;
-  **P4** cleanup + docs.
-- **Risks:** canonical **workspace identity** (symlinks/multi-root/WSL/remote —
-  verify at the protocol level); **sandbox/agent-loading fidelity** (keep agent
-  loading a shared library + a conformance test vs. agent-server behavior);
-  **lifecycle/diagnostics** ("which service am I connected to," restart, health,
-  stale cleanup); the token is **local capability auth**, not real security (keep
-  it behind a replaceable auth provider for remote/cloud).
-- **Open decision (resolved → relay v1).** Registration mechanism: **start with
-  the registrar relay** (no platform change, reuses `registerPort`, matches the
-  `montage`/`markdown` precedent). External authenticated registration on the
-  discovery channel — which also removes the agent's last hosted endpoint and the
-  token file — is the documented **follow-up evolution**, not a prerequisite.
+  `getStudioRuntime`; add `startStudioService` + the `typeagent-studio serve`
+  CLI). **P2/P3 (done)** the agent hosts the registry + proxies its read-only
+  actions and stops hosting the runtime; the extension launches/attaches the
+  service (single-instance per canonical workspace, registry lookup → attach else
+  spawn under a per-workspace lock, reading the spawned port from stdout + token
+  file) and routes the shared live surfaces to it. **P4 (in progress)** cleanup +
+  docs; remaining hardening tracked below. The extension's in-process runtime is
+  retained **only** for onboarding commands (J1) — channelizing those removes it.
+- **Resolved decisions.** Registration = **agent-hosted registry relay** (not the
+  documented direct `registerPort` of the service's port: the agent doesn't spawn
+  the service, and the registrar carries no token/workspace key). The single-live
+  fallback for the agent proxy was **removed** — exact canonical-workspace match
+  only (wrong-workspace proxying is worse than "not running"). External
+  authenticated registration on the discovery channel — which also removes the
+  agent's last hosted endpoint — is the documented **follow-up evolution**.
+- **Remaining hardening (P4+ follow-ups):**
+  - **Onboarding split-brain (blocks J1 single-source):** onboarding commands
+    still mutate the extension's in-process runtime's sandboxes, invisible to the
+    service. Channelize onboarding install/sandbox writes (or gate them) before J1.
+  - **Service-side workspace binding:** bind each service to one canonical
+    workspace at startup and reject RPCs whose `repoRoot` canonicalizes elsewhere
+    (today the service accepts arbitrary `repoRoot`).
+  - **Lifecycle:** move single-instance ownership into the service (lifetime lock
+    + heartbeat/status) and add idle shutdown so no orphan/duplicate services when
+    the agent-server is down or windows reload.
+  - **Security:** the registry is loopback + origin-gated but **token-less**;
+    `announce` is validated (shape/version/workspaceKey) but a same-user local
+    process is trusted. Add verify-back / authenticated announce before broader
+    AI-driven mutations.
+  - **Cloud transport seam:** evolve loopback/port/token-file assumptions behind a
+    `ServiceTarget { endpoint, auth, workspaceKey }` local-transport provider.
 - Exit: the runtime no longer lives in the `studio` agent; the extension launches
   + connects to the workspace service; `@studio` forwards to it (honest "not
   running — open the workspace or run `typeagent-studio serve`" when absent).

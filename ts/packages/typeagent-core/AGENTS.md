@@ -17,8 +17,9 @@ a small process entrypoint, launched by the `typeagent-studio` extension or a
 `typeagent-studio serve` CLI. The extension, the `vscode-shell` canvas, an AI
 orchestrator (MCP, via a thin `studio` agent), and the CLI are all **clients** of
 that one runtime — they do not each build a runtime. (Earlier the runtime was
-hosted inside the `studio` agent — "Option B"; it is migrating out, and the
-extension's in-process construction is likewise a transitional bootstrap.) See
+hosted inside the `studio` agent — "Option B"; P-1.6 moved it out: the agent now
+hosts a registry + proxies to the service. The extension's in-process
+construction survives **only** for onboarding commands.) See
 [`DESIGN.md` §3.5](../../docs/plans/vscode-devx/DESIGN.md).
 
 ## Design principle you MUST preserve — headless core, thin presenters
