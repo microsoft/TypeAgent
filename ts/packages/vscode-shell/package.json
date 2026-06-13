@@ -153,21 +153,21 @@
         "when": "vscode-shell.demoPaused"
       }
     ],
-    "views": {
-      "vscode-shell": [
-        {
-          "type": "webview",
-          "id": "vscode-shell.chatView",
-          "name": "Chat"
-        }
-      ]
-    },
     "menus": {
       "view/title": [
         {
           "command": "vscode-shell.newSidebarSession",
           "when": "view == vscode-shell.chatView",
           "group": "navigation"
+        }
+      ]
+    },
+    "views": {
+      "vscode-shell": [
+        {
+          "type": "webview",
+          "id": "vscode-shell.chatView",
+          "name": "Chat"
         }
       ]
     },
@@ -203,11 +203,11 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@vscode/codicons": "^0.0.42",
     "@types/debug": "^4.1.0",
     "@types/markdown-it": "^14.1.2",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.0",
+    "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
     "copyfiles": "^2.4.1",
     "esbuild": "^0.25.12",
