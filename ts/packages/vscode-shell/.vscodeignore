@@ -7,3 +7,5 @@ node_modules/**
 **/*.map
 **/_dbg.*
 *.vsix
+*.log
+*.md
