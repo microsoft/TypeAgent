@@ -509,6 +509,12 @@ function hasRenameConflict(name: string): boolean {
     );
 }
 
+function hasCreateConflict(name: string): boolean {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return knownSessions.some((s) => s.name.toLowerCase() === lower);
+}
+
 function hasSessionRenameConflict(sessionId: string, name: string): boolean {
     if (!name) return false;
     const lower = name.toLowerCase();
@@ -594,11 +600,7 @@ function updateSessionControlsEnabled(): void {
     const hasCurrentSession = currentSessionId !== undefined;
     const inputValue = sessionNewNameEl.value.trim();
     const renameValue = sessionRenameInputEl.value.trim();
-    const sessionExists =
-        inputValue !== "" &&
-        knownSessions.some(
-            (s) => s.name.toLowerCase() === inputValue.toLowerCase(),
-        );
+    const createConflict = hasCreateConflict(inputValue);
     const renameConflict = hasRenameConflict(renameValue);
     const renameUnchanged =
         renameValue !== "" &&
@@ -608,7 +610,7 @@ function updateSessionControlsEnabled(): void {
     sessionRenameBtn.disabled = !enabled || !hasCurrentSession || isRenaming;
     sessionDeleteBtn.disabled = !enabled || !hasCurrentSession;
     sessionNewNameEl.disabled = !enabled;
-    sessionCreateBtn.disabled = !enabled || inputValue === "" || sessionExists;
+    sessionCreateBtn.disabled = !enabled || inputValue === "" || createConflict;
     sessionRenameInputEl.disabled = !enabled || !isRenaming;
     sessionRenameSaveBtn.disabled =
         !enabled ||
@@ -626,9 +628,17 @@ function updateSessionControlsEnabled(): void {
         sessionRenameInputEl.removeAttribute("aria-invalid");
         sessionRenameInputEl.title = "Rename conversation";
     }
+    sessionNewNameEl.classList.toggle("conflict", createConflict);
+    if (createConflict) {
+        sessionNewNameEl.setAttribute("aria-invalid", "true");
+        sessionNewNameEl.title = "A conversation with this name already exists.";
+    } else {
+        sessionNewNameEl.removeAttribute("aria-invalid");
+        sessionNewNameEl.title = "New conversation name";
+    }
 
     // Show/hide hint based on whether session exists
-    if (sessionExists) {
+    if (createConflict) {
         sessionCreateHintEl.classList.remove("hidden");
     } else {
         sessionCreateHintEl.classList.add("hidden");
@@ -861,7 +871,7 @@ function showSessionSearchPopover(): void {
 
 function createSessionFromInput(): void {
     const name = sessionNewNameEl.value.trim();
-    if (!name || !isConnected || isSwitching) return;
+    if (!name || !isConnected || isSwitching || hasCreateConflict(name)) return;
     beginOptimisticSessionTransition(name, "Creating");
     vscode.postMessage({ type: "createSession", name });
     sessionNewNameEl.value = "";
