@@ -87,6 +87,17 @@ export class StudioServiceConnection {
         return this.client;
     }
 
+    /**
+     * The launcher-resolved service target ({@link setTarget}), or `undefined`
+     * when not yet known. Lets a dedicated client (e.g. the Impact Report's
+     * heavy replay) reach the same service without re-running discovery.
+     */
+    getTarget(): { endpoint: string; token: string } | undefined {
+        return this.endpoint !== undefined && this.token !== undefined
+            ? { endpoint: this.endpoint, token: this.token }
+            : undefined;
+    }
+
     /** Subscribe to every pushed `studioEvent`. */
     onEvent(listener: (event: StudioEvent) => void): { dispose(): void } {
         this.eventListeners.add(listener);

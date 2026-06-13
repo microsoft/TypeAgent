@@ -560,7 +560,10 @@ export function activate(context: vscode.ExtensionContext): void {
         // socket).
         vscode.commands.registerCommand(
             "typeagent-studio.openImpactReport",
-            () => openImpactReport(context, repoRootInfo.repoRoot),
+            () =>
+                openImpactReport(context, repoRootInfo.repoRoot, () =>
+                    connection.getTarget(),
+                ),
         ),
     );
 

@@ -21,6 +21,7 @@ const VIEW_TYPE = "typeagentStudio.impactReport";
 export function openImpactReport(
     context: vscode.ExtensionContext,
     repoRoot: string | undefined,
+    getTarget: () => { endpoint: string; token: string } | undefined,
 ): void {
     let client: StudioServiceClient | undefined;
     let connecting: Promise<StudioServiceClient | undefined> | undefined;
@@ -47,8 +48,15 @@ export function openImpactReport(
             return Promise.resolve(client);
         }
         if (!connecting) {
+            // Reach the same standalone service the shared connection uses (the
+            // agent no longer serves the runtime, so there is no discovery
+            // fallback); a dedicated client keeps heavy replay off the shared one.
+            const target = getTarget();
             connecting = StudioServiceClient.connect({
                 ...(repoRoot !== undefined ? { repoRoot } : {}),
+                ...(target !== undefined
+                    ? { endpoint: target.endpoint, token: target.token }
+                    : {}),
             })
                 .then((c) => {
                     client = c;
