@@ -92,6 +92,7 @@ let currentSessionId: string | undefined;
 let currentSessionName = "";
 let currentSessionClientCount: number | undefined;
 let transitionStatusLabel: "Creating" | "Connecting" | undefined;
+let transitionTargetName: string | undefined;
 let knownSessions: SessionListEntry[] = [];
 let searchRenameSessionId: string | undefined;
 type SessionListEntry = {
@@ -99,12 +100,6 @@ type SessionListEntry = {
     name: string;
     clientCount: number;
 };
-type SessionSnapshot = {
-    sessionId: string | undefined;
-    name: string;
-    clientCount: number | undefined;
-};
-let optimisticSessionBeforeTransition: SessionSnapshot | undefined;
 
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
@@ -567,32 +562,10 @@ function submitRenameCurrentSession(): void {
 
 function updateSessionSummary(): void {
     const displayName =
+        transitionTargetName ||
         currentSessionName || currentSessionId?.substring(0, 8) || "Conversation";
     sessionNameBtn.textContent = displayName;
     renderStatus();
-}
-
-function beginOptimisticSessionTransition(
-    targetName: string,
-    statusLabel: "Creating" | "Connecting",
-): void {
-    optimisticSessionBeforeTransition ??= {
-        sessionId: currentSessionId,
-        name: currentSessionName,
-        clientCount: currentSessionClientCount,
-    };
-    currentSessionName = targetName;
-    currentSessionClientCount = undefined;
-    transitionStatusLabel = statusLabel;
-    updateSessionSummary();
-}
-
-function restoreOptimisticSessionTransition(): void {
-    if (!optimisticSessionBeforeTransition) return;
-    currentSessionId = optimisticSessionBeforeTransition.sessionId;
-    currentSessionName = optimisticSessionBeforeTransition.name;
-    currentSessionClientCount = optimisticSessionBeforeTransition.clientCount;
-    optimisticSessionBeforeTransition = undefined;
 }
 
 function updateSessionControlsEnabled(): void {
@@ -713,7 +686,6 @@ function renderSessionSearchResults(): void {
 
         resultBtn.addEventListener("click", () => {
             if (session.sessionId !== currentSessionId) {
-                beginOptimisticSessionTransition(session.name, "Connecting");
                 vscode.postMessage({
                     type: "switchSession",
                     sessionId: session.sessionId,
@@ -872,7 +844,6 @@ function showSessionSearchPopover(): void {
 function createSessionFromInput(): void {
     const name = sessionNewNameEl.value.trim();
     if (!name || !isConnected || isSwitching || hasCreateConflict(name)) return;
-    beginOptimisticSessionTransition(name, "Creating");
     vscode.postMessage({ type: "createSession", name });
     sessionNewNameEl.value = "";
     hideSessionPopovers();
@@ -1034,7 +1005,6 @@ window.addEventListener("message", (event) => {
             chatPanel.setUserInfo(msg.name);
             break;
         case "sessionChanged":
-            optimisticSessionBeforeTransition = undefined;
             currentSessionId = msg.sessionId;
             currentSessionName = msg.sessionName || msg.sessionId.substring(0, 8);
             currentSessionClientCount = undefined;
@@ -1175,12 +1145,11 @@ window.addEventListener("message", (event) => {
             isSwitching = msg.switching;
             if (msg.switching) {
                 if (isRenaming) setRenameMode(false);
-                if (msg.targetName) currentSessionName = msg.targetName;
-                currentSessionClientCount = undefined;
                 transitionStatusLabel = msg.statusLabel ?? "Connecting";
+                transitionTargetName = msg.targetName;
             } else {
                 transitionStatusLabel = undefined;
-                restoreOptimisticSessionTransition();
+                transitionTargetName = undefined;
             }
             updateSessionSummary();
             chatPanel.setSwitching(msg.switching, msg.targetName);
