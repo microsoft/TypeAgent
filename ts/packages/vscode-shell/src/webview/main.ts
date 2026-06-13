@@ -36,6 +36,18 @@ declare function acquireVsCodeApi(): {
 const vscode = acquireVsCodeApi();
 
 const statusEl = document.getElementById("status-bar")!;
+const sessionSelectEl = document.getElementById(
+    "session-select",
+) as HTMLSelectElement;
+const sessionRefreshBtn = document.getElementById(
+    "session-refresh-btn",
+) as HTMLButtonElement;
+const sessionNewNameEl = document.getElementById(
+    "session-new-name",
+) as HTMLInputElement;
+const sessionCreateBtn = document.getElementById(
+    "session-create-btn",
+) as HTMLButtonElement;
 const rootEl = document.getElementById("chat-root")!;
 
 // Track the higher-level disabled reasons so we can reconcile them when
@@ -43,6 +55,14 @@ const rootEl = document.getElementById("chat-root")!;
 // loading internally, but we additionally require the websocket to be
 // connected before the input is enabled.
 let isConnected = false;
+let isSwitching = false;
+let currentSessionId: string | undefined;
+let suppressSessionSelectChange = false;
+type SessionListEntry = {
+    sessionId: string;
+    name: string;
+    clientCount: number;
+};
 
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
@@ -410,6 +430,49 @@ function renderStatus(): void {
     }
 }
 
+function requestSessionList(): void {
+    vscode.postMessage({ type: "requestSessions" });
+}
+
+function updateSessionControlsEnabled(): void {
+    const enabled = isConnected && !isSwitching;
+    sessionSelectEl.disabled = !enabled;
+    sessionRefreshBtn.disabled = !enabled;
+    sessionNewNameEl.disabled = !enabled;
+    sessionCreateBtn.disabled = !enabled || sessionNewNameEl.value.trim() === "";
+}
+
+function renderSessionList(
+    sessions: SessionListEntry[],
+    selectedSessionId?: string,
+): void {
+    const selectedId = selectedSessionId ?? currentSessionId;
+    suppressSessionSelectChange = true;
+    sessionSelectEl.innerHTML = "";
+    for (const session of sessions) {
+        const option = document.createElement("option");
+        option.value = session.sessionId;
+        const countLabel = session.clientCount === 1 ? "1 client" : `${session.clientCount} clients`;
+        option.textContent = `${session.name} (${countLabel})`;
+        sessionSelectEl.appendChild(option);
+    }
+    if (selectedId) {
+        sessionSelectEl.value = selectedId;
+    }
+    if (!sessionSelectEl.value && sessionSelectEl.options.length > 0) {
+        sessionSelectEl.selectedIndex = 0;
+    }
+    suppressSessionSelectChange = false;
+}
+
+function createSessionFromInput(): void {
+    const name = sessionNewNameEl.value.trim();
+    if (!name || !isConnected || isSwitching) return;
+    vscode.postMessage({ type: "createSession", name });
+    sessionNewNameEl.value = "";
+    updateSessionControlsEnabled();
+}
+
 function setStatus(
     connected: boolean,
     sessionId?: string,
@@ -417,10 +480,38 @@ function setStatus(
 ): void {
     isConnected = connected;
     lastConnected = connected;
+    currentSessionId = sessionId ?? currentSessionId;
     lastSessionLabel = sessionName || sessionId?.substring(0, 8) || "";
     renderStatus();
     chatPanel.setEnabled(connected);
+    updateSessionControlsEnabled();
 }
+
+sessionRefreshBtn.addEventListener("click", () => {
+    if (!isConnected || isSwitching) return;
+    requestSessionList();
+});
+
+sessionCreateBtn.addEventListener("click", () => {
+    createSessionFromInput();
+});
+
+sessionNewNameEl.addEventListener("input", () => {
+    updateSessionControlsEnabled();
+});
+
+sessionNewNameEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    createSessionFromInput();
+});
+
+sessionSelectEl.addEventListener("change", () => {
+    if (suppressSessionSelectChange || !isConnected || isSwitching) return;
+    const sessionId = sessionSelectEl.value;
+    if (!sessionId || sessionId === currentSessionId) return;
+    vscode.postMessage({ type: "switchSession", sessionId });
+});
 
 window.addEventListener("message", (event) => {
     const msg = event.data;
@@ -428,10 +519,12 @@ window.addEventListener("message", (event) => {
         case "status":
             setStatus(msg.connected, msg.sessionId, msg.sessionName);
             if (msg.connected && msg.sessionId) {
+                currentSessionId = msg.sessionId;
                 vscode.setState({
                     sessionId: msg.sessionId,
                     sessionName: msg.sessionName,
                 });
+                requestSessionList();
             }
             break;
         case "reconnectStatus": {
@@ -455,11 +548,16 @@ window.addEventListener("message", (event) => {
             chatPanel.setUserInfo(msg.name);
             break;
         case "sessionChanged":
+            currentSessionId = msg.sessionId;
             chatPanel.clear();
             cancelledRequests.clear();
             cancelledRendered.clear();
             pendingQueueStatus.clear();
             queueMirror.reset(undefined);
+            requestSessionList();
+            break;
+        case "sessionList":
+            renderSessionList(msg.sessions, msg.currentSessionId);
             break;
         case "setDisplay":
             // Drop display updates that arrive AFTER cancellation —
@@ -582,9 +680,11 @@ window.addEventListener("message", (event) => {
             break;
         }
         case "switching":
+            isSwitching = msg.switching;
             chatPanel.setSwitching(msg.switching, msg.targetName);
             // Re-apply connection-derived enable state when the switch ends.
             if (!msg.switching) chatPanel.setEnabled(isConnected);
+            updateSessionControlsEnabled();
             break;
         case "historyReplay":
             chatPanel.replayHistory(toChatPanelHistory(msg.entries));
@@ -747,6 +847,7 @@ window.addEventListener("message", (event) => {
 });
 
 // Ask the extension host to connect
+updateSessionControlsEnabled();
 vscode.postMessage({ type: "connect" });
 
 // Document-level Escape gesture — mirrors the Electron shell

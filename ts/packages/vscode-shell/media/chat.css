@@ -59,6 +59,78 @@ body {
   font-style: italic;
 }
 
+/* ── Conversation bar ─────────────────────────────────────────── */
+
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+}
+
+.session-bar label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+#session-select,
+#session-new-name {
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  height: 26px;
+  padding: 0 8px;
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+#session-select {
+  min-width: 120px;
+  flex: 1;
+}
+
+#session-new-name {
+  min-width: 120px;
+  flex: 1.2;
+}
+
+#session-select:focus,
+#session-new-name:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+#session-refresh-btn,
+#session-create-btn {
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  border-radius: 4px;
+  height: 26px;
+  min-width: 26px;
+  cursor: pointer;
+}
+
+#session-refresh-btn:hover,
+#session-create-btn:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
+#session-select:disabled,
+#session-new-name:disabled,
+#session-refresh-btn:disabled,
+#session-create-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* When this chat is not the active one, mute the status ribbon so it's
    visually clear which chat the global commands / status bar refer to. */
 body.chat-inactive .status.connected,

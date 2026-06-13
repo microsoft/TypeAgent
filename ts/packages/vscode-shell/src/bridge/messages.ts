@@ -166,6 +166,15 @@ export type BridgeToWebviewMessage =
               tokenUsage?: any;
               actionTokenUsage?: any;
           }>;
+      }
+    | {
+          type: "sessionList";
+          sessions: Array<{
+              sessionId: string;
+              name: string;
+              clientCount: number;
+          }>;
+          currentSessionId?: string;
       };
 
 /**
@@ -182,6 +191,9 @@ export type BridgeFromWebviewMessage =
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
+    | { type: "requestSessions" }
+    | { type: "createSession"; name: string }
+    | { type: "switchSession"; sessionId: string }
     | { type: "focus"; focused: boolean }
     | { type: "pcUpdate"; input: string; direction: CompletionDirection }
     | { type: "pcAccept" }

@@ -121,6 +121,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <body>
     <div id="chat-container">
         <div id="status-bar" class="status disconnected">Disconnected</div>
+        <div id="session-bar" class="session-bar">
+            <label for="session-select">Conversation</label>
+            <select id="session-select" title="Select conversation"></select>
+            <button
+                id="session-refresh-btn"
+                type="button"
+                title="Refresh conversations"
+                aria-label="Refresh conversations"
+            >
+                ↻
+            </button>
+            <input
+                id="session-new-name"
+                type="text"
+                placeholder="New conversation name"
+                title="New conversation name"
+            />
+            <button
+                id="session-create-btn"
+                type="button"
+                title="Create conversation"
+                aria-label="Create conversation"
+            >
+                +
+            </button>
+        </div>
         <div id="chat-root"></div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
