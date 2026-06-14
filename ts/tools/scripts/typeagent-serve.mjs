@@ -21,15 +21,19 @@
  *   node typeagent-serve.mjs provision # run getKeys to write config.local.yaml
  *   node typeagent-serve.mjs status    # report whether the daemon is listening
  *   node typeagent-serve.mjs stop       # stop the daemon (best effort)
+ *   node typeagent-serve.mjs tunnel [start|stop|status]  # manage the dev-tunnel
+ *                                       # host so remote devices can reach the service
  * Options: --port <n> (default $TYPEAGENT_PORT / $AGENT_SERVER_PORT / 8999),
- *          --idle-timeout <seconds>.
+ *          --idle-timeout <seconds>,
+ *          --tunnel (with start: also bring up the dev-tunnel host; or set
+ *          $TYPEAGENT_TUNNEL=1). Requires a tunnel configured via setup-devtunnel.
  */
 
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +154,12 @@ async function cmdStart() {
     spawnDaemon(port);
     if (await waitForPort(port)) {
         console.log(`Agent server is up at ws://localhost:${port}.`);
+        // Opt-in: also bring up the dev-tunnel host so remote devices can reach
+        // the service. Only when --tunnel/$TYPEAGENT_TUNNEL is set AND a tunnel
+        // has been configured (setup-devtunnel wrote devtunnel.json).
+        if (tunnelOptIn() && readDevTunnel() !== undefined) {
+            await cmdTunnel("start");
+        }
         return 0;
     }
     console.error(
@@ -171,6 +181,174 @@ async function cmdProvision() {
     // Pass through any extra args after the subcommand (e.g. --vault, --verbose).
     const passthrough = process.argv.slice(3).filter((a) => a !== "--port");
     return runInline(getKeysEntry, passthrough);
+}
+
+// ---- Dev-tunnel host management ----------------------------------------
+// devtunnel.json (written by setup-devtunnel) and the host pidfile live in the
+// user data dir — the same location the agent-server's discovery resolver reads.
+
+function userDataDir() {
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
+function readDevTunnel() {
+    try {
+        return JSON.parse(
+            fs.readFileSync(path.join(userDataDir(), "devtunnel.json"), "utf8"),
+        );
+    } catch {
+        return undefined;
+    }
+}
+
+// The CLI reports tunnelId as "<id>.<cluster>"; `devtunnel host` wants the id.
+function bareTunnelId(cfg) {
+    const { tunnelId, cluster } = cfg;
+    if (cluster && tunnelId.endsWith(`.${cluster}`)) {
+        return tunnelId.slice(0, -(cluster.length + 1));
+    }
+    const dot = tunnelId.indexOf(".");
+    return dot > 0 ? tunnelId.slice(0, dot) : tunnelId;
+}
+
+function deriveWss(cfg) {
+    const port = Object.keys(cfg.ports ?? {})[0] ?? "8999";
+    return `wss://${bareTunnelId(cfg)}-${port}.${cfg.cluster}.devtunnels.ms`;
+}
+
+function tunnelPidFile() {
+    return path.join(userDataDir(), "devtunnel-host.pid");
+}
+
+function pidAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function readTunnelPid() {
+    try {
+        return parseInt(fs.readFileSync(tunnelPidFile(), "utf8").trim(), 10);
+    } catch {
+        return undefined;
+    }
+}
+
+// Does the relay report a connected host? (Liveness, independent of our pidfile.)
+function tunnelRelayLive(cfg) {
+    const res = spawnSync("devtunnel", ["show", cfg.tunnelId, "--json"], {
+        encoding: "utf-8",
+    });
+    if (res.status !== 0) return false;
+    try {
+        return (JSON.parse(res.stdout)?.tunnel?.hostConnections ?? 0) > 0;
+    } catch {
+        return false;
+    }
+}
+
+async function cmdTunnel(actionArg) {
+    const action =
+        actionArg ??
+        (process.argv[3] && !process.argv[3].startsWith("--")
+            ? process.argv[3]
+            : "status");
+    const cfg = readDevTunnel();
+    if (cfg === undefined) {
+        console.error(
+            "No tunnel configured. Run setup-devtunnel.mjs to create one.",
+        );
+        return 1;
+    }
+    const id = bareTunnelId(cfg);
+    switch (action) {
+        case "start": {
+            const existing = readTunnelPid();
+            if (existing !== undefined && pidAlive(existing)) {
+                console.log(`Tunnel host already running (pid ${existing}).`);
+                return 0;
+            }
+            console.log(`Starting tunnel host for ${id}...`);
+            // `devtunnel host` exits if its stdout/stderr are the null device, so
+            // direct them to a log file (which also aids debugging). Close our
+            // copy of the fd after spawn — the detached child keeps its own.
+            const logPath = path.join(userDataDir(), "devtunnel-host.log");
+            const out = fs.openSync(logPath, "a");
+            const child = spawn("devtunnel", ["host", id], {
+                // Fully detach so the host outlives this short-lived launcher
+                // (a non-detached child is terminated when its parent exits on
+                // Windows). windowsHide keeps it from popping a console window.
+                detached: true,
+                windowsHide: true,
+                stdio: ["ignore", out, out],
+            });
+            fs.closeSync(out);
+            if (child.pid === undefined) {
+                console.error(
+                    "Failed to start devtunnel host (is the CLI installed and are you logged in?).",
+                );
+                return 1;
+            }
+            child.unref();
+            fs.writeFileSync(tunnelPidFile(), String(child.pid));
+            console.log(
+                `Tunnel host started (pid ${child.pid}); log: ${logPath}`,
+            );
+            console.log(`Client URL: ${deriveWss(cfg)}`);
+            return 0;
+        }
+        case "stop": {
+            const pid = readTunnelPid();
+            if (pid === undefined || !pidAlive(pid)) {
+                console.log("Tunnel host not running.");
+                try {
+                    fs.rmSync(tunnelPidFile(), { force: true });
+                } catch {}
+                return 0;
+            }
+            try {
+                if (process.platform === "win32") {
+                    spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"]);
+                } else {
+                    process.kill(pid, "SIGTERM");
+                }
+            } catch {}
+            try {
+                fs.rmSync(tunnelPidFile(), { force: true });
+            } catch {}
+            console.log(`Tunnel host stopped (pid ${pid}).`);
+            return 0;
+        }
+        case "status": {
+            const pid = readTunnelPid();
+            const running = pid !== undefined && pidAlive(pid);
+            const live = tunnelRelayLive(cfg);
+            console.log(
+                `Tunnel ${cfg.tunnelId}: host process ${running ? `running (pid ${pid})` : "not running"}, relay ${live ? "LIVE" : "down"}.`,
+            );
+            console.log(`Client URL: ${deriveWss(cfg)}`);
+            return live ? 0 : 1;
+        }
+        default:
+            console.error(
+                `Unknown tunnel action '${action}'. Use start|stop|status.`,
+            );
+            return 1;
+    }
+}
+
+function tunnelOptIn() {
+    const env = process.env.TYPEAGENT_TUNNEL;
+    return (
+        process.argv.includes("--tunnel") ||
+        (env !== undefined && env !== "0" && env !== "false" && env !== "")
+    );
 }
 
 async function cmdStatus() {
@@ -198,6 +376,8 @@ async function main() {
             return cmdProvision();
         case "status":
             return cmdStatus();
+        case "tunnel":
+            return cmdTunnel();
         case "stop": {
             // Best-effort: defer to the deployed control utility if present.
             const stop = path.join(artifactDir, "dist", "stop.js");

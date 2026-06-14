@@ -178,11 +178,18 @@ function main() {
         copyInto(sample, path.join(toolsOut, "config.sample.yaml"));
     }
 
-    // 4. Copy the bootstrap launcher to the artifact root.
+    // 4. Copy the bootstrap launcher to the artifact root, plus the dev-tunnel
+    //    helpers (setup-devtunnel / list-tunnels) for optional remote access.
     copyInto(
         path.join(scriptsDir, "typeagent-serve.mjs"),
         path.join(args.out, "typeagent-serve.mjs"),
     );
+    for (const tunnelScript of ["setup-devtunnel.mjs", "list-tunnels.mjs"]) {
+        copyInto(
+            path.join(scriptsDir, tunnelScript),
+            path.join(args.out, tunnelScript),
+        );
+    }
 
     console.log(
         `\nArtifact ready at ${args.out}\n` +
