@@ -61,6 +61,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.17",
@@ -69,7 +70,6 @@
     "@types/find-config": "1.0.4",
     "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "jest": "^29.7.0",
@@ -81,7 +81,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -94,7 +94,7 @@
       },
       "agc:display": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -107,7 +107,7 @@
       },
       "agc:input": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -120,7 +120,7 @@
       },
       "agc:personalization": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -133,7 +133,7 @@
       },
       "agc:power": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -146,7 +146,7 @@
       },
       "agc:privacy": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -159,7 +159,7 @@
       },
       "agc:system": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -172,7 +172,7 @@
       },
       "agc:taskbar": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

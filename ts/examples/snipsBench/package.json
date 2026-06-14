@@ -21,7 +21,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "action-grammar": "workspace:*",
+    "@typeagent/action-grammar": "workspace:*",
     "chalk": "^5.4.1"
   },
   "devDependencies": {

@@ -46,7 +46,7 @@ import {
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
     loadGrammarRulesNoThrow,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
 import {

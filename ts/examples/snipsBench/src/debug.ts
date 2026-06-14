@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { registerBuiltInEntities } from "action-grammar";
+import { registerBuiltInEntities } from "@typeagent/action-grammar";
 import { registerNPEntity } from "./npEntity.js";
 import { compile, runExample } from "./runner.js";
 import {

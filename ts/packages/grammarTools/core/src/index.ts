@@ -74,7 +74,7 @@ export {
 
 // Services
 export { loadGrammarFromFile, loadGrammarFromBuffer } from "./loader.js";
-export type { FileLoader } from "action-grammar";
+export type { FileLoader } from "@typeagent/action-grammar";
 export {
     getSymbolIndex,
     offsetToPosition,

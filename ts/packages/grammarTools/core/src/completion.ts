@@ -5,7 +5,7 @@ import {
     matchGrammarCompletion,
     type GrammarCompletionGroup,
     type GrammarCompletionProperty as AGCompletionProperty,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import type {
     LoadedGrammar,
     CompletionPreview,

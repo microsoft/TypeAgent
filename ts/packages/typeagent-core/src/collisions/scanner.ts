@@ -18,7 +18,10 @@
 import path from "node:path";
 import type { Dirent } from "node:fs";
 import { access, readFile, readdir } from "node:fs/promises";
-import { grammarFromJson, registerBuiltInEntities } from "action-grammar";
+import {
+    grammarFromJson,
+    registerBuiltInEntities,
+} from "@typeagent/action-grammar";
 import {
     scanGrammarCollisions,
     type CollisionRecord,

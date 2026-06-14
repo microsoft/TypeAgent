@@ -28,7 +28,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { grammarFromJson, registerBuiltInEntities } from "action-grammar";
+import {
+    grammarFromJson,
+    registerBuiltInEntities,
+} from "@typeagent/action-grammar";
 import {
     scanGrammarCollisions,
     type SchemaInput,

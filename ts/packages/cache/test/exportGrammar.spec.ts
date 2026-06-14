@@ -15,7 +15,7 @@ import { MatchConfig } from "../src/constructions/constructionMatch.js";
 import { Transforms } from "../src/constructions/transforms.js";
 import { convertConstructionsToGrammar } from "../src/grammar/exportGrammar.js";
 import { toJsonActions } from "../src/explanation/requestAction.js";
-import { loadGrammarRules, matchGrammar } from "action-grammar";
+import { loadGrammarRules, matchGrammar } from "@typeagent/action-grammar";
 import { getPropertyParser } from "../src/constructions/propertyParser.js";
 import { createParsePart } from "../src/constructions/parsePart.js";
 

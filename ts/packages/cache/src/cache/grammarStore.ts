@@ -16,7 +16,7 @@ import {
     matchDFAWithSplitting,
     getDFACompletions,
     tokenizeRequest,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
 const debugCompletion = registerDebug(

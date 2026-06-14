@@ -1,7 +1,6 @@
 {
-  "name": "action-grammar-compiler",
+  "name": "@typeagent/action-grammar-compiler",
   "version": "0.0.1",
-  "private": true,
   "description": "Action Grammar compiler",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -43,8 +42,8 @@
   "dependencies": {
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
-    "@typeagent/action-schema": "workspace:*",
-    "action-grammar": "workspace:*"
+    "@typeagent/action-grammar": "workspace:*",
+    "@typeagent/action-schema": "workspace:*"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "action-grammar/generation";
+import { claudeExecutableOption } from "@typeagent/action-grammar/generation";
 import { SchemaInfo, ActionInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
-import { loadGrammarRulesNoThrow } from "action-grammar";
+import { loadGrammarRulesNoThrow } from "@typeagent/action-grammar";
 
 /**
  * Configuration for grammar generation from a schema

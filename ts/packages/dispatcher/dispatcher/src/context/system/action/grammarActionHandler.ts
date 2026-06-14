@@ -10,7 +10,7 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
-import { StoredGrammarRule } from "action-grammar";
+import { StoredGrammarRule } from "@typeagent/action-grammar";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { GrammarAction } from "../schema/grammarActionSchema.js";
 

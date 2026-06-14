@@ -115,6 +115,7 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@fluidframework/build-tools": "^0.57.0",
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
@@ -131,7 +132,6 @@
     "@types/node": "^22.0.0",
     "@types/prismjs": "^1.26.3",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "archiver": "^7.0.1",
     "concurrently": "^9.1.2",
     "crx": "^5.0.1",
@@ -152,7 +152,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

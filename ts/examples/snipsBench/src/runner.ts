@@ -6,7 +6,7 @@ import {
     compileGrammarToNFA,
     matchNFA,
     registerBuiltInEntities,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { SlotSpan, spansToTags } from "./data.js";
 import { Prediction } from "./score.js";
 import { registerNPEntity } from "./npEntity.js";

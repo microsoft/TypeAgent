@@ -6,7 +6,7 @@ import {
     loadGrammarFromFile,
     type FileLoader,
 } from "../src/index.js";
-import { defaultFileLoader } from "action-grammar";
+import { defaultFileLoader } from "@typeagent/action-grammar";
 
 describe("loader", () => {
     it("loads a simple grammar from a buffer", () => {

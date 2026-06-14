@@ -5,8 +5,8 @@ import {
     parseGrammarRules,
     type GrammarParseResult,
     type RuleDefinition,
-} from "action-grammar";
-import type { Expr } from "action-grammar/rules";
+} from "@typeagent/action-grammar";
+import type { Expr } from "@typeagent/action-grammar/rules";
 import type {
     LoadedGrammar,
     SymbolIndex,

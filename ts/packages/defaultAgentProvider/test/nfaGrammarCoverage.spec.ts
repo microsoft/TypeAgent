@@ -30,7 +30,7 @@ import {
     matchGrammar,
     compileGrammarToNFA,
     matchGrammarWithNFA,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { convertConstructionsToGrammar } from "agent-cache/grammar";
 import path from "path";
 

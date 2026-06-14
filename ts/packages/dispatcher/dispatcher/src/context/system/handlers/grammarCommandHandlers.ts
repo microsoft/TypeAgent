@@ -17,7 +17,7 @@ import {
     GrammarPart,
     GrammarRule,
     grammarFromJson,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import {
     scanGrammarCollisions,
     collectTopLevelRules,

@@ -52,6 +52,7 @@
   "dependencies": {
     "@oclif/core": "^4.8.0",
     "@oclif/plugin-help": "^6",
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
@@ -59,7 +60,6 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
-    "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
