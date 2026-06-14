@@ -706,7 +706,7 @@ const TYPEAGENT_WORKSPACE_PACKAGES: Record<string, string> = {
     aiclient: "packages/aiclient",
     typechat: "packages/utils/typechatUtils",
     "@typeagent/action-schema-compiler": "packages/actionSchemaCompiler",
-    "action-grammar-compiler": "packages/actionGrammarCompiler",
+    "@typeagent/action-grammar-compiler": "packages/actionGrammarCompiler",
 };
 
 // AGENTS_DIR is `<typeagent-root>/packages/agents`; up two levels = repo root.
@@ -795,7 +795,9 @@ function buildPackageJson(
             "@typeagent/action-schema-compiler": depFor(
                 "@typeagent/action-schema-compiler",
             ),
-            "action-grammar-compiler": depFor("action-grammar-compiler"),
+            "@typeagent/action-grammar-compiler": depFor(
+                "@typeagent/action-grammar-compiler",
+            ),
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",

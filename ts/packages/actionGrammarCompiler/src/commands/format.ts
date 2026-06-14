@@ -4,7 +4,10 @@
 import { Command, Flags } from "@oclif/core";
 import path from "node:path";
 import fs from "node:fs";
-import { parseGrammarRules, writeGrammarRules } from "action-grammar";
+import {
+    parseGrammarRules,
+    writeGrammarRules,
+} from "@typeagent/action-grammar";
 
 export default class Format extends Command {
     static description = "Format action grammar (.agr) files";

@@ -8,7 +8,7 @@ import {
     compileGrammarToNFA,
     registerBuiltInEntities,
     matchGrammarWithNFA,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { findGrammarOverlap } from "../src/nfaIntersection.js";
 
 /**

@@ -100,7 +100,7 @@ import {
     AgentGrammarRegistry,
     GrammarStore as PersistedGrammarStore,
     registerBuiltInEntities,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
 import { CosmosPartitionKeyBuilder } from "telemetry";

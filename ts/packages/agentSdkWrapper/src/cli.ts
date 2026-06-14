@@ -13,7 +13,7 @@ import {
     type SDKMessage,
     type Options,
 } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "action-grammar/generation";
+import { claudeExecutableOption } from "@typeagent/action-grammar/generation";
 import * as readline from "readline";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";

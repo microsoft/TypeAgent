@@ -36,7 +36,7 @@ import {
     globalEntityRegistry,
     globalPhraseSetRegistry,
     normalizeToken,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
 export interface GrammarOverlap {
     /** Token sequence accepted by both NFAs. */

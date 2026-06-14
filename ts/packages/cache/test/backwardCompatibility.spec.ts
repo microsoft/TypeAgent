@@ -12,7 +12,7 @@
  */
 
 import { AgentCache } from "../src/cache/cache.js";
-import { loadGrammarRules } from "action-grammar";
+import { loadGrammarRules } from "@typeagent/action-grammar";
 
 const mockExplainerFactory = () => {
     return {

@@ -27,7 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "action-grammar": "workspace:*"
+    "@typeagent/action-grammar": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

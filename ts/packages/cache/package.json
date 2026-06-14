@@ -35,11 +35,11 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
-    "action-grammar": "workspace:*",
     "async": "^3.2.5",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",

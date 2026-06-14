@@ -738,7 +738,7 @@ importers:
 
   examples/snipsBench:
     dependencies:
-      action-grammar:
+      '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../../packages/actionGrammar
       chalk:
@@ -1341,12 +1341,12 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
     devDependencies:
       rimraf:
         specifier: ^6.0.1
@@ -1485,6 +1485,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -1494,9 +1497,6 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1963,6 +1963,9 @@ importers:
       '@fluidframework/build-tools':
         specifier: ^0.57.0
         version: 0.57.0(@types/node@22.15.18)
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2011,9 +2014,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -2078,6 +2078,9 @@ importers:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2087,9 +2090,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2167,6 +2167,9 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2182,9 +2185,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2246,6 +2246,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2270,9 +2273,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2301,12 +2301,12 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2369,15 +2369,15 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2477,12 +2477,12 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2499,12 +2499,12 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2790,6 +2790,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2802,9 +2805,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2836,6 +2836,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2845,9 +2848,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2919,6 +2919,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2934,9 +2937,6 @@ importers:
       '@types/spotify-api':
         specifier: ^0.0.25
         version: 0.0.25
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2968,6 +2968,9 @@ importers:
         specifier: ^1.1.6
         version: 1.1.6
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2980,9 +2983,6 @@ importers:
       '@types/node':
         specifier: ^22.13.1
         version: 22.15.18
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3011,15 +3011,15 @@ importers:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3048,6 +3048,9 @@ importers:
         specifier: workspace:*
         version: link:../../typeagent
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -3057,9 +3060,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3175,12 +3175,12 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3273,15 +3273,15 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3304,12 +3304,12 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3369,6 +3369,9 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -3378,9 +3381,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3428,12 +3428,12 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar-compiler':
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3666,6 +3666,9 @@ importers:
 
   packages/cache:
     dependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -3678,9 +3681,6 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -3828,6 +3828,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -3849,9 +3852,6 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -4210,6 +4210,9 @@ importers:
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.1.13)
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -4228,9 +4231,6 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -4430,6 +4430,9 @@ importers:
       '@github/copilot-sdk':
         specifier: 0.2.0
         version: 0.2.0
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../actionSchema
@@ -4451,9 +4454,6 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../types
-      action-grammar:
-        specifier: workspace:*
-        version: link:../../actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
@@ -4653,7 +4653,7 @@ importers:
 
   packages/grammarTools/cli:
     dependencies:
-      action-grammar:
+      '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../../actionGrammar
       grammar-tools-core:
@@ -4678,7 +4678,7 @@ importers:
 
   packages/grammarTools/core:
     dependencies:
-      action-grammar:
+      '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../../actionGrammar
     devDependencies:
@@ -5686,7 +5686,7 @@ importers:
 
   packages/typeagent-core:
     dependencies:
-      action-grammar:
+      '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../actionGrammar
       debug:

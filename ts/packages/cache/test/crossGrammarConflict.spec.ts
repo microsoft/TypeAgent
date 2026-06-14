@@ -11,7 +11,7 @@
  */
 
 import { AgentCache } from "../src/cache/cache.js";
-import { loadGrammarRules } from "action-grammar";
+import { loadGrammarRules } from "@typeagent/action-grammar";
 import { ExplainerFactory } from "../src/cache/factory.js";
 import { CompletionResult } from "../src/constructions/constructionCache.js";
 

@@ -28,8 +28,8 @@
     "@typeagent/aiclient": "workspace:*"
   },
   "devDependencies": {
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

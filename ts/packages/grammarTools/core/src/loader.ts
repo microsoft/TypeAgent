@@ -1,8 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadGrammarRulesNoThrow } from "action-grammar";
-import type { Grammar, DebugInfoCollector, FileLoader } from "action-grammar";
+import { loadGrammarRulesNoThrow } from "@typeagent/action-grammar";
+import type {
+    Grammar,
+    DebugInfoCollector,
+    FileLoader,
+} from "@typeagent/action-grammar";
 import type {
     GrammarIdentifierIndex,
     GrammarDebugInfo,

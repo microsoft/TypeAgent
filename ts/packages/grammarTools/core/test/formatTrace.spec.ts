@@ -107,7 +107,7 @@ describe("formatTrace", () => {
     it("handles empty events array", () => {
         const emptyTrace = {
             input: "test",
-            events: [] as readonly import("action-grammar").TraceEvent[],
+            events: [] as readonly import("@typeagent/action-grammar").TraceEvent[],
             result: "noMatch" as const,
         };
         const output = formatTrace(emptyTrace);

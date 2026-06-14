@@ -30,7 +30,7 @@ import {
     type RulesPart,
     compileGrammarToNFA,
     matchGrammar,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { findGrammarOverlap } from "./nfaIntersection.js";
 
 // ---------------------------------------------------------------------------

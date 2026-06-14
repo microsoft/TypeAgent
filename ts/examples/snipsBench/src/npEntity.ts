@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { globalEntityRegistry } from "action-grammar";
+import { globalEntityRegistry } from "@typeagent/action-grammar";
 import { isContentWord } from "./pos.js";
 
 /**
