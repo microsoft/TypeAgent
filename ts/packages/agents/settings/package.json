@@ -28,7 +28,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chat-agent": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",

@@ -6,7 +6,7 @@ import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import { createTypeChat } from "typeagent";
 import registerDebug from "debug";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
+import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

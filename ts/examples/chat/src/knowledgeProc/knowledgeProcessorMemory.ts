@@ -10,7 +10,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     CommandHandler,
     CommandMetadata,

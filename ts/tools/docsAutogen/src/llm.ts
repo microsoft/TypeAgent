@@ -5,8 +5,8 @@
 // on the CLI, so packages that just want the deterministic skeleton
 // don't need aiclient built or AZURE_OPENAI env vars present.
 
-import type { ChatModel } from "aiclient";
-import { openai } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 
 /**
  * Model factory for documentation generation. Wraps aiclient with a

@@ -23,7 +23,7 @@
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "copyfiles": "^2.4.1",
     "debug": "^4.4.0",

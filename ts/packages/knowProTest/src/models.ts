@@ -1,6 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { ChatModel, hasEnvSettings, openai } from "aiclient";
+import { ChatModel, hasEnvSettings, openai } from "@typeagent/aiclient";
 
 export interface LanguageModel {
     model: ChatModel;

@@ -37,7 +37,7 @@
     "@azure/identity": "^4.10.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "openai": "^6.16.0",

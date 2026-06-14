@@ -3,7 +3,7 @@
 
 import { createSemanticList, cleanDir } from "typeagent";
 import { getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
 import { createAliasMatcher, TextTable } from "../src/textMatcher.js";
 import { createFileSystemStorageProvider } from "../src/storageProvider.js";

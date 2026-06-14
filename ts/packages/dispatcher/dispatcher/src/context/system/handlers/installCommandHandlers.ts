@@ -12,6 +12,15 @@ import path from "node:path";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { expandHome } from "../../../utils/fsUtils.js";
 
+// Heuristic: an npm specifier like "@scope/name@1.2.3" or "name@^1", but not a
+// filesystem path (those are handled by existence check before this is called).
+function isNpmSpecifier(s: string): boolean {
+    if (s.includes("\\") || s.includes(":") || /^[.~/]/.test(s)) {
+        return false;
+    }
+    return /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(@[^/\\]+)?$/i.test(s);
+}
+
 export class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
     public readonly parameters = {
@@ -22,7 +31,7 @@ export class InstallCommandHandler implements CommandHandler {
             },
             agent: {
                 description:
-                    "Path of agent package directory or tar file to install",
+                    "Path of an agent package directory/tar file, or an npm specifier (e.g. @scope/agent@1.2.3) to install from the feed",
                 type: "string",
             },
         },
@@ -40,7 +49,21 @@ export class InstallCommandHandler implements CommandHandler {
         const { name, agent } = args;
         const fullPath = path.resolve(expandHome(agent));
         if (!fs.existsSync(fullPath)) {
-            throw new Error(`Agent path '${fullPath}' does not exist`);
+            // Not an on-disk path — try it as an npm specifier from the feed.
+            if (!isNpmSpecifier(agent)) {
+                throw new Error(
+                    `Agent path '${fullPath}' does not exist and '${agent}' is not a valid npm specifier`,
+                );
+            }
+            if (installer.installNpm === undefined) {
+                throw new Error(
+                    "Installing from an npm specifier is not supported by this installer",
+                );
+            }
+            const provider = await installer.installNpm(name, agent);
+            await installAppProvider(systemContext, provider);
+            displayResult(`Agent '${name}' installed from '${agent}'.`, context);
+            return;
         }
         const packageJsonPath = path.join(fullPath, "package.json");
         if (!fs.existsSync(packageJsonPath)) {

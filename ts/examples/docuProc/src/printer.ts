@@ -8,7 +8,7 @@ import {
     InteractiveIo,
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 
 export type ChalkColor = {
     foreColor?: ChalkInstance | undefined;

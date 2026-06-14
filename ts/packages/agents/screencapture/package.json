@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "debug": "^4.4.0",
     "typeagent": "workspace:*"
   },

@@ -39,7 +39,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "action-grammar": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "async": "^3.2.5",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",

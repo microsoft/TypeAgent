@@ -5,7 +5,7 @@
 // TODO: add support for "monitoring" the indexed folder for changes
 
 import fs from "node:fs";
-import { ChatModel, TextEmbeddingModel } from "aiclient";
+import { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import { isDirectoryPath } from "typeagent";
 import path from "node:path";
 import { ImageCollection, importImages } from "image-memory";

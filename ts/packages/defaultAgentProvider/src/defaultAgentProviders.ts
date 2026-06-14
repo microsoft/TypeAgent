@@ -12,6 +12,7 @@ import { createNpmAppAgentProvider } from "dispatcher-node-providers";
 
 import path from "node:path";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import {
     AppAgentConfig,
     getInstanceConfigProvider,
@@ -48,6 +49,84 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
         getExternalAgentsConfig(instanceDir).agents,
         path.join(instanceDir, "externalagents/package.json"),
     );
+}
+
+// Azure Artifacts npm registry backing the `typeagent` feed. Override with
+// TYPEAGENT_FEED_REGISTRY (e.g. to point at a different feed or a local mirror).
+const TYPEAGENT_FEED_REGISTRY =
+    process.env.TYPEAGENT_FEED_REGISTRY ??
+    "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";
+
+const FEED_SCOPES = ["@secretagents", "@typeagent"];
+
+function getExternalAgentsDir(instanceDir: string): string {
+    return path.join(instanceDir, "externalagents");
+}
+
+// Strip a trailing version/range from an npm specifier to get the module name.
+// "@scope/name@1.2.3" -> "@scope/name"; "name@^1" -> "name".
+function moduleNameFromSpec(spec: string): string {
+    const at = spec.lastIndexOf("@");
+    // at <= 0 keeps a leading-@ scope intact and handles unversioned names.
+    return at > 0 ? spec.slice(0, at) : spec;
+}
+
+// Ensure instanceDir/externalagents is a minimal npm root (package.json +
+// scoped-registry .npmrc) that npm installs land in. The external provider
+// already resolves agents from this root, so name-based config entries load
+// without a path. Feed auth is the ambient user/CI npmrc credential.
+function ensureExternalAgentsNpmRoot(instanceDir: string): string {
+    const dir = getExternalAgentsDir(instanceDir);
+    fs.mkdirSync(dir, { recursive: true });
+    const packageJsonPath = path.join(dir, "package.json");
+    if (!fs.existsSync(packageJsonPath)) {
+        fs.writeFileSync(
+            packageJsonPath,
+            JSON.stringify(
+                { name: "typeagent-external-agents", private: true },
+                null,
+                2,
+            ),
+        );
+    }
+    const npmrcLines = [
+        ...FEED_SCOPES.map(
+            (scope) => `${scope}:registry=${TYPEAGENT_FEED_REGISTRY}`,
+        ),
+        "always-auth=true",
+        "",
+    ];
+    fs.writeFileSync(path.join(dir, ".npmrc"), npmrcLines.join("\n"));
+    return dir;
+}
+
+function npmInstallAgent(instanceDir: string, spec: string): string {
+    const dir = ensureExternalAgentsNpmRoot(instanceDir);
+    const moduleName = moduleNameFromSpec(spec);
+    try {
+        execFileSync("npm", ["install", spec, "--save=false"], {
+            cwd: dir,
+            stdio: "pipe",
+            shell: process.platform === "win32",
+        });
+    } catch (e: any) {
+        const detail = e?.stderr?.toString?.() ?? e?.message ?? String(e);
+        throw new Error(
+            `npm install of '${spec}' failed. Ensure the '${TYPEAGENT_FEED_REGISTRY}' feed is authenticated (azureauth / vsts-npm-auth) and the package exists.\n${detail}`,
+        );
+    }
+    const installedPackageJson = path.join(
+        dir,
+        "node_modules",
+        ...moduleName.split("/"),
+        "package.json",
+    );
+    if (!fs.existsSync(installedPackageJson)) {
+        throw new Error(
+            `npm install of '${spec}' did not produce '${moduleName}' under ${path.join(dir, "node_modules")}.`,
+        );
+    }
+    return moduleName;
 }
 
 /**
@@ -115,6 +194,27 @@ export function getDefaultAppAgentInstaller(
             return createNpmAppAgentProvider(
                 {
                     [name]: { name: moduleName, path: packagePath },
+                },
+                path.join(instanceDir, "externalagents/package.json"),
+            );
+        },
+        installNpm: async (name: string, spec: string) => {
+            const config = getExternalAgentsConfig(instanceDir);
+            if (config.agents[name] !== undefined) {
+                throw new Error(`Agent '${name}' already exists`);
+            }
+            const moduleName = npmInstallAgent(instanceDir, spec);
+            // No `path`: the agent resolves by module name from the
+            // externalagents npm root, where npm just installed it.
+            config.agents[name] = { name: moduleName };
+            fs.writeFileSync(
+                getExternalAgentsConfigPath(instanceDir),
+                JSON.stringify(config, null, 2),
+            );
+
+            return createNpmAppAgentProvider(
+                {
+                    [name]: { name: moduleName },
                 },
                 path.join(instanceDir, "externalagents/package.json"),
             );

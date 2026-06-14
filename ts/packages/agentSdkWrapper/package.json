@@ -37,7 +37,7 @@
     "@typeagent/config": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "coder-wrapper": "workspace:*",
     "dotenv": "^16.4.5",
     "form-data": "^4.0.0",

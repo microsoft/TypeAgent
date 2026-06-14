@@ -30,7 +30,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",

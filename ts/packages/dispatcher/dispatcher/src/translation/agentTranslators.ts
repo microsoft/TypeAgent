@@ -40,7 +40,7 @@ import {
 import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { CompleteUsageStatsCallback } from "aiclient";
+import { CompleteUsageStatsCallback } from "@typeagent/aiclient";
 import { PromptLogger } from "telemetry";
 import type { UserContext } from "./userContext.js";
 

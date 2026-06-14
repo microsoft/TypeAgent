@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { LookupOptions, extractEntities } from "typeagent";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
     createActionResultFromError,

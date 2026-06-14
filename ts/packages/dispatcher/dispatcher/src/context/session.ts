@@ -23,7 +23,7 @@ import {
     mergeConfig,
     sanitizeConfig,
 } from "./options.js";
-import { TokenCounter, TokenCounterData } from "aiclient";
+import { TokenCounter, TokenCounterData } from "@typeagent/aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";

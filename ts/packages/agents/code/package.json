@@ -49,7 +49,7 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",
-    "websocket-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {

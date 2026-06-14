@@ -3,7 +3,7 @@
 
 import { BrowserControl } from "../../common/browserControl.mjs";
 import { WebFlowScope } from "./types.js";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import registerDebug from "debug";

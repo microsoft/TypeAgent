@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@typeagent/common-utils": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "better-sqlite3": "12.6.2",
     "cheerio": "^1.0.0",
     "conversation-memory": "workspace:*",

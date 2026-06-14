@@ -36,7 +36,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { createSemanticMap } from "typeagent";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 
 const debug = registerDebug("typeagent:agent:montage");
 

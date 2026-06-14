@@ -25,7 +25,7 @@ import {
 } from "./knowproCommon.js";
 import { argSourceFile } from "../common.js";
 import { getFileNameFromUrl, toUrl } from "examples-lib";
-import { getHtml } from "aiclient";
+import { getHtml } from "@typeagent/aiclient";
 import * as tp from "textpro";
 import { pathToFileURL } from "url";
 import chalk from "chalk";

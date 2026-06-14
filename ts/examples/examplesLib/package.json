@@ -25,7 +25,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",

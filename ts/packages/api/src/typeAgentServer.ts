@@ -3,7 +3,7 @@
 
 import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
-import { initRuntimeConfigFromProcessEnv } from "aiclient";
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import {
     TypeAgentAPIServerConfig,
     TypeAgentAPIWebServer,

@@ -55,7 +55,7 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "conversation-memory": "workspace:*",

@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "async": "^3.2.5",
     "cheerio": "1.0.0-rc.12",
     "debug": "^4.4.0",

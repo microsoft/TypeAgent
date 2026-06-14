@@ -16,7 +16,7 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
+import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
 import { PromptSection, Result } from "typechat";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import {

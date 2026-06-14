@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { fetchWithRetry, openai } from "aiclient";
+import { fetchWithRetry, openai } from "@typeagent/aiclient";
 import {
     arg,
     argNum,

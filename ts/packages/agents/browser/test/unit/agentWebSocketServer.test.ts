@@ -63,7 +63,7 @@ jest.mock("debug", () => {
 
 import { AgentWebSocketServer } from "../../src/agent/agentWebSocketServer.mjs";
 import { isAllowedAgentOrigin } from "../../src/agent/originAllowlist.mjs";
-import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAllowlist";
 
 function makeMockSocket() {
     const handlers: Record<string, Function> = {};

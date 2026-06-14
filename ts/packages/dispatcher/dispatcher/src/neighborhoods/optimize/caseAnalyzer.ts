@@ -21,7 +21,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { ChatModel } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import { getSchemaContent } from "../../translation/actionConfig.js";
 import type { Neighborhood, NeighborhoodMember } from "../types.js";

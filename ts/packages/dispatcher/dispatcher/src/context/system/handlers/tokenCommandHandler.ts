@@ -8,7 +8,7 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
-import { TokenCounter, openai } from "aiclient";
+import { TokenCounter, openai } from "@typeagent/aiclient";
 
 class TokenSummaryCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Get overall LLM usage statistics.";

@@ -36,7 +36,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",

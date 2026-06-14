@@ -9,7 +9,7 @@ import {
     hasEnvSettings,
     openai,
     TextEmbeddingModel,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { Result } from "typechat";
 
 export function hasTestKeys() {

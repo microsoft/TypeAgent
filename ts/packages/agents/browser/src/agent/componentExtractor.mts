@@ -3,7 +3,7 @@
 
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { hookModelTokenUsage } from "./tokenUsage.mjs";
 
 export type HtmlFragments = {

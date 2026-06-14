@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { Result } from "typechat";
 import { domains } from "./generateOpenCommandPhrasesSchema.js";
 import { createTypeChat, loadSchema } from "typeagent";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
+import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
 import { isPageAvailable } from "./common.js";
 
 async function processDomains(domains: string[]) {

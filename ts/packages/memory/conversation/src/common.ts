@@ -4,7 +4,7 @@
 import * as kpLib from "knowledge-processor";
 import * as kp from "knowpro";
 import * as ms from "memory-storage";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { IndexFileSettings, IndexingState } from "./memory.js";
 
 export function createEmbeddingModelWithCache(

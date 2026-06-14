@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

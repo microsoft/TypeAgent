@@ -30,7 +30,7 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "body-parser": "1.20.3",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
@@ -44,7 +44,7 @@
     "sharp": "^0.33.5",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "websocket-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "winreg": "^1.2.5"
   },
   "devDependencies": {

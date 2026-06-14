@@ -13,7 +13,7 @@ import {
 import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
 import { importDocMemoryFromTextFile } from "./docImport.js";
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {

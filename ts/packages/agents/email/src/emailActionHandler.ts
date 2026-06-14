@@ -22,7 +22,7 @@ import {
     ReplyEmailAction,
 } from "./emailActionsSchema.js";
 import { generateNotes } from "typeagent";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     ActionContext,
     ActionResult,

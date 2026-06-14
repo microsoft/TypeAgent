@@ -8,7 +8,7 @@ import {
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { CatalogEntryWithMeta } from "../pdfDownLoader.js";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");

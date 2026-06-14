@@ -12,7 +12,7 @@
  * before building the index).
  */
 
-import { openai, ChatModel } from "aiclient";
+import { openai, ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutableOption } from "./cliPath.js";

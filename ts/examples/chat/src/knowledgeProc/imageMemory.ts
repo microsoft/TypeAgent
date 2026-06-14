@@ -31,7 +31,7 @@ import * as knowLib from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
 import { isImageFileType } from "typechat-utils";
-import { TokenCounter, openai } from "aiclient";
+import { TokenCounter, openai } from "@typeagent/aiclient";
 
 type CompletionUsageStats = openai.CompletionUsageStats;
 

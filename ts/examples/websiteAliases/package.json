@@ -29,7 +29,7 @@
     "@azure/identity": "^4.10.0",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",

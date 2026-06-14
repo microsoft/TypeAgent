@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import type { ChatModel } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
 import { distillGuidelineCandidates } from "../src/neighborhoods/optimize/guidelineDistiller.js";
 import { buildCandidatesMarkdown } from "../src/neighborhoods/optimize/guidelinesViz.js";
 

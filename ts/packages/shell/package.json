@@ -70,7 +70,7 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-server": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "browser-typeagent": "workspace:*",
     "chat-ui": "workspace:*",
@@ -88,7 +88,7 @@
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
     "websocket-channel-server": "workspace:*",
-    "websocket-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {

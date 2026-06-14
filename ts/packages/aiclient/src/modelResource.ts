@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { getOllamaModelNames } from "./ollamaModels.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import { getCopilotClient } from "./copilotModels.js";

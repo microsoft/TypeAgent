@@ -30,7 +30,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
