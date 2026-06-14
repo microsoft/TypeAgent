@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Dev-tunnel URL resolver for the discovery channel (dev-tunnel H2).
+// Dev-tunnel URL resolver for the discovery channel.
 //
 // When a remote client looks up a port, the agent-server can answer with a
 // public `wss://…devtunnels.ms` URL instead of `ws://localhost:<port>`, so the

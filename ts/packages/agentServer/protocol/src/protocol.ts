@@ -169,8 +169,8 @@ export function createDiscoveryHandlers(
      * resolved `(agentName, port, remote)`, that URL is attached to the
      * response so remote clients connect to a tunnel address instead of
      * localhost. Hosts that don't support tunneling (e.g. the standalone
-     * shell) simply omit it and behavior is unchanged. Wiring the real
-     * tunnel resolver is done by the agent-server (dev-tunnel H2).
+     * shell) simply omit it and behavior is unchanged. The agent-server supplies
+     * a resolver that reads the dev-tunnel config and checks host liveness.
      */
     resolveUrl?: (
         agentName: string,
