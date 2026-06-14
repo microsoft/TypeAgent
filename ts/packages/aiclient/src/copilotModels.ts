@@ -30,6 +30,15 @@ import { TokenCounter } from "./tokenCounter.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 
+// Replaces the Copilot CLI's default "terminal coding assistant" system
+// prompt. In "append" mode the runtime still ships its full base persona
+// (identity, environment context, code-change rules, tool guidelines) ahead
+// of the caller's content; "replace" returns only this string, so the model
+// is framed as a translation backend driven entirely by the user turn (which
+// already carries TypeChat's schema and instructions).
+const TRANSLATION_SYSTEM_PROMPT =
+    "You are a translation engine. Follow the instructions in the user message exactly and respond only with the requested output. Do not add commentary, explanations, or formatting beyond what is asked.";
+
 let cachedClient: CopilotClient | undefined;
 let startPromise: Promise<CopilotClient> | undefined;
 let cachedCliPath: string | undefined;
@@ -168,7 +177,7 @@ function buildSessionConfig(
         streaming,
         tools: [],
         availableTools: [],
-        systemMessage: { mode: "append", content: "" },
+        systemMessage: { mode: "replace", content: TRANSLATION_SYSTEM_PROMPT },
         onPermissionRequest: approveAll,
         ...(settings.disableInfiniteSessions
             ? { infiniteSessions: { enabled: false } }
