@@ -44,12 +44,24 @@ export type DiscoverPortOptions = {
     url?: string;
     /** Per-attempt timeout in milliseconds. Default 5_000. */
     timeoutMs?: number;
+    /**
+     * Ask the server to answer with a remote-realm (tunnel) URL when one is
+     * configured and live. Set by clients connecting from another device; a
+     * local client leaves it unset and keeps getting localhost. See the
+     * dev-tunnel discovery design.
+     */
+    remote?: boolean;
 };
 
 /** What `discoverPort` returns. */
 export type DiscoverPortResult =
-    /** Agent has registered a port for `(agentName, role)`. */
-    | { kind: "found"; port: number }
+    /**
+     * Agent has registered a port for `(agentName, role)`. `url`, when
+     * present, is a fully-qualified address (e.g. a `wss://…devtunnels.ms`
+     * tunnel URL) to connect to instead of `ws://localhost:<port>`; when
+     * absent, build the localhost URL from `port` as before.
+     */
+    | { kind: "found"; port: number; url?: string }
     /** Discovery channel reached but no live allocation found. */
     | { kind: "not-registered" }
     /** Discovery channel could not be reached (agentServer down, etc). */
@@ -165,14 +177,27 @@ export async function discoverPort(
                 "discovery:client",
                 channel.createChannel(DiscoveryChannelName),
             );
-            const params =
-                role === undefined ? { agentName } : { agentName, role };
+            const params: {
+                agentName: string;
+                role?: string;
+                remote?: boolean;
+            } = { agentName };
+            if (role !== undefined) params.role = role;
+            if (options?.remote) params.remote = true;
             rpc.invoke("lookupPort", params).then(
                 (result) => {
                     if (result.port === null) {
                         settle({ kind: "not-registered" });
                     } else {
-                        settle({ kind: "found", port: result.port });
+                        settle(
+                            result.url === undefined
+                                ? { kind: "found", port: result.port }
+                                : {
+                                      kind: "found",
+                                      port: result.port,
+                                      url: result.url,
+                                  },
+                        );
                     }
                 },
                 (e: unknown) => {

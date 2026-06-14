@@ -127,7 +127,25 @@ export type DiscoveryInvokeFunctions = {
     lookupPort: (param: {
         agentName: string;
         role?: string;
-    }) => Promise<{ port: number | null }>;
+        /**
+         * Hint that the request originates from a remote (non-loopback)
+         * client, so the server should answer with a tunnel `url` (when one
+         * is configured and live) rather than a localhost realm. Optional and
+         * backward compatible — omitted by local clients, which only ever
+         * need the port. See the dev-tunnel discovery design.
+         */
+        remote?: boolean;
+    }) => Promise<{
+        port: number | null;
+        /**
+         * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
+         * tunnel address) the caller should connect to instead of
+         * `ws://localhost:<port>`. Present only when the server resolved a
+         * live tunnel mapping for `port` and the request was remote-realm.
+         * Absent → fall back to the localhost realm using `port`.
+         */
+        url?: string;
+    }>;
 };
 
 /**
@@ -146,11 +164,29 @@ export type DiscoveryInvokeFunctions = {
  */
 export function createDiscoveryHandlers(
     lookup: (agentName: string, role?: string) => number | undefined,
+    /**
+     * Optional URL resolver. When supplied and it returns a string for the
+     * resolved `(agentName, port, remote)`, that URL is attached to the
+     * response so remote clients connect to a tunnel address instead of
+     * localhost. Hosts that don't support tunneling (e.g. the standalone
+     * shell) simply omit it and behavior is unchanged. Wiring the real
+     * tunnel resolver is done by the agent-server (dev-tunnel H2).
+     */
+    resolveUrl?: (
+        agentName: string,
+        port: number,
+        remote?: boolean,
+    ) => string | undefined,
 ): DiscoveryInvokeFunctions {
     return {
-        lookupPort: async ({ agentName, role }) => ({
-            port: lookup(agentName, role) ?? null,
-        }),
+        lookupPort: async ({ agentName, role, remote }) => {
+            const port = lookup(agentName, role) ?? null;
+            if (port === null) {
+                return { port };
+            }
+            const url = resolveUrl?.(agentName, port, remote);
+            return url === undefined ? { port } : { port, url };
+        },
     };
 }
 
