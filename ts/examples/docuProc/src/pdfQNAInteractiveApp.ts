@@ -22,7 +22,7 @@ import {
 } from "typechat";
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
 import {
     createKnowProContext,

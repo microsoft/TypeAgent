@@ -10,7 +10,7 @@
 // CLI; `optimize list-levers` shows it; `explore` includes it in
 // hypothesis generation.
 
-import type { ChatModel } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import type { AttemptRecord, CaseDescription, Hypothesis } from "./types.js";
 import { pmap } from "./util.js";

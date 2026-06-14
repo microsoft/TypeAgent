@@ -98,6 +98,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
@@ -107,9 +110,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       body-parser:
         specifier: 1.20.3
         version: 1.20.3
@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -174,12 +174,12 @@ importers:
       '@azure/search-documents':
         specifier: 12.1.0
         version: 12.1.0
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -284,15 +284,15 @@ importers:
 
   examples/commandHistogram:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -361,12 +361,12 @@ importers:
 
   examples/docuProc:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -428,7 +428,7 @@ importers:
 
   examples/examplesLib:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       chalk:
@@ -511,12 +511,12 @@ importers:
       '@elastic/elasticsearch':
         specifier: ^9.3.4
         version: 9.3.4
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -609,12 +609,12 @@ importers:
 
   examples/playground:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -646,6 +646,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -655,9 +658,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../packages/azure-ai-foundry
@@ -704,12 +704,12 @@ importers:
 
   examples/searchActionTest:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -803,12 +803,12 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -849,15 +849,15 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../packages/azure-ai-foundry
@@ -919,7 +919,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.1)(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1074,7 +1074,7 @@ importers:
       '@github/copilot-sdk':
         specifier: ^0.3.0
         version: 0.3.0
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../../packages/aiclient
       ajv:
@@ -1488,6 +1488,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -1497,9 +1500,6 @@ importers:
       agent-cache:
         specifier: workspace:*
         version: link:../cache
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       coder-wrapper:
         specifier: workspace:*
         version: link:../coderWrapper
@@ -1696,12 +1696,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../../utils/commonUtils
-      aiclient:
-        specifier: workspace:*
-        version: link:../../../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -1809,6 +1809,9 @@ importers:
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../../agentServer/protocol
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
@@ -1821,9 +1824,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
-      aiclient:
+      '@typeagent/websocket-utils':
         specifier: workspace:*
-        version: link:../../aiclient
+        version: link:../../utils/webSocketUtils
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../azure-ai-foundry
@@ -1941,9 +1944,6 @@ importers:
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -2111,7 +2111,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       knowledge-processor:
@@ -2148,6 +2148,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -2160,9 +2163,6 @@ importers:
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -2206,12 +2206,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       body-parser:
         specifier: ^1.20.3
         version: 1.20.3
@@ -2297,7 +2297,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
     devDependencies:
@@ -2325,7 +2325,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       chalk:
@@ -2396,15 +2396,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       chat-agent:
         specifier: workspace:*
         version: link:../chat
@@ -2445,7 +2445,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       telemetry:
@@ -2547,9 +2547,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       debug:
         specifier: ^4.3.4
         version: 4.4.1
@@ -2598,9 +2601,6 @@ importers:
       unist-util-visit:
         specifier: ^4.1.2
         version: 4.1.2
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -2668,12 +2668,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
-      aiclient:
+      '@typeagent/websocket-utils':
         specifier: workspace:*
-        version: link:../../aiclient
+        version: link:../../utils/webSocketUtils
       body-parser:
         specifier: 1.20.3
         version: 1.20.3
@@ -2713,9 +2716,6 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../../utils/webSocketUtils
       winreg:
         specifier: ^1.2.5
         version: 1.2.5
@@ -2768,15 +2768,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       debug:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
@@ -2891,15 +2891,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -3038,7 +3038,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       debug:
@@ -3081,15 +3081,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       chat-agent:
         specifier: workspace:*
         version: link:../chat
@@ -3328,7 +3328,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       telemetry:
@@ -3359,12 +3359,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -3532,6 +3532,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -3544,9 +3547,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -3614,12 +3614,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -3672,15 +3672,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -3837,6 +3837,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -3855,9 +3858,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -3995,7 +3995,7 @@ importers:
 
   packages/codeProcessor:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       knowledge-processor:
@@ -4219,6 +4219,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -4234,9 +4237,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       android-mobile-agent:
         specifier: workspace:*
         version: link:../agents/androidMobile
@@ -4439,6 +4439,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
@@ -4454,9 +4457,6 @@ importers:
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../azure-ai-foundry
@@ -4747,7 +4747,7 @@ importers:
 
   packages/knowPro:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       async:
@@ -4805,7 +4805,7 @@ importers:
 
   packages/knowProTest:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       conversation-memory:
@@ -4848,12 +4848,12 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.3
         version: 2.0.0-beta.3
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -4955,7 +4955,7 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       better-sqlite3:
@@ -4992,12 +4992,12 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.93.0
         version: 0.93.0(zod@4.3.6)
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       dotenv:
         specifier: ^16.4.5
         version: 16.5.0
@@ -5017,7 +5017,7 @@ importers:
 
   packages/memory/conversation:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       async:
@@ -5093,7 +5093,7 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.3
         version: 2.0.0-beta.3
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
@@ -5160,7 +5160,7 @@ importers:
       '@azure/search-documents':
         specifier: 12.1.0
         version: 12.1.0
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
@@ -5212,12 +5212,12 @@ importers:
 
   packages/memory/website:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -5309,7 +5309,7 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       typeagent:
@@ -5399,6 +5399,9 @@ importers:
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../agentServer/protocol
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -5414,15 +5417,15 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
       agent-server:
         specifier: workspace:*
         version: link:../agentServer/server
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.5
@@ -5474,9 +5477,6 @@ importers:
       websocket-channel-server:
         specifier: workspace:*
         version: link:../utils/webSocketChannelServer
-      websocket-utils:
-        specifier: workspace:*
-        version: link:../utils/webSocketUtils
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -5584,12 +5584,12 @@ importers:
 
   packages/testLib:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5640,12 +5640,12 @@ importers:
 
   packages/typeagent:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -5816,7 +5816,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       chalk:
@@ -6052,7 +6052,7 @@ importers:
 
   tools/docsAutogen:
     dependencies:
-      aiclient:
+      '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       chalk:

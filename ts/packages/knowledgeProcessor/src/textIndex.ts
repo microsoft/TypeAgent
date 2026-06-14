@@ -26,7 +26,7 @@ import {
     unionMultipleScored,
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import { createIndexFolder } from "./keyValueIndex.js";
 import { TextMatcher } from "./textMatcher.js";
 

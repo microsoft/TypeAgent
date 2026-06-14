@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessageV2 } from "websocket-utils";
+import { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import { CodeAgentWebSocketServer } from "./codeAgentWebSocketServer.js";
 import {
     ActionContext,

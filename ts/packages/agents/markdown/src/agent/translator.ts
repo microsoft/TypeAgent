@@ -6,7 +6,7 @@ import {
     MultimodalPromptContent,
     TypeChatJsonTranslator,
 } from "typechat";
-import { ChatModelWithStreaming, openai as ai } from "aiclient";
+import { ChatModelWithStreaming, openai as ai } from "@typeagent/aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";

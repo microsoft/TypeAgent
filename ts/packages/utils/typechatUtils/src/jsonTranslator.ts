@@ -17,7 +17,7 @@ import {
     openai as ai,
     CompleteUsageStatsCallback,
     CompletionJsonSchema,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonParser,

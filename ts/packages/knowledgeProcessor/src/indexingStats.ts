@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { readJsonFile, removeFile, writeJsonFile } from "typeagent";
 
 export type ItemIndexingStats = {

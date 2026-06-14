@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as azSearch from "@azure/search-documents";
-import { createDefaultCredential, getEnvSetting } from "aiclient";
+import { createDefaultCredential, getEnvSetting } from "@typeagent/aiclient";
 import { NormalizedEmbedding } from "typeagent";
 
 export enum EnvVars {

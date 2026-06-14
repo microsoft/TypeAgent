@@ -34,7 +34,7 @@ import { buildPatternsHTML } from "./patternsViz.js";
 import { distillGuidelineCandidates } from "./guidelineDistiller.js";
 import { buildCandidatesMarkdown } from "./guidelinesViz.js";
 import { schemaGuidelines as canonicalSchemaGuidelines } from "../../translation/schemaGuidelines.js";
-import { openai, type ChatModel } from "aiclient";
+import { openai, type ChatModel } from "@typeagent/aiclient";
 import {
     defaultPath as defaultPathHelper,
     ensureDir,

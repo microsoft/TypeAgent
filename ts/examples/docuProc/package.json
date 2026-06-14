@@ -25,8 +25,8 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "cheerio": "1.0.0-rc.12",
     "conversation-memory": "workspace:*",

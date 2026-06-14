@@ -13,7 +13,7 @@ import {
     loadConfigSync,
     type ConfigTree,
 } from "@typeagent/config";
-import { initRuntimeConfigFromProcessEnv } from "aiclient";
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import yaml from "js-yaml";
 
 import { debugShell, debugShellError } from "./debug.js";

@@ -5,7 +5,7 @@ import { loadConfigSync } from "@typeagent/config";
 
 loadConfigSync();
 
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 import {
     generateRandomEmbedding,
     hasEmbeddingModel,

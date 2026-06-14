@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAllowlist";
 
 /**
  * Origin allowlist for the browser views server (PDF viewer + other

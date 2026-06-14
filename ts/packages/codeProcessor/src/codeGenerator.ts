@@ -3,7 +3,7 @@
 
 import { createTranslator, MessageSourceRole } from "typeagent";
 import { CodeGenResponse } from "./codeGenSchema.js";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { getData, PromptSection, TypeChatLanguageModel } from "typechat";
 import { Api, createApiSection } from "./code.js";
 

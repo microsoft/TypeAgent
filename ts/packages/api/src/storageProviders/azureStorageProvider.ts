@@ -3,7 +3,7 @@
 
 import { DefaultAzureCredential } from "@azure/identity";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
-import { getEnvSetting, openai } from "aiclient";
+import { getEnvSetting, openai } from "@typeagent/aiclient";
 import { env } from "node:process";
 import {
     BlobServiceClient,

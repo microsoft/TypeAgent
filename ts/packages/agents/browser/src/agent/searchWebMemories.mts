@@ -11,7 +11,7 @@ import {
     WebPageReference,
 } from "./knowledge/schema/knowledgeExtraction.mjs";
 import { getWebsiteSearchPromptPreamble } from "./search/websiteSearchPrompts.mjs";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { hookModelTokenUsage } from "./tokenUsage.mjs";
 import type { TypeChatLanguageModel } from "typechat";
 

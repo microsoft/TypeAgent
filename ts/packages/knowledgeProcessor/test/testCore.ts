@@ -8,7 +8,7 @@ import {
     hasEnvSettings,
     openai,
     TextEmbeddingModel,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { TextBlock, TextBlockType } from "../src/text.js";
 import { readAllText, readJsonFile } from "typeagent";
 import { splitIntoBlocks } from "../src/textChunker.js";

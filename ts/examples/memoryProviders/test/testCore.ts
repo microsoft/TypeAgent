@@ -4,7 +4,7 @@
 import path from "path";
 import os from "node:os";
 import { createNormalized, ensureDir, NormalizedEmbedding } from "typeagent";
-import { hasEnvSettings, openai } from "aiclient";
+import { hasEnvSettings, openai } from "@typeagent/aiclient";
 import * as knowLib from "knowledge-processor";
 
 export function skipTest(name: string) {

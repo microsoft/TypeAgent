@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { openai, getChatModelNames } from "aiclient";
+import { openai, getChatModelNames } from "@typeagent/aiclient";
 import fs from "node:fs";
 import chalk from "chalk";
 import { createPromptLogger } from "telemetry";

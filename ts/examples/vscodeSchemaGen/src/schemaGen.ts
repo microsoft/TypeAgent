@@ -14,7 +14,7 @@ import {
     ChatModelWithStreaming,
     EmbeddingModel,
     openai,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { generateActionRequests } from "./actionGen.js";
 import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "typeagent";
 

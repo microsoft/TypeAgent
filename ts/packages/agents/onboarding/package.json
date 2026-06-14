@@ -43,9 +43,9 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "aiclient": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
     "typeagent": "workspace:*",

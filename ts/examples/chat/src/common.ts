@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "@typeagent/aiclient";
 import { ChalkInstance } from "chalk";
 import {
     ArgDef,

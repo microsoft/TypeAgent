@@ -18,7 +18,7 @@ import {
 } from "interactive-app";
 import { collections, dateTime, ensureDir, getFileName } from "typeagent";
 
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import {
     argToDate,
     SRAG_MEM_DIR,

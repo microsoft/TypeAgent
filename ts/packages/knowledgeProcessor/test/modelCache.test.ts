@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { createEmbeddingCache } from "../src/modelCache.js";
 import { hasTestKeys, testIf } from "./testCore.js";
 import { getData } from "typechat";

@@ -45,11 +45,11 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "better-sqlite3": "12.6.2",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",
-    "websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {

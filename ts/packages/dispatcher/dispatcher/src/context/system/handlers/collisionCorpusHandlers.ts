@@ -39,7 +39,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 
 import {
     CommandHandlerContext,

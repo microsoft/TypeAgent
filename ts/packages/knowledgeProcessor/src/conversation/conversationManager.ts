@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import {
     ObjectFolderSettings,
     SearchOptions,

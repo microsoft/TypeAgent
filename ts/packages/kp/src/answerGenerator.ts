@@ -12,7 +12,7 @@
  * Falls back to Claude Agent SDK query() if aiclient is not available.
  */
 
-import { openai, ChatModel } from "aiclient";
+import { openai, ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutableOption } from "./cliPath.js";

@@ -25,9 +25,9 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
     "conversation-memory": "workspace:*",

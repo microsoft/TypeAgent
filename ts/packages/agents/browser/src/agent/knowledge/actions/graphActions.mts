@@ -20,7 +20,7 @@ import {
 } from "../utils/graphologyCache.mjs";
 import { createGraphologyPersistenceManager } from "../utils/graphologyPersistence.mjs";
 import registerDebug from "debug";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TopicRelationshipAnalysis } from "./schema/topicRelationship.mjs";

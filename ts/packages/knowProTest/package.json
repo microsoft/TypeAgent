@@ -29,7 +29,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "conversation-memory": "workspace:*",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",

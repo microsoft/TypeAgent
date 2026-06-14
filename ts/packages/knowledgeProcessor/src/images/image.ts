@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { StorageProvider } from "../storageProvider.js";
 import {
     ConversationSettings,

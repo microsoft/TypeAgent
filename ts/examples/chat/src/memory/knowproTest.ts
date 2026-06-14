@@ -26,7 +26,7 @@ import {
     readAllText,
 } from "typeagent";
 import chalk from "chalk";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     createIndexingEventHandler,
     sourcePathToMemoryIndexPath,

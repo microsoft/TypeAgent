@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModelWithStreaming, openai } from "aiclient";
+import { ChatModelWithStreaming, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { createTypeChat, loadSchema } from "typeagent";
 import {
