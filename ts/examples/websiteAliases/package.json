@@ -27,9 +27,9 @@
   "dependencies": {
     "@azure/ai-projects": "^2.2.0",
     "@azure/identity": "^4.10.0",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "@typeagent/aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",

@@ -26,8 +26,8 @@
   },
   "dependencies": {
     "@azure/search-documents": "12.1.0",
-    "@typeagent/config": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "better-sqlite3": "12.6.2",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",

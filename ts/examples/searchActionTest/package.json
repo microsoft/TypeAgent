@@ -21,8 +21,8 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@typeagent/config": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "copyfiles": "^2.4.1",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",

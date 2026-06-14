@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "debug": "^4.4.0",
     "@typeagent/websocket-utils": "workspace:*",
+    "debug": "^4.4.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {

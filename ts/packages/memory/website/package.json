@@ -31,8 +31,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/common-utils": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "better-sqlite3": "12.6.2",
     "cheerio": "^1.0.0",
     "conversation-memory": "workspace:*",

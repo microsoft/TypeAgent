@@ -32,8 +32,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/config": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "async": "^3.2.5",
     "cheerio": "1.0.0-rc.12",
     "debug": "^4.4.0",

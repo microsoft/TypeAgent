@@ -26,9 +26,9 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "@typeagent/aiclient": "workspace:*",
     "chat-agent": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
