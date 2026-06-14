@@ -3,7 +3,10 @@
 
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import { Result } from "typechat";
-import { AzureTokenScopes, createAzureTokenProvider } from "@typeagent/aiclient";
+import {
+    AzureTokenScopes,
+    createAzureTokenProvider,
+} from "@typeagent/aiclient";
 
 export interface TokenResponse {
     token: string;

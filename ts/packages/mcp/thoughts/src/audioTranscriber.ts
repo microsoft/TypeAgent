@@ -3,7 +3,10 @@
 
 import * as fs from "fs";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
-import { AzureTokenScopes, createAzureTokenProvider } from "@typeagent/aiclient";
+import {
+    AzureTokenScopes,
+    createAzureTokenProvider,
+} from "@typeagent/aiclient";
 
 export interface TranscribeOptions {
     // Path to the WAV file to transcribe

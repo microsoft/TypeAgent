@@ -62,7 +62,10 @@ export class InstallCommandHandler implements CommandHandler {
             }
             const provider = await installer.installNpm(name, agent);
             await installAppProvider(systemContext, provider);
-            displayResult(`Agent '${name}' installed from '${agent}'.`, context);
+            displayResult(
+                `Agent '${name}' installed from '${agent}'.`,
+                context,
+            );
             return;
         }
         const packageJsonPath = path.join(fullPath, "package.json");

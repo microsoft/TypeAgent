@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+} from "@typeagent/aiclient";
 import {
     CommandHandler,
     InteractiveAppSettings,

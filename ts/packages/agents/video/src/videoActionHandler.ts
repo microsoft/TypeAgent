@@ -13,7 +13,11 @@ import {
     createActionResultFromError,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { ImageInPaintItem, openai, VideoGenerationJob } from "@typeagent/aiclient";
+import {
+    ImageInPaintItem,
+    openai,
+    VideoGenerationJob,
+} from "@typeagent/aiclient";
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { randomBytes } from "crypto";

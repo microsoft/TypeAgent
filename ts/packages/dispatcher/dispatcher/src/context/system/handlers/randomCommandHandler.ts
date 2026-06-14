@@ -8,7 +8,11 @@ import {
 import fs from "node:fs";
 import { randomInt } from "crypto";
 import { processCommandNoLock } from "../../../command/command.js";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+} from "@typeagent/aiclient";
 import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";

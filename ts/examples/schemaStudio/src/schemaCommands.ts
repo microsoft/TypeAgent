@@ -11,7 +11,11 @@ import {
 import { SchemaStudio } from "./studio.js";
 import { appendFileSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { createTypeChat, loadSchema } from "typeagent";
-import { ChatModelWithStreaming, CompletionSettings, openai } from "@typeagent/aiclient";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    openai,
+} from "@typeagent/aiclient";
 import { CreateSchemaAction } from "./settingsSchemaSchema.js";
 import { PromptSection, Result } from "typechat";
 
