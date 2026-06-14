@@ -176,7 +176,7 @@ export function createDiscoveryHandlers(
         agentName: string,
         port: number,
         remote?: boolean,
-    ) => string | undefined,
+    ) => string | undefined | Promise<string | undefined>,
 ): DiscoveryInvokeFunctions {
     return {
         lookupPort: async ({ agentName, role, remote }) => {
@@ -184,8 +184,8 @@ export function createDiscoveryHandlers(
             if (port === null) {
                 return { port };
             }
-            const url = resolveUrl?.(agentName, port, remote);
-            return url === undefined ? { port } : { port, url };
+            const url = await resolveUrl?.(agentName, port, remote);
+            return url ? { port, url } : { port };
         },
     };
 }
