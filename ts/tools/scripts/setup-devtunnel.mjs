@@ -89,7 +89,10 @@ function dt(args, { json = false, check = true } = {}) {
 
 // devtunnel ids: lowercase alphanumeric + dashes, 3-60 chars.
 function defaultTunnelName() {
-    const host = os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const host = os
+        .hostname()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
     return `typeagent-${host}`.slice(0, 60).replace(/-+$/, "");
 }
 
@@ -111,7 +114,9 @@ function main() {
     if (loginStatus.error?.code === "ENOENT") {
         dt(["--version"]); // triggers the install-guidance path + exit
     }
-    const signedIn = (loginStatus.stdout ?? "").toLowerCase().includes("logged in");
+    const signedIn = (loginStatus.stdout ?? "")
+        .toLowerCase()
+        .includes("logged in");
     if (!signedIn) {
         if (!args.login) {
             console.error(
@@ -119,7 +124,9 @@ function main() {
             );
             process.exit(1);
         }
-        console.log("Signing in to Dev Tunnels (a browser window will open)...");
+        console.log(
+            "Signing in to Dev Tunnels (a browser window will open)...",
+        );
         const login = spawnSync("devtunnel", ["user", "login"], {
             stdio: "inherit",
         });

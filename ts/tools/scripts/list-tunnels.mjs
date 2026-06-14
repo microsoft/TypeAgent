@@ -67,7 +67,10 @@ function dt(args, { json = false, check = true } = {}) {
 function readLocalConfig() {
     try {
         return JSON.parse(
-            fs.readFileSync(path.join(userDataDir(), "devtunnel.json"), "utf-8"),
+            fs.readFileSync(
+                path.join(userDataDir(), "devtunnel.json"),
+                "utf-8",
+            ),
         );
     } catch {
         return undefined;
@@ -127,7 +130,9 @@ function main() {
     }
 
     if (rows.length === 0) {
-        console.log("No Dev Tunnels found. Run setup-devtunnel.mjs to create one.");
+        console.log(
+            "No Dev Tunnels found. Run setup-devtunnel.mjs to create one.",
+        );
         return;
     }
     for (const r of rows) {

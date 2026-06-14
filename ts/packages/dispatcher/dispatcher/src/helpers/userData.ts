@@ -150,10 +150,7 @@ function getDevTunnelConfigFilePath() {
  */
 export function readDevTunnelConfig(): DevTunnelConfig | undefined {
     try {
-        const content = fs.readFileSync(
-            getDevTunnelConfigFilePath(),
-            "utf-8",
-        );
+        const content = fs.readFileSync(getDevTunnelConfigFilePath(), "utf-8");
         const data: any = JSON.parse(content);
         if (
             data &&

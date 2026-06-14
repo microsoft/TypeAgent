@@ -12,10 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-    readDevTunnelConfig,
-    type DevTunnelConfig,
-} from "agent-dispatcher";
+import { readDevTunnelConfig, type DevTunnelConfig } from "agent-dispatcher";
 import registerDebug from "debug";
 
 const debug = registerDebug("agent-server:tunnel");
