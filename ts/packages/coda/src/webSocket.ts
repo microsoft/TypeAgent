@@ -30,7 +30,9 @@ async function resolveCodeEndpoint(): Promise<string | undefined> {
         url: process.env["AGENT_SERVER_URL"],
     });
     if (result.kind === "found") {
-        return `ws://localhost:${result.port}`;
+        // Honor a discovered remote (tunnel) URL when the agent-server hands
+        // one back; otherwise dial the local port.
+        return result.url ?? `ws://localhost:${result.port}`;
     }
     if (result.kind === "not-registered") {
         // Agent server is running but the `code` agent isn't enabled

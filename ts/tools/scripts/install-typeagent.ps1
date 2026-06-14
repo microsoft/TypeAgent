@@ -19,6 +19,8 @@
     4. (Optional) installs the Copilot CLI plugin from -PluginSource.
     5. Runs config provisioning (getKeys, browser login) and starts the daemon
        via the artifact's typeagent-serve.mjs.
+    6. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
+       client on another device can reach the service.
 
   Azure CLI (with az login) is used to download from the feed. This is the
   install-time exception; runtime config provisioning still uses getKeys'
@@ -27,6 +29,7 @@
 .EXAMPLE
   pwsh ./install-typeagent.ps1
   pwsh ./install-typeagent.ps1 -Variant full -Version 0.0.1-12345
+  pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
 #>
 
 [CmdletBinding()]
@@ -39,7 +42,13 @@ param(
     [string]$Project = "AI_Systems",
     [string]$Feed = "typeagent",
     [string]$PluginSource = "",
-    [switch]$NoStart
+    [switch]$NoStart,
+    # Opt-in: set up a Microsoft Dev Tunnel so another device (e.g. a phone) can
+    # reach this agent-server, and start the tunnel host alongside the daemon.
+    [switch]$DevTunnel,
+    # With -DevTunnel: allow anonymous client access (WARNING: removes the only
+    # access control on the otherwise-unauthenticated service). Default private.
+    [switch]$DevTunnelAnonymous
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,9 +135,30 @@ Write-Step "Provisioning config (getKeys, browser login)"
 & node $serve provision
 if ($LASTEXITCODE -ne 0) { Fail "Config provisioning failed." }
 
+# --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
+if ($DevTunnel) {
+    Write-Step "Setting up Dev Tunnel (cross-device access)"
+    if (-not (Test-Command devtunnel)) {
+        Write-Host "  Installing devtunnel CLI (winget install Microsoft.devtunnel)"
+        & winget install Microsoft.devtunnel --accept-source-agreements --accept-package-agreements 2>$null
+        if (-not (Test-Command devtunnel)) {
+            Fail "devtunnel CLI not found after install. Install it manually and re-run with -DevTunnel."
+        }
+    }
+    $setup = Join-Path $InstallDir "setup-devtunnel.mjs"
+    $setupArgs = @($setup)
+    if ($DevTunnelAnonymous) { $setupArgs += "--anonymous" }
+    & node @setupArgs
+    if ($LASTEXITCODE -ne 0) { Fail "Dev Tunnel setup failed." }
+    # Bring the tunnel host up with the daemon (start below honors --tunnel).
+    $env:TYPEAGENT_TUNNEL = "1"
+}
+
 if (-not $NoStart) {
     Write-Step "Starting agent-server"
-    & node $serve start
+    $startArgs = @($serve, "start")
+    if ($DevTunnel) { $startArgs += "--tunnel" }
+    & node @startArgs
 }
 
 Write-Host ""
@@ -136,3 +166,6 @@ Write-Host "TypeAgent agent-server installed at $InstallDir" -ForegroundColor Gr
 Write-Host "  Start:    node `"$serve`" start"
 Write-Host "  Status:   node `"$serve`" status"
 Write-Host "  Stop:     node `"$serve`" stop"
+if ($DevTunnel) {
+    Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
+}
