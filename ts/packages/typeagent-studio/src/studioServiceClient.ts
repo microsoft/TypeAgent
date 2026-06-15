@@ -4,7 +4,6 @@
 import WebSocket from "ws";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
-import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import type {
     StudioInfo,
     StudioServiceInvokeFunctions,
@@ -15,7 +14,6 @@ import type {
     StudioCollisionScanResult,
     AvailableAgent,
 } from "@typeagent/core/runtime";
-import { readStudioServiceToken } from "@typeagent/core/runtime";
 import type {
     StudioEvent,
     CollisionDetectedEvent,
@@ -26,14 +24,14 @@ import type { FeedbackRecordInput } from "@typeagent/core/feedback";
 import type { SandboxStatus } from "@typeagent/core/sandbox";
 
 /**
- * Client for the `studio` agent's typed service channel (the rich-client side of
- * the `code`↔`coda` pattern). Discovers the agent's WebSocket via the
- * agent-server `discovery` channel, connects, and exposes the typed Studio
- * service methods + an event subscription over `agent-rpc`.
+ * Client for the standalone Studio service's typed channel (the rich-client side
+ * of the `code`↔`coda` pattern). Connects to a service endpoint supplied by the
+ * launcher (which discovers/attaches the per-workspace service via the registry)
+ * and exposes the typed Studio service methods + an event subscription over
+ * `agent-rpc`.
  *
- * Every call is repo-scoped: pass the workspace `repoRoot` so the agent selects
- * the right per-workspace runtime (the extension knows its workspace; the agent
- * shouldn't guess).
+ * Every call is repo-scoped: pass the workspace `repoRoot` so the service selects
+ * the right per-workspace runtime (the extension knows its workspace).
  */
 export class StudioServiceClient {
     private constructor(
@@ -45,64 +43,34 @@ export class StudioServiceClient {
     ) {}
 
     /**
-     * Discover and connect to the `studio` service. Returns `undefined` when the
-     * agent-server isn't running or the `studio` agent isn't enabled yet (the
-     * caller should surface a "not connected" state and may retry).
+     * Connect to the Studio service at `endpoint`, presenting `token` as the
+     * capability bearer. Returns `undefined` when no `endpoint` is supplied (the
+     * launcher hasn't resolved the service yet) or the socket can't be opened
+     * (service gone / bad token) — the caller surfaces a "not connected" state
+     * and may retry. There is no discovery fallback: the service runs standalone
+     * and is reached only via the launcher/registry-resolved `{endpoint, token}`.
      */
     static async connect(options: {
         repoRoot?: string;
         onEvent?: (event: StudioEvent) => void;
         /**
-         * Invoked once when the underlying socket closes (agent-server stopped,
-         * studio agent disabled, network drop). Lets a client fall back instead
-         * of silently treating a dead connection as "no events".
+         * Invoked once when the underlying socket closes (service stopped,
+         * network drop). Lets a client fall back instead of silently treating a
+         * dead connection as "no events".
          */
         onClose?: () => void;
-        /** Override discovery with an explicit `ws://host:port` (tests). */
+        /** The service `ws://host:port`, resolved by the launcher/registry. */
         endpoint?: string;
-        /**
-         * Explicit capability token (tests). On the real discovery path the
-         * token is read from the per-port token file the agent published.
-         */
+        /** Capability token presented as `Authorization: Bearer`. */
         token?: string;
-        /** Where to reach the agent-server discovery channel. */
-        agentServerUrl?: string;
     }): Promise<StudioServiceClient | undefined> {
-        let endpoint = options.endpoint;
-        let token = options.token;
-        let port: number | undefined;
-        if (endpoint === undefined) {
-            // Discovery path: resolve the port, then read its capability token.
-            const result = await discoverPort(
-                "studio",
-                undefined,
-                options.agentServerUrl !== undefined
-                    ? { url: options.agentServerUrl }
-                    : undefined,
-            );
-            if (result.kind !== "found") {
-                return undefined;
-            }
-            port = result.port;
-            endpoint = `ws://127.0.0.1:${port}`;
-            if (token === undefined) {
-                token = await readStudioServiceToken(port);
-            }
+        if (options.endpoint === undefined) {
+            return undefined;
         }
-
-        let attempt = await StudioServiceClient.openSocket(endpoint, token);
-        // A 401 on the discovery path most likely means a stale token (the
-        // agent restarted between discovery and connect). Re-read once and retry
-        // — distinct from "service not found" (discovery already succeeded).
-        if (
-            attempt.socket === undefined &&
-            attempt.status === 401 &&
-            port !== undefined &&
-            options.token === undefined
-        ) {
-            token = await readStudioServiceToken(port);
-            attempt = await StudioServiceClient.openSocket(endpoint, token);
-        }
+        const attempt = await StudioServiceClient.openSocket(
+            options.endpoint,
+            options.token,
+        );
         if (attempt.socket === undefined) {
             return undefined;
         }
@@ -179,20 +147,6 @@ export class StudioServiceClient {
                 settle({});
             });
         });
-    }
-
-    /** Resolve the `studio` service endpoint via discovery, or `undefined`. */
-    static async discover(
-        agentServerUrl?: string,
-    ): Promise<string | undefined> {
-        const result = await discoverPort(
-            "studio",
-            undefined,
-            agentServerUrl !== undefined ? { url: agentServerUrl } : undefined,
-        );
-        return result.kind === "found"
-            ? `ws://127.0.0.1:${result.port}`
-            : undefined;
     }
 
     getStudioInfo(): Promise<StudioInfo> {

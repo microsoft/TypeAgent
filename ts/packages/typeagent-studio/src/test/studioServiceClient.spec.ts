@@ -104,11 +104,10 @@ test("StudioServiceClient receives pushed events after subscribeEvents", async (
     }
 });
 
-test("StudioServiceClient.connect returns undefined when discovery finds nothing", async () => {
-    // No agent-server on this URL → discovery fails → undefined (graceful).
-    const client = await StudioServiceClient.connect({
-        agentServerUrl: "ws://127.0.0.1:1", // nothing listening
-    });
+test("StudioServiceClient.connect returns undefined when no endpoint is supplied", async () => {
+    // No discovery fallback — without a launcher-resolved endpoint, connect is a
+    // graceful no-op (the caller keeps retrying until a target is set).
+    const client = await StudioServiceClient.connect({ repoRoot: "/repo/ts" });
     assert.equal(client, undefined);
 });
 
