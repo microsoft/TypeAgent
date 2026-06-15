@@ -542,7 +542,6 @@ export function activate(context: vscode.ExtensionContext): void {
     const eventLogView = vscode.window.createTreeView(EVENT_LOG_VIEW_ID, {
         treeDataProvider: eventLog,
     });
-    eventLogView.description = "studio service";
 
     context.subscriptions.push(
         eventLog,
@@ -577,7 +576,6 @@ export function activate(context: vscode.ExtensionContext): void {
     const collisionsView = vscode.window.createTreeView(COLLISIONS_VIEW_ID, {
         treeDataProvider: collisions,
     });
-    collisionsView.description = "studio service";
 
     let currentCollisionsSource: CollisionsSource = collisionsChannelSource;
 
