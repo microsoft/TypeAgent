@@ -64,18 +64,24 @@ function migrateLegacyWorkspaceState(
         return;
     }
     const dir = studioProfileDir();
-    const spellings = new Set<string>([
-        resolvedRoot,
-        resolvedRoot.toLowerCase(),
-    ]);
-    // Drive-letter casing is the common divergence on Windows.
-    if (/^[A-Za-z]:/.test(resolvedRoot)) {
-        spellings.add(
-            resolvedRoot.charAt(0).toLowerCase() + resolvedRoot.slice(1),
-        );
-        spellings.add(
-            resolvedRoot.charAt(0).toUpperCase() + resolvedRoot.slice(1),
-        );
+    const spellings = new Set<string>([resolvedRoot]);
+    // Case-only spelling variants are aliases of the SAME directory only on
+    // case-insensitive filesystems (Windows/macOS). On Linux, `/repo/A` and
+    // `/repo/a` are different workspaces, so adding the lowercase form there
+    // could migrate a *different* repo's state into this one. Mirror
+    // `canonicalizeRepoRoot`'s platform rule.
+    if (process.platform === "win32" || process.platform === "darwin") {
+        spellings.add(resolvedRoot.toLowerCase());
+        // Drive-letter casing is the common divergence on Windows (VS Code
+        // lowercases it; env/cwd may not).
+        if (/^[A-Za-z]:/.test(resolvedRoot)) {
+            spellings.add(
+                resolvedRoot.charAt(0).toLowerCase() + resolvedRoot.slice(1),
+            );
+            spellings.add(
+                resolvedRoot.charAt(0).toUpperCase() + resolvedRoot.slice(1),
+            );
+        }
     }
     for (const spelling of spellings) {
         const legacy = studioWorkspaceStateFile(dir, spelling);

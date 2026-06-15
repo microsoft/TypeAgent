@@ -88,6 +88,11 @@ function spawnService(repoRoot: string): Promise<ServiceTarget | undefined> {
             child = spawn(process.execPath, [main, "--workspace", repoRoot], {
                 stdio: ["ignore", "pipe", "ignore"],
                 windowsHide: true,
+                // In the VS Code extension host, `process.execPath` is the
+                // Electron/Code binary, not a standalone Node. `ELECTRON_RUN_AS_NODE`
+                // makes it execute our script as plain Node; harmless when
+                // execPath already is Node (e.g. the `typeagent-studio serve` CLI).
+                env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
             });
         } catch (err) {
             // eslint-disable-next-line no-console
