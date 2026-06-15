@@ -489,7 +489,7 @@
     "@types/debug": "^4.1.0",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1",
     "tsx": "^4.21.0"
