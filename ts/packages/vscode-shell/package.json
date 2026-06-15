@@ -210,7 +210,7 @@
     "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
     "copyfiles": "^2.4.1",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1"
   },
