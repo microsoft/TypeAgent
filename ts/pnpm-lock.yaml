@@ -5814,9 +5814,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      studio-service:
-        specifier: workspace:*
-        version: link:../studio-service
       ws:
         specifier: ^8.21.0
         version: 8.21.0

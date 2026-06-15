@@ -498,7 +498,6 @@
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/core": "workspace:*",
     "debug": "^4.4.0",
-    "studio-service": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {

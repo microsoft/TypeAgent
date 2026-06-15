@@ -59,13 +59,11 @@ async function waitForService(
     return undefined;
 }
 
-/** Resolve the `typeagent-studio serve` entrypoint (studio-service `main.js`). */
+/** Resolve the bundled Studio service entrypoint (shipped in the extension's
+ * `dist/` next to this bundle — see esbuild.mjs). The extension bundle is
+ * CommonJS, so `__dirname` is the `dist/` directory at runtime. */
 function resolveServiceMain(): string {
-    // `studio-service` is an external dependency (not bundled): resolve its
-    // package entry at runtime and sit `main.js` next to it in `dist/`. The
-    // extension bundle is CommonJS, so `require` is available directly.
-    const indexPath = require.resolve("studio-service");
-    return path.join(path.dirname(indexPath), "main.js");
+    return path.join(__dirname, "studio-service.js");
 }
 
 /** Spawn a service for `repoRoot` and resolve its target from stdout + token file.

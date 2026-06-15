@@ -10,7 +10,7 @@ const extensionConfig = {
     entryPoints: ["src/extension.ts"],
     bundle: true,
     outfile: "dist/extension.js",
-    external: ["vscode", "studio-service"],
+    external: ["vscode"],
     format: "cjs",
     platform: "node",
     target: "node20",
@@ -22,6 +22,32 @@ const extensionConfig = {
     // which throws in `fileURLToPath` at load time. Map it to the bundle's own
     // file URL so those modules load; the lazy file-IO paths they guard are not
     // exercised by NFA-based collision scanning.
+    define: {
+        "import.meta.url": "__importMetaUrl",
+    },
+    banner: {
+        js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
+    },
+};
+
+/**
+ * The standalone Studio service, bundled INTO the extension so it ships in the
+ * `.vsix` (packaged with `--no-dependencies`; `node_modules` is `.vscodeignore`d,
+ * so the launcher cannot `require.resolve("studio-service")` at runtime). The
+ * launcher spawns `node dist/studio-service.js --workspace <root>` by a path
+ * relative to the extension. Same node/CJS + import.meta shim as the extension.
+ * @type {import('esbuild').BuildOptions}
+ */
+const serviceConfig = {
+    entryPoints: ["../studio-service/src/main.ts"],
+    bundle: true,
+    outfile: "dist/studio-service.js",
+    external: ["vscode"],
+    format: "cjs",
+    platform: "node",
+    target: "node20",
+    sourcemap: true,
+    minify: !watch,
     define: {
         "import.meta.url": "__importMetaUrl",
     },
@@ -49,11 +75,14 @@ const webviewConfig = {
 
 if (watch) {
     const ctx = await esbuild.context(extensionConfig);
+    const serviceCtx = await esbuild.context(serviceConfig);
     const webviewCtx = await esbuild.context(webviewConfig);
     await ctx.watch();
+    await serviceCtx.watch();
     await webviewCtx.watch();
     console.log("typeagent-studio: watching…");
 } else {
     await esbuild.build(extensionConfig);
+    await esbuild.build(serviceConfig);
     await esbuild.build(webviewConfig);
 }
