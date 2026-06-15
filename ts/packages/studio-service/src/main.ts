@@ -12,12 +12,8 @@
  */
 
 import { startStudioService } from "./studioService.js";
-import { getStudioRuntime } from "./runtime.js";
 import { announceStudioService } from "./studioRegistry.js";
-import {
-    studioWorkspaceKey,
-    STUDIO_REGISTRY_PROTOCOL_VERSION,
-} from "@typeagent/core/runtime";
+import { STUDIO_REGISTRY_PROTOCOL_VERSION } from "@typeagent/core/runtime";
 
 function parseArgs(argv: string[]): { workspace?: string; port?: number } {
     const out: { workspace?: string; port?: number } = {};
@@ -41,19 +37,21 @@ async function main(): Promise<void> {
         process.env["TYPEAGENT_STUDIO_REPO_ROOT"] = args.workspace;
     }
 
-    const handle = await startStudioService(
-        args.port !== undefined ? { port: args.port } : {},
-    );
+    const handle = await startStudioService({
+        ...(args.port !== undefined ? { port: args.port } : {}),
+        ...(args.workspace !== undefined && args.workspace.trim().length > 0
+            ? { repoRoot: args.workspace }
+            : {}),
+    });
     // One machine-readable line for the launcher; the token is in the token file.
     process.stdout.write(`${JSON.stringify({ port: handle.port })}\n`);
 
     // Announce ourselves to the `studio` agent's registry so the agent proxy
     // (and any extra extension window) can discover this workspace's service.
     // Best-effort + self-retrying: a not-yet-running agent doesn't block start.
-    const repoRoot = getStudioRuntime().getRepoRootInfo().repoRoot;
     const announcement = await announceStudioService({
-        workspaceKey: studioWorkspaceKey(repoRoot),
-        repoRoot,
+        workspaceKey: handle.workspaceKey,
+        repoRoot: handle.repoRoot,
         port: handle.port,
         token: handle.token,
         pid: process.pid,
