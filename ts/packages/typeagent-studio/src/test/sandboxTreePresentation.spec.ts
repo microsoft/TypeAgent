@@ -6,20 +6,11 @@ import assert from "node:assert/strict";
 import type { SandboxStatus } from "@typeagent/core/sandbox";
 import {
     buildSandboxAgentNodes,
-    buildSandboxDisconnectedNodes,
     buildSandboxRootNodes,
     formatHashFingerprint,
     formatHealth,
     formatSandboxState,
 } from "../sandboxTreePresentation.js";
-
-test("buildSandboxDisconnectedNodes returns a single service-not-connected row", () => {
-    const nodes = buildSandboxDisconnectedNodes();
-    assert.equal(nodes.length, 1);
-    assert.equal(nodes[0].kind, "empty");
-    assert.match(nodes[0].label, /not connected/i);
-    assert.equal(nodes[0].hasChildren, false);
-});
 
 function createSandbox(overrides: Partial<SandboxStatus> = {}): SandboxStatus {
     return {

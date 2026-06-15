@@ -4,7 +4,6 @@
 import * as vscode from "vscode";
 import {
     buildSandboxAgentNodes,
-    buildSandboxDisconnectedNodes,
     buildSandboxRootNodes,
     type SandboxTreeNode,
 } from "./sandboxTreePresentation.js";
@@ -18,7 +17,8 @@ export const SANDBOX_VIEW_ID = "typeagentStudioSandboxes";
  * Structuring/labelling lives in that vscode-free module; this class only
  * resolves children from a {@link SandboxSource} (the studio service channel)
  * and maps descriptors to `TreeItem`s. Sandboxes have no in-process fallback —
- * when the service is disconnected the view shows a single explanatory row.
+ * when the service is disconnected the view is empty (connection state is
+ * surfaced by the dedicated status-bar item, not as a row here).
  */
 export class SandboxTreeProvider
     implements vscode.TreeDataProvider<SandboxTreeNode>, vscode.Disposable
@@ -65,7 +65,9 @@ export class SandboxTreeProvider
     async getChildren(node?: SandboxTreeNode): Promise<SandboxTreeNode[]> {
         if (!node) {
             if (!this.connected) {
-                return buildSandboxDisconnectedNodes();
+                // Empty when disconnected — the status-bar item shows the
+                // connection state; it doesn't belong as a sandbox row.
+                return [];
             }
             return buildSandboxRootNodes(await this.source.listSandboxes());
         }

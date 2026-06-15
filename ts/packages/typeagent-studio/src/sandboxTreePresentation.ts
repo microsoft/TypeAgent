@@ -38,26 +38,6 @@ export interface SandboxTreeNode {
 }
 
 const EMPTY_ROOT_ID = "sandbox:empty";
-const DISCONNECTED_ROOT_ID = "sandbox:disconnected";
-
-/**
- * The Sandbox view reads only through the studio service channel (no in-process
- * fallback). When disconnected, show a single explanatory row instead of an
- * empty/“no sandboxes” state (which would wrongly imply none exist).
- */
-export function buildSandboxDisconnectedNodes(): SandboxTreeNode[] {
-    return [
-        {
-            kind: "empty",
-            id: DISCONNECTED_ROOT_ID,
-            label: "Studio service not connected",
-            description: "start the agent-server",
-            tooltip:
-                "Sandboxes run in the studio agent. Start an agent-server with the studio agent enabled; the view connects automatically.",
-            hasChildren: false,
-        },
-    ];
-}
 
 /** Build the top-level rows: one node per sandbox, or a single placeholder. */
 export function buildSandboxRootNodes(
