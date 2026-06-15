@@ -28,43 +28,433 @@ body {
   height: 100vh;
 }
 
-/* ── Status bar ──────────────────────────────────────────────── */
+/* Session bar */
 
-.status {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  flex-shrink: 0;
+.session-name-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
 }
 
-.status.connected {
+.session-name-label {
+  flex-shrink: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.session-name-btn {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 2px 4px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+.session-name-btn:hover {
+  color: var(--vscode-textLink-activeForeground);
+}
+
+.session-name-btn:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.session-name-btn.hidden {
+  display: none;
+}
+
+.session-rename-editor {
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-rename-editor.hidden {
+  display: none;
+}
+
+#session-rename-input {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+#session-rename-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+#session-rename-input.conflict {
+  border-color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.session-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-action-btn {
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--vscode-font-family);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.session-action-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 16px;
+  display: block;
+}
+
+.session-action-btn:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
+.session-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.session-status-summary {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+.session-status-summary.connected {
   background: var(--vscode-testing-iconPassed);
-  color: var(--vscode-editor-background);
+  color: var(--vscode-testing-iconPassed);
 }
 
-.status.connecting {
-  background: var(--vscode-editorWarning-foreground);
-  color: var(--vscode-editor-background);
-}
-
-.status.disconnected {
+.session-status-summary.disconnected {
   background: var(--vscode-errorForeground);
-  color: var(--vscode-editor-background);
+  color: var(--vscode-errorForeground);
 }
 
-.status.switching {
+.session-status-summary.switching,
+.session-status-summary.connecting {
   background: var(--vscode-editorWarning-foreground);
-  color: var(--vscode-editor-background);
-  font-style: italic;
+  color: var(--vscode-editorWarning-foreground);
 }
 
-/* When this chat is not the active one, mute the status ribbon so it's
+.session-status-summary.connected,
+.session-status-summary.disconnected,
+.session-status-summary.switching,
+.session-status-summary.connecting {
+  color: var(--vscode-editor-background);
+}
+
+.session-popover {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
+  background: var(
+    --vscode-dropdown-background,
+    var(--vscode-sideBar-background)
+  );
+}
+
+.session-popover.hidden {
+  display: none;
+}
+
+#session-new-name,
+#session-search-input {
+  min-width: 0;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-input-border);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border-radius: 4px;
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+#session-new-name:focus,
+#session-search-input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.session-create-popover {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.session-create-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-create-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--vscode-errorForeground, #f14c4c);
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.session-create-hint::before {
+  content: "x";
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.session-create-hint.hidden {
+  display: none;
+}
+
+.session-create-submit {
+  flex-shrink: 0;
+  height: 26px;
+  min-width: 26px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
+  cursor: pointer;
+  font-family: var(--vscode-font-family);
+  font-size: 14px;
+}
+
+.session-create-submit:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
+.session-create-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.session-search-popover {
+  flex-direction: column;
+  max-height: min(320px, calc(100vh - 96px));
+}
+
+.session-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.session-search-result-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  padding: 5px 6px;
+  text-align: left;
+  font-family: var(--vscode-font-family);
+}
+
+.session-search-result.hidden {
+  display: none;
+}
+
+.session-search-result:hover,
+.session-search-result:focus {
+  outline: none;
+  background: var(--vscode-list-hoverBackground);
+}
+
+.session-search-result.current {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.session-search-result-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-search-result-count,
+.session-search-empty {
+  flex-shrink: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.session-search-result.current .session-search-result-count {
+  color: inherit;
+}
+
+.session-search-result-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.session-search-result-actions.hidden {
+  display: none;
+}
+
+.session-search-item-btn {
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-search-item-btn:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
+.session-search-item-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.session-search-inline-rename {
+  min-width: 0;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-search-inline-rename.hidden {
+  display: none;
+}
+
+.session-search-inline-rename input {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+}
+
+.session-search-inline-rename input:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+.session-search-inline-rename input.conflict {
+  border-color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.session-search-empty {
+  padding: 6px;
+}
+
+/* When this chat is not the active one, mute the status summary so it's
    visually clear which chat the global commands / status bar refer to. */
-body.chat-inactive .status.connected,
-body.chat-inactive .status.connecting,
-body.chat-inactive .status.disconnected,
-body.chat-inactive .status.switching {
+body.chat-inactive .session-status-summary {
   background: var(--vscode-disabledForeground, #888);
   color: var(--vscode-editor-background);
   opacity: 0.7;

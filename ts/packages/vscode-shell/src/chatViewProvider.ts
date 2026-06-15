@@ -13,6 +13,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private _sidebarView?: vscode.WebviewView;
     private _onSidebarResolved?: (view: vscode.WebviewView) => void;
+    private _activateNewSessionInputWhenReady = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -22,6 +23,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     public onSidebarResolved(cb: (view: vscode.WebviewView) => void): void {
         this._onSidebarResolved = cb;
         if (this._sidebarView) cb(this._sidebarView);
+    }
+
+    public activateNewSessionInput(): void {
+        if (!this._sidebarView) {
+            this._activateNewSessionInputWhenReady = true;
+            return;
+        }
+        this._activateNewSessionInputWhenReady = false;
+        this._primaryBridge.activateNewSessionInput(this._sidebarView.webview);
     }
 
     public resolveWebviewView(
@@ -48,6 +58,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
 
         this._onSidebarResolved?.(webviewView);
+        if (this._activateNewSessionInputWhenReady) {
+            this.activateNewSessionInput();
+        }
     }
 
     /**
@@ -85,6 +98,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             "media",
             "chat.css",
         );
+        const codiconPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "media",
+            "codicon.css",
+        );
         // Append each bundle's mtime as a query string so VS Code's
         // webview cache doesn't serve a stale resource after a deploy.
         // The base URI is the same after a rebuild, so without this the
@@ -102,6 +120,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
         const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${stamp(scriptPath)}`;
         const styleUri = `${webview.asWebviewUri(stylePath)}?v=${stamp(stylePath)}`;
+        const codiconUri = `${webview.asWebviewUri(codiconPath)}?v=${stamp(codiconPath)}`;
         const nonce = getNonce();
 
         return /* html */ `<!DOCTYPE html>
@@ -115,12 +134,100 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                    script-src 'nonce-${nonce}';
                    img-src ${webview.cspSource} data:;
                    font-src ${webview.cspSource};">
+    <link href="${codiconUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
     <title>TypeAgent Chat</title>
 </head>
 <body>
     <div id="chat-container">
-        <div id="status-bar" class="status disconnected">Disconnected</div>
+        <div id="session-bar" class="session-name-bar">
+            <span class="session-name-label">Session</span>
+            <button
+                id="session-name-btn"
+                type="button"
+                class="session-name-btn"
+                title="Search conversations"
+                aria-label="Search conversations"
+            >
+                Conversation
+            </button>
+            <div id="session-rename-editor" class="session-rename-editor hidden">
+                <input
+                    id="session-rename-input"
+                    type="text"
+                    title="Rename conversation"
+                    aria-label="Rename conversation"
+                />
+                <button
+                    id="session-rename-save-btn"
+                    type="button"
+                    class="session-action-btn"
+                    title="Save conversation name"
+                    aria-label="Save conversation name"
+                >
+                    <span class="codicon codicon-check session-action-icon" aria-hidden="true"></span>
+                </button>
+                <button
+                    id="session-rename-cancel-btn"
+                    type="button"
+                    class="session-action-btn"
+                    title="Cancel rename"
+                    aria-label="Cancel rename"
+                >
+                    <span class="codicon codicon-close session-action-icon" aria-hidden="true"></span>
+                </button>
+            </div>
+            <span id="session-status-summary" class="session-status-summary disconnected">Disconnected</span>
+            <div class="session-actions" aria-label="Session actions">
+                <button
+                    id="session-rename-btn"
+                    type="button"
+                    class="session-action-btn"
+                    title="Rename conversation"
+                    aria-label="Rename conversation"
+                >
+                    <span class="codicon codicon-edit session-action-icon" aria-hidden="true"></span>
+                </button>
+                <button
+                    id="session-delete-btn"
+                    type="button"
+                    class="session-action-btn"
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                >
+                    <span class="codicon codicon-trash session-action-icon" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div id="session-create-popover" class="session-popover session-create-popover hidden">
+                <div class="session-create-input-wrapper">
+                    <input
+                        id="session-new-name"
+                        type="text"
+                        placeholder="New session name"
+                        title="New session name"
+                    />
+                    <button
+                        id="session-create-btn"
+                        type="button"
+                        class="session-create-submit"
+                        title="Create conversation"
+                        aria-label="Create conversation"
+                    >
+                        +
+                    </button>
+                </div>
+                <div id="session-create-hint" class="session-create-hint hidden">Session already exists</div>
+            </div>
+            <div id="session-search-popover" class="session-popover session-search-popover hidden">
+                <input
+                    id="session-search-input"
+                    type="text"
+                    placeholder="Search conversations"
+                    title="Search conversations"
+                />
+                <div id="session-search-results" class="session-search-results" role="listbox"></div>
+            </div>
+        </div>
         <div id="chat-root"></div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
