@@ -1,6 +1,6 @@
 # TypeAgent.NET
 
-This **sample code** is in early stage experimental developement with **frequent changes**. 
+This **sample code** is in early stage experimental development with **frequent changes**. 
 
 Working towards .NET versions of the following **TypeAgent** packages:
 * [KnowPro](../../ts/packages/knowPro/README.md)
