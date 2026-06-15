@@ -73,7 +73,8 @@ async function startStubServer(): Promise<{
 async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
     const start = Date.now();
     while (!predicate()) {
-        if (Date.now() - start > timeoutMs) throw new Error("waitFor timed out");
+        if (Date.now() - start > timeoutMs)
+            throw new Error("waitFor timed out");
         await new Promise((r) => setTimeout(r, 10));
     }
 }

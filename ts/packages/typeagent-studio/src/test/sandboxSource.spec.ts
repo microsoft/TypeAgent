@@ -18,9 +18,10 @@ async function startStubServer() {
     server.on("connection", (socket) => {
         let push: (e: StudioEvent) => void = () => {};
         const handlers = stubInvokeHandlers({
-            listSandboxes: async () => [
-                { id: "studio-default", agents: [], state: "running" },
-            ] as never,
+            listSandboxes: async () =>
+                [
+                    { id: "studio-default", agents: [], state: "running" },
+                ] as never,
             startSandbox: async (_repoRoot, options) =>
                 ({
                     id: options?.id ?? "studio-default",

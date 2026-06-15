@@ -24,13 +24,13 @@ test("parseWebviewMessage rejects malformed / hostile input", () => {
     assert.equal(parseWebviewMessage("ready"), undefined);
     assert.equal(parseWebviewMessage({ type: "bogus" }), undefined);
     // run requires both a numeric requestId and a string agent.
-    assert.equal(parseWebviewMessage({ type: "run", agent: "player" }), undefined);
+    assert.equal(
+        parseWebviewMessage({ type: "run", agent: "player" }),
+        undefined,
+    );
     assert.equal(
         parseWebviewMessage({ type: "run", requestId: "1", agent: "player" }),
         undefined,
     );
-    assert.equal(
-        parseWebviewMessage({ type: "run", requestId: 1 }),
-        undefined,
-    );
+    assert.equal(parseWebviewMessage({ type: "run", requestId: 1 }), undefined);
 });

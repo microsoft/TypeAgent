@@ -77,7 +77,10 @@ window.addEventListener("message", (event: MessageEvent) => {
             }
             break;
         case "error":
-            if (msg.requestId === undefined || msg.requestId === latestRequestId) {
+            if (
+                msg.requestId === undefined ||
+                msg.requestId === latestRequestId
+            ) {
                 setStatus(msg.message);
                 setControlsEnabled(true);
             }

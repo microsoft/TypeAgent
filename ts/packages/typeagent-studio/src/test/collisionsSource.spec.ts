@@ -86,7 +86,10 @@ test("StudioServiceCollisionsSource delegates scan/clear and routes events", asy
         assert.equal(await source.clearCollisions(), 0);
 
         const start = Date.now();
-        while ((collisions < 1 || agentLoads < 1) && Date.now() - start < 2000) {
+        while (
+            (collisions < 1 || agentLoads < 1) &&
+            Date.now() - start < 2000
+        ) {
             await new Promise((r) => setTimeout(r, 10));
         }
         assert.equal(collisions, 1, "collision.detected routed");

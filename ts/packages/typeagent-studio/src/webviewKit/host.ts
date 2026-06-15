@@ -41,7 +41,11 @@ export class WebviewKitPanel {
             undefined,
             this.disposables,
         );
-        this.panel.onDidDispose(() => this.handleDispose(), undefined, this.disposables);
+        this.panel.onDidDispose(
+            () => this.handleDispose(),
+            undefined,
+            this.disposables,
+        );
     }
 
     /** Create the panel, or reveal the existing one for this `viewType`. */

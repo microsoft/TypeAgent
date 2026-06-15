@@ -30,9 +30,7 @@ test("buildWebviewHtml emits a strict, nonce-locked CSP", () => {
     assert.ok(html.includes("base-uri 'none'"));
     assert.ok(html.includes("form-action 'none'"));
     // Styles from the webview origin or the nonce.
-    assert.ok(
-        html.includes("style-src vscode-resource://x 'nonce-N0NCE'"),
-    );
+    assert.ok(html.includes("style-src vscode-resource://x 'nonce-N0NCE'"));
     // The script tag carries the nonce and the resolved bundle URI.
     assert.ok(
         html.includes(

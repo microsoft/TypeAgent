@@ -816,8 +816,8 @@ identity** (a second launcher discovers and attaches). No agent-hosted fallback
     workspace at startup and reject RPCs whose `repoRoot` canonicalizes elsewhere
     (today the service accepts arbitrary `repoRoot`).
   - **Lifecycle:** move single-instance ownership into the service (lifetime lock
-    + heartbeat/status) and add idle shutdown so no orphan/duplicate services when
-    the agent-server is down or windows reload.
+    - heartbeat/status) and add idle shutdown so no orphan/duplicate services when
+      the agent-server is down or windows reload.
   - **Security:** the registry is loopback + origin-gated but **token-less**;
     `announce` is validated (shape/version/workspaceKey) but a same-user local
     process is trusted. Add verify-back / authenticated announce before broader
@@ -825,8 +825,8 @@ identity** (a second launcher discovers and attaches). No agent-hosted fallback
   - **Cloud transport seam:** evolve loopback/port/token-file assumptions behind a
     `ServiceTarget { endpoint, auth, workspaceKey }` local-transport provider.
 - Exit: the runtime no longer lives in the `studio` agent; the extension launches
-  + connects to the workspace service; `@studio` forwards to it (honest "not
-  running — open the workspace or run `typeagent-studio serve`" when absent).
+  - connects to the workspace service; `@studio` forwards to it (honest "not
+    running — open the workspace or run `typeagent-studio serve`" when absent).
 
 ### P-2 J1 vertical (weeks 4–6)
 

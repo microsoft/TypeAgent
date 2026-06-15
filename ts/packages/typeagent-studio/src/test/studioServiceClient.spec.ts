@@ -143,9 +143,15 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
         });
     try {
         // Correct token → connects and round-trips.
-        const ok = await StudioServiceClient.connect({ endpoint, token: TOKEN });
+        const ok = await StudioServiceClient.connect({
+            endpoint,
+            token: TOKEN,
+        });
         assert.ok(ok, "should connect with the correct token");
-        assert.equal((await ok!.getStudioInfo()).repoRootInfo.repoRoot, "/repo/ts");
+        assert.equal(
+            (await ok!.getStudioInfo()).repoRootInfo.repoRoot,
+            "/repo/ts",
+        );
         ok!.close();
 
         // Wrong token → upgrade rejected → undefined (graceful).
@@ -158,4 +164,3 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
         await close();
     }
 });
-

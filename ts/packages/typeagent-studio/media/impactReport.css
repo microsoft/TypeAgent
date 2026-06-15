@@ -2,101 +2,101 @@
    Licensed under the MIT License. */
 
 body {
-    font-family: var(--vscode-font-family);
-    font-size: var(--vscode-font-size);
-    color: var(--vscode-foreground);
-    background: var(--vscode-editor-background);
-    padding: 12px;
-    margin: 0;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  padding: 12px;
+  margin: 0;
 }
 
 .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .toolbar button {
-    color: var(--vscode-button-foreground);
-    background: var(--vscode-button-background);
-    border: none;
-    padding: 4px 12px;
-    border-radius: 2px;
-    cursor: pointer;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: none;
+  padding: 4px 12px;
+  border-radius: 2px;
+  cursor: pointer;
 }
 
 .toolbar button:hover:not(:disabled) {
-    background: var(--vscode-button-hoverBackground);
+  background: var(--vscode-button-hoverBackground);
 }
 
 .toolbar button:disabled {
-    opacity: 0.5;
-    cursor: default;
+  opacity: 0.5;
+  cursor: default;
 }
 
 .agent-select {
-    color: var(--vscode-dropdown-foreground);
-    background: var(--vscode-dropdown-background);
-    border: 1px solid var(--vscode-dropdown-border);
-    padding: 3px 6px;
-    border-radius: 2px;
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border);
+  padding: 3px 6px;
+  border-radius: 2px;
 }
 
 .status {
-    color: var(--vscode-descriptionForeground);
-    margin-left: auto;
+  color: var(--vscode-descriptionForeground);
+  margin-left: auto;
 }
 
 .summary {
-    font-weight: 600;
-    margin-bottom: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 13px;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
 }
 
 th {
-    text-align: left;
-    color: var(--vscode-descriptionForeground);
-    border-bottom: 1px solid var(--vscode-panel-border);
-    padding: 4px 8px;
-    font-weight: 600;
+  text-align: left;
+  color: var(--vscode-descriptionForeground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding: 4px 8px;
+  font-weight: 600;
 }
 
 td {
-    padding: 3px 8px;
-    border-bottom: 1px solid var(--vscode-panel-border);
-    vertical-align: top;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  vertical-align: top;
 }
 
 td.detail {
-    color: var(--vscode-descriptionForeground);
-    white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
 }
 
 .status-equal {
-    color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
 }
 
 .status-changed {
-    color: var(--vscode-charts-yellow);
+  color: var(--vscode-charts-yellow);
 }
 
 .status-new-match {
-    color: var(--vscode-charts-blue);
+  color: var(--vscode-charts-blue);
 }
 
 .status-lost-match {
-    color: var(--vscode-errorForeground);
+  color: var(--vscode-errorForeground);
 }
 
 .truncation {
-    color: var(--vscode-descriptionForeground);
-    font-style: italic;
-    margin-top: 8px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  margin-top: 8px;
 }

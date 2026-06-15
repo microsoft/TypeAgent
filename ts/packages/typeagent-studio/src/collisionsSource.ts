@@ -71,4 +71,3 @@ export class StudioServiceCollisionsSource implements CollisionsSource {
         });
     }
 }
-
