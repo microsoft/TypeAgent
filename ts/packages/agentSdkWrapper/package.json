@@ -40,7 +40,7 @@
     "agent-cache": "workspace:*",
     "coder-wrapper": "workspace:*",
     "dotenv": "^16.4.5",
-    "form-data": "^4.0.0",
+    "form-data": "^4.0.6",
     "mic": "^2.1.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "openai": "^4.73.0",
