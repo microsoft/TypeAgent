@@ -162,6 +162,15 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("vscode-shell.newSession", () =>
             activeChat?.bridge.newSession(),
         ),
+        vscode.commands.registerCommand(
+            "vscode-shell.newSidebarSession",
+            async () => {
+                await vscode.commands.executeCommand(
+                    "vscode-shell.chatView.focus",
+                );
+                provider.activateNewSessionInput();
+            },
+        ),
         vscode.commands.registerCommand("vscode-shell.renameSession", () =>
             activeChat?.bridge.renameCurrentSession(),
         ),

@@ -10,7 +10,7 @@ import {
     createSemanticIndex,
 } from "typeagent";
 import { CodeBlock, StoredCodeBlock } from "./code.js";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import path from "path";
 import { CodeDocumentation } from "./codeDocSchema.js";
 

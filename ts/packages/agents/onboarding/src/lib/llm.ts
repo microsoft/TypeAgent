@@ -10,7 +10,7 @@
 // model. When omitted the model is determined by the OPENAI_MODEL /
 // AZURE_OPENAI_CHAT_MODEL_DEPLOYMENT_NAME environment variable.
 
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // ---------------------------------------------------------------------------

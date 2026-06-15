@@ -14,7 +14,7 @@ import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { GeneratedImage, openai } from "aiclient";
+import { GeneratedImage, openai } from "@typeagent/aiclient";
 import { randomBytes, randomUUID } from "crypto";
 import {
     CreateImageAction,

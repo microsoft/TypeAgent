@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { TraceEvent } from "action-grammar";
+import type { TraceEvent } from "@typeagent/action-grammar";
 import type { GrammarDebugInfo, MatchTrace, SourceLocation } from "./types.js";
 
 export interface FormatTraceOptions {

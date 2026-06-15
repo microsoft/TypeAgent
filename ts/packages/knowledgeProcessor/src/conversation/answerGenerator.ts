@@ -9,7 +9,7 @@ import {
     rewriteText,
 } from "typeagent";
 import { PromptSection } from "typechat";
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
 import { SearchResponse, TopKSettings } from "./searchResponse.js";

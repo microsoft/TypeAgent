@@ -31,7 +31,13 @@ import {
     PendingInteractionResponse,
     RequestId,
 } from "agent-dispatcher";
-import { awaitCommand } from "@typeagent/dispatcher-types";
+import {
+    awaitCommand,
+    QueueCancelReason,
+    QueueStateMirror,
+    type QueuedRequest,
+    type QueueSnapshot,
+} from "@typeagent/dispatcher-types";
 import {
     createCompletionController,
     type CompletionController,
@@ -267,6 +273,188 @@ export function createChatPanelClient(
     // another client answers or the server cancels the interaction.
     const activeInteractions = new Map<string, AbortController>();
 
+    // ─── Per-bubble queue chips ────────────────────────────────────────
+    // Mirrors `vscode-shell/src/webview/main.ts`. Drives chat-ui's chip
+    // surface off the dispatcher's four queue ClientIO events + a local
+    // QueueStateMirror.
+    //
+    // Two cancel sets, intentionally separate:
+    //   * cancelledRequests — drops late setDisplay stragglers.
+    //   * cancelledRendered — one-shot claim to avoid double-stamping
+    //     the "⚠ Cancelled" affordance.
+    // Both wiped on clear / conversationChanged.
+    const queueMirror = new QueueStateMirror();
+    const cancelledRequests = new Set<string>();
+    const cancelledRendered = new Set<string>();
+
+    // Chips deferred until their bubble materializes. serverId is the
+    // canonical id sent on × click (targetRid may BE the serverId for
+    // peer-originated entries).
+    const pendingQueueStatus = new Map<
+        string,
+        { status: "queued" | "running"; serverId: string }
+    >();
+
+    // Local entries key off clientRequestId; peer entries fall back to
+    // the server UUID (same key as addRemoteUserMessage).
+    function chipTargetRid(entry: QueuedRequest): string {
+        return typeof entry.clientRequestId === "string"
+            ? entry.clientRequestId
+            : entry.requestId;
+    }
+
+    function markCancelled(...rids: Array<string | undefined>): void {
+        for (const rid of rids) {
+            if (rid) cancelledRequests.add(rid);
+        }
+    }
+
+    function isCancelledRequest(rid: string | undefined): boolean {
+        return rid !== undefined && cancelledRequests.has(rid);
+    }
+
+    // Two-pass so claim("X","X") doesn't have arg 1's add() trip arg 2's
+    // membership check. Returns true on first claim.
+    function claimCancelledRender(...rids: Array<string | undefined>): boolean {
+        let alreadyClaimed = false;
+        let anyValid = false;
+        for (const rid of rids) {
+            if (!rid) continue;
+            anyValid = true;
+            if (cancelledRendered.has(rid)) alreadyClaimed = true;
+        }
+        for (const rid of rids) {
+            if (rid) cancelledRendered.add(rid);
+        }
+        return anyValid && !alreadyClaimed;
+    }
+
+    function materializeQueueBubbleIfMissing(
+        entry: QueuedRequest,
+        targetRid: string,
+    ): void {
+        if (chatPanel.hasUserMessage(targetRid)) return;
+        if (entry.text) {
+            chatPanel.addRemoteUserMessage(entry.text, targetRid);
+        }
+    }
+
+    async function cancelByServerId(serverId: string): Promise<void> {
+        const d = dispatcher;
+        if (!d) return;
+        try {
+            await d.cancelCommand(serverId);
+        } catch (e) {
+            console.warn("cancelCommand failed for", serverId, e);
+        }
+    }
+
+    async function promoteByServerId(serverId: string): Promise<void> {
+        const d = dispatcher;
+        if (!d) return;
+        try {
+            await d.promoteCommand(serverId);
+        } catch (e) {
+            console.warn("promoteCommand failed for", serverId, e);
+        }
+    }
+
+    // Stash when the bubble isn't there yet; setUserRequest flushes.
+    function applyQueueChip(
+        targetRid: string,
+        serverId: string,
+        status: "queued" | "running",
+    ): void {
+        if (!chatPanel.hasUserMessage(targetRid)) {
+            pendingQueueStatus.set(targetRid, { status, serverId });
+            return;
+        }
+        const onCancel =
+            status === "queued"
+                ? () => void cancelByServerId(serverId)
+                : undefined;
+        const onPromote =
+            status === "queued"
+                ? () => void promoteByServerId(serverId)
+                : undefined;
+        chatPanel.setUserBubbleQueueStatus(
+            targetRid,
+            status,
+            onCancel,
+            onPromote,
+        );
+        pendingQueueStatus.delete(targetRid);
+    }
+
+    function clearQueueChip(targetRid: string): void {
+        pendingQueueStatus.delete(targetRid);
+        chatPanel.setUserBubbleQueueStatus(targetRid, null);
+    }
+
+    // Snapshots are authoritative; fine-grained events are hints.
+    function reconcileQueueChips(
+        prev: QueueSnapshot | undefined,
+        next: QueueSnapshot | undefined,
+    ): void {
+        const live = new Set<string>();
+        if (next?.running) {
+            const targetRid = chipTargetRid(next.running);
+            materializeQueueBubbleIfMissing(next.running, targetRid);
+            live.add(targetRid);
+            applyQueueChip(targetRid, next.running.requestId, "running");
+        }
+        for (const entry of next?.queued ?? []) {
+            const targetRid = chipTargetRid(entry);
+            materializeQueueBubbleIfMissing(entry, targetRid);
+            live.add(targetRid);
+            applyQueueChip(targetRid, entry.requestId, "queued");
+        }
+        const prevIds = new Set<string>();
+        if (prev?.running) prevIds.add(chipTargetRid(prev.running));
+        for (const e of prev?.queued ?? []) prevIds.add(chipTargetRid(e));
+        for (const id of prevIds) {
+            if (live.has(id)) continue;
+            clearQueueChip(id);
+        }
+        for (const id of Array.from(pendingQueueStatus.keys())) {
+            if (!live.has(id)) pendingQueueStatus.delete(id);
+        }
+    }
+
+    function resetQueueChipState(snapshot?: QueueSnapshot): void {
+        for (const id of Array.from(pendingQueueStatus.keys())) {
+            chatPanel.setUserBubbleQueueStatus(id, null);
+        }
+        pendingQueueStatus.clear();
+        cancelledRequests.clear();
+        cancelledRendered.clear();
+        const prev = queueMirror.snapshot;
+        queueMirror.reset(snapshot);
+        if (snapshot) reconcileQueueChips(prev, snapshot);
+    }
+
+    // Driven by double-Escape. Reads from the local mirror so a
+    // no-snapshot client is a silent no-op.
+    async function cancelAllQueuedAndRunning(): Promise<void> {
+        const snap = queueMirror.snapshot;
+        const d = dispatcher;
+        if (!d || !snap) return;
+        const ids: string[] = [];
+        if (snap.running) ids.push(snap.running.requestId);
+        for (const entry of snap.queued) ids.push(entry.requestId);
+        if (ids.length === 0) return;
+        await Promise.all(
+            ids.map(async (id) => {
+                try {
+                    await d.cancelCommand(id);
+                } catch (e) {
+                    console.warn("cancelCommand failed for", id, e);
+                }
+            }),
+        );
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     // Template-editor services backed by the live dispatcher (read the
     // `dispatcher` closure each call so it stays reconnect-safe).
     const templateServices: TemplateEditServices = {
@@ -423,18 +611,32 @@ export function createChatPanelClient(
                         undefined,
                         requestId,
                     );
-                    chatPanel.completeRequest(requestId, mapResult(result));
-                } catch (e: any) {
-                    chatPanel.addSystemMessage(
-                        `Error: ${e?.message ?? String(e)}`,
+                    const mapped = mapResult(result);
+                    // Dedupe with queueRequestCancelled to avoid
+                    // double-stamping the affordance.
+                    const cancelled =
+                        mapped?.cancelled === true &&
+                        claimCancelledRender(requestId);
+                    chatPanel.completeRequest(
+                        requestId,
+                        mapped ? { ...mapped, cancelled } : undefined,
                     );
+                    clearQueueChip(requestId);
+                } catch (e: any) {
+                    // Drop rejection-from-cancel stragglers (affordance
+                    // already painted by queueRequestCancelled).
+                    if (!isCancelledRequest(requestId)) {
+                        chatPanel.addSystemMessage(
+                            `Error: ${e?.message ?? String(e)}`,
+                        );
+                    }
+                    clearQueueChip(requestId);
                 } finally {
                     chatPanel.setIdle();
                 }
             })();
         },
         onCancel: (requestId) => {
-            // requestId is the client-assigned id passed to submitCommand.
             dispatcher?.cancelCommandByClientId(requestId);
         },
         onFeedback: async (requestId, rating, category, comment, ctx) => {
@@ -459,6 +661,51 @@ export function createChatPanelClient(
     // Apply the initial theme from current settings (subsequent changes
     // flow through updateSettings / the dark-mode toggle).
     applyDarkMode(settings.ui.darkMode);
+
+    // Document-level Escape: single Esc cancels active request; two
+    // within DOUBLE_ESCAPE_WINDOW_MS cancel ALL queued + running.
+    // Honors e.defaultPrevented so we don't double-count when chat-ui's
+    // input handler already consumed the keystroke.
+    const DOUBLE_ESCAPE_WINDOW_MS = 1000;
+    let lastEscapeTime = 0;
+    document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if (e.defaultPrevented) {
+            const now = Date.now();
+            const isDouble = now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+            lastEscapeTime = now;
+            if (isDouble) {
+                lastEscapeTime = 0;
+                void cancelAllQueuedAndRunning();
+            }
+            return;
+        }
+        const now = Date.now();
+        const isDouble = now - lastEscapeTime <= DOUBLE_ESCAPE_WINDOW_MS;
+        lastEscapeTime = now;
+        const activeClientId = chatPanel.getActiveRequestId();
+        const fallbackServerId = queueMirror.snapshot?.running?.requestId;
+        const activeId = activeClientId ?? fallbackServerId;
+        if (activeId) {
+            e.preventDefault();
+            try {
+                // Prefer clientId path; fall back to server-id for
+                // peer-originated running requests.
+                if (activeClientId !== undefined) {
+                    dispatcher?.cancelCommandByClientId(activeClientId);
+                } else {
+                    void dispatcher?.cancelCommand(activeId);
+                }
+            } catch {
+                // Channel may be gone (server killed).
+            }
+        }
+        if (isDouble) {
+            lastEscapeTime = 0;
+            e.preventDefault();
+            void cancelAllQueuedAndRunning();
+        }
+    });
 
     // Recognized speech is fed into the input by ChatPanel itself (it
     // registers speechProvider.onResult internally); no wiring needed here.
@@ -514,21 +761,30 @@ export function createChatPanelClient(
 
     // --- ClientIO --------------------------------------------------------
     const clientIO: ClientIO = {
-        clear: () => chatPanel.clear(),
+        clear: () => {
+            chatPanel.clear();
+            resetQueueChipState();
+        },
         exit: () => window.close(),
         shutdown: () => window.close(),
         setUserRequest: (requestId, command) => {
             afterReplay(() => {
                 const rid = ridStr(requestId);
-                // Local requests already rendered their bubble at send time;
-                // only render peer/replayed requests we haven't seen.
                 if (rid && !chatPanel.hasUserMessage(rid)) {
                     chatPanel.addUserMessage(command, rid);
+                }
+                // Flush any chip stashed by a `requestQueued` race.
+                if (rid) {
+                    const pending = pendingQueueStatus.get(rid);
+                    if (pending) {
+                        applyQueueChip(rid, pending.serverId, pending.status);
+                    }
                 }
             });
         },
         setDisplayInfo: (requestId, source, _actionIndex, action) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
                 chatPanel.setDisplayInfo(
                     source,
                     undefined,
@@ -539,6 +795,7 @@ export function createChatPanelClient(
         },
         setDisplay: (message) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(message.requestId))) return;
                 if (message.kind === "toast" || message.kind === "inline") {
                     chatPanel.showInline(message.message, message.source);
                     return;
@@ -553,6 +810,7 @@ export function createChatPanelClient(
         },
         appendDisplay: (message, mode) => {
             afterReplay(() => {
+                if (isCancelledRequest(ridStr(message.requestId))) return;
                 if (message.kind === "toast" || message.kind === "inline") {
                     chatPanel.showInline(message.message, message.source);
                     return;
@@ -770,10 +1028,82 @@ export function createChatPanelClient(
         onUserHide: () => {
             // Hidden-state mirroring across peers is deferred.
         },
-        requestQueued: () => {},
-        requestStarted: () => {},
-        requestCancelled: () => {},
-        queueStateChanged: () => {},
+        requestQueued: (entry, version) => {
+            const result = queueMirror.applyQueued(entry, version);
+            if (!result.admitted) return;
+            const targetRid = chipTargetRid(entry);
+            // Mirror updates sync (version watermark); DOM defers until
+            // replay finishes (replayHistory clears userMessageById).
+            afterReplay(() => {
+                materializeQueueBubbleIfMissing(entry, targetRid);
+                applyQueueChip(targetRid, entry.requestId, "queued");
+            });
+        },
+        requestStarted: (entry, version) => {
+            const result = queueMirror.applyStarted(entry, version);
+            if (!result.admitted) return;
+            const previousRunningTarget = result.previousRunning
+                ? chipTargetRid(result.previousRunning)
+                : undefined;
+            const targetRid = chipTargetRid(entry);
+            afterReplay(() => {
+                if (previousRunningTarget) {
+                    clearQueueChip(previousRunningTarget);
+                }
+                materializeQueueBubbleIfMissing(entry, targetRid);
+                applyQueueChip(targetRid, entry.requestId, "running");
+            });
+        },
+        requestCancelled: (
+            requestId: string,
+            _reason: QueueCancelReason,
+            version: number,
+        ) => {
+            // Capture target BEFORE applyCancelled mutates the snapshot.
+            const snapBefore = queueMirror.snapshot;
+            let preTargetRid: string | undefined;
+            if (snapBefore?.running?.requestId === requestId) {
+                preTargetRid = chipTargetRid(snapBefore.running);
+            } else {
+                const queued = snapBefore?.queued.find(
+                    (e) => e.requestId === requestId,
+                );
+                if (queued) preTargetRid = chipTargetRid(queued);
+            }
+            // Mark sync (not behind afterReplay) so display guards see it
+            // immediately. Stale-version cancels still mark — user intent
+            // is authoritative.
+            markCancelled(requestId, preTargetRid);
+            const result = queueMirror.applyCancelled(requestId, version);
+            const targetRid = preTargetRid ?? requestId;
+            afterReplay(() => {
+                // Clear chip even on stale versions.
+                clearQueueChip(targetRid);
+                if (targetRid !== requestId) clearQueueChip(requestId);
+                if (!result.admitted) return;
+                // No bubble = peer-originated queued item cancelled
+                // before our setUserRequest fired; skip the affordance.
+                if (!chatPanel.hasUserMessage(targetRid)) {
+                    if (chatPanel.getActiveRequestId() === targetRid) {
+                        chatPanel.setIdle();
+                    }
+                    return;
+                }
+                // Dedupe against awaitCommand's completeRequest path.
+                if (claimCancelledRender(requestId, preTargetRid)) {
+                    chatPanel.completeRequest(targetRid, { cancelled: true });
+                }
+                if (chatPanel.getActiveRequestId() === targetRid) {
+                    chatPanel.setIdle();
+                }
+            });
+        },
+        queueStateChanged: (snapshot) => {
+            const result = queueMirror.applyQueueStateChanged(snapshot);
+            if (!result.admitted) return;
+            const previous = result.previous;
+            afterReplay(() => reconcileQueueChips(previous, snapshot));
+        },
     };
 
     function handleShowNotifications(data: NotifyCommands) {
@@ -912,8 +1242,19 @@ export function createChatPanelClient(
     // --- Client ----------------------------------------------------------
     const client: Client = {
         clientIO,
-        dispatcherInitialized(d: Dispatcher, _snapshot, cutoffSeq): void {
+        dispatcherInitialized(
+            d: Dispatcher,
+            initialQueueSnapshot: QueueSnapshot | undefined,
+            cutoffSeq: number | undefined,
+        ): void {
             dispatcher = d;
+            // Seed mirror sync; defer DOM reconcile until replay finishes.
+            if (initialQueueSnapshot) {
+                const prev = queueMirror.snapshot;
+                queueMirror.reset(initialQueueSnapshot);
+                const snapshot = initialQueueSnapshot;
+                afterReplay(() => reconcileQueueChips(prev, snapshot));
+            }
             void replayDisplayHistory(cutoffSeq);
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
@@ -990,19 +1331,46 @@ export function createChatPanelClient(
         systemNotification(message: string): void {
             chatPanel.showToast(message, "shell");
         },
-        conversationChanged(): void {
+        conversationChanged(
+            _conversationId: string,
+            _name: string,
+            queueSnapshot?: QueueSnapshot,
+        ): void {
             chatPanel.clear();
+            // Reset state sync (watermark must be right for events that
+            // arrive during the new conversation's replay). Defer DOM
+            // until after replay — replayHistory wipes userMessageById
+            // at the end, orphaning any bubble materialized here.
+            pendingQueueStatus.clear();
+            cancelledRequests.clear();
+            cancelledRendered.clear();
+            const prev = queueMirror.snapshot;
+            queueMirror.reset(queueSnapshot);
+            // Re-arm replay gate so display events during the new
+            // conversation's history fetch also buffer.
+            replayDone = false;
+            if (queueSnapshot) {
+                const snapshot = queueSnapshot;
+                afterReplay(() => reconcileQueueChips(prev, snapshot));
+            }
             void replayDisplayHistory();
         },
         markHistoryEntries(): void {
             // Structured history replay marks entries; no-op here.
         },
         requestCompleted(clientRequestId: string, result: any): void {
-            // A main-process-dispatched request (e.g. the startup @greeting)
-            // finished. Finalize its metrics bubble — these requests never
-            // flow through the renderer's onSend → completeRequest path.
+            // Main-process-dispatched requests (e.g. startup @greeting)
+            // bypass the renderer's onSend → completeRequest path.
             afterReplay(() => {
-                chatPanel.completeRequest(clientRequestId, mapResult(result));
+                const mapped = mapResult(result);
+                const cancelled =
+                    mapped?.cancelled === true &&
+                    claimCancelledRender(clientRequestId);
+                chatPanel.completeRequest(
+                    clientRequestId,
+                    mapped ? { ...mapped, cancelled } : undefined,
+                );
+                clearQueueChip(clientRequestId);
             });
         },
         demoStateChanged(state: "running" | "paused" | "idle"): void {

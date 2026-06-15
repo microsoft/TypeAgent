@@ -8,7 +8,7 @@ import {
     compileGrammarToNFA,
     loadGrammarRulesNoThrow,
     matchNFA,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
 // Resolve the .agr source from the package root regardless of where the
 // compiled spec runs from.  __dirname is dist/test/, so go up two levels

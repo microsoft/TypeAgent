@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
-import { needsSeparatorInAutoMode } from "action-grammar/completion";
+import { needsSeparatorInAutoMode } from "@typeagent/action-grammar/completion";
 import {
     AfterWildcard,
     CompletionDirection,

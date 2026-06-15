@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ReasoningTrace } from "./tracing/types.js";
 import registerDebug from "debug";
 
@@ -286,6 +287,7 @@ Generate a corrected version. Return ONLY the JSON object, no markdown or explan
             options: {
                 model: RECIPE_MODEL,
                 maxTurns: 1,
+                ...claudeExecutableOption(),
             },
         });
 

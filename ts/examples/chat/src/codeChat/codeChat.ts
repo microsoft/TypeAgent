@@ -28,7 +28,7 @@ import {
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import chalk from "chalk";
 import { pathToFileURL } from "url";
 import {

@@ -16,7 +16,10 @@ import {
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import chalk from "chalk";
 import { getDefaultExplainerName } from "agent-cache";
-import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
+import {
+    getChatModelMaxConcurrency,
+    getChatModelNames,
+} from "@typeagent/aiclient";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 
 const cacheFactory = getCacheFactory();

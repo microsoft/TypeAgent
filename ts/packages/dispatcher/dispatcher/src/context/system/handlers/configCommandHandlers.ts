@@ -24,7 +24,7 @@ import {
     getRuntimeConfig,
     PROVIDER_MODES,
     type ProviderMode,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { SessionOptions } from "../../session.js";
 import chalk from "chalk";
 import {

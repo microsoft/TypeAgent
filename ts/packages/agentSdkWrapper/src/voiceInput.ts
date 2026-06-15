@@ -11,7 +11,7 @@ import {
     AzureTokenScopes,
     createAzureTokenProvider,
     type AuthTokenProvider,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { AudioCapture } from "./audioCapture.js";
 
 export type TranscriptionProvider =

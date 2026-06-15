@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseGrammarRules, writeGrammarRules } from "action-grammar";
-import type { RuleDefinition } from "action-grammar";
+import {
+    parseGrammarRules,
+    writeGrammarRules,
+} from "@typeagent/action-grammar";
+import type { RuleDefinition } from "@typeagent/action-grammar";
 import type {
     LoadedGrammar,
     GrammarDiff,

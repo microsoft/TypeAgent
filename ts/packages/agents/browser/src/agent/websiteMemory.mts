@@ -19,7 +19,7 @@ import {
 } from "./searchWebMemories.mjs";
 import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { docPartsFromHtml } from "conversation-memory";
 import {

@@ -11,7 +11,7 @@ import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc
 import { app, ipcMain, net } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     indexesOfNearest,
     NormalizedEmbedding,

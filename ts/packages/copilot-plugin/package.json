@@ -13,8 +13,9 @@
   "type": "module",
   "scripts": {
     "build": "npm run tsc && npm run bundle",
+    "build:exe": "node scripts/build-mcp-exe.mjs",
     "bundle": "node scripts/bundle.mjs",
-    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "clean": "rimraf --glob dist dist-exe *.tsbuildinfo *.done.build.log",
     "install:global": "node scripts/install-plugin.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
@@ -36,7 +37,8 @@
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^20.10.0",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
+    "postject": "1.0.0-alpha.6",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   }

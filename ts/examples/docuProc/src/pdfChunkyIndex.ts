@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
+import { openai, ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import * as knowLib from "knowledge-processor";
 import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 

@@ -25,15 +25,15 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
-    "websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
@@ -42,7 +42,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

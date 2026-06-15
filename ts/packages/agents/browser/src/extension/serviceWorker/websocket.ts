@@ -101,12 +101,18 @@ async function resolveBrowserEndpoint(
         url: agentServerUrl,
     });
     if (result.kind === "found") {
-        // Browser agent's WS server binds to the same host as the
+        const query = `channel=browser&role=client&clientId=${chrome.runtime.id}&sessionId=${sessionId}`;
+        // A discovered remote (tunnel) URL takes precedence; append our query.
+        if (result.url) {
+            const sep = result.url.includes("?") ? "&" : "?";
+            return `${result.url}${sep}${query}`;
+        }
+        // Otherwise the browser agent's WS server binds to the same host as the
         // agent-server (single-process), so we reuse the host portion of
         // agentServerUrl and swap in the discovered port.
         try {
             const u = new URL(agentServerUrl);
-            return `${u.protocol}//${u.hostname}:${result.port}/?channel=browser&role=client&clientId=${chrome.runtime.id}&sessionId=${sessionId}`;
+            return `${u.protocol}//${u.hostname}:${result.port}/?${query}`;
         } catch (e) {
             debugWebSocketError("Invalid agentServerHost URL: %s", e);
             return undefined;

@@ -62,11 +62,12 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
@@ -106,7 +107,6 @@
     "typechat": "^0.1.1",
     "typescript": "~5.4.5",
     "website-memory": "workspace:*",
-    "websocket-utils": "workspace:*",
     "ws": "^8.21.0",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
@@ -115,6 +115,7 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@fluidframework/build-tools": "^0.57.0",
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
@@ -131,7 +132,6 @@
     "@types/node": "^22.0.0",
     "@types/prismjs": "^1.26.3",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "archiver": "^7.0.1",
     "concurrently": "^9.1.2",
     "crx": "^5.0.1",
@@ -152,7 +152,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

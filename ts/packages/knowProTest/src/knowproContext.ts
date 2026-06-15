@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import * as kp from "knowpro";
 import { createKnowledgeModel } from "./models.js";
 import * as cm from "conversation-memory";

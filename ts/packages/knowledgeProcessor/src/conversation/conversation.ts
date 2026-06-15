@@ -48,7 +48,7 @@ import {
 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./knowledgeTermSearch2.js";
 import { TypeChatLanguageModel } from "typechat";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import { createSearchResponse, SearchResponse } from "./searchResponse.js";
 import {
     createFileSystemStorageProvider,

@@ -33,7 +33,7 @@
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
     "@typeagent/agent-sdk": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",

@@ -19,7 +19,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { AddressInfo } from "node:net";
 import registerDebug from "debug";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAllowlist";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import {
     STUDIO_REGISTRY_ROLE,

@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/action-grammar/generation";
 import { SchemaInfo, ActionInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
-import { loadGrammarRulesNoThrow } from "action-grammar";
+import { loadGrammarRulesNoThrow } from "@typeagent/action-grammar";
 
 /**
  * Configuration for grammar generation from a schema
@@ -305,6 +306,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -360,6 +362,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -423,6 +426,7 @@ export class SchemaToGrammarGenerator {
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 
@@ -533,6 +537,7 @@ Return the complete corrected grammar, starting with the copyright header.`;
             prompt,
             options: {
                 model: this.model,
+                ...claudeExecutableOption(),
             },
         });
 

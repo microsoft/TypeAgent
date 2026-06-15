@@ -17,6 +17,7 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Browser } from "puppeteer";
@@ -243,7 +244,7 @@ async function handleLlmTransform(
     const fullPrompt = `${prompt}\n\n${input}`;
     const queryInstance = query({
         prompt: fullPrompt,
-        options: { model, abortController },
+        options: { model, abortController, ...claudeExecutableOption() },
     });
     const onAbort = () => {
         abortController.abort(signal?.reason);
@@ -312,6 +313,7 @@ async function handleClaudeTask(
             maxTurns,
             abortController,
             permissionMode: "acceptEdits",
+            ...claudeExecutableOption(),
             canUseTool: async () => ({ behavior: "allow" as const }),
             allowedTools: ["WebSearch", "WebFetch"],
             cwd: getRepoRoot(),

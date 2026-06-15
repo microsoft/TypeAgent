@@ -18,7 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 loadConfigSync();
 
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { createNodeHtmlReducer } from "../src/common/crossContextHtmlReducer.js";

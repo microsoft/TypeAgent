@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadSchema } from "typeagent";

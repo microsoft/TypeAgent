@@ -15,6 +15,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "./cliPath.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 import { compileGrammarToNFA } from "../nfaCompiler.js";
@@ -228,7 +229,7 @@ const SENTENCE_FORM_WEIGHTS = {
 async function queryLLM(prompt: string, model: string): Promise<string> {
     const queryInstance = query({
         prompt,
-        options: { model },
+        options: { model, ...claudeExecutableOption() },
     });
 
     let responseText = "";

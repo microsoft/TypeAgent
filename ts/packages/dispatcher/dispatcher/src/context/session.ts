@@ -7,7 +7,7 @@ import {
     DeepPartialUndefinedAndNull,
 } from "@typeagent/common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
-import { getSessionGrammarStorePath } from "action-grammar";
+import { getSessionGrammarStorePath } from "@typeagent/action-grammar";
 import registerDebug from "debug";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,7 +23,7 @@ import {
     mergeConfig,
     sanitizeConfig,
 } from "./options.js";
-import { TokenCounter, TokenCounterData } from "aiclient";
+import { TokenCounter, TokenCounterData } from "@typeagent/aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";

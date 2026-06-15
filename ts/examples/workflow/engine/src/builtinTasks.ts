@@ -23,7 +23,7 @@ import {
     TaskTypeParameter,
 } from "workflow-model";
 import { isGenericBuiltinSchema } from "./builtinTaskSchemas.js";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import type { CustomAgentConfig } from "@github/copilot-sdk";
 import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
 import { invokeCopilotAgent } from "./copilotClientHost.js";

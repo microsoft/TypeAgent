@@ -25,7 +25,7 @@ import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
 import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
-import { openai, ChatModelWithStreaming } from "aiclient";
+import { openai, ChatModelWithStreaming } from "@typeagent/aiclient";
 import {
     AlbumTrackCollection,
     ITrackCollection,

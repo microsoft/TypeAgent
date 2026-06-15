@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextEmbeddingModel, openai } from "aiclient";
+import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import { ScoredItem } from "../memory.js";
 import {
     VectorStore,

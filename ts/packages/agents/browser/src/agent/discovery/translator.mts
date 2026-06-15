@@ -11,7 +11,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import path from "path";
 import fs from "fs";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { hookModelTokenUsage } from "../tokenUsage.mjs";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";

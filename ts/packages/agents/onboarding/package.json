@@ -43,20 +43,20 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "aiclient": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
@@ -71,7 +71,7 @@
     "tasks": {
       "agc:main": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -84,7 +84,7 @@
       },
       "agc:discovery": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -97,7 +97,7 @@
       },
       "agc:grammargen": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -110,7 +110,7 @@
       },
       "agc:packaging": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -123,7 +123,7 @@
       },
       "agc:phrasegen": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -136,7 +136,7 @@
       },
       "agc:scaffolder": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -149,7 +149,7 @@
       },
       "agc:schemagen": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -162,7 +162,7 @@
       },
       "agc:testing": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

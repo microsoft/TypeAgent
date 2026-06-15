@@ -25,3 +25,8 @@ export type {
 export { DefaultIndexingServiceRegistry } from "./context/indexingServiceRegistry.js";
 export * from "@typeagent/dispatcher-types";
 export { StorageProvider } from "./storageProvider/storageProvider.js";
+export {
+    readDevTunnelConfig,
+    saveDevTunnelConfig,
+} from "./helpers/userData.js";
+export type { DevTunnelConfig } from "./helpers/userData.js";

@@ -10,7 +10,7 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "aiclient";
+import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 const debugError = registerDebug("typeagent:desktop:error");
 

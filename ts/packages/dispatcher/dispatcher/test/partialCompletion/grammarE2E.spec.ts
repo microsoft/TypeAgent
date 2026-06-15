@@ -15,7 +15,7 @@ import {
     matchGrammarCompletion,
     type Grammar,
     type GrammarCompletionResult,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { CompletionGroup, CompletionDirection } from "@typeagent/agent-sdk";
 
 // ── Grammar-based mock dispatcher ────────────────────────────────────────────

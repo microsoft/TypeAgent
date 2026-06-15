@@ -6,7 +6,7 @@ import { AddressInfo } from "node:net";
 import registerDebug from "debug";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
-import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAllowlist";
 import type {
     StudioRuntime,
     StudioClientCallFunctions,

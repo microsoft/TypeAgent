@@ -67,7 +67,7 @@ import registerDebug from "debug";
 import { ActionConfig } from "./actionConfig.js";
 import type { UserContext } from "./userContext.js";
 import { DispatcherConfig } from "../context/session.js";
-import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
+import { openai as ai, CompleteUsageStatsCallback } from "@typeagent/aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
 

@@ -9,7 +9,7 @@ import {
     loadGrammarRulesNoThrow,
     recommendedOptimizations,
     SchemaLoader,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { parseSchemaSource } from "@typeagent/action-schema";
 import type { SchemaTypeDefinition } from "@typeagent/action-schema";
 

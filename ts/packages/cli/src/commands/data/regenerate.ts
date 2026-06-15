@@ -29,7 +29,10 @@ import {
     RequestAction,
 } from "agent-cache";
 import { createLimiter, getElapsedString } from "@typeagent/common-utils";
-import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
+import {
+    getChatModelMaxConcurrency,
+    getChatModelNames,
+} from "@typeagent/aiclient";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,

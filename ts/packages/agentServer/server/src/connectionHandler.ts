@@ -19,6 +19,7 @@ import {
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
+import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 
 /**
  * Per-connection handler signature expected by transports (the WebSocket
@@ -247,8 +248,12 @@ export function createAgentServerConnectionHandler(
             createRpc(
                 "agent-server:discovery",
                 channelProvider.createChannel(DiscoveryChannelName),
-                createDiscoveryHandlers((agentName, role) =>
-                    portRegistrar.lookup(agentName, role),
+                createDiscoveryHandlers(
+                    (agentName, role) => portRegistrar.lookup(agentName, role),
+                    // Remote clients get a live dev-tunnel URL when one is
+                    // configured; local clients (and a down/absent tunnel) fall
+                    // back to localhost. See tunnelResolver.ts.
+                    resolveTunnelUrlForDiscovery,
                 ),
             );
         }

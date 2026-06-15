@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getEnvSetting } from "aiclient";
+import { getEnvSetting } from "@typeagent/aiclient";
 import * as wikipedia from "./wikipedia.js";
 
 export type WikipediaApiSettings = {

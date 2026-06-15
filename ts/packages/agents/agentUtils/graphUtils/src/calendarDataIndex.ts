@@ -9,7 +9,7 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "aiclient";
+import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 
 export type EventInfo = {
     eventId: string;

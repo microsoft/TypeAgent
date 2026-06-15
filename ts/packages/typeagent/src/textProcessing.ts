@@ -16,7 +16,12 @@ import {
     getData,
     success,
 } from "typechat";
-import { getHtml, bing, ChatModel, TextEmbeddingModel } from "aiclient";
+import {
+    getHtml,
+    bing,
+    ChatModel,
+    TextEmbeddingModel,
+} from "@typeagent/aiclient";
 import { createChatTranslator } from "./chat.js";
 import { MessageSourceRole } from "./message.js";
 import { TypeSchema } from "./schema.js";

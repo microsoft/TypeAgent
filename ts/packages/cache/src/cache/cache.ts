@@ -402,7 +402,7 @@ export class AgentCache {
                             // Import populateCache dynamically to avoid circular dependencies
                             debug(`Importing populateCache...`);
                             const { populateCache } = await import(
-                                "action-grammar/generation"
+                                "@typeagent/action-grammar/generation"
                             );
                             debug(`populateCache imported successfully`);
 

@@ -7,7 +7,7 @@ import {
     createAzureTokenProvider,
     getEnvSetting,
     openai,
-} from "aiclient";
+} from "@typeagent/aiclient";
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
 import { env } from "process";
 import { AddressOutput } from "@azure-rest/maps-search";

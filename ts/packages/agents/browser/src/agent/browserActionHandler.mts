@@ -119,7 +119,7 @@ import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import {
     SearchProviderCommandHandlerTable,

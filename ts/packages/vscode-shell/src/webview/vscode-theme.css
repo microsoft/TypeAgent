@@ -5,9 +5,9 @@
    surfaces to VS Code's --vscode-* CSS variables so the panel honors
    the user's selected theme (light, dark, high-contrast). */
 
-/* The host page provides #chat-container as a column flex with
-   #status-bar above and #chat-root taking the rest. The ChatPanel
-   builds .chat-panel-wrapper into #chat-root. Make it fill. */
+/* The host page provides #chat-container as a column flex with a session
+  bar above #chat-root. The ChatPanel builds .chat-panel-wrapper into
+  #chat-root. Make it fill. */
 #chat-root {
   flex: 1;
   min-height: 0;
