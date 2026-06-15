@@ -199,7 +199,7 @@
     "debug": "^4.4.0",
     "dompurify": "^3.4.1",
     "isomorphic-ws": "^5.0.0",
-    "markdown-it": "^14.1.1",
+    "markdown-it": "^14.2.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {
