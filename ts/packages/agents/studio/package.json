@@ -31,9 +31,9 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/core": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
     "studio-service": "workspace:*",
-    "@typeagent/websocket-utils": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
