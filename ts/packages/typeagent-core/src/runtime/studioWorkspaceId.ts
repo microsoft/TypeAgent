@@ -37,18 +37,19 @@ export function canonicalizeRepoRoot(repoRoot: string): string {
     } catch {
         // Path may not exist yet — fall back to the lexical absolute path.
     }
-    // Strip trailing separators (but keep a root like `C:\` or `/`). Done with a
-    // linear scan rather than `/[\\/]+$/`, which backtracks quadratically on a
+    // Strip trailing separators, but never below the filesystem root (so a drive
+    // root like `C:\` or `/` stays intact rather than collapsing to `C:` / ``).
+    // Linear scan rather than `/[\\/]+$/`, which backtracks quadratically on a
     // path with many trailing slashes (CodeQL: polynomial-regex ReDoS).
+    const rootLen = path.parse(resolved).root.length;
     let end = resolved.length;
     while (
-        end > 0 &&
+        end > rootLen &&
         (resolved[end - 1] === "\\" || resolved[end - 1] === "/")
     ) {
         end--;
     }
-    const trimmed = resolved.slice(0, end);
-    const normalized = trimmed.length > 0 ? trimmed : resolved;
+    const normalized = resolved.slice(0, end);
     // Windows and macOS are case-insensitive; lowercasing makes the key stable
     // regardless of how the path was typed. (Linux is case-sensitive — leave it.)
     return process.platform === "win32" || process.platform === "darwin"

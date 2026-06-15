@@ -24,6 +24,15 @@ describe("studio workspace identity", () => {
         expect(c).toBe(a);
     });
 
+    it("keeps a filesystem root intact (doesn't strip it away)", () => {
+        // The root separator must survive — stripping it would yield an
+        // unstable key (e.g. `C:` on Windows, or empty on POSIX).
+        const root = process.platform === "win32" ? "C:\\" : "/";
+        const canonical = canonicalizeRepoRoot(root);
+        expect(canonical.length).toBeGreaterThan(0);
+        expect(canonical).toBe(process.platform === "win32" ? "c:\\" : "/");
+    });
+
     it("treats case per platform (insensitive on win32/darwin)", () => {
         const lower = canonicalizeRepoRoot("/Repo/TS");
         const upper = canonicalizeRepoRoot("/repo/ts");

@@ -78,7 +78,7 @@ async function ensureSharedRegistry(): Promise<StudioRegistryServer> {
                 const primary = sharedActiveSessions.values().next().value;
                 for (const sc of sharedActiveSessions) {
                     void sc.notifyClientCountChanged(
-                        "default",
+                        STUDIO_REGISTRY_ROLE,
                         sc === primary ? count : 0,
                     );
                 }
@@ -154,7 +154,7 @@ export async function updateStudioContext(
                 // 0 to others so `@system ports` summing doesn't double-count.
                 const primary = sharedActiveSessions.values().next().value;
                 void context.notifyClientCountChanged(
-                    "default",
+                    STUDIO_REGISTRY_ROLE,
                     context === primary ? server.getConnectedCount() : 0,
                 );
                 debug(
@@ -212,7 +212,7 @@ async function releaseSession(
         const newPrimary = sharedActiveSessions.values().next().value;
         if (newPrimary) {
             void newPrimary.notifyClientCountChanged(
-                "default",
+                STUDIO_REGISTRY_ROLE,
                 sharedRegistry.getConnectedCount(),
             );
         }

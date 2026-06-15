@@ -55,6 +55,8 @@ export function parseWebviewMessage(
             const m = value as { requestId?: unknown; agent?: unknown };
             if (
                 typeof m.requestId === "number" &&
+                Number.isInteger(m.requestId) &&
+                m.requestId >= 0 &&
                 typeof m.agent === "string"
             ) {
                 return { type: "run", requestId: m.requestId, agent: m.agent };

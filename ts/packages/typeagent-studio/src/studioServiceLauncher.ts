@@ -71,8 +71,10 @@ function resolveServiceMain(): string {
  * The child prints `{"port":N}` on stdout once bound and writes its capability
  * token to the per-port file; reading both directly means the launching window
  * connects to its own service WITHOUT needing the agent-server (the registry is
- * only for the agent proxy and cross-window attach). The child is tied to this
- * extension host (not detached) so it doesn't outlive VS Code.
+ * only for the agent proxy and cross-window attach). The child is launched
+ * non-detached and `unref`'d so it doesn't keep the extension host's event loop
+ * alive; binding its lifetime strictly to the host (kill on deactivate / idle
+ * shutdown) is a tracked follow-up.
  */
 function spawnService(repoRoot: string): Promise<ServiceTarget | undefined> {
     const main = resolveServiceMain();

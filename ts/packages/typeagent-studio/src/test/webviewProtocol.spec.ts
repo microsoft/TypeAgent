@@ -33,4 +33,26 @@ test("parseWebviewMessage rejects malformed / hostile input", () => {
         undefined,
     );
     assert.equal(parseWebviewMessage({ type: "run", requestId: 1 }), undefined);
+    // Non-finite / non-integer / negative request ids are rejected (they could
+    // never match latestRequestId and would wedge the webview state).
+    assert.equal(
+        parseWebviewMessage({ type: "run", requestId: NaN, agent: "player" }),
+        undefined,
+    );
+    assert.equal(
+        parseWebviewMessage({
+            type: "run",
+            requestId: Infinity,
+            agent: "player",
+        }),
+        undefined,
+    );
+    assert.equal(
+        parseWebviewMessage({ type: "run", requestId: 1.5, agent: "player" }),
+        undefined,
+    );
+    assert.equal(
+        parseWebviewMessage({ type: "run", requestId: -1, agent: "player" }),
+        undefined,
+    );
 });

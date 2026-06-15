@@ -7,10 +7,10 @@ import { createHash } from "node:crypto";
 import type { StudioWorkspaceState } from "@typeagent/core/runtime";
 
 /**
- * Durable, file-backed {@link StudioWorkspaceState} for the agent-hosted Studio
- * runtime — so sandboxes (and other persisted runtime state) survive
- * agent-server restarts, now that the agent is the single source of truth for
- * in-memory state (it used to be ephemeral `MemoryWorkspaceState`).
+ * Durable, file-backed {@link StudioWorkspaceState} for the standalone Studio
+ * service's per-workspace runtime — so sandboxes (and other persisted runtime
+ * state) survive service restarts (it used to be ephemeral
+ * `MemoryWorkspaceState`).
  *
  * `get` is synchronous (the runtime reads at construction/restore time), so the
  * whole store is loaded into memory once on construction and served from there;

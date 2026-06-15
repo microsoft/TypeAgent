@@ -29,6 +29,10 @@ const vscode = acquireVsCodeApi();
 // Monotonic id so a slow earlier replay can't overwrite a newer run's result.
 let requestId = 0;
 let latestRequestId = 0;
+// Whether the service is connected with at least one corpus agent (last `init`).
+// Run controls are re-enabled after a run only when this holds, so a result /
+// error never re-enables Run while the service is unavailable.
+let controlsAvailable = false;
 
 const root = document.getElementById("root")!;
 
@@ -58,7 +62,8 @@ window.addEventListener("message", (event: MessageEvent) => {
     switch (msg.type) {
         case "init":
             populateAgents(msg.agents);
-            setControlsEnabled(msg.connected && msg.agents.length > 0);
+            controlsAvailable = msg.connected && msg.agents.length > 0;
+            setControlsEnabled(controlsAvailable);
             setStatus(
                 msg.connected
                     ? msg.agents.length > 0
@@ -73,7 +78,7 @@ window.addEventListener("message", (event: MessageEvent) => {
         case "result":
             if (msg.requestId === latestRequestId) {
                 renderResult(msg.payload);
-                setControlsEnabled(true);
+                setControlsEnabled(controlsAvailable);
             }
             break;
         case "error":
@@ -82,7 +87,7 @@ window.addEventListener("message", (event: MessageEvent) => {
                 msg.requestId === latestRequestId
             ) {
                 setStatus(msg.message);
-                setControlsEnabled(true);
+                setControlsEnabled(controlsAvailable);
             }
             break;
     }
