@@ -30,8 +30,22 @@ export class SandboxTreeProvider
     private readonly subscription: { dispose(): void };
     private connected = false;
 
+    // Initial-load gate: until the first connect + sandbox restore settles, the
+    // root `getChildren` awaits this so VS Code keeps the view's native loading
+    // bar showing — rather than resolving to an empty list and flashing a blank
+    // view before the persisted sandboxes come back. A safety timer resolves it
+    // so a service that never connects can't spin the bar forever.
+    private ready = false;
+    private resolveReady!: () => void;
+    private readonly readyGate = new Promise<void>((resolve) => {
+        this.resolveReady = resolve;
+    });
+    private readyTimer: ReturnType<typeof setTimeout> | undefined;
+
     constructor(private readonly source: SandboxSource) {
         this.subscription = source.onSandboxChanged(() => this.refresh());
+        this.readyTimer = setTimeout(() => this.markReady(), 20_000);
+        this.readyTimer.unref?.();
     }
 
     /** Reflect the studio service connection state (drives the empty view). */
@@ -40,6 +54,24 @@ export class SandboxTreeProvider
             return;
         }
         this.connected = connected;
+        this.refresh();
+    }
+
+    /**
+     * Signal that the initial connect + sandbox restore has settled (or timed
+     * out), so the view stops holding the loading bar and renders real rows.
+     * Idempotent.
+     */
+    markReady(): void {
+        if (this.ready) {
+            return;
+        }
+        this.ready = true;
+        if (this.readyTimer !== undefined) {
+            clearTimeout(this.readyTimer);
+            this.readyTimer = undefined;
+        }
+        this.resolveReady();
         this.refresh();
     }
 
@@ -64,6 +96,11 @@ export class SandboxTreeProvider
 
     async getChildren(node?: SandboxTreeNode): Promise<SandboxTreeNode[]> {
         if (!node) {
+            // Hold the native loading bar until the first connect + restore
+            // settles, so the view doesn't flash empty before sandboxes return.
+            if (!this.ready) {
+                await this.readyGate;
+            }
             if (!this.connected) {
                 // Empty when disconnected — the status-bar item shows the
                 // connection state; it doesn't belong as a sandbox row.
@@ -80,6 +117,11 @@ export class SandboxTreeProvider
     }
 
     dispose(): void {
+        if (this.readyTimer !== undefined) {
+            clearTimeout(this.readyTimer);
+            this.readyTimer = undefined;
+        }
+        this.resolveReady();
         this.subscription.dispose();
         this.emitter.dispose();
     }

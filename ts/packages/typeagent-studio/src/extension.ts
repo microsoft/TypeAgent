@@ -805,7 +805,9 @@ export function activate(context: vscode.ExtensionContext): void {
             sandboxTree.setConnected(connected);
             if (connected && !sandboxesRestored) {
                 sandboxesRestored = true;
-                // Replay the service's persisted sandboxes once connected.
+                // Replay the service's persisted sandboxes once connected, then
+                // release the Sandbox view's loading bar (whether restore
+                // succeeded or failed) so it renders the restored rows.
                 void sandboxSource
                     .restoreSandboxes()
                     .then(() => sandboxTree.refresh())
@@ -814,7 +816,8 @@ export function activate(context: vscode.ExtensionContext): void {
                             "[typeagent-studio] Failed to restore sandboxes:",
                             describeError(err),
                         ),
-                    );
+                    )
+                    .finally(() => sandboxTree.markReady());
             }
         }),
         vscode.commands.registerCommand(SERVICE_CONNECT_COMMAND, async () => {
