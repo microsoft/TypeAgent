@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
     createStudioRuntimeCore,
+    resolveRepoRoot,
+    canonicalizeRepoRoot,
     type StudioRuntime,
 } from "@typeagent/core/runtime";
 import {
@@ -60,7 +62,16 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
         repoRoot != null && repoRoot.trim().length > 0
             ? [repoRoot]
             : resolveStudioRepoRootCandidates();
-    const key = candidates.join(path.delimiter);
+    // Key the runtime cache by the CANONICAL resolved workspace so every caller
+    // for the same workspace shares ONE runtime instance — and thus one
+    // in-memory event stream. Without this, the extension (which passes an
+    // explicit repoRoot) and the `@studio` agent proxy (which passes none, so
+    // the service resolves from env/cwd) land on different raw-string keys and
+    // get separate event ring buffers: collisions/corpus persist to shared
+    // globalStorage and look fine, but the Event Log subscribes to one stream
+    // while activity is emitted on the other — so it appears empty.
+    const resolved = resolveRepoRoot(candidates, studioProfileDir()).repoRoot;
+    const key = canonicalizeRepoRoot(resolved);
     let runtime = runtimeCache.get(key);
     if (runtime === undefined) {
         runtime = createStudioRuntimeCore({
