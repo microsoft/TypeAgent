@@ -49,17 +49,15 @@ const NOT_RUNNING = [
  * — it proxies — so an absent service is reported honestly rather than guessed.
  */
 async function withService<T>(
-    repoRoot: string | undefined,
     fn: (client: StudioServiceProxyClient) => Promise<T>,
 ): Promise<T | undefined> {
-    const entry = lookupStudioServiceEntry(repoRoot);
+    const entry = lookupStudioServiceEntry();
     if (entry === undefined) {
         return undefined;
     }
     const client = await StudioServiceProxyClient.connect({
         port: entry.port,
         token: entry.token,
-        ...(repoRoot !== undefined ? { repoRoot } : {}),
     });
     if (client === undefined) {
         return undefined;
@@ -77,9 +75,7 @@ async function executeAction(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "getStudioInfo": {
-            const info = await withService(action.parameters?.repoRoot, (c) =>
-                c.getStudioInfo(),
-            );
+            const info = await withService((c) => c.getStudioInfo());
             return info === undefined
                 ? createActionResultFromMarkdownDisplay(NOT_RUNNING)
                 : createActionResultFromMarkdownDisplay(
@@ -87,10 +83,7 @@ async function executeAction(
                   );
         }
         case "listCollisions": {
-            const collisions = await withService(
-                action.parameters?.repoRoot,
-                (c) => c.listCollisions(),
-            );
+            const collisions = await withService((c) => c.listCollisions());
             return collisions === undefined
                 ? createActionResultFromMarkdownDisplay(NOT_RUNNING)
                 : createActionResultFromMarkdownDisplay(
@@ -98,8 +91,8 @@ async function executeAction(
                   );
         }
         case "queryEvents": {
-            const { limit, repoRoot } = action.parameters;
-            const events = await withService(repoRoot, (c) =>
+            const limit = action.parameters?.limit;
+            const events = await withService((c) =>
                 c.queryRecentEvents(limit ?? 20),
             );
             return events === undefined

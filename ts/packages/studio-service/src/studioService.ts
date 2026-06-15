@@ -52,7 +52,7 @@ export async function startStudioService(
     const boundKey = studioWorkspaceKey(boundRepoRoot);
     const resolveRuntime = (repoRoot?: string) => {
         if (
-            repoRoot !== undefined &&
+            repoRoot != null &&
             repoRoot.trim().length > 0 &&
             studioWorkspaceKey(repoRoot) !== boundKey
         ) {

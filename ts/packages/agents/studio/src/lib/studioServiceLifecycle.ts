@@ -113,7 +113,7 @@ export function lookupStudioServiceEntry(
         return undefined;
     }
     const root =
-        repoRoot !== undefined && repoRoot.trim().length > 0
+        repoRoot != null && repoRoot.trim().length > 0
             ? repoRoot
             : resolveRepoRoot(resolveStudioRepoRootCandidates(), process.cwd())
                   .repoRoot;
