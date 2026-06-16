@@ -14,6 +14,15 @@ global.chrome = {
             removeListener: jest.fn(),
         },
     },
+    alarms: {
+        create: jest.fn(),
+        clear: jest.fn(),
+        onAlarm: {
+            addListener: jest.fn(),
+            hasListeners: jest.fn(),
+            removeListener: jest.fn(),
+        },
+    },
     contextMenus: {
         create: jest.fn(),
         remove: jest.fn(),

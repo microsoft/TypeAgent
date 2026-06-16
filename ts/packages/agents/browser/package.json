@@ -107,6 +107,7 @@
     "typechat": "^0.1.1",
     "typescript": "~5.4.5",
     "website-memory": "workspace:*",
+    "websocket-channel-server": "workspace:*",
     "ws": "^8.21.0",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",

@@ -7,6 +7,7 @@ jest.mock("ws", () => {
     const listeningHandlers: Function[] = [];
     let lastVerifyClient: any;
     const mockWss: any = {
+        clients: new Set(),
         on: jest.fn((event: string, handler: Function) => {
             if (event === "connection") connectionHandlers.push(handler);
             if (event === "error") errorHandlers.push(handler);

@@ -50,6 +50,7 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",
+    "websocket-channel-server": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
