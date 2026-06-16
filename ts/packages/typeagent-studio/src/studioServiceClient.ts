@@ -35,11 +35,13 @@ import type { SandboxStatus } from "@typeagent/core/sandbox";
  */
 export class StudioServiceClient {
     private constructor(
-        private readonly socket: WebSocket,
+        private socket: WebSocket,
         private readonly rpc: ReturnType<
             typeof createRpc<StudioServiceInvokeFunctions>
         >,
         private readonly repoRoot: string | undefined,
+        private readonly endpoint: string,
+        private readonly token: string | undefined,
     ) {}
 
     /**
@@ -91,8 +93,36 @@ export class StudioServiceClient {
             createWebSocketRpcChannel(socket),
             undefined,
             callHandlers,
+            { rebindable: true },
         );
-        return new StudioServiceClient(socket, rpc, options.repoRoot);
+        return new StudioServiceClient(
+            socket,
+            rpc,
+            options.repoRoot,
+            options.endpoint,
+            options.token,
+        );
+    }
+
+    /**
+     * Reopen the service socket and rebind the existing rpc onto it, so this
+     * client (and its rpc reference) survives a reconnect instead of being
+     * recreated. `onClose` is wired to the new socket. Returns false when the
+     * socket can't be reopened (service gone / bad token) — caller retries.
+     */
+    async reconnect(onClose: () => void): Promise<boolean> {
+        const attempt = await StudioServiceClient.openSocket(
+            this.endpoint,
+            this.token,
+        );
+        if (attempt.socket === undefined) {
+            return false;
+        }
+        const socket = attempt.socket;
+        socket.on("close", onClose);
+        this.rpc.rebind(createWebSocketRpcChannel(socket));
+        this.socket = socket;
+        return true;
     }
 
     /**
