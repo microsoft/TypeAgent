@@ -20,7 +20,12 @@ import { stubInvokeHandlers } from "./stubInvokeHandlers.js";
 const STUB_INFO: StudioInfo = {
     repoRootInfo: { repoRoot: "/repo/ts", agentsDirFound: true },
     agentLocations: [
-        { root: "/repo/ts/packages/agents", exists: true, agentCount: 3 },
+        {
+            root: "/repo/ts/packages/agents",
+            exists: true,
+            agentCount: 3,
+            external: false,
+        },
     ],
 };
 

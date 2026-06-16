@@ -23,13 +23,23 @@ describe("studio inspect formatters", () => {
             agentsDirFound: true,
         };
         const locations: AgentLocation[] = [
-            { root: "/repo/ts/packages/agents", exists: true, agentCount: 30 },
-            { root: "/ext/agents", exists: true, agentCount: 3 },
+            {
+                root: "/repo/ts/packages/agents",
+                exists: true,
+                agentCount: 30,
+                external: false,
+            },
+            {
+                root: "/ext/agents",
+                exists: true,
+                agentCount: 3,
+                external: true,
+            },
         ];
         const md = formatStudioInfo(info, locations);
         expect(md).toContain("`/repo/ts`");
         expect(md).toContain("✅ `/repo/ts/packages/agents` — 30 agent(s)");
-        expect(md).toContain("✅ `/ext/agents` — 3 agent(s)");
+        expect(md).toContain("✅ `/ext/agents` — 3 agent(s) _(external)_");
         expect(md).toContain("Agents discovered:** 33");
     });
 
@@ -43,6 +53,7 @@ describe("studio inspect formatters", () => {
                 root: "/somewhere/else/packages/agents",
                 exists: false,
                 agentCount: 0,
+                external: false,
             },
         ];
         const md = formatStudioInfo(info, locations);

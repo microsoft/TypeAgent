@@ -150,6 +150,12 @@ export interface AgentLocation {
     exists: boolean;
     /** Number of agent packages (declaring `./agent/manifest`) found in it. */
     agentCount: number;
+    /**
+     * True when this root is an **external** location contributed by the
+     * `agentSearchPaths` setting, rather than the repository's own
+     * `packages/agents` (which is always the first, non-external root).
+     */
+    external: boolean;
 }
 
 export interface StudioRuntime {
@@ -664,12 +670,16 @@ export function createStudioRuntimeCore(
             return listAvailableAgentNames(agentRoots());
         },
         async getAgentLocations() {
+            // The repo's own `packages/agents` is always the first root; any
+            // others come from the `agentSearchPaths` setting and are external.
+            const repoAgentsRoot = path.join(repoRoot, "packages", "agents");
             return Promise.all(
                 agentRoots().map(async (root) => {
+                    const external = root !== repoAgentsRoot;
                     const agentCount = await countAgentsInRoot(root);
                     return agentCount === undefined
-                        ? { root, exists: false, agentCount: 0 }
-                        : { root, exists: true, agentCount };
+                        ? { root, exists: false, agentCount: 0, external }
+                        : { root, exists: true, agentCount, external };
                 }),
             );
         },

@@ -72,7 +72,12 @@ function createRuntimeStub(): {
             agentsDirFound: true,
         }),
         getAgentLocations: async () => [
-            { root: "/repo/ts/packages/agents", exists: true, agentCount: 2 },
+            {
+                root: "/repo/ts/packages/agents",
+                exists: true,
+                agentCount: 2,
+                external: false,
+            },
         ],
         listCollisions: async () => [],
         clearCollisions: async () => 0,

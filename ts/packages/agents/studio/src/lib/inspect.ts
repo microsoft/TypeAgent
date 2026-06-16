@@ -26,10 +26,11 @@ export function formatStudioInfo(
     lines.push(`- **Repo root:** \`${info.repoRoot}\``);
     lines.push("- **Agent locations:**");
     for (const loc of locations) {
+        const suffix = loc.external ? " _(external)_" : "";
         lines.push(
             loc.exists
-                ? `  - ✅ \`${loc.root}\` — ${loc.agentCount} agent(s)`
-                : `  - ⚠️ \`${loc.root}\` — not found`,
+                ? `  - ✅ \`${loc.root}\` — ${loc.agentCount} agent(s)${suffix}`
+                : `  - ⚠️ \`${loc.root}\` — not found${suffix}`,
         );
     }
     lines.push(`- **Agents discovered:** ${total}`);
