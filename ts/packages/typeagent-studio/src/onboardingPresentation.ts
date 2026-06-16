@@ -8,53 +8,15 @@ import {
     type OnboardingState,
 } from "@typeagent/core/onboardingBridge";
 
+// getDefaultPhaseInputs moved to the headless runtime in @typeagent/core; it is
+// runtime logic (seeds a phase run), not presentation. Re-exported here so
+// existing importers/tests keep their import path.
+export { getDefaultPhaseInputs } from "@typeagent/core/runtime";
+
 export interface OnboardingSettingsSnapshot {
     openSummaryAfterBatchRun: boolean;
     defaultSandboxId: string;
     installHealthGatePolicy: "enforce" | "warn";
-}
-
-export function getDefaultPhaseInputs(
-    state: OnboardingState,
-    phase: OnboardingPhaseName,
-): unknown {
-    switch (phase) {
-        case "Discovery":
-            return {
-                description: state.description,
-                agentName: state.agentName,
-            };
-        case "PhraseGen":
-            return {
-                seed: "Generate representative utterances for the target workflow.",
-                sourcePhase: "Discovery",
-            };
-        case "SchemaGen":
-            return {
-                seed: "Draft schema/action types from discovery and phrase coverage.",
-                sourcePhase: "PhraseGen",
-            };
-        case "GrammarGen":
-            return {
-                seed: "Draft grammar variants from schema and phrase outputs.",
-                sourcePhase: "SchemaGen",
-            };
-        case "Scaffolder":
-            return {
-                seed: "Create initial manifest/schema/handler scaffolding.",
-                sourcePhase: "GrammarGen",
-            };
-        case "Testing":
-            return {
-                seed: "Run local validation and summarize failures.",
-                sourcePhase: "Scaffolder",
-            };
-        case "Packaging":
-            return {
-                seed: "Prepare package artifacts and release checklist.",
-                sourcePhase: "Testing",
-            };
-    }
 }
 
 export function formatOnboardingSummary(state: OnboardingState): string {

@@ -1,7 +1,9 @@
 # TypeAgent Studio — Design Overview
 
-> A consolidated, human-readable design for **TypeAgent Studio**, the VS Code
-> developer experience for authoring, tuning, and validating TypeAgent agents.
+> A consolidated, human-readable design for **TypeAgent Studio**, the developer
+> experience for authoring, tuning, and validating TypeAgent agents — surfaced
+> both as a VS Code extension pack (for humans) and as a `studio` TypeAgent agent
+> (for AI / conversational / hybrid callers) over one headless core.
 >
 > This document describes the final system. It is intended as the canonical
 > introduction; the numbered planning docs in this folder remain as the deep
@@ -84,16 +86,17 @@ makes possible), and [`STATUS.md`](./STATUS.md) ("Interaction modes &
 agent-drivability"). When implementing any new surface, **check it against this
 principle before writing UI-only code.**
 
-### 3.1 Four extensions, one shared library
+### 3.1 Four extensions and an agent, one shared library
 
-| Package                | Purpose                                                                                                                                                                                                                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Extensions, command-line tools, and tests all consume it. |
-| **`typeagent-studio`** | The main VS Code extension. The activity-bar app: tree views, webviews, status bar, commands. A thin layer on top of `typeagent-core`.                                                                                                                                                                      |
-| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                               |
-| **`vscode-shell`**     | The existing chat surface, refactored onto `typeagent-core`. Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                  |
+| Package                | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`typeagent-core`**   | A pure-TypeScript engine library. No VS Code dependency. Hosts every cross-cutting primitive: sandbox lifecycle, corpus federation, structured event stream, feedback wrappers, health rules, collision wiring, replay engine, onboarding bridge. Its `runtime` module assembles these into the Studio runtime, which is **instantiated once per workspace, inside the standalone Studio service** (see §3.5). The service, the `studio` agent proxy, command-line tools, and tests consume it directly.                                                 |
+| **`typeagent-studio`** | The bespoke VS Code extension — the **human presenter**. The activity-bar app: tree views, webviews, status bar, commands. It **launches (or attaches to) the per-workspace Studio service** and renders the rich UI from its typed results + event stream — it does **not** host the runtime. (It keeps a small in-process runtime only for the onboarding commands.)                                                                                                                                                                                   |
+| **`agr-language`**     | The existing grammar-file (`.agr`) language server and debug panel, refactored to depend on `typeagent-core` so it shares the corpus, events, and feedback infrastructure. Gains a miss-cluster view, code lenses, and cross-links to schema.                                                                                                                                                                                                                                                                                                            |
+| **`vscode-shell`**     | The existing chat surface — the **generic canvas**. Connects to the agent-server and can route requests to any agent (including `studio`). Gains Studio-sandbox awareness and a "capture this session to corpus" action on chat bubbles.                                                                                                                                                                                                                                                                                                                 |
+| **`agents/studio`**    | A first-party TypeAgent agent — the **AI / conversational presenter** and a **thin proxy to the standalone Studio service** (it hosts a small registry endpoint the service announces to, and forwards its read-only actions; it does **not** host the runtime). Exposes the Studio loop as typed, dispatchable actions (auto-available over MCP). Every other surface — the `typeagent-studio` UI, the `vscode-shell` canvas, an AI orchestrator, the CLI — is a **client** of the workspace's one runtime. See [`STUDIO-AGENT.md`](./STUDIO-AGENT.md). |
 
-Together these are the "TypeAgent Studio extension pack." A user installs the
+Together the four VS Code packages are the "TypeAgent Studio extension pack." A user installs the
 pack; each component activates on demand.
 
 ### 3.2 Six engine primitives
@@ -114,9 +117,12 @@ Inside `typeagent-core`, six primitives carry the weight of the design.
    recording, collision detection, replay rows. Sits _alongside_ the existing
    `debug("typeagent:*")` traces — no migration. Schema-versioned.
 4. **Health rule engine** — invariants over the chain `manifest → schema →
-grammar → handler → provider`. Each rule produces evidence and a
+grammar → handler` (10 MVP rules). Each rule produces evidence and a
    fix hint. Catches the silent-runtime-failure class of bugs that today
-   only surface when the dispatcher tries to load the agent.
+   only surface when the dispatcher tries to load the agent. (Agent discovery
+   in Studio is filesystem-only; the dispatcher's own `defaultAgentProvider`
+   registration is what loads an agent, and is checked at load time, not by a
+   health rule.)
 5. **Replay engine** — the long pole. Takes an agent, a corpus, two version
    specs (a git ref or working tree on each side), and a miss policy. Spins
    up two transient sandboxes, evaluates each utterance against both
@@ -167,50 +173,160 @@ don't build a webview when a code lens would do:
 Most capabilities show up on all three layers — a lens, a panel, a command —
 because that's how a developer naturally encounters them.
 
+### 3.5 Where the runtime runs — a standalone per-workspace Studio service
+
+The §3.0 principle says capability logic is a headless core primitive with thin
+presenters. This section pins down where that primitive is _hosted_: **the Studio
+runtime runs as a standalone, per-workspace _Studio service_ — a host-agnostic
+library (`@typeagent/core/runtime`) plus a small process entrypoint — not inside
+any UI and not inside the `studio` agent.** There is **one runtime per target
+repository/workspace** (keyed by canonical workspace identity), and **every
+presenter is a client of it**: the `typeagent-studio` extension, an AI
+orchestrator (MCP) via a thin `studio` agent, the CLI, and the `vscode-shell`
+canvas.
+
+**Why a standalone service and not the `studio` agent.** An earlier iteration
+hosted the runtime _inside_ the `studio` agent (the `code`↔`coda` pattern). On
+reflection that is the wrong layer: the runtime's affinity is to the developer's
+**repo/workspace**, not to an agent-server session. It is a **language/build
+server** (LSP-like), not an agent — agents handle end-user requests at runtime,
+whereas this runtime is build-time tooling that operates _on other agents_.
+Hosting it in an agent produced a layer inversion (an agent loading sibling
+agents into its own host), a loopback-WebSocket workaround (an agent cannot
+expose a first-class endpoint — a platform smell), a lifecycle mismatch
+(request-serving vs. developer-iterating), and a cloud mismatch (the runtime
+needs the repo on local disk; a multi-tenant agent-server is the wrong host).
+
+**Who launches it (single mode).** The **extension** launches the service (the
+common case); a **CLI** (`typeagent-studio serve --workspace <root>`) launches it
+headlessly (CI / agent-only). The **`studio` agent is a thin proxy** — never the
+host: it forwards its read-only actions to the workspace's service. There is
+**exactly one service per canonical workspace identity**; a second launcher
+discovers and attaches. We deliberately do **not** add an agent-hosted fallback
+("dual-mode"): its only benefit is `@studio` working with no service running,
+which a dev tool doesn't need and the CLI covers explicitly.
+
+Concretely:
+
+- The **Studio service** constructs the runtime — one per workspace — and hosts
+  the typed channel (below).
+- The **`typeagent-studio` extension** launches/connects to the service and
+  renders the rich UI (trees, Impact Report webview, status bar) from typed
+  results + the event stream.
+- The **`studio` agent**, MCP, the CLI, and `vscode-shell` are peers — all
+  clients of the same service for a given workspace, so they never diverge on repo
+  root, sandbox set, or corpus state.
+
+**The typed channel (unchanged in shape; only the host moved).** The rich views
+need typed results and an event stream, not rendered markdown:
+
+- A typed **`agent-rpc`** channel over the service's WebSocket: `invoke` for typed
+  results + a server→client subscription pushing the existing `StudioEvent` union
+  from `@typeagent/core/events` (`sandbox.*`, `collision.detected`, `replay.row` /
+  `replay.summary`, `feedback.recorded`, …). The protocol types are **pure** in
+  `@typeagent/core` (no transport dependency).
+- _Repo scoping from day one:_ every `invoke` and the subscription carry the
+  workspace identity; subscriptions are per-connection — a window for repo A must
+  never receive repo B's events.
+- _Guardrails:_ a **capability token** (beyond an Origin check), session/repo
+  identity on every message, and explicit **subscription ids / cancellation /
+  backpressure**.
+
+**Discovery & registration — reuse the platform registrar, add a tiny registry relay.**
+
+- _Lookup:_ the service is reached in two hops. The agent-server's
+  **`PortRegistrar`** locates the **`studio` agent's registry endpoint**
+  (`discoverPort("studio", "registry")` — the agent registers this endpoint's own
+  port under the `registry` role); a client then asks that registry
+  `lookup(workspaceKey)` for the live service's `{port, token, …}`. Two hops are
+  needed because the registrar maps `(agent, role) → port` only — it can carry
+  neither a per-workspace key nor a token.
+- _Registration (registry relay):_ the discovery channel is read-only (only
+  in-process agents can `registerPort`) and the **extension/CLI — not the agent —
+  spawns the service**, so the agent can't learn the service's `{port, token}` the
+  `montage`/`markdown` way (where the agent spawns its own child). Instead the
+  `studio` agent hosts a small **registry** WebSocket endpoint: a service
+  `announce`s `{workspaceKey, repoRoot, port, token, pid, protocolVersion}` to it
+  on start, the registry validates the announcement (current protocol version and
+  `workspaceKey === studioWorkspaceKey(repoRoot)`, so a service can only claim its
+  own workspace) and ties the entry to the announcing socket — evicting it when
+  that socket closes (socket-based liveness, no stale-file/PID guessing). The
+  agent proxy and any extra extension window resolve the service via `lookup`. The
+  token rides the announcement (and the per-port token file the launcher reads
+  after spawning), so there is no shared token file on the registry path.
+  **Evolution:** an authenticated external `registerPort`/registration on the
+  discovery channel so the service self-registers and the agent keeps no endpoint
+  at all.
+
+**Security / approval boundary.** Mutating actions (sandbox lifecycle,
+corpus/schema/grammar writes, costly replays) stay behind the `dryRun` + approval
+model (§3.0, STUDIO-AGENT §5) and the channel's capability-token check. The
+human-driven channel client (the extension) represents a person clicking a
+button; the per-action approval boundary applies to the AI/MCP action surface.
+
+**Consequence.** `@studio` chat/MCP works only when the workspace's service is
+running (open the workspace in VS Code, or run `typeagent-studio serve`) — an
+acceptable, honest stance for a workspace-scoped dev tool.
+
+**Cloud readiness.** This design is local / co-located today: loopback bind,
+ephemeral port, `127.0.0.1` connect, a local capability token, and —
+fundamentally — the **repo on local disk**. What ports cleanly to a future
+cloud/remote agent-server is the **thin-client shape**, the **transport-agnostic
+typed protocol** (pure types in `@typeagent/core`), and **`repoRoot` → workspace
+id**. The target model is **"the runtime lives where the repo lives"** (local /
+devcontainer / Codespace), with a cloud surface **proxying** to it — _not_ a
+multi-tenant agent-server hosting a developer's repo-bound runtime. The cloud move
+swaps the local transport (loopback + file/relay token) for `wss` + a real auth
+provider behind the discovery/auth abstraction; the runtime, protocol, and
+client stack are unchanged.
+
+> **Transitional note.** The current code still hosts the runtime inside the
+> `studio` agent, and the extension still builds an in-process
+> `createStudioRuntime` as a bootstrap. Both are migrated to the standalone-service
+> topology per the implementation plan's phasing (extract the host → re-point the
+> extension → thin agent proxy → cleanup).
+
 ---
 
 ## 4. Architecture in a single picture
 
 ```
-┌──────────────────────────── VS Code ────────────────────────────┐
-│                                                                  │
-│   typeagent-studio                  agr-language                 │
-│   ┌────────────────────┐            ┌────────────────────┐       │
-│   │ Activity bar       │            │ LSP for .agr       │       │
-│   │  • Sandboxes       │            │ Debug panel        │       │
-│   │  • Corpora         │            │  + miss-cluster    │       │
-│   │  • Event Log       │            │ Code lenses        │       │
-│   │  • Collisions      │            └─────────┬──────────┘       │
-│   │ Webviews:          │                      │                  │
-│   │  • Wizard          │      vscode-shell    │                  │
-│   │  • Schema Studio   │      ┌───────────────┴───────┐          │
-│   │  • Impact Report   │      │ Chat UI               │          │
-│   │  • Trace / Live    │      │  + capture-to-corpus  │          │
-│   │ Status bar         │      └───────────┬───────────┘          │
-│   └─────────┬──────────┘                  │                      │
-│             │                             │                      │
-│             ▼                             ▼                      │
-│   ┌──────────────────────────────────────────────────────────┐   │
-│   │                @typeagent/core                           │   │
-│   │  sandbox │ corpus │ events │ feedback │ health           │   │
-│   │  collisions │ replay │ onboardingBridge                  │   │
-│   └──────────────────────────────┬───────────────────────────┘   │
-│                                  │                               │
-└──────────────────────────────────┼───────────────────────────────┘
-                                   │  in-memory or
-                                   │  IPC (socket / named pipe)
+   Presenters (clients) ─ all drive the same runtime; none host it:
+
+   ┌──────────────────┬───────────────────┬───────────────────────────┐
+   │ typeagent-studio  │ vscode-shell       │ AI orchestrator (MCP)/CLI │
+   │ rich VS Code UI:  │ generic chat       │                           │
+   │ trees · webviews  │ canvas (any agent) │                           │
+   └───────┬──────────┴─────────┬──────────┴─────────────┬─────────────┘
+           │ typed result/       │ @studio (chat)         │ @studio (MCP)
+           │ event channel       ▼                        ▼
+           │             ┌──────────── agent-server ──────────────┐
+           │             │  studio agent = THIN PROXY:            │
+           │             │  forwards actions to the service +     │
+           │             │  relays its port into the registrar    │
+           │             └────────────────────┬───────────────────┘
+           │                                  │ discoverPort → connect
+           ▼                                  ▼
+   ┌──────────── Studio service · one per workspace ───────────────────┐
+   │  the Studio runtime, built on @typeagent/core: sandbox · corpus · │
+   │  events · feedback · health · collisions · replay · onboarding    │
+   │  launched by the extension (or `typeagent-studio serve` CLI)      │
+   └───────────────────────────────┬───────────────────────────────────┘
+                                   │  spins up (in-memory or IPC)
                                    ▼
-                       ┌──────────────────────┐
-                       │  Sandboxed dispatcher│
-                       │  (player + others    │
-                       │  loaded under the    │
-                       │  Studio profile dir) │
-                       └──────────────────────┘
+                        ┌──────────────────────┐
+                        │  Sandboxed dispatcher │
+                        │  (agents under the    │
+                        │  Studio profile dir)  │
+                        └──────────────────────┘
 ```
 
-The sandboxed dispatcher runs the user's actual agents. The Studio profile
-directory is **always separate** from the developer's personal TypeAgent
-profile.
+`@typeagent/core` is the shared engine **library**; the runtime **instance**
+lives in the standalone **per-workspace Studio service** (launched by the
+extension or the `typeagent-studio serve` CLI), and every presenter — including
+the `studio` agent, which is a thin proxy — is a client of it (§3.5). The
+sandboxed dispatcher runs the user's actual agents. The Studio profile directory
+is **always separate** from the developer's personal TypeAgent profile.
 
 ---
 
@@ -420,14 +536,17 @@ reach for the test runner.
 This document consolidates the five-part planning series. For deeper detail
 on any topic, the source docs remain canonical:
 
-| Doc                                                        | What it covers                                                                                                      |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| [`README.md`](./README.md)                                 | Series index, locked and open decisions, demo-script reference.                                                     |
-| [`01-inventory.md`](./01-inventory.md)                     | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions. |
-| [`02-journeys.md`](./02-journeys.md)                       | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure.          |
-| [`03-features.md`](./03-features.md)                       | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map.              |
-| [`04-mvp-slice.md`](./04-mvp-slice.md)                     | The vertical slice that defines the first release. Acceptance gates, risk register, demo script.                    |
-| [`05-implementation-plan.md`](./05-implementation-plan.md) | Workspace layout, API type surfaces, transport choices, sequencing, named open decisions.                           |
+| Doc                                                        | What it covers                                                                                                                                                                   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`README.md`](./README.md)                                 | Series index, locked and open decisions, demo-script reference.                                                                                                                  |
+| [`01-inventory.md`](./01-inventory.md)                     | What exists today: every TypeAgent package's surface relevant to Studio, in-flight work, open-question resolutions.                                                              |
+| [`02-journeys.md`](./02-journeys.md)                       | The six personas and journeys in full, with success criteria per journey and cross-journey infrastructure.                                                                       |
+| [`03-features.md`](./03-features.md)                       | Per-journey feature sketch at three layers (editor / panels / commands). The feature-to-primitive map.                                                                           |
+| [`04-mvp-slice.md`](./04-mvp-slice.md)                     | The vertical slice that defines the first release. Acceptance gates, risk register, demo script.                                                                                 |
+| [`05-implementation-plan.md`](./05-implementation-plan.md) | The single build plan for both presenters: workspace layout, API type surfaces, transport choices, sequencing (P-0…P-6 with agent phases S0–S5 mapped in), named open decisions. |
+| [`USER-STORY.md`](./USER-STORY.md)                         | The authoring loop and the three interaction modes (human / AI-agent / hybrid).                                                                                                  |
+| [`STUDIO-AGENT.md`](./STUDIO-AGENT.md)                     | The `studio` agent action-surface reference (groups A–F, tiers, approval boundary).                                                                                              |
+| [`STATUS.md`](./STATUS.md)                                 | What's built, known issues, and the ready-to-start next slices.                                                                                                                  |
 
 ---
 

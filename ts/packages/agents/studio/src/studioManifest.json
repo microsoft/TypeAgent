@@ -1,0 +1,10 @@
+{
+  "emojiChar": "🎨",
+  "description": "TypeAgent Studio agent — the AI / conversational presenter of TypeAgent Studio, driving the author → tune → validate developer loop over the Studio engine. Today it surfaces inspection of Studio's environment, grammar collisions, and event stream; the rest of the loop (sandboxes, run, validate, author) is being added.",
+  "schema": {
+    "description": "Converse with TypeAgent Studio — the AI presenter of the author → tune → validate loop a developer runs in the Studio extension. Currently available: report Studio's environment and agent locations, list known cross-schema grammar collisions, and show recent Studio events. Run, validate, and author actions (over the same typed Studio service the extension uses) are being added.",
+    "originalSchemaFile": "./studioSchema.ts",
+    "schemaFile": "../dist/studioSchema.pas.json",
+    "schemaType": "StudioActions"
+  }
+}

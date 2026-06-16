@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
     "debug": "^4.4.0",
     "type-fest": "^4.39.1"
   },

@@ -21,7 +21,7 @@ import type {
 } from "@typeagent/core/corpus";
 import type { ReplayActionResolver } from "@typeagent/core/replay";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
-import { createStudioRuntimeCore } from "../studioRuntimeCore.js";
+import { createStudioRuntimeCore } from "@typeagent/core/runtime";
 
 function createContext(
     workspaceFolderFsPaths: string[] = [],

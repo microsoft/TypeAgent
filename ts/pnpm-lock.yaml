@@ -1292,6 +1292,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -1448,6 +1451,9 @@ importers:
 
   packages/agentSdk:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -1858,8 +1864,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.4.10
+        version: 3.4.10
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2563,8 +2569,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1
       dompurify:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.4.10
+        version: 3.4.10
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -3121,6 +3127,61 @@ importers:
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/agents/studio:
+    dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../../typeagent-core
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      studio-service:
+        specifier: workspace:*
+        version: link:../../studio-service
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3801,8 +3862,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.4.10
+        version: 3.4.10
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -4339,6 +4400,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
+      studio-agent:
+        specifier: workspace:*
+        version: link:../agents/studio
       taskflow-typeagent:
         specifier: workspace:*
         version: link:../agents/taskflow
@@ -4964,6 +5028,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -5237,8 +5304,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.4.10
+        version: 3.4.10
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -5451,8 +5518,8 @@ importers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
       dompurify:
-        specifier: ^3.4.0
-        version: 3.4.0
+        specifier: ^3.4.10
+        version: 3.4.10
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -5547,6 +5614,52 @@ importers:
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@25.9.1)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(tsx@4.21.0)(yaml@2.8.3)
+
+  packages/studio-service:
+    dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
+      '@typeagent/core':
+        specifier: workspace:*
+        version: link:../typeagent-core
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/telemetry:
     dependencies:
@@ -5723,12 +5836,21 @@ importers:
 
   packages/typeagent-studio:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
       '@typeagent/core':
         specifier: workspace:*
         version: link:../typeagent-core
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -5736,6 +5858,9 @@ importers:
       '@types/vscode':
         specifier: ^1.90.0
         version: 1.100.0
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       '@vscode/vsce':
         specifier: ^3.2.1
         version: 3.4.0
@@ -5785,9 +5910,6 @@ importers:
 
   packages/utils/commonUtils:
     dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -5982,8 +6104,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.1
-        version: 3.4.2
+        specifier: ^3.4.10
+        version: 3.4.10
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.21.0)
@@ -11366,11 +11488,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.0:
-    resolution: {integrity: sha512-nolgK9JcaUXMSmW+j1yaSvaEaoXYHwWyGJlkoCTghc97KgGDDSnpoU/PlEnw63Ah+TGKFOyY+X5LnxaWbCSfXg==}
-
-  dompurify@3.4.2:
-    resolution: {integrity: sha512-lHeS9SA/IKeIFFyYciHBr2n0v1VMPlSj843HdLOwjb2OxNwdq9Xykxqhk+FE42MzAdHvInbAolSE4mhahPpjXA==}
+  dompurify@3.4.10:
+    resolution: {integrity: sha512-0xzNv0e7oYC6yyuOGZIABPM4qtg3QxLFniDNPP4ZP90wR8Yq3zgwpRbrNiT4N3IKqDbbYFEJLV+JWEs19aZ//w==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -19457,7 +19576,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.2
+      dompurify: 3.4.10
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -23618,11 +23737,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.0:
-    optionalDependencies:
-      '@types/trusted-types': 2.0.7
-
-  dompurify@3.4.2:
+  dompurify@3.4.10:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -26763,7 +26878,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
-      dompurify: 3.4.2
+      dompurify: 3.4.10
       es-toolkit: 1.46.1
       katex: 0.16.45
       khroma: 2.1.0

@@ -8,9 +8,16 @@ import { readFile } from "node:fs/promises";
 import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
-import type { AvailableAgent } from "./studioRuntimeCore.js";
+import { ensureStudioService } from "./studioServiceLauncher.js";
+import {
+    StudioServiceRuntimeFacade,
+    type CorpusSource,
+} from "./serviceRuntimeFacade.js";
+import type { AvailableAgent } from "@typeagent/core/runtime";
 import { SANDBOX_VIEW_ID, SandboxTreeProvider } from "./sandboxTreeProvider.js";
 import type { SandboxTreeNode } from "./sandboxTreePresentation.js";
+import { StudioServiceSandboxSource } from "./sandboxSource.js";
+import type { SandboxSource } from "./sandboxSource.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
 import type { CorpusTreeNode } from "./corpusTreePresentation.js";
 import {
@@ -27,6 +34,10 @@ import {
     COLLISIONS_VIEW_ID,
     CollisionsTreeProvider,
 } from "./collisionsTreeProvider.js";
+import {
+    StudioServiceCollisionsSource,
+    type CollisionsSource,
+} from "./collisionsSource.js";
 import type { CollisionRow } from "./collisionsPresentation.js";
 import {
     STUDIO_STATUS_BAR_COMMAND,
@@ -36,8 +47,17 @@ import {
     EVENT_LOG_VIEW_ID,
     EventLogTreeProvider,
 } from "./eventLogTreeProvider.js";
+import { StudioServiceEventSource } from "./eventLogSource.js";
+import {
+    StudioServiceConnection,
+    type StudioConnectionState,
+} from "./studioServiceConnection.js";
+import { openImpactReport } from "./impactReportView.js";
 
 export function activate(context: vscode.ExtensionContext): void {
+    // In-process runtime — retained ONLY for the onboarding command surface
+    // (see studioRuntime.ts). The shared live surfaces below read from the
+    // standalone Studio service over the channel, not from this runtime.
     const runtime = createStudioRuntime(context);
 
     // Warn early if we couldn't locate `packages/agents` under any open
@@ -55,18 +75,24 @@ export function activate(context: vscode.ExtensionContext): void {
 
     registerStudioCommands(context, runtime);
 
-    const sandboxTree = new SandboxTreeProvider(runtime);
+    // One shared connection to the standalone Studio service for all
+    // channel-backed views. Created early because the Sandbox view reads only
+    // through it (the service is the single source of truth for sandboxes). The
+    // launcher (below) points it at the launched/attached service.
+    const connection = new StudioServiceConnection(repoRootInfo.repoRoot);
+    const sandboxSource = new StudioServiceSandboxSource(connection);
+    // Service-backed corpus / health / feedback / replay surfaces (repo info is
+    // resolved locally; everything else routes to the service).
+    const serviceRuntime = new StudioServiceRuntimeFacade(
+        connection,
+        repoRootInfo,
+    );
 
-    // Replay the persisted sandbox set asynchronously so activation stays
-    // synchronous; the sandbox tree refreshes via the lifecycle event
-    // subscription as each sandbox comes back online.
-    runtime.restoreSandboxes().catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn(
-            "[typeagent-studio] Failed to restore persisted sandboxes:",
-            err,
-        );
-    });
+    const sandboxTree = new SandboxTreeProvider(sandboxSource);
+
+    // Sandboxes are restored from the agent runtime's persisted snapshot on the
+    // first successful connect (wired in the connection state handler below),
+    // not at activation — the agent-server may not be up yet.
     context.subscriptions.push(
         sandboxTree,
         vscode.window.registerTreeDataProvider(SANDBOX_VIEW_ID, sandboxTree),
@@ -103,7 +129,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         options =
                             trimmed.length > 0 ? { id: trimmed } : undefined;
                     }
-                    const status = await runtime.startSandbox(options);
+                    const status = await sandboxSource.startSandbox(options);
                     vscode.window.showInformationMessage(
                         `Sandbox '${status.id}' started.`,
                     );
@@ -117,12 +143,12 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.stopSandbox",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 try {
-                    await runtime.stopSandbox(id);
+                    await sandboxSource.stopSandbox(id);
                     vscode.window.showInformationMessage(
                         `Sandbox '${id}' stopped.`,
                     );
@@ -136,12 +162,12 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.restartSandbox",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 try {
-                    await runtime.restartSandbox(id);
+                    await sandboxSource.restartSandbox(id);
                     vscode.window.showInformationMessage(
                         `Sandbox '${id}' restarted.`,
                     );
@@ -155,20 +181,20 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.loadAgent",
             async (node?: SandboxTreeNode) => {
-                const id = await resolveSandboxId(runtime, node);
+                const id = await resolveSandboxId(sandboxSource, node);
                 if (!id) {
                     return;
                 }
                 // Exclude agents already loaded in this sandbox from the
                 // suggestions (loading a duplicate is a no-op / confusing).
                 const loaded = new Set(
-                    (await runtime.listSandboxes())
+                    (await sandboxSource.listSandboxes())
                         .find((s) => s.id === id)
                         ?.agents.map((a) => a.name) ?? [],
                 );
-                const available = (await runtime.listAvailableAgents()).filter(
-                    (a) => !loaded.has(a.name),
-                );
+                const available = (
+                    await sandboxSource.listAvailableAgents()
+                ).filter((a) => !loaded.has(a.name));
                 const agentRef =
                     available.length > 0
                         ? await pickAgentRef(available, id)
@@ -192,7 +218,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    const status = await runtime.loadSandboxAgent(
+                    const status = await sandboxSource.loadSandboxAgent(
                         id,
                         agentRef.trim(),
                     );
@@ -288,7 +314,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    await runtime.unloadSandboxAgent(id, agentName);
+                    await sandboxSource.unloadSandboxAgent(id, agentName);
                     vscode.window.showInformationMessage(
                         `Unloaded agent '${agentName}' from '${id}'.`,
                     );
@@ -301,7 +327,7 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    const corpusTree = new CorpusTreeProvider(runtime);
+    const corpusTree = new CorpusTreeProvider(serviceRuntime);
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
@@ -365,7 +391,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    await runtime.recordFeedback(
+                    await serviceRuntime.recordFeedback(
                         buildFeedbackRecordInput({
                             requestId: randomUUID(),
                             rating: rating.value,
@@ -393,7 +419,7 @@ export function activate(context: vscode.ExtensionContext): void {
             async (arg?: string | CorpusTreeNode) => {
                 const agent =
                     typeof arg === "string" ? arg : (arg?.agent ?? undefined);
-                const target = agent ?? (await pickCorpusAgent(runtime));
+                const target = agent ?? (await pickCorpusAgent(serviceRuntime));
                 if (!target) {
                     return;
                 }
@@ -412,7 +438,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
                 try {
                     const { path: filePath, created } =
-                        await runtime.seedInRepoCorpus(target);
+                        await serviceRuntime.seedInRepoCorpus(target);
                     corpusTree.refresh();
                     const doc = await vscode.workspace.openTextDocument(
                         vscode.Uri.file(filePath),
@@ -433,7 +459,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.addExternalCorpus",
             async (node?: CorpusTreeNode) => {
-                const agent = node?.agent ?? (await pickCorpusAgent(runtime));
+                const agent =
+                    node?.agent ?? (await pickCorpusAgent(serviceRuntime));
                 if (!agent) {
                     return;
                 }
@@ -456,7 +483,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    await runtime.addExternalCorpusSource({
+                    await serviceRuntime.addExternalCorpusSource({
                         name: name.trim(),
                         agent,
                         kind: "jsonl-file",
@@ -474,7 +501,7 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         ),
     );
-    const statusBar = new StudioStatusBar(runtime);
+    const statusBar = new StudioStatusBar(serviceRuntime);
     context.subscriptions.push(
         statusBar,
         vscode.commands.registerCommand(STUDIO_STATUS_BAR_COMMAND, () =>
@@ -482,19 +509,75 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    const eventLog = new EventLogTreeProvider(runtime);
+    // Service connection status bar (clicking re-attempts the connection). The
+    // shared `connection` is created earlier (the Sandbox view depends on it).
+    const SERVICE_CONNECT_COMMAND = "typeagent-studio.connectStudioService";
+    const serviceStatusBar = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        99,
+    );
+    serviceStatusBar.command = SERVICE_CONNECT_COMMAND;
+    const renderServiceStatus = (state: StudioConnectionState) => {
+        if (state === "connected") {
+            serviceStatusBar.text = "$(plug) Studio: connected";
+            serviceStatusBar.tooltip =
+                "Connected to the standalone Studio service for this workspace.";
+        } else if (state === "connecting") {
+            serviceStatusBar.text = "$(sync~spin) Studio: connecting…";
+            serviceStatusBar.tooltip =
+                "Launching / connecting to the Studio service…";
+        } else {
+            serviceStatusBar.text = "$(debug-disconnect) Studio: disconnected";
+            serviceStatusBar.tooltip =
+                "Studio service not connected. Click to retry (or run `typeagent-studio serve`).";
+        }
+        serviceStatusBar.show();
+    };
+
+    // The Event Log reads from the standalone Studio service over the shared
+    // connection (no in-process fallback). It shows recent activity once
+    // connected; empty while connecting.
+    const eventChannelSource = new StudioServiceEventSource(connection);
+    const eventLog = new EventLogTreeProvider(eventChannelSource);
+    const eventLogView = vscode.window.createTreeView(EVENT_LOG_VIEW_ID, {
+        treeDataProvider: eventLog,
+    });
+
     context.subscriptions.push(
         eventLog,
-        vscode.window.registerTreeDataProvider(EVENT_LOG_VIEW_ID, eventLog),
+        eventLogView,
+        serviceStatusBar,
+        { dispose: () => connection.dispose() },
         vscode.commands.registerCommand("typeagent-studio.refreshEvents", () =>
             eventLog.refresh(),
         ),
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
         ),
+        // Open the Impact Report webview — the first greenfield client of the
+        // service channel (replay over the channel; webview never opens a
+        // socket).
+        vscode.commands.registerCommand(
+            "typeagent-studio.openImpactReport",
+            () =>
+                openImpactReport(context, repoRootInfo.repoRoot, () =>
+                    connection.getTarget(),
+                ),
+        ),
     );
 
-    const collisions = new CollisionsTreeProvider(runtime);
+    // The Collisions view reads from the standalone Studio service over the
+    // shared connection (scan + list are read-only analysis); no in-process
+    // fallback.
+    const collisionsChannelSource = new StudioServiceCollisionsSource(
+        connection,
+    );
+    const collisions = new CollisionsTreeProvider(collisionsChannelSource);
+    const collisionsView = vscode.window.createTreeView(COLLISIONS_VIEW_ID, {
+        treeDataProvider: collisions,
+    });
+
+    let currentCollisionsSource: CollisionsSource = collisionsChannelSource;
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an
@@ -508,14 +591,14 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     };
 
-    // subscription: run the grammar collision scan, then push fresh results
-    // and the skipped set into the tree.
+    // subscription: run the grammar collision scan against the active source,
+    // then push fresh results and the skipped set into the tree.
     const runCollisionScan = async () => {
         // An explicit scan makes any queued debounced auto-scan redundant
         // (e.g. the one refreshSandboxAgent triggers after Build grammar).
         cancelPendingAutoScan();
-        const result = await runtime.scanGrammarCollisions();
-        await collisions.reloadFromRuntime();
+        const result = await currentCollisionsSource.scanGrammarCollisions();
+        await collisions.reload();
         collisions.setSkipped(result.skipped);
         return result;
     };
@@ -542,13 +625,17 @@ export function activate(context: vscode.ExtensionContext): void {
             });
         }, AUTO_SCAN_DEBOUNCE_MS);
     };
-    const agentLoadSubscription = runtime.onAgentLoadChanged(scheduleAutoScan);
+
+    // The collision source is fixed (the service channel), so the agent-load
+    // subscription is bound once.
+    const agentLoadSubscription =
+        currentCollisionsSource.onAgentLoadChanged(scheduleAutoScan);
 
     context.subscriptions.push(
         collisions,
-        agentLoadSubscription,
+        collisionsView,
+        { dispose: () => agentLoadSubscription.dispose() },
         { dispose: cancelPendingAutoScan },
-        vscode.window.registerTreeDataProvider(COLLISIONS_VIEW_ID, collisions),
         vscode.commands.registerCommand(
             "typeagent-studio.refreshCollisions",
             () => collisions.refresh(),
@@ -598,7 +685,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     );
                     return;
                 }
-                const { repoRoot, agentsDirFound } = runtime.getRepoRootInfo();
+                const { repoRoot, agentsDirFound } = repoRootInfo;
                 if (!agentsDirFound) {
                     vscode.window.showErrorMessage(
                         "Can't build grammar: no 'packages/agents' directory found. Open the monorepo's 'ts' folder.",
@@ -623,7 +710,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     // re-evaluate against the freshly built grammar; this also
                     // emits sandbox.agent.loaded, which refreshes the trees and
                     // triggers the collision auto-scan.
-                    await runtime.refreshSandboxAgent(agent);
+                    await sandboxSource.refreshSandboxAgent(agent);
                     const scan = await runCollisionScan();
                     const stillUnbuilt = scan.skipped.some(
                         (s) =>
@@ -652,7 +739,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             "typeagent-studio.replayCorpus",
             async () => {
-                const agents = await runtime.listCorpusAgents();
+                const agents = await serviceRuntime.listCorpusAgents();
                 if (agents.length === 0) {
                     vscode.window.showInformationMessage(
                         "No agents have a corpus to replay. Load an agent into a sandbox first.",
@@ -670,7 +757,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     return;
                 }
                 try {
-                    const result = await runtime.replayCorpus({ agent });
+                    const result = await serviceRuntime.replayCorpus({ agent });
                     const line = formatReplaySummaryLine(result.summary);
                     if (result.rows.length === 0) {
                         vscode.window.showInformationMessage(
@@ -703,6 +790,86 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
+    // React to the shared connection's state. All views read from the service
+    // (no in-process fallback); the Sandbox view shows a disconnected row.
+    // Restores the service's persisted sandboxes on the first connect. Fires
+    // immediately with the current ("disconnected") state.
+    let sandboxesRestored = false;
+    context.subscriptions.push(
+        connection.onStateChanged((state) => {
+            renderServiceStatus(state);
+            const connected = state === "connected";
+
+            sandboxTree.setConnected(connected);
+            if (connected && !sandboxesRestored) {
+                sandboxesRestored = true;
+                // Replay the service's persisted sandboxes once connected, then
+                // release the Sandbox view's loading bar (whether restore
+                // succeeded or failed) so it renders the restored rows.
+                void sandboxSource
+                    .restoreSandboxes()
+                    .then(() => sandboxTree.refresh())
+                    .catch((err) =>
+                        console.warn(
+                            "[typeagent-studio] Failed to restore sandboxes:",
+                            describeError(err),
+                        ),
+                    )
+                    .finally(() => sandboxTree.markReady());
+            }
+        }),
+        vscode.commands.registerCommand(SERVICE_CONNECT_COMMAND, async () => {
+            // Re-run the launcher (attach or relaunch), then connect.
+            const target = await ensureStudioService(repoRootInfo.repoRoot);
+            if (target !== undefined) {
+                connection.setTarget(target);
+            }
+            const ok = await connection.connect();
+            if (!ok) {
+                void vscode.window.showWarningMessage(
+                    "TypeAgent Studio service not reachable — open the workspace, or run `typeagent-studio serve`. Studio will keep retrying.",
+                );
+                return;
+            }
+            let detail = "";
+            try {
+                const info = await connection.getClient()?.getStudioInfo();
+                if (info) {
+                    const total = info.agentLocations.reduce(
+                        (n, l) => n + l.agentCount,
+                        0,
+                    );
+                    detail = ` — repo ${info.repoRootInfo.repoRoot ?? "(unknown)"}, ${total} agent(s)`;
+                }
+            } catch {
+                // Service info is best-effort decoration on the toast.
+            }
+            void vscode.window.showInformationMessage(
+                `Connected to the Studio service${detail}.`,
+            );
+        }),
+    );
+
+    // Launch (or attach to) the standalone Studio service for this workspace,
+    // then begin auto-connecting. Non-blocking: a not-yet-running agent-server
+    // or slow spawn doesn't hold up activation; the connection retries and the
+    // service announces itself when ready.
+    void (async () => {
+        try {
+            const target = await ensureStudioService(repoRootInfo.repoRoot);
+            if (target !== undefined) {
+                connection.setTarget(target);
+            }
+        } catch (err) {
+            console.warn(
+                "[typeagent-studio] Failed to launch Studio service:",
+                describeError(err),
+            );
+        } finally {
+            connection.startAutoConnect();
+        }
+    })();
+
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-studio.hello", () => {
             vscode.window.showInformationMessage(
@@ -713,13 +880,13 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 async function resolveSandboxId(
-    runtime: ReturnType<typeof createStudioRuntime>,
+    source: SandboxSource,
     node: SandboxTreeNode | undefined,
 ): Promise<string | undefined> {
     if (node?.sandboxId) {
         return node.sandboxId;
     }
-    const sandboxes = await runtime.listSandboxes();
+    const sandboxes = await source.listSandboxes();
     if (sandboxes.length === 0) {
         vscode.window.showInformationMessage("No sandboxes are running.");
         return undefined;
@@ -795,9 +962,9 @@ function pickAgentRef(
  * user cancels.
  */
 async function pickCorpusAgent(
-    runtime: ReturnType<typeof createStudioRuntime>,
+    source: CorpusSource,
 ): Promise<string | undefined> {
-    const agents = await runtime.listCorpusAgents();
+    const agents = await source.listCorpusAgents();
     if (agents.length === 0) {
         vscode.window.showInformationMessage(
             "No agents are loaded. Load an agent into a sandbox first.",

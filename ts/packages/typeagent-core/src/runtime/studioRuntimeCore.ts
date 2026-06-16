@@ -12,23 +12,23 @@ import {
     type OnboardingState,
     type RestorePhaseResult,
     routeStudioConversation,
-} from "@typeagent/core/onboardingBridge";
-import { FileHealthService, type HealthFinding } from "@typeagent/core/health";
-import { InProcessEventStream } from "@typeagent/core/events";
-import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
+} from "../onboardingBridge/index.js";
+import { FileHealthService, type HealthFinding } from "../health/index.js";
+import { InProcessEventStream } from "../events/index.js";
+import type { StudioEvent, StudioEventType } from "../events/index.js";
 import {
     createRepoAgentLoader,
     InMemorySandboxManager,
     type SandboxManager,
     type SandboxStatus,
-} from "@typeagent/core/sandbox";
+} from "../sandbox/index.js";
 import {
     FileCorpusService,
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
     type ExternalSourceSpec,
-} from "@typeagent/core/corpus";
+} from "../corpus/index.js";
 import {
     CoreFeedbackService,
     InMemoryFeedbackBackend,
@@ -37,7 +37,7 @@ import {
     type FeedbackRecordInput,
     type FeedbackRow,
     type FeedbackService,
-} from "@typeagent/core/feedback";
+} from "../feedback/index.js";
 import {
     replayCorpus,
     type ActionDelta,
@@ -46,19 +46,19 @@ import {
     type ReplayMissPolicy,
     type ReplaySummary,
     type VersionSpec,
-} from "@typeagent/core/replay";
+} from "../replay/index.js";
 import {
     InProcessCollisionService,
     type CollisionFilter,
     type CollisionService,
-} from "@typeagent/core/collisions";
+} from "../collisions/index.js";
 import {
     createRepoGrammarScanner,
     type GrammarCollisionScanner,
     type GrammarScanSkip,
-} from "@typeagent/core/collisionScanner";
-import type { CollisionDetectedEvent } from "@typeagent/core/events";
-import { getDefaultPhaseInputs } from "./onboardingPresentation.js";
+} from "../collisions/scanner.js";
+import type { CollisionDetectedEvent } from "../events/index.js";
+import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
     resolveRepoRoot,
     type RepoRootResolution,
@@ -142,6 +142,22 @@ export interface AvailableAgent {
     emoji?: string;
 }
 
+/** A directory Studio scans for agents, with what it found there. */
+export interface AgentLocation {
+    /** Resolved absolute path of the agent root. */
+    root: string;
+    /** Whether the directory exists / is readable. */
+    exists: boolean;
+    /** Number of agent packages (declaring `./agent/manifest`) found in it. */
+    agentCount: number;
+    /**
+     * True when this root is an **external** location contributed by the
+     * `agentSearchPaths` setting, rather than the repository's own
+     * `packages/agents` (which is always the first, non-external root).
+     */
+    external: boolean;
+}
+
 export interface StudioRuntime {
     /**
      * Repo root used for agent discovery and whether a `packages/agents`
@@ -205,13 +221,18 @@ export interface StudioRuntime {
     };
     listSandboxes(): Promise<SandboxStatus[]>;
     /**
-     * Agents available to load (name + manifest emoji when known). Merges the
-     * curated registry (`defaultAgentProvider/data/config.json` agent keys —
-     * what the shell loads) with `packages/agents/*` directories declaring the
-     * dispatcher `./agent/manifest` export. Used to offer autocomplete in the
-     * Load agent UI.
+     * Agents available to load (name + manifest emoji when known). Discovered
+     * by scanning the configured agent roots (`packages/agents` plus any
+     * `agentSearchPaths`) for directories declaring the dispatcher
+     * `./agent/manifest` export. Used to offer autocomplete in the Load agent UI.
      */
     listAvailableAgents(): Promise<AvailableAgent[]>;
+    /**
+     * The directories Studio scans for agents (`packages/agents` plus any
+     * configured `agentSearchPaths`), each with whether it exists and how many
+     * agent packages it contains. Read-only. (Studio Inspect surface.)
+     */
+    getAgentLocations(): Promise<AgentLocation[]>;
     startSandbox(options?: {
         id?: string;
         agents?: string[];
@@ -648,6 +669,20 @@ export function createStudioRuntimeCore(
         async listAvailableAgents() {
             return listAvailableAgentNames(agentRoots());
         },
+        async getAgentLocations() {
+            // The repo's own `packages/agents` is always the first root; any
+            // others come from the `agentSearchPaths` setting and are external.
+            const repoAgentsRoot = path.join(repoRoot, "packages", "agents");
+            return Promise.all(
+                agentRoots().map(async (root) => {
+                    const external = root !== repoAgentsRoot;
+                    const agentCount = await countAgentsInRoot(root);
+                    return agentCount === undefined
+                        ? { root, exists: false, agentCount: 0, external }
+                        : { root, exists: true, agentCount, external };
+                }),
+            );
+        },
         async startSandbox(startOptions = {}) {
             // Title-bar "Start sandbox" passes no id; mint a unique one so
             // multiple sandboxes can coexist (the default id is reused only
@@ -1068,16 +1103,12 @@ function stripAgentSuffix(agentName: string): string {
 }
 
 /**
- * Discover agents available to load. Merges two sources so the picker matches
- * what the shell offers without being limited to physical directories:
- *  1. the curated registry at
- *     `<repoRoot>/packages/defaultAgentProvider/data/config.json` (its `agents`
- *     keys — the same set the shell loads), and
- *  2. directories under `<repoRoot>/packages/agents` whose `package.json`
- *     declares the dispatcher `./agent/manifest` export (catches agents not yet
- *     in the registry, e.g. freshly scaffolded ones).
- * Each agent carries its manifest emoji when one can be resolved from disk.
- * Returns the sorted, de-duplicated union; empty when nothing can be read.
+ * Discover agents available to load by scanning the configured agent roots
+ * (`packages/agents` plus any `agentSearchPaths`) for directories whose
+ * `package.json` declares the dispatcher `./agent/manifest` export. Each agent
+ * carries its manifest emoji when one can be resolved from disk. Returns the
+ * sorted, de-duplicated list; empty when nothing can be read. (Discovery is
+ * filesystem-only; it does not consult the `defaultAgentProvider` registry.)
  */
 async function listAvailableAgentNames(
     agentRoots: string[],
@@ -1089,6 +1120,41 @@ async function listAvailableAgentNames(
             const emoji = emojiByName.get(name);
             return emoji !== undefined ? { name, emoji } : { name };
         });
+}
+
+/**
+ * Count the agent packages in a single root (directories declaring the
+ * dispatcher `./agent/manifest` export). Returns `undefined` when the root
+ * doesn't exist / can't be read, so callers can distinguish "missing" from
+ * "present but empty".
+ */
+async function countAgentsInRoot(root: string): Promise<number | undefined> {
+    let entries;
+    try {
+        entries = await fs.readdir(root, { withFileTypes: true });
+    } catch {
+        return undefined;
+    }
+    let count = 0;
+    for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === "dist") {
+            continue;
+        }
+        try {
+            const pkg = JSON.parse(
+                await fs.readFile(
+                    path.join(root, entry.name, "package.json"),
+                    "utf8",
+                ),
+            ) as { exports?: Record<string, unknown> };
+            if (resolveManifestExport(pkg.exports) !== undefined) {
+                count++;
+            }
+        } catch {
+            // not an agent package — skip
+        }
+    }
+    return count;
 }
 
 /**

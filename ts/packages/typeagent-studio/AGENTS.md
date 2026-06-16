@@ -4,28 +4,46 @@ For AI agents and developers working in this package.
 
 ## What this package is
 
-`typeagent-studio` is the VS Code extension surface of TypeAgent Studio: tree
-views (Sandboxes, Corpora, Event Log, Collisions), a health status bar,
-commands, and (planned) webviews. It is a **thin presenter** over the
-`@typeagent/core` engine.
+`typeagent-studio` is the bespoke VS Code extension surface of TypeAgent Studio:
+tree views (Sandboxes, Corpora, Event Log, Collisions), a health status bar,
+commands, and webviews (Impact Report). It is a **thin client** of the
+**standalone, per-workspace Studio service** — the rich VS Code view over a
+runtime it does not own. (The `studio` agent is _also_ a thin client of that same
+service, for the chat/MCP surface.)
 
-## Design principle you MUST preserve — thin presenter over a headless core
+## Design principle you MUST preserve — thin client over the Studio service
 
-> **This package renders and orchestrates UI; it does not own capability
-> logic.** Capability logic belongs in `@typeagent/core`, returns a typed
-> result, and is consumed identically by a human (this UI), an AI agent, and a
-> human+AI hybrid. See [`DESIGN.md`](../../docs/plans/vscode-devx/DESIGN.md) §3.0.
+> **This package renders and orchestrates UI; it does not own capability logic
+> and it does not host the Studio runtime.** Capability logic lives in
+> `@typeagent/core`; the runtime runs **once per workspace, in a standalone
+> Studio service** (launched by this extension or a `typeagent-studio serve`
+> CLI). This extension is a **client** of that service over the typed
+> result/event channel — serving the human (this UI) while an AI agent (MCP, via
+> the thin `studio` agent) and a hybrid driver use the _same_ runtime. See
+> [`DESIGN.md` §3.0 and §3.5](../../docs/plans/vscode-devx/DESIGN.md).
+
+> **Runtime placement (P-1.6 done).** The runtime lives in the standalone
+> `studio-service` (launched/attached by this extension via `ensureStudioService`,
+> or `typeagent-studio serve`); the `studio` agent hosts a registry + proxies to
+> it. This extension routes its shared live surfaces (sandboxes, event log,
+> collisions, corpus, health, feedback, replay) through the service channel. The
+> in-process `createStudioRuntime` survives **only** for onboarding commands (J1);
+> do **not** add new in-process runtime/capability logic here. New capability is a
+> **typed runtime method reachable over the Studio service channel** (and surfaced
+> as a thin `studio` agent action for chat/MCP), which this extension then renders.
 
 When adding a feature here:
 
-- Put the real work in `@typeagent/core` (or the shared runtime) as a typed
-  primitive; keep this layer to presentation, command wiring, and VS Code glue.
+- Put the real work in `@typeagent/core`, reachable over the **Studio service
+  channel** (and proxied by a thin `studio` agent action); keep this layer to
+  presentation, command wiring, and VS Code glue. The view calls the service and
+  renders the typed result.
 - Mirror the existing split: a **vscode-free presentation module**
   (`*Presentation.ts`, unit-tested with `node:test`) + a thin **`TreeDataProvider`
   / command** adapter. New views/commands should follow this.
-- If a capability would only be reachable by clicking in the UI, reconsider:
-  it should also be invocable headlessly (the basis for the `studio` agent and
-  CLI/MCP surfaces). See
+- If a capability would only be reachable by clicking in the UI, that's a bug in
+  the layering: it must be a typed runtime method (also reachable over
+  MCP/CLI via the `studio` agent), and the UI renders it. See
   [`STUDIO-AGENT.md`](../../docs/plans/vscode-devx/STUDIO-AGENT.md).
 - File-writing commands must be explicit/confirmed, never fire-on-selection
   (see the corpus seed action + its confirmation).
@@ -46,6 +64,6 @@ few unrelated errors — the package builds via esbuild, not tsc.
 
 ## Where the design lives
 
-- [`DESIGN.md`](../../docs/plans/vscode-devx/DESIGN.md) §3.0 — headless-core / thin-presenter principle.
+- [`DESIGN.md`](../../docs/plans/vscode-devx/DESIGN.md) §3.0 — headless-core / thin-presenter principle; §3.5 — runtime placement (standalone per-workspace Studio service).
 - [`USER-STORY.md`](../../docs/plans/vscode-devx/USER-STORY.md) — human / AI / hybrid interaction modes.
 - [`STATUS.md`](../../docs/plans/vscode-devx/STATUS.md) — current state, known issues, next slices.
