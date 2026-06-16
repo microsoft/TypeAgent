@@ -221,6 +221,9 @@ pending = new Map<number, { resolve; reject }>();
 // On result: pending.get(callId)?.resolve(result)
 // On error: pending.get(callId)?.reject(new Error(error))
 // On disconnect: reject all pending with "Agent channel disconnected"
+// A non-rebindable rpc also permanently replaces invoke/send with error stubs
+// ("poison"); a rebindable rpc keeps them and re-points at a new channel via
+// rebind(channel) — see `createRpc(..., { rebindable: true })`.
 ```
 
 ### Layer 4: Agent RPC client/server
@@ -311,12 +314,18 @@ const channelProvider = createChannelProviderAdapter("browser", ws.send.bind(ws)
 const browserControlChannel = channelProvider.createChannel("browserControl");
 createExternalBrowserServer(browserControlChannel);
 
-// Agent service: extension sends requests to agent
+// Agent service: extension sends requests to agent. Created once as a
+// rebindable rpc and re-pointed at the fresh channel on each reconnect, so
+// the cached reference survives socket drops instead of being recreated.
 const agentServiceChannel = channelProvider.createChannel("agentService");
-agentRpc = createRpc(agentServiceChannel, /* no local handlers */, {
-    importProgress(params) { /* update UI */ },
-    knowledgeExtractionProgress(params) { /* update UI */ }
-});
+if (agentRpc) {
+    agentRpc.rebind(agentServiceChannel);
+} else {
+    agentRpc = createRpc(agentServiceChannel, /* no local handlers */, {
+        importProgress(params) { /* update UI */ },
+        knowledgeExtractionProgress(params) { /* update UI */ }
+    }, { rebindable: true });
+}
 ```
 
 **Message routing:**
@@ -689,11 +698,14 @@ isn't loaded:
 On unexpected WebSocket close (not "duplicate" reason):
 
 ```
-1. Clear channel provider and RPC state
+1. Reject pending RPC calls (notifyDisconnected) and clear the channel provider.
+   The rebindable agentRpc is kept (not nulled) and re-pointed at the new
+   channel on reconnect; a stale socket's onclose is ignored via an identity
+   guard so it can't tear down a newer connection.
 2. Start reconnection timer (5-second interval)
 3. Update badge to show disconnected state
 4. Broadcast connectionStatusChanged(false) to extension pages
-5. On successful reconnect: flush message queue, restore state
+5. On successful reconnect: rebind agentRpc, flush message queue, restore state
 ```
 
 ### RPC timeout and disconnect
@@ -704,6 +716,9 @@ When the WebSocket disconnects while RPC calls are pending:
 1. channelProvider.notifyDisconnected() fires
 2. All pending invoke promises are rejected with "Agent channel disconnected"
 3. Callers receive the rejection and can retry or report to user
+4. The agent-service rpc is rebindable, so it is not poisoned: calls in the
+   disconnected window fail fast with "Agent channel disconnected", and the
+   same rpc reference resumes working after rebind() on reconnect
 ```
 
 ---
