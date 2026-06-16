@@ -34,6 +34,17 @@ export {
     FeedbackWidget,
 } from "./feedbackWidget.js";
 
+export {
+    ConversationBar,
+    type ConversationBarController,
+    type ConversationBarConversation,
+    type ConversationBarIcon,
+    type ConversationBarIconName,
+    type ConversationBarIcons,
+    type ConversationBarOptions,
+    type ConversationBarStatus,
+} from "./conversationBar.js";
+
 export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
 
 export type {
