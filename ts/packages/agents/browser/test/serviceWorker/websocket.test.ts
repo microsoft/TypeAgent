@@ -126,4 +126,66 @@ describe("WebSocket Module", () => {
             }).rejects.toThrow();
         });
     });
+
+    describe("agentRpc rebind across reconnect", () => {
+        // Drives ensureWebsocketConnected to completion: flushes the
+        // getSettings/discoverPort microtasks and fires the MockWebSocket's
+        // 10ms open timer.
+        async function connectAndOpen(): Promise<any> {
+            const p = websocketModule.ensureWebsocketConnected();
+            await jest.advanceTimersByTimeAsync(20);
+            return p;
+        }
+
+        it("reuses the same agentRpc instance across a reconnect (rebind, not recreate)", async () => {
+            const socket1 = await connectAndOpen();
+            expect(socket1).toBeDefined();
+            const rpc1 = websocketModule.getAgentRpc();
+            expect(rpc1).toBeDefined();
+
+            // Drop the connection.
+            socket1.close();
+            expect(websocketModule.getWebSocket()).toBeUndefined();
+            // Rebindable rpc is kept across the drop rather than nulled.
+            expect(websocketModule.getAgentRpc()).toBe(rpc1);
+
+            // Reconnect.
+            const socket2 = await connectAndOpen();
+            expect(socket2).toBeDefined();
+            expect(socket2).not.toBe(socket1);
+            // Same object, rebound to the fresh channel.
+            expect(websocketModule.getAgentRpc()).toBe(rpc1);
+        });
+
+        it("ignores a stale onclose from a superseded socket", async () => {
+            const socket1 = await connectAndOpen();
+            const rpc1 = websocketModule.getAgentRpc();
+
+            socket1.close();
+            const socket2 = await connectAndOpen();
+            expect(websocketModule.getWebSocket()).toBe(socket2);
+
+            // The abandoned socket's onclose fires late; it must not tear down
+            // the live connection or the rebound rpc.
+            socket1.onclose({ reason: "" });
+
+            expect(websocketModule.getWebSocket()).toBe(socket2);
+            expect(websocketModule.getAgentRpc()).toBe(rpc1);
+        });
+
+        it("fails fast (does not poison) after a disconnect", async () => {
+            await connectAndOpen();
+            const socket = websocketModule.getWebSocket();
+            socket.close();
+
+            // Rebindable rpc rejects calls in the disconnected window instead of
+            // hanging, and is not permanently poisoned.
+            await expect(
+                websocketModule.sendActionToAgent({
+                    actionName: "testAction",
+                    parameters: {},
+                }),
+            ).rejects.toThrow("Agent channel disconnected");
+        });
+    });
 });
