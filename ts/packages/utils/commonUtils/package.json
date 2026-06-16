@@ -33,7 +33,6 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0"
   },
