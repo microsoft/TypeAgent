@@ -117,8 +117,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 await refreshConversations();
             },
             deleteConversation: async (conversationId) => {
-                await clientAPI.conversationDelete(conversationId);
-                await refreshConversations();
+                await deleteConversationFromBar(conversationId);
             },
         },
     });
@@ -169,6 +168,67 @@ document.addEventListener("DOMContentLoaded", async function () {
             conversationBar.setStatus({ connected: false });
             conversationBar.setError(e?.message ?? String(e));
         }
+    }
+
+    async function deleteConversationFromBar(
+        conversationId: string,
+    ): Promise<void> {
+        const current = await clientAPI.conversationGetCurrent();
+        if (current?.conversationId !== conversationId) {
+            await clientAPI.conversationDelete(conversationId);
+            await refreshConversations();
+            return;
+        }
+
+        const conversations = await clientAPI.conversationList();
+        const fallback = conversations.find(
+            (conversation) => conversation.conversationId !== conversationId,
+        );
+
+        if (fallback) {
+            const result = await clientAPI.conversationSwitch(
+                fallback.conversationId,
+            );
+            if (!result.success) {
+                throw new Error(
+                    result.error ??
+                        `Failed to switch to conversation "${fallback.name}" before deleting the current conversation.`,
+                );
+            }
+        } else {
+            const created = await clientAPI.conversationCreate(
+                makeFallbackConversationName(conversations),
+            );
+            const result = await clientAPI.conversationSwitch(
+                created.conversationId,
+            );
+            if (!result.success) {
+                throw new Error(
+                    result.error ??
+                        `Created conversation "${created.name}" but failed to switch to it before deleting the current conversation.`,
+                );
+            }
+        }
+
+        await clientAPI.conversationDelete(conversationId);
+        await refreshConversations();
+    }
+
+    function makeFallbackConversationName(
+        conversations: ConversationInfo[],
+    ): string {
+        const taken = new Set(
+            conversations.map((conversation) =>
+                conversation.name.toLowerCase(),
+            ),
+        );
+        const base = "New Conversation";
+        let name = base;
+        let suffix = 2;
+        while (taken.has(name.toLowerCase())) {
+            name = `${base} ${suffix++}`;
+        }
+        return name;
     }
 
     function setConversationBarVisible(visible: boolean): void {
