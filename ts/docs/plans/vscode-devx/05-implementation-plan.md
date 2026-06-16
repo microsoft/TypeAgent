@@ -1,8 +1,19 @@
 # TypeAgent Studio — Phase 5: Implementation Plan
 
 > **Status:** Drafted 2026-05-14, after [04-mvp-slice.md](./04-mvp-slice.md).
+> Revised 2026-06-11 to make this a **single plan for both presenters** — the
+> VS Code extension UI and the `studio` agent — over one headless core.
 >
 > **Purpose:** Concrete shapes — API surfaces, file layouts, schema-versioning rules, transport choices — to make the MVP slice buildable. Where a decision is open, this doc names it as an _open decision_ with a recommended default rather than hand-waving.
+>
+> **Scope — one capability, two presenters.** Per
+> [DESIGN.md §3.0](./DESIGN.md) ("headless core, thin presenters, three
+> audiences"), every capability is a typed primitive in `typeagent-core`,
+> surfaced by **both** the extension UI **and** the `studio` agent (MCP +
+> conversational). The agent is therefore **not a separate plan**: its action
+> surface is catalogued in [STUDIO-AGENT.md](./STUDIO-AGENT.md), and its build
+> phases (S0–S5) are sequenced inside §11 of this plan. Interaction modes
+> (human / AI-agent / hybrid) are described in [USER-STORY.md](./USER-STORY.md).
 >
 > **Convention:** Type definitions are TypeScript-shaped pseudo-code. They are illustrative; the real types ship in `typeagent-core` and are the single source of truth.
 
@@ -25,11 +36,15 @@ ts/
         collisions/              # F0.6
         replay/                  # F4.1
         onboardingBridge/        # F1.1 backend
+        runtime/                 # S0: context-agnostic Studio runtime
+                                 #     (hosted by the studio agent; the
+                                 #      extension consumes it only as a
+                                 #      transitional bootstrap — see §3.5/§11)
         index.ts
       package.json
       tsconfig.json
 
-    typeagent-studio/            [NEW — main extension]
+    typeagent-studio/            [NEW — bespoke VS Code extension; UI client of the agent-server]
       src/
         extension.ts             # activation
         sandbox/                 # tree + status bar
@@ -44,6 +59,12 @@ ts/
       media/                     # webview assets
       package.json
       tsconfig.json
+
+    agents/studio/               [NEW — hosts the Studio runtime; AI/MCP surface]
+      # depends on typeagent-core/runtime
+      # constructs the ONE Studio runtime; the extension/canvas/CLI are clients
+      # dispatchable + MCP action surface catalogued in STUDIO-AGENT.md (A–F)
+      # exposes a typed result/event channel for rich clients (à la code↔coda)
 
     agr-language/                [REFACTORED]
       # depends on typeagent-core
@@ -581,7 +602,16 @@ Gate C of MVP is evaluated with `needs-explanation`. The other policies exist bu
 
 ---
 
-## 10. UI layer — webview infrastructure
+## 10. Presentation layer — one runtime, many clients
+
+The Studio runtime is built on `typeagent-core` and instantiated **once, inside
+the `studio` agent** in the agent-server (DESIGN §3.5). Every surface is a
+**client** of that runtime, not a second host: the `typeagent-studio` extension
+(rich human UI), the `vscode-shell` canvas (generic chat), an AI orchestrator
+(MCP), and the CLI. This is the `code` : `coda` shape — the agent owns the
+capability + a channel; the extension is the rich client/view.
+
+### 10.1 UI client — webview infrastructure
 
 Five webviews. All share a common module:
 
@@ -599,9 +629,68 @@ Each webview:
 
 - Uses a single `Webview` instance per concept; multiple instances disallowed (open-the-existing-one behavior).
 - Persists state across reloads via `webview.setState`.
-- Communicates with the host via the `webviewKit/protocol.ts` message types; the host translates those messages into `typeagent-core` calls.
+- Communicates with the host via the `webviewKit/protocol.ts` message types; the host turns those messages into `studio`-agent action calls over the agent-server (not into an in-process runtime).
 
-**No direct dispatcher calls from inside a webview.** Always: webview → extension host → `typeagent-core` → sandbox.
+**No direct dispatcher state in the webview or the extension host.** Always:
+webview → extension host → agent-server (`studio` agent) → runtime → sandbox. The
+extension renders typed results and subscribes to the agent's event stream; it
+does not own the runtime. (The current in-process `createStudioRuntime` is a
+transitional bootstrap — see §11.)
+
+### 10.2 Agent — proxy to the runtime; the AI / conversational surface
+
+The `studio` agent (`packages/agents/studio/`) exposes the Studio loop as
+**typed, dispatchable actions** — automatically available over MCP and
+conversationally, with no new transport code. It follows the `onboarding` agent
+template (manifest + per-group schema/handler). It currently **hosts** the
+**S0 headless runtime** (`@typeagent/core/runtime`); per the runtime-placement
+decision ([DESIGN.md §3.5](./DESIGN.md), §11 "Runtime extraction" below) it is
+being migrated to a **thin proxy** that forwards to a standalone per-workspace
+Studio service.
+
+The surface is **layered by abstraction** (full catalogue in
+[STUDIO-AGENT.md](./STUDIO-AGENT.md)):
+
+- **Tier 1 — Primitives:** 1:1 with a core function; the typed result is the data.
+- **Tier 2 — Composites:** a few primitives sequenced into a useful unit.
+- **Tier 3 — Goal-oriented:** an LLM-planned loop with structured progress and approval checkpoints.
+
+Action groups (each maps to a build phase in §11):
+
+| Group          | Mutates? | Examples                                                                                               |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| A. Inspect     | no       | `ListAgents`, `DescribeAgent`, `GetSchema`, `ListCollisions`, `GetCoverage`, `QueryEvents`, `GetTrace` |
+| B. Author/edit | yes      | `AddAction`, `AddGrammarRule`, `GenerateGrammarFromSchema`, `BuildAgent` (always `dryRun`-able)        |
+| C. Corpus      | yes      | `SeedInRepoCorpus`, `CaptureSession`, `PromoteCaptures`                                                |
+| D. Run/try     | sandbox  | `StartSandbox`, `LoadAgent`, `RunUtterance(s)`                                                         |
+| E. Validate    | no       | `ScanCollisions`, `HealthGate`, `ReplayCorpus`, `DetectRegressions`, `ValidateChange`                  |
+| F. Orchestrate | composes | `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ReviewAgent`                                         |
+
+**Approval boundary (hybrid mode).** Autonomous-safe (no approval): all of group
+A; `RunUtterance(s)` (group D) **when it runs in a throwaway sandbox**; and the
+read-only group E analyses — `ScanCollisions`, `HealthGate`, `DiffGrammars`,
+`CoverageDelta`, `CollisionsDelta`, and `ReplayCorpus` / `ValidateChange` under
+the deterministic `needs-explanation` policy. Require `dryRun` + approval (or an
+explicit allow-list policy): all of groups B and C (and anything that commits);
+sandbox lifecycle that persists state (`StartSandbox` / `LoadAgent` against a
+non-throwaway sandbox); and any **cost-bearing or external-calling** run —
+notably `ReplayCorpus(live-llm)` and large-corpus replays, which show a cost
+estimate first. Tier-3 orchestration (group F) runs the whole loop but pauses at
+each group-B/C mutation for the same checkpoint. This mirrors onboarding's
+`pending → in-progress → approved` model and the same confirmations the UI uses.
+Authentic 👍/👎 feedback stays human; the agent may only _propose_ labels.
+
+**MCP exposure uses the existing TypeAgent integration** — there is no new
+Studio MCP host in scope (locked decision Q8). The `studio` agent's actions
+become available over MCP and `list_commands` automatically by virtue of being a
+registered TypeAgent agent, the same way the `onboarding` agent's are.
+
+**One runtime per workspace; clients reach it through the Studio service.** The
+runtime lives in a standalone, per-workspace Studio service ([DESIGN.md
+§3.5](./DESIGN.md)); the `studio` agent **forwards** its actions to that service
+for the chat/MCP surface (agent action → service → runtime → sandbox), and the
+`typeagent-studio` webview/extension launches and connects to that **same**
+service — neither holds a runtime of its own.
 
 ---
 
@@ -609,11 +698,28 @@ Each webview:
 
 Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
+**One capability, one runtime, many clients — by P-6.** Each capability is a
+headless primitive in `typeagent-core`, assembled into the Studio runtime that is
+hosted **once per workspace, in a standalone Studio service** ([DESIGN.md
+§3.5](./DESIGN.md)). Every surface is a client of that runtime: the `studio`
+agent (a thin proxy whose dispatchable actions, groups A–F per §10.2, forward to
+the service), the `typeagent-studio` UI, the `vscode-shell` canvas, an AI
+orchestrator (MCP), and the CLI. The invariant is that **no capability is
+permanently UI-only or agent-only** — every one is reachable as a typed action by
+MVP. It does **not** mean every surface lands the same week: **read-only**
+actions (the Inspect slice S1) ride along in P-1; the **mutating /
+sandbox-executing** actions (Run, Corpus,
+Validate, Author) land in P-3/P-4 behind the approval checkpoint. The agent's own
+phases **S0–S5** map onto the phases below (see the table at the end). There is
+one plan; the agent is not a separate track.
+
 ### P-0 Skeleton (week 0–1)
 
 - Create `typeagent-core` package, `typeagent-studio` extension, scaffold files. No behavior.
 - Refactor `agr-language` and `vscode-shell` to import from `typeagent-core` (no consumed APIs yet — just the dependency edge). Full existing test suites must remain green.
-- Exit: `pnpm -r build` clean; both refactored extensions load and behave identically to today.
+- **Agent (S0 — headless runtime):** extract the engine wiring out of the extension's `studioRuntimeCore` into a context-agnostic runtime in `typeagent-core/runtime/` (done). Scaffold `packages/agents/studio/` (manifest, schema, handler), which **hosts** that runtime; ship the first read-only Inspect actions (done). The extension keeps its in-process runtime as a **transitional bootstrap**.
+- **Migration (Option B) — begins here, lands in P-1.5.** The extension keeps its in-process runtime as a transitional bootstrap **only** until the typed result/event channel exists; the dedicated **P-1.5** milestone stands that channel up and starts the cutover. The one rule during P-0→P-1: the extension gains **no new** in-process runtime logic.
+- Exit: `pnpm -r build` clean; refactored extensions behave identically to today; the `studio` agent loads and answers the read-only Inspect actions over the dispatcher / MCP.
 
 ### P-1 Foundations (weeks 1–4)
 
@@ -621,10 +727,106 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - **F0.1 sandbox.** Implement inmemory mode end-to-end first, subprocess mode second. Sandbox tree + status bar UI.
 - **F0.2 corpus.** Implement service against the on-disk layout. Corpora tree UI. Capture-to-corpus action on vscode-shell bubbles (F4.6 starts here, on purpose, per risk mitigation).
 - **F0.4 feedback.** Thin wrappers + filter chip components.
-- **F0.5 health.** Eleven MVP rules + UI in Sandbox tree.
+- **F0.5 health.** Ten MVP rules + UI in Sandbox tree.
 - **F0.6 collisions.** Wire detectors → events → diagnostics.
 - **F0.7 conversational, F0.8 miss-policy, F0.9 workflow view, F0.10 reasoning view.** Land at end of P-1; they are mostly small.
-- Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data.
+- **Agent (S1 — Inspect, group A):** `ListAgents`, `DescribeAgent`, `GetSchema`/`GetGrammar`, `ListActions`, `GetCoverage`, `SearchCorpus`, `ListCollisions`, `QueryEvents` — each wraps the same primitive the P-1 UI surfaces. Read-only; proves MCP/conversational drivability with zero mutation risk. Register `studio` in `defaultAgentProvider` (the dispatcher load path, not Studio's discovery).
+- Exit: Gate A is reachable (the parts that don't need the wizard); corpus capture is producing labelled data; the Inspect surface is callable over MCP / conversationally.
+
+### P-1.5 Studio service channel (Option B migration — the typed result/event channel)
+
+> **Note:** P-1.5 stood up the typed channel with the runtime **hosted in the
+> `studio` agent** (the interim Option-B placement). That transport detail is
+> **superseded by P-1.6** (the runtime moves to a standalone per-workspace
+> service); the **typed protocol, guardrails, and client work below carry over
+> unchanged** — only the channel's _host_ moves. Kept here as the record of what
+> was built.
+
+The pivotal Option-B step: stand up the **typed `studio` service channel** so rich
+clients consume the agent's runtime instead of hosting their own. This is its own
+milestone because everything stateful downstream (Impact Report, sandbox/replay
+UIs, live trace) should be built as a **client** of it from day one rather than on
+the extension's transitional in-process runtime.
+
+- **Transport** (`code`↔`coda` pattern — the only feasible option): the `studio` agent runs its **own WebSocket server** (analogue of `codeAgentWebSocketServer`) and registers the port via `SessionContext.registerPort`; `typeagent-studio` discovers it via the shared `discoverPort("studio")` (`@typeagent/agent-server-client/discovery`) and connects. _An agent cannot add a channel to the agent-server connection — it only gets `SessionContext`, and only `connectionHandler` creates channels — so a "channel on the agent-server, no new port" is infeasible without a platform change._
+- **Channel protocol** (served by the `studio` agent; **pure** function-map/data types in `@typeagent/core` — no `agent-rpc`/`RpcChannel` import in core): `agent-rpc` `createRpc` over the WS — typed `invoke` (e.g. service-level `getStudioInfo` → `{ repoRootInfo, agentLocations }`, `listCollisions`, `queryRecentEvents`, `subscribeEvents`) + a server→client push of the **existing `StudioEvent` union** from `@typeagent/core/events` (reuse it; don't invent `healthChanged/...`). **Every invoke + the subscription carry `repoRoot`** (the runtime is per-workspace), and subscriptions are per-connection. `registerPort` is called from `updateAgentContext` (not init). This WS protocol is the **canonical typed Studio API**; `studio` actions + MCP tools wrap the same runtime methods. See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
+- **Guardrails / authorization:** every message carries session/repo identity (per-workspace scoping); connections present a capability token (beyond an Origin check); mutating invokes stay behind `dryRun` + approval and that capability check (the agent owns the runtime; any local WS client could otherwise invoke it).
+- **First client = the new Impact Report webview** (P-3's `webviewKit` shell): greenfield, so it proves the channel end-to-end with zero migration risk. **Done:** a minimal `webviewKit` (secure CSP/nonce HTML builder, singleton-panel host, typed host↔webview protocol) + an Impact Report webview that runs `replayCorpus` over the channel (`listCorpusAgents` + `replayCorpus` added to the protocol; rows bounded for transport) and renders the `ActionDelta[]` contract. The webview never opens a socket — webview → extension host → channel → agent runtime.
+- **Cut over existing trees view-by-view** (Sandboxes / Corpora / Event Log / Collisions) from the in-process runtime to channel calls, as each view's backing actions land (rides S2–S3). The extension must gain **no new** in-process runtime logic in the meantime. **Done so far:** the **Event Log** and **Collisions** trees read through the channel (swappable sources; the "Connect … to studio service" command cuts them over to the agent's runtime, with graceful fallback on disconnect). Collisions' scan/list/clear are read-only analysis (`scanGrammarCollisions`/`listCollisions`/`clearCollisions` on the channel; live `collision.detected` + `sandbox.agent.loaded/unloaded` ride the event push). The agent also reports its live client count to `@system ports`.
+- Exit: the Impact Report shell and at least one existing tree read through the `studio` agent over the channel; a collision scan or sandbox action is visible identically from the UI, chat, and MCP (one runtime, one source of truth); the extension's in-process `createStudioRuntime` is on a path to deletion. **Status: MET** — the Impact Report webview (replay over the channel) and the Event Log tree both read through the agent over the channel; the channel has capability-token auth, subscription cancellation, and backpressure guardrails. Remaining cleanup (not blocking exit): migrate the other trees (Sandboxes/Corpora/Collisions) and delete the transitional in-process `createStudioRuntime`.
+
+### P-1.6 Runtime extraction — standalone per-workspace Studio service
+
+> Supersedes the "Option B" placement (runtime hosted **inside** the `studio`
+> agent). Decision + rationale: [DESIGN.md §3.5](./DESIGN.md),
+> [STUDIO-AGENT.md §4/§8](./STUDIO-AGENT.md). The work of P-1.5 (typed protocol in
+> `@typeagent/core`, WS server, capability token, durable `FileWorkspaceState`,
+> the extension client stack, sandbox/event/collision over the channel) carries
+> over unchanged — only the runtime's **host** and the **launch/registration**
+> path move.
+
+The runtime's affinity is to the developer's **workspace**, not to an
+agent-server session, so it moves out of the `studio` agent into a **standalone,
+per-workspace Studio service** (a host-agnostic library + a small process
+entrypoint). **Single mode**: the service is launched by the extension (common
+case) or a `typeagent-studio serve` CLI (headless/CI); the `studio` agent is a
+**thin proxy**; the extension is a client; **one service per canonical workspace
+identity** (a second launcher discovers and attaches). No agent-hosted fallback
+("dual-mode" rejected — the CLI covers the headless case).
+
+- **Discovery: reuse the `PortRegistrar` + a tiny agent-hosted registry.** Two
+  hops: `discoverPort("studio", "registry")` finds the `studio` agent's registry
+  endpoint (registered under the `registry` role), then `lookup(workspaceKey)`
+  returns the live service's `{port, token, …}`. The registrar maps
+  `(agent, role) → port` only, so it can carry neither a per-workspace key nor a
+  token — hence the registry.
+- **Registration (registry relay):** the discovery channel is read-only and the
+  extension/CLI (not the agent) spawns the service, so the agent can't learn the
+  service's `{port, token}` the `montage`/`markdown` way (agent-spawns-child).
+  Instead the agent hosts a small **registry** WS endpoint; the service
+  `announce`s `{workspaceKey, repoRoot, port, token, pid, protocolVersion}` on
+  start; the registry validates it (current protocol version +
+  `workspaceKey === studioWorkspaceKey(repoRoot)`) and ties the entry to the
+  announcing socket (evicted on close). Token rides the announcement (and the
+  per-port token file the launcher reads after spawn) — no shared token file.
+  Evolution: authenticated external registration on the discovery channel so the
+  service self-registers and the agent keeps no endpoint.
+- Phases: **P1 (done)** extract the runtime host into `studio-service` (relocate
+  `StudioServiceServer` + capability token + `FileWorkspaceState` +
+  `getStudioRuntime`; add `startStudioService` + the `typeagent-studio serve`
+  CLI). **P2/P3 (done)** the agent hosts the registry + proxies its read-only
+  actions and stops hosting the runtime; the extension launches/attaches the
+  service (single-instance per canonical workspace, registry lookup → attach else
+  spawn under a per-workspace lock, reading the spawned port from stdout + token
+  file) and routes the shared live surfaces to it. **P4 (in progress)** cleanup +
+  docs; remaining hardening tracked below. The extension's in-process runtime is
+  retained **only** for onboarding commands (J1) — channelizing those removes it.
+- **Resolved decisions.** Registration = **agent-hosted registry relay** (not the
+  documented direct `registerPort` of the service's port: the agent doesn't spawn
+  the service, and the registrar carries no token/workspace key). The single-live
+  fallback for the agent proxy was **removed** — exact canonical-workspace match
+  only (wrong-workspace proxying is worse than "not running"). External
+  authenticated registration on the discovery channel — which also removes the
+  agent's last hosted endpoint — is the documented **follow-up evolution**.
+- **Remaining hardening (P4+ follow-ups):**
+  - **Onboarding split-brain (blocks J1 single-source):** onboarding commands
+    still mutate the extension's in-process runtime's sandboxes, invisible to the
+    service. Channelize onboarding install/sandbox writes (or gate them) before J1.
+  - **Service-side workspace binding:** bind each service to one canonical
+    workspace at startup and reject RPCs whose `repoRoot` canonicalizes elsewhere
+    (today the service accepts arbitrary `repoRoot`).
+  - **Lifecycle:** move single-instance ownership into the service (lifetime lock
+    - heartbeat/status) and add idle shutdown so no orphan/duplicate services when
+      the agent-server is down or windows reload.
+  - **Security:** the registry is loopback + origin-gated but **token-less**;
+    `announce` is validated (shape/version/workspaceKey) but a same-user local
+    process is trusted. Add verify-back / authenticated announce before broader
+    AI-driven mutations.
+  - **Cloud transport seam:** evolve loopback/port/token-file assumptions behind a
+    `ServiceTarget { endpoint, auth, workspaceKey }` local-transport provider.
+- Exit: the runtime no longer lives in the `studio` agent; the extension launches
+  - connects to the workspace service; `@studio` forwards to it (honest "not
+    running — open the workspace or run `typeagent-studio serve`" when absent).
 
 ### P-2 J1 vertical (weeks 4–6)
 
@@ -633,6 +835,7 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F1.3 install-into-sandbox.
 - F1.4 health gate on phase 7.
 - F1.5 reconciliation prompts.
+- **Agent:** `ScaffoldAgent` delegates to the `onboarding` agent (no duplication of J1); `studio` picks the loop up at install.
 - Exit: **Gate A passes** with a stranger walking the script.
 
 ### P-3 J4 vertical (weeks 4–9, runs partly in parallel with P-2)
@@ -644,7 +847,10 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F4.4 predicate, configurable.
 - F4.5 export.
 - In parallel: **J5 trace viewer module (F5.1, F5.2, F5.3, F5.4)** so J4 drill-in is real at demo time.
-- Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.**
+- **Agent (S2 — Run/try + Corpus, groups D, C):** `StartSandbox`/`LoadAgent`/`RunUtterance(s)`; corpus `SeedInRepoCorpus`/`AddExternalCorpus`/`CaptureSession`/`PromoteCaptures` (writes behind `dryRun` + approval).
+- **Agent (S3 — Validate, group E):** `ScanCollisions`, `HealthGate`, `DiffGrammars`, `CoverageDelta`, `CollisionsDelta`; then `ReplayCorpus` / `DetectRegressions` / `ValidateChange` as `replayCorpus()` lands — emitting the same `ActionDelta[]` contract the Impact Report webview renders. `ValidateChange` is the read-only composite that returns one Impact-Report-shaped verdict. Autonomous-safe only for the deterministic `needs-explanation` policy; `live-llm` / large-corpus runs require approval (see §10.2).
+- **Agent (Trace, group A):** `GetTrace(requestId)` ships here with the J5 trace viewer (it needs the structured dispatch tree), so an agent can drill into a replay/regression row exactly like the Trace Viewer does.
+- Exit: **Gate C passes** ≥ 80% on hand-labelled regression set. **Gate D passes.** `ValidateChange` returns an Impact-Report-shaped verdict headlessly.
 
 ### P-4 J2 + J3 verticals (weeks 6–9)
 
@@ -655,12 +861,14 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - F2.5 feedback chips.
 - F2.6 live re-evaluation.
 - F3.\* AGR refactor + new features.
+- **Agent (S4 — Author/edit, group B):** `ProposeActionsFromUtterances`, `AddAction`/`EditAction`, `ProposeGrammarVariations`, `AddGrammarRule`/`EditGrammarRule`, `GenerateGrammarFromSchema`, `BuildAgent`/`CompileGrammar` — mutating, always `dryRun`-able, behind the approval checkpoint shared with the Schema Studio UI.
 - Exit: **Gate B passes.**
 
 ### P-5 J6 vertical (week 9)
 
 - F6.1 Live Trace panel (reuses Trace Viewer renderer in tail mode).
 - F6.2 status-bar item.
+- **Agent:** `QueryEvents` / an event-tail action (group A) over the same structured event stream the Live Trace panel tails (`GetTrace` already shipped in P-3).
 - Exit: **Gate E passes.**
 
 ### P-6 Validation & hardening (week 9–10)
@@ -668,9 +876,24 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 - Run all five gates on a clean laptop.
 - Performance budgets.
 - dblogging-default-on privacy indicator polish.
+- **Agent (S5 — Orchestrate, group F):** `ImproveCoverage`, `FixRegression`, `TuneAgent`, `ReviewAgent` — Tier-3 goal-oriented loops that compose the S1–S4 actions and pause at each mutation checkpoint. (`ValidateChange` is the read-only verdict composite from P-3, which these loops call.) Lands here because it can only compose primitives that already exist.
+- **Agent-mode gate:** a scripted MCP/conversational run of the Inspect→Run→Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C), so agent-drivability is validated like the human gates.
 - Documentation: this plan series + a Studio README + a Demo runbook.
 
 (Weeks are relative; this is sequencing, not a calendar commitment.)
+
+#### Agent phase ↔ plan phase
+
+| Agent phase                | Action group   | Lands in |
+| -------------------------- | -------------- | -------- |
+| S0 headless runtime        | —              | P-0      |
+| S1 Inspect                 | A              | P-1      |
+| Studio service channel (B) | —              | P-1.5    |
+| S2 Run/try + Corpus        | D, C           | P-3      |
+| S3 Validate                | E              | P-3      |
+| S4 Author/edit             | B              | P-4      |
+| (Trace)                    | A (`GetTrace`) | P-3      |
+| S5 Orchestrate             | F              | P-6      |
 
 ---
 
@@ -690,6 +913,11 @@ Re-stated from §6 of MVP slice, with the engine work mapped to packages/files.
 
 - `typeagent-studio` uses the standard `@vscode/test-electron` harness for activation + command palette tests.
 - One end-to-end test per gate (A–E) using a scripted scenario — long runtime, run in a separate CI job.
+
+### Agent (`studio`)
+
+- Action handlers are thin over `typeagent-core/runtime`, so most logic is already covered by core unit/integration tests; handler tests assert routing + the typed result shape + `dryRun` behavior for mutations.
+- Agent-mode gate (P-6): a scripted MCP/conversational run of the Inspect → Run → Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C).
 
 ### Validation gate (Gate C) test
 
@@ -727,6 +955,7 @@ Before kicking off P-0, confirm:
 - [ ] §6 health rule set covers the right invariants; nothing critical missing.
 - [ ] §9 `replayCorpus()` execution model (transient inmemory sandboxes, two of them per run) is acceptable.
 - [ ] §11 phasing puts F4.6 corpus capture in P-1 (not P-3) per the risk-register mitigation.
+- [ ] §10 + §11 deliver each capability through **both** presenters (UI + `studio` agent) over one core primitive, and the S0–S5 ↔ P-phase mapping is right.
 - [ ] §13 open decisions are the right ones to track; their defaults are sane.
 
 ---

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import type { StudioRuntime } from "./studioRuntimeCore.js";
+import type { HealthSource } from "./serviceRuntimeFacade.js";
 import {
     summarizeAgentHealth,
     type HealthSummaryLevel,
@@ -20,13 +20,13 @@ export class StudioStatusBar implements vscode.Disposable {
     private readonly item: vscode.StatusBarItem;
     private readonly subscription: { dispose(): void };
 
-    constructor(private readonly runtime: StudioRuntime) {
+    constructor(private readonly source: HealthSource) {
         this.item = vscode.window.createStatusBarItem(
             vscode.StatusBarAlignment.Left,
             100,
         );
         this.item.command = STUDIO_STATUS_BAR_COMMAND;
-        this.subscription = runtime.onSandboxChanged(() => {
+        this.subscription = source.onSandboxChanged(() => {
             void this.refresh();
         });
         void this.refresh();
@@ -37,7 +37,7 @@ export class StudioStatusBar implements vscode.Disposable {
         // When no `packages/agents` directory was found, agent health is
         // meaningless — surface a persistent warning pointing at the fix
         // instead of an "all healthy / unknown" summary over zero agents.
-        const repoRootInfo = this.runtime.getRepoRootInfo();
+        const repoRootInfo = this.source.getRepoRootInfo();
         if (!repoRootInfo.agentsDirFound) {
             this.item.text = "$(warning) Studio: no agents";
             this.item.tooltip =
@@ -45,9 +45,7 @@ export class StudioStatusBar implements vscode.Disposable {
             this.item.backgroundColor = backgroundForLevel("warning");
             return;
         }
-        const summary = summarizeAgentHealth(
-            await this.runtime.listSandboxes(),
-        );
+        const summary = summarizeAgentHealth(await this.source.listSandboxes());
         this.item.text = `$(${summary.icon}) ${summary.label}`;
         this.item.tooltip = summary.tooltip;
         this.item.backgroundColor = backgroundForLevel(summary.level);

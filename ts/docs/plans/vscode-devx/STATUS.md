@@ -13,24 +13,24 @@ Legend: ✅ done · 🟡 partial · ❌ not started.
 "Wired to dispatcher" = backed by the real TypeAgent dispatcher/engine rather
 than an in-memory stand-in.
 
-| Capability                                                     | Core logic                                   | UI                                       | Wired to dispatcher                                   | Tested |
-| -------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------- | ----------------------------------------------------- | ------ |
-| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view                             | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
-| Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                        | n/a                                                   | ✅     |
-| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                             | n/a                                                   | ✅     |
-| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view                             | ❌ most emit sites unwired                            | ✅     |
-| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                            | ❌ no real schema parse / grammar compile             | ✅     |
-| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan | n/a (reads compiled grammars)                         | ✅     |
-| Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                               | n/a                                                   | ✅     |
-| Replay / compare engine                                        | 🟡 engine + command                          | 🟡 quick-pick (no Impact Report)         | ❌ identity resolver (no two-version build/dispatch)  | ✅     |
-| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                           | ✅ commands                              | ❌ in-memory bridge                                   | ✅     |
-| Repo-root detection (find `packages/agents`)                   | ✅                                           | ✅ warn toast + status bar               | n/a                                                   | ✅     |
-| Webview infrastructure (`webviewKit`)                          | ❌                                           | ❌                                       | —                                                     | ❌     |
-| Impact Report webview                                          | ❌                                           | ❌                                       | ❌                                                    | ❌     |
-| Player corpus capture                                          | ❌                                           | ❌                                       | ❌                                                    | ❌     |
-| Schema Studio                                                  | ❌                                           | ❌                                       | ❌                                                    | ❌     |
-| Live Trace                                                     | ❌                                           | ❌                                       | ❌                                                    | ❌     |
-| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                      | —                                        | ❌ no behavioral integration                          | ❌     |
+| Capability                                                     | Core logic                                   | UI                                                                 | Wired to dispatcher                                   | Tested |
+| -------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ------ |
+| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view (channel-backed; agent runtime is source of truth)    | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
+| Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                                                  | n/a                                                   | ✅     |
+| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                                                       | n/a                                                   | ✅     |
+| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view (+ channel-backed source)                             | ❌ most emit sites unwired                            | ✅     |
+| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                                                      | ❌ no real schema parse / grammar compile             | ✅     |
+| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                         | ✅     |
+| Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                                                         | n/a                                                   | ✅     |
+| Replay / compare engine                                        | 🟡 engine + command                          | 🟡 quick-pick (no Impact Report)                                   | ❌ identity resolver (no two-version build/dispatch)  | ✅     |
+| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                           | ✅ commands                                                        | ❌ in-memory bridge                                   | ✅     |
+| Repo-root detection (find `packages/agents`)                   | ✅                                           | ✅ warn toast + status bar                                         | n/a                                                   | ✅     |
+| Webview infrastructure (`webviewKit`)                          | ❌                                           | ❌                                                                 | —                                                     | ❌     |
+| Impact Report webview                                          | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
+| Player corpus capture                                          | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
+| Schema Studio                                                  | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
+| Live Trace                                                     | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
+| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                      | —                                                                  | ❌ no behavioral integration                          | ❌     |
 
 ## The long pole
 
@@ -72,39 +72,71 @@ Impact Report) is **not** closed:
 
 ## Next slice candidates
 
-Smallest → larger.
+The build sequence now lives in **one unified plan** —
+[`05-implementation-plan.md` §11](./05-implementation-plan.md#11-phasing--concrete-sequencing)
+— where each capability ships as a core primitive + both presenters (UI +
+`studio` agent), and the agent's S0–S5 phases are mapped onto P-0…P-6. The
+candidates below are the immediate ready-to-start slices; pick per that plan.
 
-1. **Configurable agent search paths** (next follow-up PR). Add a
-   `typeagentStudio.agentSearchPaths: string[]` setting — directories that
-   contain agent subdirectories (peer to `packages/agents`), relative entries
-   resolved against the repo root. Generalize the single hardcoded
-   `packages/agents` assumption into an ordered list of agent roots threaded
-   through health (`discoverAgentFiles` / `FileHealthService`), the sandbox
-   loader (`createRepoAgentLoader`), and the collision scanner
-   (`createRepoGrammarScanner`), plus discovery (`listAvailableAgents`), so
-   agents outside `packages/agents` (e.g. a sibling `agents/` directory in a
-   submodule) fully load, report health, and participate in collisions. Keep
-   `packages/agents` + the registry config as implicit defaults; the setting is
-   additive and generic (no hardcoded paths).
-2. **Loader parity for registry entries** — the Load agent picker lists the
-   `defaultAgentProvider` registry keys, but the loader still resolves by
-   `packages/agents/<name>`, so keys whose folder differs (e.g. `localPlayer`,
-   `workflow`) load with `health: unknown`. Resolve registry entries by their
-   package `name` like the dispatcher does. (Folds naturally into item 1.)
-3. **Split `studioRuntimeCore.ts`** into bounded runtime modules
-   (sandbox/corpus/collision/replay/onboarding) before webviews land — it is
-   already a god/facade object.
-4. **Minimal `webviewKit` + Impact Report shell** — prove lifecycle, state
-   restore, CSP/assets, message protocol, theming before full replay exists.
-5. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
+Done / superseded:
+
+- ~~**S0 — extract the runtime into `@typeagent/core/runtime`**~~ — **done**:
+  `studioRuntimeCore` (+ `repoRootResolver`, `getDefaultPhaseInputs`) moved into
+  a context-agnostic `typeagent-core/src/runtime/` with a `./runtime` export; the
+  extension consumes it via the package boundary (the only VS-Code-coupled file
+  is the `studioRuntime.ts` adapter). No behavior change; core 127 / studio 112
+  tests green. The further "split into bounded modules" cleanup can follow as
+  needed. **Still open in P-0:** scaffold the empty `packages/agents/studio/`
+  agent (manifest/schema/handler + `defaultAgentProvider` registration).
+- ~~**P-0 `studio` agent scaffold + S1 Inspect actions**~~ — **done**:
+  `packages/agents/studio/` (schema-only agent, emoji 🎨) registered in
+  `defaultAgentProvider`, with a thin handler over the headless runtime
+  (`getStudioRuntime` → `createStudioRuntimeCore`). Read-only group-A surface,
+  deliberately scoped to what's Studio-distinct and headless-appropriate (no
+  duplication of the dispatcher's `@config agent`):
+  `getStudioInfo` (repo root + agent **locations** with per-root counts),
+  `listCollisions`, `queryEvents`. Backed by a read-only `getAgentLocations()`
+  core runtime method. Repo root is an explicit per-action param (cached per
+  root), `TYPEAGENT_STUDIO_REPO_ROOT`/cwd fallback. Verified end-to-end; 11
+  agent tests + core 127 + studio-ext 112 green.
+  _Reintroduce later (not as generic agent actions):_ per-agent describe,
+  schema/grammar/corpus inspection — these belong **sandbox-scoped** (S2) and/or
+  as client-side "open in VS Code" actions over the P-1.5 channel (the headless
+  agent can't open an editor).
+- ~~**Configurable agent search paths**~~ — **done** (merged in #2472):
+  `typeagentStudio.agentSearchPaths`, live (no-reload) roots, Add/Remove
+  directory commands, user-settings persistence.
+- ~~**Loader parity for registry entries**~~ — **moot**: discovery is now
+  filesystem-only (we removed the `defaultAgentProvider` config.json source and
+  the `provider.registers` health rule), so there are no registry-only picker
+  entries to reconcile.
+
+Ready to start (smallest → larger):
+
+1. **Studio service channel (plan phase P-1.5; host moved to the standalone
+   service in P-1.6)** — **done (exit criteria met).** The typed `agent-rpc`
+   service channel — originally served by the `studio` agent's own WebSocket, now
+   served by the **standalone per-workspace Studio service** (P-1.6) with the
+   agent as a thin proxy — is built and verified end-to-end, with guardrails
+   (capability-token auth on every connection, idempotent subscribe +
+   `unsubscribeEvents`, backpressure). All channel-backed clients read through it:
+   the Event Log, Collisions, Sandbox, and Corpus trees, the health status bar,
+   and the Impact Report webview. **P-1.6 cleanup done:** all those surfaces are
+   channel-only (no in-process fallback); the in-process `createStudioRuntime`
+   remains only for onboarding (J1). **Remaining:** see the implementation plan's
+   P-1.6 follow-ups (onboarding channelization, service-side workspace binding,
+   lifecycle/security hardening).
+2. **`webviewKit` + Impact Report shell** — **done.** A minimal, reusable
+   `webviewKit` (strict CSP/nonce HTML builder, singleton-panel host, typed
+   host↔webview message protocol, browser-neutral replay view model) and an
+   Impact Report webview that drives `replayCorpus` over the service channel and
+   renders the `ActionDelta[]` contract. The webview never opens a socket
+   (webview → extension host → channel → agent runtime).
+3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
    core corpus.
-6. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
-   real dispatch; validate the Impact Report contract.
-7. **Agent-drivable surfaces** (cross-cutting; see "Interaction modes" below).
-   Publish stable typed result contracts for the headline primitives
-   (`replayCorpus` → `ActionDelta[]` + summary, health findings, collision
-   reports) and a headless entry point (CLI and/or Studio-as-MCP-host) so an
-   AI agent — not just the webview — can drive author → tune → replay → judge.
+4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
+   real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
+   agent's `ValidateChange` and the webview both consume).
 
 ## Interaction modes & agent-drivability
 
@@ -136,8 +168,57 @@ once (the webview renders the result; an agent consumes the same shape). A
 concrete vehicle for the agent surface is a new first-party **`studio` TypeAgent
 agent** — see [`STUDIO-AGENT.md`](./STUDIO-AGENT.md).
 
+**Architecture decision — where the runtime runs (standalone per-workspace
+service; supersedes "Option B").** The Studio runtime's affinity is to the
+developer's **workspace**, not to an agent-server session, so it runs in a
+**standalone, per-workspace Studio service** (a host-agnostic library + a small
+process entrypoint) launched by the extension or a `typeagent-studio serve` CLI.
+The **`studio` agent is a thin proxy** — never the runtime host; the
+`typeagent-studio` extension, the `vscode-shell` canvas, MCP, and the CLI are all
+**clients** of the service for a given workspace. **Single mode** (no agent-hosted
+fallback — the CLI covers the headless case). See [`DESIGN.md` §3.5](./DESIGN.md)
+and [`STUDIO-AGENT.md` §4](./STUDIO-AGENT.md).
+
+> _Earlier this was "Option B" (the runtime hosted **inside** the `studio` agent,
+> the `code`↔`coda` pattern). **P-1.6 has migrated off it** (commits on
+> `dev/talzacc/typeagent_studio_part2`): the runtime now lives in the
+> `studio-service` package, the `studio` agent hosts a registry + proxies its
+> read-only actions (no longer hosts the runtime), and the extension
+> launches/attaches the service and routes its shared live surfaces to it. The
+> extension's in-process `createStudioRuntime` survives **only** for onboarding
+> commands (J1) — channelizing those removes it. Remaining hardening is tracked in
+> the implementation plan's P-1.6 follow-ups._
+
+**Typed result / event channel (decided).** Rich (non-chat) clients consume a
+**typed `agent-rpc` channel over the Studio service's WebSocket**: `invoke` for
+typed results + a server→client subscription pushing the existing `StudioEvent`
+union from `@typeagent/core/events` (`sandbox.*`, `collision.detected`,
+`replay.row` / `replay.summary`, `feedback.recorded`, …) — reuse that type.
+Clients **look up** the service through the `studio` agent's registry
+(`discoverPort("studio", "registry")` → `lookup(workspaceKey)`). Because the
+discovery channel is read-only and the extension/CLI — not the agent — spawns the
+service, the service **registers** by announcing its `{workspaceKey, repoRoot,
+port, token, …}` to the agent's registry (validated: protocol version +
+`workspaceKey === studioWorkspaceKey(repoRoot)`; entry tied to the announcing
+socket, evicted on close); evolving to authenticated external self-registration. That protocol is the **canonical typed API**; `studio` actions and MCP
+tools proxy the **same typed runtime methods**; `ActionResult.displayContent` is
+chat-summary-only. Guardrails: session/repo identity on every message, a
+capability token, and subscription/cancellation/backpressure. Rejected:
+"structured data on `ActionResult`" (clients get a `CommandResult`, not the raw
+`ActionResult<T>` — a platform change). See [`STUDIO-AGENT.md` §8](./STUDIO-AGENT.md).
+Mutating actions must sit behind `dryRun` + approval **and** the channel's
+capability-token check.
+
 **Open decisions to make** (from [`USER-STORY.md`](./USER-STORY.md) §6):
 
+- ~~Where does the Studio **runtime** live?~~ **Resolved:** a **standalone,
+  per-workspace Studio service**; the `studio` agent and the UIs are clients (see
+  the note above). _(Earlier "Option B" placed it inside the agent; migrating
+  out.)_
+- ~~**Typed result / event channel** for rich clients.~~ **Resolved:** the
+  `studio` agent's own WebSocket (`code`↔`coda` pattern: `registerPort` /
+  `discoverPort`) with `agent-rpc` framing; actions/MCP wrap the same methods
+  (see the note above).
 - Where does the driving agent run — in-editor (Copilot driving commands), as a
   TypeAgent agent (conversational), or a CLI in CI? Each implies a different
   headless surface.

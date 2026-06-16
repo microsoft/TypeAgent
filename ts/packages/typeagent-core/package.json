@@ -21,7 +21,8 @@
     "./collisions": "./dist/collisions/index.js",
     "./collisionScanner": "./dist/collisions/scanner.js",
     "./replay": "./dist/replay/index.js",
-    "./onboardingBridge": "./dist/onboardingBridge/index.js"
+    "./onboardingBridge": "./dist/onboardingBridge/index.js",
+    "./runtime": "./dist/runtime/index.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

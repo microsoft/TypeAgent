@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
-import { resolveRepoRoot } from "../repoRootResolver.js";
+import { resolveRepoRoot } from "@typeagent/core/runtime";
 
 /** Build a predicate that reports `packages/agents` for an explicit set of dirs. */
 function agentsAt(...roots: string[]): (root: string) => boolean {
