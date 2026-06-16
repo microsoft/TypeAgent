@@ -137,21 +137,22 @@ Ready to start (smallest → larger):
 4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
    agent's `ValidateChange` and the webview both consume).
-5. **Active-sandbox selector + per-sandbox scoping** — collisions and corpora are
+5. **Active-sandbox selector + per-sandbox scoping** (plan phase **P-7a**;
+   sequenced **after** the single-sandbox E2E closes) — collisions and corpora are
    intrinsically per-sandbox (a collision is a function of the co-loaded agent
    set). Add a single active-sandbox selector that scopes the Corpora, Collisions,
    and Event Log views to the selected sandbox's agents (`scanGrammarCollisions`
    already takes `sandboxId`/`agents`; `listCorpusAgents` currently unions across
    all sandboxes). Scopes _visibility/analysis_ only — a small, clean win that also
    sets up the overlay below. See [`DESIGN.md` §3.6](./DESIGN.md).
-6. **Sandbox isolated overlay (the bigger lift)** — evolve a sandbox from a
-   filtered view over shared repo source into a per-sandbox **copy-on-write
-   overlay** so tuning is sandbox-local (true A/B; a full debugging experience).
-   The seam exists: the loader probes ordered _agent roots_, so give each sandbox a
-   higher-priority overlay root (`~/.typeagent/sandboxes/<id>/agents/` shadowing
-   `packages/agents`). Unlocks sandbox-vs-base replay, hot-reload, and a
-   create-from-base → tune → promote/discard lifecycle. See
-   [`DESIGN.md` §3.6](./DESIGN.md).
+6. **Sandbox isolated overlay (the bigger lift)** (plan phase **P-7b**) — evolve a
+   sandbox from a filtered view over shared repo source into a per-sandbox
+   **copy-on-write overlay** so tuning is sandbox-local (true A/B; a full debugging
+   experience). The seam exists: the loader probes ordered _agent roots_, so give
+   each sandbox a higher-priority overlay root
+   (`~/.typeagent/sandboxes/<id>/agents/` shadowing `packages/agents`). Unlocks
+   sandbox-vs-base replay, hot-reload, and a create-from-base → tune →
+   promote/discard lifecycle. See [`DESIGN.md` §3.6](./DESIGN.md).
 
 ## Interaction modes & agent-drivability
 

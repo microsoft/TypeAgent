@@ -239,6 +239,7 @@ Studio sandbox always uses `~/.typeagent/profiles/<studio-instance>/` — a _dif
 
 - **Crash recovery in inmemory mode.** Recommend isolating sandbox state in a dedicated AsyncContext / VM context so an agent throw doesn't poison the extension host. Subprocess mode is the safe option; inmemory is the fast option.
 - **Hot-reload on schema/grammar file save.** Recommend opt-in toggle in Sandbox tree, default off — the dev should control when a re-evaluation happens.
+- **Source isolation (per-sandbox overlay).** Today a sandbox loads agents directly from the shared repo working tree, so it is a filtered _view_ and edits are repo-global. The target is a per-sandbox copy-on-write overlay via the loader's ordered `agentRoots` (sequenced post-E2E as **P-7**; see [DESIGN.md §3.6](./DESIGN.md) and decisions D11/D12).
 
 ---
 
@@ -880,6 +881,43 @@ identity** (a second launcher discovers and attaches). No agent-hosted fallback
 - **Agent-mode gate:** a scripted MCP/conversational run of the Inspect→Run→Validate loop (mode B) and a hybrid `dryRun` + approval run (mode C), so agent-drivability is validated like the human gates.
 - Documentation: this plan series + a Studio README + a Demo runbook.
 
+### P-7 Sandbox isolation — per-sandbox scoping → copy-on-write overlay (post-E2E)
+
+> **Sequencing.** Deliberately **after** the single-sandbox end-to-end headline
+> (P-3 / J4, Gates A–E) is closed. We get one sandbox's
+> tune → find-regressions → validate loop working end-to-end **before** taking on
+> multi-sandbox / divergent-source scenarios — they build on a working E2E, not
+> before it. Design: [DESIGN.md §3.6](./DESIGN.md).
+
+Today a sandbox is a _co-loaded agent set_ that is a **filtered view** over the
+shared repo working tree; this phase makes it a real, isolated **debugging
+workspace**. Two sub-steps, smallest first:
+
+- **P-7a — active-sandbox selector + per-sandbox scoping (visibility/analysis).**
+  Collisions and corpora are intrinsically per-sandbox (a collision is a function
+  of the co-loaded set). Add a single **active-sandbox selector** and scope the
+  Corpora, Collisions, and Event Log views to the selected sandbox's agents.
+  Mostly wiring: `scanGrammarCollisions` already takes `sandboxId` / `agents`;
+  change `listCorpusAgents` from union-across-all-sandboxes to the selected
+  sandbox; thread the selection through the trees. **Scopes visibility/analysis
+  only — no source isolation yet.** Small, and it sets up P-7b.
+  - _Agent:_ the selected sandbox is a typed runtime selector; collision/corpus
+    queries carry the sandbox scope (collisions already do).
+- **P-7b — isolated copy-on-write overlay (mutation-local).** Give each sandbox a
+  higher-priority **agent root** (`~/.typeagent/sandboxes/<id>/agents/` shadowing
+  `packages/agents`) via the loader's ordered `agentRoots` seam, so
+  schema/grammar/manifest edits are **sandbox-local**. Unlocks: an
+  **overlay-vs-base** replay axis (complementing today's working-tree-vs-HEAD),
+  hot-reload on overlay edit, and a **create-from-base → tune → promote/discard**
+  lifecycle. The selector from P-7a now scopes **mutation** too — edits write the
+  selected sandbox's overlay, not the shared repo. In-repo corpus seed + feedback
+  stay agent-keyed and shared; captures remain sandbox-originated.
+  - _Agent:_ `CreateSandboxFromBase` / `PromoteOverlay` / `DiscardOverlay`
+    (mutating — `dryRun` + approval); `ReplayCorpus` gains an overlay-vs-base axis.
+- Exit: two sandboxes hold **divergent** versions of the same agent and are tuned
+  independently; a **sandbox-scoped Impact Report** shows "what my isolated edits
+  changed."
+
 (Weeks are relative; this is sequencing, not a calendar commitment.)
 
 #### Agent phase ↔ plan phase
@@ -929,18 +967,20 @@ identity** (a second launcher discovers and attaches). No agent-hosted fallback
 
 Each decision is named, with the recommended default and the deadline phase by which it must be locked.
 
-| #   | Decision                                            | Default                                                   | Lock by                                       |
-| --- | --------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------- | --- |
-| D1  | Subprocess transport: socket vs pipe vs WS          | Unix socket / Windows named pipe; WS fallback             | P-1                                           |
-| D2  | Event buffer size and backpressure behavior         | 10k ring, drop with `events.dropped(n)`                   | P-1                                           |
-| D3  | Corpus entry de-duplication policy                  | `hash(utterance + agent + requestId                       | "")`                                          | P-1 |
-| D4  | Remote feedback fetch cadence                       | On-demand pull                                            | P-1                                           |
-| D5  | Onboarding stale-phase semantics on partial restore | Mark stale + reconciliation prompt; no auto-merge         | P-2                                           |
-| D6  | `replayCorpus()` concurrency                        | Batch 8–16; backpressure on event sink                    | P-3                                           |
-| D7  | `likely-bad change` default predicate exact form    | `(feedbackA.up ∧ actionA ≠ actionB) ∨ feedbackB.down`     | P-3                                           |
-| D8  | Webview message protocol stability                  | Versioned alongside event schema; bump on breaking change | P-1                                           |
-| D9  | Privacy indicator placement when dblogging on       | Status-bar dot + Sandbox tree row; opt-out toggle         | P-1                                           |
-| D10 | Gate C threshold                                    | 80%                                                       | P-3 (re-evaluated against measured agreement) |
+| #   | Decision                                            | Default                                                                                              | Lock by                                       |
+| --- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- | --- |
+| D1  | Subprocess transport: socket vs pipe vs WS          | Unix socket / Windows named pipe; WS fallback                                                        | P-1                                           |
+| D2  | Event buffer size and backpressure behavior         | 10k ring, drop with `events.dropped(n)`                                                              | P-1                                           |
+| D3  | Corpus entry de-duplication policy                  | `hash(utterance + agent + requestId                                                                  | "")`                                          | P-1 |
+| D4  | Remote feedback fetch cadence                       | On-demand pull                                                                                       | P-1                                           |
+| D5  | Onboarding stale-phase semantics on partial restore | Mark stale + reconciliation prompt; no auto-merge                                                    | P-2                                           |
+| D6  | `replayCorpus()` concurrency                        | Batch 8–16; backpressure on event sink                                                               | P-3                                           |
+| D7  | `likely-bad change` default predicate exact form    | `(feedbackA.up ∧ actionA ≠ actionB) ∨ feedbackB.down`                                                | P-3                                           |
+| D8  | Webview message protocol stability                  | Versioned alongside event schema; bump on breaking change                                            | P-1                                           |
+| D9  | Privacy indicator placement when dblogging on       | Status-bar dot + Sandbox tree row; opt-out toggle                                                    | P-1                                           |
+| D10 | Gate C threshold                                    | 80%                                                                                                  | P-3 (re-evaluated against measured agreement) |
+| D11 | Sandbox overlay substrate (P-7b)                    | Copy-on-write dir under `~/.typeagent/sandboxes/<id>/agents/` (lighter MVP) over git worktree/branch | P-7b                                          |
+| D12 | Overlay promote semantics (overlay → repo)          | Explicit, with diff preview; no auto-promote                                                         | P-7b                                          |
 
 ---
 
