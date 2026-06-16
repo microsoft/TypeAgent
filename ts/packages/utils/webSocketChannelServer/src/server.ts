@@ -8,6 +8,7 @@ import {
 import WebSocket, { WebSocketServer } from "ws";
 import registerDebug from "debug";
 import { createPromiseWithResolvers } from "@typeagent/common-utils";
+import { attachHeartbeat } from "./heartbeat.js";
 
 const debugWss = registerDebug("typeagent:transport:wss");
 const debugWssError = registerDebug("typeagent:transport:wss:error");
@@ -80,6 +81,7 @@ export async function createWebSocketChannelServer(
               }
             : wsOptions;
     const wss = new WebSocketServer(wssOptions);
+    attachHeartbeat(wss);
     wss.on("connection", (ws) => {
         const id = nextId++;
         const debugId = `typeagent:transport:wss:ws-${id}`;
