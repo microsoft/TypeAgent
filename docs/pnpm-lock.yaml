@@ -14,17 +14,17 @@ importers:
     dependencies:
       markdown-it-replace-link:
         specifier: ^1.2.2
-        version: 1.2.2(@types/markdown-it@14.1.2)(markdown-it@14.1.1)
+        version: 1.2.2(@types/markdown-it@14.1.2)(markdown-it@14.2.0)
     devDependencies:
       '@11ty/eleventy':
         specifier: ^3.1.2
         version: 3.1.2
       markdown-it:
-        specifier: '>=14.1.1'
-        version: 14.1.1
+        specifier: ^14.2.0
+        version: 14.2.0
       markdown-it-anchor:
         specifier: ^8.6.7
-        version: 8.6.7(@types/markdown-it@14.1.2)(markdown-it@14.1.1)
+        version: 8.6.7(@types/markdown-it@14.1.2)(markdown-it@14.2.0)
       slugify:
         specifier: ^1.6.6
         version: 1.6.6
@@ -383,8 +383,8 @@ packages:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
     engines: {node: '>=6'}
 
-  linkify-it@5.0.0:
-    resolution: {integrity: sha512-5aHCbzQRADcdP+ATqnDuhhJ/MRIqDkZX5pyjFHRRysS8vZ5AbqGEoFIb6pYHPZ+L/OC2Lc+xT8uHVVR5CAK/wQ==}
+  linkify-it@5.0.1:
+    resolution: {integrity: sha512-wVoTjP4Q6R0NW5hiZkVJaFZPWgtXfoGF+6LucL3/FtiNjmcHhYjEr5f1Kqjirc1nBW07J/ZuRFumqr2oqccEWg==}
 
   liquidjs@10.27.0:
     resolution: {integrity: sha512-tw/OA59K7aIBlMKIrKlumr37fiZUheShVHXY8cVctWisgY1p9mc5hreOvlreoS0wTiwlWk14Ya7305c2a/Cg5w==}
@@ -410,8 +410,8 @@ packages:
       '@types/markdown-it': '*'
       markdown-it: '*'
 
-  markdown-it@14.1.1:
-    resolution: {integrity: sha512-BuU2qnTti9YKgK5N+IeMubp14ZUKUUw7yeJbkjtosvHiP0AZ5c8IAgEMk79D0eC8F23r4Ac/q8cAIFdm2FtyoA==}
+  markdown-it@14.2.0:
+    resolution: {integrity: sha512-1TGiQiJVRQ3NPmZH6sx5Cfnmg6GQm9jvC1ch4TK511NjSJvjzKLzn5pPfZRNZkRPZP0HqCioSndqH8v2nRaWVQ==}
     hasBin: true
 
   maximatch@0.1.0:
@@ -675,7 +675,7 @@ snapshots:
       kleur: 4.1.5
       liquidjs: 10.27.0
       luxon: 3.6.1
-      markdown-it: 14.1.1
+      markdown-it: 14.2.0
       minimist: 1.2.8
       moo: 0.5.2
       node-retrieve-globals: 6.0.1
@@ -992,7 +992,7 @@ snapshots:
 
   kleur@4.1.5: {}
 
-  linkify-it@5.0.0:
+  linkify-it@5.0.1:
     dependencies:
       uc.micro: 2.1.0
 
@@ -1004,24 +1004,24 @@ snapshots:
 
   luxon@3.6.1: {}
 
-  markdown-it-anchor@8.6.7(@types/markdown-it@14.1.2)(markdown-it@14.1.1):
+  markdown-it-anchor@8.6.7(@types/markdown-it@14.1.2)(markdown-it@14.2.0):
     dependencies:
       '@types/markdown-it': 14.1.2
-      markdown-it: 14.1.1
+      markdown-it: 14.2.0
 
-  markdown-it-replace-link@1.2.2(@types/markdown-it@14.1.2)(markdown-it@14.1.1):
+  markdown-it-replace-link@1.2.2(@types/markdown-it@14.1.2)(markdown-it@14.2.0):
     dependencies:
       '@types/markdown-it': 14.1.2
-      markdown-it: 14.1.1
+      markdown-it: 14.2.0
     optionalDependencies:
       dom-serializer: 2.0.0
       htmlparser2: 8.0.2
 
-  markdown-it@14.1.1:
+  markdown-it@14.2.0:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
-      linkify-it: 5.0.0
+      linkify-it: 5.0.1
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
