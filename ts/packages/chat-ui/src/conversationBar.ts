@@ -246,7 +246,9 @@ export class ConversationBar {
 
     public setStatus(status: Partial<ConversationBarStatus>): void {
         this.status = { ...this.status, ...status };
-        if (status.connected) this.status.errorText = undefined;
+        if (status.connected !== undefined || status.errorText === undefined) {
+            this.status.errorText = status.errorText;
+        }
         this.updateSummary();
         this.updateControlsEnabled();
     }
