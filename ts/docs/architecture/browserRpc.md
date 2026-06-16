@@ -82,9 +82,29 @@ Call IDs are monotonically increasing integers, unique per endpoint.
 
 ### 5. Keep-alive for MV3
 
-WebSocket keep-alive pings every 20 seconds prevent the MV3 service
-worker from going idle. The ping is counted as activity, resetting the
-30-second idle timer.
+Liveness is maintained from three independent angles:
+
+1. **Application keep-alive (client → agent).** The extension sends a
+   `keepAlive` JSON message every 20 seconds. The agent ignores its
+   contents; the point is to count as activity and reset the service
+   worker's 30-second idle timer.
+2. **Service-worker wake (`chrome.alarms`).** A persisted alarm fires
+   every 30 seconds (the shortest interval Chrome allows). Because an
+   alarm resurrects a _dormant_ service worker — not just a live one —
+   its `onAlarm` handler calls `ensureWebsocketConnected()`, so the
+   worker reconnects without waiting for a user gesture. The 20s
+   application keep-alive only helps while the worker is still alive;
+   the alarm is what recovers it after Chrome has reaped it.
+3. **Server-side heartbeat (agent → client).** The agent's WebSocket
+   server pings each client on a 30-second sweep (RFC 6455 ping/pong)
+   and `terminate()`s any socket that misses the previous sweep's pong.
+   This reaps half-open sockets (sleep/wake, VPN flip, a killed service
+   worker) within ~60 seconds instead of waiting on the OS TCP timeout,
+   so the server's client map and readiness probes reflect reality and
+   the extension's `onclose`-driven reconnect fires promptly. Browsers
+   answer protocol pings automatically, so no extension code is
+   involved. Implemented by `attachHeartbeat` in
+   `@typeagent/websocket-channel-server`.
 
 > **Why this matters:** Without keep-alive, the service worker would
 > terminate during idle periods, dropping the WebSocket connection. The

@@ -28,8 +28,8 @@
     "@typeagent/completion-ui": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "ansi_up": "^6.0.2",
-    "dompurify": "^3.4.0",
-    "markdown-it": "^14.1.0"
+    "dompurify": "^3.4.10",
+    "markdown-it": "^14.2.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
