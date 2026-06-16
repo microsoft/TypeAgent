@@ -93,6 +93,7 @@
   ],
   "permissions": [
     "activeTab",
+    "alarms",
     "tts",
     "search",
     "storage",
