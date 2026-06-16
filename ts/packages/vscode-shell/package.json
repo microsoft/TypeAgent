@@ -197,7 +197,7 @@
     "ansi_up": "^6.0.6",
     "chat-ui": "workspace:*",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.1",
+    "dompurify": "^3.4.10",
     "isomorphic-ws": "^5.0.0",
     "markdown-it": "^14.2.0",
     "ws": "^8.21.0"
