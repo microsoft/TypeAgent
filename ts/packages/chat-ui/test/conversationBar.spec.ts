@@ -18,15 +18,18 @@ type MockConversationBarController = ConversationBarController & {
     deleteConversation: jest.MockedFunction<(conversationId: string) => void>;
 };
 
-function makeBar(options: Partial<Omit<ConversationBarOptions, "controller">> = {}) {
+function makeBar(
+    options: Partial<Omit<ConversationBarOptions, "controller">> = {},
+) {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const controller: MockConversationBarController = {
         requestConversations: jest.fn(() => undefined),
         createConversation: jest.fn((_name: string) => undefined),
         switchConversation: jest.fn((_conversationId: string) => undefined),
-        renameConversation:
-            jest.fn((_conversationId: string, _name: string) => undefined),
+        renameConversation: jest.fn(
+            (_conversationId: string, _name: string) => undefined,
+        ),
         deleteConversation: jest.fn((_conversationId: string) => undefined),
     };
     const bar = new ConversationBar(root, { controller, ...options });
@@ -103,7 +106,9 @@ describe("ConversationBar", () => {
     it("shows the create toolbar action only when opted in", () => {
         const defaultBar = makeBar();
         expect(
-            defaultBar.root.querySelector('button[aria-label="New conversation"]'),
+            defaultBar.root.querySelector(
+                'button[aria-label="New conversation"]',
+            ),
         ).toBeNull();
 
         const { root, controller } = makeBar({ showCreateButton: true });
@@ -181,7 +186,11 @@ describe("ConversationBar", () => {
         bar.setStatus({ connected: false, reconnectText: "Retrying" });
         expect(status?.textContent).toBe("Retrying");
 
-        bar.setStatus({ connected: true, switching: true, statusLabel: "Creating" });
+        bar.setStatus({
+            connected: true,
+            switching: true,
+            statusLabel: "Creating",
+        });
         expect(status?.textContent).toBe("Creating");
         expect(status?.classList.contains("switching")).toBe(true);
     });
@@ -231,9 +240,7 @@ describe("ConversationBar", () => {
         );
         expect(popover?.classList.contains("hidden")).toBe(false);
 
-        document.body.dispatchEvent(
-            new MouseEvent("click", { bubbles: true }),
-        );
+        document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(popover?.classList.contains("hidden")).toBe(true);
     });
 
