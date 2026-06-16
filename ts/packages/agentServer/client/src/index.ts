@@ -15,6 +15,7 @@ export {
     writeServerPid,
     removeServerPid,
 } from "./agentServerClient.js";
+export type { AgentServerSpawnOptions } from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,

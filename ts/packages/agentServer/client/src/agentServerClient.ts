@@ -12,6 +12,7 @@ import {
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
+import type { StdioOptions } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -364,11 +365,26 @@ export function isServerRunning(url: string): Promise<boolean> {
     });
 }
 
+/**
+ * Optional overrides for how the agent-server child process is spawned. The
+ * defaults preserve the standard background-server behavior — its own process
+ * group via `detached`, no console window via `windowsHide`, and ignored stdio.
+ * Callers that need different lifecycle/IO semantics can override individual
+ * fields. Only applies to the direct `node` spawn paths (background/hidden and
+ * non-Windows), not the visible new-window path.
+ */
+export interface AgentServerSpawnOptions {
+    detached?: boolean;
+    windowsHide?: boolean;
+    stdio?: StdioOptions;
+}
+
 function spawnAgentServer(
     serverPath: string,
     port: number,
     hidden: boolean = false,
     idleTimeout: number = 0,
+    spawnOptions: AgentServerSpawnOptions = {},
 ): void {
     // Use an exclusive lock file to prevent two concurrent client processes from
     // both concluding the server is down and each spawning their own copy.
@@ -396,19 +412,17 @@ function spawnAgentServer(
         const isWindows = process.platform === "win32";
         if (isWindows) {
             if (hidden) {
-                // On Windows, detached: true creates a new console window
-                // for the child and any processes it spawns. To avoid this,
-                // spawn via cmd /c start /B which runs the process truly in
-                // the background with no visible windows.
+                // Spawn node directly (no shell) so the absolute serverPath can
+                // never be reinterpreted by a command interpreter. The defaults
+                // give the child its own process group / DETACHED_PROCESS (so it
+                // outlives this client) and suppress the console window
+                // (CREATE_NO_WINDOW); callers can override via spawnOptions.
                 const args = [serverPath, "--port", String(port), ...extraArgs];
-                const child = spawn(
-                    "cmd.exe",
-                    ["/c", "start", "/B", "node", ...args],
-                    {
-                        stdio: "ignore",
-                        windowsHide: true,
-                    },
-                );
+                const child = spawn("node", args, {
+                    detached: spawnOptions.detached ?? true,
+                    stdio: spawnOptions.stdio ?? "ignore",
+                    windowsHide: spawnOptions.windowsHide ?? true,
+                });
                 child.unref();
                 debug(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
@@ -442,8 +456,8 @@ function spawnAgentServer(
                 "node",
                 [serverPath, "--port", String(port), ...extraArgs],
                 {
-                    detached: true,
-                    stdio: "ignore",
+                    detached: spawnOptions.detached ?? true,
+                    stdio: spawnOptions.stdio ?? "ignore",
                 },
             );
             child.unref();
@@ -480,6 +494,7 @@ export async function ensureAgentServer(
     port: number = AGENT_SERVER_DEFAULT_PORT,
     hidden: boolean = false,
     idleTimeout: number = 0,
+    spawnOptions: AgentServerSpawnOptions = {},
 ): Promise<void> {
     const url = `ws://localhost:${port}`;
     if (await isServerRunning(url)) {
@@ -493,7 +508,7 @@ export async function ensureAgentServer(
             console.log("Starting TypeAgent server in a new window...");
         }
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath, port, hidden, idleTimeout);
+        spawnAgentServer(serverPath, port, hidden, idleTimeout, spawnOptions);
         await waitForServer(url);
         console.log("TypeAgent server started.");
     }
