@@ -5,7 +5,7 @@
 // `node:child_process` dependency is isolated from the package's main entry,
 // which is also consumed by browser/renderer bundles.
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent-sdk:cliPath");
@@ -38,9 +38,10 @@ export function resolveCliOnPath(name: string): string | undefined {
     }
     let resolved: string | undefined;
     try {
-        const command =
-            process.platform === "win32" ? `where ${name}` : `which ${name}`;
-        const out = execSync(command, {
+        // Pass `name` as a separate argv entry (no shell) so it can never be
+        // interpreted as a shell command, regardless of its contents.
+        const lookup = process.platform === "win32" ? "where" : "which";
+        const out = execFileSync(lookup, [name], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "ignore"],
         }).trim();

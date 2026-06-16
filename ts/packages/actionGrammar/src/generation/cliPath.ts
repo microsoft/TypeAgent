@@ -7,7 +7,7 @@
 // mirrors @typeagent/agent-sdk/node's helper. action-grammar's generation code
 // is node-only (already uses node:fs/path/url) and is not bundled for the web.
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:action-grammar:cliPath");
@@ -26,9 +26,10 @@ export function resolveCliOnPath(name: string): string | undefined {
     }
     let resolved: string | undefined;
     try {
-        const command =
-            process.platform === "win32" ? `where ${name}` : `which ${name}`;
-        const out = execSync(command, {
+        // Pass `name` as a separate argv entry (no shell) so it can never be
+        // interpreted as a shell command, regardless of its contents.
+        const lookup = process.platform === "win32" ? "where" : "which";
+        const out = execFileSync(lookup, [name], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "ignore"],
         }).trim();
