@@ -376,6 +376,7 @@
 .chat-panel-wrapper {
   display: flex;
   flex-direction: column;
+  position: relative;
   height: 100%;
   width: 100%;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -1580,6 +1581,15 @@ span.ansi-bright-white-fg {
 }
 
 /* =========================================================================
+   Load-earlier-messages sentinel (invisible; triggers IntersectionObserver)
+   ========================================================================= */
+.chat-load-more-history {
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* =========================================================================
    Feedback widget — mirrors packages/shell/src/renderer/assets/styles.less.
    Keep both in sync when changing class names or layout.
    ========================================================================= */
@@ -2069,4 +2079,39 @@ span.ansi-bright-white-fg {
 .action-text-editable tr.missing td.name-cell {
   font-style: italic;
   color: lightgray;
+}
+
+/* =========================================================================
+   New Messages Pill (shown when user scrolls away from bottom)
+   ========================================================================= */
+
+.chat-new-messages-pill {
+  display: none;
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: var(--chat-new-messages-bg, #0066bf);
+  color: var(--chat-new-messages-fg, #ffffff);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+  user-select: none;
+  z-index: 100;
+}
+
+.chat-new-messages-pill:hover {
+  background-color: var(--chat-new-messages-bg-hover, #0052a3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.chat-new-messages-pill:active {
+  transform: translateX(-50%) scale(0.98);
 }

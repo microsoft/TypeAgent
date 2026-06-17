@@ -934,6 +934,17 @@ export function createChatPanelClient(
                     });
                     break;
                 case AppAgentEvent.Inline:
+                    chatPanel.showInline(data, source);
+                    if (source !== "osNotifications") {
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                    }
+                    break;
                 case AppAgentEvent.Toast:
                     chatPanel.showToast(data, source);
                     if (source !== "osNotifications") {

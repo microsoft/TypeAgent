@@ -452,6 +452,13 @@ export class ChatPanel {
      */
     private threadContainers = new Map<string, AgentMessageContainer>();
     /**
+     * All agent bubbles ever created for a request/thread id, in creation
+     * order. Step-mode reasoning intentionally creates multiple bubbles per
+     * request; this lets us clear stale running rails and still finalize
+     * metrics/token counts even after `threadContainers` is rotated.
+     */
+    private requestAgentContainers = new Map<string, AgentMessageContainer[]>();
+    /**
      * Thread ids whose request is currently being processed. Drives the
      * agent bubble's "working" status rail + Stop button. An id is added on
      * `setProcessing` and removed on `completeRequest` / `setIdle`. The rail
@@ -514,6 +521,24 @@ export class ChatPanel {
     private isSwitching = false;
     private isHistoryLoading = false;
     private historyLoadingPlaceholder: HTMLElement | undefined;
+    private pendingHistoryEntries: HistoryEntry[] = [];
+    private loadMoreHistoryEl: HTMLElement | undefined;
+    private loadMoreObserver: IntersectionObserver | undefined;
+    private isLoadingMoreHistory = false;
+    /**
+     * When non-null, all add* methods insert before this element instead of
+     * before messageDiv.firstElementChild. Set during paginated history loads
+     * so older entries land at the correct visual position (just above the
+     * existing oldest history, not at the live-message bottom).
+     */
+    private replayInsertAnchor: Element | null = null;
+
+    /** Returns the element before which new messages are inserted. */
+    private get insertionAnchor(): Element {
+        return (
+            this.replayInsertAnchor ?? this.messageDiv.firstElementChild!
+        );
+    }
     private isDemoPaused = false;
     private isDemoRunning = false;
     // Flipped by `cancelTypingAnimation()` (called from the host when the
@@ -565,6 +590,11 @@ export class ChatPanel {
     // history replay (those timestamps would reflect replay speed, not
     // the original interaction).
     private suppressFirstMessageTracking = false;
+
+    // New messages pill state — shown when user scrolls away from bottom
+    private newMessagesPill: HTMLDivElement | undefined;
+    private userHasManuallyScrolled = false;
+    private hasUnseenNewMessages = false;
 
     public onSend?: (
         text: string,
@@ -667,6 +697,19 @@ export class ChatPanel {
         this.messageDiv.appendChild(sentinel);
 
         wrapper.appendChild(this.messageDiv);
+
+        // New messages pill — shown when user scrolls away from bottom
+        // Positioned outside messageDiv to avoid column-reverse layout issues
+        this.newMessagesPill = document.createElement("div");
+        this.newMessagesPill.className = "chat-new-messages-pill";
+        this.newMessagesPill.style.display = "none";
+        this.newMessagesPill.innerHTML = '↓ New messages';
+        wrapper.appendChild(this.newMessagesPill);
+
+        // Setup scroll tracking to detect when user scrolls away from bottom
+        this.messageDiv.addEventListener("scroll", () => {
+            this.updateScrollState();
+        });
 
         // Input area
         this.inputArea = document.createElement("div");
@@ -1543,6 +1586,12 @@ export class ChatPanel {
     private clearAgentRunning(threadId: string): void {
         this.agentRunningRequestIds.delete(threadId);
         this.threadContainers.get(threadId)?.clearRunning();
+        const all = this.requestAgentContainers.get(threadId);
+        if (all) {
+            for (const container of all) {
+                container.clearRunning();
+            }
+        }
     }
 
     /**
@@ -1732,7 +1781,7 @@ export class ChatPanel {
         isRemote: boolean,
         attachments?: string[],
     ) {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const sentinel = this.insertionAnchor;
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
@@ -1964,6 +2013,10 @@ export class ChatPanel {
             // getOrCreateAgentContainer will spin up a fresh one.
             if (requestId) {
                 const threadId = this.resolveThreadId(requestId);
+                // Mark the previous step bubble as done immediately when we
+                // advance to the next phase, rather than waiting for the
+                // whole command to complete.
+                this.threadContainers.get(threadId)?.clearRunning();
                 this.threadContainers.delete(threadId);
             }
         }
@@ -2011,6 +2064,7 @@ export class ChatPanel {
      */
     public clearRequest(requestId: string): void {
         this.threadContainers.delete(requestId);
+        this.requestAgentContainers.delete(requestId);
         this.pendingThreadDisplayInfo.delete(requestId);
         if (this.currentUserThreadId === requestId) {
             this.currentUserThreadId = undefined;
@@ -2072,6 +2126,10 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        const requestContainers =
+            this.requestAgentContainers.get(threadId) ?? [];
+        requestContainers.push(container);
+        this.requestAgentContainers.set(threadId, requestContainers);
         // If this request is in-flight, stamp the "working" rail + Stop now
         // that there's a visible bubble to anchor it to.
         this.applyAgentRunning(threadId);
@@ -2191,7 +2249,7 @@ export class ChatPanel {
      * participate in the thread map — fire-and-forget.
      */
     public showInline(content: DisplayContent, source?: string) {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const sentinel = this.insertionAnchor;
         const row = document.createElement("div");
         row.className = "chat-message-inline";
         row.style.cssText =
@@ -2226,7 +2284,7 @@ export class ChatPanel {
      * confirmations, session lifecycle events, and similar host notices.
      */
     public addSystemMessage(text: string): void {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const sentinel = this.insertionAnchor;
         const el = document.createElement("div");
         el.className = "chat-message-system";
         el.textContent = text;
@@ -2259,6 +2317,7 @@ export class ChatPanel {
 
         // Reset live state so replay starts fresh.
         this.threadContainers.clear();
+        this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
@@ -2294,6 +2353,7 @@ export class ChatPanel {
         // with new live requests, causing hasUserMessage() to return a
         // false positive and silently drop the live user-message bubble.
         this.threadContainers.clear();
+        this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
@@ -2302,17 +2362,29 @@ export class ChatPanel {
 
     /**
      * Stream-replay history in chunks so the browser can paint between
-     * batches.  Prefer this over `replayHistory` for large transcripts.
+     * batches. Only renders the last `pageSize` entries initially; older
+     * entries are stored in `pendingHistoryEntries` and loaded on demand
+     * when the user clicks "Load earlier messages".
      * The host should call `setHistoryLoading(true)` before and
      * `setHistoryLoading(false)` after (or chain on the returned promise).
      */
     public async replayHistoryStreaming(
         entries: HistoryEntry[],
         chunkSize: number = 20,
+        pageSize: number = 200,
     ): Promise<void> {
         if (!entries || entries.length === 0) return;
 
+        // Slice to the last pageSize entries; stash the rest for paging.
+        if (entries.length > pageSize) {
+            this.pendingHistoryEntries = entries.slice(0, entries.length - pageSize);
+            entries = entries.slice(-pageSize);
+        } else {
+            this.pendingHistoryEntries = [];
+        }
+
         this.threadContainers.clear();
+        this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
@@ -2348,11 +2420,116 @@ export class ChatPanel {
         }
 
         this.threadContainers.clear();
+        this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
+
+        // Show load-more button if older pages remain.
+        if (this.pendingHistoryEntries.length > 0) {
+            this._showLoadMoreHistory();
+        }
     }
+
+    /** Attach an invisible sentinel at the visual top of history; load more when it enters view. */
+    private _showLoadMoreHistory(): void {
+        if (this.loadMoreHistoryEl) return;
+        const el = document.createElement("div");
+        el.className = "chat-load-more-history";
+        // appendChild puts it at DOM end = visual top (column-reverse).
+        this.messageDiv.appendChild(el);
+        this.loadMoreHistoryEl = el;
+
+        // IntersectionObserver fires when the sentinel scrolls into view.
+        this.loadMoreObserver = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    void this._loadMoreHistory();
+                }
+            },
+            { root: this.messageDiv, threshold: 0 },
+        );
+        this.loadMoreObserver.observe(el);
+    }
+
+    /** Page in the next batch of older history entries. */
+    private async _loadMoreHistory(
+        chunkSize: number = 20,
+        pageSize: number = 200,
+    ): Promise<void> {
+        if (
+            this.isLoadingMoreHistory ||
+            this.pendingHistoryEntries.length === 0 ||
+            !this.loadMoreHistoryEl
+        ) {
+            return;
+        }
+        this.isLoadingMoreHistory = true;
+
+        // Take the next page (newest-of-pending = entries closest to
+        // the currently visible oldest history).
+        const page = this.pendingHistoryEntries.slice(-pageSize);
+        this.pendingHistoryEntries = this.pendingHistoryEntries.slice(
+            0,
+            -pageSize,
+        );
+
+        // Point the insertion anchor to loadMoreHistoryEl so all
+        // add* helpers insert before it (visual top of history block)
+        // instead of before firstElementChild (visual bottom).
+        // Process newest-first within the page so that when inserted
+        // before loadMoreEl, the oldest entry ends up highest visually
+        // (column-reverse: last DOM position = visual top).
+        this.replayInsertAnchor = this.loadMoreHistoryEl;
+        this.suppressFirstMessageTracking = true;
+        try {
+            // Iterate from newest (end of page) to oldest (start).
+            for (let i = page.length - 1; i >= 0; i -= chunkSize) {
+                const chunkStart = Math.max(0, i - chunkSize + 1);
+
+                // Snapshot what's just before loadMoreEl so we can
+                // mark newly inserted elements as .history afterwards.
+                const markerBefore =
+                    this.loadMoreHistoryEl.previousElementSibling;
+
+                for (let j = i; j >= chunkStart; j--) {
+                    this._processHistoryEntry(page[j]);
+                }
+
+                // Walk from loadMoreEl backward to markerBefore and
+                // mark every newly inserted element as .history.
+                let cur =
+                    this.loadMoreHistoryEl.previousElementSibling;
+                while (cur && cur !== markerBefore) {
+                    cur.classList.add("history");
+                    cur = cur.previousElementSibling;
+                }
+
+                // Yield to the browser between chunks.
+                if (chunkStart > 0) {
+                    await new Promise<void>((resolve) =>
+                        setTimeout(resolve, 0),
+                    );
+                }
+            }
+        } finally {
+            this.replayInsertAnchor = null;
+            this.suppressFirstMessageTracking = false;
+        }
+
+        this.isLoadingMoreHistory = false;
+
+        if (this.pendingHistoryEntries.length === 0) {
+            this.loadMoreObserver?.disconnect();
+            this.loadMoreObserver = undefined;
+            this.loadMoreHistoryEl?.remove();
+            this.loadMoreHistoryEl = undefined;
+        }
+        // If more pages remain, the observer keeps watching the sentinel
+        // and will fire again when the user scrolls to the top.
+    }
+
 
     /** Process a single HistoryEntry into the DOM (shared by sync and streaming replay). */
     private _processHistoryEntry(entry: HistoryEntry): void {
@@ -2483,6 +2660,7 @@ export class ChatPanel {
         sentinel.className = "chat-sentinel";
         this.messageDiv.appendChild(sentinel);
         this.threadContainers.clear();
+        this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
@@ -2495,6 +2673,9 @@ export class ChatPanel {
         // user issues new commands.
         this.commandHistory = [];
         this.historyIndex = -1;
+        this.userHasManuallyScrolled = false;
+        this.hasUnseenNewMessages = false;
+        this.hideNewMessagesPill();
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
@@ -2503,6 +2684,9 @@ export class ChatPanel {
         if (this.toastStack) {
             this.toastStack.replaceChildren();
         }
+        // Reset scroll state and pill
+        this.userHasManuallyScrolled = false;
+        this.hideNewMessagesPill();
     }
 
     /**
@@ -2606,7 +2790,13 @@ export class ChatPanel {
         // The request is done — drop the in-flight marker and remove the
         // "working" rail + Stop from its agent bubble.
         this.clearAgentRunning(threadId);
-        const target = this.threadContainers.get(threadId);
+        const requestContainers =
+            this.requestAgentContainers.get(threadId) ?? [];
+        const target =
+            this.threadContainers.get(threadId) ??
+            (requestContainers.length > 0
+                ? requestContainers[requestContainers.length - 1]
+                : undefined);
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
             // Mirror Electron's "⚠ Cancelled" status, anchored to the
@@ -2654,6 +2844,9 @@ export class ChatPanel {
                 firstMessageMs,
             );
         }
+        // Request is finalized; future updates for this id should start with
+        // a clean container list.
+        this.requestAgentContainers.delete(threadId);
         if (result && requestId) {
             // Always attempt to populate user-side metrics. Even when the
             // request had no parse phase (e.g. cached translations or
@@ -3319,7 +3512,7 @@ export class ChatPanel {
 
     /** Add a separator for previous session history. */
     public addHistorySeparator(label: string = "previously") {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const sentinel = this.insertionAnchor;
         const sep = document.createElement("div");
         sep.className = "chat-separator chat-history-separator";
 
@@ -3341,7 +3534,7 @@ export class ChatPanel {
 
     /** Add a dimmed history user message. */
     public addHistoryUserMessage(text: string) {
-        const sentinel = this.messageDiv.firstElementChild!;
+        const sentinel = this.insertionAnchor;
         const container = document.createElement("div");
         container.className =
             "chat-message-container-user chat-history-message";
@@ -3369,7 +3562,7 @@ export class ChatPanel {
         appendMode?: DisplayAppendMode,
     ) {
         if (!this.historyAgentContainer || !appendMode) {
-            const sentinel = this.messageDiv.firstElementChild!;
+            const sentinel = this.insertionAnchor;
             this.historyAgentContainer = new AgentMessageContainer(
                 sentinel,
                 source ?? "assistant",
@@ -3628,6 +3821,10 @@ export class ChatPanel {
     public setSwitching(switching: boolean, targetName?: string) {
         this.isSwitching = switching;
         if (switching) {
+            // Reset scroll state when switching conversations
+            this.userHasManuallyScrolled = false;
+            this.hasUnseenNewMessages = false;
+            this.hideNewMessagesPill();
             this.setEnabledInternal(false);
             const label = targetName
                 ? `Switching to conversation "${targetName}"…`
@@ -3655,6 +3852,10 @@ export class ChatPanel {
     public setHistoryLoading(loading: boolean) {
         this.isHistoryLoading = loading;
         if (loading) {
+            // Reset scroll state when loading history
+            this.userHasManuallyScrolled = false;
+            this.hasUnseenNewMessages = false;
+            this.hideNewMessagesPill();
             this.setEnabledInternal(false);
             this.textInput.setAttribute("data-placeholder", "Loading history…");
             this.inputArea.classList.add("chat-input-history-loading");
@@ -3802,7 +4003,7 @@ export class ChatPanel {
         anchorElement?: Element,
     ): AgentMessageContainer {
         const beforeElement =
-            anchorElement ?? this.messageDiv.firstElementChild!;
+            anchorElement ?? this.insertionAnchor;
         const container = new AgentMessageContainer(
             beforeElement,
             source,
@@ -3935,8 +4136,93 @@ export class ChatPanel {
     }
 
     private scrollToBottom() {
+        // If user has manually scrolled away from bottom, don't auto-scroll.
+        // Show the pill instead so they can choose to jump to new messages.
+        if (this.userHasManuallyScrolled) {
+            if (this.isNewestMessageVisible()) {
+                this.hideNewMessagesPill();
+                return;
+            }
+            this.hasUnseenNewMessages = true;
+            this.showNewMessagesPill();
+            return;
+        }
+
         // With column-reverse flex, scrollTop 0 = bottom
         this.messageDiv.scrollTop = 0;
+        this.hasUnseenNewMessages = false;
+        this.hideNewMessagesPill();
+    }
+
+    /** Returns true when the newest message element is visible in the chat viewport. */
+    private isNewestMessageVisible(): boolean {
+        let newest = this.messageDiv.firstElementChild as HTMLElement | null;
+        while (newest && newest.classList.contains("chat-sentinel")) {
+            newest = newest.nextElementSibling as HTMLElement | null;
+        }
+        if (!newest) return true;
+
+        const viewport = this.messageDiv.getBoundingClientRect();
+        const rect = newest.getBoundingClientRect();
+        return rect.bottom > viewport.top && rect.top < viewport.bottom;
+    }
+
+    /**
+     * Check if the user is at the bottom of the chat.
+     * In column-reverse flex, scrollTop = 0 or very small means we're at the bottom.
+     */
+    private updateScrollState() {
+        const threshold = 10; // Allow 10px tolerance for scroll position
+        const distanceFromBottom = Math.abs(this.messageDiv.scrollTop);
+        const atBottom = distanceFromBottom <= threshold;
+
+        if (atBottom) {
+            // User scrolled back to bottom, clear the flag and hide the pill
+            this.userHasManuallyScrolled = false;
+            this.hasUnseenNewMessages = false;
+            this.hideNewMessagesPill();
+            return;
+        }
+
+        // Any non-trivial distance from bottom means the user intentionally
+        // moved away from the live edge; lock out auto-scroll.
+        this.userHasManuallyScrolled = true;
+        if (!this.hasUnseenNewMessages || this.isNewestMessageVisible()) {
+            this.hideNewMessagesPill();
+            return;
+        }
+        this.showNewMessagesPill();
+    }
+
+    /** Show the new messages pill at the bottom of the chat */
+    private showNewMessagesPill() {
+        if (
+            !this.newMessagesPill ||
+            !this.userHasManuallyScrolled ||
+            !this.hasUnseenNewMessages
+        ) {
+            return;
+        }
+
+        this.newMessagesPill.style.display = "flex";
+        this.newMessagesPill.onclick = () => {
+            // Scroll back to the bottom where new messages appear
+            this.messageDiv.scrollTop = 0;
+            this.userHasManuallyScrolled = false;
+            this.hasUnseenNewMessages = false;
+            // Hide the pill after scrolling
+            setTimeout(() => {
+                this.hideNewMessagesPill();
+            }, 100);
+        };
+    }
+
+    /** Hide the new messages pill and clear tracking */
+    private hideNewMessagesPill() {
+        if (!this.newMessagesPill) return;
+
+        this.newMessagesPill.style.display = "none";
+        this.newMessagesPill.onclick = null;
     }
 }
 

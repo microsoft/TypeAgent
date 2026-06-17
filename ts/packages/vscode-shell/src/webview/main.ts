@@ -611,6 +611,10 @@ window.addEventListener("message", (event) => {
                 // Defensive chip clear (see direct `commandComplete` case).
                 clearQueueChip(rid);
                 if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
+            } else if (msg.event === "inline") {
+                chatPanel.showInline(msg.data, msg.source);
+            } else if (msg.event === "toast") {
+                chatPanel.showToast(msg.data, msg.source);
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
