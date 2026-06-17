@@ -10,7 +10,11 @@
  * `$(icon)` labels that module emits for the command surface.
  */
 
-import type { ActionDelta, ReplaySummary } from "@typeagent/core/replay";
+import type {
+    ActionDelta,
+    ReplaySummary,
+    VersionSpec,
+} from "@typeagent/core/replay";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 import {
     classifyReplayRow,
@@ -87,4 +91,34 @@ export function toImpactMethodNote(
 export function toImpactErrorLine(error: ReplayRunError): string {
     const where = error.side === "A" ? "version A" : "version B";
     return `Replay aborted: ${where} (${error.ref}) failed to build. ${error.message}`;
+}
+
+/** Keywords (case-insensitive) a user can type to mean the live working tree
+ *  rather than a committed git ref. */
+const WORKING_TREE_INPUTS = new Set(["", "workingtree", "working tree", "."]);
+
+/**
+ * Parse a free-text version field from the launch controls into a
+ * {@link VersionSpec}. Empty / `working tree` / `.` selects the live working
+ * tree (uncommitted edits); anything else is treated as a git ref (`HEAD`,
+ * `HEAD~1`, a branch, a tag, a SHA).
+ */
+export function parseVersionInput(raw: string | undefined): VersionSpec {
+    const value = (raw ?? "").trim();
+    if (WORKING_TREE_INPUTS.has(value.toLowerCase())) {
+        return { kind: "workingTree" };
+    }
+    return { kind: "git", ref: value };
+}
+
+/** Short label for a version: the git ref, or `working tree`. */
+export function describeVersion(spec: VersionSpec): string {
+    return spec.kind === "workingTree" ? "working tree" : spec.ref;
+}
+
+/** A `Comparing A → B` line built from the summary's resolved versions. */
+export function toImpactComparisonLine(summary: ReplaySummary): string {
+    return `Comparing ${describeVersion(summary.versionA)} \u2192 ${describeVersion(
+        summary.versionB,
+    )}`;
 }

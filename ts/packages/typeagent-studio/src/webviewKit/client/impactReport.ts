@@ -20,12 +20,18 @@ import {
     toImpactSummaryLine,
     toImpactMethodNote,
     toImpactErrorLine,
+    toImpactComparisonLine,
 } from "../replayViewModel.js";
 
+interface PanelState {
+    selectedAgent?: string;
+    versionA?: string;
+    versionB?: string;
+}
 interface VsCodeApi {
     postMessage(message: WebviewToHostMessage): void;
-    getState(): { selectedAgent?: string } | undefined;
-    setState(state: { selectedAgent?: string }): void;
+    getState(): PanelState | undefined;
+    setState(state: PanelState): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
@@ -47,17 +53,33 @@ const statusEl = el("span", "status");
 const agentSelect = document.createElement("select");
 agentSelect.className = "agent-select";
 agentSelect.setAttribute("aria-label", "Agent to replay");
+// Two version fields drive the A→B compare. Defaults express the "find a
+// regression" journey: baseline HEAD vs the live working tree (your edits).
+const versionAInput = versionField("Base (A)", "HEAD", "HEAD");
+const versionBInput = versionField(
+    "Compare (B)",
+    "working tree",
+    "working tree",
+);
 const runButton = button("Run replay", () => runReplay());
 const reconnectButton = button("Reconnect", () => {
     vscode.postMessage({ type: "reconnect" });
 });
-toolbar.append(agentSelect, runButton, reconnectButton, statusEl);
+toolbar.append(
+    agentSelect,
+    versionAInput.wrap,
+    versionBInput.wrap,
+    runButton,
+    reconnectButton,
+    statusEl,
+);
 
 const summaryEl = el("div", "summary");
+const comparisonEl = el("div", "comparison");
 const bannerEl = el("div", "banner");
 const tableWrap = el("div", "table-wrap");
 
-root.append(toolbar, bannerEl, summaryEl, tableWrap);
+root.append(toolbar, bannerEl, summaryEl, comparisonEl, tableWrap);
 
 setControlsEnabled(false);
 restoreSelection();
@@ -109,14 +131,17 @@ function runReplay(): void {
     }
     requestId += 1;
     latestRequestId = requestId;
-    vscode.setState({ selectedAgent: agent });
+    const versionA = versionAInput.input.value;
+    const versionB = versionBInput.input.value;
+    vscode.setState({ selectedAgent: agent, versionA, versionB });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
     summaryEl.textContent = "";
+    comparisonEl.textContent = "";
     bannerEl.textContent = "";
     bannerEl.className = "banner";
     tableWrap.textContent = "";
-    vscode.postMessage({ type: "run", requestId, agent });
+    vscode.postMessage({ type: "run", requestId, agent, versionA, versionB });
 }
 
 function renderResult(result: StudioReplayResult): void {
@@ -126,6 +151,7 @@ function renderResult(result: StudioReplayResult): void {
         bannerEl.className = "banner banner-error";
         bannerEl.textContent = toImpactErrorLine(result.error);
         summaryEl.textContent = "";
+        comparisonEl.textContent = toImpactComparisonLine(result.summary);
         tableWrap.textContent = "";
         setStatus("Replay aborted.");
         return;
@@ -141,6 +167,7 @@ function renderResult(result: StudioReplayResult): void {
     }
 
     summaryEl.textContent = toImpactSummaryLine(result.summary);
+    comparisonEl.textContent = toImpactComparisonLine(result.summary);
     const rows = toImpactRows(result.rows);
     const shown = rows.length;
     const total = result.summary.rowCount;
@@ -190,7 +217,8 @@ function populateAgents(agents: string[]): void {
 }
 
 function restoreSelection(): void {
-    const previous = vscode.getState()?.selectedAgent;
+    const state = vscode.getState();
+    const previous = state?.selectedAgent;
     if (previous) {
         const opt = document.createElement("option");
         opt.value = previous;
@@ -198,11 +226,19 @@ function restoreSelection(): void {
         agentSelect.appendChild(opt);
         agentSelect.value = previous;
     }
+    if (state?.versionA !== undefined) {
+        versionAInput.input.value = state.versionA;
+    }
+    if (state?.versionB !== undefined) {
+        versionBInput.input.value = state.versionB;
+    }
 }
 
 function setControlsEnabled(enabled: boolean): void {
     runButton.disabled = !enabled;
     agentSelect.disabled = !enabled;
+    versionAInput.input.disabled = !enabled;
+    versionBInput.input.disabled = !enabled;
 }
 
 function setStatus(text: string): void {
@@ -230,4 +266,33 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
     b.textContent = label;
     b.addEventListener("click", onClick);
     return b;
+}
+
+/** A labelled version text field (e.g. "Base (A)"): label + input wrapped for
+ *  the toolbar. `value` seeds the default; `placeholder` hints the keyword. */
+function versionField(
+    label: string,
+    value: string,
+    placeholder: string,
+): { wrap: HTMLElement; input: HTMLInputElement } {
+    const wrap = el("label", "version-field");
+    const text = document.createElement("span");
+    text.className = "version-label";
+    text.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "version-input";
+    input.value = value;
+    input.placeholder = placeholder;
+    input.setAttribute(
+        "aria-label",
+        `${label} version (git ref or working tree)`,
+    );
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" && !runButton.disabled) {
+            runReplay();
+        }
+    });
+    wrap.append(text, input);
+    return { wrap, input };
 }

@@ -44,6 +44,36 @@ body {
   border-radius: 2px;
 }
 
+.version-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.version-label {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.version-input {
+  width: 9em;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-dropdown-border));
+  padding: 3px 6px;
+  border-radius: 2px;
+}
+
+.comparison {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.comparison:empty {
+  display: none;
+}
+
 .status {
   color: var(--vscode-descriptionForeground);
   margin-left: auto;

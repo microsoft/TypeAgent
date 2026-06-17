@@ -9,6 +9,9 @@ import {
     toImpactSummaryLine,
     toImpactMethodNote,
     toImpactErrorLine,
+    parseVersionInput,
+    describeVersion,
+    toImpactComparisonLine,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -92,4 +95,32 @@ test("toImpactErrorLine names the failed side and ref", () => {
     assert.ok(line.includes("version B"));
     assert.ok(line.includes("HEAD~1"));
     assert.ok(line.includes("boom"));
+});
+
+test("parseVersionInput treats blanks/keywords as working tree, else a git ref", () => {
+    for (const blank of ["", "  ", "working tree", "WorkingTree", "."]) {
+        assert.deepEqual(parseVersionInput(blank), { kind: "workingTree" });
+    }
+    assert.deepEqual(parseVersionInput(undefined), { kind: "workingTree" });
+    assert.deepEqual(parseVersionInput("HEAD"), { kind: "git", ref: "HEAD" });
+    assert.deepEqual(parseVersionInput("  HEAD~2 "), {
+        kind: "git",
+        ref: "HEAD~2",
+    });
+    assert.deepEqual(parseVersionInput("my-branch"), {
+        kind: "git",
+        ref: "my-branch",
+    });
+});
+
+test("describeVersion and toImpactComparisonLine read the resolved versions", () => {
+    assert.equal(describeVersion({ kind: "workingTree" }), "working tree");
+    assert.equal(describeVersion({ kind: "git", ref: "HEAD" }), "HEAD");
+    const line = toImpactComparisonLine({
+        versionA: { kind: "git", ref: "HEAD" },
+        versionB: { kind: "workingTree" },
+    } as ReplaySummary);
+    assert.ok(line.includes("HEAD"));
+    assert.ok(line.includes("working tree"));
+    assert.ok(line.includes("\u2192"));
 });

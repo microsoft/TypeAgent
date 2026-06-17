@@ -7,6 +7,7 @@ import {
     parseWebviewMessage,
     type HostToWebviewMessage,
 } from "./webviewKit/protocol.js";
+import { parseVersionInput } from "./webviewKit/replayViewModel.js";
 import { StudioServiceClient } from "./studioServiceClient.js";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
@@ -111,9 +112,13 @@ export function openImpactReport(
             }
             const payload = await c.replayCorpus({
                 agent: msg.agent,
-                // The shell uses the deterministic policy (working tree vs
-                // working tree → an all-equal baseline) to prove the channel
-                // and the ActionDelta contract without a two-version build.
+                // The launch controls choose the two versions to compare
+                // (default: HEAD → working tree, the "find a regression"
+                // journey). The static-grammar resolver builds each side and
+                // the deterministic `needs-explanation` policy keeps the run
+                // free of LLM calls.
+                versionA: parseVersionInput(msg.versionA),
+                versionB: parseVersionInput(msg.versionB),
                 missPolicy: "needs-explanation",
             });
             post({ type: "result", requestId: msg.requestId, payload });
