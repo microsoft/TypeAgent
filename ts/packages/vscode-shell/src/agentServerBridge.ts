@@ -37,7 +37,10 @@ import {
     type CompletionController,
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
-import type { UserContext, ProcessCommandOptions } from "@typeagent/dispatcher-types";
+import type {
+    UserContext,
+    ProcessCommandOptions,
+} from "@typeagent/dispatcher-types";
 
 // Internal-only message type unions; re-export for any future consumers.
 export type {

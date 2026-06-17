@@ -37,7 +37,11 @@ import {
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
-import { ClientIO, RequestId, ProcessCommandOptions } from "@typeagent/dispatcher-types";
+import {
+    ClientIO,
+    RequestId,
+    ProcessCommandOptions,
+} from "@typeagent/dispatcher-types";
 import { initializeGeolocation } from "./geolocation.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 

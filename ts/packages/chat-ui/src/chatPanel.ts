@@ -535,9 +535,7 @@ export class ChatPanel {
 
     /** Returns the element before which new messages are inserted. */
     private get insertionAnchor(): Element {
-        return (
-            this.replayInsertAnchor ?? this.messageDiv.firstElementChild!
-        );
+        return this.replayInsertAnchor ?? this.messageDiv.firstElementChild!;
     }
     private isDemoPaused = false;
     private isDemoRunning = false;
@@ -703,7 +701,7 @@ export class ChatPanel {
         this.newMessagesPill = document.createElement("div");
         this.newMessagesPill.className = "chat-new-messages-pill";
         this.newMessagesPill.style.display = "none";
-        this.newMessagesPill.innerHTML = '↓ New messages';
+        this.newMessagesPill.innerHTML = "↓ New messages";
         wrapper.appendChild(this.newMessagesPill);
 
         // Setup scroll tracking to detect when user scrolls away from bottom
@@ -2377,7 +2375,10 @@ export class ChatPanel {
 
         // Slice to the last pageSize entries; stash the rest for paging.
         if (entries.length > pageSize) {
-            this.pendingHistoryEntries = entries.slice(0, entries.length - pageSize);
+            this.pendingHistoryEntries = entries.slice(
+                0,
+                entries.length - pageSize,
+            );
             entries = entries.slice(-pageSize);
         } else {
             this.pendingHistoryEntries = [];
@@ -2403,7 +2404,8 @@ export class ChatPanel {
                 // Each entry goes to DOM index 0 (via sentinel.before),
                 // so after processing the chunk the first `added` children
                 // are the ones we just inserted.
-                const chunkAdded = this.messageDiv.children.length - beforeChunk;
+                const chunkAdded =
+                    this.messageDiv.children.length - beforeChunk;
                 for (let k = 0; k < chunkAdded; k++) {
                     this.messageDiv.children[k].classList.add("history");
                 }
@@ -2499,8 +2501,7 @@ export class ChatPanel {
 
                 // Walk from loadMoreEl backward to markerBefore and
                 // mark every newly inserted element as .history.
-                let cur =
-                    this.loadMoreHistoryEl.previousElementSibling;
+                let cur = this.loadMoreHistoryEl.previousElementSibling;
                 while (cur && cur !== markerBefore) {
                     cur.classList.add("history");
                     cur = cur.previousElementSibling;
@@ -2529,7 +2530,6 @@ export class ChatPanel {
         // If more pages remain, the observer keeps watching the sentinel
         // and will fire again when the user scrolls to the top.
     }
-
 
     /** Process a single HistoryEntry into the DOM (shared by sync and streaming replay). */
     private _processHistoryEntry(entry: HistoryEntry): void {
@@ -4002,8 +4002,7 @@ export class ChatPanel {
         threadId?: string,
         anchorElement?: Element,
     ): AgentMessageContainer {
-        const beforeElement =
-            anchorElement ?? this.insertionAnchor;
+        const beforeElement = anchorElement ?? this.insertionAnchor;
         const container = new AgentMessageContainer(
             beforeElement,
             source,

@@ -673,27 +673,30 @@ export class ConversationBar {
         if (previousConversations.length > 0) {
             const separatorEl = document.createElement("div");
             separatorEl.className = "conversation-search-separator";
-            
+
             const leftLine = document.createElement("div");
             leftLine.className = "conversation-search-separator-line";
             separatorEl.appendChild(leftLine);
-            
+
             const textEl = document.createElement("div");
             textEl.className = "conversation-search-separator-text";
-            
+
             // Use the oldest previous conversation's timestamp for the label
-            const oldestPrevious = previousConversations[previousConversations.length - 1];
+            const oldestPrevious =
+                previousConversations[previousConversations.length - 1];
             if (oldestPrevious.createdAt) {
-                textEl.textContent = formatRelativeTime(oldestPrevious.createdAt);
+                textEl.textContent = formatRelativeTime(
+                    oldestPrevious.createdAt,
+                );
             } else {
                 textEl.textContent = "earlier";
             }
             separatorEl.appendChild(textEl);
-            
+
             const rightLine = document.createElement("div");
             rightLine.className = "conversation-search-separator-line";
             separatorEl.appendChild(rightLine);
-            
+
             this.searchResultsEl.appendChild(separatorEl);
         }
 

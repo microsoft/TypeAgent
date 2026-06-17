@@ -683,12 +683,10 @@ window.addEventListener("message", (event) => {
             // completion always re-enables input even if the host message
             // races or is lost.
             const replayEntries = toChatPanelHistory(msg.entries);
-            void chatPanel
-                .replayHistoryStreaming(replayEntries)
-                .then(() => {
-                    chatPanel.setHistoryLoading(false);
-                    chatPanel.setEnabled(isConnected);
-                });
+            void chatPanel.replayHistoryStreaming(replayEntries).then(() => {
+                chatPanel.setHistoryLoading(false);
+                chatPanel.setEnabled(isConnected);
+            });
             break;
         }
         case "setActive":
