@@ -84,7 +84,10 @@ export class StudioServiceConnection {
 
     /** The live client, or `undefined` when not connected. */
     getClient(): StudioServiceClient | undefined {
-        return this.client;
+        // The client is kept across reconnects (its rpc is rebound onto the new
+        // socket), so only surface it when actually connected — preserving the
+        // "undefined while disconnected" contract callers and tests rely on.
+        return this.state === "connected" ? this.client : undefined;
     }
 
     /**
@@ -128,7 +131,7 @@ export class StudioServiceConnection {
         if (this.disposed) {
             return Promise.resolve(false);
         }
-        if (this.client) {
+        if (this.client && this.state === "connected") {
             return Promise.resolve(true);
         }
         if (this.connecting) {
@@ -138,22 +141,33 @@ export class StudioServiceConnection {
         const gen = ++this.generation;
         this.setState("connecting");
         this.connecting = (async () => {
-            const client = await StudioServiceClient.connect({
-                ...(this.repoRoot !== undefined
-                    ? { repoRoot: this.repoRoot }
-                    : {}),
-                ...(this.endpoint !== undefined
-                    ? { endpoint: this.endpoint }
-                    : {}),
-                ...(this.token !== undefined ? { token: this.token } : {}),
-                onEvent: (event) => this.fanout(event),
-                onClose: () => this.handleClose(gen),
-            });
-            // Superseded (disposed or a newer generation, e.g. setTarget) —
-            // drop this client. The superseding change may not have started its
-            // own attempt (connect() coalesces onto this in-flight one), so when
-            // auto-retry is on, schedule a fresh attempt for the new target;
-            // otherwise the connection can stall with nothing pending.
+            const existing = this.client;
+            let client: StudioServiceClient | undefined;
+            if (existing !== undefined) {
+                // Reuse the cached client across a reconnect: reopen the socket
+                // and rebind its rpc rather than recreating the client.
+                client = (await existing.reconnect(() => this.handleClose(gen)))
+                    ? existing
+                    : undefined;
+            } else {
+                client = await StudioServiceClient.connect({
+                    ...(this.repoRoot !== undefined
+                        ? { repoRoot: this.repoRoot }
+                        : {}),
+                    ...(this.endpoint !== undefined
+                        ? { endpoint: this.endpoint }
+                        : {}),
+                    ...(this.token !== undefined ? { token: this.token } : {}),
+                    onEvent: (event) => this.fanout(event),
+                    onClose: () => this.handleClose(gen),
+                });
+            }
+            // Superseded (disposed or a newer generation, e.g. setTarget). The
+            // superseding op (setTarget/dispose) already cleared this.client, so
+            // whatever we just (re)opened is now an orphan — close it (for a
+            // reused client this closes its freshly-rebound socket). The
+            // superseding change may not have started its own attempt, so when
+            // auto-retry is on, schedule one for the new target.
             if (this.disposed || gen !== this.generation) {
                 client?.close();
                 if (!this.disposed && this.client === undefined) {
@@ -190,7 +204,9 @@ export class StudioServiceConnection {
         if (gen !== this.generation || this.disposed) {
             return; // a stale client closing, or we're shutting down
         }
-        this.client = undefined;
+        // Keep this.client: its rpc is rebindable and gets re-pointed at a fresh
+        // socket on reconnect. getClient() gates on state, so callers still see
+        // "undefined" while disconnected.
         this.setState("disconnected");
         if (this.autoRetry) {
             this.scheduleRetry();

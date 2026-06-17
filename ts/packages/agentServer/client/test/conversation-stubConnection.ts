@@ -202,6 +202,9 @@ export function makeStubConnection(
         },
 
         async shutdown() {},
+        async reconnect() {
+            return true;
+        },
         async close() {},
     };
 

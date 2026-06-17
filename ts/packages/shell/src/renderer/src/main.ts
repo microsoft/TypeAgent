@@ -12,11 +12,16 @@ declare global {
     }
 }
 
-import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
+import {
+    ClientAPI,
+    ConversationInfo,
+    SpeechToken,
+} from "../../preload/electronTypes";
 import { getSpeechToken } from "./speechToken";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { createChatPanelClient } from "./chatPanelBridge";
+import { ConversationBar } from "chat-ui";
 
 // Load the shared chat-ui / completion-ui stylesheets. These are injected at
 // runtime (after the static <link> stylesheets in chatView.html) so the
@@ -74,20 +79,191 @@ export class IdGenerator {
 document.addEventListener("DOMContentLoaded", async function () {
     const wrapper = document.getElementById("wrapper")!;
     const agents = new Map<string, string>();
+    const clientAPI = getClientAPI();
+
+    const layout = document.createElement("div");
+    layout.className = "chat-shell-layout";
+    const chatRoot = document.createElement("div");
+    chatRoot.className = "chat-shell-panel";
+    layout.appendChild(chatRoot);
+    wrapper.appendChild(layout);
+
+    const conversationBar = new ConversationBar(layout, {
+        showCreateButton: true,
+        icons: {
+            rename: { text: "✎" },
+            delete: { text: "⌫" },
+            save: { text: "✓" },
+            cancel: { text: "×" },
+        },
+        controller: {
+            requestConversations: () => refreshConversations(),
+            createConversation: async (name) => {
+                await clientAPI.conversationCreate(name);
+                await refreshConversations();
+            },
+            switchConversation: async (conversationId) => {
+                const result =
+                    await clientAPI.conversationSwitch(conversationId);
+                if (!result.success) {
+                    throw new Error(
+                        result.error ?? "Failed to switch conversation.",
+                    );
+                }
+                await refreshConversations();
+            },
+            renameConversation: async (conversationId, name) => {
+                await clientAPI.conversationRename(conversationId, name);
+                await refreshConversations();
+            },
+            deleteConversation: async (conversationId) => {
+                await deleteConversationFromBar(conversationId);
+            },
+        },
+    });
+    const conversationBarEl = conversationBar.getContainer();
+    layout.insertBefore(conversationBarEl, chatRoot);
+    window.addEventListener("beforeunload", () => conversationBar.dispose());
+
+    let refreshConversationsPromise: Promise<void> | undefined;
+
+    async function refreshConversations(): Promise<void> {
+        refreshConversationsPromise ??= refreshConversationsCore().finally(
+            () => {
+                refreshConversationsPromise = undefined;
+            },
+        );
+        return refreshConversationsPromise;
+    }
+
+    async function refreshConversationsCore(): Promise<void> {
+        try {
+            const [conversations, current] = await Promise.all([
+                clientAPI.conversationList(),
+                clientAPI.conversationGetCurrent(),
+            ]);
+            const isLocalOnly = isLocalOnlyConversationMode(conversations);
+            setConversationBarVisible(!isLocalOnly);
+            if (isLocalOnly) return;
+            conversationBar.setStatus({
+                connected: true,
+                errorText: undefined,
+            });
+            conversationBar.setConversations(
+                conversations.map((conversation) => ({
+                    conversationId: conversation.conversationId,
+                    name: conversation.name,
+                    clientCount: conversation.clientCount,
+                    createdAt: conversation.createdAt,
+                })),
+                current?.conversationId,
+            );
+            if (current) {
+                conversationBar.setCurrentConversation(
+                    current.conversationId,
+                    current.name,
+                );
+            }
+        } catch (e: any) {
+            setConversationBarVisible(true);
+            conversationBar.setStatus({ connected: false });
+            conversationBar.setError(e?.message ?? String(e));
+        }
+    }
+
+    async function deleteConversationFromBar(
+        conversationId: string,
+    ): Promise<void> {
+        const current = await clientAPI.conversationGetCurrent();
+        if (current?.conversationId !== conversationId) {
+            await clientAPI.conversationDelete(conversationId);
+            await refreshConversations();
+            return;
+        }
+
+        const conversations = await clientAPI.conversationList();
+        const fallback = conversations.find(
+            (conversation) => conversation.conversationId !== conversationId,
+        );
+
+        if (fallback) {
+            const result = await clientAPI.conversationSwitch(
+                fallback.conversationId,
+            );
+            if (!result.success) {
+                throw new Error(
+                    result.error ??
+                        `Failed to switch to conversation "${fallback.name}" before deleting the current conversation.`,
+                );
+            }
+        } else {
+            const created = await clientAPI.conversationCreate(
+                makeFallbackConversationName(conversations),
+            );
+            const result = await clientAPI.conversationSwitch(
+                created.conversationId,
+            );
+            if (!result.success) {
+                throw new Error(
+                    result.error ??
+                        `Created conversation "${created.name}" but failed to switch to it before deleting the current conversation.`,
+                );
+            }
+        }
+
+        await clientAPI.conversationDelete(conversationId);
+        await refreshConversations();
+    }
+
+    function makeFallbackConversationName(
+        conversations: ConversationInfo[],
+    ): string {
+        const taken = new Set(
+            conversations.map((conversation) =>
+                conversation.name.toLowerCase(),
+            ),
+        );
+        const base = "New Conversation";
+        let name = base;
+        let suffix = 2;
+        while (taken.has(name.toLowerCase())) {
+            name = `${base} ${suffix++}`;
+        }
+        return name;
+    }
+
+    function setConversationBarVisible(visible: boolean): void {
+        conversationBarEl.hidden = !visible;
+    }
+
+    function isLocalOnlyConversationMode(conversations: ConversationInfo[]) {
+        return (
+            conversations.length === 1 &&
+            conversations[0]?.conversationId === "local"
+        );
+    }
 
     // Build the chat-ui ChatPanel + provider stack and the dispatcher Client
     // (which already contains its ClientIO). ChatPanel mounts itself into the
     // wrapper element.
     const { client, chatPanel, cameraView } = createChatPanelClient(
-        wrapper,
+        chatRoot,
         agents,
     );
+
+    const baseConversationChanged = client.conversationChanged?.bind(client);
+    client.conversationChanged = (conversationId, name, queueSnapshot) => {
+        conversationBar.setCurrentConversation(conversationId, name);
+        void refreshConversations();
+        baseConversationChanged?.(conversationId, name, queueSnapshot);
+    };
 
     // The camera overlay lives alongside the panel and is toggled by the
     // image-capture provider.
     wrapper.appendChild(cameraView.getContainer());
 
-    getClientAPI().registerClient(client);
+    clientAPI.registerClient(client);
+    void refreshConversations();
 
     // Expose the clientIO object on window for integration tests so that tests
     // can trigger requestInteraction / interactionResolved / interactionCancelled

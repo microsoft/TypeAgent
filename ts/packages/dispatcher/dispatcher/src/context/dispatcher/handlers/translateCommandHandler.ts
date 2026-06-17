@@ -58,6 +58,7 @@ export class TranslateCommandHandler implements CommandHandler {
             undefined,
             undefined,
             usageCallback,
+            context.sessionContext.agentContext.currentOptions?.userContext,
         );
 
         const elapsedStr = getColorElapsedString(translationResult.elapsedMs);

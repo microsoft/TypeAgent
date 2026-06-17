@@ -569,6 +569,9 @@ function makeConnectionAdapter(): AgentServerConnection {
             return rpc.invoke("deleteConversation", id) as Promise<void>;
         },
         shutdown: () => notSupported("shutdown"),
+        // In-place rebind reconnect isn't driven through this adapter; the
+        // service worker reconnects via its own doConnect path.
+        reconnect: async () => false,
         close: () => notSupported("close"),
     };
 }

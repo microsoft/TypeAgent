@@ -15,6 +15,7 @@ body {
   background-color: #00000000;
   /* Light theme: image lightbox backdrop is translucent white. */
   --chat-lightbox-backdrop: rgba(255, 255, 255, 0.85);
+  --chat-conversation-search-result-font-size: 12px;
 }
 
 .dark-mode {
@@ -339,6 +340,68 @@ body {
   width: 100%;
   position: absolute;
   background-color: #00000000;
+}
+
+.chat-shell-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  --chat-conversation-background: #f7f7f8;
+  --chat-conversation-border: #d8d8df;
+  --chat-conversation-foreground: #202124;
+  --chat-conversation-muted-foreground: #6f7179;
+  --chat-conversation-link-active-foreground: #2563eb;
+  --chat-conversation-button-background: #e9eaee;
+  --chat-conversation-button-foreground: #202124;
+  --chat-conversation-button-hover-background: #dfe1e7;
+  --chat-conversation-input-background: #ffffff;
+  --chat-conversation-input-foreground: #202124;
+  --chat-conversation-input-border: #c8cbd3;
+  --chat-conversation-focus-border: #2563eb;
+  --chat-conversation-error-foreground: #c42b1c;
+  --chat-conversation-success-foreground: #16825d;
+  --chat-conversation-warning-foreground: #a15c00;
+  --chat-conversation-status-foreground: #ffffff;
+  --chat-conversation-popover-background: #ffffff;
+  --chat-conversation-popover-shadow: rgba(0, 0, 0, 0.22);
+  --chat-conversation-list-hover-background: #eceef4;
+  --chat-conversation-list-active-background: #dbeafe;
+  --chat-conversation-list-active-foreground: #111827;
+  --chat-conversation-separator-color: #e0e0e0;
+}
+
+.dark-mode .chat-shell-layout {
+  --chat-conversation-background: #13131d;
+  --chat-conversation-border: #3b3b4c;
+  --chat-conversation-foreground: #f3f4f6;
+  --chat-conversation-muted-foreground: #a7aab7;
+  --chat-conversation-link-active-foreground: #93c5fd;
+  --chat-conversation-button-background: #303142;
+  --chat-conversation-button-foreground: #f3f4f6;
+  --chat-conversation-button-hover-background: #3b3d52;
+  --chat-conversation-input-background: #161720;
+  --chat-conversation-input-foreground: #f3f4f6;
+  --chat-conversation-input-border: #484a5f;
+  --chat-conversation-focus-border: #93c5fd;
+  --chat-conversation-error-foreground: #f87171;
+  --chat-conversation-success-foreground: #34d399;
+  --chat-conversation-warning-foreground: #fbbf24;
+  --chat-conversation-status-foreground: #161720;
+  --chat-conversation-popover-background: #242536;
+  --chat-conversation-popover-shadow: rgba(0, 0, 0, 0.45);
+  --chat-conversation-list-hover-background: #323449;
+  --chat-conversation-list-active-background: #1d4ed8;
+  --chat-conversation-list-active-foreground: #ffffff;
+  --chat-conversation-separator-color: #3b3b4c;
+}
+
+.chat-shell-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .inline-ghost {

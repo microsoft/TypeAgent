@@ -216,46 +216,62 @@ export async function ensureWebsocketConnected(): Promise<
             channelProvider.createChannel("browserControl");
         createExternalBrowserServer(browserControlChannel);
 
-        // Agent service RPC client (replaces sendActionToAgent)
+        // Agent service RPC client (replaces sendActionToAgent). Created once
+        // as a rebindable rpc and re-pointed at the fresh channel on each
+        // reconnect, so the cached reference survives socket drops.
         const agentServiceChannel =
             channelProvider.createChannel("agentService");
-        agentRpc = createRpc<
-            BrowserAgentInvokeFunctions,
-            BrowserAgentCallFunctions
-        >(
-            "browser:agentService",
-            agentServiceChannel,
-            undefined, // no invoke handlers — we're the client
-            {
-                // Call handlers for fire-and-forget events from agent
-                importProgress(params: { importId: string; progress: any }) {
-                    broadcastEvent("importProgress", {
-                        importId: params.importId,
-                        progress: params.progress,
-                    });
-                },
-                knowledgeExtractionProgress(params: {
-                    extractionId: string;
-                    progress: any;
-                }) {
-                    import("./messageHandlers")
-                        .then(({ handleKnowledgeExtractionProgress }) => {
-                            handleKnowledgeExtractionProgress(
-                                params.extractionId,
-                                params.progress,
-                            );
-                        })
-                        .catch((error) => {
-                            console.error(
-                                "Failed to handle knowledge extraction progress:",
-                                error,
-                            );
+        if (agentRpc) {
+            agentRpc.rebind(agentServiceChannel);
+        } else {
+            agentRpc = createRpc<
+                BrowserAgentInvokeFunctions,
+                BrowserAgentCallFunctions
+            >(
+                "browser:agentService",
+                agentServiceChannel,
+                undefined, // no invoke handlers — we're the client
+                {
+                    // Call handlers for fire-and-forget events from agent
+                    importProgress(params: {
+                        importId: string;
+                        progress: any;
+                    }) {
+                        broadcastEvent("importProgress", {
+                            importId: params.importId,
+                            progress: params.progress,
                         });
+                    },
+                    knowledgeExtractionProgress(params: {
+                        extractionId: string;
+                        progress: any;
+                    }) {
+                        import("./messageHandlers")
+                            .then(({ handleKnowledgeExtractionProgress }) => {
+                                handleKnowledgeExtractionProgress(
+                                    params.extractionId,
+                                    params.progress,
+                                );
+                            })
+                            .catch((error) => {
+                                console.error(
+                                    "Failed to handle knowledge extraction progress:",
+                                    error,
+                                );
+                            });
+                    },
                 },
-            },
-        );
+                { rebindable: true },
+            );
+        }
 
-        webSocket.onmessage = async (event: MessageEvent) => {
+        // Capture this connection's socket + provider so a stale onclose from a
+        // superseded socket can't tear down a newer connection, and a late
+        // message routes to its own provider.
+        const activeSocket = webSocket;
+        const activeChannelProvider = channelProvider;
+
+        activeSocket.onmessage = async (event: MessageEvent) => {
             const text = await parseWebSocketData(event.data);
             if (!text) return;
 
@@ -263,7 +279,7 @@ export async function ensureWebsocketConnected(): Promise<
 
             // All messages should be channel-multiplexed format
             if (data.name !== undefined) {
-                channelProvider!.notifyMessage(data);
+                activeChannelProvider.notifyMessage(data);
                 return;
             }
 
@@ -272,14 +288,18 @@ export async function ensureWebsocketConnected(): Promise<
             }
         };
 
-        webSocket.onclose = (event: CloseEvent) => {
+        activeSocket.onclose = (event: CloseEvent) => {
             debugWebSocket("websocket connection closed");
-            if (channelProvider) {
-                channelProvider.notifyDisconnected();
+            activeChannelProvider.notifyDisconnected();
+            // Ignore a stale onclose once a newer connect has superseded us.
+            if (webSocket !== activeSocket) {
+                return;
             }
             webSocket = undefined;
             channelProvider = undefined;
-            agentRpc = undefined;
+            // agentRpc is rebindable and kept across reconnects: the
+            // notifyDisconnected() above rejects its in-flight calls without
+            // poisoning it, and the next connect rebinds it to a fresh channel.
             showBadgeError();
             broadcastConnectionStatus(false);
             if (event.reason !== "duplicate") {

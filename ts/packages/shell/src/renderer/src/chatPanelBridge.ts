@@ -219,6 +219,55 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
     return out;
 }
 
+function formatHistorySeparatorLabel(entries: any[]): string {
+    let newestTimestamp: number | undefined;
+    for (const entry of entries) {
+        if (typeof entry.timestamp !== "number") continue;
+        if (
+            newestTimestamp === undefined ||
+            entry.timestamp > newestTimestamp
+        ) {
+            newestTimestamp = entry.timestamp;
+        }
+    }
+
+    if (newestTimestamp === undefined) {
+        return "earlier";
+    }
+
+    const diffMs = Math.max(0, Date.now() - newestTimestamp);
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMinutes < 2) {
+        return "a moment ago";
+    }
+    if (diffMinutes < 10) {
+        return "a few minutes ago";
+    }
+    if (diffMinutes < 60) {
+        return `${diffMinutes} minutes ago`;
+    }
+    if (diffHours < 2) {
+        return "an hour ago";
+    }
+    if (diffHours < 6) {
+        return "a few hours ago";
+    }
+    if (diffHours < 24) {
+        return `${diffHours} hours ago`;
+    }
+    if (diffDays < 2) {
+        return "yesterday";
+    }
+    if (diffDays < 7) {
+        return `${diffDays} days ago`;
+    }
+
+    return new Date(newestTimestamp).toLocaleDateString();
+}
+
 export type ChatPanelClient = {
     client: Client;
     chatPanel: ChatPanel;
@@ -885,6 +934,17 @@ export function createChatPanelClient(
                     });
                     break;
                 case AppAgentEvent.Inline:
+                    chatPanel.showInline(data, source);
+                    if (source !== "osNotifications") {
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                    }
+                    break;
                 case AppAgentEvent.Toast:
                     chatPanel.showToast(data, source);
                     if (source !== "osNotifications") {
@@ -1220,11 +1280,13 @@ export function createChatPanelClient(
             if (cutoffSeq !== undefined) {
                 entries = entries.filter((e) => e.seq <= cutoffSeq);
             }
-            chatPanel.replayHistory(toHistoryEntries(entries));
+            await chatPanel.replayHistoryStreaming(toHistoryEntries(entries));
             // Divider between replayed history and live messages. Only show
             // it when there was actually prior history to separate from.
             if (entries.length > 0) {
-                chatPanel.addHistorySeparator("now");
+                chatPanel.addHistorySeparator(
+                    formatHistorySeparatorLabel(entries),
+                );
             }
         } catch {
             // Ignore — replay is best-effort.

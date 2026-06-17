@@ -155,6 +155,17 @@ export type AgentSchemaInfo = {
     subSchemas: AgentSubSchemaInfo[];
 };
 
+/**
+ * User-environment context for translation prompts.
+ * Provides information about the host application context to improve translation accuracy.
+ */
+export type UserContext = {
+    /** Top-level appAgent name the user is currently working in (e.g., "code", "spotify"). */
+    activeApp: string;
+    /** Free-text description of the app, typically copied from the agent manifest. Optional. */
+    activeAppDescription?: string;
+};
+
 export type ProcessCommandOptions = {
     /**
      * When true, skip reasoning, clarification, and chat fallback.
@@ -162,6 +173,13 @@ export type ProcessCommandOptions = {
      * and TypeAgent should act as a pure action executor.
      */
     noReasoning?: boolean;
+    /**
+     * User-environment context for translation prompts.
+     * Provides information about which app/host the user is currently in
+     * to improve translation accuracy (e.g., to disambiguate "change volume"
+     * between desktop audio and a media player app).
+     */
+    userContext?: UserContext;
 };
 
 /**
