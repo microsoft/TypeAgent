@@ -5,7 +5,7 @@
 > and what remains. Update it whenever a capability changes state.
 
 Branch: feature work has merged to `main` via PR #2468; ongoing work continues
-on `dev/talzacc/typeagent_studio`.
+on `dev/talzacc/typeagent_studio_part3` (the real replay path).
 
 ## Capability matrix
 
@@ -13,37 +13,41 @@ Legend: ✅ done · 🟡 partial · ❌ not started.
 "Wired to dispatcher" = backed by the real TypeAgent dispatcher/engine rather
 than an in-memory stand-in.
 
-| Capability                                                     | Core logic                                   | UI                                                                 | Wired to dispatcher                                   | Tested |
-| -------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ------ |
-| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                 | ✅ tree view (channel-backed; agent runtime is source of truth)    | ❌ in-memory only (no subprocess/isolated dispatcher) | ✅     |
-| Sandbox persistence across reload/restart                      | ✅                                           | ✅ (auto-restore)                                                  | n/a                                                   | ✅     |
-| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                               | ✅ tree view                                                       | n/a                                                   | ✅     |
-| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                     | ✅ tree view (+ channel-backed source)                             | ❌ most emit sites unwired                            | ✅     |
-| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks               | ✅ status bar                                                      | ❌ no real schema parse / grammar compile             | ✅     |
-| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json` | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                         | ✅     |
-| Feedback (thumbs up/down → corpus)                             | ✅                                           | ✅ command                                                         | n/a                                                   | ✅     |
-| Replay / compare engine                                        | 🟡 engine + command                          | 🟡 quick-pick (no Impact Report)                                   | ❌ identity resolver (no two-version build/dispatch)  | ✅     |
-| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                           | ✅ commands                                                        | ❌ in-memory bridge                                   | ✅     |
-| Repo-root detection (find `packages/agents`)                   | ✅                                           | ✅ warn toast + status bar                                         | n/a                                                   | ✅     |
-| Webview infrastructure (`webviewKit`)                          | ❌                                           | ❌                                                                 | —                                                     | ❌     |
-| Impact Report webview                                          | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
-| Player corpus capture                                          | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
-| Schema Studio                                                  | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
-| Live Trace                                                     | ❌                                           | ❌                                                                 | ❌                                                    | ❌     |
-| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                      | —                                                                  | ❌ no behavioral integration                          | ❌     |
+| Capability                                                     | Core logic                                         | UI                                                                 | Wired to dispatcher                                                      | Tested |
+| -------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------ |
+| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                       | ✅ tree view (channel-backed; agent runtime is source of truth)    | ❌ in-memory only (no subprocess/isolated dispatcher)                    | ✅     |
+| Sandbox persistence across reload/restart                      | ✅                                                 | ✅ (auto-restore)                                                  | n/a                                                                      | ✅     |
+| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                                     | ✅ tree view                                                       | n/a                                                                      | ✅     |
+| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                           | ✅ tree view (+ channel-backed source)                             | ❌ most emit sites unwired                                               | ✅     |
+| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks                     | ✅ status bar                                                      | ❌ no real schema parse / grammar compile                                | ✅     |
+| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json`       | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                                            | ✅     |
+| Feedback (thumbs up/down → corpus)                             | ✅                                                 | ✅ command                                                         | n/a                                                                      | ✅     |
+| Replay / compare engine                                        | ✅ static-grammar & schema-enriched (L1) resolvers | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar-level (L1); no construction cache / two-version build (L2–L4) | ✅     |
+| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                                 | ✅ commands                                                        | ❌ in-memory bridge                                                      | ✅     |
+| Repo-root detection (find `packages/agents`)                   | ✅                                                 | ✅ warn toast + status bar                                         | n/a                                                                      | ✅     |
+| Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                 | ✅ singleton-panel host                                            | —                                                                        | ✅     |
+| Impact Report webview                                          | ✅ `replayCorpus` over channel                     | ✅ context header, A/B controls, durable state                     | 🟡 grammar-level replay (L1)                                             | ✅     |
+| Player corpus capture                                          | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
+| Schema Studio                                                  | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
+| Live Trace                                                     | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
+| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                            | —                                                                  | ❌ no behavioral integration                                             | ❌     |
 
 ## The long pole
 
 The headline "find a regression" journey (capture → replay two versions →
-Impact Report) is **not** closed:
+Impact Report) is **progressing but not yet closed**:
 
-- **No webview infrastructure exists.** Impact Report, Schema Studio, Wizard,
-  Trace, and Live Trace all depend on a `webviewKit` that hasn't been started.
-  This is the single biggest hidden dependency.
-- **Replay is an identity-comparison shell.** The default resolver returns each
-  corpus entry's captured `expectedAction` for _both_ versions, producing an
-  all-equal baseline (`studioRuntimeCore.ts` `identityReplayResolver`). There is
-  no git-worktree build, transient dispatcher, or version-specific resolution.
+- **Webview infrastructure now exists.** ✅ `webviewKit` (strict CSP/nonce HTML
+  builder, singleton-panel host, typed host↔webview protocol, browser-neutral
+  replay view model) and the Impact Report webview are built and tested — the
+  foundation Schema Studio, Wizard, Trace, and Live Trace will reuse.
+- **Replay has climbed the fidelity ladder to L1.** Beyond the original identity
+  resolver, replay now runs **static-grammar** matching and **schema-enriched
+  grammar** matching (L1: the agent's grammar is enriched with checked-variable
+  metadata from its action schema and matched through the real `GrammarStore`).
+  Results are still indicative, not authoritative — **L2–L4** (construction
+  cache, deterministic dispatch, build-from-git-ref two-version sandboxes)
+  remain, and there is no git-worktree build of two versions yet.
 - **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
   it; without capture the Impact Report would have no real labelled corpus.
 - **Health gives false confidence.** It does not run the schema parser or
@@ -51,6 +55,25 @@ Impact Report) is **not** closed:
   (`health/service.ts`). It can mark things healthier than the dispatcher would.
 
 ## Recently completed (this work stream)
+
+- Impact Report webview + `webviewKit`: a strict-CSP webview that drives
+  `replayCorpus` over the service channel and renders the `ActionDelta[]`
+  contract, with a context header (sandbox + resolved versions), A/B version
+  launch controls, durable state across navigate-away/back, and run-error
+  surfacing.
+- Replay fidelity: a **static-grammar** resolver (real needs-explanation path;
+  ships `builtInEntities.agr` in the bundle) and a **schema-enriched grammar**
+  resolver (L1 — schema `checked_wildcard`/param metadata projected onto the
+  grammar, matched through the real `GrammarStore`; graceful fallback to
+  static-grammar when the schema can't be discovered).
+- Connection-aware UX: Corpora / Event Log / Collisions views show "Connect to
+  Studio service" welcome content when the service is down (mirroring
+  Sandboxes); the corpus tree auto-refreshes on in-repo capture; clearer
+  clickable seed-corpus affordance.
+- Shared WebSocket liveness heartbeat: `attachClientHeartbeat` (client-side
+  ping/pong watchdog) extracted alongside `attachHeartbeat` into
+  `@typeagent/websocket-utils`; the Studio service client uses it to detect a
+  silently-dropped service and drive the existing reconnect/backoff path.
 
 - Health handler discovery uses `package.json` `exports` (dispatcher contract)
   instead of filename heuristics; chat-style agents opt out of the
