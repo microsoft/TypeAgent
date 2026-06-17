@@ -73,6 +73,8 @@ const METHOD_NOTE: Record<StudioReplayMethod, string | undefined> = {
     identity: undefined,
     "static-grammar":
         "Static grammar replay \u2014 utterances are matched against the agent's compiled grammar only (no construction cache or dispatcher), so results are indicative, not authoritative.",
+    "schema-grammar":
+        "Schema-enriched grammar replay \u2014 the agent's grammar was enriched with checked-variable metadata from its action schema and matched through the real grammar store. Still no construction cache or wildcard-value validation, so results are indicative, not authoritative.",
 };
 
 /**
@@ -137,11 +139,13 @@ const PLACEHOLDER = "\u2014";
 const METHOD_LABEL: Record<StudioReplayMethod, string> = {
     identity: "identity",
     "static-grammar": "static grammar",
+    "schema-grammar": "schema-enriched grammar",
 };
 
 const FIDELITY_LABEL: Record<StudioReplayMethod, string> = {
     identity: "baseline (no grammar diff)",
     "static-grammar": "indicative",
+    "schema-grammar": "indicative (schema-enriched)",
 };
 
 /**

@@ -116,11 +116,19 @@ export interface StudioReplayRequest {
  * - `identity` — the deterministic baseline (surfaces each entry's captured
  *   `expectedAction`); no grammar is evaluated.
  * - `static-grammar` — the agent's grammar was compiled for each version and
- *   utterances were matched against it (no construction cache / dispatcher), so
- *   results are indicative, not authoritative. The UI labels this so it isn't
- *   read as full-fidelity dispatch.
+ *   matched through the real grammar store (NFA + `sortMatches`), but WITHOUT
+ *   schema-derived checked-variable enrichment (the schema couldn't be
+ *   discovered). Indicative, not authoritative.
+ * - `schema-grammar` — as `static-grammar`, plus the grammar was enriched with
+ *   `checked_wildcard` metadata from the agent's action schema before NFA
+ *   compilation, so `checked_wildcard` parameters compile exactly as the
+ *   dispatcher does. Still indicative (no construction cache / wildcard-value
+ *   validation), so the UI labels it accordingly.
  */
-export type StudioReplayMethod = "identity" | "static-grammar";
+export type StudioReplayMethod =
+    | "identity"
+    | "static-grammar"
+    | "schema-grammar";
 
 export interface StudioReplayResult {
     runId: string;
@@ -428,14 +436,15 @@ const identityReplayResolver: ReplayActionResolver = {
 function abortedReplayResult(
     options: Parameters<typeof replayCorpus>[0],
     error: ReplayRunError,
+    method: StudioReplayMethod = "static-grammar",
 ): StudioReplayResult {
     const runId = `replay-error-${Date.now().toString(36)}`;
     return {
         runId,
         rows: [],
         error,
-        // A version-build failure only happens on the static-grammar path.
-        method: "static-grammar",
+        // A version-build failure only happens on the grammar path.
+        method,
         summary: {
             runId,
             agent: options.agent,
@@ -873,18 +882,26 @@ export function createStudioRuntimeCore(
                             replayOptions.versionB,
                         );
                         resolver = grammarResolver;
-                        method = "static-grammar";
+                        method = grammarResolver.enriched
+                            ? "schema-grammar"
+                            : "static-grammar";
                     } catch (err) {
                         if (err instanceof ReplayVersionBuildError) {
-                            return abortedReplayResult(replayOptions, {
-                                kind: "version-build-failed",
-                                side: err.side,
-                                ref:
-                                    err.version.kind === "git"
-                                        ? err.version.ref
-                                        : "workingTree",
-                                message: err.message,
-                            });
+                            return abortedReplayResult(
+                                replayOptions,
+                                {
+                                    kind: "version-build-failed",
+                                    side: err.side,
+                                    ref:
+                                        err.version.kind === "git"
+                                            ? err.version.ref
+                                            : "workingTree",
+                                    message: err.message,
+                                },
+                                grammarResolver.enriched
+                                    ? "schema-grammar"
+                                    : "static-grammar",
+                            );
                         }
                         throw err;
                     }

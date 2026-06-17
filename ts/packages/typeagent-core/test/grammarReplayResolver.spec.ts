@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { CorpusEntry, CorpusFilter } from "../src/corpus/types.js";
@@ -15,6 +15,7 @@ import {
 import {
     createGrammarReplayResolver,
     normalizeGrammarAction,
+    resolveGrammarReplayTarget,
     ReplayVersionBuildError,
     type GrammarReplayTarget,
 } from "../src/replay/grammarResolver.js";
@@ -242,5 +243,131 @@ maybeDescribe("createGrammarReplayResolver (git working-tree vs HEAD)", () => {
         expect(summary.lostMatchCount).toBe(1);
         expect(summary.changedCount).toBe(0);
         expect(summary.newMatchCount).toBe(0);
+    });
+});
+
+const DEMO_SCHEMA_TS = [
+    "export type DemoActions = PlayTrackAction | PauseAction;",
+    "",
+    "// Play a track by name.",
+    "export type PlayTrackAction = {",
+    '    actionName: "playTrack";',
+    "    parameters: {",
+    "        trackName: string;",
+    "    };",
+    "};",
+    "",
+    "// Pause playback.",
+    "export type PauseAction = {",
+    '    actionName: "pause";',
+    "};",
+    "",
+].join("\n");
+
+const DEMO_PARAM_SPEC = JSON.stringify({
+    paramSpec: { playTrack: { trackName: "checked_wildcard" } },
+});
+
+const DEMO_MANIFEST = JSON.stringify({
+    schema: {
+        originalSchemaFile: "./demoSchema.ts",
+        schemaType: { action: "DemoActions" },
+    },
+});
+
+/**
+ * Scaffold a minimal single-schema agent package under
+ * `<root>/agents/demo/src/agent/` so `resolveGrammarReplayTarget` can discover
+ * the grammar AND the action schema for checked-variable enrichment.
+ */
+function scaffoldAgentPackage(root: string): { agentRoots: string[] } {
+    const agentDir = path.join(root, "agents", "demo", "src", "agent");
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(path.join(agentDir, "demoSchema.agr"), GRAMMAR_V1, "utf8");
+    writeFileSync(path.join(agentDir, "demoSchema.ts"), DEMO_SCHEMA_TS, "utf8");
+    writeFileSync(
+        path.join(agentDir, "demoSchema.json"),
+        DEMO_PARAM_SPEC,
+        "utf8",
+    );
+    writeFileSync(
+        path.join(agentDir, "demoManifest.json"),
+        DEMO_MANIFEST,
+        "utf8",
+    );
+    return { agentRoots: [path.join(root, "agents")] };
+}
+
+describe("resolveGrammarReplayTarget + schema enrichment (L1)", () => {
+    let dir: string;
+
+    beforeEach(() => {
+        dir = tempDir();
+    });
+
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("discovers the action schema and paramSpec config from the manifest", async () => {
+        const { agentRoots } = scaffoldAgentPackage(dir);
+        const target = await resolveGrammarReplayTarget(
+            agentRoots,
+            "demo",
+            dir,
+        );
+        expect(target).toBeDefined();
+        expect(target?.schema?.actionTypeName).toBe("DemoActions");
+        expect(target?.schema?.sourceFilePath).toMatch(/demoSchema\.ts$/);
+        expect(target?.schema?.paramSpecConfigPath).toMatch(
+            /demoSchema\.json$/,
+        );
+    });
+
+    it("builds an enriched resolver that still matches utterances", async () => {
+        const { agentRoots } = scaffoldAgentPackage(dir);
+        const target = await resolveGrammarReplayTarget(
+            agentRoots,
+            "demo",
+            dir,
+        );
+        const resolver = createGrammarReplayResolver({ target: target! });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        expect(resolver.enriched).toBe(true);
+
+        const res = await resolver.resolve(
+            entry("e1", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
+    });
+
+    it("falls back to a non-enriched resolver when no schema is discoverable", async () => {
+        const grammarPath = path.join(dir, "schema.agr");
+        writeFileSync(grammarPath, GRAMMAR_V1, "utf8");
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        expect(resolver.enriched).toBe(false);
+
+        const res = await resolver.resolve(
+            entry("e1", "resume"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toEqual({
+            schemaName: "demo",
+            actionName: "resume",
+        });
     });
 });

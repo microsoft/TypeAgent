@@ -38,6 +38,8 @@
   },
   "dependencies": {
     "@typeagent/action-grammar": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
+    "agent-cache": "workspace:*",
     "debug": "^4.4.0",
     "grammar-tools-core": "workspace:*"
   },
