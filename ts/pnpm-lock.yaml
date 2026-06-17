@@ -5808,6 +5808,12 @@ importers:
       '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../actionGrammar
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
+      agent-cache:
+        specifier: workspace:*
+        version: link:../cache
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -5845,6 +5851,9 @@ importers:
       '@typeagent/core':
         specifier: workspace:*
         version: link:../typeagent-core
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -5993,6 +6002,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../commonUtils
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../webSocketUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
+import { attachClientHeartbeat } from "@typeagent/websocket-utils/heartbeat";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type {
@@ -63,6 +64,15 @@ export class StudioServiceClient {
         endpoint?: string;
         /** Capability token presented as `Authorization: Bearer`. */
         token?: string;
+        /**
+         * Liveness-heartbeat period in ms (default 10s). The client pings the
+         * service every period and terminates the socket if a pong hasn't
+         * arrived since the previous ping — so a silently-dropped service (an
+         * abrupt kill, a crash, or a half-open socket that never emits `close`)
+         * is detected instead of leaving a stale "connected" state. `0`
+         * disables the heartbeat. Exposed for tests.
+         */
+        heartbeatMs?: number;
     }): Promise<StudioServiceClient | undefined> {
         if (options.endpoint === undefined) {
             return undefined;
@@ -78,6 +88,9 @@ export class StudioServiceClient {
         if (options.onClose) {
             socket.on("close", options.onClose);
         }
+        attachClientHeartbeat(socket, {
+            intervalMs: options.heartbeatMs ?? 10_000,
+        });
         const callHandlers: StudioClientCallFunctions = {
             studioEvent: (event: StudioEvent) => options.onEvent?.(event),
         };

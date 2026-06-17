@@ -40,9 +40,19 @@ export class EventLogTreeProvider
     private readonly eventById = new Map<string, StudioEvent>();
     private seq = 0;
     private generation = 0;
+    private connected = false;
 
     constructor(source: EventLogSource) {
         this.install(source, ++this.generation);
+    }
+
+    /** Reflect the studio service connection state (drives the empty view). */
+    setConnected(connected: boolean): void {
+        if (connected === this.connected) {
+            return;
+        }
+        this.connected = connected;
+        this.refresh();
     }
 
     /**
@@ -87,6 +97,12 @@ export class EventLogTreeProvider
 
     getChildren(row?: EventLogRow): EventLogRow[] {
         if (row) {
+            return [];
+        }
+        // Disconnected with nothing buffered: render nothing so the view's
+        // welcome content ("connect to the Studio service") shows instead of a
+        // misleading "No events yet" placeholder.
+        if (!this.connected && this.entries.length === 0) {
             return [];
         }
         return buildEventLogRows(this.entries);

@@ -6,3 +6,4 @@ node_modules/**
 *.ts
 tsconfig.json
 esbuild.mjs
+svc-out.txt

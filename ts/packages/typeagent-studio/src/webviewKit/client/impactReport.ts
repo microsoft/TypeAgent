@@ -186,6 +186,17 @@ function runReplay(): void {
 function renderResult(result: StudioReplayResult, restored = false): void {
     lastRenderedResult = result;
     renderHeader();
+    // Reset every output region first so a render fully *replaces* the previous
+    // one. `renderResult` runs more than once per result on navigate-away/back:
+    // `restoreSelection` paints the persisted snapshot, then the host re-pushes
+    // the full result on `ready` (recovery). The table is built with
+    // `appendChild`, so without this clear the recovery render would append a
+    // second table instead of upgrading the snapshot in place.
+    bannerEl.className = "banner";
+    bannerEl.textContent = "";
+    summaryEl.textContent = "";
+    comparisonEl.textContent = "";
+    tableWrap.textContent = "";
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {

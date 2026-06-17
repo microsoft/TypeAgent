@@ -501,6 +501,28 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         ),
     );
+
+    // Auto-refresh the Corpora view when in-repo corpus files change on disk
+    // (`<repoRoot>/corpus/<agent>.utterances.jsonl`). Editing/saving an
+    // utterance file otherwise required a manual refresh. Scoped to the in-repo
+    // corpus dir — captures/external/feedback are refreshed by their own write
+    // paths. No-op when the repo root is unknown.
+    if (repoRootInfo.repoRoot) {
+        const corpusWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(
+                repoRootInfo.repoRoot,
+                "corpus/*.utterances.jsonl",
+            ),
+        );
+        const refreshOnCorpusChange = () => corpusTree.refresh();
+        context.subscriptions.push(
+            corpusWatcher,
+            corpusWatcher.onDidCreate(refreshOnCorpusChange),
+            corpusWatcher.onDidChange(refreshOnCorpusChange),
+            corpusWatcher.onDidDelete(refreshOnCorpusChange),
+        );
+    }
+
     const statusBar = new StudioStatusBar(serviceRuntime);
     context.subscriptions.push(
         statusBar,
@@ -799,6 +821,18 @@ export function activate(context: vscode.ExtensionContext): void {
         connection.onStateChanged((state) => {
             renderServiceStatus(state);
             const connected = state === "connected";
+
+            // Drive the views' connection-aware empty states: when disconnected
+            // each tree renders nothing so its `viewsWelcome` "connect" content
+            // shows instead of a misleading "no data" placeholder.
+            void vscode.commands.executeCommand(
+                "setContext",
+                "typeagentStudio.serviceConnected",
+                connected,
+            );
+            corpusTree.setConnected(connected);
+            eventLog.setConnected(connected);
+            collisions.setConnected(connected);
 
             sandboxTree.setConnected(connected);
             if (connected && !sandboxesRestored) {
