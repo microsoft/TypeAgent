@@ -111,10 +111,23 @@ export interface StudioReplayRequest {
     missPolicy?: ReplayMissPolicy;
 }
 
+/**
+ * How a replay resolved corpus utterances into actions:
+ * - `identity` — the deterministic baseline (surfaces each entry's captured
+ *   `expectedAction`); no grammar is evaluated.
+ * - `static-grammar` — the agent's grammar was compiled for each version and
+ *   utterances were matched against it (no construction cache / dispatcher), so
+ *   results are indicative, not authoritative. The UI labels this so it isn't
+ *   read as full-fidelity dispatch.
+ */
+export type StudioReplayMethod = "identity" | "static-grammar";
+
 export interface StudioReplayResult {
     runId: string;
     summary: ReplaySummary;
     rows: ActionDelta[];
+    /** How utterances were resolved into actions (drives the UI's method label). */
+    method: StudioReplayMethod;
     /**
      * Set when a version failed to materialize or compile. The run is aborted
      * with an empty summary rather than emitting fabricated regression rows.
@@ -421,6 +434,8 @@ function abortedReplayResult(
         runId,
         rows: [],
         error,
+        // A version-build failure only happens on the static-grammar path.
+        method: "static-grammar",
         summary: {
             runId,
             agent: options.agent,
@@ -833,6 +848,7 @@ export function createStudioRuntimeCore(
             // standalone-compilable grammar. Otherwise fall back to the identity
             // resolver (preserves the all-equal baseline used by tests).
             let resolver = options.replayResolver;
+            let method: StudioReplayMethod = "identity";
             if (
                 resolver === undefined &&
                 replayOptions.missPolicy === "needs-explanation" &&
@@ -857,6 +873,7 @@ export function createStudioRuntimeCore(
                             replayOptions.versionB,
                         );
                         resolver = grammarResolver;
+                        method = "static-grammar";
                     } catch (err) {
                         if (err instanceof ReplayVersionBuildError) {
                             return abortedReplayResult(replayOptions, {
@@ -885,7 +902,7 @@ export function createStudioRuntimeCore(
                 rows.push(row);
             }
             const summary = await handle.summary;
-            return { runId: handle.runId, summary, rows };
+            return { runId: handle.runId, summary, rows, method };
         },
         reportCollision(event) {
             return collisions.report(event);

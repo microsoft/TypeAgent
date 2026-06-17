@@ -54,6 +54,33 @@ body {
   margin-bottom: 8px;
 }
 
+.banner {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  border-left: 3px solid transparent;
+  font-size: 12px;
+}
+
+.banner:empty {
+  display: none;
+}
+
+.banner-note {
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-textBlockQuote-background);
+  border-left-color: var(--vscode-charts-yellow);
+}
+
+.banner-error {
+  color: var(
+    --vscode-inputValidation-errorForeground,
+    var(--vscode-errorForeground)
+  );
+  background: var(--vscode-inputValidation-errorBackground);
+  border-left-color: var(--vscode-errorForeground);
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

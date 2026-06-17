@@ -15,7 +15,12 @@ import type {
     HostToWebviewMessage,
     WebviewToHostMessage,
 } from "../protocol.js";
-import { toImpactRows, toImpactSummaryLine } from "../replayViewModel.js";
+import {
+    toImpactRows,
+    toImpactSummaryLine,
+    toImpactMethodNote,
+    toImpactErrorLine,
+} from "../replayViewModel.js";
 
 interface VsCodeApi {
     postMessage(message: WebviewToHostMessage): void;
@@ -49,9 +54,10 @@ const reconnectButton = button("Reconnect", () => {
 toolbar.append(agentSelect, runButton, reconnectButton, statusEl);
 
 const summaryEl = el("div", "summary");
+const bannerEl = el("div", "banner");
 const tableWrap = el("div", "table-wrap");
 
-root.append(toolbar, summaryEl, tableWrap);
+root.append(toolbar, bannerEl, summaryEl, tableWrap);
 
 setControlsEnabled(false);
 restoreSelection();
@@ -107,11 +113,33 @@ function runReplay(): void {
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
     summaryEl.textContent = "";
+    bannerEl.textContent = "";
+    bannerEl.className = "banner";
     tableWrap.textContent = "";
     vscode.postMessage({ type: "run", requestId, agent });
 }
 
 function renderResult(result: StudioReplayResult): void {
+    // A run-level error (a version that failed to build) aborts with an empty
+    // summary — surface the failure instead of a misleading zero-row success.
+    if (result.error) {
+        bannerEl.className = "banner banner-error";
+        bannerEl.textContent = toImpactErrorLine(result.error);
+        summaryEl.textContent = "";
+        tableWrap.textContent = "";
+        setStatus("Replay aborted.");
+        return;
+    }
+
+    const note = toImpactMethodNote(result.method);
+    if (note) {
+        bannerEl.className = "banner banner-note";
+        bannerEl.textContent = note;
+    } else {
+        bannerEl.className = "banner";
+        bannerEl.textContent = "";
+    }
+
     summaryEl.textContent = toImpactSummaryLine(result.summary);
     const rows = toImpactRows(result.rows);
     const shown = rows.length;

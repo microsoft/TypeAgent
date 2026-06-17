@@ -7,6 +7,8 @@ import type { ActionDelta, ReplaySummary } from "@typeagent/core/replay";
 import {
     toImpactRows,
     toImpactSummaryLine,
+    toImpactMethodNote,
+    toImpactErrorLine,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -69,4 +71,25 @@ test("toImpactSummaryLine renders a headline", () => {
     assert.ok(line.includes("player"));
     assert.ok(line.includes("3 rows"));
     assert.ok(line.includes("42ms"));
+});
+
+test("toImpactMethodNote labels static-grammar but stays silent for identity", () => {
+    assert.equal(toImpactMethodNote("identity"), undefined);
+    const note = toImpactMethodNote("static-grammar");
+    assert.ok(note);
+    assert.ok(/static grammar/i.test(note!));
+    // Make the caveat explicit so results aren't read as authoritative dispatch.
+    assert.ok(/indicative/i.test(note!));
+});
+
+test("toImpactErrorLine names the failed side and ref", () => {
+    const line = toImpactErrorLine({
+        kind: "version-build-failed",
+        side: "B",
+        ref: "HEAD~1",
+        message: "Failed to compile grammar for player (side B): boom",
+    });
+    assert.ok(line.includes("version B"));
+    assert.ok(line.includes("HEAD~1"));
+    assert.ok(line.includes("boom"));
 });
