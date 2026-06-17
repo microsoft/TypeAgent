@@ -350,9 +350,18 @@ async function initializeDispatcher(
                             // new window is surprising when the user killed it
                             // intentionally. Just try to reconnect to the
                             // existing one; if it's gone we keep retrying.
-                            const fresh = await connectAgentServer(url, () =>
-                                onConnectionLost?.(),
-                            );
+                            //
+                            // Reconnect in place: reopen the socket and rebind
+                            // the connection's control rpc, reusing the same
+                            // connection object rather than building a new one.
+                            // We still re-join below (the dispatcher is fresh).
+                            if (!connection) {
+                                throw new Error("No connection to reconnect");
+                            }
+                            const conn = connection;
+                            if (!(await conn.reconnect())) {
+                                throw new Error("Reconnect attempt failed");
+                            }
                             // Re-join the conversation we were on. Read the
                             // latest saved conversation id from userSettings
                             // — switchConversation writes it on every switch
@@ -363,13 +372,13 @@ async function initializeDispatcher(
                                 initialConversationId) as string | undefined;
                             let freshConversation:
                                 | Awaited<
-                                      ReturnType<typeof fresh.joinConversation>
+                                      ReturnType<typeof conn.joinConversation>
                                   >
                                 | undefined;
                             if (targetConversationId) {
                                 try {
                                     freshConversation =
-                                        await fresh.joinConversation(clientIO, {
+                                        await conn.joinConversation(clientIO, {
                                             conversationId:
                                                 targetConversationId,
                                         });
@@ -383,20 +392,21 @@ async function initializeDispatcher(
                             if (freshConversation === undefined) {
                                 // Fall back to the default Shell conversation.
                                 const list =
-                                    await fresh.listConversations("Shell");
+                                    await conn.listConversations("Shell");
                                 const m = list.find(
                                     (s) => s.name.toLowerCase() === "shell",
                                 );
                                 const id =
                                     m?.conversationId ??
-                                    (await fresh.createConversation("Shell"))
+                                    (await conn.createConversation("Shell"))
                                         .conversationId;
-                                freshConversation =
-                                    await fresh.joinConversation(clientIO, {
+                                freshConversation = await conn.joinConversation(
+                                    clientIO,
+                                    {
                                         conversationId: id,
-                                    });
+                                    },
+                                );
                             }
-                            connection = fresh;
                             rebindDispatcher(freshConversation.dispatcher);
                             reconnectAttempt = 0;
                             broadcastReconnect(undefined);
