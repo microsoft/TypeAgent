@@ -12,6 +12,7 @@ import {
     parseVersionInput,
     describeVersion,
     toImpactComparisonLine,
+    toImpactHeaderFields,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -123,4 +124,48 @@ test("describeVersion and toImpactComparisonLine read the resolved versions", ()
     assert.ok(line.includes("HEAD"));
     assert.ok(line.includes("working tree"));
     assert.ok(line.includes("\u2192"));
+});
+
+function headerValue(
+    fields: ReturnType<typeof toImpactHeaderFields>,
+    label: string,
+): string | undefined {
+    return fields.find((f) => f.label === label)?.value;
+}
+
+test("toImpactHeaderFields fills placeholders before a run", () => {
+    const fields = toImpactHeaderFields({});
+    // Every field present with a tooltip.
+    assert.deepEqual(
+        fields.map((f) => f.label),
+        ["repo", "agent", "method", "fidelity", "sandbox", "policy"],
+    );
+    assert.ok(fields.every((f) => f.tooltip.length > 0));
+    assert.equal(headerValue(fields, "repo"), "\u2014");
+    assert.equal(headerValue(fields, "agent"), "\u2014");
+    assert.equal(headerValue(fields, "method"), "\u2014");
+    assert.equal(headerValue(fields, "policy"), "\u2014");
+    // Sandbox is honestly "not used" — the static-grammar path is not sandbox-bound.
+    assert.equal(headerValue(fields, "sandbox"), "not used");
+});
+
+test("toImpactHeaderFields reflects a static-grammar run as indicative", () => {
+    const fields = toImpactHeaderFields({
+        repo: "TypeAgent",
+        agent: "player",
+        method: "static-grammar",
+        missPolicy: "needs-explanation",
+    });
+    assert.equal(headerValue(fields, "repo"), "TypeAgent");
+    assert.equal(headerValue(fields, "agent"), "player");
+    assert.equal(headerValue(fields, "method"), "static grammar");
+    assert.equal(headerValue(fields, "fidelity"), "indicative");
+    assert.equal(headerValue(fields, "policy"), "needs-explanation");
+    assert.equal(headerValue(fields, "sandbox"), "not used");
+});
+
+test("toImpactHeaderFields labels the identity baseline distinctly", () => {
+    const fields = toImpactHeaderFields({ method: "identity" });
+    assert.equal(headerValue(fields, "method"), "identity");
+    assert.ok(/baseline/i.test(headerValue(fields, "fidelity")!));
 });

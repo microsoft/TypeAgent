@@ -10,6 +10,50 @@ body {
   margin: 0;
 }
 
+.context-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
+}
+
+.context-header:empty {
+  display: none;
+}
+
+.context-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  cursor: help;
+}
+
+.context-label {
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.context-value {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.context-sep {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

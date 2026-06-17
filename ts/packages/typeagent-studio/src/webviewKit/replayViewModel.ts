@@ -12,6 +12,7 @@
 
 import type {
     ActionDelta,
+    ReplayMissPolicy,
     ReplaySummary,
     VersionSpec,
 } from "@typeagent/core/replay";
@@ -121,4 +122,81 @@ export function toImpactComparisonLine(summary: ReplaySummary): string {
     return `Comparing ${describeVersion(summary.versionA)} \u2192 ${describeVersion(
         summary.versionB,
     )}`;
+}
+
+/** One labelled field in the Impact Report context header. */
+export interface ImpactHeaderField {
+    label: string;
+    value: string;
+    /** Hover text explaining what the field means. */
+    tooltip: string;
+}
+
+const PLACEHOLDER = "\u2014";
+
+const METHOD_LABEL: Record<StudioReplayMethod, string> = {
+    identity: "identity",
+    "static-grammar": "static grammar",
+};
+
+const FIDELITY_LABEL: Record<StudioReplayMethod, string> = {
+    identity: "baseline (no grammar diff)",
+    "static-grammar": "indicative",
+};
+
+/**
+ * The provenance band shown above the controls: what this report pertains to
+ * (`repo · agent · method · fidelity · sandbox · policy`). Deliberately omits a
+ * sandbox id — neither the identity nor the static-grammar method runs in a
+ * sandbox (they read grammar source from git / the working tree), so labelling
+ * one would falsely imply the result reflects a loaded runtime agent. A real
+ * sandbox label only becomes meaningful with the full-fidelity replay path.
+ */
+export function toImpactHeaderFields(input: {
+    repo?: string;
+    agent?: string;
+    method?: StudioReplayMethod;
+    missPolicy?: ReplayMissPolicy;
+}): ImpactHeaderField[] {
+    const method = input.method;
+    return [
+        {
+            label: "repo",
+            value:
+                input.repo && input.repo.length > 0 ? input.repo : PLACEHOLDER,
+            tooltip: "The workspace repository this report runs against.",
+        },
+        {
+            label: "agent",
+            value:
+                input.agent && input.agent.length > 0
+                    ? input.agent
+                    : PLACEHOLDER,
+            tooltip: "The agent whose corpus is being replayed.",
+        },
+        {
+            label: "method",
+            value: method ? METHOD_LABEL[method] : PLACEHOLDER,
+            tooltip:
+                "How utterances are resolved into actions for the compare.",
+        },
+        {
+            label: "fidelity",
+            value: method ? FIDELITY_LABEL[method] : PLACEHOLDER,
+            tooltip:
+                "How faithfully the result reflects real dispatch. Static-grammar replay is indicative, not authoritative.",
+        },
+        {
+            label: "sandbox",
+            value: "not used",
+            tooltip:
+                "Static-grammar replay reads grammar from git / the working tree and is not sandbox-bound. A sandbox is only used by the full-fidelity replay path.",
+        },
+        {
+            label: "policy",
+            value: input.missPolicy ?? PLACEHOLDER,
+            tooltip:
+                "Cache-miss policy for the run. needs-explanation stays deterministic (no LLM calls).",
+        },
+    ];
 }

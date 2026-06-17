@@ -843,8 +843,15 @@ identity** (a second launcher discovers and attaches). No agent-hosted fallback
 
 - F4.6 player corpus capture path already running from P-1. Build labelled set to target size during P-3.
 - F4.1 `replayCorpus()`. Implement `needs-explanation` policy first; `strict-cache` second; `live-llm` last.
-- F4.2 launch dialog.
-- F4.3 Impact Report: panes 1, 2, 4 first; pane 3 (action-level) last because it's the novel surface.
+- F4.2 launch dialog. **UX overhaul slice U2** turns the launch dialog into
+  git-hydrated, searchable version/agent pickers (resolved branch/commit labels,
+  swap A↔B) over a host-driven QuickPick.
+- F4.3 Impact Report: panes 1, 2, 4 first; pane 3 (action-level) last because
+  it's the novel surface. **UX overhaul:** U1 = pane-1 context header (`repo ·
+  agent · sandbox · policy`) + durable state (re-render last run on
+  navigate-away/reload) + tooltips/labels/empty-state; U3 = pane-2 clickable
+  summary filter chips + streaming rows; U4 = pane-3 row drill-in (action A/B
+  JSON diff + jump-to-grammar-rule). Sliced smallest-first, U1→U4.
 - F4.4 predicate, configurable.
 - F4.5 export.
 - In parallel: **J5 trace viewer module (F5.1, F5.2, F5.3, F5.4)** so J4 drill-in is real at demo time.
