@@ -5,6 +5,7 @@ export type ConversationBarConversation = {
     conversationId: string;
     name: string;
     clientCount?: number;
+    createdAt?: string; // ISO 8601 timestamp
 };
 
 export type ConversationBarStatus = {
@@ -58,6 +59,37 @@ const fallbackIconText: Record<ConversationBarIconName, string> = {
     save: "OK",
     cancel: "X",
 };
+
+function formatRelativeTime(createdAtIso: string): string {
+    try {
+        const created = new Date(createdAtIso);
+        const now = new Date();
+        const diffMs = now.getTime() - created.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) {
+            return "just now";
+        }
+        if (diffMins < 60) {
+            return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+        }
+        if (diffHours < 24) {
+            return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+        }
+        if (diffDays === 1) {
+            return "yesterday";
+        }
+        if (diffDays < 7) {
+            return `${diffDays} days ago`;
+        }
+        // Fall back to date format for older conversations
+        return created.toLocaleDateString();
+    } catch {
+        return "";
+    }
+}
 
 export class ConversationBar {
     private readonly controller: ConversationBarController;
@@ -624,7 +656,52 @@ export class ConversationBar {
             return;
         }
 
-        for (const conversation of matches) {
+        // Separate current conversation from previous ones
+        const currentConversation = matches.find(
+            (c) => c.conversationId === this.currentConversationId,
+        );
+        const previousConversations = matches.filter(
+            (c) => c.conversationId !== this.currentConversationId,
+        );
+
+        // Render current conversation first
+        if (currentConversation) {
+            this.renderConversationSearchResult(currentConversation);
+        }
+
+        // Add separator if there are previous conversations
+        if (previousConversations.length > 0) {
+            const separatorEl = document.createElement("div");
+            separatorEl.className = "conversation-search-separator";
+
+            const leftLine = document.createElement("div");
+            leftLine.className = "conversation-search-separator-line";
+            separatorEl.appendChild(leftLine);
+
+            const textEl = document.createElement("div");
+            textEl.className = "conversation-search-separator-text";
+
+            // Use the oldest previous conversation's timestamp for the label
+            const oldestPrevious =
+                previousConversations[previousConversations.length - 1];
+            if (oldestPrevious.createdAt) {
+                textEl.textContent = formatRelativeTime(
+                    oldestPrevious.createdAt,
+                );
+            } else {
+                textEl.textContent = "earlier";
+            }
+            separatorEl.appendChild(textEl);
+
+            const rightLine = document.createElement("div");
+            rightLine.className = "conversation-search-separator-line";
+            separatorEl.appendChild(rightLine);
+
+            this.searchResultsEl.appendChild(separatorEl);
+        }
+
+        // Render previous conversations
+        for (const conversation of previousConversations) {
             this.renderConversationSearchResult(conversation);
         }
     }

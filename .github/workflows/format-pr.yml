@@ -80,10 +80,14 @@ jobs:
         working-directory: ts
         run: node tools/scripts/prettier-changed.mjs --base origin/${{ github.base_ref }} --write
 
-      - name: Commit formatting fixes
+      - name: Check and fix policy violations
+        working-directory: ts
+        run: node tools/scripts/repo-policy-check.mjs --fix
+
+      - name: Commit formatting and policy fixes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "style: apply prettier formatting"
+          commit_message: "style: apply prettier formatting and policy fixes"
           commit_user_name: typeagent-bot
           commit_user_email: typeagent-bot[bot]@users.noreply.github.com
           commit_author: "typeagent-bot <typeagent-bot[bot]@users.noreply.github.com>"
@@ -128,3 +132,7 @@ jobs:
             echo "::error::Some changed files are not formatted. Run 'pnpm prettier:changed:fix' in ts/ and push the result."
             exit 1
           fi
+
+      - name: Check policy violations
+        working-directory: ts
+        run: node tools/scripts/repo-policy-check.mjs

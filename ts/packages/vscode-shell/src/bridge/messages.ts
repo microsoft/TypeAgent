@@ -179,6 +179,7 @@ export type BridgeToWebviewMessage =
               sessionId: string;
               name: string;
               clientCount: number;
+              createdAt?: string; // ISO 8601
           }>;
           currentSessionId?: string;
       }

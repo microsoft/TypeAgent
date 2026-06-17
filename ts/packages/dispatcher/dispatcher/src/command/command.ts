@@ -457,6 +457,7 @@ export async function processCommand(
         return await context.commandLock(async () => {
             const requestIdStr = requestId.requestId;
             context.activeRequests.set(requestIdStr, abortController);
+            context.currentOptions = options;
             beginProcessCommand(
                 requestId,
                 context,
@@ -474,6 +475,7 @@ export async function processCommand(
                 }
             } finally {
                 context.activeRequests.delete(requestIdStr);
+                context.currentOptions = undefined;
                 return endProcessCommand(requestId, context);
             }
         });

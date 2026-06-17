@@ -334,6 +334,29 @@
   display: none;
 }
 
+.conversation-search-separator {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  text-align: center;
+  font-size: 11px;
+  margin: 6px 0;
+  gap: 8px;
+}
+
+.conversation-search-separator-line {
+  flex-grow: 1;
+  background-color: var(--chat-conversation-separator-color, #e0e0e0);
+  height: 1px;
+}
+
+.conversation-search-separator-text {
+  flex-shrink: 0;
+  color: var(--chat-conversation-muted-foreground, #666);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
 .conversation-search-inline-rename {
   min-width: 0;
   width: 100%;
@@ -353,6 +376,7 @@
 .chat-panel-wrapper {
   display: flex;
   flex-direction: column;
+  position: relative;
   height: 100%;
   width: 100%;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -500,11 +524,7 @@
    ========================================================================= */
 
 .chat-history-separator {
-  text-align: center;
-  color: #999;
-  font-size: 12px;
   padding: 8px 0;
-  border-top: 1px solid #e0e0e0;
   margin: 8px 20px;
 }
 
@@ -1499,14 +1519,14 @@ span.ansi-bright-white-fg {
 .chat-separator-line {
   flex-grow: 1;
   width: 40px;
-  background-color: darkgray;
-  height: 2px;
+  background-color: var(--chat-conversation-separator-color, #e0e0e0);
+  height: 1px;
 }
 
 .chat-separator-text {
   margin: 0px 10px;
-  color: darkgray;
-  height: 20px;
+  color: var(--chat-conversation-muted-foreground, #999);
+  line-height: 1;
 }
 
 /* =========================================================================
@@ -1529,6 +1549,58 @@ span.ansi-bright-white-fg {
 .chat-input-switching .user-textarea,
 .chat-input-history-loading .user-textarea {
   opacity: 0.6;
+}
+
+/* =========================================================================
+   History loading indicator (animated dots, appears in the message area)
+   ========================================================================= */
+.chat-history-loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 0;
+}
+
+.chat-history-loading-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--chat-conversation-muted-foreground, #aaa);
+  animation: chat-history-dot-bounce 1.2s ease-in-out infinite;
+}
+
+.chat-history-loading-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.chat-history-loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.chat-history-loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes chat-history-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* =========================================================================
+   Load-earlier-messages sentinel (invisible; triggers IntersectionObserver)
+   ========================================================================= */
+.chat-load-more-history {
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
 }
 
 /* =========================================================================
@@ -2021,4 +2093,39 @@ span.ansi-bright-white-fg {
 .action-text-editable tr.missing td.name-cell {
   font-style: italic;
   color: lightgray;
+}
+
+/* =========================================================================
+   New Messages Pill (shown when user scrolls away from bottom)
+   ========================================================================= */
+
+.chat-new-messages-pill {
+  display: none;
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: var(--chat-new-messages-bg, #0066bf);
+  color: var(--chat-new-messages-fg, #ffffff);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+  user-select: none;
+  z-index: 100;
+}
+
+.chat-new-messages-pill:hover {
+  background-color: var(--chat-new-messages-bg-hover, #0052a3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.chat-new-messages-pill:active {
+  transform: translateX(-50%) scale(0.98);
 }

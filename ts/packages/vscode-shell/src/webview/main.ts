@@ -524,10 +524,12 @@ window.addEventListener("message", (event) => {
                         sessionId: string;
                         name: string;
                         clientCount: number;
+                        createdAt?: string;
                     }) => ({
                         conversationId: session.sessionId,
                         name: session.name,
                         clientCount: session.clientCount,
+                        createdAt: session.createdAt,
                     }),
                 ),
                 msg.currentSessionId,
@@ -609,6 +611,10 @@ window.addEventListener("message", (event) => {
                 // Defensive chip clear (see direct `commandComplete` case).
                 clearQueueChip(rid);
                 if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
+            } else if (msg.event === "inline") {
+                chatPanel.showInline(msg.data, msg.source);
+            } else if (msg.event === "toast") {
+                chatPanel.showToast(msg.data, msg.source);
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
@@ -670,9 +676,19 @@ window.addEventListener("message", (event) => {
             // Re-apply connection-derived enable state when the switch ends.
             if (!msg.switching) chatPanel.setEnabled(isConnected);
             break;
-        case "historyReplay":
-            chatPanel.replayHistory(toChatPanelHistory(msg.entries));
+        case "historyReplay": {
+            // Stream the replay in chunks so the browser can paint between
+            // batches. setHistoryLoading(false) comes from the extension
+            // host after the entries are sent; also clear it here so replay
+            // completion always re-enables input even if the host message
+            // races or is lost.
+            const replayEntries = toChatPanelHistory(msg.entries);
+            void chatPanel.replayHistoryStreaming(replayEntries).then(() => {
+                chatPanel.setHistoryLoading(false);
+                chatPanel.setEnabled(isConnected);
+            });
             break;
+        }
         case "setActive":
             document.body.classList.toggle("chat-inactive", !msg.active);
             break;
