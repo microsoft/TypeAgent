@@ -57,6 +57,12 @@ import {
     type GrammarCollisionScanner,
     type GrammarScanSkip,
 } from "../collisions/scanner.js";
+import {
+    createGrammarReplayResolver,
+    resolveGrammarReplayTarget,
+    ReplayVersionBuildError,
+    type ReplayRunError,
+} from "../replay/grammarResolver.js";
 import type { CollisionDetectedEvent } from "../events/index.js";
 import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
@@ -109,6 +115,11 @@ export interface StudioReplayResult {
     runId: string;
     summary: ReplaySummary;
     rows: ActionDelta[];
+    /**
+     * Set when a version failed to materialize or compile. The run is aborted
+     * with an empty summary rather than emitting fabricated regression rows.
+     */
+    error?: ReplayRunError;
 }
 
 export interface StudioCollisionScanRequest {
@@ -398,6 +409,35 @@ const identityReplayResolver: ReplayActionResolver = {
         };
     },
 };
+
+/** Build an aborted replay result (empty summary + run-level error) for when a
+ *  version fails to build, so the engine never runs and no fake rows are emitted. */
+function abortedReplayResult(
+    options: Parameters<typeof replayCorpus>[0],
+    error: ReplayRunError,
+): StudioReplayResult {
+    const runId = `replay-error-${Date.now().toString(36)}`;
+    return {
+        runId,
+        rows: [],
+        error,
+        summary: {
+            runId,
+            agent: options.agent,
+            versionA: options.versionA,
+            versionB: options.versionB,
+            corpusSize: 0,
+            rowCount: 0,
+            equalCount: 0,
+            changedCount: 0,
+            newMatchCount: 0,
+            lostMatchCount: 0,
+            collisionDelta: 0,
+            duration: 0,
+            missPolicy: options.missPolicy,
+        },
+    };
+}
 
 export function createStudioRuntimeCore(
     context: StudioRuntimeContext,
@@ -787,9 +827,56 @@ export function createStudioRuntimeCore(
                 missPolicy: request.missPolicy ?? "needs-explanation",
             } satisfies Parameters<typeof replayCorpus>[0];
 
+            // Resolve actions for real via static grammar matching when no
+            // resolver is injected, the deterministic `needs-explanation` policy
+            // is in effect, a repo root is known, and the agent has a single
+            // standalone-compilable grammar. Otherwise fall back to the identity
+            // resolver (preserves the all-equal baseline used by tests).
+            let resolver = options.replayResolver;
+            if (
+                resolver === undefined &&
+                replayOptions.missPolicy === "needs-explanation" &&
+                repoRoot !== undefined
+            ) {
+                const target = await resolveGrammarReplayTarget(
+                    agentRoots(),
+                    replayOptions.agent,
+                    repoRoot,
+                );
+                if (target !== undefined) {
+                    const grammarResolver = createGrammarReplayResolver({
+                        target,
+                        repoRoot,
+                    });
+                    try {
+                        // Build both versions up front so a build failure aborts
+                        // the run cleanly instead of throwing mid-stream (which
+                        // would hang the engine's row channel).
+                        await grammarResolver.prepare(
+                            replayOptions.versionA,
+                            replayOptions.versionB,
+                        );
+                        resolver = grammarResolver;
+                    } catch (err) {
+                        if (err instanceof ReplayVersionBuildError) {
+                            return abortedReplayResult(replayOptions, {
+                                kind: "version-build-failed",
+                                side: err.side,
+                                ref:
+                                    err.version.kind === "git"
+                                        ? err.version.ref
+                                        : "workingTree",
+                                message: err.message,
+                            });
+                        }
+                        throw err;
+                    }
+                }
+            }
+
             const handle = replayCorpus(replayOptions, {
                 corpus: { list: (agent, filter) => corpus.list(agent, filter) },
-                resolver: options.replayResolver ?? identityReplayResolver,
+                resolver: resolver ?? identityReplayResolver,
                 emitter: events,
             });
 

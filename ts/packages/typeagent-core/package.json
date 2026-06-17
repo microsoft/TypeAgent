@@ -21,6 +21,7 @@
     "./collisions": "./dist/collisions/index.js",
     "./collisionScanner": "./dist/collisions/scanner.js",
     "./replay": "./dist/replay/index.js",
+    "./replayResolver": "./dist/replay/grammarResolver.js",
     "./onboardingBridge": "./dist/onboardingBridge/index.js",
     "./runtime": "./dist/runtime/index.js"
   },
