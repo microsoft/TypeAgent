@@ -524,10 +524,12 @@ window.addEventListener("message", (event) => {
                         sessionId: string;
                         name: string;
                         clientCount: number;
+                        createdAt?: string;
                     }) => ({
                         conversationId: session.sessionId,
                         name: session.name,
                         clientCount: session.clientCount,
+                        createdAt: session.createdAt,
                     }),
                 ),
                 msg.currentSessionId,

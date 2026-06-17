@@ -311,62 +311,8 @@ function attachHoverPush(
     containerDiv: HTMLElement,
     metricsDiv: HTMLElement,
 ) {
-    bodyDiv.addEventListener("mouseenter", () => {
-        if (!containerDiv.classList.contains("chat-message-has-metrics")) {
-            return;
-        }
-        // Measure on demand — wrap heights vary per bubble.
-        metricsDiv.style.visibility = "hidden";
-        metricsDiv.style.display = "block";
-        const overlayH = metricsDiv.offsetHeight;
-        metricsDiv.style.display = "";
-        metricsDiv.style.visibility = "";
-        const offset = `${overlayH + 4}px`;
-        const hasEarlier = containerDiv.previousElementSibling !== null;
-        if (hasEarlier) {
-            // Normal case: hovered bubble is NOT the bottommost. Push
-            // visually-lower (DOM-earlier) bubbles DOWN to make room
-            // for the overlay rendered below this bubble.
-            let sibling: Element | null = containerDiv.previousElementSibling;
-            while (sibling) {
-                (sibling as HTMLElement).style.translate = `0 ${offset}`;
-                (sibling as HTMLElement).style.transition =
-                    "translate 0.15s ease-out";
-                sibling = sibling.previousElementSibling;
-            }
-        } else {
-            // Bottommost bubble: there's nothing visually below it to
-            // push down, AND the overlay would be clipped by the input
-            // area. Slide the bubble itself (plus all visually-higher
-            // = DOM-later siblings) UP by the overlay height so the
-            // overlay renders above the input. We translate all of
-            // them together so the chat's vertical stacking stays
-            // intact.
-            (containerDiv as HTMLElement).style.translate = `0 -${offset}`;
-            (containerDiv as HTMLElement).style.transition =
-                "translate 0.15s ease-out";
-            let sibling: Element | null = containerDiv.nextElementSibling;
-            while (sibling) {
-                (sibling as HTMLElement).style.translate = `0 -${offset}`;
-                (sibling as HTMLElement).style.transition =
-                    "translate 0.15s ease-out";
-                sibling = sibling.nextElementSibling;
-            }
-        }
-    });
-    bodyDiv.addEventListener("mouseleave", () => {
-        (containerDiv as HTMLElement).style.translate = "";
-        let sibling: Element | null = containerDiv.previousElementSibling;
-        while (sibling) {
-            (sibling as HTMLElement).style.translate = "";
-            sibling = sibling.previousElementSibling;
-        }
-        sibling = containerDiv.nextElementSibling;
-        while (sibling) {
-            (sibling as HTMLElement).style.translate = "";
-            sibling = sibling.nextElementSibling;
-        }
-    });
+    // No-op: metrics overlay appears without pushing sibling messages.
+    // The overlay is positioned absolutely, so it won't affect layout.
 }
 
 // Inline SVG roadrunner icon used by `notifyExplained` / `updateGrammarResult`
@@ -3315,8 +3261,21 @@ export class ChatPanel {
     public addHistorySeparator(label: string = "previously") {
         const sentinel = this.messageDiv.firstElementChild!;
         const sep = document.createElement("div");
-        sep.className = "chat-history-separator";
-        sep.textContent = label;
+        sep.className = "chat-separator chat-history-separator";
+
+        const leftLine = document.createElement("div");
+        leftLine.className = "chat-separator-line";
+        sep.appendChild(leftLine);
+
+        const text = document.createElement("div");
+        text.className = "chat-separator-text";
+        text.textContent = label;
+        sep.appendChild(text);
+
+        const rightLine = document.createElement("div");
+        rightLine.className = "chat-separator-line";
+        sep.appendChild(rightLine);
+
         sentinel.before(sep);
     }
 

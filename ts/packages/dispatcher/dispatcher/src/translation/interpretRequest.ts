@@ -101,8 +101,9 @@ async function interpretRequestWithActiveSchemas(
     activeSchemaNames: string[],
     usageCallback: (usage: ai.CompletionUsageStats) => void,
 ) {
+    const systemContext = context.sessionContext.agentContext;
     const cannotUseCacheReason = getCannotUseCacheReason(
-        context.sessionContext.agentContext,
+        systemContext,
         attachments,
         history,
     );
@@ -113,7 +114,7 @@ async function interpretRequestWithActiveSchemas(
               request,
               history,
               activeSchemaNames,
-              context.sessionContext.agentContext.currentAbortSignal,
+              systemContext.currentAbortSignal,
           )
         : undefined;
 
@@ -127,6 +128,7 @@ async function interpretRequestWithActiveSchemas(
             streamingActionIndex,
             activeSchemaNames,
             usageCallback,
+            systemContext.currentOptions?.userContext,
         ))
     );
 }

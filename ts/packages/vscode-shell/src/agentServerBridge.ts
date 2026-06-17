@@ -37,6 +37,7 @@ import {
     type CompletionController,
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
+import type { UserContext, ProcessCommandOptions } from "@typeagent/dispatcher-types";
 
 // Internal-only message type unions; re-export for any future consumers.
 export type {
@@ -580,6 +581,7 @@ export class AgentServerBridge {
                     sessionId: s.sessionId,
                     name: s.name || s.sessionId.substring(0, 8),
                     clientCount: s.clientCount,
+                    createdAt: s.createdAt,
                 })),
                 currentSessionId: this.session?.sessionId,
             });
@@ -1543,6 +1545,31 @@ export class AgentServerBridge {
         this.serverToClientRequestId.clear();
     }
 
+    /**
+     * Gather user context from VS Code (active editor, workspace, etc.)
+     */
+    private gatherUserContext(): UserContext {
+        const activeEditor = vscode.window.activeTextEditor;
+        const activeWorkspaceFolder =
+            vscode.workspace.workspaceFolders?.[0]?.name ?? undefined;
+
+        // Build description from active document/language
+        let activeAppDescription: string | undefined;
+        if (activeEditor) {
+            const languageId = activeEditor.document.languageId;
+            const fileName =
+                activeEditor.document.fileName.split(/[\\/]/).pop() ?? "file";
+            activeAppDescription = `${fileName} (${languageId})`;
+        } else if (activeWorkspaceFolder) {
+            activeAppDescription = `Project: ${activeWorkspaceFolder}`;
+        }
+
+        return {
+            activeApp: "vscode",
+            activeAppDescription,
+        };
+    }
+
     private async sendCommand(
         command: string,
         requestId?: string,
@@ -1574,11 +1601,15 @@ export class AgentServerBridge {
         }
 
         try {
+            const userContext = this.gatherUserContext();
+            const options: ProcessCommandOptions = {
+                userContext,
+            };
             const result = await awaitCommand(
                 this.session.dispatcher,
                 command,
                 undefined,
-                undefined,
+                options,
                 requestId,
             );
             // Command finished — tell webview to clean up temporary status

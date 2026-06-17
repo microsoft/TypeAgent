@@ -100,6 +100,10 @@ function runPowerShell(
     script,
     { ignoreExitCode = false, interactive = false } = {},
 ) {
+    const wrappedScript = `
+        $ErrorActionPreference = 'Stop'
+        ${script}
+    `;
     const args = [
         "-NoProfile",
         // Interactive mode preserves the parent's stdin/stdout/stderr so any
@@ -111,7 +115,7 @@ function runPowerShell(
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        script,
+        wrappedScript,
     ];
     const result = spawnSync("powershell.exe", args, {
         encoding: "utf8",
@@ -133,23 +137,26 @@ function runPowerShell(
 // Re-encrypts a PFX with a new password. Reads sourcePath, writes destPath.
 // sourcePassword may be empty (Key Vault returns unprotected PFX).
 function reencryptPfx(sourcePath, sourcePassword, destPath, destPassword) {
-    // Use Get-PfxData + Export-PfxCertificate. Export-PfxCertificate writes
-    // a PFX with the new password; Get-PfxData reads with the old one.
+    // Use .NET X509 APIs directly so we don't rely on PowerShell cert
+    // modules/providers that may be unavailable in locked-down hosts.
     const ps = `
-        $srcPwd = ConvertTo-SecureString -String '${escapePsString(sourcePassword)}' -AsPlainText -Force
-        $dstPwd = ConvertTo-SecureString -String '${escapePsString(destPassword)}' -AsPlainText -Force
-        $data = Get-PfxData -FilePath '${escapePsString(sourcePath)}' -Password $srcPwd
-        $cert = $data.EndEntityCertificates[0]
-        $thumb = $cert.Thumbprint
-        # Round-trip via the cert store: import temporarily so we have a key handle,
-        # then export with the new password, then remove.
-        $imported = Import-PfxCertificate -FilePath '${escapePsString(sourcePath)}' -Password $srcPwd -CertStoreLocation Cert:\\CurrentUser\\My -Exportable
-        try {
-            Export-PfxCertificate -Cert $imported -FilePath '${escapePsString(destPath)}' -Password $dstPwd -Force | Out-Null
-        } finally {
-            Remove-Item -Path "Cert:\\CurrentUser\\My\\$thumb" -Force -ErrorAction SilentlyContinue
+        $srcPath = '${escapePsString(sourcePath)}'
+        $dstPath = '${escapePsString(destPath)}'
+        $srcPassword = '${escapePsString(sourcePassword)}'
+        $dstPassword = '${escapePsString(destPassword)}'
+        $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
+        $collection = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
+        $collection.Import($srcPath, $srcPassword, $flags)
+        if ($collection.Count -lt 1) {
+            throw 'No certificates found in source PFX.'
         }
-        Write-Output $thumb
+        $pfxBytes = $collection.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pkcs12, $dstPassword)
+        [System.IO.File]::WriteAllBytes($dstPath, $pfxBytes)
+        $mainCert = $collection | Where-Object { $_.HasPrivateKey } | Select-Object -First 1
+        if ($null -eq $mainCert) {
+            $mainCert = $collection[0]
+        }
+        Write-Output $mainCert.Thumbprint
     `;
     const { stdout } = runPowerShell(ps);
     return stdout.trim();
@@ -304,12 +311,21 @@ async function install() {
     const password = (await secretClient.getSecret(passwordSecretName)).value;
 
     // Cert:\CurrentUser\My — needs the private key (we sign with this), so
-    // import the PFX with its password. -Exportable keeps the key extractable
-    // for signtool flows that prefer a fresh PFX export.
+    // import the PFX with its password.
     console.log("\nImporting into CurrentUser\\My (private key)…");
     runPowerShell(`
-        $pwd = ConvertTo-SecureString -String '${escapePsString(password)}' -AsPlainText -Force
-        Import-PfxCertificate -FilePath '${escapePsString(localPfxPath)}' -Password $pwd -CertStoreLocation Cert:\\CurrentUser\\My -Exportable | Out-Null
+        $pfxPath = '${escapePsString(localPfxPath)}'
+        $pfxPassword = '${escapePsString(password)}'
+        $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
+        $cert.Import($pfxPath, $pfxPassword, $flags)
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('My', 'CurrentUser')
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        try {
+            $store.Add($cert)
+        } finally {
+            $store.Close()
+        }
     `);
 
     // For trust stores (TrustedPeople and Root), we only need the public
@@ -322,13 +338,30 @@ async function install() {
     );
     console.log(`Exporting public cert to ${chalk.cyanBright(cerPath)}…`);
     runPowerShell(`
-        $cert = Get-Item Cert:\\CurrentUser\\My\\${escapePsString(thumbprint)}
-        Export-Certificate -Cert $cert -FilePath '${escapePsString(cerPath)}' -Type CERT -Force | Out-Null
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('My', 'CurrentUser')
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        try {
+            $found = $store.Certificates.Find([System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint, '${escapePsString(thumbprint)}', $false)
+            if ($found.Count -lt 1) {
+                throw 'Certificate not found in CurrentUser\\My by thumbprint.'
+            }
+            $cerBytes = $found[0].Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            [System.IO.File]::WriteAllBytes('${escapePsString(cerPath)}', $cerBytes)
+        } finally {
+            $store.Close()
+        }
     `);
 
     console.log("Importing into CurrentUser\\TrustedPeople (public)…");
     runPowerShell(`
-        Import-Certificate -FilePath '${escapePsString(cerPath)}' -CertStoreLocation Cert:\\CurrentUser\\TrustedPeople | Out-Null
+        $publicCert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('${escapePsString(cerPath)}')
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('TrustedPeople', 'CurrentUser')
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        try {
+            $store.Add($publicCert)
+        } finally {
+            $store.Close()
+        }
     `);
 
     if (paramTrustedRoot) {
@@ -343,7 +376,14 @@ async function install() {
         );
         runPowerShell(
             `
-            Import-Certificate -FilePath '${escapePsString(cerPath)}' -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null
+            $publicCert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('${escapePsString(cerPath)}')
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser')
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            try {
+                $store.Add($publicCert)
+            } finally {
+                $store.Close()
+            }
             `,
             { interactive: true },
         );
@@ -411,9 +451,14 @@ async function status() {
     if (onDisk && pfxPassword) {
         try {
             const ps = `
-                $pwd = ConvertTo-SecureString -String '${escapePsString(pfxPassword)}' -AsPlainText -Force
-                $data = Get-PfxData -FilePath '${escapePsString(localPfxPath)}' -Password $pwd
-                Write-Output $data.EndEntityCertificates[0].Thumbprint
+                $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet
+                $collection = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
+                $collection.Import('${escapePsString(localPfxPath)}', '${escapePsString(pfxPassword)}', $flags)
+                $mainCert = $collection | Where-Object { $_.HasPrivateKey } | Select-Object -First 1
+                if ($null -eq $mainCert) {
+                    $mainCert = $collection[0]
+                }
+                Write-Output $mainCert.Thumbprint
             `;
             thumbprint = runPowerShell(ps).stdout.trim();
         } catch (e) {
@@ -432,13 +477,20 @@ async function status() {
     }
     console.log(`  thumbprint: ${chalk.cyanBright(thumbprint)}`);
     const stores = [
-        ["CurrentUser\\My", "Cert:\\CurrentUser\\My"],
-        ["CurrentUser\\TrustedPeople", "Cert:\\CurrentUser\\TrustedPeople"],
-        ["CurrentUser\\Root", "Cert:\\CurrentUser\\Root"],
+        ["CurrentUser\\My", "My"],
+        ["CurrentUser\\TrustedPeople", "TrustedPeople"],
+        ["CurrentUser\\Root", "Root"],
     ];
-    for (const [label, psPath] of stores) {
+    for (const [label, storeName] of stores) {
         const ps = `
-            if (Test-Path '${psPath}\\${thumbprint}') { Write-Output 'yes' } else { Write-Output 'no' }
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('${storeName}', 'CurrentUser')
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+            try {
+                $found = $store.Certificates.Find([System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint, '${escapePsString(thumbprint)}', $false)
+                if ($found.Count -gt 0) { Write-Output 'yes' } else { Write-Output 'no' }
+            } finally {
+                $store.Close()
+            }
         `;
         const { stdout } = runPowerShell(ps, { ignoreExitCode: true });
         const present = stdout.trim() === "yes";

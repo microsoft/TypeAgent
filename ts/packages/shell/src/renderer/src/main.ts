@@ -154,6 +154,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     conversationId: conversation.conversationId,
                     name: conversation.name,
                     clientCount: conversation.clientCount,
+                    createdAt: conversation.createdAt,
                 })),
                 current?.conversationId,
             );
