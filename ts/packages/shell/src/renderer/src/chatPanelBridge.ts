@@ -1269,7 +1269,7 @@ export function createChatPanelClient(
             if (cutoffSeq !== undefined) {
                 entries = entries.filter((e) => e.seq <= cutoffSeq);
             }
-            chatPanel.replayHistory(toHistoryEntries(entries));
+            await chatPanel.replayHistoryStreaming(toHistoryEntries(entries));
             // Divider between replayed history and live messages. Only show
             // it when there was actually prior history to separate from.
             if (entries.length > 0) {

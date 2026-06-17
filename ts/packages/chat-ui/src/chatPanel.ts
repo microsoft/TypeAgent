@@ -513,6 +513,7 @@ export class ChatPanel {
     private activeRequestId?: string;
     private isSwitching = false;
     private isHistoryLoading = false;
+    private historyLoadingPlaceholder: HTMLElement | undefined;
     private isDemoPaused = false;
     private isDemoRunning = false;
     // Flipped by `cancelTypingAnimation()` (called from the host when the
@@ -2268,72 +2269,7 @@ export class ChatPanel {
         this.suppressFirstMessageTracking = true;
         try {
             for (const entry of entries) {
-                switch (entry.kind) {
-                    case "user":
-                        this.addUserMessage(entry.text, entry.requestId);
-                        // Seed the up-arrow command history with replayed
-                        // user commands so it recalls prior-session input.
-                        // Entries arrive oldest-first; unshift keeps the
-                        // most recent command at index 0.
-                        if (
-                            entry.text &&
-                            entry.text.trim() &&
-                            this.shouldAddToHistory(entry.text)
-                        ) {
-                            this.commandHistory.unshift(entry.text);
-                        }
-                        break;
-                    case "agent-replace":
-                        this.replaceAgentMessage(
-                            entry.content,
-                            entry.source,
-                            entry.sourceIcon,
-                            entry.requestId,
-                        );
-                        break;
-                    case "agent-append":
-                        if (entry.mode === "temporary") break;
-                        this.addAgentMessage(
-                            entry.content,
-                            entry.source,
-                            entry.sourceIcon,
-                            entry.mode,
-                            entry.requestId,
-                        );
-                        break;
-                    case "system":
-                        this.addSystemMessage(entry.text);
-                        break;
-                    case "display-info":
-                        this.setDisplayInfo(
-                            entry.source,
-                            entry.sourceIcon,
-                            entry.action,
-                            entry.requestId,
-                        );
-                        break;
-                    case "command-result":
-                        if (entry.requestId) {
-                            // Pre-seed the per-request firstMessageMs so the
-                            // metrics tooltip can show "First Message" on
-                            // history-replayed bubbles (live tracking is
-                            // suppressed during replay).
-                            if (entry.firstMessageMs !== undefined) {
-                                this.firstMessageMsByRequestId.set(
-                                    entry.requestId,
-                                    entry.firstMessageMs,
-                                );
-                            }
-                            this.completeRequest(entry.requestId, {
-                                actionPhase: entry.actionPhase,
-                                totalDuration: entry.totalDuration,
-                                tokenUsage: entry.tokenUsage,
-                                actionTokenUsage: entry.actionTokenUsage,
-                                parsePhase: entry.parsePhase,
-                            });
-                        }
-                        break;
-                }
+                this._processHistoryEntry(entry);
             }
         } finally {
             this.suppressFirstMessageTracking = false;
@@ -2362,6 +2298,130 @@ export class ChatPanel {
         this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
+    }
+
+    /**
+     * Stream-replay history in chunks so the browser can paint between
+     * batches.  Prefer this over `replayHistory` for large transcripts.
+     * The host should call `setHistoryLoading(true)` before and
+     * `setHistoryLoading(false)` after (or chain on the returned promise).
+     */
+    public async replayHistoryStreaming(
+        entries: HistoryEntry[],
+        chunkSize: number = 20,
+    ): Promise<void> {
+        if (!entries || entries.length === 0) return;
+
+        this.threadContainers.clear();
+        this.currentUserThreadId = undefined;
+        this.pendingThreadDisplayInfo.clear();
+        this.agentRunningRequestIds.clear();
+        this.suppressFirstMessageTracking = true;
+
+        try {
+            for (let i = 0; i < entries.length; i += chunkSize) {
+                const chunkEnd = Math.min(i + chunkSize, entries.length);
+                const beforeChunk = this.messageDiv.children.length;
+
+                for (let j = i; j < chunkEnd; j++) {
+                    this._processHistoryEntry(entries[j]);
+                }
+
+                // Mark this chunk's newly-prepended elements as history.
+                // Each entry goes to DOM index 0 (via sentinel.before),
+                // so after processing the chunk the first `added` children
+                // are the ones we just inserted.
+                const chunkAdded = this.messageDiv.children.length - beforeChunk;
+                for (let k = 0; k < chunkAdded; k++) {
+                    this.messageDiv.children[k].classList.add("history");
+                }
+
+                // Yield to the browser so it can paint the chunk.
+                if (chunkEnd < entries.length) {
+                    await new Promise<void>((resolve) =>
+                        setTimeout(resolve, 0),
+                    );
+                }
+            }
+        } finally {
+            this.suppressFirstMessageTracking = false;
+        }
+
+        this.threadContainers.clear();
+        this.currentUserThreadId = undefined;
+        this.pendingThreadDisplayInfo.clear();
+        this.userMessageById.clear();
+        this.scrollToBottom();
+    }
+
+    /** Process a single HistoryEntry into the DOM (shared by sync and streaming replay). */
+    private _processHistoryEntry(entry: HistoryEntry): void {
+        switch (entry.kind) {
+            case "user":
+                this.addUserMessage(entry.text, entry.requestId);
+                // Seed the up-arrow command history with replayed
+                // user commands so it recalls prior-session input.
+                // Entries arrive oldest-first; unshift keeps the
+                // most recent command at index 0.
+                if (
+                    entry.text &&
+                    entry.text.trim() &&
+                    this.shouldAddToHistory(entry.text)
+                ) {
+                    this.commandHistory.unshift(entry.text);
+                }
+                break;
+            case "agent-replace":
+                this.replaceAgentMessage(
+                    entry.content,
+                    entry.source,
+                    entry.sourceIcon,
+                    entry.requestId,
+                );
+                break;
+            case "agent-append":
+                if (entry.mode === "temporary") break;
+                this.addAgentMessage(
+                    entry.content,
+                    entry.source,
+                    entry.sourceIcon,
+                    entry.mode,
+                    entry.requestId,
+                );
+                break;
+            case "system":
+                this.addSystemMessage(entry.text);
+                break;
+            case "display-info":
+                this.setDisplayInfo(
+                    entry.source,
+                    entry.sourceIcon,
+                    entry.action,
+                    entry.requestId,
+                );
+                break;
+            case "command-result":
+                if (entry.requestId) {
+                    // Pre-seed the per-request firstMessageMs so the
+                    // metrics tooltip can show "First Message" on
+                    // history-replayed bubbles (live tracking is
+                    // suppressed during replay).
+                    if (entry.firstMessageMs !== undefined) {
+                        this.firstMessageMsByRequestId.set(
+                            entry.requestId,
+                            entry.firstMessageMs,
+                        );
+                    }
+                    this.completeRequest(entry.requestId, {
+                        actionPhase: entry.actionPhase,
+                        totalDuration: entry.totalDuration,
+                        tokenUsage: entry.tokenUsage,
+                        actionTokenUsage: entry.actionTokenUsage,
+                        parsePhase: entry.parsePhase,
+                    });
+                }
+                break;
+        }
     }
 
     /** Update the source/agent label on the targeted thread's bubble. */
@@ -3598,8 +3658,22 @@ export class ChatPanel {
             this.setEnabledInternal(false);
             this.textInput.setAttribute("data-placeholder", "Loading history…");
             this.inputArea.classList.add("chat-input-history-loading");
+            if (!this.historyLoadingPlaceholder) {
+                const el = document.createElement("div");
+                el.className = "chat-history-loading-indicator";
+                el.innerHTML =
+                    `<span class="chat-history-loading-dot"></span>` +
+                    `<span class="chat-history-loading-dot"></span>` +
+                    `<span class="chat-history-loading-dot"></span>`;
+                this.messageDiv.appendChild(el);
+                this.historyLoadingPlaceholder = el;
+            }
         } else {
             this.inputArea.classList.remove("chat-input-history-loading");
+            if (this.historyLoadingPlaceholder) {
+                this.historyLoadingPlaceholder.remove();
+                this.historyLoadingPlaceholder = undefined;
+            }
             if (!this.isSwitching) {
                 this.setEnabledInternal(true);
                 this.textInput.setAttribute(

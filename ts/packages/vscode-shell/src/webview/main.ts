@@ -672,9 +672,21 @@ window.addEventListener("message", (event) => {
             // Re-apply connection-derived enable state when the switch ends.
             if (!msg.switching) chatPanel.setEnabled(isConnected);
             break;
-        case "historyReplay":
-            chatPanel.replayHistory(toChatPanelHistory(msg.entries));
+        case "historyReplay": {
+            // Stream the replay in chunks so the browser can paint between
+            // batches. setHistoryLoading(false) comes from the extension
+            // host after the entries are sent; also clear it here so replay
+            // completion always re-enables input even if the host message
+            // races or is lost.
+            const replayEntries = toChatPanelHistory(msg.entries);
+            void chatPanel
+                .replayHistoryStreaming(replayEntries)
+                .then(() => {
+                    chatPanel.setHistoryLoading(false);
+                    chatPanel.setEnabled(isConnected);
+                });
             break;
+        }
         case "setActive":
             document.body.classList.toggle("chat-inactive", !msg.active);
             break;
