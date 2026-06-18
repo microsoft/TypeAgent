@@ -1,0 +1,223 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Azure Pipelines: Build and sign TypeAgent Agent-Server MSI
+# Publishes signed MSI to Azure Storage for distribution
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/tools/scripts/build-msi.mjs
+      - ts/tools/scripts/sign-msi.mjs
+      - ts/tools/installers/wix/**
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: installerDir
+    value: $(buildDirectory)/tools/installers/wix
+  - name: scriptDir
+    value: $(buildDirectory)/tools/scripts
+  - name: nodeVersion
+    value: 22
+  - name: channel
+    value: ci
+  - name: MSI_BUILD_DIR
+    value: $(Build.ArtifactStagingDirectory)/msi
+
+parameters:
+  - name: publishArtifacts
+    type: boolean
+    default: false
+    displayName: "Publish MSI to Azure Storage (requires manual approval)"
+  - name: rid
+    type: string
+    default: win32-x64
+    values:
+      - win32-x64
+      - win32-arm64
+    displayName: "RID (Runtime ID)"
+  - name: agentVersion
+    type: string
+    default: latest
+    displayName: "agent-server artifact version (semver or 'latest')"
+  - name: pluginVersion
+    type: string
+    default: latest
+    displayName: "typeagent-copilot-plugin artifact version (semver or 'latest')"
+
+jobs:
+  - job: build_sign_msi
+    displayName: Build and Sign MSI
+    pool:
+      vmImage: windows-latest
+
+    steps:
+      # Setup: Node.js and dependencies
+      - task: NodeTool@0
+        displayName: Use Node.js $(nodeVersion)
+        inputs:
+          versionSpec: "$(nodeVersion)"
+
+      - task: AzureCLI@2
+        displayName: Check Azure CLI
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: powershell
+          scriptLocation: inlineScript
+          inlineScript: |
+            az --version
+            Write-Host "✅ Azure CLI ready"
+
+      # Install build dependencies
+      - script: |
+          echo "Installing build tools..."
+          npm install -g pnpm
+          pnpm --version
+        displayName: Install pnpm
+        workingDirectory: $(buildDirectory)
+
+      - script: |
+          $wixBin = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          if (Test-Path "$wixBin\candle.exe") {
+            Write-Host "✅ WiX Toolset 3.11 found"
+            Write-Host "   candle: $(& "$wixBin\candle.exe" -? 2>&1 | Select-String 'version' | Select-Object -First 1)"
+          } else {
+            Write-Error "WiX Toolset 3.11 not found at $wixBin. Install from https://github.com/wixtoolset/wix3/releases"
+            exit 1
+          }
+        displayName: Check WiX Toolset (required)
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+
+      - script: |
+          echo "Checking Windows SDK..."
+          if (Test-Path "C:\Program Files (x86)\Windows Kits\10\bin") {
+            Write-Host "✅ Windows SDK found"
+          } else {
+            Write-Host "⚠️  Windows SDK NOT found"
+          }
+        displayName: Check Windows SDK
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+
+      # Step 1: Pull the dev certificate from Key Vault
+      - task: AzureCLI@2
+        displayName: Pull dev certificate from Key Vault
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: node
+          scriptLocation: inlineScript
+          inlineScript: |
+            const { spawnSync } = require('child_process');
+            const result = spawnSync('node', [
+              '$(scriptDir)/getCert.mjs',
+              'pull',
+              '--verbose'
+            ], {
+              stdio: 'inherit',
+              cwd: '$(scriptDir)'
+            });
+            if (result.status !== 0) {
+              console.error('Failed to pull certificate');
+              process.exit(1);
+            }
+
+      # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
+      - script: |
+          cd $(scriptDir)
+          node build-msi.mjs `
+            --rid ${{ parameters.rid }} `
+            --version ${{ parameters.agentVersion }} `
+            --plugin-version ${{ parameters.pluginVersion }} `
+            --output $(MSI_BUILD_DIR)
+        displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+      # Step 3: Sign the MSI
+      - script: |
+          cd $(scriptDir)
+          $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+          if ($null -eq $msiPath) {
+            Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
+            exit 1
+          }
+          Write-Host "Signing MSI: $($msiPath.FullName)"
+          node sign-msi.mjs "$($msiPath.FullName)"
+        displayName: Sign MSI with dev certificate
+        env:
+          MSI_SIGNING_CERT_PASSWORD: $(MSI_SIGNING_CERT_PASSWORD)
+
+      # Step 4: Verify signature
+      - script: |
+          $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+          if ($null -eq $msiPath) {
+            Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
+            exit 1
+          }
+          
+          Write-Host "Verifying signature: $($msiPath.FullName)"
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\" -Recurse -Filter "signtool.exe" | Select-Object -First 1
+          if ($null -ne $signtool) {
+            & $signtool.FullName verify /pa $msiPath.FullName
+            Write-Host "✅ Signature verified"
+          } else {
+            Write-Warning "signtool.exe not found for verification"
+          }
+        displayName: Verify signature
+
+      # Step 5: Publish to artifact storage
+      - publish: $(MSI_BUILD_DIR)
+        displayName: Upload MSI artifact
+        artifact: msi-${{ parameters.rid }}
+
+      # Step 6: Publish to Azure Storage (optional, requires approval)
+      - task: AzureFileCopy@6
+        displayName: Upload to Azure Storage (if publishArtifacts=true)
+        condition: and(succeeded(), eq('${{ parameters.publishArtifacts }}', 'true'))
+        inputs:
+          SourcePath: $(MSI_BUILD_DIR)\**
+          Destination: AzureBlob
+          azureSubscription: $(azureSubscription)
+          storage: $(azureStorageAccountName)
+          ContainerName: $(azureStorageContainerName)
+
+  # Optional: sign the shell .exe while we're at it (Phase 2)
+  - job: sign_shell_exe
+    displayName: Sign Shell EXE (Phase 2)
+    pool:
+      vmImage: windows-latest
+    condition: false  # Disabled for now; enable when Phase 2 is prioritized
+
+    steps:
+      - task: NodeTool@0
+        displayName: Use Node.js $(nodeVersion)
+        inputs:
+          versionSpec: "$(nodeVersion)"
+
+      - task: AzureCLI@2
+        displayName: Pull dev certificate
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: node
+          scriptLocation: inlineScript
+          inlineScript: |
+            const { spawnSync } = require('child_process');
+            spawnSync('node', [
+              '$(scriptDir)/getCert.mjs',
+              'pull'
+            ], {
+              stdio: 'inherit',
+              cwd: '$(scriptDir)'
+            });
+
+      - script: |
+          echo "Sign shell .exe here (mirror MSI signing)"
+        displayName: Sign shell EXE
