@@ -2,7 +2,7 @@
 .vscode-test/**
 src/**
 node_modules/**
-*.map
+**/*.map
 *.ts
 tsconfig.json
 esbuild.mjs
