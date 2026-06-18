@@ -28,7 +28,7 @@
     "@typeagent/completion-ui": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "ansi_up": "^6.0.2",
-    "dompurify": "^3.4.10",
+    "dompurify": "^3.4.11",
     "markdown-it": "^14.2.0"
   },
   "devDependencies": {
