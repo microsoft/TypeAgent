@@ -81,6 +81,16 @@ jobs:
           restoreKeys: |
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
+      - bash: |
+          # Clean up pnpm cache and store to free disk space on Linux
+          pnpm store prune
+          # Remove unnecessary node_modules from other packages to save space
+          find $(buildDirectory)/packages -maxdepth 2 -type d -name "node_modules" ! -path "*/shell/*" -exec rm -rf {} + 2>/dev/null || true
+          # Report disk usage
+          df -h / || true
+        displayName: Free disk space before packaging
+        condition: eq(variables['Agent.OS'], 'Linux')
+
       - script: |
           pnpm run shell:package
         displayName: Package - shell
