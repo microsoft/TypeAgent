@@ -3,7 +3,6 @@
   "displayName": "TypeAgent VS Code Shell",
   "version": "0.0.2",
   "private": true,
-  "type": "module",
   "description": "Embeds the TypeAgent shell chat into VS Code",
   "categories": [
     "Other"
@@ -17,6 +16,7 @@
   "license": "MIT",
   "author": "Microsoft",
   "publisher": "typeagent",
+  "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
     "build": "npm run compile",

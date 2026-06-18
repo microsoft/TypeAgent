@@ -3,7 +3,6 @@
   "displayName": "TypeAgent Chat",
   "version": "0.0.4",
   "private": true,
-  "type": "module",
   "description": "Registers TypeAgent as a third-party agent in VS Code's native Chat view",
   "categories": [
     "Other"
@@ -17,23 +16,21 @@
   "license": "MIT",
   "author": "Microsoft",
   "publisher": "typeagent",
+  "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
     "build": "npm run compile",
     "build:ext:vscode": "npm run package",
-    "clean": "rimraf --glob dist dist-pub *.vsix",
     "bundle": "node esbuild.mjs",
+    "clean": "rimraf --glob dist dist-pub *.vsix",
     "compile": "concurrently npm:tsc npm:bundle",
-    "tsc": "tsc --noEmit -p .",
     "deploy:local": "npm run package && code-insiders --install-extension dist-pub/vscode-chat.vsix --force",
     "install:ext:vscode": "code-insiders --install-extension dist-pub/vscode-chat.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-chat.vsix",
+    "tsc": "tsc --noEmit -p .",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
   },
-  "enabledApiProposals": [
-    "chatSessionsProvider"
-  ],
   "contributes": {
     "chatParticipants": [
       {
@@ -97,6 +94,9 @@
     "vscode": "^1.95.0"
   },
   "icon": "media/icons/icon-80.png",
+  "enabledApiProposals": [
+    "chatSessionsProvider"
+  ],
   "fluidBuild": {
     "tasks": {
       "build:ext:vscode": {
