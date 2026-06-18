@@ -1,0 +1,10 @@
+{
+  "name": "typeagent-icons",
+  "inputDir": "media/icons",
+  "outputDir": "media",
+  "fontTypes": ["woff"],
+  "assetTypes": [],
+  "normalize": true,
+  "fontHeight": 1000,
+  "codepoints": { "typeagent": 61697 }
+}

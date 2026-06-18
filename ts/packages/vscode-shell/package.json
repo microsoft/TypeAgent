@@ -1,7 +1,7 @@
 {
   "name": "vscode-shell",
   "displayName": "TypeAgent VS Code Shell",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Embeds the TypeAgent shell chat into VS Code",
   "categories": [
@@ -16,15 +16,20 @@
   "license": "MIT",
   "author": "Microsoft",
   "publisher": "typeagent",
-  "main": "./dist/extension.js",
+  "type": "module",
+  "main": "./dist/extension.cjs",
   "scripts": {
+    "build": "npm run compile",
     "build:ext:vscode": "npm run package",
+    "bundle": "npm run copy:codicons && node esbuild.mjs",
     "clean": "rimraf --glob dist dist-pub *.vsix",
-    "compile": "npm run copy:codicons && node esbuild.mjs",
+    "compile": "concurrently npm:tsc:extension npm:tsc:webview npm:bundle",
     "copy:codicons": "copyfiles -f node_modules/@vscode/codicons/dist/codicon.css node_modules/@vscode/codicons/dist/codicon.ttf media",
     "deploy:local": "npm run package && code --install-extension dist-pub/vscode-shell.vsix --force",
     "install:ext:vscode": "code --install-extension dist-pub/vscode-shell.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-shell.vsix",
+    "tsc:extension": "tsc --noEmit -p tsconfig.extension.json",
+    "tsc:webview": "tsc --noEmit -p tsconfig.webview.json",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
   },
@@ -209,10 +214,12 @@
     "@types/ws": "^8.5.0",
     "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
+    "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "esbuild": "^0.28.1",
     "mkdirp": "^3.0.1",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
   },
   "engines": {
     "vscode": "^1.90.0"

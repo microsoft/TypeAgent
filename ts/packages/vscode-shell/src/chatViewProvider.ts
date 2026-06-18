@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { AgentServerBridge } from "./agentServerBridge";
+import { AgentServerBridge } from "./agentServerBridge.js";
 
 /**
  * Provides the chat webview for the sidebar (uses primary bridge) and

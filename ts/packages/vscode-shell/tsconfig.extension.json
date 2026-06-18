@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "strict": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/extension.ts",
+    "src/agentServerBridge.ts",
+    "src/chatViewProvider.ts",
+    "src/bridge/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

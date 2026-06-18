@@ -12,6 +12,10 @@ const slashHeader = prefixHeader("//");
 const hashHeader = prefixHeader("#");
 const cmdHeader = prefixHeader("::");
 const htmlHeader = enclosedHeader("<!--", "-->");
+const vscodeSlashBlockHeader = `/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/`;
 
 function checkExtraCopyRight(header, content) {
     const escaped = header.replaceAll(/([()\][{*+.$^\\|?])/g, "\\$1");
@@ -25,9 +29,10 @@ function checkExtraCopyRight(header, content) {
     return regexp.test(content);
 }
 
-function checkCopyrightHeader(file, header, fix, skipFirstLineWithPrefix) {
+function checkCopyrightHeader(file, headers, fix, skipFirstLineWithPrefix) {
     let firstLine = "";
     let content = file.content;
+    const headerList = Array.isArray(headers) ? headers : [headers];
     if (skipFirstLineWithPrefix && skipFirstLineWithPrefix.test(content)) {
         const index = content.indexOf("\n");
         if (index !== -1) {
@@ -35,11 +40,17 @@ function checkCopyrightHeader(file, header, fix, skipFirstLineWithPrefix) {
             content = content.slice(index + 1);
         }
     }
-    if (content.startsWith(header) || checkExtraCopyRight(header, content)) {
+    if (
+        headerList.some(
+            (header) =>
+                content.startsWith(header) ||
+                checkExtraCopyRight(header, content),
+        )
+    ) {
         return true;
     }
     if (fix) {
-        file.content = `${firstLine}${header}\n\n${content}`;
+        file.content = `${firstLine}${headerList[0]}\n\n${content}`;
         return false;
     }
 
@@ -53,7 +64,12 @@ export const rules = [
         name: "ts-js-copyright-header",
         match: /.*\.[cm]?[jt]sx?$/i,
         check: (file, fix) => {
-            return checkCopyrightHeader(file, slashHeader, fix, hashBang);
+            return checkCopyrightHeader(
+                file,
+                [slashHeader, vscodeSlashBlockHeader],
+                fix,
+                hashBang,
+            );
         },
     },
     {
