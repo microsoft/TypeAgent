@@ -93,6 +93,104 @@ export function toImpactRows(
     return rows.map((row) => toImpactRow(row, methodA, methodB));
 }
 
+export type { ReplayRowStatus };
+
+/** Fixed chip order: differences first (the regression journey), equal last. */
+export const IMPACT_FILTER_ORDER: ReplayRowStatus[] = [
+    "changed",
+    "new-match",
+    "lost-match",
+    "equal",
+];
+
+/** The difference statuses — everything except `equal`. */
+const DIFFERENCE_STATUSES: ReplayRowStatus[] = [
+    "changed",
+    "new-match",
+    "lost-match",
+];
+
+export interface ImpactFilterChip {
+    status: ReplayRowStatus;
+    /** Human word for the status, e.g. "changed". */
+    label: string;
+    /** How many received rows have this status. */
+    count: number;
+}
+
+/**
+ * The default active filter: differences only (`equal` hidden) so the report
+ * opens focused on what changed between versions rather than burying a handful
+ * of regressions under a long list of unchanged rows.
+ */
+export function defaultImpactFilters(): Set<ReplayRowStatus> {
+    return new Set<ReplayRowStatus>(DIFFERENCE_STATUSES);
+}
+
+/** Per-status chip descriptors (counts taken from the received rows). */
+export function buildImpactFilterChips(
+    rows: readonly ImpactRow[],
+): ImpactFilterChip[] {
+    const counts = new Map<ReplayRowStatus, number>();
+    for (const row of rows) {
+        counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+    }
+    return IMPACT_FILTER_ORDER.map((status) => ({
+        status,
+        label: STATUS_LABEL[status],
+        count: counts.get(status) ?? 0,
+    }));
+}
+
+/** Keep only rows whose status is in the active set. */
+export function filterImpactRows(
+    rows: readonly ImpactRow[],
+    active: ReadonlySet<ReplayRowStatus>,
+): ImpactRow[] {
+    return rows.filter((row) => active.has(row.status));
+}
+
+/** True when every received row is `equal` (no differences between A and B). */
+export function allRowsEqual(rows: readonly ImpactRow[]): boolean {
+    return rows.length > 0 && rows.every((row) => row.status === "equal");
+}
+
+/**
+ * A note describing rows hidden by the active filter (e.g. the `equal` rows the
+ * default view omits), or `undefined` when nothing with a non-zero count is
+ * hidden.
+ */
+export function impactFilterNote(
+    chips: readonly ImpactFilterChip[],
+    active: ReadonlySet<ReplayRowStatus>,
+): string | undefined {
+    const hidden = chips.filter(
+        (chip) => !active.has(chip.status) && chip.count > 0,
+    );
+    if (hidden.length === 0) {
+        return undefined;
+    }
+    const total = hidden.reduce((sum, chip) => sum + chip.count, 0);
+    const parts = hidden.map((chip) => `${chip.count} ${chip.label}`);
+    return `${total} row${total === 1 ? "" : "s"} hidden (${parts.join(", ")}).`;
+}
+
+export interface ImpactEmptyState {
+    title: string;
+    hint: string;
+}
+
+/**
+ * First-run guidance shown in the report body before any replay has run, so a
+ * newcomer understands the A→B compare and how to start one.
+ */
+export function impactEmptyState(): ImpactEmptyState {
+    return {
+        title: "Compare two versions of an agent",
+        hint: "Choose an agent, set Base (A) and Compare (B), then Run replay to see how its actions differ between versions. Base defaults to HEAD and Compare to your working tree — ideal for catching regressions in uncommitted edits.",
+    };
+}
+
 /** One-line headline for a replay summary (reused from the command surface). */
 export function toImpactSummaryLine(summary: ReplaySummary): string {
     return formatReplaySummaryLine(summary);

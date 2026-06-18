@@ -10,6 +10,14 @@ body {
   margin: 0;
 }
 
+/* Class display rules (e.g. `.filters { display: flex }`) outrank the UA
+   `[hidden] { display: none }` by specificity, so an explicit rule is needed
+   for `el.hidden` to actually hide flex containers (the CSP forbids inline
+   `style=""`, so visibility is toggled via the hidden attribute). */
+[hidden] {
+  display: none !important;
+}
+
 .context-header {
   display: flex;
   align-items: center;
@@ -210,4 +218,58 @@ td.detail {
   color: var(--vscode-descriptionForeground);
   font-style: italic;
   margin-top: 8px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.filter-chip {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.filter-chip:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.filter-chip.is-active {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border-color: var(--vscode-badge-background);
+}
+
+.filter-chip.is-empty {
+  opacity: 0.5;
+}
+
+.empty-state {
+  border: 1px dashed var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 18px 16px;
+  margin-top: 12px;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
+}
+
+.empty-state-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.empty-state-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.5;
 }

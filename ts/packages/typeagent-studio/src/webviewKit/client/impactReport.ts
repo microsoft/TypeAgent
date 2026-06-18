@@ -23,6 +23,14 @@ import {
     toImpactComparisonLine,
     toImpactHeaderFields,
     toSideMethodLabel,
+    buildImpactFilterChips,
+    filterImpactRows,
+    defaultImpactFilters,
+    impactFilterNote,
+    impactEmptyState,
+    allRowsEqual,
+    type ImpactRow,
+    type ReplayRowStatus,
 } from "../replayViewModel.js";
 
 /** A completed result persisted so the report survives navigate-away/reload. */
@@ -63,6 +71,13 @@ let controlsAvailable = false;
 let repoName: string | undefined;
 // The last result rendered, so the header reflects its method/policy.
 let lastRenderedResult: StudioReplayResult | undefined;
+// Rows from the last rendered result and the run's true total, kept so the
+// status filter can re-render the table without re-fetching.
+let currentRows: ImpactRow[] = [];
+let currentTotal = 0;
+// Active status filter; defaults to differences-only so the report opens
+// focused on regressions rather than a wall of unchanged rows.
+const activeFilters = defaultImpactFilters();
 
 const root = document.getElementById("root")!;
 
@@ -105,9 +120,20 @@ toolbar.append(
 const summaryEl = el("div", "summary");
 const comparisonEl = el("div", "comparison");
 const bannerEl = el("div", "banner");
+const filtersEl = el("div", "filters");
+const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
 
-root.append(headerEl, toolbar, bannerEl, summaryEl, comparisonEl, tableWrap);
+root.append(
+    headerEl,
+    toolbar,
+    bannerEl,
+    summaryEl,
+    comparisonEl,
+    filtersEl,
+    emptyStateEl,
+    tableWrap,
+);
 
 setControlsEnabled(false);
 restoreSelection();
@@ -126,6 +152,7 @@ window.addEventListener("message", (event: MessageEvent) => {
             controlsAvailable = msg.connected && msg.agents.length > 0;
             setControlsEnabled(controlsAvailable);
             renderHeader();
+            renderEmptyState();
             setStatus(
                 msg.connected
                     ? msg.agents.length > 0
@@ -180,6 +207,10 @@ function runReplay(): void {
     comparisonEl.textContent = "";
     bannerEl.textContent = "";
     bannerEl.className = "banner";
+    filtersEl.textContent = "";
+    filtersEl.hidden = true;
+    emptyStateEl.hidden = true;
+    currentRows = [];
     tableWrap.textContent = "";
     vscode.postMessage({ type: "run", requestId, agent, versionA, versionB });
 }
@@ -197,9 +228,13 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     bannerEl.textContent = "";
     summaryEl.textContent = "";
     comparisonEl.textContent = "";
+    filtersEl.textContent = "";
+    filtersEl.hidden = true;
+    emptyStateEl.hidden = true;
     tableWrap.textContent = "";
     versionAInput.sub.textContent = "";
     versionBInput.sub.textContent = "";
+    currentRows = [];
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
@@ -228,9 +263,61 @@ function renderResult(result: StudioReplayResult, restored = false): void {
 
     summaryEl.textContent = toImpactSummaryLine(result.summary);
     comparisonEl.textContent = toImpactComparisonLine(result.summary);
-    const rows = toImpactRows(result.rows, result.methodA, result.methodB);
-    const shown = rows.length;
-    const total = result.summary.rowCount;
+
+    currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
+    currentTotal = result.summary.rowCount;
+
+    renderFilters();
+    renderTable();
+
+    const shown = currentRows.length;
+    setStatus(
+        restored
+            ? `Restored from last run — Run for live results (${shown} row(s)).`
+            : `Done — ${shown} row(s).`,
+    );
+}
+
+/** Paint the status filter chips for the rows of the current result. */
+function renderFilters(): void {
+    filtersEl.textContent = "";
+    const chips = buildImpactFilterChips(currentRows);
+    // Nothing to filter (no rows, or an error/empty run) — keep the bar hidden.
+    if (currentRows.length === 0) {
+        filtersEl.hidden = true;
+        return;
+    }
+    filtersEl.hidden = false;
+    for (const chip of chips) {
+        const button = document.createElement("button");
+        button.type = "button";
+        const isActive = activeFilters.has(chip.status);
+        const classes = ["filter-chip"];
+        if (isActive) classes.push("is-active");
+        if (chip.count === 0) classes.push("is-empty");
+        button.className = classes.join(" ");
+        button.setAttribute("aria-pressed", String(isActive));
+        button.textContent = `${chip.label} ${chip.count}`;
+        button.addEventListener("click", () => toggleFilter(chip.status));
+        filtersEl.appendChild(button);
+    }
+}
+
+/** Toggle one status in the active filter and re-render the table in place. */
+function toggleFilter(status: ReplayRowStatus): void {
+    if (activeFilters.has(status)) {
+        activeFilters.delete(status);
+    } else {
+        activeFilters.add(status);
+    }
+    renderFilters();
+    renderTable();
+}
+
+/** Build the rows table from `currentRows`, honouring the active filter. */
+function renderTable(): void {
+    tableWrap.textContent = "";
+    const rows = filterImpactRows(currentRows, activeFilters);
 
     const table = document.createElement("table");
     const head = document.createElement("tr");
@@ -250,20 +337,51 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     }
     tableWrap.appendChild(table);
 
-    if (shown < total) {
-        const note = el("div", "truncation");
-        note.textContent = `Showing first ${shown} of ${total} rows.`;
-        tableWrap.appendChild(note);
-    } else if (shown === 0) {
+    const chips = buildImpactFilterChips(currentRows);
+    if (rows.length === 0) {
+        // Distinguish "filtered everything out" from a genuinely all-equal run
+        // (the happy path of the regression journey: nothing changed).
         const empty = el("div", "truncation");
-        empty.textContent = "No corpus rows replayed.";
+        empty.textContent = allRowsEqual(currentRows)
+            ? `No differences — all ${currentRows.length} row(s) are equal between A and B.`
+            : "No rows match the active filter.";
         tableWrap.appendChild(empty);
+    } else {
+        const hiddenNote = impactFilterNote(chips, activeFilters);
+        if (hiddenNote) {
+            const note = el("div", "truncation");
+            note.textContent = hiddenNote;
+            tableWrap.appendChild(note);
+        }
     }
-    setStatus(
-        restored
-            ? `Restored from last run — Run for live results (${shown} row(s)).`
-            : `Done — ${shown} row(s).`,
-    );
+
+    // The host may cap the rows it sends; chips count the received rows, so a
+    // separate note reports the run's true total when it was truncated.
+    if (currentRows.length < currentTotal) {
+        const note = el("div", "truncation");
+        note.textContent = `Showing first ${currentRows.length} of ${currentTotal} rows.`;
+        tableWrap.appendChild(note);
+    }
+}
+
+/**
+ * First-run guidance: shown only before any replay has run and once the
+ * controls are usable, so a newcomer knows what the report does and how to
+ * start. Hidden the moment a run starts or a result/error arrives.
+ */
+function renderEmptyState(): void {
+    if (lastRenderedResult || !controlsAvailable) {
+        emptyStateEl.hidden = true;
+        return;
+    }
+    emptyStateEl.textContent = "";
+    const state = impactEmptyState();
+    const title = el("div", "empty-state-title");
+    title.textContent = state.title;
+    const hint = el("div", "empty-state-hint");
+    hint.textContent = state.hint;
+    emptyStateEl.append(title, hint);
+    emptyStateEl.hidden = false;
 }
 
 /** Render the provenance band (`repo · agent · method · …`) from what we know. */

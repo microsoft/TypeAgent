@@ -14,6 +14,14 @@ import {
     toImpactComparisonLine,
     toImpactHeaderFields,
     toSideMethodLabel,
+    buildImpactFilterChips,
+    filterImpactRows,
+    defaultImpactFilters,
+    impactFilterNote,
+    impactEmptyState,
+    allRowsEqual,
+    IMPACT_FILTER_ORDER,
+    type ReplayRowStatus,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -237,4 +245,85 @@ test("toImpactHeaderFields labels a construction-cache run", () => {
     });
     assert.equal(headerValue(fields, "method"), "construction cache");
     assert.ok(/cache/i.test(headerValue(fields, "fidelity")!));
+});
+
+// A spread of every status for the filter helpers: 2 equal, 1 each of the
+// three difference kinds.
+function mixedRows() {
+    return toImpactRows([
+        row({ equal: true, utteranceId: "e1" }),
+        row({ equal: true, utteranceId: "e2" }),
+        row({ equal: false, actionA: {}, actionB: {}, utteranceId: "c1" }),
+        row({ equal: false, actionB: {}, utteranceId: "n1" }),
+        row({ equal: false, actionA: {}, utteranceId: "l1" }),
+    ]);
+}
+
+test("buildImpactFilterChips counts each status in fixed order", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    assert.deepEqual(
+        chips.map((c) => c.status),
+        IMPACT_FILTER_ORDER,
+    );
+    const byStatus = new Map(chips.map((c) => [c.status, c.count]));
+    assert.equal(byStatus.get("equal"), 2);
+    assert.equal(byStatus.get("changed"), 1);
+    assert.equal(byStatus.get("new-match"), 1);
+    assert.equal(byStatus.get("lost-match"), 1);
+    // Every chip carries a non-empty human label.
+    assert.ok(chips.every((c) => c.label.length > 0));
+});
+
+test("defaultImpactFilters hides equal rows so the report opens on differences", () => {
+    const active = defaultImpactFilters();
+    assert.ok(!active.has("equal"));
+    assert.ok(active.has("changed"));
+    assert.ok(active.has("new-match"));
+    assert.ok(active.has("lost-match"));
+    const shown = filterImpactRows(mixedRows(), active);
+    assert.equal(shown.length, 3);
+    assert.ok(shown.every((r) => r.status !== "equal"));
+});
+
+test("filterImpactRows keeps only rows whose status is active", () => {
+    const active = new Set<ReplayRowStatus>(["lost-match"]);
+    const shown = filterImpactRows(mixedRows(), active);
+    assert.equal(shown.length, 1);
+    assert.equal(shown[0].status, "lost-match");
+});
+
+test("impactFilterNote describes the non-empty hidden statuses", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    const note = impactFilterNote(chips, defaultImpactFilters());
+    // The 2 equal rows are hidden by default.
+    assert.ok(note);
+    assert.ok(/2 rows hidden/.test(note!));
+    assert.ok(/equal/.test(note!));
+});
+
+test("impactFilterNote is silent when nothing with rows is hidden", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    const all = new Set<ReplayRowStatus>(IMPACT_FILTER_ORDER);
+    assert.equal(impactFilterNote(chips, all), undefined);
+});
+
+test("allRowsEqual is true only when every row is equal", () => {
+    assert.ok(
+        allRowsEqual(
+            toImpactRows([
+                row({ equal: true, utteranceId: "e1" }),
+                row({ equal: true, utteranceId: "e2" }),
+            ]),
+        ),
+    );
+    assert.ok(!allRowsEqual(mixedRows()));
+    // An empty set is not "all equal" — there's simply nothing to compare.
+    assert.ok(!allRowsEqual([]));
+});
+
+test("impactEmptyState gives first-run guidance", () => {
+    const state = impactEmptyState();
+    assert.ok(state.title.length > 0);
+    assert.ok(/base/i.test(state.hint));
+    assert.ok(/compare/i.test(state.hint));
 });
