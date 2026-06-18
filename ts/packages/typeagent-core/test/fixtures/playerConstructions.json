@@ -3,133 +3,85 @@
   "explainerName": "v5",
   "matchSets": [
     {
-      "matches": [
-        "can you",
-        "could you",
-        "would you",
-        "will you"
-      ],
+      "matches": ["can you", "could you", "would you", "will you"],
       "basename": "politeness",
       "canBeMerged": false,
       "index": 0
     },
     {
-      "matches": [
-        "pause"
-      ],
+      "matches": ["pause"],
       "basename": "M:action",
       "namespace": "player.pause::fullActionName",
       "canBeMerged": false,
       "index": 1
     },
     {
-      "matches": [
-        "please",
-        "kindly",
-        "if you don't mind",
-        "if you could"
-      ],
+      "matches": ["please", "kindly", "if you don't mind", "if you could"],
       "basename": "politeness",
       "canBeMerged": false,
       "index": 2
     },
     {
-      "matches": [
-        "the music",
-        "the song",
-        "the track",
-        "the audio"
-      ],
+      "matches": ["the music", "the song", "the track", "the audio"],
       "basename": "object",
       "canBeMerged": false,
       "index": 3
     },
     {
-      "matches": [
-        "play"
-      ],
+      "matches": ["play"],
       "basename": "M:action",
       "namespace": "player.playTrack::fullActionName",
       "canBeMerged": false,
       "index": 4
     },
     {
-      "matches": [
-        "nocturne",
-        "fur elise",
-        "moonlight sonata",
-        "clair de lune"
-      ],
+      "matches": ["nocturne", "fur elise", "moonlight sonata", "clair de lune"],
       "basename": "M:trackName",
       "namespace": "player::parameters.trackName",
       "canBeMerged": false,
       "index": 5
     },
     {
-      "matches": [
-        "by"
-      ],
+      "matches": ["by"],
       "basename": "preposition",
       "canBeMerged": false,
       "index": 6
     },
     {
-      "matches": [
-        "chopin",
-        "beethoven",
-        "mozart",
-        "debussy"
-      ],
+      "matches": ["chopin", "beethoven", "mozart", "debussy"],
       "basename": "M:artist",
       "namespace": "player::parameters.artists.0",
       "canBeMerged": false,
       "index": 7
     },
     {
-      "matches": [
-        "thank you",
-        "i would appreciate it"
-      ],
+      "matches": ["thank you", "i would appreciate it"],
       "basename": "politeness",
       "canBeMerged": false,
       "index": 8
     },
     {
-      "matches": [
-        "play"
-      ],
+      "matches": ["play"],
       "basename": "M:action",
       "namespace": "player.playArtist::fullActionName",
       "canBeMerged": false,
       "index": 9
     },
     {
-      "matches": [
-        "some"
-      ],
+      "matches": ["some"],
       "basename": "filler",
       "canBeMerged": false,
       "index": 10
     },
     {
-      "matches": [
-        "bach",
-        "mozart",
-        "beethoven",
-        "chopin"
-      ],
+      "matches": ["bach", "mozart", "beethoven", "chopin"],
       "basename": "M:artist",
       "namespace": "player::parameters.artist",
       "canBeMerged": false,
       "index": 11
     },
     {
-      "matches": [
-        "for me",
-        "for us",
-        "for them",
-        "for everyone"
-      ],
+      "matches": ["for me", "for us", "for them", "for everyone"],
       "basename": "politeness",
       "canBeMerged": false,
       "index": 12
