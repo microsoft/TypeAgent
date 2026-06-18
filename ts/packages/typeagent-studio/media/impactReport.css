@@ -90,8 +90,18 @@ body {
 
 .version-field {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+}
+
+.version-method {
+  flex-basis: 100%;
+  text-align: right;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-style: italic;
+  min-height: 13px;
 }
 
 .version-label {

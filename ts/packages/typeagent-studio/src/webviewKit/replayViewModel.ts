@@ -12,6 +12,7 @@
 
 import type {
     ActionDelta,
+    ReplayCacheState,
     ReplayMissPolicy,
     ReplaySummary,
     VersionSpec,
@@ -49,19 +50,47 @@ function collapse(text: string, max = 120): string {
     return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s;
 }
 
-export function toImpactRow(row: ActionDelta): ImpactRow {
+/**
+ * The per-side resolution token for the Detail column. On a construction-cache
+ * side the raw `hit`/`miss` is ambiguous (both can resolve an action), so we
+ * spell out the source: a `hit` was served from the construction cache, a
+ * `miss` fell through to the grammar. Other sides keep the raw cache state.
+ */
+function sideToken(
+    state: ReplayCacheState,
+    method: StudioReplayMethod | undefined,
+): string {
+    if (method === "construction-cache") {
+        if (state === "hit") return "hit\u00b7cache";
+        if (state === "miss") return "miss\u00b7grammar";
+    }
+    return state;
+}
+
+export function toImpactRow(
+    row: ActionDelta,
+    methodA?: StudioReplayMethod,
+    methodB?: StudioReplayMethod,
+): ImpactRow {
     const status = classifyReplayRow(row);
     return {
         status,
         statusLabel: STATUS_LABEL[status],
         utterance: collapse(row.utterance),
-        detail: `A:${row.cacheStateA} B:${row.cacheStateB} \u00b7 ${row.latencyA}/${row.latencyB}ms`,
+        detail: `A:${sideToken(row.cacheStateA, methodA)} B:${sideToken(
+            row.cacheStateB,
+            methodB,
+        )} \u00b7 ${row.latencyA}/${row.latencyB}ms`,
         utteranceId: row.utteranceId,
     };
 }
 
-export function toImpactRows(rows: ActionDelta[]): ImpactRow[] {
-    return rows.map(toImpactRow);
+export function toImpactRows(
+    rows: ActionDelta[],
+    methodA?: StudioReplayMethod,
+    methodB?: StudioReplayMethod,
+): ImpactRow[] {
+    return rows.map((row) => toImpactRow(row, methodA, methodB));
 }
 
 /** One-line headline for a replay summary (reused from the command surface). */
@@ -75,6 +104,8 @@ const METHOD_NOTE: Record<StudioReplayMethod, string | undefined> = {
         "Static grammar replay \u2014 utterances are matched against the agent's compiled grammar only (no construction cache or dispatcher), so results are indicative, not authoritative.",
     "schema-grammar":
         "Schema-enriched grammar replay \u2014 the agent's grammar was enriched with checked-variable metadata from its action schema and matched through the real grammar store. Still no construction cache or wildcard-value validation, so results are indicative, not authoritative.",
+    "construction-cache":
+        "Construction-cache replay \u2014 the live working-tree side consulted the agent's real per-session construction cache (hash-gated to the current schema, exactly as the dispatcher gates it) before falling back to the schema-enriched grammar. Cache hits reflect what the dispatcher would serve from cache; everything else is still grammar-matched (indicative). The cache is consulted for the working tree only, never at a git ref.",
 };
 
 /**
@@ -140,13 +171,26 @@ const METHOD_LABEL: Record<StudioReplayMethod, string> = {
     identity: "identity",
     "static-grammar": "static grammar",
     "schema-grammar": "schema-enriched grammar",
+    "construction-cache": "construction cache",
 };
 
 const FIDELITY_LABEL: Record<StudioReplayMethod, string> = {
     identity: "baseline (no grammar diff)",
     "static-grammar": "indicative",
     "schema-grammar": "indicative (schema-enriched)",
+    "construction-cache": "faithful cache hits, indicative grammar",
 };
+
+/**
+ * Short label for how a single A/B side resolved, rendered under that side's
+ * version field. The construction cache is live-only, so a git ref reads
+ * `schema-enriched grammar`/`static grammar` while only a working-tree side can
+ * show `construction cache` — making the asymmetry explicit instead of letting
+ * the single run-level method chip imply the cache served both sides.
+ */
+export function toSideMethodLabel(method: StudioReplayMethod): string {
+    return METHOD_LABEL[method];
+}
 
 /**
  * The provenance band shown above the controls: what this report pertains to

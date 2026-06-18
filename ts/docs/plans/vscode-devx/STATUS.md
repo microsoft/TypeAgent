@@ -22,11 +22,11 @@ than an in-memory stand-in.
 | Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks                     | ✅ status bar                                                      | ❌ no real schema parse / grammar compile                                | ✅     |
 | Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json`       | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                                            | ✅     |
 | Feedback (thumbs up/down → corpus)                             | ✅                                                 | ✅ command                                                         | n/a                                                                      | ✅     |
-| Replay / compare engine                                        | ✅ static-grammar & schema-enriched (L1) resolvers | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar-level (L1); no construction cache / two-version build (L2–L4) | ✅     |
+| Replay / compare engine                                        | ✅ static-grammar, schema-enriched (L1) & construction-cache (L2) resolvers | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar + live construction cache (L1–L2); no two-version build (L3–L4) | ✅     |
 | Onboarding bridge (snapshot/restore, stale detection)          | ✅                                                 | ✅ commands                                                        | ❌ in-memory bridge                                                      | ✅     |
 | Repo-root detection (find `packages/agents`)                   | ✅                                                 | ✅ warn toast + status bar                                         | n/a                                                                      | ✅     |
 | Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                 | ✅ singleton-panel host                                            | —                                                                        | ✅     |
-| Impact Report webview                                          | ✅ `replayCorpus` over channel                     | ✅ context header, A/B controls, durable state                     | 🟡 grammar-level replay (L1)                                             | ✅     |
+| Impact Report webview                                          | ✅ `replayCorpus` over channel                     | ✅ context header, A/B controls, durable state                     | 🟡 grammar + construction-cache replay (L1–L2)                          | ✅     |
 | Player corpus capture                                          | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
 | Schema Studio                                                  | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
 | Live Trace                                                     | ❌                                                 | ❌                                                                 | ❌                                                                       | ❌     |
@@ -41,13 +41,20 @@ Impact Report) is **progressing but not yet closed**:
   builder, singleton-panel host, typed host↔webview protocol, browser-neutral
   replay view model) and the Impact Report webview are built and tested — the
   foundation Schema Studio, Wizard, Trace, and Live Trace will reuse.
-- **Replay has climbed the fidelity ladder to L1.** Beyond the original identity
-  resolver, replay now runs **static-grammar** matching and **schema-enriched
+- **Replay has climbed the fidelity ladder to L2.** Beyond the original identity
+  resolver, replay now runs **static-grammar** matching, **schema-enriched
   grammar** matching (L1: the agent's grammar is enriched with checked-variable
-  metadata from its action schema and matched through the real `GrammarStore`).
-  Results are still indicative, not authoritative — **L2–L4** (construction
-  cache, deterministic dispatch, build-from-git-ref two-version sandboxes)
-  remain, and there is no git-worktree build of two versions yet.
+  metadata from its action schema and matched through the real `GrammarStore`),
+  and a **live construction-cache consult** (L2: the working-tree side checks the
+  agent's real per-session construction cache first — the dispatcher's actual
+  first step — hash-gated to the current schema exactly as the dispatcher gates
+  it, so a schema edit invalidates the cached constructions rather than reporting
+  a phantom hit). The construction cache is consulted for the **working tree
+  only** (caches are runtime artifacts, never committed / never read at a git
+  ref) and degrades cleanly to L1 when no live cache is found or it has gone
+  stale. Results are still indicative for grammar-resolved rows — **L3–L4**
+  (deterministic dispatch, build-from-git-ref two-version sandboxes) remain, and
+  there is no git-worktree build of two versions yet.
 - **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
   it; without capture the Impact Report would have no real labelled corpus.
 - **Health gives false confidence.** It does not run the schema parser or
@@ -62,10 +69,15 @@ Impact Report) is **progressing but not yet closed**:
   launch controls, durable state across navigate-away/back, and run-error
   surfacing.
 - Replay fidelity: a **static-grammar** resolver (real needs-explanation path;
-  ships `builtInEntities.agr` in the bundle) and a **schema-enriched grammar**
+  ships `builtInEntities.agr` in the bundle), a **schema-enriched grammar**
   resolver (L1 — schema `checked_wildcard`/param metadata projected onto the
   grammar, matched through the real `GrammarStore`; graceful fallback to
-  static-grammar when the schema can't be discovered).
+  static-grammar when the schema can't be discovered), and a **construction-cache
+  layer** (L2 — the live working-tree side consults the agent's real per-session
+  construction cache before the grammar; faithful to the completion-based
+  dispatcher's construction-store-first path, hash-gated to the working-tree
+  schema; a cache hit is reported distinctly from a grammar-resolved `miss`, and
+  the layer degrades to L1 when the cache is absent or stale).
 - Connection-aware UX: Corpora / Event Log / Collisions views show "Connect to
   Studio service" welcome content when the service is down (mirroring
   Sandboxes); the corpus tree auto-refreshes on in-repo capture; clearer

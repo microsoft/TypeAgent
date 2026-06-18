@@ -22,6 +22,7 @@ import {
     toImpactErrorLine,
     toImpactComparisonLine,
     toImpactHeaderFields,
+    toSideMethodLabel,
 } from "../replayViewModel.js";
 
 /** A completed result persisted so the report survives navigate-away/reload. */
@@ -197,6 +198,8 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     summaryEl.textContent = "";
     comparisonEl.textContent = "";
     tableWrap.textContent = "";
+    versionAInput.sub.textContent = "";
+    versionBInput.sub.textContent = "";
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
@@ -218,9 +221,14 @@ function renderResult(result: StudioReplayResult, restored = false): void {
         bannerEl.textContent = "";
     }
 
+    // Per-side method under each version field: a git ref can never consult the
+    // live construction cache, so this makes the A/B asymmetry explicit.
+    versionAInput.sub.textContent = toSideMethodLabel(result.methodA);
+    versionBInput.sub.textContent = toSideMethodLabel(result.methodB);
+
     summaryEl.textContent = toImpactSummaryLine(result.summary);
     comparisonEl.textContent = toImpactComparisonLine(result.summary);
-    const rows = toImpactRows(result.rows);
+    const rows = toImpactRows(result.rows, result.methodA, result.methodB);
     const shown = rows.length;
     const total = result.summary.rowCount;
 
@@ -393,7 +401,7 @@ function versionField(
     label: string,
     value: string,
     placeholder: string,
-): { wrap: HTMLElement; input: HTMLInputElement } {
+): { wrap: HTMLElement; input: HTMLInputElement; sub: HTMLElement } {
     const wrap = el("label", "version-field");
     const text = document.createElement("span");
     text.className = "version-label";
@@ -412,6 +420,12 @@ function versionField(
             runReplay();
         }
     });
-    wrap.append(text, input);
-    return { wrap, input };
+    // Filled in after a run with how this side actually resolved (e.g.
+    // "construction cache" vs "schema-enriched grammar"), so the per-side
+    // method is visible right under the field rather than collapsed into the
+    // single run-level chip.
+    const sub = el("span", "version-method");
+    sub.textContent = "";
+    wrap.append(text, input, sub);
+    return { wrap, input, sub };
 }

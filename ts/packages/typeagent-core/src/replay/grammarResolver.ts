@@ -59,6 +59,11 @@ import {
 import type { CorpusEntry } from "../corpus/types.js";
 import type { VersionSpec } from "./types.js";
 import type { ReplayActionResolver, ReplayAgentResolution } from "./engine.js";
+import { normalizeAction } from "./replayActionShape.js";
+import type {
+    ConstructionCacheLayer,
+    ConstructionCacheStatus,
+} from "./constructionCacheResolver.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -145,6 +150,19 @@ export interface GrammarReplaySchema {
      * (`playerSchema.json`); without it enrichment finds no checked variables.
      */
     paramSpecConfigPath?: string;
+    /**
+     * The manifest's raw `schema.schemaType` object (`{ action, entity? }`),
+     * captured verbatim so the L2 construction-cache hash gate can reproduce the
+     * dispatcher's `JSON.stringify(schemaType)` byte-for-byte (key order matters).
+     */
+    schemaType: Record<string, unknown>;
+    /**
+     * Absolute path to the manifest's built `schemaFile` (`.pas.json`) when the
+     * manifest declares one. The dispatcher hashes this artifact (with no sidecar
+     * config) in preference to the `.ts` source; absent when the manifest has no
+     * `schemaFile` (then the `.ts` source + sidecar config are hashed instead).
+     */
+    builtSchemaFilePath?: string;
 }
 
 export interface CreateGrammarReplayResolverOptions {
@@ -153,6 +171,14 @@ export interface CreateGrammarReplayResolverOptions {
     repoRoot?: string;
     /** Clock injection for deterministic latency in tests. */
     now?: () => number;
+    /**
+     * Live construction-cache layer (L2). When provided and `valid`, the
+     * **working-tree** side consults it before the grammar so a construction
+     * `hit` is reported distinctly from a grammar-only resolution (`miss`).
+     * Only the working-tree side uses it — construction caches are never read at
+     * a git ref. A `stale`/`absent` layer leaves behavior at L1.
+     */
+    constructionCache?: ConstructionCacheLayer;
 }
 
 /**
@@ -174,6 +200,12 @@ export interface GrammarReplayResolver extends ReplayActionResolver {
      * (`"schema-grammar"` vs `"static-grammar"`).
      */
     readonly enriched: boolean;
+    /**
+     * Status of the live construction-cache layer (L2), or `undefined` when no
+     * layer was supplied. `"valid"` drives the `"construction-cache"` method
+     * label; `"stale"`/`"absent"` fall back to the grammar method label.
+     */
+    readonly constructionCacheStatus: ConstructionCacheStatus | undefined;
 }
 
 let entitiesRegistered = false;
@@ -326,46 +358,10 @@ async function buildGrammar(
 
 /**
  * Normalize a resolved grammar-store action into a comparable action shape.
- *
- * `GrammarStoreImpl.match(...)` returns `MatchResult[]` whose `match` is a
- * `RequestAction`; the underlying action lives at `actions[0].action` as
- * `{ schemaName, actionName, parameters? }`. Two adjustments make A/B comparison
- * (and Impact Report display) correct:
- *  - re-stamp `schemaName` so the action mirrors the configured target schema;
- *  - canonicalize empty `parameters`: the grammar evaluator omits the field when
- *    empty, but mixed sources may carry `{}`; `actionsEqual` is strict on key
- *    counts, so `{}` must be treated as omitted.
- *
- * Returns `undefined` when the value is not an action object (treated as a miss
- * → `needs-explanation`).
+ * Re-exported from {@link normalizeAction} (shared with the L2 construction-cache
+ * layer) under the original name for back-compat with existing imports/tests.
  */
-export function normalizeGrammarAction(
-    schemaName: string,
-    raw: unknown,
-): Record<string, unknown> | undefined {
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-        return undefined;
-    }
-    const r = raw as Record<string, unknown>;
-    if (typeof r.actionName !== "string") {
-        return undefined;
-    }
-    const action: Record<string, unknown> = {
-        schemaName,
-        actionName: r.actionName,
-    };
-    const params = r.parameters;
-    if (
-        params !== undefined &&
-        params !== null &&
-        typeof params === "object" &&
-        !Array.isArray(params) &&
-        Object.keys(params as Record<string, unknown>).length > 0
-    ) {
-        action.parameters = params;
-    }
-    return action;
-}
+export { normalizeAction as normalizeGrammarAction };
 
 /** Pull the underlying action object out of the top-ranked grammar-store match. */
 function topMatchAction(results: MatchResult[]): unknown {
@@ -386,6 +382,11 @@ export function createGrammarReplayResolver(
 ): GrammarReplayResolver {
     const { target } = opts;
     const now = opts.now ?? (() => Date.now());
+    const constructionCache = opts.constructionCache;
+    // Construction-cache consult is faithful to the dispatcher only for the live
+    // working tree, and only when the cache's namespace hash still matches.
+    const constructionActive =
+        constructionCache !== undefined && constructionCache.status === "valid";
     // Memoize the compiled store per side: A built once, B built once. Safe to
     // key on side because the engine always calls resolve(_, versionA, "A") and
     // resolve(_, versionB, "B") within a single run.
@@ -412,6 +413,10 @@ export function createGrammarReplayResolver(
             return runEnriched;
         },
 
+        get constructionCacheStatus(): ConstructionCacheStatus | undefined {
+            return constructionCache?.status;
+        },
+
         async prepare(versionA, versionB): Promise<void> {
             // Build A then B so the first failure (by side) is the one reported.
             const a = await build(versionA, "A");
@@ -429,6 +434,25 @@ export function createGrammarReplayResolver(
                 entry.feedback !== undefined
                     ? { feedback: entry.feedback }
                     : {};
+
+            // L2: on the working-tree side, consult the live construction cache
+            // first — the dispatcher's real first check. A construction hit is a
+            // genuine cache `hit`; everything the cache doesn't resolve falls
+            // through to the grammar path below and is reported as a `miss`
+            // (deterministically resolvable, but not served from the cache).
+            const useConstruction =
+                constructionActive && version.kind === "workingTree";
+            if (useConstruction) {
+                const cacheAction = constructionCache!.match(entry.utterance);
+                if (cacheAction !== undefined) {
+                    return {
+                        action: cacheAction,
+                        cacheState: "hit",
+                        latencyMs: now() - t0,
+                        ...feedback,
+                    };
+                }
+            }
 
             let g: BuiltGrammar;
             try {
@@ -448,7 +472,7 @@ export function createGrammarReplayResolver(
             const latencyMs = now() - t0;
             const action =
                 results.length > 0
-                    ? normalizeGrammarAction(
+                    ? normalizeAction(
                           target.schemaName,
                           topMatchAction(results),
                       )
@@ -461,7 +485,12 @@ export function createGrammarReplayResolver(
                     ...feedback,
                 };
             }
-            return { action, cacheState: "hit", latencyMs, ...feedback };
+            // When the live construction cache is in play, a grammar-only
+            // resolution is reported as a `miss` (not in the cache) to keep the
+            // working-tree side's cache states faithful; otherwise it is a plain
+            // grammar `hit` (L1 semantics, unchanged).
+            const cacheState = useConstruction ? "miss" : "hit";
+            return { action, cacheState, latencyMs, ...feedback };
         },
     };
 }
@@ -498,6 +527,7 @@ export async function resolveGrammarReplayTarget(
 interface ManifestForSchema {
     schema?: {
         originalSchemaFile?: string;
+        schemaFile?: string;
         schemaType?: { action?: string; entity?: string };
     };
     subActionManifests?: Record<string, unknown>;
@@ -565,11 +595,42 @@ async function discoverSchemaTarget(
     const hasConfig = await isFile(configPath);
 
     const entityTypeName = manifest.schema?.schemaType?.entity;
+
+    // Capture the L2 hash inputs: the raw schemaType object (for a byte-faithful
+    // JSON.stringify) and the built `.pas.json` artifact path when the manifest
+    // declares one (the dispatcher hashes the built schema in preference to the
+    // `.ts` source, with no sidecar config).
+    const schemaType: Record<string, unknown> = {
+        ...(manifest.schema?.schemaType as Record<string, unknown> | undefined),
+    };
+    const declaredSchemaFile = manifest.schema?.schemaFile;
+    let builtSchemaFilePath: string | undefined;
+    // Only a *built* `.pas.json` artifact is hashed with no sidecar config (as
+    // the dispatcher does). A `.ts` `schemaFile` is hashed from source *with*
+    // its paramSpec config, which the sourceFilePath + paramSpecConfigPath path
+    // below already reproduces — so leaving builtSchemaFilePath unset for a
+    // non-`.pas.json` schemaFile keeps the hash faithful instead of silently
+    // mismatching (which would disable L2 for that agent).
+    if (
+        typeof declaredSchemaFile === "string" &&
+        declaredSchemaFile.endsWith(".pas.json")
+    ) {
+        const resolved = path.resolve(
+            path.dirname(manifestFile),
+            declaredSchemaFile,
+        );
+        if (await isFile(resolved)) {
+            builtSchemaFilePath = resolved;
+        }
+    }
+
     return {
         sourceFilePath,
         actionTypeName,
         ...(typeof entityTypeName === "string" ? { entityTypeName } : {}),
         ...(hasConfig ? { paramSpecConfigPath: configPath } : {}),
+        schemaType,
+        ...(builtSchemaFilePath !== undefined ? { builtSchemaFilePath } : {}),
     };
 }
 

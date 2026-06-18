@@ -43,6 +43,8 @@ export class StudioServiceClient {
         private readonly repoRoot: string | undefined,
         private readonly endpoint: string,
         private readonly token: string | undefined,
+        /** Resolved heartbeat period; re-applied on every reconnect. `0` off. */
+        private readonly heartbeatMs: number,
     ) {}
 
     /**
@@ -90,9 +92,8 @@ export class StudioServiceClient {
         if (options.onClose) {
             socket.on("close", options.onClose);
         }
-        attachClientHeartbeat(socket, {
-            intervalMs: options.heartbeatMs ?? 10_000,
-        });
+        const heartbeatMs = options.heartbeatMs ?? 10_000;
+        attachClientHeartbeat(socket, { intervalMs: heartbeatMs });
         const callHandlers: StudioClientCallFunctions = {
             studioEvent: (event: StudioEvent) => options.onEvent?.(event),
         };
@@ -114,6 +115,7 @@ export class StudioServiceClient {
             options.repoRoot,
             options.endpoint,
             options.token,
+            heartbeatMs,
         );
     }
 
@@ -133,6 +135,13 @@ export class StudioServiceClient {
         }
         const socket = attempt.socket;
         socket.on("close", onClose);
+        // Re-arm liveness on the fresh socket: without this the ping/pong
+        // watchdog would exist only for the first socket, so every reconnect
+        // after the first drop would again be unable to detect a silently
+        // half-open peer — the exact stale-"connected" failure the heartbeat
+        // was added to fix. The previous socket's heartbeat self-stops on its
+        // own `close`, so this re-attaches rather than leaks.
+        attachClientHeartbeat(socket, { intervalMs: this.heartbeatMs });
         this.rpc.rebind(createWebSocketRpcChannel(socket));
         this.socket = socket;
         return true;

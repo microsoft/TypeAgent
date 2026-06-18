@@ -13,6 +13,7 @@ import {
     describeVersion,
     toImpactComparisonLine,
     toImpactHeaderFields,
+    toSideMethodLabel,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -56,6 +57,53 @@ test("toImpactRows collapses long utterances", () => {
     assert.ok(r.utterance.endsWith("\u2026"));
 });
 
+test("toImpactRows tags cache-served and grammar fall-through on the construction-cache side", () => {
+    // A → HEAD (schema grammar), B → working tree (construction cache).
+    const rows = toImpactRows(
+        [
+            row({ cacheStateA: "hit", cacheStateB: "hit" }), // B served from cache
+            row({
+                cacheStateA: "hit",
+                cacheStateB: "miss",
+                utteranceId: "u2",
+            }), // B fell through to grammar
+            row({
+                cacheStateA: "needs-explanation",
+                cacheStateB: "hit",
+                utteranceId: "u3",
+            }), // new match the cache resolves
+        ],
+        "schema-grammar",
+        "construction-cache",
+    );
+    // The cache side spells out the source; the grammar side stays raw.
+    assert.equal(rows[0].detail, "A:hit B:hit\u00b7cache \u00b7 10/12ms");
+    assert.equal(rows[1].detail, "A:hit B:miss\u00b7grammar \u00b7 10/12ms");
+    assert.equal(
+        rows[2].detail,
+        "A:needs-explanation B:hit\u00b7cache \u00b7 10/12ms",
+    );
+});
+
+test("toImpactRows leaves tokens raw when neither side ran the construction cache", () => {
+    const [r] = toImpactRows(
+        [row({ cacheStateA: "hit", cacheStateB: "hit" })],
+        "schema-grammar",
+        "schema-grammar",
+    );
+    assert.equal(r.detail, "A:hit B:hit \u00b7 10/12ms");
+});
+
+test("toSideMethodLabel gives a short per-side label", () => {
+    assert.equal(toSideMethodLabel("construction-cache"), "construction cache");
+    assert.equal(
+        toSideMethodLabel("schema-grammar"),
+        "schema-enriched grammar",
+    );
+    assert.equal(toSideMethodLabel("static-grammar"), "static grammar");
+    assert.equal(toSideMethodLabel("identity"), "identity");
+});
+
 test("toImpactSummaryLine renders a headline", () => {
     const summary = {
         runId: "r1",
@@ -84,6 +132,16 @@ test("toImpactMethodNote labels static-grammar but stays silent for identity", (
     assert.ok(/static grammar/i.test(note!));
     // Make the caveat explicit so results aren't read as authoritative dispatch.
     assert.ok(/indicative/i.test(note!));
+});
+
+test("toImpactMethodNote explains the construction-cache method (L2)", () => {
+    const note = toImpactMethodNote("construction-cache");
+    assert.ok(note);
+    assert.ok(/construction[- ]cache/i.test(note!));
+    // The honest caveats: cache hits are faithful, the rest is indicative grammar,
+    // and the cache is consulted for the working tree only.
+    assert.ok(/working tree/i.test(note!));
+    assert.ok(/git ref/i.test(note!));
 });
 
 test("toImpactErrorLine names the failed side and ref", () => {
@@ -168,4 +226,15 @@ test("toImpactHeaderFields labels the identity baseline distinctly", () => {
     const fields = toImpactHeaderFields({ method: "identity" });
     assert.equal(headerValue(fields, "method"), "identity");
     assert.ok(/baseline/i.test(headerValue(fields, "fidelity")!));
+});
+
+test("toImpactHeaderFields labels a construction-cache run", () => {
+    const fields = toImpactHeaderFields({
+        repo: "TypeAgent",
+        agent: "player",
+        method: "construction-cache",
+        missPolicy: "needs-explanation",
+    });
+    assert.equal(headerValue(fields, "method"), "construction cache");
+    assert.ok(/cache/i.test(headerValue(fields, "fidelity")!));
 });

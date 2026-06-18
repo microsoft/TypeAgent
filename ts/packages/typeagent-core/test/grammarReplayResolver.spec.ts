@@ -19,6 +19,7 @@ import {
     ReplayVersionBuildError,
     type GrammarReplayTarget,
 } from "../src/replay/grammarResolver.js";
+import type { ConstructionCacheLayer } from "../src/replay/constructionCacheResolver.js";
 
 const GRAMMAR_V1 = [
     "<Start> = <Pause> | <Resume>;",
@@ -153,6 +154,124 @@ describe("createGrammarReplayResolver (working tree)", () => {
         await expect(
             resolver.prepare({ kind: "workingTree" }, { kind: "workingTree" }),
         ).rejects.toBeInstanceOf(ReplayVersionBuildError);
+    });
+});
+
+describe("createGrammarReplayResolver (construction-cache layer, L2)", () => {
+    let dir: string;
+    let grammarPath: string;
+
+    beforeEach(() => {
+        dir = tempDir();
+        grammarPath = path.join(dir, "schema.agr");
+        writeFileSync(grammarPath, GRAMMAR_V1, "utf8");
+    });
+
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    // A valid layer that "resolves" only the utterance "pause" from the cache.
+    function stubLayer(): ConstructionCacheLayer {
+        return {
+            status: "valid",
+            cacheFilePath: "/stub/constructions.json",
+            schemaName: "demo",
+            currentHash: "hash=",
+            cachedHash: "hash=",
+            match(utterance: string) {
+                return utterance === "pause"
+                    ? { schemaName: "demo", actionName: "pause" }
+                    : undefined;
+            },
+        };
+    }
+
+    it("reports the layer status via constructionCacheStatus", () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: stubLayer(),
+        });
+        expect(resolver.constructionCacheStatus).toBe("valid");
+    });
+
+    it("working tree: a construction hit is reported as a cache hit", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: stubLayer(),
+        });
+        const res = await resolver.resolve(
+            entry("c1", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
+    });
+
+    it("working tree: a grammar-only resolution is reported as a miss", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: stubLayer(),
+        });
+        // "resume" is not in the stub cache but the grammar resolves it.
+        const res = await resolver.resolve(
+            entry("c2", "resume"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("miss");
+        expect(res.action).toEqual({
+            schemaName: "demo",
+            actionName: "resume",
+        });
+    });
+
+    it("git ref side never consults the cache (construction caches are live-only)", async () => {
+        let consulted = false;
+        const spyLayer: ConstructionCacheLayer = {
+            ...stubLayer(),
+            match(utterance: string) {
+                consulted = true;
+                return utterance === "pause"
+                    ? { schemaName: "demo", actionName: "pause" }
+                    : undefined;
+            },
+        };
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: spyLayer,
+        });
+        // A git ref side must not touch the live cache, even for an utterance the
+        // cache would resolve on the working tree. (The temp dir is not a git
+        // repo, so the grammar build degrades to needs-explanation — that's fine;
+        // the assertion here is purely that the cache was never consulted.)
+        const res = await resolver.resolve(
+            entry("c3", "pause"),
+            { kind: "git", ref: "HEAD" },
+            "B",
+        );
+        expect(consulted).toBe(false);
+        expect(res.cacheState).not.toBe("miss");
+    });
+
+    it("a stale layer leaves behavior at L1 (grammar hit)", async () => {
+        const stale: ConstructionCacheLayer = {
+            ...stubLayer(),
+            status: "stale",
+        };
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: stale,
+        });
+        const res = await resolver.resolve(
+            entry("c4", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        // Not consulted: a plain grammar hit, not a cache miss.
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
     });
 });
 

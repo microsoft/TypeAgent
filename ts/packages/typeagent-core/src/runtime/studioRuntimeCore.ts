@@ -62,7 +62,13 @@ import {
     resolveGrammarReplayTarget,
     ReplayVersionBuildError,
     type ReplayRunError,
+    type GrammarReplayTarget,
 } from "../replay/grammarResolver.js";
+import {
+    computeWorkingTreeSchemaHash,
+    loadConstructionCacheLayer,
+    type ConstructionCacheLayer,
+} from "../replay/constructionCacheResolver.js";
 import type { CollisionDetectedEvent } from "../events/index.js";
 import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
@@ -86,6 +92,131 @@ const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
     "sandbox.agent.loaded",
     "sandbox.agent.unloaded",
 ];
+
+/**
+ * Explicit path to a construction cache file for the L2 replay consult. Set this
+ * to make the construction-cache layer deterministic (e.g. point it at a known
+ * session cache); when unset the runtime best-effort discovers the newest cache
+ * under the user data dir.
+ */
+const STUDIO_CONSTRUCTION_CACHE_ENV = "TYPEAGENT_STUDIO_CONSTRUCTION_CACHE";
+
+/** Mirrors the dispatcher's `getUserDataDir()` without depending on it. */
+function studioUserDataDir(): string {
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
+/**
+ * Best-effort locate the newest construction cache JSON (a file ending in
+ * `.json` directly under a `constructions` directory) beneath `dir`, bounded by
+ * `depth` to keep the scan cheap. Returns the path + mtime of the newest match.
+ */
+async function newestConstructionsCache(
+    dir: string,
+    depth: number,
+): Promise<{ path: string; mtimeMs: number } | undefined> {
+    if (depth < 0) {
+        return undefined;
+    }
+    let best: { path: string; mtimeMs: number } | undefined;
+    const inConstructionsDir = path.basename(dir) === "constructions";
+    let entries;
+    try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+        return undefined;
+    }
+    for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            if (entry.name === "node_modules" || entry.name === ".git") {
+                continue;
+            }
+            const sub = await newestConstructionsCache(full, depth - 1);
+            if (
+                sub !== undefined &&
+                (best === undefined || sub.mtimeMs > best.mtimeMs)
+            ) {
+                best = sub;
+            }
+        } else if (
+            inConstructionsDir &&
+            entry.isFile() &&
+            entry.name.endsWith(".json")
+        ) {
+            try {
+                const s = await fs.stat(full);
+                if (best === undefined || s.mtimeMs > best.mtimeMs) {
+                    best = { path: full, mtimeMs: s.mtimeMs };
+                }
+            } catch {
+                // ignore unreadable entries
+            }
+        }
+    }
+    return best;
+}
+
+/**
+ * Resolve the construction cache file to consult for L2: an explicit
+ * {@link STUDIO_CONSTRUCTION_CACHE_ENV} override (deterministic) if it points at
+ * a real file, else the newest discovered session cache under the user data dir.
+ * Returns `undefined` when nothing usable is found (replay stays at L1).
+ */
+async function discoverLiveConstructionCacheFile(): Promise<
+    string | undefined
+> {
+    const override = process.env[STUDIO_CONSTRUCTION_CACHE_ENV];
+    if (override !== undefined && override !== "") {
+        try {
+            return (await fs.stat(override)).isFile() ? override : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+    const found = await newestConstructionsCache(studioUserDataDir(), 6);
+    return found?.path;
+}
+
+/**
+ * Build the L2 {@link ConstructionCacheLayer} for a resolved grammar target:
+ * compute the working-tree schema-file hash, discover the live cache, and gate
+ * the consult on the hash. Returns `undefined` when the agent's schema can't be
+ * hashed or no live cache exists — in either case replay stays at L1.
+ */
+async function resolveConstructionCacheLayer(
+    target: GrammarReplayTarget,
+): Promise<ConstructionCacheLayer | undefined> {
+    const schema = target.schema;
+    if (schema === undefined) {
+        return undefined;
+    }
+    const cacheFilePath = await discoverLiveConstructionCacheFile();
+    if (cacheFilePath === undefined) {
+        return undefined;
+    }
+    const currentHash = await computeWorkingTreeSchemaHash({
+        schemaType: schema.schemaType,
+        sourceFilePath: schema.sourceFilePath,
+        ...(schema.builtSchemaFilePath !== undefined
+            ? { builtSchemaFilePath: schema.builtSchemaFilePath }
+            : {}),
+        ...(schema.paramSpecConfigPath !== undefined
+            ? { paramSpecConfigPath: schema.paramSpecConfigPath }
+            : {}),
+    });
+    if (currentHash === undefined) {
+        return undefined;
+    }
+    return loadConstructionCacheLayer({
+        cacheFilePath,
+        schemaName: target.schemaName,
+        currentHash,
+    });
+}
 
 export type PackagingHealthGateStatus =
     | "pass"
@@ -124,11 +255,19 @@ export interface StudioReplayRequest {
  *   compilation, so `checked_wildcard` parameters compile exactly as the
  *   dispatcher does. Still indicative (no construction cache / wildcard-value
  *   validation), so the UI labels it accordingly.
+ * - `construction-cache` — the live working-tree side additionally consulted the
+ *   agent's real per-session construction cache (L2), hash-gated to the current
+ *   schema exactly as the dispatcher gates it. A construction `hit` is a faithful
+ *   cache resolution; everything else falls through to the (enriched) grammar.
+ *   Only used when a live cache was discovered AND its namespace hash still
+ *   matches the working tree; otherwise the run degrades to `schema-grammar` /
+ *   `static-grammar`.
  */
 export type StudioReplayMethod =
     | "identity"
     | "static-grammar"
-    | "schema-grammar";
+    | "schema-grammar"
+    | "construction-cache";
 
 export interface StudioReplayResult {
     runId: string;
@@ -136,6 +275,15 @@ export interface StudioReplayResult {
     rows: ActionDelta[];
     /** How utterances were resolved into actions (drives the UI's method label). */
     method: StudioReplayMethod;
+    /**
+     * Per-side resolution method. The construction cache is live-only, so it is
+     * consulted for a working-tree side only — a git ref is at best
+     * `schema-grammar`/`static-grammar`, never `construction-cache`. The UI
+     * renders these under each A/B version field so the run-level `method` chip
+     * doesn't over-claim the cache for a side that never read it.
+     */
+    methodA: StudioReplayMethod;
+    methodB: StudioReplayMethod;
     /**
      * Set when a version failed to materialize or compile. The run is aborted
      * with an empty summary rather than emitting fabricated regression rows.
@@ -443,8 +591,11 @@ function abortedReplayResult(
         runId,
         rows: [],
         error,
-        // A version-build failure only happens on the grammar path.
+        // A version-build failure only happens on the grammar path. We never got
+        // to run either side, so report the same method for both.
         method,
+        methodA: method,
+        methodB: method,
         summary: {
             runId,
             agent: options.agent,
@@ -858,6 +1009,8 @@ export function createStudioRuntimeCore(
             // resolver (preserves the all-equal baseline used by tests).
             let resolver = options.replayResolver;
             let method: StudioReplayMethod = "identity";
+            let methodA: StudioReplayMethod = "identity";
+            let methodB: StudioReplayMethod = "identity";
             if (
                 resolver === undefined &&
                 replayOptions.missPolicy === "needs-explanation" &&
@@ -869,10 +1022,40 @@ export function createStudioRuntimeCore(
                     repoRoot,
                 );
                 if (target !== undefined) {
+                    // L2: best-effort consult of the agent's live per-session
+                    // construction cache for the working-tree side. Hash-gated to
+                    // the current schema exactly as the dispatcher gates it, so a
+                    // schema edit invalidates the cached constructions (→ stale →
+                    // grammar fallback) rather than reporting a phantom cache hit.
+                    const constructionCache =
+                        await resolveConstructionCacheLayer(target);
+
                     const grammarResolver = createGrammarReplayResolver({
                         target,
                         repoRoot,
+                        ...(constructionCache !== undefined
+                            ? { constructionCache }
+                            : {}),
                     });
+                    const labelFor = (): StudioReplayMethod =>
+                        grammarResolver.constructionCacheStatus === "valid"
+                            ? "construction-cache"
+                            : grammarResolver.enriched
+                              ? "schema-grammar"
+                              : "static-grammar";
+                    // Per-side method: the construction cache is live-only, so a
+                    // side resolves through it only when it is the working tree
+                    // and the cache is hash-valid; a git ref always resolves via
+                    // the (enriched) grammar.
+                    const sideMethod = (
+                        version: VersionSpec,
+                    ): StudioReplayMethod =>
+                        version.kind === "workingTree" &&
+                        grammarResolver.constructionCacheStatus === "valid"
+                            ? "construction-cache"
+                            : grammarResolver.enriched
+                              ? "schema-grammar"
+                              : "static-grammar";
                     try {
                         // Build both versions up front so a build failure aborts
                         // the run cleanly instead of throwing mid-stream (which
@@ -882,9 +1065,19 @@ export function createStudioRuntimeCore(
                             replayOptions.versionB,
                         );
                         resolver = grammarResolver;
-                        method = grammarResolver.enriched
-                            ? "schema-grammar"
-                            : "static-grammar";
+                        methodA = sideMethod(replayOptions.versionA);
+                        methodB = sideMethod(replayOptions.versionB);
+                        // The run-level chip reflects the most faithful side
+                        // actually used, so a ref-vs-ref compare doesn't claim a
+                        // cache neither side consulted.
+                        method =
+                            methodA === "construction-cache" ||
+                            methodB === "construction-cache"
+                                ? "construction-cache"
+                                : methodA === "schema-grammar" ||
+                                    methodB === "schema-grammar"
+                                  ? "schema-grammar"
+                                  : "static-grammar";
                     } catch (err) {
                         if (err instanceof ReplayVersionBuildError) {
                             return abortedReplayResult(
@@ -898,9 +1091,7 @@ export function createStudioRuntimeCore(
                                             : "workingTree",
                                     message: err.message,
                                 },
-                                grammarResolver.enriched
-                                    ? "schema-grammar"
-                                    : "static-grammar",
+                                labelFor(),
                             );
                         }
                         throw err;
@@ -919,7 +1110,14 @@ export function createStudioRuntimeCore(
                 rows.push(row);
             }
             const summary = await handle.summary;
-            return { runId: handle.runId, summary, rows, method };
+            return {
+                runId: handle.runId,
+                summary,
+                rows,
+                method,
+                methodA,
+                methodB,
+            };
         },
         reportCollision(event) {
             return collisions.report(event);

@@ -502,27 +502,6 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // Auto-refresh the Corpora view when in-repo corpus files change on disk
-    // (`<repoRoot>/corpus/<agent>.utterances.jsonl`). Editing/saving an
-    // utterance file otherwise required a manual refresh. Scoped to the in-repo
-    // corpus dir — captures/external/feedback are refreshed by their own write
-    // paths. No-op when the repo root is unknown.
-    if (repoRootInfo.repoRoot) {
-        const corpusWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(
-                repoRootInfo.repoRoot,
-                "corpus/*.utterances.jsonl",
-            ),
-        );
-        const refreshOnCorpusChange = () => corpusTree.refresh();
-        context.subscriptions.push(
-            corpusWatcher,
-            corpusWatcher.onDidCreate(refreshOnCorpusChange),
-            corpusWatcher.onDidChange(refreshOnCorpusChange),
-            corpusWatcher.onDidDelete(refreshOnCorpusChange),
-        );
-    }
-
     const statusBar = new StudioStatusBar(serviceRuntime);
     context.subscriptions.push(
         statusBar,
