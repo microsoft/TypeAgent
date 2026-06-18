@@ -193,9 +193,15 @@ td {
   vertical-align: top;
 }
 
-td.detail {
+td.resolution {
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
+}
+
+td.latency {
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  text-align: right;
 }
 
 .status-equal {
@@ -249,7 +255,16 @@ td.detail {
 }
 
 .filter-chip.is-empty {
-  opacity: 0.5;
+  opacity: 0.45;
+  cursor: default;
+}
+
+.filter-chip:disabled {
+  cursor: default;
+}
+
+.filter-chip:disabled:hover {
+  border-color: var(--vscode-panel-border);
 }
 
 .empty-state {

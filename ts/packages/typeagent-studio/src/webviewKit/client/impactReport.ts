@@ -292,13 +292,20 @@ function renderFilters(): void {
         const button = document.createElement("button");
         button.type = "button";
         const isActive = activeFilters.has(chip.status);
+        const isEmpty = chip.count === 0;
         const classes = ["filter-chip"];
         if (isActive) classes.push("is-active");
-        if (chip.count === 0) classes.push("is-empty");
+        if (isEmpty) classes.push("is-empty");
         button.className = classes.join(" ");
         button.setAttribute("aria-pressed", String(isActive));
         button.textContent = `${chip.label} ${chip.count}`;
-        button.addEventListener("click", () => toggleFilter(chip.status));
+        // A status with no rows is nothing to filter on — show it for context
+        // (a count of 0 is informative) but make it inert.
+        if (isEmpty) {
+            button.disabled = true;
+        } else {
+            button.addEventListener("click", () => toggleFilter(chip.status));
+        }
         filtersEl.appendChild(button);
     }
 }
@@ -321,7 +328,13 @@ function renderTable(): void {
 
     const table = document.createElement("table");
     const head = document.createElement("tr");
-    for (const h of ["", "Utterance", "Detail"]) {
+    for (const h of [
+        "Utterance",
+        "Status",
+        "Base (A)",
+        "Compare (B)",
+        "Latency",
+    ]) {
         const th = document.createElement("th");
         th.textContent = h;
         head.appendChild(th);
@@ -330,9 +343,11 @@ function renderTable(): void {
 
     for (const row of rows) {
         const tr = document.createElement("tr");
-        tr.appendChild(cell(row.statusLabel, `status-${row.status}`));
         tr.appendChild(cell(row.utterance));
-        tr.appendChild(cell(row.detail, "detail"));
+        tr.appendChild(cell(row.statusLabel, `status-${row.status}`));
+        tr.appendChild(cell(row.resolutionA, "resolution"));
+        tr.appendChild(cell(row.resolutionB, "resolution"));
+        tr.appendChild(cell(row.latency, "latency"));
         table.appendChild(tr);
     }
     tableWrap.appendChild(table);

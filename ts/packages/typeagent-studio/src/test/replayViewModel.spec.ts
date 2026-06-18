@@ -55,7 +55,9 @@ test("toImpactRows classifies and shapes rows for the webview", () => {
     );
     // Browser-neutral: no Quick Pick `$(...)` icon syntax leaks through.
     assert.ok(rows.every((r) => !r.statusLabel.includes("$(")));
-    assert.equal(rows[0].detail, "A:hit B:hit \u00b7 10/12ms");
+    assert.equal(rows[0].resolutionA, "hit");
+    assert.equal(rows[0].resolutionB, "hit");
+    assert.equal(rows[0].latency, "10/12ms");
 });
 
 test("toImpactRows collapses long utterances", () => {
@@ -85,12 +87,12 @@ test("toImpactRows tags cache-served and grammar fall-through on the constructio
         "construction-cache",
     );
     // The cache side spells out the source; the grammar side stays raw.
-    assert.equal(rows[0].detail, "A:hit B:hit\u00b7cache \u00b7 10/12ms");
-    assert.equal(rows[1].detail, "A:hit B:miss\u00b7grammar \u00b7 10/12ms");
-    assert.equal(
-        rows[2].detail,
-        "A:needs-explanation B:hit\u00b7cache \u00b7 10/12ms",
-    );
+    assert.equal(rows[0].resolutionA, "hit");
+    assert.equal(rows[0].resolutionB, "hit\u00b7cache");
+    assert.equal(rows[1].resolutionB, "miss\u00b7grammar");
+    assert.equal(rows[2].resolutionA, "needs-explanation");
+    assert.equal(rows[2].resolutionB, "hit\u00b7cache");
+    assert.equal(rows[0].latency, "10/12ms");
 });
 
 test("toImpactRows leaves tokens raw when neither side ran the construction cache", () => {
@@ -99,7 +101,9 @@ test("toImpactRows leaves tokens raw when neither side ran the construction cach
         "schema-grammar",
         "schema-grammar",
     );
-    assert.equal(r.detail, "A:hit B:hit \u00b7 10/12ms");
+    assert.equal(r.resolutionA, "hit");
+    assert.equal(r.resolutionB, "hit");
+    assert.equal(r.latency, "10/12ms");
 });
 
 test("toSideMethodLabel gives a short per-side label", () => {

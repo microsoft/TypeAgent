@@ -33,8 +33,12 @@ export interface ImpactRow {
     statusLabel: string;
     /** The corpus utterance (collapsed whitespace, bounded). */
     utterance: string;
-    /** Cache states + latencies, e.g. "A:hit B:miss · 12/8ms". */
-    detail: string;
+    /** How side A (Base) resolved, e.g. "hit" or "hit\u00b7cache". */
+    resolutionA: string;
+    /** How side B (Compare) resolved, e.g. "miss\u00b7grammar". */
+    resolutionB: string;
+    /** Latency pair "A/B", e.g. "10/12ms". */
+    latency: string;
     utteranceId: string;
 }
 
@@ -77,10 +81,9 @@ export function toImpactRow(
         status,
         statusLabel: STATUS_LABEL[status],
         utterance: collapse(row.utterance),
-        detail: `A:${sideToken(row.cacheStateA, methodA)} B:${sideToken(
-            row.cacheStateB,
-            methodB,
-        )} \u00b7 ${row.latencyA}/${row.latencyB}ms`,
+        resolutionA: sideToken(row.cacheStateA, methodA),
+        resolutionB: sideToken(row.cacheStateB, methodB),
+        latency: `${row.latencyA}/${row.latencyB}ms`,
         utteranceId: row.utteranceId,
     };
 }
