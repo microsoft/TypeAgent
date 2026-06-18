@@ -1,15 +1,7 @@
 {
-  "compilerOptions": {
-    "module": "Node16",
-    "target": "ES2022",
-    "lib": ["ES2022"],
-    "sourceMap": true,
-    "strict": true,
-    "rootDir": "src",
-    "outDir": "dist",
-    "esModuleInterop": true,
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.extension.json" },
+    { "path": "./tsconfig.webview.json" }
+  ]
 }

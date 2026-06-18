@@ -1,0 +1,104 @@
+{
+  "name": "vscode-chat",
+  "displayName": "TypeAgent Chat",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Registers TypeAgent as a third-party agent in VS Code's native Chat view",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/vscode-chat"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "main": "./dist/extension.cjs",
+  "scripts": {
+    "build": "npm run compile",
+    "build:ext:vscode": "npm run package",
+    "clean": "rimraf --glob dist dist-pub *.vsix",
+    "bundle": "node esbuild.mjs",
+    "compile": "concurrently npm:tsc npm:bundle",
+    "tsc": "tsc --noEmit -p .",
+    "deploy:local": "npm run package && code-insiders --install-extension dist-pub/vscode-chat.vsix --force",
+    "install:ext:vscode": "code-insiders --install-extension dist-pub/vscode-chat.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/vscode-chat.vsix",
+    "vscode:prepublish": "npm run compile",
+    "watch": "node esbuild.mjs --watch"
+  },
+  "enabledApiProposals": [
+    "chatSessionsProvider"
+  ],
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "typeagent",
+        "name": "typeagent",
+        "fullName": "TypeAgent",
+        "description": "TypeAgent personal agent"
+      }
+    ],
+    "chatSessions": [
+      {
+        "type": "typeagent",
+        "name": "typeagent",
+        "displayName": "TypeAgent",
+        "description": "TypeAgent personal agent",
+        "when": "true"
+      }
+    ],
+    "configuration": {
+      "title": "TypeAgent Chat",
+      "properties": {
+        "typeagentChat.serverUrl": {
+          "type": "string",
+          "default": "ws://localhost:8999",
+          "description": "WebSocket URL of the TypeAgent agent server"
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onChatSession:typeagent"
+  ],
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.2.1",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.28.1",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.0.1"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "icon": "media/icons/icon-80.png",
+  "fluidBuild": {
+    "tasks": {
+      "build:ext:vscode": {
+        "dependsOn": [
+          "^build",
+          "compile"
+        ]
+      },
+      "install:ext:vscode": {
+        "dependsOn": [
+          "build:ext:vscode"
+        ]
+      }
+    }
+  }
+}

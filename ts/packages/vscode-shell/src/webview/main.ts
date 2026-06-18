@@ -142,7 +142,11 @@ function chipTargetRid(
     entry: QueuedRequest,
     msgClientRequestId: string | undefined,
 ): string {
-    return entry.clientRequestId ?? msgClientRequestId ?? entry.requestId;
+    return (
+        (entry.clientRequestId as string | undefined) ??
+        msgClientRequestId ??
+        entry.requestId
+    );
 }
 
 /**

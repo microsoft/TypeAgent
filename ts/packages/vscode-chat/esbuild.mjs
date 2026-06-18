@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 import * as esbuild from "esbuild";
 
 const watch = process.argv.includes("--watch");
@@ -26,32 +23,13 @@ const extensionConfig = {
     },
 };
 
-/** @type {import('esbuild').BuildOptions} */
-const webviewConfig = {
-    entryPoints: ["src/webview/main.ts"],
-    bundle: true,
-    outfile: "dist/webview.js",
-    format: "iife",
-    platform: "browser",
-    target: "es2022",
-    sourcemap: true,
-    minify: !watch,
-    loader: {
-        ".css": "text",
-    },
-};
-
 async function build() {
     if (watch) {
-        const extCtx = await esbuild.context(extensionConfig);
-        const webCtx = await esbuild.context(webviewConfig);
-        await Promise.all([extCtx.watch(), webCtx.watch()]);
+        const ctx = await esbuild.context(extensionConfig);
+        await ctx.watch();
         console.log("Watching for changes...");
     } else {
-        await Promise.all([
-            esbuild.build(extensionConfig),
-            esbuild.build(webviewConfig),
-        ]);
+        await esbuild.build(extensionConfig);
         console.log("Build complete");
     }
 }

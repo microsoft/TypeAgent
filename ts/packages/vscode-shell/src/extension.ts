@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { ChatViewProvider } from "./chatViewProvider";
-import { AgentServerBridge } from "./agentServerBridge";
+import { ChatViewProvider } from "./chatViewProvider.js";
+import { AgentServerBridge } from "./agentServerBridge.js";
 
 interface ChatEntry {
     bridge: AgentServerBridge;
