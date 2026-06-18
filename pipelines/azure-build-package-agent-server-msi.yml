@@ -141,21 +141,14 @@ jobs:
         displayName: Pull dev certificate from Key Vault
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: node
+          scriptType: powershell
           scriptLocation: inlineScript
           inlineScript: |
-            const { spawnSync } = require('child_process');
-            const result = spawnSync('node', [
-              '$(scriptDir)/getCert.mjs',
-              'pull',
-              '--verbose'
-            ], {
-              stdio: 'inherit',
-              cwd: '$(scriptDir)'
-            });
-            if (result.status !== 0) {
-              console.error('Failed to pull certificate');
-              process.exit(1);
+            Set-Location "$(scriptDir)"
+            node .\getCert.mjs pull --verbose
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to pull certificate from Key Vault"
+              exit $LASTEXITCODE
             }
 
       # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
@@ -231,17 +224,15 @@ jobs:
         displayName: Pull dev certificate
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: node
+          scriptType: powershell
           scriptLocation: inlineScript
           inlineScript: |
-            const { spawnSync } = require('child_process');
-            spawnSync('node', [
-              '$(scriptDir)/getCert.mjs',
-              'pull'
-            ], {
-              stdio: 'inherit',
-              cwd: '$(scriptDir)'
-            });
+            Set-Location "$(scriptDir)"
+            node .\getCert.mjs pull
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to pull certificate from Key Vault"
+              exit $LASTEXITCODE
+            }
 
       - script: |
           echo "Sign shell .exe here (mirror MSI signing)"
