@@ -31,7 +31,7 @@
     "commands": [
       {
         "command": "typeagent-studio.connectStudioService",
-        "title": "Connect Event Log to studio service",
+        "title": "Connect to Studio service",
         "category": "TypeAgent Studio"
       },
       {
@@ -39,11 +39,6 @@
         "title": "Open Impact Report",
         "category": "TypeAgent Studio",
         "icon": "$(graph)"
-      },
-      {
-        "command": "typeagent-studio.hello",
-        "title": "Hello (skeleton)",
-        "category": "TypeAgent Studio"
       },
       {
         "command": "typeagent-studio.startOnboardingSession",
@@ -483,7 +478,6 @@
     "onView:typeagentStudioCollisions",
     "onCommand:typeagent-studio.connectStudioService",
     "onCommand:typeagent-studio.openImpactReport",
-    "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",

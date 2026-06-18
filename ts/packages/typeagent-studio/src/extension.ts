@@ -5,7 +5,6 @@ import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
-import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
 import { ensureStudioService } from "./studioServiceLauncher.js";
@@ -882,14 +881,6 @@ export function activate(context: vscode.ExtensionContext): void {
             connection.startAutoConnect();
         }
     })();
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("typeagent-studio.hello", () => {
-            vscode.window.showInformationMessage(
-                `TypeAgent Studio skeleton (typeagent-core ${VERSION}).`,
-            );
-        }),
-    );
 }
 
 async function resolveSandboxId(

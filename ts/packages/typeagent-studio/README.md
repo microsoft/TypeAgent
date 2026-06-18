@@ -25,7 +25,6 @@ pnpm run build
 
 Current command palette surface:
 
-- TypeAgent Studio: Hello (skeleton)
 - TypeAgent Studio: Start onboarding session
 - TypeAgent Studio: Ask TypeAgent about this...
 - TypeAgent Studio: Install latest onboarding session to sandbox
