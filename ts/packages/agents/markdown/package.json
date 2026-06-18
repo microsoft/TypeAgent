@@ -43,7 +43,7 @@
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dompurify": "^3.4.10",
+    "dompurify": "^3.4.11",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "katex": "^0.16.21",
