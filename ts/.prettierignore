@@ -9,6 +9,7 @@ pnpm-lock.yaml
 **/dist/*
 **/lib/*
 **/out/*
+**/msi-out/*
 examples/workflow/workflows/built/*
 .rollup.cache/**
 .tsc-cache-*.json
@@ -16,6 +17,7 @@ examples/workflow/workflows/built/*
 packages/uriHandler/bundle/agent-uri-handler.bundle.js
 
 .scratch
+tools/installers/wix/TypeAgent-AgentServer.wxs
 
 # Test data
 packages/defaultAgentProvider/test/data

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+
+<!--
+  TypeAgent MSI — installs:
+    C:\Program Files\TypeAgent\
+      agent-server\       ← agent-server.<rid> artifact (all files from heat)
+      copilot-plugin\     ← typeagent-copilot-plugin artifact (all files from heat)
+      .github\plugin\marketplace.json  ← for `copilot plugin marketplace add`
+      register-plugin.ps1 ← run after install to register the Copilot CLI plugin
+
+  Build variables required (passed via candle -d):
+    ProductVersion         e.g. 0.0.1-12345
+    AgentServerArtifactDir path to downloaded agent-server artifact
+    CopilotPluginArtifactDir path to downloaded copilot-plugin artifact
+    MarketplaceDir         path to directory containing the generated marketplace.json
+    InstallerSourceDir     path to this file's directory (for register-plugin.ps1)
+-->
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="TypeAgent"
+    Language="1033"
+    Version="$(var.ProductVersion)"
+    Manufacturer="Microsoft Corporation"
+    UpgradeCode="12345678-1234-1234-1234-123456789012">
+
+    <Package
+      InstallerVersion="500"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Platform="x64"
+      Description="TypeAgent — AI agent server and GitHub Copilot CLI integration"
+      Manufacturer="Microsoft Corporation" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Upgrade: replaces older versions, blocks downgrades -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+
+    <!-- ═══════════════════════════════════════════════
+         Directory layout
+         ═══════════════════════════════════════════════ -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="TYPEAGENTFOLDER" Name="TypeAgent">
+          <Directory Id="INSTALLFOLDER" Name="agent-server" />
+          <Directory Id="PLUGINFOLDER" Name="copilot-plugin" />
+          <Directory Id="GITHUBFOLDER" Name=".github">
+            <Directory Id="PLUGINREGFOLDER" Name="plugin" />
+          </Directory>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <!-- ═══════════════════════════════════════════════
+         Features
+         ═══════════════════════════════════════════════ -->
+    <Feature Id="ProductFeature" Title="TypeAgent" Level="1">
+      <!-- Files harvested by heat from the artifact directories -->
+      <ComponentGroupRef Id="AgentServerComponents" />
+      <ComponentGroupRef Id="CopilotPluginComponents" />
+      <!-- Static files and registry -->
+      <ComponentRef Id="MarketplaceJsonComponent" />
+      <ComponentRef Id="RegisterScriptComponent" />
+      <ComponentRef Id="RegistryComponent" />
+    </Feature>
+
+    <!-- ═══════════════════════════════════════════════
+         Static components
+         ═══════════════════════════════════════════════ -->
+
+    <!-- marketplace.json — enables `copilot plugin marketplace add <TYPEAGENTFOLDER>` -->
+    <DirectoryRef Id="PLUGINREGFOLDER">
+      <Component Id="MarketplaceJsonComponent" Guid="*">
+        <File Id="MarketplaceJson" Name="marketplace.json"
+              Source="$(var.MarketplaceDir)\marketplace.json" />
+        <RemoveFolder Id="RemovePluginRegFolder" Directory="PLUGINREGFOLDER" On="uninstall" />
+        <RemoveFolder Id="RemoveGithubFolder" Directory="GITHUBFOLDER" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- register-plugin.ps1 — helper for post-install Copilot CLI registration -->
+    <DirectoryRef Id="TYPEAGENTFOLDER">
+      <Component Id="RegisterScriptComponent" Guid="*">
+        <File Id="RegisterPluginPs1" Name="register-plugin.ps1"
+              Source="$(var.InstallerSourceDir)\register-plugin.ps1" />
+        <RemoveFolder Id="RemoveTypeAgentFolder" Directory="TYPEAGENTFOLDER" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- HKLM registry entries for config and tool discovery -->
+    <DirectoryRef Id="TARGETDIR">
+      <Component Id="RegistryComponent" Guid="*">
+        <RegistryKey Root="HKLM" Key="Software\Microsoft\TypeAgent">
+          <RegistryValue Name="InstallDir"        Value="[TYPEAGENTFOLDER]" Type="string" KeyPath="yes" />
+          <RegistryValue Name="AgentServerDir"    Value="[INSTALLFOLDER]"   Type="string" />
+          <RegistryValue Name="CopilotPluginDir"  Value="[PLUGINFOLDER]"    Type="string" />
+          <RegistryValue Name="Version"           Value="$(var.ProductVersion)" Type="string" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <!-- ═══════════════════════════════════════════════
+         Custom actions — Copilot CLI plugin registration
+         Runs register-plugin.ps1 as the installing user.
+         Return="ignore" so install succeeds even if the
+         Copilot CLI is not present on this machine.
+         ═══════════════════════════════════════════════ -->
+
+    <!-- Pass the PowerShell command as CustomActionData to the deferred CA -->
+    <SetProperty Id="RegisterCopilotPlugin"
+                 Before="RegisterCopilotPlugin"
+                 Sequence="execute"
+                 Value="[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -NonInteractive -File &quot;[TYPEAGENTFOLDER]register-plugin.ps1&quot; -InstallDir &quot;[TYPEAGENTFOLDER]&quot;" />
+
+    <CustomAction Id="RegisterCopilotPlugin"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- Unregister on uninstall -->
+    <SetProperty Id="UnregisterCopilotPlugin"
+                 Before="UnregisterCopilotPlugin"
+                 Sequence="execute"
+                 Value="[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -NonInteractive -File &quot;[TYPEAGENTFOLDER]register-plugin.ps1&quot; -Uninstall" />
+
+    <CustomAction Id="UnregisterCopilotPlugin"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterCopilotPlugin"   After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
+    </InstallExecuteSequence>
+
+    <!-- UI: minimal built-in sequence for install progress/finish -->
+    <UIRef Id="WixUI_Minimal" />
+
+  </Product>
+</Wix>
