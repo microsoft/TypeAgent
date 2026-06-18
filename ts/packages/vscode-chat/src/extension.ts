@@ -23,6 +23,15 @@ function conversationIdFrom(resource: vscode.Uri): string {
     );
 }
 
+function isUntitledConversation(conversationId: string): boolean {
+    return conversationId.startsWith("untitled-");
+}
+
+function timingFor(createdAt: string): vscode.ChatSessionItem["timing"] {
+    const created = Date.parse(createdAt);
+    return Number.isNaN(created) ? undefined : { created };
+}
+
 export async function activate(
     context: vscode.ExtensionContext,
 ): Promise<void> {
@@ -64,9 +73,7 @@ export async function activate(
                     item.tooltip = new vscode.MarkdownString(
                         `**${info.name}**\n\n\`${info.conversationId}\``,
                     );
-                    item.description = new Date(
-                        info.createdAt,
-                    ).toLocaleString();
+                    item.timing = timingFor(info.createdAt);
                     return item;
                 });
                 controller.items.replace(items);
@@ -92,6 +99,7 @@ export async function activate(
                 resourceFor(created.conversationId),
                 created.name,
             );
+            item.timing = timingFor(created.createdAt);
             controller.items.add(item);
             return item;
         } catch (e) {
@@ -123,31 +131,16 @@ export async function activate(
     const provider: vscode.ChatSessionContentProvider = {
         async provideChatSessionContent(resource, _token, providerContext) {
             const conversationId = conversationIdFrom(resource);
+            if (isUntitledConversation(conversationId)) {
+                return { history: [], requestHandler: undefined };
+            }
             // When the chat view is closed, schedule a delayed drop so the
             // server can release the dispatcher. Reopening within the delay
             // cancels the drop via openSession().
             providerContext.inputState.onDidDispose(() => {
                 manager.scheduleDrop(conversationId);
             });
-            try {
-                return await manager.openSession(conversationId);
-            } catch (e) {
-                if (
-                    conversationId.startsWith("untitled-") &&
-                    (e as Error).message?.includes("not found")
-                ) {
-                    const created = await connection.createConversation(
-                        `Chat ${new Date().toLocaleTimeString()}`,
-                    );
-                    const realItem = controller.createChatSessionItem(
-                        resourceFor(created.conversationId),
-                        created.name,
-                    );
-                    controller.items.add(realItem);
-                    return await manager.openSession(created.conversationId);
-                }
-                throw e;
-            }
+            return await manager.openSession(conversationId);
         },
     };
     context.subscriptions.push(

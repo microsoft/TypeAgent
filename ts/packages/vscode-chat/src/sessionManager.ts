@@ -16,6 +16,33 @@ import type {
 import type { DisplayContent } from "@typeagent/agent-sdk";
 import { renderDisplayToMarkdown } from "./displayRender.js";
 
+// TODO: Replace these private constructor casts when VS Code exposes a
+// supported way for chat session providers to restore request/response turns.
+type ChatRequestTurnConstructor = new (
+    prompt: string,
+    command: string | undefined,
+    references: vscode.ChatPromptReference[],
+    participant: string,
+    toolReferences: vscode.ChatLanguageModelToolReference[],
+) => vscode.ChatRequestTurn;
+
+type ChatResponseTurnConstructor = new (
+    response: ReadonlyArray<
+        | vscode.ChatResponseMarkdownPart
+        | vscode.ChatResponseFileTreePart
+        | vscode.ChatResponseAnchorPart
+        | vscode.ChatResponseCommandButtonPart
+    >,
+    result: vscode.ChatResult,
+    participant: string,
+    command?: string,
+) => vscode.ChatResponseTurn;
+
+const ChatRequestTurn =
+    vscode.ChatRequestTurn as unknown as ChatRequestTurnConstructor;
+const ChatResponseTurn =
+    vscode.ChatResponseTurn as unknown as ChatResponseTurnConstructor;
+
 class ResponseSink {
     constructor(
         public readonly stream: vscode.ChatResponseStream,
@@ -229,25 +256,28 @@ async function buildHistory(
         const group = groups.get(rid)!;
         if (!group.userText) continue;
 
-        history.push({
-            prompt: group.userText,
-            command: undefined,
-            references: [],
-            participant: participantId,
-            toolReferences: [],
-        } as vscode.ChatRequestTurn);
+        history.push(
+            new ChatRequestTurn(
+                group.userText,
+                undefined,
+                [],
+                participantId,
+                [],
+            ),
+        );
 
         if (group.lines.length > 0) {
-            history.push({
-                response: [
-                    new vscode.ChatResponseMarkdownPart(
-                        new vscode.MarkdownString(group.lines.join("\n\n")),
-                    ),
-                ],
-                result: {},
-                participant: participantId,
-                command: undefined,
-            } as vscode.ChatResponseTurn);
+            history.push(
+                new ChatResponseTurn(
+                    [
+                        new vscode.ChatResponseMarkdownPart(
+                            new vscode.MarkdownString(group.lines.join("\n\n")),
+                        ),
+                    ],
+                    {},
+                    participantId,
+                ),
+            );
         }
     }
 
