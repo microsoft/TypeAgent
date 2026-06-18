@@ -10,7 +10,10 @@ import {
     type HealthFinding,
     type HealthService,
 } from "../health/index.js";
+import { resolveAgentName } from "./agentRef.js";
 import type { AgentLoader, HealthStatus, SandboxAgentInfo } from "./types.js";
+
+export { resolveAgentName };
 
 export interface RepoAgentLoaderOptions {
     /** Repository root that contains `packages/agents/<name>`. */
@@ -30,28 +33,6 @@ export interface RepoAgentLoaderOptions {
 }
 
 const NO_FILES_HASH = "none";
-
-/**
- * Resolve an agent reference (a bare name, a `packages/agents/<name>` path, or
- * an arbitrary directory/file path) to the agent's package name.
- */
-export function resolveAgentName(agentRef: string): string {
-    let normalized = agentRef.replace(/\\/g, "/");
-    while (normalized.endsWith("/")) {
-        normalized = normalized.slice(0, -1);
-    }
-    const marker = "packages/agents/";
-    const markerAt = normalized.lastIndexOf(marker);
-    if (markerAt >= 0) {
-        const rest = normalized.slice(markerAt + marker.length);
-        const name = rest.split("/")[0];
-        if (name) {
-            return name;
-        }
-    }
-    const tail = normalized.split("/").pop() ?? agentRef;
-    return tail.replace(/\.[^.]+$/, "") || agentRef;
-}
 
 /**
  * Map a set of health findings to the coarse badge used by sandbox status.
