@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * F4.x / L1 — Grammar replay resolver (the "real replay path", schema-enriched).
+ * Grammar replay resolver (the "real replay path", schema-enriched).
  *
  * Replaces the stub identity resolver with one that actually evaluates each
  * corpus utterance against two grammar versions (A and B) so a genuine grammar
@@ -11,8 +11,8 @@
  * Matching runs through the **real `agent-cache` grammar store**
  * ({@link GrammarStoreImpl}) — the same component the dispatcher's deterministic
  * path uses — rather than a bespoke `matchGrammarWithNFA` call. Two fidelity
- * gains over the bare-NFA first slice:
- *  - **Schema enrichment (L1):** when the agent's action-schema source + paramSpec
+ * gains over a bare-NFA match:
+ *  - **Schema enrichment:** when the agent's action-schema source + paramSpec
  *    config can be discovered, the grammar is enriched with checked-variable
  *    metadata (`enrichGrammarWithCheckedVariables`) before NFA compilation, so
  *    `checked_wildcard` parameters compile with the `checked` flag exactly as the
@@ -23,13 +23,11 @@
  *    dispatcher would pick. Without a discoverable schema this still applies, but
  *    without enrichment — the method label is `"static-grammar"`.
  *
- * This is still **static grammar replay**, not full dispatcher fidelity: it does
- * NOT consult the construction/explanation cache and does NOT validate wildcard
- * *values* (e.g. confirming a real Spotify track) — that requires the live
- * construction cache + external APIs and is a later rung on the fidelity ladder
- * (L2+). Results remain indicative. See
- * `docs/plans/vscode-devx/05-implementation-plan.md` §9 and the design notes
- * `real-replay-path-design.md` / `long-pole-fidelity-plan.md`.
+ * This is still **static grammar replay**, not full dispatcher fidelity: by
+ * itself it does NOT validate wildcard *values* (e.g. confirming a real Spotify
+ * track), which requires external APIs. When a live construction-cache layer is
+ * supplied, the working-tree side also consults that cache before falling back
+ * to the grammar match. Results remain indicative.
  *
  * Kept out of `replay/index.ts` (and behind the dedicated
  * `@typeagent/core/replayResolver` export) so importing the lightweight replay
@@ -38,7 +36,7 @@
 
 import path from "node:path";
 import type { Dirent } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -107,7 +105,7 @@ export interface ReplayRunError {
 /**
  * Identifies which grammar to compile for an agent. Deliberately explicit (a
  * single grammar file + schema name) rather than dispatcher-style manifest
- * discovery — the first slice targets single-schema, standalone-compilable
+ * discovery — this targets single-schema, standalone-compilable
  * agents only.
  */
 export interface GrammarReplayTarget {
@@ -123,7 +121,7 @@ export interface GrammarReplayTarget {
     /** NFA tag for debugging; defaults to `<agent>-<side>`. */
     nfaTag?: string;
     /**
-     * Action-schema source for checked-variable enrichment (L1). When present,
+     * Action-schema source for checked-variable enrichment. When present,
      * the grammar is enriched with `checked_wildcard` metadata before NFA
      * compilation so matching mirrors the dispatcher. Absent when the schema
      * can't be unambiguously discovered — matching still runs through the real
@@ -152,7 +150,7 @@ export interface GrammarReplaySchema {
     paramSpecConfigPath?: string;
     /**
      * The manifest's raw `schema.schemaType` object (`{ action, entity? }`),
-     * captured verbatim so the L2 construction-cache hash gate can reproduce the
+     * captured verbatim so the construction-cache hash gate can reproduce the
      * dispatcher's `JSON.stringify(schemaType)` byte-for-byte (key order matters).
      */
     schemaType: Record<string, unknown>;
@@ -172,11 +170,11 @@ export interface CreateGrammarReplayResolverOptions {
     /** Clock injection for deterministic latency in tests. */
     now?: () => number;
     /**
-     * Live construction-cache layer (L2). When provided and `valid`, the
+     * Live construction-cache layer. When provided and `valid`, the
      * **working-tree** side consults it before the grammar so a construction
      * `hit` is reported distinctly from a grammar-only resolution (`miss`).
      * Only the working-tree side uses it — construction caches are never read at
-     * a git ref. A `stale`/`absent` layer leaves behavior at L1.
+     * a git ref. A `stale`/`absent` layer leaves behavior at the grammar match.
      */
     constructionCache?: ConstructionCacheLayer;
 }
@@ -201,7 +199,7 @@ export interface GrammarReplayResolver extends ReplayActionResolver {
      */
     readonly enriched: boolean;
     /**
-     * Status of the live construction-cache layer (L2), or `undefined` when no
+     * Status of the live construction-cache layer, or `undefined` when no
      * layer was supplied. `"valid"` drives the `"construction-cache"` method
      * label; `"stale"`/`"absent"` fall back to the grammar method label.
      */
@@ -232,8 +230,16 @@ async function readFileAtVersion(
     }
     // `git show <ref>:<path>` is read-only and stateless — no worktree/checkout
     // to create or clean up (the resolver interface has no disposer hook).
-    const gitRoot = await gitToplevel(path.dirname(filePath));
-    const relPath = path.relative(gitRoot, filePath).split(path.sep).join("/");
+    // Canonicalize the file path first: `git rev-parse --show-toplevel` returns a
+    // symlink-resolved path, so on platforms where the temp/working dir lives
+    // behind a symlink (e.g. macOS `/var` -> `/private/var`) an un-resolved
+    // file path would yield a relative path that escapes the repo root.
+    const realFilePath = await realpath(filePath);
+    const gitRoot = await gitToplevel(path.dirname(realFilePath));
+    const relPath = path
+        .relative(gitRoot, realFilePath)
+        .split(path.sep)
+        .join("/");
     const { stdout } = await execFileAsync(
         "git",
         ["-C", gitRoot, "show", `${version.ref}:${relPath}`],
@@ -306,7 +312,7 @@ async function buildGrammar(
         );
     }
 
-    // Best-effort schema enrichment (L1). A schema read/parse failure must NOT
+    // Best-effort schema enrichment. A schema read/parse failure must NOT
     // abort an otherwise-valid grammar replay: degrade to the non-enriched
     // grammar-store path instead (the run reports method `static-grammar`). The
     // enrichability of a given schema source is deterministic across versions,
@@ -358,7 +364,7 @@ async function buildGrammar(
 
 /**
  * Normalize a resolved grammar-store action into a comparable action shape.
- * Re-exported from {@link normalizeAction} (shared with the L2 construction-cache
+ * Re-exported from {@link normalizeAction} (shared with the construction-cache
  * layer) under the original name for back-compat with existing imports/tests.
  */
 export { normalizeAction as normalizeGrammarAction };
@@ -435,7 +441,7 @@ export function createGrammarReplayResolver(
                     ? { feedback: entry.feedback }
                     : {};
 
-            // L2: on the working-tree side, consult the live construction cache
+            // On the working-tree side, consult the live construction cache
             // first — the dispatcher's real first check. A construction hit is a
             // genuine cache `hit`; everything the cache doesn't resolve falls
             // through to the grammar path below and is reported as a `miss`
@@ -488,7 +494,7 @@ export function createGrammarReplayResolver(
             // When the live construction cache is in play, a grammar-only
             // resolution is reported as a `miss` (not in the cache) to keep the
             // working-tree side's cache states faithful; otherwise it is a plain
-            // grammar `hit` (L1 semantics, unchanged).
+            // grammar `hit` (unchanged grammar-match semantics).
             const cacheState = useConstruction ? "miss" : "hit";
             return { action, cacheState, latencyMs, ...feedback };
         },
@@ -498,7 +504,7 @@ export function createGrammarReplayResolver(
 /**
  * Resolve the grammar target for an agent by probing the agent roots for its
  * package and finding a single `.agr` under `src/`. Returns `undefined` when
- * the agent has zero or multiple `.agr` files — the first slice only handles
+ * the agent has zero or multiple `.agr` files — this only handles
  * single-schema, standalone-compilable agents, and picking among several would
  * risk compiling a grammar the dispatcher does not treat as the active schema.
  */
@@ -535,7 +541,7 @@ interface ManifestForSchema {
 
 /**
  * Best-effort discovery of the agent's action-schema source for checked-variable
- * enrichment (L1). Reads the single agent manifest under `src/` for
+ * enrichment. Reads the single agent manifest under `src/` for
  * `schema.originalSchemaFile` + `schema.schemaType.action`; the paramSpec config
  * (where `checked_wildcard` lives) is the sibling `<basename>.json` by
  * convention (matches how `asc` consumes it at build time). Returns `undefined`
@@ -596,7 +602,7 @@ async function discoverSchemaTarget(
 
     const entityTypeName = manifest.schema?.schemaType?.entity;
 
-    // Capture the L2 hash inputs: the raw schemaType object (for a byte-faithful
+    // Capture the construction-cache hash inputs: the raw schemaType object (for a byte-faithful
     // JSON.stringify) and the built `.pas.json` artifact path when the manifest
     // declares one (the dispatcher hashes the built schema in preference to the
     // `.ts` source, with no sidecar config).
@@ -610,7 +616,7 @@ async function discoverSchemaTarget(
     // its paramSpec config, which the sourceFilePath + paramSpecConfigPath path
     // below already reproduces — so leaving builtSchemaFilePath unset for a
     // non-`.pas.json` schemaFile keeps the hash faithful instead of silently
-    // mismatching (which would disable L2 for that agent).
+    // mismatching (which would disable the construction-cache consult for that agent).
     if (
         typeof declaredSchemaFile === "string" &&
         declaredSchemaFile.endsWith(".pas.json")

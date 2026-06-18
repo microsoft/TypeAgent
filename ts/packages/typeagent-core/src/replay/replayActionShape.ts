@@ -4,7 +4,7 @@
 /**
  * Shared action-shape normalization for the replay resolvers.
  *
- * Both the grammar resolver (L1) and the construction-cache layer (L2) pull a
+ * Both the grammar resolver and the construction-cache layer pull a
  * raw action object out of a matcher result (`{ schemaName?, actionName,
  * parameters? }`) and must canonicalize it the same way before the engine's
  * strict structural `actionsEqual` compares the two sides:

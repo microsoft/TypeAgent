@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * F4.x / L2 — Construction-cache layer for the live (working-tree) replay side.
+ * Construction-cache layer for the live (working-tree) replay side.
  *
- * Where the L1 grammar resolver answers "does the agent's grammar resolve this
- * utterance," L2 answers the dispatcher's *first* question: "does the agent's
+ * Where the grammar resolver answers "does the agent's grammar resolve this
+ * utterance," this answers the dispatcher's *first* question: "does the agent's
  * live construction cache already resolve it." The default dispatcher is
  * completion-based — it consults the construction store before the grammar — so
  * a faithful replay of the working-tree side should report a construction
@@ -26,10 +26,7 @@
  * A schema edit changes the hash → the cached constructions go `stale` → the
  * live side falls back to the grammar path, which is precisely the regression
  * signal. When the cache file is missing (the agent was never run) the status
- * is `absent` and the resolver degrades cleanly to L1.
- *
- * See `docs/plans/vscode-devx/05-implementation-plan.md` §9 and the design notes
- * `long-pole-fidelity-plan.md`.
+ * is `absent` and the resolver degrades cleanly to the grammar match.
  */
 
 import crypto from "node:crypto";
@@ -106,7 +103,7 @@ export interface ConstructionCacheLayer {
  * Mirrors `loadSchemaFile`: when a built `.pas.json` exists it is hashed with no
  * sidecar config; otherwise the `.ts` source is hashed together with its sibling
  * paramSpec config (when present). Returns `undefined` when the artifact can't be
- * read, which leaves replay at L1 (no construction-cache consult).
+ * read, which leaves replay at the grammar match (no construction-cache consult).
  */
 export interface WorkingTreeSchemaHashInput {
     /** Manifest's raw `schema.schemaType` (`{ action, entity? }`). */
@@ -205,7 +202,7 @@ export interface LoadConstructionCacheLayerOptions {
 /**
  * Load a {@link ConstructionCacheLayer} for one agent from a construction cache
  * file. Resolves to an `absent` layer (never throws) when the file is missing or
- * unparseable, so a missing live cache degrades replay to L1 rather than failing
+ * unparseable, so a missing live cache degrades replay to the grammar match rather than failing
  * the run. The heavier {@link ConstructionCache} is materialized only when the
  * namespace hash validates, so a stale cache costs only a JSON read.
  */

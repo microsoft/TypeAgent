@@ -94,7 +94,8 @@ const SANDBOX_LIFECYCLE_EVENT_TYPES: StudioEventType[] = [
 ];
 
 /**
- * Explicit path to a construction cache file for the L2 replay consult. Set this
+ * Explicit path to a construction cache file for the construction-cache replay
+ * consult. Set this
  * to make the construction-cache layer deterministic (e.g. point it at a known
  * session cache); when unset the runtime best-effort discovers the newest cache
  * under the user data dir.
@@ -161,10 +162,10 @@ async function newestConstructionsCache(
 }
 
 /**
- * Resolve the construction cache file to consult for L2: an explicit
+ * Resolve the construction cache file to consult: an explicit
  * {@link STUDIO_CONSTRUCTION_CACHE_ENV} override (deterministic) if it points at
  * a real file, else the newest discovered session cache under the user data dir.
- * Returns `undefined` when nothing usable is found (replay stays at L1).
+ * Returns `undefined` when nothing usable is found (replay stays at the grammar match).
  */
 async function discoverLiveConstructionCacheFile(): Promise<
     string | undefined
@@ -182,10 +183,10 @@ async function discoverLiveConstructionCacheFile(): Promise<
 }
 
 /**
- * Build the L2 {@link ConstructionCacheLayer} for a resolved grammar target:
+ * Build the {@link ConstructionCacheLayer} for a resolved grammar target:
  * compute the working-tree schema-file hash, discover the live cache, and gate
  * the consult on the hash. Returns `undefined` when the agent's schema can't be
- * hashed or no live cache exists — in either case replay stays at L1.
+ * hashed or no live cache exists — in either case replay stays at the grammar match.
  */
 async function resolveConstructionCacheLayer(
     target: GrammarReplayTarget,
@@ -256,7 +257,7 @@ export interface StudioReplayRequest {
  *   dispatcher does. Still indicative (no construction cache / wildcard-value
  *   validation), so the UI labels it accordingly.
  * - `construction-cache` — the live working-tree side additionally consulted the
- *   agent's real per-session construction cache (L2), hash-gated to the current
+ *   agent's real per-session construction cache, hash-gated to the current
  *   schema exactly as the dispatcher gates it. A construction `hit` is a faithful
  *   cache resolution; everything else falls through to the (enriched) grammar.
  *   Only used when a live cache was discovered AND its namespace hash still
@@ -473,7 +474,7 @@ export interface StudioRuntime {
     /** List recorded feedback rows, optionally filtered. */
     listFeedback(filter?: FeedbackFilter): Promise<FeedbackRow[]>;
     /**
-     * Replay an agent's corpus through the F4.1 compare engine, evaluating each
+     * Replay an agent's corpus through the compare engine, evaluating each
      * utterance against versions A and B. Emits `replay.row`/`replay.summary`
      * events (visible in the Event Log) and resolves with the collected rows
      * and summary.
@@ -1022,7 +1023,7 @@ export function createStudioRuntimeCore(
                     repoRoot,
                 );
                 if (target !== undefined) {
-                    // L2: best-effort consult of the agent's live per-session
+                    // Best-effort consult of the agent's live per-session
                     // construction cache for the working-tree side. Hash-gated to
                     // the current schema exactly as the dispatcher gates it, so a
                     // schema edit invalidates the cached constructions (→ stale →

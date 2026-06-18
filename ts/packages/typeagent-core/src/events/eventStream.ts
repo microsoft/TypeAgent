@@ -66,9 +66,7 @@ export interface EventEmitterLike {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Default ring-buffer capacity. See implementation plan §2.5 D2 (open decision).
- * 10_000 is the recommended default for MVP; per-workspace override is possible
- * once we wire configuration in P-1.
+ * Default ring-buffer capacity. A per-workspace override may be added later.
  */
 export const DEFAULT_BUFFER_CAPACITY = 10_000;
 

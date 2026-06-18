@@ -134,7 +134,7 @@ test("toImpactMethodNote labels static-grammar but stays silent for identity", (
     assert.ok(/indicative/i.test(note!));
 });
 
-test("toImpactMethodNote explains the construction-cache method (L2)", () => {
+test("toImpactMethodNote explains the construction-cache method", () => {
     const note = toImpactMethodNote("construction-cache");
     assert.ok(note);
     assert.ok(/construction[- ]cache/i.test(note!));

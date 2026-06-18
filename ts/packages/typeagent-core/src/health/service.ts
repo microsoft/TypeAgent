@@ -471,7 +471,7 @@ function createRules(): HealthRule[] {
         {
             id: "grammar.rules.targetKnownActions",
             description:
-                "Grammar targets should map to known actions (heuristic MVP check).",
+                "Grammar targets should map to known actions (heuristic check).",
             check: async (ctx) => {
                 if (
                     ctx.files.grammarFiles.length === 0 ||
@@ -479,7 +479,7 @@ function createRules(): HealthRule[] {
                 ) {
                     return [];
                 }
-                // MVP heuristic: if we have both files, we assume target mapping is
+                // Heuristic: if we have both files, we assume target mapping is
                 // checkable; strict semantic checks land when actionGrammar hooks in.
                 return [];
             },
