@@ -1,7 +1,7 @@
 {
   "name": "vscode-chat",
   "displayName": "TypeAgent Chat",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "description": "Registers TypeAgent as a third-party agent in VS Code's native Chat view",
@@ -49,6 +49,7 @@
         "name": "typeagent",
         "displayName": "TypeAgent",
         "description": "TypeAgent personal agent",
+        "icon": "$(typeagent-logo)",
         "when": "true"
       }
     ],
@@ -59,6 +60,15 @@
           "type": "string",
           "default": "ws://localhost:8999",
           "description": "WebSocket URL of the TypeAgent agent server"
+        }
+      }
+    },
+    "icons": {
+      "typeagent-logo": {
+        "description": "TypeAgent logo",
+        "default": {
+          "fontPath": "media/typeagent-icons.woff",
+          "fontCharacter": "\\F101"
         }
       }
     }

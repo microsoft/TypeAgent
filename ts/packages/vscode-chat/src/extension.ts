@@ -117,12 +117,7 @@ export async function activate(
             await state.handleRequest(connection, request, stream, token);
         },
     );
-    participant.iconPath = vscode.Uri.joinPath(
-        context.extensionUri,
-        "media",
-        "icons",
-        "typeagent.svg",
-    );
+    participant.iconPath = new vscode.ThemeIcon("typeagent-logo");
     context.subscriptions.push(participant);
 
     const provider: vscode.ChatSessionContentProvider = {

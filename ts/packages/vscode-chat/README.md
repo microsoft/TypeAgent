@@ -71,6 +71,23 @@ Electron shell too.
 | `npm run deploy:local` | Package and install the VSIX into the local `code`. |
 | `npm run clean`        | Remove `dist`, `dist-pub`, and stray `.vsix` files. |
 
+### Regenerating the icon font
+
+The participant icon is provided via a contributed icon font
+(`media/typeagent-icons.woff`) generated from `media/icons/typeagent.svg`
+using [fantasticon](https://www.npmjs.com/package/fantasticon). The
+font is checked in, so you only need to regenerate it after editing the
+SVG:
+
+```sh
+npx --yes fantasticon
+```
+
+The config lives in `.fantasticonrc.json`. After regenerating, bump the
+extension `version` in `package.json` (or fully restart VS Code) before
+reinstalling — VS Code caches the contributed WOFF by file path, so an
+unchanged path will keep serving the stale font.
+
 ## License
 
 MIT — see the [TypeAgent repository LICENSE](../../../LICENSE).

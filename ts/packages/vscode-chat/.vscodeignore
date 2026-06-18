@@ -1,5 +1,6 @@
 .gitignore
 .vscode/**
+.fantasticonrc.json
 src/**
 tsconfig.json
 esbuild.mjs
