@@ -2,19 +2,17 @@
 // Licensed under the MIT License.
 
 /**
- * Pure builders for a VS Code webview's HTML shell and its capability nonce.
+ * Pure builders for a VS Code webview's HTML shell.
  *
  * Kept free of `vscode`/DOM so the strict Content-Security-Policy can be
  * unit-tested. The host (`host.ts`) supplies the resolved `asWebviewUri`
- * strings and `cspSource`.
+ * strings and `cspSource`. The per-load nonce comes from the shared
+ * {@link createWebviewNonce} so every webview surface uses one crypto source.
  */
 
-import { randomBytes } from "node:crypto";
+import { createWebviewNonce } from "@typeagent/core/webview";
 
-/** A per-load nonce (base64) for the CSP `script-src`/`style-src`. */
-export function createWebviewNonce(): string {
-    return randomBytes(16).toString("base64");
-}
+export { createWebviewNonce };
 
 export interface WebviewHtmlOptions {
     /** Per-load nonce from {@link createWebviewNonce}. */

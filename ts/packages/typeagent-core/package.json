@@ -23,6 +23,7 @@
     "./replay": "./dist/replay/index.js",
     "./replayResolver": "./dist/replay/grammarResolver.js",
     "./onboardingBridge": "./dist/onboardingBridge/index.js",
+    "./webview": "./dist/webview/index.js",
     "./runtime": "./dist/runtime/index.js"
   },
   "types": "./dist/index.d.ts",
