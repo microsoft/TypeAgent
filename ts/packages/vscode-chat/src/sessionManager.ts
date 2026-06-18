@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import type {
     AgentServerConnection,
     ConversationDispatcher,
@@ -14,7 +15,10 @@ import type {
     RequestId,
 } from "@typeagent/dispatcher-types";
 import type { DisplayContent } from "@typeagent/agent-sdk";
-import { renderDisplayToMarkdown } from "./displayRender.js";
+import {
+    renderDisplayToMarkdown,
+    renderDisplayToText,
+} from "./displayRender.js";
 
 // TODO: Replace these private constructor casts when VS Code exposes a
 // supported way for chat session providers to restore request/response turns.
@@ -43,6 +47,12 @@ const ChatRequestTurn =
 const ChatResponseTurn =
     vscode.ChatResponseTurn as unknown as ChatResponseTurnConstructor;
 
+function chatMarkdown(value: string): vscode.MarkdownString {
+    const markdown = new vscode.MarkdownString(value);
+    markdown.supportHtml = true;
+    return markdown;
+}
+
 class ResponseSink {
     constructor(
         public readonly stream: vscode.ChatResponseStream,
@@ -51,7 +61,13 @@ class ResponseSink {
     write(content: DisplayContent) {
         const md = renderDisplayToMarkdown(content);
         if (md.length > 0) {
-            this.stream.markdown(new vscode.MarkdownString(md));
+            this.stream.markdown(chatMarkdown(md));
+        }
+    }
+    progress(content: DisplayContent) {
+        const text = renderDisplayToText(content);
+        if (text.length > 0) {
+            this.stream.progress(text);
         }
     }
 }
@@ -129,8 +145,15 @@ class SessionState {
             setDisplayInfo: noop,
             setDisplay: (msg: IAgentMessage) =>
                 this.routeToSink(msg.requestId, (s) => s.write(msg.message)),
-            appendDisplay: (msg: IAgentMessage) =>
-                this.routeToSink(msg.requestId, (s) => s.write(msg.message)),
+            appendDisplay: (msg: IAgentMessage, mode: DisplayAppendMode) => {
+                this.routeToSink(msg.requestId, (s) => {
+                    if (mode === "temporary") {
+                        s.progress(msg.message);
+                    } else {
+                        s.write(msg.message);
+                    }
+                });
+            },
             appendDiagnosticData: noop,
             setDynamicDisplay: noop,
             question: async (_rid, message, choices, defaultId) => {
@@ -246,6 +269,9 @@ async function buildHistory(
             entry.type === "set-display" ||
             entry.type === "append-display"
         ) {
+            if (entry.type === "append-display" && entry.mode === "temporary") {
+                continue;
+            }
             const md = renderDisplayToMarkdown(entry.message.message);
             if (md) touch(entry.message.requestId.requestId).lines.push(md);
         }
@@ -271,7 +297,7 @@ async function buildHistory(
                 new ChatResponseTurn(
                     [
                         new vscode.ChatResponseMarkdownPart(
-                            new vscode.MarkdownString(group.lines.join("\n\n")),
+                            chatMarkdown(group.lines.join("\n\n")),
                         ),
                     ],
                     {},

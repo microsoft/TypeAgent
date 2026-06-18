@@ -81,6 +81,7 @@
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "ansi_up": "^6.0.6",
     "debug": "^4.4.0"
   },
   "devDependencies": {
