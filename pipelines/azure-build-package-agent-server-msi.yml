@@ -85,24 +85,53 @@ jobs:
         displayName: Install pnpm
         workingDirectory: $(buildDirectory)
 
-      - script: |
-          $wixBin = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
-          if (Test-Path "$wixBin\candle.exe") {
-            Write-Host "✅ WiX Toolset 3.11 found"
-            Write-Host "   candle: $(& "$wixBin\candle.exe" -? 2>&1 | Select-String 'version' | Select-Object -First 1)"
-          } else {
-            Write-Error "WiX Toolset 3.11 not found at $wixBin. Install from https://github.com/wixtoolset/wix3/releases"
+      - pwsh: |
+          $wixCandidates = @(
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe",
+            "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe",
+            "C:\Program Files\WiX Toolset v3.14\bin\candle.exe",
+            "C:\Program Files\WiX Toolset v3.11\bin\candle.exe"
+          )
+
+          $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($existing) {
+            Write-Host "✅ WiX already installed at: $existing"
+            return
+          }
+
+          $choco = Get-Command choco -ErrorAction SilentlyContinue
+          if (-not $choco) {
+            Write-Error "WiX not found and Chocolatey is unavailable; cannot auto-install WiX on this agent."
             exit 1
           }
-        displayName: Check WiX Toolset (required)
+
+          Write-Host "Installing WiX Toolset with Chocolatey..."
+          choco install wixtoolset --version=3.14.1 -y --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install WiX Toolset via Chocolatey"
+            exit 1
+          }
+
+          $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $existing) {
+            Write-Error "WiX installation completed but candle.exe was not found in expected locations."
+            exit 1
+          }
+
+          Write-Host "✅ WiX installed at: $existing"
+        displayName: Ensure WiX Toolset
         condition: eq(variables['Agent.OS'], 'Windows_NT')
 
-      - script: |
-          echo "Checking Windows SDK..."
-          if (Test-Path "C:\Program Files (x86)\Windows Kits\10\bin") {
-            Write-Host "✅ Windows SDK found"
+      - pwsh: |
+          Write-Host "Checking Windows SDK..."
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Select-Object -First 1
+
+          if ($null -ne $signtool) {
+            Write-Host "✅ Windows SDK signtool found: $($signtool.FullName)"
           } else {
-            Write-Host "⚠️  Windows SDK NOT found"
+            Write-Warning "Windows SDK signtool.exe not found under Windows Kits; signing step may fail."
           }
         displayName: Check Windows SDK
         condition: eq(variables['Agent.OS'], 'Windows_NT')
@@ -130,20 +159,16 @@ jobs:
             }
 
       # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
-      - script: |
-          cd $(scriptDir)
-          node build-msi.mjs `
-            --rid ${{ parameters.rid }} `
-            --version ${{ parameters.agentVersion }} `
-            --plugin-version ${{ parameters.pluginVersion }} `
-            --output $(MSI_BUILD_DIR)
+      - pwsh: |
+          Set-Location "$(scriptDir)"
+          node build-msi.mjs --rid "${{ parameters.rid }}" --version "${{ parameters.agentVersion }}" --plugin-version "${{ parameters.pluginVersion }}" --output "$(MSI_BUILD_DIR)"
         displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
         env:
           SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
       # Step 3: Sign the MSI
-      - script: |
-          cd $(scriptDir)
+      - pwsh: |
+          Set-Location "$(scriptDir)"
           $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
           if ($null -eq $msiPath) {
             Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
@@ -156,7 +181,7 @@ jobs:
           MSI_SIGNING_CERT_PASSWORD: $(MSI_SIGNING_CERT_PASSWORD)
 
       # Step 4: Verify signature
-      - script: |
+      - pwsh: |
           $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
           if ($null -eq $msiPath) {
             Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
