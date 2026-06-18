@@ -6039,6 +6039,9 @@ importers:
 
   packages/utils/webSocketUtils:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
@@ -6149,6 +6152,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

@@ -14,7 +14,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./originAllowlist": "./dist/originAllowlist.js",
-    "./heartbeat": "./dist/heartbeat.js"
+    "./heartbeat": "./dist/heartbeat.js",
+    "./rpcChannel": "./dist/rpcChannel.js"
   },
   "files": [
     "dist",
@@ -28,6 +29,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
