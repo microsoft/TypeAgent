@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import crypto from "node:crypto";
 import { ParamSpec } from "@typeagent/action-schema";
 import { ExecutableAction, FullAction } from "./requestAction.js";
 
@@ -55,6 +56,33 @@ export function getNamespaceForCache(
     }
 
     return schemaName;
+}
+
+/**
+ * Compute the schema-file hash that keys a schema's construction-cache
+ * namespace (`${schemaName},${hash}`). A construction only matches while this
+ * hash still equals the current schema's (see {@link isValidActionSchemaFileHash}),
+ * so editing or rebuilding a schema invalidates its cached constructions.
+ *
+ * The hash digests, in order, the JSON-serialized schema type, the schema
+ * source, and the optional sidecar paramSpec config (omitted when falsy, e.g.
+ * built `.pas.json` schemas that carry no sidecar). This is the single source of
+ * truth for the hash; producers (the dispatcher's schema cache) and consumers
+ * (cache-namespace validation, replay tooling) must share it so the namespace
+ * key stays consistent.
+ */
+export function computeActionSchemaFileHash(
+    schemaType: unknown,
+    source: string,
+    config?: string,
+): string {
+    const hash = crypto.createHash("sha256");
+    hash.update(JSON.stringify(schemaType));
+    hash.update(source);
+    if (config) {
+        hash.update(config);
+    }
+    return hash.digest("base64");
 }
 
 export function isValidActionSchemaFileHash(
