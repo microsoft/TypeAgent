@@ -22,18 +22,12 @@ pr:
 variables:
   - name: buildDirectory
     value: $(Build.SourcesDirectory)/ts
-  - name: installerDir
-    value: $(buildDirectory)/tools/installers/wix
   - name: scriptDir
     value: $(buildDirectory)/tools/scripts
   - name: nodeVersion
     value: 22
-  - name: channel
-    value: ci
   - name: MSI_BUILD_DIR
     value: $(Build.ArtifactStagingDirectory)/msi
-  - name: artifactFeedVersion
-    value: 0.0.1-$(Build.BuildId)
   - name: resolvedAgentVersion
     value: ""
   - name: resolvedPluginVersion
@@ -91,7 +85,7 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: "true"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
-      # Step 0a: Build and publish agent-server (win32-x64 only)
+      # Step 0a: Build and stage agent-server (win32-x64 only)
       - pwsh: |
           Write-Host "📦 Building agent-server.win32-x64 from source..."
           cd "$(buildDirectory)"
@@ -108,33 +102,12 @@ jobs:
             --platform win32 --arch x64 \
             --profile service
           echo "✅ Deployed to: $STAGE_DIR"
-          find "$STAGE_DIR" -type f | head -10
+          mapfile -t files < <(find "$STAGE_DIR" -type f)
+          for f in "${files[@]:0:10}"; do echo "$f"; done
         displayName: Deploy agent-server (win32-x64)
         workingDirectory: $(buildDirectory)
-      
-      - task: AzureCLI@2
-        displayName: Publish agent-server.win32-x64 to feed
-        inputs:
-          azureSubscription: $(azureSubscription)
-          scriptType: pwsh
-          scriptLocation: inlineScript
-          inlineScript: |
-            az extension add --name azure-devops --only-show-errors
-            $version = "0.0.1-$(Build.BuildId)"
-            Write-Host "Publishing agent-server.win32-x64 v$version"
-            az artifacts universal publish `
-              --organization "https://dev.azure.com/msctoproj" `
-              --project "AI_Systems" --scope project `
-              --feed "typeagent" `
-              --name "agent-server.win32-x64" `
-              --version "$version" `
-              --path "$(Build.ArtifactStagingDirectory)/agent-server-deploy"
-            Write-Host "✅ Published agent-server"
-            Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]$version"
-        env:
-          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
-      # Step 0b: Build and publish copilot-plugin
+      # Step 0b: Build and stage copilot-plugin
       - pwsh: |
           Write-Host "📦 Building copilot-plugin from source..."
           cd "$(buildDirectory)"
@@ -156,31 +129,17 @@ jobs:
           cp -r "$PLUGIN_SRC/skills"     "$STAGE_DIR/skills"
           
           echo "✅ Staged plugin artifact"
-          find "$STAGE_DIR" -type f | head -10
+          mapfile -t files < <(find "$STAGE_DIR" -type f)
+          for f in "${files[@]:0:10}"; do echo "$f"; done
         displayName: Stage copilot-plugin artifact
         workingDirectory: $(buildDirectory)
-      
-      - task: AzureCLI@2
-        displayName: Publish copilot-plugin to feed
-        inputs:
-          azureSubscription: $(azureSubscription)
-          scriptType: pwsh
-          scriptLocation: inlineScript
-          inlineScript: |
-            az extension add --name azure-devops --only-show-errors
-            $version = "0.0.1-$(Build.BuildId)"
-            Write-Host "Publishing typeagent-copilot-plugin v$version"
-            az artifacts universal publish `
-              --organization "https://dev.azure.com/msctoproj" `
-              --project "AI_Systems" --scope project `
-              --feed "typeagent" `
-              --name "typeagent-copilot-plugin" `
-              --version "$version" `
-              --path "$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
-            Write-Host "✅ Published copilot-plugin"
-            Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]$version"
-        env:
-          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      - pwsh: |
+          $version = "0.0.1-$(Build.BuildId)"
+          Write-Host "Using local staged artifacts for MSI"
+          Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]$version"
+          Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]$version"
+        displayName: Set resolved artifact versions
 
       - pwsh: |
           $wixCandidates = @(
@@ -267,28 +226,21 @@ jobs:
           Write-Host "✅ Plugin version: $pluginVer"
         displayName: Confirm artifact versions resolved
 
-      # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
-      - task: AzureCLI@2
+      # Step 2: Build the MSI (uses staged agent-server + copilot-plugin folders)
+      - pwsh: |
+          Set-Location "$(scriptDir)"
+
+          $agentVer = "$(resolvedAgentVersion)"
+          $pluginVer = "$(resolvedPluginVersion)"
+          Write-Host "Building MSI with:"
+          Write-Host "  - RID:    ${{ parameters.rid }}"
+          Write-Host "  - Agent:  $agentVer"
+          Write-Host "  - Plugin: $pluginVer"
+          Write-Host "  - Agent dir:  $(Build.ArtifactStagingDirectory)/agent-server-deploy"
+          Write-Host "  - Plugin dir: $(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
+
+          node .\build-msi.mjs --rid "${{ parameters.rid }}" --skip-download --agent-dir "$(Build.ArtifactStagingDirectory)/agent-server-deploy" --plugin-dir "$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy" --version "$agentVer" --plugin-version "$pluginVer" --output "$(MSI_BUILD_DIR)"
         displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
-        inputs:
-          azureSubscription: $(azureSubscription)
-          scriptType: pscore
-          scriptLocation: inlineScript
-          inlineScript: |
-            az extension add --name azure-devops --only-show-errors
-            $env:PATH = "C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;$env:PATH"
-            Set-Location "$(scriptDir)"
-            
-            $agentVer = "$(resolvedAgentVersion)"
-            $pluginVer = "$(resolvedPluginVersion)"
-            Write-Host "Building MSI with:"
-            Write-Host "  - RID:    ${{ parameters.rid }}"
-            Write-Host "  - Agent:  $agentVer"
-            Write-Host "  - Plugin: $pluginVer"
-            
-            node .\build-msi.mjs --rid "${{ parameters.rid }}" --version "$agentVer" --plugin-version "$pluginVer" --output "$(MSI_BUILD_DIR)"
-        env:
-          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # Step 3: Sign the MSI
       - task: AzureCLI@2
