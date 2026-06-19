@@ -172,7 +172,9 @@ function downloadArtifact(packageName, ver, targetDir) {
         ver,
         "--path",
         targetDir,
-    ]);
+    ], {
+        shell: process.platform === "win32",
+    });
 
     const files = fs.readdirSync(targetDir);
     if (files.length === 0) {
