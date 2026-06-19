@@ -71,7 +71,7 @@ function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
-        shell: process.platform === "win32",
+        shell: false,
         ...options,
     });
     if (result.error) {
@@ -172,7 +172,9 @@ function downloadArtifact(packageName, ver, targetDir) {
         ver,
         "--path",
         targetDir,
-    ]);
+    ], {
+        shell: process.platform === "win32",
+    });
 
     const files = fs.readdirSync(targetDir);
     if (files.length === 0) {
