@@ -66,7 +66,7 @@ function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
-        shell: false,
+        shell: process.platform === "win32",
         ...options,
     });
     if (result.error) {
