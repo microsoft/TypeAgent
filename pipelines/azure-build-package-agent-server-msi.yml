@@ -85,6 +85,14 @@ jobs:
         displayName: Install pnpm
         workingDirectory: $(buildDirectory)
 
+      - script: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+        displayName: Install dependencies
+        workingDirectory: $(buildDirectory)
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
       - pwsh: |
           $wixCandidates = @(
             "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe",
@@ -144,7 +152,8 @@ jobs:
           scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
-            node "$(scriptDir)\getCert.mjs" pull --verbose
+            Set-Location "$(buildDirectory)"
+            node .\tools\scripts\getCert.mjs pull --verbose
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Failed to pull certificate from Key Vault"
               exit $LASTEXITCODE
@@ -226,7 +235,8 @@ jobs:
           scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
-            node "$(scriptDir)\getCert.mjs" pull
+            Set-Location "$(buildDirectory)"
+            node .\tools\scripts\getCert.mjs pull
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Failed to pull certificate from Key Vault"
               exit $LASTEXITCODE
