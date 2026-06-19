@@ -86,7 +86,7 @@ function runCommand(cmd, cmdArgs, options = {}) {
     // script wrapper, not a direct .exe.
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
-        shell: process.platform === "win32",
+        shell: false,
         ...options,
     });
 
