@@ -67,6 +67,16 @@ const pluginHeatFile = path.join(outputPath, "CopilotPluginFiles.wxs");
 if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { recursive: true });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function quoteCmdArg(arg) {
+    if (arg === "") {
+        return '""';
+    }
+    if (/[^A-Za-z0-9_\-.:\\/]/.test(arg)) {
+        return `"${arg.replace(/"/g, '\\"')}"`;
+    }
+    return arg;
+}
+
 function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
 
@@ -76,7 +86,7 @@ function runCommand(cmd, cmdArgs, options = {}) {
     // script wrapper, not a direct .exe.
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
-        shell: false,
+        shell: process.platform === "win32",
         ...options,
     });
 
