@@ -241,6 +241,33 @@ const semverVersion =
         .replace(/[^0-9.]/g, ".")
         .replace(/\.{2,}/g, ".")
         .replace(/\.$/, "") || "0.0.1";
+
+function toWixProductVersion(input) {
+    // WiX requires 4 numeric parts, each in [0, 65534].
+    const parts = (input.match(/\d+/g) ?? ["0", "0", "1", "0"])
+        .slice(0, 4)
+        .map((n) => Number.parseInt(n, 10) || 0);
+
+    while (parts.length < 4) {
+        parts.push(0);
+    }
+
+    // Carry overflow from right to left so large build IDs remain representable.
+    for (let i = 3; i > 0; i--) {
+        const carry = Math.floor(parts[i] / 65535);
+        parts[i] = parts[i] % 65535;
+        parts[i - 1] += carry;
+    }
+
+    // Clamp the major version in the unlikely event of extreme overflow.
+    parts[0] = Math.min(parts[0], 65534);
+
+    return parts.join(".");
+}
+
+const wixProductVersion = toWixProductVersion(version);
+console.log(`   WiX ProductVersion: ${wixProductVersion}`);
+
 const marketplace = {
     name: "typeagent-local",
     owner: { name: "Microsoft", email: "typeagent@microsoft.com" },
@@ -280,6 +307,8 @@ function runHeat(dir, componentGroup, dirRef, varName, outFile) {
         "-var",
         `var.${varName}`,
         "-gg", // generate stable GUIDs per file path
+        "-scom", // suppress COM harvesting (avoids SelfReg DLL warnings for native binaries)
+        "-sreg", // suppress registry harvesting
         "-srd", // suppress root directory element
         "-sfrag", // suppress fragment wrapping (use our own Product.wxs structure)
         "-indent",
@@ -310,7 +339,7 @@ console.log(`\n🕯️  Compiling WiX...`);
 
 const wixobjDir = outputPath;
 runCommand(candleExe, [
-    `-dProductVersion=${version}`,
+    `-dProductVersion=${wixProductVersion}`,
     `-dAgentServerArtifactDir=${agentArtifactDir}`,
     `-dCopilotPluginArtifactDir=${pluginArtifactDir}`,
     `-dMarketplaceDir=${marketplaceDir}`,
