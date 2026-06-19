@@ -117,57 +117,14 @@ function wixTool(name) {
     return found;
 }
 
-function getLatestVersion(packageName) {
-    console.log(`   Querying available versions...`);
-    const result = spawnSync("az", [
-        "artifacts",
-        "universal",
-        "list",
-        "--organization",
-        "https://dev.azure.com/msctoproj",
-        "--project",
-        "AI_Systems",
-        "--scope",
-        "project",
-        "--feed",
-        "typeagent",
-        "--name",
-        packageName,
-    ], {
-        stdio: "pipe",
-        shell: process.platform === "win32",
-        encoding: "utf-8",
-    });
-
-    if (result.error || result.status !== 0) {
-        console.error(`❌ Failed to query versions for ${packageName}`);
-        if (result.stderr) console.error(result.stderr);
-        process.exit(1);
-    }
-
-    try {
-        const data = JSON.parse(result.stdout);
-        if (!Array.isArray(data) || data.length === 0) {
-            console.error(`❌ No versions found for ${packageName}`);
-            process.exit(1);
-        }
-        const latest = data[0].version;
-        console.log(`   Found latest version: ${latest}`);
-        return latest;
-    } catch (e) {
-        console.error(`❌ Failed to parse version list: ${e.message}`);
-        if (result.stdout) console.error(`Output: ${result.stdout}`);
-        process.exit(1);
-    }
-}
-
 function downloadArtifact(packageName, ver, targetDir) {
     if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true });
     fs.mkdirSync(targetDir, { recursive: true });
 
-    let verArg = ver;
-    if (ver === "latest") {
-        verArg = getLatestVersion(packageName);
+    if (!ver || ver === "" || ver === "latest") {
+        console.error(`❌ Version must be explicitly specified (got: "${ver}")`);
+        console.error(`   For the MSI pipeline, queue a build and specify artifact versions.`);
+        process.exit(1);
     }
 
     runCommand("az", [
@@ -185,7 +142,7 @@ function downloadArtifact(packageName, ver, targetDir) {
         "--name",
         packageName,
         "--version",
-        verArg,
+        ver,
         "--path",
         targetDir,
     ]);

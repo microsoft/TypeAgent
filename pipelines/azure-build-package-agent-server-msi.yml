@@ -32,6 +32,12 @@ variables:
     value: ci
   - name: MSI_BUILD_DIR
     value: $(Build.ArtifactStagingDirectory)/msi
+  - name: artifactFeedVersion
+    value: 0.0.1-$(Build.BuildId)
+  - name: resolvedAgentVersion
+    value: ""
+  - name: resolvedPluginVersion
+    value: ""
 
 parameters:
   - name: publishArtifacts
@@ -45,14 +51,30 @@ parameters:
       - win32-x64
       - win32-arm64
     displayName: "RID (Runtime ID)"
-  - name: agentVersion
+  - name: buildAgentServer
+    type: boolean
+    default: true
+    displayName: "Build agent-server from source (if false, use pre-built artifact)"
+  - name: buildCopilotPlugin
+    type: boolean
+    default: true
+    displayName: "Build copilot-plugin from source (if false, use pre-built artifact)"
+  - name: agentServerBranch
     type: string
-    default: latest
-    displayName: "agent-server artifact version (semver or 'latest')"
-  - name: pluginVersion
+    default: $(Build.SourceBranch)
+    displayName: "Branch to build agent-server from (default: current branch)"
+  - name: copilotPluginBranch
     type: string
-    default: latest
-    displayName: "typeagent-copilot-plugin artifact version (semver or 'latest')"
+    default: $(Build.SourceBranch)
+    displayName: "Branch to build copilot-plugin from (default: current branch)"
+  - name: prebuiltAgentVersion
+    type: string
+    default: ""
+    displayName: "[Optional] Pre-built agent-server version (only if buildAgentServer=false, e.g., 0.0.1-132398)"
+  - name: prebuiltPluginVersion
+    type: string
+    default: ""
+    displayName: "[Optional] Pre-built copilot-plugin version (only if buildCopilotPlugin=false, e.g., 0.0.1-132398)"
 
 jobs:
   - job: build_sign_msi
@@ -92,6 +114,119 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+      # Step 0a: Build and publish agent-server (win32-x64 only)
+      - ${{ if eq(parameters.buildAgentServer, true) }}:
+          - pwsh: |
+              Write-Host "📦 Building agent-server.win32-x64 from source..."
+              cd "$(buildDirectory)"
+              pnpm run build agent-server
+            displayName: Build agent-server
+          
+          - bash: |
+              set -euo pipefail
+              echo "📦 Deploying agent-server (win32-x64)..."
+              STAGE_DIR="$(Build.ArtifactStagingDirectory)/agent-server-deploy"
+              mkdir -p "$STAGE_DIR"
+              node tools/scripts/deployAgentServer.mjs \
+                --out "$STAGE_DIR" \
+                --platform win32 --arch x64 \
+                --profile service
+              echo "✅ Deployed to: $STAGE_DIR"
+              find "$STAGE_DIR" -type f | head -10
+            displayName: Deploy agent-server (win32-x64)
+            workingDirectory: $(buildDirectory)
+          
+          - task: AzureCLI@2
+            displayName: Publish agent-server.win32-x64 to feed
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pwsh
+              scriptLocation: inlineScript
+              inlineScript: |
+                az extension add --name azure-devops --only-show-errors
+                $version = "0.0.1-$(Build.BuildId)"
+                Write-Host "Publishing agent-server.win32-x64 v$version"
+                az artifacts universal publish `
+                  --organization "https://dev.azure.com/msctoproj" `
+                  --project "AI_Systems" --scope project `
+                  --feed "typeagent" `
+                  --name "agent-server.win32-x64" `
+                  --version "$version" `
+                  --path "$(Build.ArtifactStagingDirectory)/agent-server-deploy"
+                Write-Host "✅ Published agent-server"
+                Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]$version"
+              env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      - ${{ if eq(parameters.buildAgentServer, false) }}:
+          - pwsh: |
+              if ("${{ parameters.prebuiltAgentVersion }}" -eq "" -or "${{ parameters.prebuiltAgentVersion }}" -eq "`$null") {
+                Write-Error "buildAgentServer=false but prebuiltAgentVersion not provided"
+                exit 1
+              }
+              Write-Host "Using pre-built agent-server version: ${{ parameters.prebuiltAgentVersion }}"
+              Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]${{ parameters.prebuiltAgentVersion }}"
+            displayName: Use pre-built agent-server
+
+      # Step 0b: Build and publish copilot-plugin
+      - ${{ if eq(parameters.buildCopilotPlugin, true) }}:
+          - pwsh: |
+              Write-Host "📦 Building copilot-plugin from source..."
+              cd "$(buildDirectory)"
+              pnpm run build copilot-plugin
+            displayName: Build copilot-plugin
+          
+          - bash: |
+              set -euo pipefail
+              echo "📦 Staging copilot-plugin artifact..."
+              PLUGIN_SRC="$(buildDirectory)/packages/copilot-plugin"
+              STAGE_DIR="$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
+              mkdir -p "$STAGE_DIR"
+              
+              cp -r "$PLUGIN_SRC/dist"       "$STAGE_DIR/dist"
+              cp    "$PLUGIN_SRC/hooks.json" "$STAGE_DIR/hooks.json"
+              cp    "$PLUGIN_SRC/.mcp.json"  "$STAGE_DIR/.mcp.json"
+              cp    "$PLUGIN_SRC/plugin.json" "$STAGE_DIR/plugin.json"
+              cp -r "$PLUGIN_SRC/agents"     "$STAGE_DIR/agents"
+              cp -r "$PLUGIN_SRC/skills"     "$STAGE_DIR/skills"
+              
+              echo "✅ Staged plugin artifact"
+              find "$STAGE_DIR" -type f | head -10
+            displayName: Stage copilot-plugin artifact
+            workingDirectory: $(buildDirectory)
+          
+          - task: AzureCLI@2
+            displayName: Publish copilot-plugin to feed
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pwsh
+              scriptLocation: inlineScript
+              inlineScript: |
+                az extension add --name azure-devops --only-show-errors
+                $version = "0.0.1-$(Build.BuildId)"
+                Write-Host "Publishing typeagent-copilot-plugin v$version"
+                az artifacts universal publish `
+                  --organization "https://dev.azure.com/msctoproj" `
+                  --project "AI_Systems" --scope project `
+                  --feed "typeagent" `
+                  --name "typeagent-copilot-plugin" `
+                  --version "$version" `
+                  --path "$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
+                Write-Host "✅ Published copilot-plugin"
+                Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]$version"
+              env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      - ${{ if eq(parameters.buildCopilotPlugin, false) }}:
+          - pwsh: |
+              if ("${{ parameters.prebuiltPluginVersion }}" -eq "" -or "${{ parameters.prebuiltPluginVersion }}" -eq "`$null") {
+                Write-Error "buildCopilotPlugin=false but prebuiltPluginVersion not provided"
+                exit 1
+              }
+              Write-Host "Using pre-built copilot-plugin version: ${{ parameters.prebuiltPluginVersion }}"
+              Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]${{ parameters.prebuiltPluginVersion }}"
+            displayName: Use pre-built copilot-plugin
 
       - pwsh: |
           $wixCandidates = @(
@@ -159,6 +294,25 @@ jobs:
               exit $LASTEXITCODE
             }
 
+      # Step 1b: Confirm artifact versions are resolved
+      - pwsh: |
+          $agentVer = "$(resolvedAgentVersion)"
+          $pluginVer = "$(resolvedPluginVersion)"
+          
+          if ($agentVer -eq "" -or $agentVer -eq "`$null") {
+            Write-Error "ERROR: Agent version not resolved. Check build steps above."
+            exit 1
+          }
+          
+          if ($pluginVer -eq "" -or $pluginVer -eq "`$null") {
+            Write-Error "ERROR: Plugin version not resolved. Check build steps above."
+            exit 1
+          }
+          
+          Write-Host "✅ Agent version:  $agentVer"
+          Write-Host "✅ Plugin version: $pluginVer"
+        displayName: Confirm artifact versions resolved
+
       # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
       - task: AzureCLI@2
         displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
@@ -170,7 +324,15 @@ jobs:
             az extension add --name azure-devops --only-show-errors
             $env:PATH = "C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;$env:PATH"
             Set-Location "$(scriptDir)"
-            node .\build-msi.mjs --rid "${{ parameters.rid }}" --version "${{ parameters.agentVersion }}" --plugin-version "${{ parameters.pluginVersion }}" --output "$(MSI_BUILD_DIR)"
+            
+            $agentVer = "$(resolvedAgentVersion)"
+            $pluginVer = "$(resolvedPluginVersion)"
+            Write-Host "Building MSI with:"
+            Write-Host "  - RID:    ${{ parameters.rid }}"
+            Write-Host "  - Agent:  $agentVer"
+            Write-Host "  - Plugin: $pluginVer"
+            
+            node .\build-msi.mjs --rid "${{ parameters.rid }}" --version "$agentVer" --plugin-version "$pluginVer" --output "$(MSI_BUILD_DIR)"
         env:
           AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
