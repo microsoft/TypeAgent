@@ -8,16 +8,15 @@
  * build-msi.mjs
  *
  * Orchestrates the TypeAgent MSI build:
- * 1. Download agent-server.<rid> artifact from ADO feed
- * 2. Download typeagent-copilot-plugin artifact from ADO feed
- * 3. Generate marketplace.json for Copilot CLI plugin registration
- * 4. Harvest file components with heat.exe (one pass per artifact dir)
- * 5. Compile WiX (candle) + link to MSI (light)
+ * 1. Resolve artifact inputs (pipeline default: pre-staged local directories via --skip-download)
+ * 2. Generate marketplace.json for Copilot CLI plugin registration
+ * 3. Harvest file components with heat.exe (one pass per artifact dir)
+ * 4. Compile WiX (candle) + link to MSI (light)
  *
  * Usage:
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --output ./out
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --plugin-version 0.0.1-12345
- *   node build-msi.mjs --skip-download --version 0.0.1-test --output ./out
+ *   node build-msi.mjs --skip-download --agent-dir ./agent-server --plugin-dir ./copilot-plugin --version 0.0.1-test --plugin-version 0.0.1-test --output ./out
  */
 
 import fs from "node:fs";
@@ -34,6 +33,8 @@ let version = "latest";
 let pluginVersion = "latest";
 let outputDir = "./msi-out";
 let skipDownload = false;
+let stagedAgentDir = "";
+let stagedPluginDir = "";
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];
@@ -41,6 +42,8 @@ for (let i = 0; i < args.length; i++) {
     else if (args[i] === "--plugin-version") pluginVersion = args[++i];
     else if (args[i] === "--output") outputDir = args[++i];
     else if (args[i] === "--skip-download") skipDownload = true;
+    else if (args[i] === "--agent-dir") stagedAgentDir = args[++i];
+    else if (args[i] === "--plugin-dir") stagedPluginDir = args[++i];
 }
 
 console.log(`📦 Building TypeAgent MSI`);
@@ -48,6 +51,8 @@ console.log(`   RID:            ${rid}`);
 console.log(`   Agent version:  ${version}`);
 console.log(`   Plugin version: ${pluginVersion}`);
 console.log(`   Output:         ${outputDir}`);
+if (stagedAgentDir) console.log(`   Agent dir:      ${stagedAgentDir}`);
+if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const wxsDir = path.resolve(__dirname, "../installers/wix");
@@ -66,7 +71,7 @@ function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
-        shell: false,
+        shell: process.platform === "win32",
         ...options,
     });
     if (result.error) {
@@ -117,11 +122,38 @@ function wixTool(name) {
     return found;
 }
 
+function ensureDirHasContent(dir, label) {
+    if (!fs.existsSync(dir)) {
+        console.error(`❌ ${label} dir not found: ${dir}`);
+        process.exit(1);
+    }
+    const entries = fs.readdirSync(dir);
+    if (entries.length === 0) {
+        console.error(`❌ ${label} dir is empty: ${dir}`);
+        process.exit(1);
+    }
+}
+
+function prepareFromStagedDir(sourceDir, targetDir, label) {
+    const resolvedSource = path.resolve(sourceDir);
+    ensureDirHasContent(resolvedSource, `${label} source`);
+    if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+    fs.cpSync(resolvedSource, targetDir, { recursive: true });
+    ensureDirHasContent(targetDir, `${label} target`);
+    console.log(`✅ Using staged ${label}: ${resolvedSource}`);
+}
+
 function downloadArtifact(packageName, ver, targetDir) {
     if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true });
     fs.mkdirSync(targetDir, { recursive: true });
 
-    const verArg = ver === "latest" ? "*" : ver;
+    if (!ver || ver === "" || ver === "latest") {
+        console.error(`❌ Version must be explicitly specified (got: "${ver}")`);
+        console.error(`   For the MSI pipeline, queue a build and specify artifact versions.`);
+        process.exit(1);
+    }
+
     runCommand("az", [
         "artifacts",
         "universal",
@@ -137,7 +169,7 @@ function downloadArtifact(packageName, ver, targetDir) {
         "--name",
         packageName,
         "--version",
-        verArg,
+        ver,
         "--path",
         targetDir,
     ]);
@@ -162,6 +194,13 @@ if (!skipDownload) {
         pluginArtifactDir,
     );
 } else {
+    if (stagedAgentDir) {
+        prepareFromStagedDir(stagedAgentDir, agentArtifactDir, "agent-server");
+    }
+    if (stagedPluginDir) {
+        prepareFromStagedDir(stagedPluginDir, pluginArtifactDir, "copilot-plugin");
+    }
+
     for (const [label, dir] of [
         ["agent-server", agentArtifactDir],
         ["copilot-plugin", pluginArtifactDir],
