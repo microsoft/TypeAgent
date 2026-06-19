@@ -71,7 +71,7 @@ jobs:
         displayName: Check Azure CLI
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: powershell
+          scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
             az --version
@@ -141,11 +141,10 @@ jobs:
         displayName: Pull dev certificate from Key Vault
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: powershell
+          scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
-            Set-Location "$(scriptDir)"
-            node .\getCert.mjs pull --verbose
+            node "$(scriptDir)\getCert.mjs" pull --verbose
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Failed to pull certificate from Key Vault"
               exit $LASTEXITCODE
@@ -224,11 +223,10 @@ jobs:
         displayName: Pull dev certificate
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: powershell
+          scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
-            Set-Location "$(scriptDir)"
-            node .\getCert.mjs pull
+            node "$(scriptDir)\getCert.mjs" pull
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Failed to pull certificate from Key Vault"
               exit $LASTEXITCODE
