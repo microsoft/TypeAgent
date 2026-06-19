@@ -67,33 +67,18 @@ const pluginHeatFile = path.join(outputPath, "CopilotPluginFiles.wxs");
 if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { recursive: true });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function quoteCmdArg(arg) {
-    if (arg === "") {
-        return '""';
-    }
-    if (/[^A-Za-z0-9_\-.:\\/]/.test(arg)) {
-        return `"${arg.replace(/"/g, '\\"')}"`;
-    }
-    return arg;
-}
-
 function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
 
-    const useCmdShell = process.platform === "win32" && options.shell === true;
-    const spawnOptions = {
+    // Use shell:false so Node passes the exe path directly to CreateProcess,
+    // which handles paths with spaces correctly (e.g. WiX under Program Files (x86)).
+    // Only az CLI uses shell:true (passed explicitly via options) because it's a
+    // script wrapper, not a direct .exe.
+    const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
         shell: false,
         ...options,
-    };
-
-    let result;
-    if (useCmdShell) {
-        const commandLine = [cmd, ...cmdArgs].map(quoteCmdArg).join(" ");
-        result = spawnSync("cmd.exe", ["/d", "/s", "/c", commandLine], spawnOptions);
-    } else {
-        result = spawnSync(cmd, cmdArgs, spawnOptions);
-    }
+    });
 
     if (result.error) {
         console.error(`❌ Command failed: ${result.error.message}`);

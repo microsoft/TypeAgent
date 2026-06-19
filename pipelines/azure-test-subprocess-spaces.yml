@@ -1,0 +1,50 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Test pipeline: verifies Node.js spawnSync shell:false correctly invokes
+# executables whose paths contain spaces (e.g. C:\Program Files (x86)\...).
+#
+# Uses the real WiX heat.exe on the agent (installed by the pipeline step below)
+# so the test exercises the exact binary that the MSI build uses.
+#
+# Run this pipeline manually (no trigger) for a quick pass/fail without
+# waiting for a full MSI build.
+
+trigger: none
+pr: none
+
+jobs:
+  - job: test_subprocess_spaces
+    displayName: Test subprocess invocation with spaces in path
+    pool:
+      vmImage: windows-latest
+
+    steps:
+      - task: NodeTool@0
+        displayName: Use Node.js 22
+        inputs:
+          versionSpec: "22"
+
+      - task: PowerShell@2
+        displayName: Install WiX Toolset v3.14
+        inputs:
+          targetType: inline
+          script: |
+            $url = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314.exe"
+            $installer = "$env:TEMP\wix314.exe"
+            Write-Host "Downloading WiX installer..."
+            Invoke-WebRequest -Uri $url -OutFile $installer
+            Write-Host "Installing WiX silently..."
+            Start-Process -FilePath $installer -ArgumentList "/quiet" -Wait
+            $heatExe = "C:\Program Files (x86)\WiX Toolset v3.14\bin\heat.exe"
+            if (!(Test-Path $heatExe)) { throw "WiX heat.exe not found after install" }
+            Write-Host "WiX installed: $heatExe"
+
+      - task: PowerShell@2
+        displayName: Run subprocess-spaces test (shell:false + spaced WiX path)
+        inputs:
+          targetType: inline
+          script: |
+            $heatExe = "C:\Program Files (x86)\WiX Toolset v3.14\bin\heat.exe"
+            node $(Build.SourcesDirectory)/ts/tools/scripts/test-subprocess-spaces.mjs "$heatExe"
+
