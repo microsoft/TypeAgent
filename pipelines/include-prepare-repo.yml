@@ -45,3 +45,8 @@ steps:
       pnpm install --frozen-lockfile --strict-peer-dependencies
     displayName: "Install dependencies"
     workingDirectory: ${{ parameters.buildDirectory }}
+    env:
+      # CI agents may not have outbound access to storage.googleapis.com.
+      # We don't need bundled browser binaries for package/deploy pipelines.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
