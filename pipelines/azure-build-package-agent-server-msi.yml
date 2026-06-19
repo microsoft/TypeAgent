@@ -160,24 +160,35 @@ jobs:
             }
 
       # Step 2: Build the MSI (downloads agent-server + copilot-plugin artifacts)
-      - pwsh: |
-          Set-Location "$(scriptDir)"
-          node build-msi.mjs --rid "${{ parameters.rid }}" --version "${{ parameters.agentVersion }}" --plugin-version "${{ parameters.pluginVersion }}" --output "$(MSI_BUILD_DIR)"
+      - task: AzureCLI@2
         displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            az extension add --name azure-devops --only-show-errors
+            Set-Location "$(scriptDir)"
+            node .\build-msi.mjs --rid "${{ parameters.rid }}" --version "${{ parameters.agentVersion }}" --plugin-version "${{ parameters.pluginVersion }}" --output "$(MSI_BUILD_DIR)"
         env:
-          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # Step 3: Sign the MSI
-      - pwsh: |
-          Set-Location "$(scriptDir)"
-          $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
-          if ($null -eq $msiPath) {
-            Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
-            exit 1
-          }
-          Write-Host "Signing MSI: $($msiPath.FullName)"
-          node sign-msi.mjs "$($msiPath.FullName)"
+      - task: AzureCLI@2
         displayName: Sign MSI with dev certificate
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            Set-Location "$(scriptDir)"
+            $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+            if ($null -eq $msiPath) {
+              Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
+              exit 1
+            }
+            Write-Host "Signing MSI: $($msiPath.FullName)"
+            node .\sign-msi.mjs "$($msiPath.FullName)"
         env:
           MSI_SIGNING_CERT_PASSWORD: $(MSI_SIGNING_CERT_PASSWORD)
 
