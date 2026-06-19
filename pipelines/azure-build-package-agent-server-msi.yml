@@ -168,6 +168,7 @@ jobs:
           scriptLocation: inlineScript
           inlineScript: |
             az extension add --name azure-devops --only-show-errors
+            $env:PATH = "C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;$env:PATH"
             Set-Location "$(scriptDir)"
             node .\build-msi.mjs --rid "${{ parameters.rid }}" --version "${{ parameters.agentVersion }}" --plugin-version "${{ parameters.pluginVersion }}" --output "$(MSI_BUILD_DIR)"
         env:
