@@ -131,8 +131,8 @@ jobs:
               --path "$(Build.ArtifactStagingDirectory)/agent-server-deploy"
             Write-Host "✅ Published agent-server"
             Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]$version"
-          env:
-            AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+        env:
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # Step 0b: Build and publish copilot-plugin
       - pwsh: |
@@ -179,8 +179,8 @@ jobs:
               --path "$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
             Write-Host "✅ Published copilot-plugin"
             Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]$version"
-          env:
-            AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+        env:
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       - pwsh: |
           $wixCandidates = @(
