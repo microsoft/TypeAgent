@@ -131,6 +131,21 @@ try { & az account show --only-show-errors *> $null } catch {
     & az login --only-show-errors | Out-Null
 }
 
+# Set defaults and verify DevOps auth up front so package download errors are actionable.
+& az devops configure --defaults organization=$Org project=$Project --only-show-errors 2>$null
+try {
+    & az devops project show --organization $Org --project $Project --only-show-errors *> $null
+} catch {
+    $msg = @(
+        "Azure DevOps authentication failed for organization '$Org' and project '$Project'.",
+        "Run one of the following and re-run this script:",
+        "  1) az login                           (AAD/MSA identity with org access)",
+        "  2) az devops login --organization $Org   (PAT auth)",
+        "See: https://aka.ms/azure-devops-cli-auth"
+    ) -join [Environment]::NewLine
+    Fail $msg
+}
+
 $arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "x64" }
 $rid = "win32-$arch"
 $pkgName = "agent-server.$rid"
