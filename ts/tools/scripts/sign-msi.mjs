@@ -95,7 +95,16 @@ function resolveCertPassword() {
         process.exit(1);
     }
 
-    const tmpFilePath = result.stdout?.trim();
+    // getCert can emit extra login/status lines in CI; extract the temp file path line.
+    const combinedOutput = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const lines = combinedOutput
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const pathLikeLine = [...lines]
+        .reverse()
+        .find((line) => /^[A-Za-z]:\\.+\.txt$/i.test(line));
+    const tmpFilePath = pathLikeLine ?? result.stdout?.trim();
     if (!tmpFilePath || !fs.existsSync(tmpFilePath)) {
         console.error(`❌ getCert.mjs get-password succeeded but temp file not found: ${tmpFilePath}`);
         process.exit(1);
