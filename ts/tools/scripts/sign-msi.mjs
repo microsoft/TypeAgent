@@ -24,8 +24,11 @@ import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const config = require("./getKeys.config.json");
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -60,6 +63,53 @@ function runCommand(cmd, args, options = {}) {
     return result.status === 0;
 }
 
+function resolveCertPassword() {
+    const certVaultName = config?.cert?.vault ?? "aisystems";
+    const passwordSecretName =
+        config?.cert?.passwordSecretName ??
+        "TypeAgent-Development-Certificate-Password";
+
+    console.log(`   Resolving cert password from Key Vault secret...`);
+    const secretResult = spawnSync(
+        "az",
+        [
+            "keyvault",
+            "secret",
+            "show",
+            "--vault-name",
+            certVaultName,
+            "--name",
+            passwordSecretName,
+            "--query",
+            "value",
+            "-o",
+            "tsv",
+        ],
+        { encoding: "utf8" },
+    );
+
+    const secretValue = secretResult.stdout?.trim();
+    if (secretResult.status === 0 && secretValue) {
+        return secretValue;
+    }
+
+    const fromEnv = process.env.MSI_SIGNING_CERT_PASSWORD?.trim();
+    if (fromEnv) {
+        console.warn(
+            "⚠️  Falling back to MSI_SIGNING_CERT_PASSWORD because Key Vault lookup failed.",
+        );
+        return fromEnv;
+    }
+
+    console.error(
+        `❌ Could not resolve MSI certificate password. Set MSI_SIGNING_CERT_PASSWORD or ensure az can read ${passwordSecretName} from vault ${certVaultName}.`,
+    );
+    if (secretResult.stderr) {
+        console.error(secretResult.stderr.trim());
+    }
+    process.exit(1);
+}
+
 // Step 1: Pull cert from Key Vault (unless verify-only)
 if (!verifyOnly) {
     console.log(`\n📥 Pulling TypeAgent dev certificate from Key Vault...`);
@@ -78,8 +128,7 @@ if (!verifyOnly) {
 if (!verifyOnly) {
     console.log(`\n✍️  Signing MSI with TypeAgent-Development-Certificate...`);
 
-    // Cert password should be passed as env var or read from pipeline secret
-    const certPassword = process.env.MSI_SIGNING_CERT_PASSWORD || "test123";
+    const certPassword = resolveCertPassword();
     const pfxPath = path.join(
         os.homedir(),
         ".typeagent/TypeAgent-Development-Certificate.pfx",

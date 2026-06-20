@@ -258,8 +258,6 @@ jobs:
             }
             Write-Host "Signing MSI: $($msiPath.FullName)"
             node .\sign-msi.mjs "$($msiPath.FullName)"
-        env:
-          MSI_SIGNING_CERT_PASSWORD: $(MSI_SIGNING_CERT_PASSWORD)
 
       # Step 4: Verify signature
       - pwsh: |
