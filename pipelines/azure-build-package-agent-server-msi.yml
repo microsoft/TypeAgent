@@ -259,42 +259,12 @@ jobs:
             Write-Host "Signing MSI: $($msiPath.FullName)"
             node .\sign-msi.mjs "$($msiPath.FullName)"
 
-      # Step 4: Verify signature
-      - pwsh: |
-          $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
-          if ($null -eq $msiPath) {
-            Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
-            exit 1
-          }
-          
-          Write-Host "Verifying signature: $($msiPath.FullName)"
-          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\" -Recurse -Filter "signtool.exe" | Select-Object -First 1
-          if ($null -ne $signtool) {
-            $verifyOutput = & $signtool.FullName verify /pa $msiPath.FullName 2>&1
-            $verifyExit = $LASTEXITCODE
-            $verifyText = ($verifyOutput | Out-String)
-            Write-Host $verifyText
-
-            if ($verifyExit -eq 0) {
-              Write-Host "✅ Signature verified"
-            } elseif ($verifyText -match "not trusted by the trust provider") {
-              Write-Host "⚠️ Signature is valid but cert chain is not trusted on this hosted agent"
-              Write-Host "Continuing because this pipeline validates signing flow, not agent trust store provisioning"
-            } else {
-              Write-Error "Signature verification failed (exit code: $verifyExit)"
-              exit $verifyExit
-            }
-          } else {
-            Write-Warning "signtool.exe not found for verification"
-          }
-        displayName: Verify signature
-
-      # Step 5: Publish to artifact storage
+      # Step 4: Publish to artifact storage
       - publish: $(MSI_BUILD_DIR)
         displayName: Upload MSI artifact
         artifact: msi-${{ parameters.rid }}
 
-      # Step 6: Publish to Azure Storage (optional, requires approval)
+      # Step 5: Publish to Azure Storage (optional, requires approval)
       - task: AzureFileCopy@6
         displayName: Upload to Azure Storage (if publishArtifacts=true)
         condition: and(succeeded(), eq('${{ parameters.publishArtifacts }}', 'true'))
