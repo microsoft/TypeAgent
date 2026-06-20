@@ -1,153 +1,337 @@
-trigger: none
-pr: none
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
-pool:
-  vmImage: 'windows-latest'
+# Azure Pipelines: Build and sign TypeAgent Agent-Server MSI
+# Publishes signed MSI to Azure Storage for distribution
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/tools/scripts/build-msi.mjs
+      - ts/tools/scripts/sign-msi.mjs
+      - ts/tools/installers/wix/**
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: scriptDir
+    value: $(buildDirectory)/tools/scripts
+  - name: nodeVersion
+    value: 22
+  - name: MSI_BUILD_DIR
+    value: $(Build.ArtifactStagingDirectory)/msi
+  - name: resolvedAgentVersion
+    value: ""
+  - name: resolvedPluginVersion
+    value: ""
+
+parameters:
+  - name: publishArtifacts
+    type: boolean
+    default: false
+    displayName: "Publish MSI to Azure Storage (requires manual approval)"
+  - name: rid
+    type: string
+    default: win32-x64
+    values:
+      - win32-x64
+      - win32-arm64
+    displayName: "RID (Runtime ID)"
 
 jobs:
-  - job: TestMSISigning
-    displayName: 'Test MSI Signing (Certificate Fetch -> Password Fetch -> signtool Sign)'
+  - job: build_sign_msi
+    displayName: Build and Sign MSI
+    pool:
+      vmImage: windows-latest
+
     steps:
-      - checkout: self
-        fetchDepth: 1
-
+      # Setup: Node.js and dependencies
       - task: NodeTool@0
+        displayName: Use Node.js $(nodeVersion)
         inputs:
-          versionSpec: '22.x'
-        displayName: 'Use Node 22'
-
-      - task: Cache@2
-        displayName: 'Cache pnpm modules'
-        inputs:
-          key: 'pnpm | "$(Agent.OS)" | ts/pnpm-lock.yaml'
-          path: '$(Build.SourcesDirectory)/ts/node_modules'
-          cacheHitVar: CACHE_RESTORED
-
-      - script: npm install -g pnpm
-        displayName: 'Install pnpm'
-        condition: ne(variables.CACHE_RESTORED, 'true')
-
-      - script: pnpm install --frozen-lockfile
-        displayName: 'Install dependencies'
-        workingDirectory: '$(Build.SourcesDirectory)/ts'
-        condition: ne(variables.CACHE_RESTORED, 'true')
+          versionSpec: "$(nodeVersion)"
 
       - task: AzureCLI@2
-        displayName: 'Test: Pull certificate, get password, sign test file'
+        displayName: Check Azure CLI
         inputs:
           azureSubscription: $(azureSubscription)
-          scriptType: 'ps'
-          scriptLocation: 'inlineScript'
+          scriptType: pscore
+          scriptLocation: inlineScript
           inlineScript: |
-            Write-Host "======================================"
-            Write-Host "TEST: MSI Signing Pipeline"
-            Write-Host "======================================"
-            Write-Host ""
+            az --version
+            Write-Host "✅ Azure CLI ready"
 
-            $scriptsDir = "$(Build.SourcesDirectory)\ts\tools\scripts"
-            Write-Host "Scripts directory: $scriptsDir"
-            Write-Host ""
+      # Install build dependencies
+      - script: |
+          echo "Installing build tools..."
+          npm install -g pnpm
+          pnpm --version
+        displayName: Install pnpm
+        workingDirectory: $(buildDirectory)
 
-            Write-Host "[1/4] Pulling TypeAgent dev certificate from Key Vault..."
-            node "$scriptsDir\getCert.mjs" pull
+      - script: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+        displayName: Install dependencies
+        workingDirectory: $(buildDirectory)
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+      # Step 0a: Build and stage agent-server (win32-x64 only)
+      - pwsh: |
+          Write-Host "📦 Building agent-server.win32-x64 from source..."
+          cd "$(buildDirectory)"
+          pnpm run build agent-server
+        displayName: Build agent-server
+      
+      - bash: |
+          set -euo pipefail
+          echo "📦 Deploying agent-server (win32-x64)..."
+          STAGE_DIR="$(Build.ArtifactStagingDirectory)/agent-server-deploy"
+          mkdir -p "$STAGE_DIR"
+          node tools/scripts/deployAgentServer.mjs \
+            --out "$STAGE_DIR" \
+            --platform win32 --arch x64 \
+            --profile service
+          echo "✅ Deployed to: $STAGE_DIR"
+          mapfile -t files < <(find "$STAGE_DIR" -type f)
+          for f in "${files[@]:0:10}"; do echo "$f"; done
+        displayName: Deploy agent-server (win32-x64)
+        workingDirectory: $(buildDirectory)
+
+      # Step 0b: Build and stage copilot-plugin
+      - pwsh: |
+          Write-Host "📦 Building copilot-plugin from source..."
+          cd "$(buildDirectory)"
+          pnpm run build copilot-plugin
+        displayName: Build copilot-plugin
+      
+      - bash: |
+          set -euo pipefail
+          echo "📦 Staging copilot-plugin artifact..."
+          PLUGIN_SRC="$(buildDirectory)/packages/copilot-plugin"
+          STAGE_DIR="$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
+          mkdir -p "$STAGE_DIR"
+          
+          cp -r "$PLUGIN_SRC/dist"       "$STAGE_DIR/dist"
+          cp    "$PLUGIN_SRC/hooks.json" "$STAGE_DIR/hooks.json"
+          cp    "$PLUGIN_SRC/.mcp.json"  "$STAGE_DIR/.mcp.json"
+          cp    "$PLUGIN_SRC/plugin.json" "$STAGE_DIR/plugin.json"
+          cp -r "$PLUGIN_SRC/agents"     "$STAGE_DIR/agents"
+          cp -r "$PLUGIN_SRC/skills"     "$STAGE_DIR/skills"
+          
+          echo "✅ Staged plugin artifact"
+          mapfile -t files < <(find "$STAGE_DIR" -type f)
+          for f in "${files[@]:0:10}"; do echo "$f"; done
+        displayName: Stage copilot-plugin artifact
+        workingDirectory: $(buildDirectory)
+
+      - pwsh: |
+          $version = "0.0.1-$(Build.BuildId)"
+          Write-Host "Using local staged artifacts for MSI"
+          Write-Host "##vso[task.setvariable variable=resolvedAgentVersion]$version"
+          Write-Host "##vso[task.setvariable variable=resolvedPluginVersion]$version"
+        displayName: Set resolved artifact versions
+
+      - pwsh: |
+          $wixCandidates = @(
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe",
+            "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe",
+            "C:\Program Files\WiX Toolset v3.14\bin\candle.exe",
+            "C:\Program Files\WiX Toolset v3.11\bin\candle.exe"
+          )
+
+          $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($existing) {
+            Write-Host "✅ WiX already installed at: $existing"
+            return
+          }
+
+          $choco = Get-Command choco -ErrorAction SilentlyContinue
+          if (-not $choco) {
+            Write-Error "WiX not found and Chocolatey is unavailable; cannot auto-install WiX on this agent."
+            exit 1
+          }
+
+          Write-Host "Installing WiX Toolset with Chocolatey..."
+          choco install wixtoolset --version=3.14.1 -y --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install WiX Toolset via Chocolatey"
+            exit 1
+          }
+
+          $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $existing) {
+            Write-Error "WiX installation completed but candle.exe was not found in expected locations."
+            exit 1
+          }
+
+          Write-Host "✅ WiX installed at: $existing"
+        displayName: Ensure WiX Toolset
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+
+      - pwsh: |
+          Write-Host "Checking Windows SDK..."
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Select-Object -First 1
+
+          if ($null -ne $signtool) {
+            Write-Host "✅ Windows SDK signtool found: $($signtool.FullName)"
+          } else {
+            Write-Warning "Windows SDK signtool.exe not found under Windows Kits; signing step may fail."
+          }
+        displayName: Check Windows SDK
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+
+      # Step 1: Pull the dev certificate from Key Vault
+      - task: AzureCLI@2
+        displayName: Pull dev certificate from Key Vault
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            Set-Location "$(buildDirectory)"
+            node .\tools\scripts\getCert.mjs pull --verbose
             if ($LASTEXITCODE -ne 0) {
-              Write-Host "Failed to pull certificate"
+              Write-Error "Failed to pull certificate from Key Vault"
               exit $LASTEXITCODE
             }
-            Write-Host "Certificate retrieved"
-            Write-Host ""
 
-            Write-Host "[2/4] Fetching password via getCert.mjs get-password..."
-            $tmpFile = node "$scriptsDir\getCert.mjs" get-password 2>&1 | Select-Object -Last 1
-            if (-not (Test-Path $tmpFile)) {
-              Write-Host "Password temp file not found: $tmpFile"
+      # Step 1b: Confirm artifact versions are resolved
+      - pwsh: |
+          $agentVer = "$(resolvedAgentVersion)"
+          $pluginVer = "$(resolvedPluginVersion)"
+          
+          if ($agentVer -eq "" -or $agentVer -eq "`$null") {
+            Write-Error "ERROR: Agent version not resolved. Check build steps above."
+            exit 1
+          }
+          
+          if ($pluginVer -eq "" -or $pluginVer -eq "`$null") {
+            Write-Error "ERROR: Plugin version not resolved. Check build steps above."
+            exit 1
+          }
+          
+          Write-Host "✅ Agent version:  $agentVer"
+          Write-Host "✅ Plugin version: $pluginVer"
+        displayName: Confirm artifact versions resolved
+
+      # Step 2: Build the MSI (uses staged agent-server + copilot-plugin folders)
+      - pwsh: |
+          Set-Location "$(scriptDir)"
+
+          $agentVer = "$(resolvedAgentVersion)"
+          $pluginVer = "$(resolvedPluginVersion)"
+          Write-Host "Building MSI with:"
+          Write-Host "  - RID:    ${{ parameters.rid }}"
+          Write-Host "  - Agent:  $agentVer"
+          Write-Host "  - Plugin: $pluginVer"
+          Write-Host "  - Agent dir:  $(Build.ArtifactStagingDirectory)/agent-server-deploy"
+          Write-Host "  - Plugin dir: $(Build.ArtifactStagingDirectory)/copilot-plugin-deploy"
+
+          node .\build-msi.mjs --rid "${{ parameters.rid }}" --skip-download --agent-dir "$(Build.ArtifactStagingDirectory)/agent-server-deploy" --plugin-dir "$(Build.ArtifactStagingDirectory)/copilot-plugin-deploy" --version "$agentVer" --plugin-version "$pluginVer" --output "$(MSI_BUILD_DIR)"
+        displayName: Build MSI (agent-server + copilot-plugin + WiX compile + link)
+
+      # Step 3: Sign the MSI
+      - task: AzureCLI@2
+        displayName: Sign MSI with dev certificate
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            Set-Location "$(scriptDir)"
+            $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+            if ($null -eq $msiPath) {
+              Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
               exit 1
             }
-            $password = Get-Content $tmpFile
-            Remove-Item $tmpFile -Force
-            Write-Host "Password retrieved ($($password.Length) bytes)"
-            Write-Host "Preview: $($password.Substring(0, 10))..."
-            Write-Host ""
+            Write-Host "Signing MSI: $($msiPath.FullName)"
+            node .\sign-msi.mjs "$($msiPath.FullName)"
 
-            Write-Host "[3/4] Creating signable test executable..."
-            $testSrc = "$(Agent.TempDirectory)\test-msi-signing.cs"
-            $testFile = "$(Agent.TempDirectory)\test-msi-signing.exe"
-            @"
-            using System;
-
-            internal static class Program
-            {
-                private static void Main()
-                {
-                    Console.WriteLine("TypeAgent signing test");
-                }
-            }
-            "@ | Out-File -FilePath $testSrc -Encoding ascii -NoNewline
-
-            $cscCandidates = @(
-              "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-              "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
-            )
-            $cscPath = $cscCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if (-not $cscPath) {
-              Write-Host "C# compiler not found on agent"
-              exit 1
-            }
-
-            & $cscPath /nologo /target:exe /out:"$testFile" "$testSrc"
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $testFile)) {
-              Write-Host "Failed to create test executable"
-              exit 1
-            }
-
-            Write-Host "Created: $testFile"
-            Write-Host ""
-
-            Write-Host "[4/4] Signing test file with signtool..."
-            $pfxPath = [System.IO.Path]::Combine($env:USERPROFILE, ".typeagent", "TypeAgent-Development-Certificate.pfx")
-            $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
-
-            if (-not (Test-Path $pfxPath)) {
-              Write-Host "PFX file not found: $pfxPath"
-              exit 1
-            }
-            if (-not (Test-Path $signtoolPath)) {
-              Write-Host "signtool.exe not found: $signtoolPath"
-              exit 1
-            }
-
-            Write-Host "Using: $signtoolPath"
-            Write-Host "PFX: $pfxPath"
-            Write-Host "File: $testFile"
-            Write-Host ""
-
-            Write-Host "Running: signtool sign /fd SHA256 /f `"$pfxPath`" /p <PASSWORD> /t http://timestamp.digicert.com `"$testFile`""
-            & $signtoolPath sign /fd SHA256 /a /f "$pfxPath" /p "$password" /t http://timestamp.digicert.com "$testFile"
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Signing failed (exit code: $LASTEXITCODE)"
-              exit $LASTEXITCODE
-            }
-            Write-Host "Signing succeeded"
-            Write-Host ""
-
-            Write-Host "[5/5] Verifying signature..."
-            $verifyOutput = & $signtoolPath verify /pa "$testFile" 2>&1
+      # Step 4: Verify signature
+      - pwsh: |
+          $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+          if ($null -eq $msiPath) {
+            Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
+            exit 1
+          }
+          
+          Write-Host "Verifying signature: $($msiPath.FullName)"
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\" -Recurse -Filter "signtool.exe" | Select-Object -First 1
+          if ($null -ne $signtool) {
+            $verifyOutput = & $signtool.FullName verify /pa $msiPath.FullName 2>&1
             $verifyExit = $LASTEXITCODE
             $verifyText = ($verifyOutput | Out-String)
             Write-Host $verifyText
 
             if ($verifyExit -eq 0) {
-              Write-Host "Signature verified"
+              Write-Host "✅ Signature verified"
             } elseif ($verifyText -match "not trusted by the trust provider") {
-              Write-Host "Warning: Signature is valid but cert chain is not trusted on this hosted agent."
-              Write-Host "Continuing because this pipeline is validating signing/password flow, not trust store provisioning."
-              $global:LASTEXITCODE = 0
+              Write-Host "⚠️ Signature is valid but cert chain is not trusted on this hosted agent"
+              Write-Host "Continuing because this pipeline validates signing flow, not agent trust store provisioning"
             } else {
-              Write-Host "Signature verification failed (exit code: $verifyExit)"
+              Write-Error "Signature verification failed (exit code: $verifyExit)"
               exit $verifyExit
             }
-            Write-Host ""
+          } else {
+            Write-Warning "signtool.exe not found for verification"
+          }
+        displayName: Verify signature
 
-            Write-Host "======================================"
-            Write-Host "TEST COMPLETE"
-            Write-Host "======================================"
+      # Step 5: Publish to artifact storage
+      - publish: $(MSI_BUILD_DIR)
+        displayName: Upload MSI artifact
+        artifact: msi-${{ parameters.rid }}
+
+      # Step 6: Publish to Azure Storage (optional, requires approval)
+      - task: AzureFileCopy@6
+        displayName: Upload to Azure Storage (if publishArtifacts=true)
+        condition: and(succeeded(), eq('${{ parameters.publishArtifacts }}', 'true'))
+        inputs:
+          SourcePath: $(MSI_BUILD_DIR)\**
+          Destination: AzureBlob
+          azureSubscription: $(azureSubscription)
+          storage: $(azureStorageAccountName)
+          ContainerName: $(azureStorageContainerName)
+
+  # Optional: sign the shell .exe while we're at it (Phase 2)
+  - job: sign_shell_exe
+    displayName: Sign Shell EXE (Phase 2)
+    pool:
+      vmImage: windows-latest
+    condition: false  # Disabled for now; enable when Phase 2 is prioritized
+
+    steps:
+      - task: NodeTool@0
+        displayName: Use Node.js $(nodeVersion)
+        inputs:
+          versionSpec: "$(nodeVersion)"
+
+      - task: AzureCLI@2
+        displayName: Pull dev certificate
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            Set-Location "$(buildDirectory)"
+            node .\tools\scripts\getCert.mjs pull
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to pull certificate from Key Vault"
+              exit $LASTEXITCODE
+            }
+
+      - script: |
+          echo "Sign shell .exe here (mirror MSI signing)"
+        displayName: Sign shell EXE
