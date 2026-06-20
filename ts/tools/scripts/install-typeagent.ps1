@@ -123,7 +123,12 @@ function Invoke-PrereqBootstrap {
     }
 
     Write-Step "Bootstrapping prerequisites via setup-typeagent-prereqs.ps1"
-    $bootstrapArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bootstrapScript, "-Variant", $Variant)
+    $bootstrapArgs = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bootstrapScript,
+        "-Variant", $Variant,
+        "-Org", $Org,
+        "-Project", $Project
+    )
     if ($DevTunnel) { $bootstrapArgs += "-DevTunnel" }
     & pwsh @bootstrapArgs
     if ($LASTEXITCODE -ne 0) {
@@ -228,8 +233,38 @@ if ($PluginSource -ne "") {
 
 # --- 5. Provision config + start the daemon ----------------------------------
 Write-Step "Provisioning config (getKeys, browser login)"
-& node $serve provision
-if ($LASTEXITCODE -ne 0) { Fail "Config provisioning failed." }
+$provisionOutput = & node $serve provision 2>&1
+$provisionExitCode = $LASTEXITCODE
+if ($provisionOutput) { $provisionOutput | ForEach-Object { Write-Host $_ } }
+
+if ($provisionExitCode -ne 0) {
+    $provisionText = ($provisionOutput | Out-String)
+    $isKeyVaultAuthError = (
+        $provisionText -match "Caller is not authorized" -or
+        $provisionText -match "Microsoft\.KeyVault/vaults/secrets/getSecret/action" -or
+        $provisionText -match "Failed to read 'typeagent-config' from vault"
+    )
+
+    if ($isKeyVaultAuthError) {
+        Write-Host "" 
+        Write-Host "Key Vault access failed for the current Azure identity." -ForegroundColor Yellow
+        Write-Host "Launching 'az login' so you can select an identity with access..." -ForegroundColor Yellow
+        & az login --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Config provisioning failed and az login did not complete successfully."
+        }
+
+        Write-Step "Retrying config provisioning after az login"
+        $retryOutput = & node $serve provision 2>&1
+        $retryExitCode = $LASTEXITCODE
+        if ($retryOutput) { $retryOutput | ForEach-Object { Write-Host $_ } }
+        if ($retryExitCode -ne 0) {
+            Fail "Config provisioning failed after re-authentication. Confirm the selected identity has Key Vault access."
+        }
+    } else {
+        Fail "Config provisioning failed."
+    }
+}
 
 # --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
 if ($DevTunnel) {

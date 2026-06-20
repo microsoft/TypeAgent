@@ -35,8 +35,11 @@
 param(
     [ValidateSet("external", "full")]
     [string]$Variant = "external",
+    [string]$Org = "https://dev.azure.com/msctoproj",
+    [string]$Project = "AI_Systems",
     [switch]$DevTunnel,
     [switch]$SkipAzLogin,
+    [switch]$SkipDevOpsLogin,
     [switch]$ForceReinstallCli,
     [string]$ScriptSourceUrl = "",
     [switch]$NoAutoElevate,
@@ -131,7 +134,10 @@ function Restart-ScriptElevated {
     )
     if ($DevTunnel) { $argList += "-DevTunnel" }
     if ($SkipAzLogin) { $argList += "-SkipAzLogin" }
+    if ($SkipDevOpsLogin) { $argList += "-SkipDevOpsLogin" }
     if ($ForceReinstallCli) { $argList += "-ForceReinstallCli" }
+    if ($Org) { $argList += @("-Org", $Org) }
+    if ($Project) { $argList += @("-Project", $Project) }
     if ($resolvedSourceUrl) { $argList += @("-ScriptSourceUrl", $resolvedSourceUrl) }
 
     try {
@@ -258,6 +264,37 @@ function Ensure-AzureCli {
             }
             Write-Ok "Azure CLI login completed"
         }
+    }
+
+    Write-Step "Ensuring Azure DevOps access ($Org / $Project)"
+    & az devops configure --defaults organization=$Org project=$Project --only-show-errors 2>$null
+
+    $hasDevOpsAccess = $true
+    try {
+        & az devops project show --organization $Org --project $Project --only-show-errors *> $null
+    } catch {
+        $hasDevOpsAccess = $false
+    }
+
+    if (-not $hasDevOpsAccess) {
+        if ($SkipDevOpsLogin) {
+            Fail "Azure DevOps access check failed for '$Org/$Project'. Re-run without -SkipDevOpsLogin, run 'az devops login --organization $Org', or use a principal with feed access."
+        }
+
+        Write-Info "Launching Azure DevOps login for organization $Org"
+        & az devops login --organization $Org
+        if ($LASTEXITCODE -ne 0) {
+            Fail "az devops login failed."
+        }
+
+        try {
+            & az devops project show --organization $Org --project $Project --only-show-errors *> $null
+        } catch {
+            Fail "Azure DevOps login succeeded, but project access check still failed for '$Org/$Project'. Confirm permissions and re-run."
+        }
+        Write-Ok "Azure DevOps access verified"
+    } else {
+        Write-Ok "Azure DevOps access verified"
     }
 }
 
