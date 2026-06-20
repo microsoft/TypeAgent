@@ -30,6 +30,7 @@
   pwsh ./install-typeagent.ps1
   pwsh ./install-typeagent.ps1 -Variant full -Version 0.0.1-12345
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
+    pwsh ./install-typeagent.ps1 -BootstrapPrereqs
 #>
 
 [CmdletBinding()]
@@ -43,6 +44,9 @@ param(
     [string]$Feed = "typeagent",
     [string]$PluginSource = "",
     [switch]$NoStart,
+    # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
+    # prerequisites (Node/Azure CLI and optional extras for selected switches).
+    [switch]$BootstrapPrereqs,
     # Opt-in: set up a Microsoft Dev Tunnel so another device (e.g. a phone) can
     # reach this agent-server, and start the tunnel host alongside the daemon.
     [switch]$DevTunnel,
@@ -58,6 +62,30 @@ function Fail($msg) { Write-Error $msg; exit 1 }
 
 function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
+}
+
+function Invoke-PrereqBootstrap {
+    $scriptDir = if ($PSCommandPath) { Split-Path -Parent $PSCommandPath } else { $PSScriptRoot }
+    if (-not $scriptDir) {
+        Fail "Unable to resolve script directory for prerequisite bootstrap."
+    }
+
+    $bootstrapScript = Join-Path $scriptDir "setup-typeagent-prereqs.ps1"
+    if (-not (Test-Path $bootstrapScript)) {
+        Fail "-BootstrapPrereqs was requested but setup-typeagent-prereqs.ps1 was not found next to this script."
+    }
+
+    Write-Step "Bootstrapping prerequisites via setup-typeagent-prereqs.ps1"
+    $bootstrapArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $bootstrapScript, "-Variant", $Variant)
+    if ($DevTunnel) { $bootstrapArgs += "-DevTunnel" }
+    & pwsh @bootstrapArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Prerequisite bootstrap failed."
+    }
+}
+
+if ($BootstrapPrereqs) {
+    Invoke-PrereqBootstrap
 }
 
 # --- 1. Node >= 22 -----------------------------------------------------------
