@@ -534,8 +534,9 @@ Config (ts/tools/scripts/getKeys.config.json under "cert"):
 }
 
 // ---------------------------------------------------------------------------
-// get-password: print the PFX password from Key Vault to stdout (for scripts).
-// All other output goes to stderr so callers can capture just the secret.
+// get-password: write the PFX password from Key Vault to a temp file.
+// Temp file path is printed to stdout; password goes to the file itself.
+// This avoids Azure SDK console logging pollution.
 // ---------------------------------------------------------------------------
 
 async function getPassword() {
@@ -546,8 +547,11 @@ async function getPassword() {
         console.error(chalk.red(`Secret '${passwordSecretName}' is empty in vault '${certVaultName}'.`));
         process.exit(1);
     }
-    // Only the password itself goes to stdout — nothing else.
-    process.stdout.write(secret.value);
+    // Write password to a temp file for clean transfer (avoids console.log pollution).
+    const tmpFile = path.join(os.tmpdir(), `typeagent-pwd-${process.pid}-${Date.now()}.txt`);
+    await fs.promises.writeFile(tmpFile, secret.value, "utf8");
+    // Print path to stdout; caller reads the file.
+    process.stdout.write(tmpFile);
 }
 
 const commands = ["pull", "install", "renew", "status", "get-password", "help"];

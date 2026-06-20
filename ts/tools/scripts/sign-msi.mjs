@@ -74,31 +74,42 @@ function resolveCertPassword() {
         { encoding: "utf8" },
     );
 
-    const password = result.stdout?.trim();
-    if (result.status === 0 && password) {
-        return password;
-    }
-
-    const fromEnv = process.env.MSI_SIGNING_CERT_PASSWORD?.trim();
-    if (fromEnv) {
-        console.warn(
-            "⚠️  Falling back to MSI_SIGNING_CERT_PASSWORD because getCert.mjs get-password failed.",
+    if (result.status !== 0) {
+        const fromEnv = process.env.MSI_SIGNING_CERT_PASSWORD?.trim();
+        if (fromEnv) {
+            console.warn(
+                "⚠️  getCert.mjs get-password failed; falling back to MSI_SIGNING_CERT_PASSWORD.",
+            );
+            return fromEnv;
+        }
+        const certVaultName = config?.cert?.vault ?? "aisystems";
+        const passwordSecretName =
+            config?.cert?.passwordSecretName ??
+            "TypeAgent-Development-Certificate-Password";
+        console.error(
+            `❌ Could not resolve MSI certificate password. Ensure az is logged in and can read '${passwordSecretName}' from vault '${certVaultName}'.`,
         );
-        return fromEnv;
+        if (result.stderr) {
+            console.error(result.stderr.trim());
+        }
+        process.exit(1);
     }
 
-    const certVaultName = config?.cert?.vault ?? "aisystems";
-    const passwordSecretName =
-        config?.cert?.passwordSecretName ??
-        "TypeAgent-Development-Certificate-Password";
-    console.error(
-        `❌ Could not resolve MSI certificate password. Ensure az is logged in and can read '${passwordSecretName}' from vault '${certVaultName}'.`,
-    );
-    if (result.stderr) {
-        console.error(result.stderr.trim());
+    const tmpFilePath = result.stdout?.trim();
+    if (!tmpFilePath || !fs.existsSync(tmpFilePath)) {
+        console.error(`❌ getCert.mjs get-password succeeded but temp file not found: ${tmpFilePath}`);
+        process.exit(1);
     }
-    process.exit(1);
-}
+
+    try {
+        const password = fs.readFileSync(tmpFilePath, "utf8").trim();
+        fs.unlinkSync(tmpFilePath);
+        return password;
+    } catch (e) {
+        console.error(`❌ Failed to read password from temp file: ${e.message}`);
+        process.exit(1);
+    }
+
 
 // Step 1: Pull cert from Key Vault (unless verify-only)
 if (!verifyOnly) {
