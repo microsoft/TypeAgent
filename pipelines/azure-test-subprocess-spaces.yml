@@ -1,6 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Test pipeline: verifies Node.js spawnSync shell:false correctly invokes
 # executables whose paths contain spaces (e.g. C:\Program Files (x86)\...).
 #

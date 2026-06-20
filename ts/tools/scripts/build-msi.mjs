@@ -153,7 +153,8 @@ function ensureDirHasContent(dir, label) {
 function prepareFromStagedDir(sourceDir, targetDir, label) {
     const resolvedSource = path.resolve(sourceDir);
     ensureDirHasContent(resolvedSource, `${label} source`);
-    if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true, force: true });
+    if (fs.existsSync(targetDir))
+        fs.rmSync(targetDir, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(targetDir), { recursive: true });
     fs.cpSync(resolvedSource, targetDir, { recursive: true });
     ensureDirHasContent(targetDir, `${label} target`);
@@ -165,32 +166,40 @@ function downloadArtifact(packageName, ver, targetDir) {
     fs.mkdirSync(targetDir, { recursive: true });
 
     if (!ver || ver === "" || ver === "latest") {
-        console.error(`❌ Version must be explicitly specified (got: "${ver}")`);
-        console.error(`   For the MSI pipeline, queue a build and specify artifact versions.`);
+        console.error(
+            `❌ Version must be explicitly specified (got: "${ver}")`,
+        );
+        console.error(
+            `   For the MSI pipeline, queue a build and specify artifact versions.`,
+        );
         process.exit(1);
     }
 
-    runCommand("az", [
-        "artifacts",
-        "universal",
-        "download",
-        "--organization",
-        "https://dev.azure.com/msctoproj",
-        "--project",
-        "AI_Systems",
-        "--scope",
-        "project",
-        "--feed",
-        "typeagent",
-        "--name",
-        packageName,
-        "--version",
-        ver,
-        "--path",
-        targetDir,
-    ], {
-        shell: process.platform === "win32",
-    });
+    runCommand(
+        "az",
+        [
+            "artifacts",
+            "universal",
+            "download",
+            "--organization",
+            "https://dev.azure.com/msctoproj",
+            "--project",
+            "AI_Systems",
+            "--scope",
+            "project",
+            "--feed",
+            "typeagent",
+            "--name",
+            packageName,
+            "--version",
+            ver,
+            "--path",
+            targetDir,
+        ],
+        {
+            shell: process.platform === "win32",
+        },
+    );
 
     const files = fs.readdirSync(targetDir);
     if (files.length === 0) {
@@ -216,7 +225,11 @@ if (!skipDownload) {
         prepareFromStagedDir(stagedAgentDir, agentArtifactDir, "agent-server");
     }
     if (stagedPluginDir) {
-        prepareFromStagedDir(stagedPluginDir, pluginArtifactDir, "copilot-plugin");
+        prepareFromStagedDir(
+            stagedPluginDir,
+            pluginArtifactDir,
+            "copilot-plugin",
+        );
     }
 
     for (const [label, dir] of [

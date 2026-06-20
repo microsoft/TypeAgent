@@ -544,11 +544,18 @@ async function getPassword() {
     const secretClient = new SecretClient(vaultUrl(certVaultName), credential);
     const secret = await secretClient.getSecret(passwordSecretName);
     if (!secret.value) {
-        console.error(chalk.red(`Secret '${passwordSecretName}' is empty in vault '${certVaultName}'.`));
+        console.error(
+            chalk.red(
+                `Secret '${passwordSecretName}' is empty in vault '${certVaultName}'.`,
+            ),
+        );
         process.exit(1);
     }
     // Write password to a temp file for clean transfer (avoids console.log pollution).
-    const tmpFile = path.join(os.tmpdir(), `typeagent-pwd-${process.pid}-${Date.now()}.txt`);
+    const tmpFile = path.join(
+        os.tmpdir(),
+        `typeagent-pwd-${process.pid}-${Date.now()}.txt`,
+    );
     await fs.promises.writeFile(tmpFile, secret.value, "utf8");
     // Print path to stdout; caller reads the file.
     process.stdout.write(tmpFile);

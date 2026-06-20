@@ -106,7 +106,9 @@ function resolveCertPassword() {
         .find((line) => /^[A-Za-z]:\\.+\.txt$/i.test(line));
     const tmpFilePath = pathLikeLine ?? result.stdout?.trim();
     if (!tmpFilePath || !fs.existsSync(tmpFilePath)) {
-        console.error(`❌ getCert.mjs get-password succeeded but temp file not found: ${tmpFilePath}`);
+        console.error(
+            `❌ getCert.mjs get-password succeeded but temp file not found: ${tmpFilePath}`,
+        );
         process.exit(1);
     }
 
@@ -115,11 +117,12 @@ function resolveCertPassword() {
         fs.unlinkSync(tmpFilePath);
         return password;
     } catch (e) {
-        console.error(`❌ Failed to read password from temp file: ${e.message}`);
+        console.error(
+            `❌ Failed to read password from temp file: ${e.message}`,
+        );
         process.exit(1);
     }
 }
-
 
 // Step 1: Pull cert from Key Vault (unless verify-only)
 if (!verifyOnly) {

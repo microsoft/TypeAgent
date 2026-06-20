@@ -46,11 +46,16 @@ function test(label, fn) {
 // Test 1: spawnSync shell:false runs exes with spaces in path
 console.log("-- Test 1: spawnSync shell:false");
 test("invokes exe with spaces in path", () => {
-    const result = spawnSync(exePath, [], { stdio: "pipe", shell: false, encoding: "utf8" });
+    const result = spawnSync(exePath, [], {
+        stdio: "pipe",
+        shell: false,
+        encoding: "utf8",
+    });
     if (result.error) throw new Error(result.error.message);
     // Any exit code is acceptable as long as it is NOT an ENOENT/spawn failure
     // (exit code 1 is fine - tool ran but printed usage)
-    if (result.status === null) throw new Error(`Process killed by signal: ${result.signal}`);
+    if (result.status === null)
+        throw new Error(`Process killed by signal: ${result.signal}`);
     if (result.stderr && result.stderr.includes("is not recognized")) {
         throw new Error(`cmd.exe split the path: ${result.stderr.trim()}`);
     }
@@ -59,11 +64,21 @@ test("invokes exe with spaces in path", () => {
 // Test 2: confirm shell:true would fail (proof that shell:false is the right mode)
 console.log("\n-- Test 2: shell:true fails for spaced path (expected)");
 test("shell:true splits path on spaces (validates test 1 is meaningful)", () => {
-    const result = spawnSync(exePath, [], { stdio: "pipe", shell: true, encoding: "utf8" });
+    const result = spawnSync(exePath, [], {
+        stdio: "pipe",
+        shell: true,
+        encoding: "utf8",
+    });
     const pathHasSpace = exePath.includes(" ");
-    if (pathHasSpace && result.status === 0 && !result.stderr?.includes("is not recognized")) {
+    if (
+        pathHasSpace &&
+        result.status === 0 &&
+        !result.stderr?.includes("is not recognized")
+    ) {
         // shell:true may still work in some environments; just log a note
-        console.log(`    (Note: shell:true also succeeded - both modes work here)`);
+        console.log(
+            `    (Note: shell:true also succeeded - both modes work here)`,
+        );
     }
     // This test always passes - it's informational
 });
