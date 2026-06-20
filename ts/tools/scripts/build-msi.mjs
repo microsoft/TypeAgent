@@ -8,16 +8,15 @@
  * build-msi.mjs
  *
  * Orchestrates the TypeAgent MSI build:
- * 1. Download agent-server.<rid> artifact from ADO feed
- * 2. Download typeagent-copilot-plugin artifact from ADO feed
- * 3. Generate marketplace.json for Copilot CLI plugin registration
- * 4. Harvest file components with heat.exe (one pass per artifact dir)
- * 5. Compile WiX (candle) + link to MSI (light)
+ * 1. Resolve artifact inputs (pipeline default: pre-staged local directories via --skip-download)
+ * 2. Generate marketplace.json for Copilot CLI plugin registration
+ * 3. Harvest file components with heat.exe (one pass per artifact dir)
+ * 4. Compile WiX (candle) + link to MSI (light)
  *
  * Usage:
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --output ./out
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --plugin-version 0.0.1-12345
- *   node build-msi.mjs --skip-download --version 0.0.1-test --output ./out
+ *   node build-msi.mjs --skip-download --agent-dir ./agent-server --plugin-dir ./copilot-plugin --version 0.0.1-test --plugin-version 0.0.1-test --output ./out
  */
 
 import fs from "node:fs";
@@ -34,6 +33,8 @@ let version = "latest";
 let pluginVersion = "latest";
 let outputDir = "./msi-out";
 let skipDownload = false;
+let stagedAgentDir = "";
+let stagedPluginDir = "";
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];
@@ -41,6 +42,8 @@ for (let i = 0; i < args.length; i++) {
     else if (args[i] === "--plugin-version") pluginVersion = args[++i];
     else if (args[i] === "--output") outputDir = args[++i];
     else if (args[i] === "--skip-download") skipDownload = true;
+    else if (args[i] === "--agent-dir") stagedAgentDir = args[++i];
+    else if (args[i] === "--plugin-dir") stagedPluginDir = args[++i];
 }
 
 console.log(`📦 Building TypeAgent MSI`);
@@ -48,6 +51,8 @@ console.log(`   RID:            ${rid}`);
 console.log(`   Agent version:  ${version}`);
 console.log(`   Plugin version: ${pluginVersion}`);
 console.log(`   Output:         ${outputDir}`);
+if (stagedAgentDir) console.log(`   Agent dir:      ${stagedAgentDir}`);
+if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const wxsDir = path.resolve(__dirname, "../installers/wix");
@@ -62,13 +67,29 @@ const pluginHeatFile = path.join(outputPath, "CopilotPluginFiles.wxs");
 if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { recursive: true });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function quoteCmdArg(arg) {
+    if (arg === "") {
+        return '""';
+    }
+    if (/[^A-Za-z0-9_\-.:\\/]/.test(arg)) {
+        return `"${arg.replace(/"/g, '\\"')}"`;
+    }
+    return arg;
+}
+
 function runCommand(cmd, cmdArgs, options = {}) {
     console.log(`\n▶ ${cmd} ${cmdArgs.join(" ")}`);
+
+    // Use shell:false so Node passes the exe path directly to CreateProcess,
+    // which handles paths with spaces correctly (e.g. WiX under Program Files (x86)).
+    // Only az CLI uses shell:true (passed explicitly via options) because it's a
+    // script wrapper, not a direct .exe.
     const result = spawnSync(cmd, cmdArgs, {
         stdio: "inherit",
         shell: false,
         ...options,
     });
+
     if (result.error) {
         console.error(`❌ Command failed: ${result.error.message}`);
         process.exit(1);
@@ -117,30 +138,68 @@ function wixTool(name) {
     return found;
 }
 
+function ensureDirHasContent(dir, label) {
+    if (!fs.existsSync(dir)) {
+        console.error(`❌ ${label} dir not found: ${dir}`);
+        process.exit(1);
+    }
+    const entries = fs.readdirSync(dir);
+    if (entries.length === 0) {
+        console.error(`❌ ${label} dir is empty: ${dir}`);
+        process.exit(1);
+    }
+}
+
+function prepareFromStagedDir(sourceDir, targetDir, label) {
+    const resolvedSource = path.resolve(sourceDir);
+    ensureDirHasContent(resolvedSource, `${label} source`);
+    if (fs.existsSync(targetDir))
+        fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+    fs.cpSync(resolvedSource, targetDir, { recursive: true });
+    ensureDirHasContent(targetDir, `${label} target`);
+    console.log(`✅ Using staged ${label}: ${resolvedSource}`);
+}
+
 function downloadArtifact(packageName, ver, targetDir) {
     if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true });
     fs.mkdirSync(targetDir, { recursive: true });
 
-    const verArg = ver === "latest" ? "*" : ver;
-    runCommand("az", [
-        "artifacts",
-        "universal",
-        "download",
-        "--organization",
-        "https://dev.azure.com/msctoproj",
-        "--project",
-        "AI_Systems",
-        "--scope",
-        "project",
-        "--feed",
-        "typeagent",
-        "--name",
-        packageName,
-        "--version",
-        verArg,
-        "--path",
-        targetDir,
-    ]);
+    if (!ver || ver === "" || ver === "latest") {
+        console.error(
+            `❌ Version must be explicitly specified (got: "${ver}")`,
+        );
+        console.error(
+            `   For the MSI pipeline, queue a build and specify artifact versions.`,
+        );
+        process.exit(1);
+    }
+
+    runCommand(
+        "az",
+        [
+            "artifacts",
+            "universal",
+            "download",
+            "--organization",
+            "https://dev.azure.com/msctoproj",
+            "--project",
+            "AI_Systems",
+            "--scope",
+            "project",
+            "--feed",
+            "typeagent",
+            "--name",
+            packageName,
+            "--version",
+            ver,
+            "--path",
+            targetDir,
+        ],
+        {
+            shell: process.platform === "win32",
+        },
+    );
 
     const files = fs.readdirSync(targetDir);
     if (files.length === 0) {
@@ -162,6 +221,17 @@ if (!skipDownload) {
         pluginArtifactDir,
     );
 } else {
+    if (stagedAgentDir) {
+        prepareFromStagedDir(stagedAgentDir, agentArtifactDir, "agent-server");
+    }
+    if (stagedPluginDir) {
+        prepareFromStagedDir(
+            stagedPluginDir,
+            pluginArtifactDir,
+            "copilot-plugin",
+        );
+    }
+
     for (const [label, dir] of [
         ["agent-server", agentArtifactDir],
         ["copilot-plugin", pluginArtifactDir],
@@ -184,6 +254,33 @@ const semverVersion =
         .replace(/[^0-9.]/g, ".")
         .replace(/\.{2,}/g, ".")
         .replace(/\.$/, "") || "0.0.1";
+
+function toWixProductVersion(input) {
+    // WiX requires 4 numeric parts, each in [0, 65534].
+    const parts = (input.match(/\d+/g) ?? ["0", "0", "1", "0"])
+        .slice(0, 4)
+        .map((n) => Number.parseInt(n, 10) || 0);
+
+    while (parts.length < 4) {
+        parts.push(0);
+    }
+
+    // Carry overflow from right to left so large build IDs remain representable.
+    for (let i = 3; i > 0; i--) {
+        const carry = Math.floor(parts[i] / 65535);
+        parts[i] = parts[i] % 65535;
+        parts[i - 1] += carry;
+    }
+
+    // Clamp the major version in the unlikely event of extreme overflow.
+    parts[0] = Math.min(parts[0], 65534);
+
+    return parts.join(".");
+}
+
+const wixProductVersion = toWixProductVersion(version);
+console.log(`   WiX ProductVersion: ${wixProductVersion}`);
+
 const marketplace = {
     name: "typeagent-local",
     owner: { name: "Microsoft", email: "typeagent@microsoft.com" },
@@ -223,6 +320,8 @@ function runHeat(dir, componentGroup, dirRef, varName, outFile) {
         "-var",
         `var.${varName}`,
         "-gg", // generate stable GUIDs per file path
+        "-scom", // suppress COM harvesting (avoids SelfReg DLL warnings for native binaries)
+        "-sreg", // suppress registry harvesting
         "-srd", // suppress root directory element
         "-sfrag", // suppress fragment wrapping (use our own Product.wxs structure)
         "-indent",
@@ -253,7 +352,7 @@ console.log(`\n🕯️  Compiling WiX...`);
 
 const wixobjDir = outputPath;
 runCommand(candleExe, [
-    `-dProductVersion=${version}`,
+    `-dProductVersion=${wixProductVersion}`,
     `-dAgentServerArtifactDir=${agentArtifactDir}`,
     `-dCopilotPluginArtifactDir=${pluginArtifactDir}`,
     `-dMarketplaceDir=${marketplaceDir}`,
