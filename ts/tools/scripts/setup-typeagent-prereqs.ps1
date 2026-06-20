@@ -283,7 +283,7 @@ function Ensure-NpmGlobalCli {
         Fail "$FriendlyName command '$Command' was not found on PATH after install."
     }
 
-    Write-Ok "$FriendlyName: $((Get-Command $Command).Source)"
+    Write-Ok "${FriendlyName}: $((Get-Command $Command).Source)"
 }
 
 function Ensure-ExternalClis {
