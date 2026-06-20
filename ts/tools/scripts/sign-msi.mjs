@@ -109,6 +109,7 @@ function resolveCertPassword() {
         console.error(`❌ Failed to read password from temp file: ${e.message}`);
         process.exit(1);
     }
+}
 
 
 // Step 1: Pull cert from Key Vault (unless verify-only)
