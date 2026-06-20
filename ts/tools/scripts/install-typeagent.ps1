@@ -64,6 +64,53 @@ function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+function Resolve-LatestUniversalPackageVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Organization,
+        [Parameter(Mandatory = $true)][string]$ProjectName,
+        [Parameter(Mandatory = $true)][string]$FeedName,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+
+    $json = & az devops invoke `
+        --organization $Organization `
+        --area packaging --resource packages `
+        --route-parameters project=$ProjectName feedId=$FeedName `
+        --query-parameters protocolType=upack packageNameQuery=$PackageName includeAllVersions=true `
+        --api-version 7.1 --output json --only-show-errors
+    if ($LASTEXITCODE -ne 0 -or -not $json) {
+        Fail "Failed to query package versions for '$PackageName' from feed '$FeedName'."
+    }
+
+    $response = $json | ConvertFrom-Json
+    if ($null -eq $response -or $null -eq $response.value) {
+        Fail "Unexpected response while listing versions for '$PackageName'."
+    }
+
+    $pkg = @($response.value | Where-Object { $_.name -eq $PackageName -and $_.protocolType -eq "upack" } | Select-Object -First 1)
+    if ($pkg.Count -eq 0) {
+        Fail "Package '$PackageName' was not found in feed '$FeedName'."
+    }
+
+    $versions = @($pkg[0].versions | Where-Object { -not $_.isDeleted })
+    if ($versions.Count -eq 0) {
+        Fail "Package '$PackageName' has no available versions in feed '$FeedName'."
+    }
+
+    # Prefer service-computed latest; fallback to most recent publish date.
+    $latest = @($versions | Where-Object { $_.isLatest } | Select-Object -First 1)
+    if ($latest.Count -eq 0) {
+        $latest = @($versions | Sort-Object -Property publishDate -Descending | Select-Object -First 1)
+    }
+
+    $latestVersion = [string]$latest[0].version
+    if (-not $latestVersion) {
+        Fail "Unable to resolve latest version for '$PackageName'."
+    }
+
+    return $latestVersion
+}
+
 function Invoke-PrereqBootstrap {
     $scriptDir = if ($PSCommandPath) { Split-Path -Parent $PSCommandPath } else { $PSScriptRoot }
     if (-not $scriptDir) {
@@ -154,7 +201,13 @@ if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 Write-Host "  $pkgName ($Version) -> $InstallDir"
-$verArgs = if ($Version -eq "latest") { @("--version", "*") } else { @("--version", $Version) }
+$resolvedVersion = $Version
+if ($Version -eq "latest") {
+    Write-Host "  Resolving latest concrete package version (including prerelease versions)..."
+    $resolvedVersion = Resolve-LatestUniversalPackageVersion -Organization $Org -ProjectName $Project -FeedName $Feed -PackageName $pkgName
+    Write-Host "  Resolved latest version: $resolvedVersion"
+}
+$verArgs = @("--version", $resolvedVersion)
 & az artifacts universal download `
     --organization $Org --project $Project --scope project `
     --feed $Feed --name $pkgName @verArgs --path $InstallDir --only-show-errors
