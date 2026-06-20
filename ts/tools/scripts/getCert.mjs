@@ -533,7 +533,24 @@ Config (ts/tools/scripts/getKeys.config.json under "cert"):
 `);
 }
 
-const commands = ["pull", "install", "renew", "status", "help"];
+// ---------------------------------------------------------------------------
+// get-password: print the PFX password from Key Vault to stdout (for scripts).
+// All other output goes to stderr so callers can capture just the secret.
+// ---------------------------------------------------------------------------
+
+async function getPassword() {
+    const credential = await getCredential();
+    const secretClient = new SecretClient(vaultUrl(certVaultName), credential);
+    const secret = await secretClient.getSecret(passwordSecretName);
+    if (!secret.value) {
+        console.error(chalk.red(`Secret '${passwordSecretName}' is empty in vault '${certVaultName}'.`));
+        process.exit(1);
+    }
+    // Only the password itself goes to stdout — nothing else.
+    process.stdout.write(secret.value);
+}
+
+const commands = ["pull", "install", "renew", "status", "get-password", "help"];
 
 (async () => {
     const command = process.argv[2];
@@ -571,6 +588,9 @@ const commands = ["pull", "install", "renew", "status", "help"];
             break;
         case "status":
             await status();
+            break;
+        case "get-password":
+            await getPassword();
             break;
     }
 })().catch((e) => {

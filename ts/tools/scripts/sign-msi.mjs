@@ -64,48 +64,38 @@ function runCommand(cmd, args, options = {}) {
 }
 
 function resolveCertPassword() {
-    const certVaultName = config?.cert?.vault ?? "aisystems";
-    const passwordSecretName =
-        config?.cert?.passwordSecretName ??
-        "TypeAgent-Development-Certificate-Password";
-
-    console.log(`   Resolving cert password from Key Vault secret...`);
-    const secretResult = spawnSync(
-        "az",
-        [
-            "keyvault",
-            "secret",
-            "show",
-            "--vault-name",
-            certVaultName,
-            "--name",
-            passwordSecretName,
-            "--query",
-            "value",
-            "-o",
-            "tsv",
-        ],
+    // Use getCert.mjs get-password so auth goes through the same Azure SDK
+    // credential chain that pull already uses — az CLI child processes don't
+    // inherit the AzureCLI@2 task auth context reliably.
+    console.log(`   Resolving cert password via getCert.mjs get-password...`);
+    const result = spawnSync(
+        "node",
+        [path.join(__dirname, "getCert.mjs"), "get-password"],
         { encoding: "utf8" },
     );
 
-    const secretValue = secretResult.stdout?.trim();
-    if (secretResult.status === 0 && secretValue) {
-        return secretValue;
+    const password = result.stdout?.trim();
+    if (result.status === 0 && password) {
+        return password;
     }
 
     const fromEnv = process.env.MSI_SIGNING_CERT_PASSWORD?.trim();
     if (fromEnv) {
         console.warn(
-            "⚠️  Falling back to MSI_SIGNING_CERT_PASSWORD because Key Vault lookup failed.",
+            "⚠️  Falling back to MSI_SIGNING_CERT_PASSWORD because getCert.mjs get-password failed.",
         );
         return fromEnv;
     }
 
+    const certVaultName = config?.cert?.vault ?? "aisystems";
+    const passwordSecretName =
+        config?.cert?.passwordSecretName ??
+        "TypeAgent-Development-Certificate-Password";
     console.error(
-        `❌ Could not resolve MSI certificate password. Set MSI_SIGNING_CERT_PASSWORD or ensure az can read ${passwordSecretName} from vault ${certVaultName}.`,
+        `❌ Could not resolve MSI certificate password. Ensure az is logged in and can read '${passwordSecretName}' from vault '${certVaultName}'.`,
     );
-    if (secretResult.stderr) {
-        console.error(secretResult.stderr.trim());
+    if (result.stderr) {
+        console.error(result.stderr.trim());
     }
     process.exit(1);
 }
