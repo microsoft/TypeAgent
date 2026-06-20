@@ -38,6 +38,7 @@ param(
     [switch]$DevTunnel,
     [switch]$SkipAzLogin,
     [switch]$ForceReinstallCli,
+    [string]$ScriptSourceUrl = "",
     [switch]$NoAutoElevate,
     [Parameter(DontShow)]
     [switch]$ElevatedInstance
@@ -80,11 +81,40 @@ function Test-RequiresAdminInstall {
     return (Get-NodeNeedsInstall) -or (Get-AzureCliNeedsInstall) -or (Get-DevTunnelNeedsInstall)
 }
 
+$script:DefaultScriptSourceUrl = "https://raw.githubusercontent.com/microsoft/TypeAgent/main/ts/tools/scripts/setup-typeagent-prereqs.ps1"
+
+function Resolve-ScriptSourceUrl {
+    if ($ScriptSourceUrl) {
+        return $ScriptSourceUrl
+    }
+
+    $candidateLines = @()
+    if ($MyInvocation -and $MyInvocation.Line) {
+        $candidateLines += $MyInvocation.Line
+    }
+    try {
+        $historyItem = Get-History -Count 1 -ErrorAction Stop
+        if ($historyItem -and $historyItem.CommandLine) {
+            $candidateLines += $historyItem.CommandLine
+        }
+    } catch {
+        # Ignore if history is unavailable.
+    }
+
+    foreach ($line in $candidateLines) {
+        if (-not $line) { continue }
+        $match = [regex]::Match($line, 'https://raw\.githubusercontent\.com/[^''"`\s|;)]*/setup-typeagent-prereqs\.ps1')
+        if ($match.Success) {
+            return $match.Value
+        }
+    }
+
+    return $script:DefaultScriptSourceUrl
+}
+
 function Restart-ScriptElevated {
     $scriptPath = if ($PSCommandPath) { $PSCommandPath } elseif ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $null }
-    if (-not $scriptPath) {
-        Fail "Cannot auto-elevate because the script path is unavailable. Save the script to a file and run it with -File."
-    }
+    $resolvedSourceUrl = Resolve-ScriptSourceUrl
 
     $timestamp = Get-Date -Format "yyyyMMddHHmmss"
     $tempScriptDir = Join-Path $env:TEMP "TypeAgent_Prereqs_$timestamp"
@@ -102,13 +132,21 @@ function Restart-ScriptElevated {
     if ($DevTunnel) { $argList += "-DevTunnel" }
     if ($SkipAzLogin) { $argList += "-SkipAzLogin" }
     if ($ForceReinstallCli) { $argList += "-ForceReinstallCli" }
+    if ($resolvedSourceUrl) { $argList += @("-ScriptSourceUrl", $resolvedSourceUrl) }
 
     try {
         Write-Step "Some prerequisite installs may require administrator rights"
         Write-Info "Requesting elevation via UAC"
 
         New-Item -ItemType Directory -Path $tempScriptDir -Force | Out-Null
-        Copy-Item $scriptPath -Destination $tempScriptPath -Force
+
+        if ($scriptPath) {
+            Copy-Item $scriptPath -Destination $tempScriptPath -Force
+        } else {
+            Write-Info "Script was run from a URL or memory — downloading a copy for elevation"
+            Write-Info "Using source URL: $resolvedSourceUrl"
+            Invoke-WebRequest -Uri $resolvedSourceUrl -OutFile $tempScriptPath -UseBasicParsing
+        }
 
         $process = Start-Process $powershellExecutable -ArgumentList $argList -Verb RunAs -Wait -PassThru
         if ($null -eq $process) {
