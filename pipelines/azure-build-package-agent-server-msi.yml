@@ -301,7 +301,6 @@ stages:
           - download: current
             artifact: msi-${{ parameters.rid }}
             displayName: Download signed MSI artifact
-            path: $(feedStagingDir)
 
           - task: AzureCLI@2
             displayName: Publish MSI to Azure Artifacts feed
@@ -310,7 +309,7 @@ stages:
               scriptType: pscore
               scriptLocation: inlineScript
               inlineScript: |
-                $publishPath = "$(feedStagingDir)"
+                $publishPath = "$(Pipeline.Workspace)/msi-${{ parameters.rid }}"
                 $msi = Get-ChildItem $publishPath -Filter "*.msi" | Select-Object -First 1
                 if ($null -eq $msi) {
                   Write-Error "No MSI found in $publishPath"
