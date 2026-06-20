@@ -26,6 +26,14 @@ variables:
     value: $(buildDirectory)/tools/scripts
   - name: nodeVersion
     value: 22
+  - name: packageVersion
+    value: 0.0.1-$(Build.BuildId)
+  - name: adoOrgUrl
+    value: https://dev.azure.com/msctoproj
+  - name: adoProject
+    value: AI_Systems
+  - name: adoFeed
+    value: typeagent
   - name: MSI_BUILD_DIR
     value: $(Build.ArtifactStagingDirectory)/msi
   - name: resolvedAgentVersion
@@ -274,6 +282,46 @@ jobs:
           azureSubscription: $(azureSubscription)
           storage: $(azureStorageAccountName)
           ContainerName: $(azureStorageContainerName)
+
+  - job: publish_msi_feed
+    displayName: Publish MSI Universal Package
+    dependsOn: build_sign_msi
+    condition: succeeded()
+    pool:
+      vmImage: windows-latest
+    steps:
+      - download: current
+        artifact: msi-${{ parameters.rid }}
+        displayName: Download signed MSI artifact
+
+      - task: AzureCLI@2
+        displayName: Publish MSI to Azure Artifacts feed
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            $publishPath = "$(Pipeline.Workspace)/msi-${{ parameters.rid }}"
+            $msi = Get-ChildItem $publishPath -Filter "*.msi" | Select-Object -First 1
+            if ($null -eq $msi) {
+              Write-Error "No MSI found in $publishPath"
+              exit 1
+            }
+
+            az extension add --name azure-devops --only-show-errors | Out-Null
+            $packageVersion = "$(packageVersion)"
+            $rid = "${{ parameters.rid }}"
+            $packageName = "typeagent-msi.$rid"
+
+            Write-Host "Publishing $packageName v$packageVersion"
+            az artifacts universal publish `
+              --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project `
+              --feed "$(adoFeed)" `
+              --name "$packageName" --version "$packageVersion" `
+              --path "$publishPath" `
+              --description "TypeAgent MSI installer for $rid"
+        env:
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
   # Optional: sign the shell .exe while we're at it (Phase 2)
   - job: sign_shell_exe
