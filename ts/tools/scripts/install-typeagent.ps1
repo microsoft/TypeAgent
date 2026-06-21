@@ -232,7 +232,6 @@ if ($assetExists) {
         --feed $Feed --name $pkgName @verArgs --path $InstallDir --only-show-errors
     if ($LASTEXITCODE -ne 0) { Fail "Artifact download failed for $pkgName." }
 }
-}
 
 if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
 
