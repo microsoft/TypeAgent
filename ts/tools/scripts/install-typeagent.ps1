@@ -16,7 +16,7 @@
        runtime; see @typeagent/agent-sdk/node claudeExecutableOption). The 'full'
        variant bundles those runtimes, so this step is skipped.
     3. Downloads the agent-server Universal package for this RID from the feed.
-    4. (Optional) installs the Copilot CLI plugin from -PluginSource.
+    4. Installs the Copilot CLI plugin (from feed by default, or -PluginSource).
     5. Runs config provisioning (getKeys, browser login) and starts the daemon
        via the artifact's typeagent-serve.mjs.
     6. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
@@ -32,6 +32,7 @@
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
   pwsh ./install-typeagent.ps1 -BootstrapPrereqs
   pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
+    pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
 #>
 
 [CmdletBinding()]
@@ -44,6 +45,9 @@ param(
     [string]$Project = "AI_Systems",
     [string]$Feed = "typeagent",
     [string]$PluginSource = "",
+    [string]$PluginVersion = "latest",
+    [string]$PluginPackageName = "typeagent-copilot-plugin",
+    [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\installed-plugins\typeagent",
     [switch]$NoStart,
     # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
     # prerequisites (Node/Azure CLI and optional extras for selected switches).
@@ -234,15 +238,59 @@ if ($assetExists) {
 
 if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
 
-# --- 4. Optional: install the Copilot CLI plugin -----------------------------
+# --- 4. Install the Copilot CLI plugin ---------------------------------------
+Write-Step "Installing Copilot CLI plugin"
+$pluginDest = $PluginInstallDir
+$pluginConfig = Join-Path $pluginDest "plugin.json"
+$pluginMcpServer = Join-Path $pluginDest "dist\mcp\server.js"
+
+if ($Upgrade -and (Test-Path $pluginDest)) {
+    Write-Host "  -Upgrade specified: removing existing plugin assets for fresh download"
+    Remove-Item -Recurse -Force $pluginDest
+}
+
 if ($PluginSource -ne "") {
-    Write-Step "Installing Copilot CLI plugin from $PluginSource"
-    $pluginDest = Join-Path $env:USERPROFILE ".copilot\installed-plugins\typeagent"
+    Write-Host "  Using local plugin source: $PluginSource"
     New-Item -ItemType Directory -Force -Path (Split-Path $pluginDest) | Out-Null
     if (Test-Path $pluginDest) { Remove-Item -Recurse -Force $pluginDest }
     Copy-Item -Recurse -Force $PluginSource $pluginDest
-    Write-Host "  Plugin copied to $pluginDest"
+} elseif (Test-Path $pluginConfig) {
+    Write-Host "  Using existing plugin at $pluginDest"
+} else {
+    New-Item -ItemType Directory -Force -Path $pluginDest | Out-Null
+    $resolvedPluginVersion = $PluginVersion
+    if ($PluginVersion -eq "latest") {
+        Write-Host "  Resolving latest plugin version for $PluginPackageName..."
+        $resolvedPluginVersion = Resolve-LatestUniversalPackageVersion -Organization $Org -ProjectName $Project -FeedName $Feed -PackageName $PluginPackageName
+        Write-Host "  Resolved plugin version: $resolvedPluginVersion"
+    }
+
+    Write-Host "  Downloading plugin $PluginPackageName ($resolvedPluginVersion) -> $pluginDest"
+    $pluginDlArgs = @(
+        "artifacts", "universal", "download",
+        "--organization", $Org,
+        "--project", $Project,
+        "--scope", "project",
+        "--feed", $Feed,
+        "--name", $PluginPackageName,
+        "--version", $resolvedPluginVersion,
+        "--path", $pluginDest,
+        "--only-show-errors"
+    )
+    & az @pluginDlArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Plugin download failed for $PluginPackageName."
+    }
 }
+
+if (-not (Test-Path $pluginConfig)) {
+    Fail "Plugin install failed: missing plugin.json at $pluginDest."
+}
+if (-not (Test-Path $pluginMcpServer)) {
+    Fail "Plugin install failed: missing MCP server entrypoint at $pluginMcpServer."
+}
+Write-Host "  Plugin installed at $pluginDest"
+Write-Host "  MCP server entrypoint found: $pluginMcpServer"
 
 # --- 5. Provision config + start the daemon ----------------------------------
 Write-Step "Provisioning config (getKeys, browser login)"
