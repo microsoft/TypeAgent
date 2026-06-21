@@ -158,7 +158,11 @@ function spawnDaemon(port) {
         if (!env.DEBUG) env.DEBUG = "typeagent:*";
         console.log(`[debug] Daemon log: ${logPath}`);
         // Close our copy of the fd after spawn so the child owns it.
-        setTimeout(() => { try { fs.closeSync(logFd); } catch {} }, 1000);
+        setTimeout(() => {
+            try {
+                fs.closeSync(logFd);
+            } catch {}
+        }, 1000);
     }
 
     if (isWindows && !debugMode) {
