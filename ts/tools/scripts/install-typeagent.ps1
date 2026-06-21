@@ -227,9 +227,8 @@ if ($assetExists) {
         Write-Host "  Resolved latest version: $resolvedVersion"
     }
     $verArgs = @("--version", $resolvedVersion)
-    & az artifacts universal download `
-        --organization $Org --project $Project --scope project `
-        --feed $Feed --name $pkgName @verArgs --path $InstallDir --only-show-errors
+    $dlArgs = @("artifacts", "universal", "download", "--organization", $Org, "--project", $Project, "--scope", "project", "--feed", $Feed, "--name", $pkgName) + @($verArgs) + @("--path", $InstallDir, "--only-show-errors")
+    & az @dlArgs
     if ($LASTEXITCODE -ne 0) { Fail "Artifact download failed for $pkgName." }
 }
 
