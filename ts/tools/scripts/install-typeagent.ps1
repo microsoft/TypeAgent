@@ -51,6 +51,8 @@ param(
     # Copilot CLI. Keep this separate from Copilot's managed installed-plugins
     # directory so the CLI owns the final installed layout.
     [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\available-plugins\typeagent",
+    [string]$PluginMarketplaceName = "typeagent-local",
+    [string]$PluginMarketplaceDir = "$env:USERPROFILE\.copilot\marketplaces\typeagent-local",
     [switch]$NoStart,
     # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
     # prerequisites (Node/Azure CLI and optional extras for selected switches).
@@ -158,6 +160,89 @@ function Test-CopilotPluginRegistered {
     }
 
     return $false
+}
+
+function Ensure-LocalPluginMarketplace {
+    param(
+        [Parameter(Mandatory = $true)][string]$MarketplaceRoot,
+        [Parameter(Mandatory = $true)][string]$MarketplaceName,
+        [Parameter(Mandatory = $true)][string]$PluginName,
+        [Parameter(Mandatory = $true)][string]$PluginSourceDir,
+        [Parameter(Mandatory = $true)][string]$PluginDescription,
+        [Parameter(Mandatory = $true)][string]$PluginVersion
+    )
+
+    $manifestDir = Join-Path $MarketplaceRoot ".github\plugin"
+    $manifestPath = Join-Path $manifestDir "marketplace.json"
+    $pluginsRoot = Join-Path $MarketplaceRoot "plugins"
+    $marketplacePluginDir = Join-Path $pluginsRoot $PluginName
+
+    New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $pluginsRoot | Out-Null
+
+    if (Test-Path $marketplacePluginDir) {
+        Remove-Item -Recurse -Force $marketplacePluginDir
+    }
+    Copy-Item -Path $PluginSourceDir -Destination $pluginsRoot -Recurse -Force
+
+    $manifest = $null
+    if (Test-Path $manifestPath) {
+        try {
+            $manifest = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json -Depth 20
+        } catch {
+            Write-Host "  Existing marketplace.json is invalid JSON; recreating it"
+            $manifest = $null
+        }
+    }
+
+    if ($null -eq $manifest) {
+        $manifest = [ordered]@{
+            name = $MarketplaceName
+            owner = [ordered]@{
+                name = "Microsoft"
+            }
+            metadata = [ordered]@{
+                description = "Local TypeAgent plugin marketplace"
+                version = "1.0.0"
+            }
+            plugins = @()
+        }
+    }
+
+    $existingPlugins = @()
+    if ($manifest.plugins) {
+        foreach ($entry in @($manifest.plugins)) {
+            if ($entry.name -ne $PluginName) {
+                $existingPlugins += $entry
+            }
+        }
+    }
+
+    $pluginEntry = [ordered]@{
+        name = $PluginName
+        description = $PluginDescription
+        version = $PluginVersion
+        source = "plugins/$PluginName"
+    }
+    $existingPlugins += $pluginEntry
+
+    $manifest.name = $MarketplaceName
+    if (-not $manifest.owner -or -not $manifest.owner.name) {
+        $manifest.owner = [ordered]@{ name = "Microsoft" }
+    }
+    if (-not $manifest.metadata) {
+        $manifest.metadata = [ordered]@{}
+    }
+    if (-not $manifest.metadata.description) {
+        $manifest.metadata.description = "Local TypeAgent plugin marketplace"
+    }
+    if (-not $manifest.metadata.version) {
+        $manifest.metadata.version = "1.0.0"
+    }
+    $manifest.plugins = $existingPlugins
+
+    $manifest | ConvertTo-Json -Depth 20 | Set-Content -Path $manifestPath -Encoding UTF8
+    return $manifestPath
 }
 
 function Resolve-LatestUniversalPackageVersion {
@@ -359,6 +444,8 @@ $pluginSourceDir = $PluginInstallDir
 $pluginConfig = Join-Path $pluginSourceDir "plugin.json"
 $pluginMcpServer = Join-Path $pluginSourceDir "dist\mcp\server.js"
 $pluginName = "typeagent"
+$pluginDescription = "TypeAgent Copilot CLI plugin"
+$pluginResolvedVersion = $PluginVersion
 
 if (-not (Test-Command copilot)) {
     if (-not (Test-Command npm)) {
@@ -392,6 +479,7 @@ if ($PluginSource -ne "") {
         $resolvedPluginVersion = Resolve-LatestUniversalPackageVersion -Organization $Org -ProjectName $Project -FeedName $Feed -PackageName $PluginPackageName
         Write-Host "  Resolved plugin version: $resolvedPluginVersion"
     }
+    $pluginResolvedVersion = $resolvedPluginVersion
 
     Write-Host "  Downloading plugin $PluginPackageName ($resolvedPluginVersion) -> $pluginSourceDir"
     $pluginDlArgs = @(
@@ -408,6 +496,18 @@ if ($PluginSource -ne "") {
     [void](Invoke-UniversalPackageDownload -Arguments $pluginDlArgs -PackageName $PluginPackageName)
 }
 
+try {
+    $pluginManifest = Get-Content -Raw -Path $pluginConfig | ConvertFrom-Json -Depth 20
+    if ($pluginManifest.version) {
+        $pluginResolvedVersion = [string]$pluginManifest.version
+    }
+    if ($pluginManifest.description) {
+        $pluginDescription = [string]$pluginManifest.description
+    }
+} catch {
+    Write-Host "  Warning: unable to parse plugin.json for metadata; using defaults"
+}
+
 if (-not (Test-Path $pluginConfig)) {
     Fail "Plugin install failed: missing plugin.json at $pluginSourceDir."
 }
@@ -416,6 +516,32 @@ if (-not (Test-Path $pluginMcpServer)) {
 }
 Write-Host "  Plugin source ready at $pluginSourceDir"
 Write-Host "  MCP server entrypoint found: $pluginMcpServer"
+
+$marketplaceManifestPath = Ensure-LocalPluginMarketplace `
+    -MarketplaceRoot $PluginMarketplaceDir `
+    -MarketplaceName $PluginMarketplaceName `
+    -PluginName $pluginName `
+    -PluginSourceDir $pluginSourceDir `
+    -PluginDescription $pluginDescription `
+    -PluginVersion $pluginResolvedVersion
+Write-Host "  Local marketplace manifest ready at $marketplaceManifestPath"
+
+$marketplaceAddOutput = & copilot plugin marketplace add $PluginMarketplaceDir 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $marketplaceAddText = ($marketplaceAddOutput | Out-String)
+    if ($marketplaceAddText -match "already" -and $marketplaceAddText -match "marketplace") {
+        Write-Host "  Marketplace '$PluginMarketplaceName' is already registered"
+    } else {
+        if ($marketplaceAddText) { Write-Host $marketplaceAddText }
+        Fail "Failed to register local marketplace from '$PluginMarketplaceDir'."
+    }
+}
+
+$marketplaceUpdateOutput = & copilot plugin marketplace update $PluginMarketplaceName 2>&1
+if ($LASTEXITCODE -ne 0) {
+    if ($marketplaceUpdateOutput) { $marketplaceUpdateOutput | ForEach-Object { Write-Host $_ } }
+    Fail "Failed to refresh marketplace '$PluginMarketplaceName'."
+}
 
 $pluginRegistered = Test-CopilotPluginRegistered -PluginName $pluginName
 if ($Upgrade -and $pluginRegistered) {
@@ -427,13 +553,24 @@ if ($Upgrade -and $pluginRegistered) {
     $pluginRegistered = $false
 }
 
-if ($pluginRegistered) {
-    Write-Host "  Copilot plugin '$pluginName' is already registered"
-} else {
-    Write-Host "  Registering plugin with Copilot CLI from $pluginSourceDir"
-    & copilot plugin install $pluginSourceDir
-    if ($LASTEXITCODE -ne 0) {
-        Fail "Copilot plugin registration failed for source '$pluginSourceDir'."
+Write-Host "  Registering plugin with Copilot CLI from local marketplace '$PluginMarketplaceName'"
+$pluginInstallSpec = "$pluginName@$PluginMarketplaceName"
+$pluginInstallOutput = & copilot plugin install $pluginInstallSpec 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $installText = ($pluginInstallOutput | Out-String)
+    if ($pluginRegistered -and ($installText -match "already" -and $installText -match "installed")) {
+        Write-Host "  Plugin '$pluginName' is already installed; reinstalling from marketplace"
+        & copilot plugin uninstall $pluginName
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Failed to uninstall existing Copilot plugin '$pluginName' before marketplace reinstall."
+        }
+        & copilot plugin install $pluginInstallSpec
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Copilot plugin registration failed for '$pluginInstallSpec'."
+        }
+    } else {
+        if ($installText) { Write-Host $installText }
+        Fail "Copilot plugin registration failed for '$pluginInstallSpec'."
     }
 }
 
