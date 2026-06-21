@@ -30,7 +30,8 @@
   pwsh ./install-typeagent.ps1
   pwsh ./install-typeagent.ps1 -Variant full -Version 0.0.1-12345
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
-    pwsh ./install-typeagent.ps1 -BootstrapPrereqs
+  pwsh ./install-typeagent.ps1 -BootstrapPrereqs
+  pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
 #>
 
 [CmdletBinding()]
@@ -47,6 +48,9 @@ param(
     # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
     # prerequisites (Node/Azure CLI and optional extras for selected switches).
     [switch]$BootstrapPrereqs,
+    # Opt-in: force a fresh download of agent-server, replacing existing assets at
+    # -InstallDir. By default, reuses existing downloaded assets if present.
+    [switch]$Upgrade,
     # Opt-in: set up a Microsoft Dev Tunnel so another device (e.g. a phone) can
     # reach this agent-server, and start the tunnel host alongside the daemon.
     [switch]$DevTunnel,
@@ -202,24 +206,35 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "x64"
 $rid = "win32-$arch"
 $pkgName = "agent-server.$rid"
 
-if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-
-Write-Host "  $pkgName ($Version) -> $InstallDir"
-$resolvedVersion = $Version
-if ($Version -eq "latest") {
-    Write-Host "  Resolving latest concrete package version (including prerelease versions)..."
-    $resolvedVersion = Resolve-LatestUniversalPackageVersion -Organization $Org -ProjectName $Project -FeedName $Feed -PackageName $pkgName
-    Write-Host "  Resolved latest version: $resolvedVersion"
-}
-$verArgs = @("--version", $resolvedVersion)
-& az artifacts universal download `
-    --organization $Org --project $Project --scope project `
-    --feed $Feed --name $pkgName @verArgs --path $InstallDir --only-show-errors
-if ($LASTEXITCODE -ne 0) { Fail "Artifact download failed for $pkgName." }
-
 $serve = Join-Path $InstallDir "typeagent-serve.mjs"
-if (-not (Test-Path $serve)) { Fail "Downloaded artifact missing typeagent-serve.mjs (unexpected layout)." }
+$assetExists = Test-Path $serve
+
+if ($Upgrade -and $assetExists) {
+    Write-Host "  -Upgrade specified: removing existing assets for fresh download"
+    Remove-Item -Recurse -Force $InstallDir
+    $assetExists = $false
+}
+
+if ($assetExists) {
+    Write-Host "  Using existing agent-server assets at $InstallDir"
+} else {
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    Write-Host "  Downloading $pkgName ($Version) -> $InstallDir"
+    $resolvedVersion = $Version
+    if ($Version -eq "latest") {
+        Write-Host "  Resolving latest concrete package version (including prerelease versions)..."
+        $resolvedVersion = Resolve-LatestUniversalPackageVersion -Organization $Org -ProjectName $Project -FeedName $Feed -PackageName $pkgName
+        Write-Host "  Resolved latest version: $resolvedVersion"
+    }
+    $verArgs = @("--version", $resolvedVersion)
+    & az artifacts universal download `
+        --organization $Org --project $Project --scope project `
+        --feed $Feed --name $pkgName @verArgs --path $InstallDir --only-show-errors
+    if ($LASTEXITCODE -ne 0) { Fail "Artifact download failed for $pkgName." }
+}
+}
+
+if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
 
 # --- 4. Optional: install the Copilot CLI plugin -----------------------------
 if ($PluginSource -ne "") {
