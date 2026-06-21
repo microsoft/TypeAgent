@@ -16,7 +16,7 @@
        runtime; see @typeagent/agent-sdk/node claudeExecutableOption). The 'full'
        variant bundles those runtimes, so this step is skipped.
     3. Downloads the agent-server Universal package for this RID from the feed.
-    4. Installs the Copilot CLI plugin (from feed by default, or -PluginSource).
+    4. Installs and registers the Copilot CLI plugin (from feed by default, or -PluginSource).
     5. Runs config provisioning (getKeys, browser login) and starts the daemon
        via the artifact's typeagent-serve.mjs.
     6. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
@@ -47,7 +47,10 @@ param(
     [string]$PluginSource = "",
     [string]$PluginVersion = "latest",
     [string]$PluginPackageName = "typeagent-copilot-plugin",
-    [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\installed-plugins\typeagent",
+    # Local source cache for the plugin payload before registering it with the
+    # Copilot CLI. Keep this separate from Copilot's managed installed-plugins
+    # directory so the CLI owns the final installed layout.
+    [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\available-plugins\typeagent",
     [switch]$NoStart,
     # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
     # prerequisites (Node/Azure CLI and optional extras for selected switches).
@@ -70,6 +73,35 @@ function Fail($msg) { Write-Error $msg; exit 1 }
 
 function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
+}
+
+function Test-CopilotPluginRegistered {
+    param(
+        [Parameter(Mandatory = $true)][string]$PluginName
+    )
+
+    $copilotConfigPath = Join-Path $env:USERPROFILE ".copilot\config.json"
+    if (-not (Test-Path $copilotConfigPath)) {
+        return $false
+    }
+
+    try {
+        $config = Get-Content -Raw -Path $copilotConfigPath | ConvertFrom-Json
+    } catch {
+        return $false
+    }
+
+    $installedPlugins = @($config.installedPlugins)
+    foreach ($installedPlugin in $installedPlugins) {
+        if ($installedPlugin -is [string] -and $installedPlugin -eq $PluginName) {
+            return $true
+        }
+        if ($installedPlugin -and $installedPlugin.name -eq $PluginName) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Resolve-LatestUniversalPackageVersion {
@@ -238,26 +270,39 @@ if ($assetExists) {
 
 if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
 
-# --- 4. Install the Copilot CLI plugin ---------------------------------------
+# --- 4. Install and register the Copilot CLI plugin ---------------------------
 Write-Step "Installing Copilot CLI plugin"
-$pluginDest = $PluginInstallDir
-$pluginConfig = Join-Path $pluginDest "plugin.json"
-$pluginMcpServer = Join-Path $pluginDest "dist\mcp\server.js"
+$pluginSourceDir = $PluginInstallDir
+$pluginConfig = Join-Path $pluginSourceDir "plugin.json"
+$pluginMcpServer = Join-Path $pluginSourceDir "dist\mcp\server.js"
+$pluginName = "typeagent"
 
-if ($Upgrade -and (Test-Path $pluginDest)) {
+if (-not (Test-Command copilot)) {
+    if (-not (Test-Command npm)) {
+        Fail "GitHub Copilot CLI is required to register the plugin, and npm is not available to install it."
+    }
+
+    Write-Host "  Installing GitHub Copilot CLI (npm i -g @github/copilot)"
+    & npm install -g "@github/copilot"
+    if (-not (Test-Command copilot)) {
+        Fail "GitHub Copilot CLI was not found after installation."
+    }
+}
+
+if ($Upgrade -and (Test-Path $pluginSourceDir)) {
     Write-Host "  -Upgrade specified: removing existing plugin assets for fresh download"
-    Remove-Item -Recurse -Force $pluginDest
+    Remove-Item -Recurse -Force $pluginSourceDir
 }
 
 if ($PluginSource -ne "") {
     Write-Host "  Using local plugin source: $PluginSource"
-    New-Item -ItemType Directory -Force -Path (Split-Path $pluginDest) | Out-Null
-    if (Test-Path $pluginDest) { Remove-Item -Recurse -Force $pluginDest }
-    Copy-Item -Recurse -Force $PluginSource $pluginDest
+    $pluginSourceDir = $PluginSource
+    $pluginConfig = Join-Path $pluginSourceDir "plugin.json"
+    $pluginMcpServer = Join-Path $pluginSourceDir "dist\mcp\server.js"
 } elseif (Test-Path $pluginConfig) {
-    Write-Host "  Using existing plugin at $pluginDest"
+    Write-Host "  Using existing downloaded plugin source at $pluginSourceDir"
 } else {
-    New-Item -ItemType Directory -Force -Path $pluginDest | Out-Null
+    New-Item -ItemType Directory -Force -Path $pluginSourceDir | Out-Null
     $resolvedPluginVersion = $PluginVersion
     if ($PluginVersion -eq "latest") {
         Write-Host "  Resolving latest plugin version for $PluginPackageName..."
@@ -265,7 +310,7 @@ if ($PluginSource -ne "") {
         Write-Host "  Resolved plugin version: $resolvedPluginVersion"
     }
 
-    Write-Host "  Downloading plugin $PluginPackageName ($resolvedPluginVersion) -> $pluginDest"
+    Write-Host "  Downloading plugin $PluginPackageName ($resolvedPluginVersion) -> $pluginSourceDir"
     $pluginDlArgs = @(
         "artifacts", "universal", "download",
         "--organization", $Org,
@@ -274,7 +319,7 @@ if ($PluginSource -ne "") {
         "--feed", $Feed,
         "--name", $PluginPackageName,
         "--version", $resolvedPluginVersion,
-        "--path", $pluginDest,
+        "--path", $pluginSourceDir,
         "--only-show-errors"
     )
     & az @pluginDlArgs
@@ -284,13 +329,38 @@ if ($PluginSource -ne "") {
 }
 
 if (-not (Test-Path $pluginConfig)) {
-    Fail "Plugin install failed: missing plugin.json at $pluginDest."
+    Fail "Plugin install failed: missing plugin.json at $pluginSourceDir."
 }
 if (-not (Test-Path $pluginMcpServer)) {
     Fail "Plugin install failed: missing MCP server entrypoint at $pluginMcpServer."
 }
-Write-Host "  Plugin installed at $pluginDest"
+Write-Host "  Plugin source ready at $pluginSourceDir"
 Write-Host "  MCP server entrypoint found: $pluginMcpServer"
+
+$pluginRegistered = Test-CopilotPluginRegistered -PluginName $pluginName
+if ($Upgrade -and $pluginRegistered) {
+    Write-Host "  Removing existing registered plugin '$pluginName' before reinstall"
+    & copilot plugin uninstall $pluginName
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Failed to uninstall existing Copilot plugin '$pluginName'."
+    }
+    $pluginRegistered = $false
+}
+
+if ($pluginRegistered) {
+    Write-Host "  Copilot plugin '$pluginName' is already registered"
+} else {
+    Write-Host "  Registering plugin with Copilot CLI from $pluginSourceDir"
+    & copilot plugin install $pluginSourceDir
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Copilot plugin registration failed for source '$pluginSourceDir'."
+    }
+}
+
+if (-not (Test-CopilotPluginRegistered -PluginName $pluginName)) {
+    Fail "Plugin files were staged but Copilot did not register plugin '$pluginName'."
+}
+Write-Host "  Copilot plugin '$pluginName' registered successfully"
 
 # --- 5. Provision config + start the daemon ----------------------------------
 Write-Step "Provisioning config (getKeys, browser login)"
