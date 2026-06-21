@@ -614,6 +614,34 @@ if ($provisionExitCode -ne 0) {
     }
 }
 
+# Validate that provisioning produced embedding config required at startup.
+$typeAgentConfigDir = if ($env:TYPEAGENT_CONFIG_DIR) {
+    $env:TYPEAGENT_CONFIG_DIR
+} elseif ($env:TYPEAGENT_USER_DATA_DIR) {
+    $env:TYPEAGENT_USER_DATA_DIR
+} else {
+    Join-Path $env:USERPROFILE ".typeagent"
+}
+$configLocalPath = Join-Path $typeAgentConfigDir "config.local.yaml"
+$hasEmbeddingEnv = -not [string]::IsNullOrWhiteSpace($env:AZURE_OPENAI_ENDPOINT_EMBEDDING)
+$hasEmbeddingInFile = $false
+if (Test-Path $configLocalPath) {
+    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpoint_embedding" -Quiet)
+}
+
+if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
+    $msg = @(
+        "Provisioning completed, but required embedding config was not found.",
+        "Missing: AZURE_OPENAI_ENDPOINT_EMBEDDING",
+        "Checked: env var and '$configLocalPath'",
+        "The agent server will start and then exit immediately without this setting.",
+        "Re-run provisioning with an identity that can read the expected config source (e.g. Key Vault),",
+        "or set AZURE_OPENAI_ENDPOINT_EMBEDDING in the environment/config before start.",
+        "For detailed startup diagnostics: set TYPEAGENT_DEBUG=1 and run 'node typeagent-serve.mjs start --debug', then 'node typeagent-serve.mjs logs'."
+    ) -join [Environment]::NewLine
+    Fail $msg
+}
+
 # --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
 if ($DevTunnel) {
     Write-Step "Setting up Dev Tunnel (cross-device access)"
@@ -638,12 +666,50 @@ if (-not $NoStart) {
     $startArgs = @($serve, "start")
     if ($DevTunnel) { $startArgs += "--tunnel" }
     & node @startArgs
+    $startExitCode = $LASTEXITCODE
+    if ($startExitCode -ne 0) {
+        $daemonLogPath = Join-Path $typeAgentConfigDir "agent-server.log"
+        $logText = ""
+        if (Test-Path $daemonLogPath) {
+            try {
+                $logText = Get-Content -Raw -Path $daemonLogPath
+            } catch {
+                $logText = ""
+            }
+        }
+
+        $isOpenAiPermissionError = (
+            $logText -match "PermissionDenied" -and
+            $logText -match "openai\.azure\.com" -and
+            $logText -match "embeddings"
+        )
+
+        if ($isOpenAiPermissionError) {
+            $msg = @(
+                "Agent server failed to start due to Azure OpenAI authorization failure.",
+                "Detected in daemon log: '$daemonLogPath'",
+                "The configured identity does not have permission to call the embeddings deployment.",
+                "Remediation:",
+                "  1) az login   (choose an account with access to the OpenAI resource/deployment)",
+                "  2) Verify config.local.yaml points to a deployment your selected principal can use",
+                "  3) Re-run: node \"$serve\" start --debug",
+                "  4) Check logs: node \"$serve\" logs"
+            ) -join [Environment]::NewLine
+            Fail $msg
+        }
+
+        if (Test-Path $daemonLogPath) {
+            Write-Host "  Agent-server daemon log: $daemonLogPath" -ForegroundColor Yellow
+        }
+        Fail "Agent server failed to start. Re-run with TYPEAGENT_DEBUG=1 and inspect 'node \"$serve\" logs'."
+    }
 }
 
 Write-Host ""
 Write-Host "TypeAgent agent-server installed at $InstallDir" -ForegroundColor Green
 Write-Host "  Start:    node `"$serve`" start"
 Write-Host "  Status:   node `"$serve`" status"
+Write-Host "  Logs:     node `"$serve`" logs"
 Write-Host "  Stop:     node `"$serve`" stop"
 if ($DevTunnel) {
     Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
