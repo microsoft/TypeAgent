@@ -75,6 +75,62 @@ function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+function Test-AzureDevOpsAuthError {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+
+    return (
+        $Text -match "Before you can run Azure DevOps commands, you need to run the login command" -or
+        $Text -match "az devops login" -or
+        $Text -match "azure-devops-cli-auth" -or
+        $Text -match "TF401444" -or
+        $Text -match "401" -or
+        $Text -match "403"
+    )
+}
+
+function Invoke-AzLoginForAccess {
+    param(
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    Write-Host ""
+    Write-Host $Reason -ForegroundColor Yellow
+    Write-Host "Launching 'az login' so you can select an identity with access..." -ForegroundColor Yellow
+    & az login --only-show-errors | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Azure login did not complete successfully."
+    }
+}
+
+function Invoke-AzureDevOpsCommandWithRetry {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Command,
+        [Parameter(Mandatory = $true)][string]$FailureMessage,
+        [Parameter(Mandatory = $true)][string]$LoginReason
+    )
+
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $output = & $Command 2>&1
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            return $output
+        }
+
+        $outputText = ($output | Out-String)
+        if ($attempt -eq 1 -and (Test-AzureDevOpsAuthError -Text $outputText)) {
+            Invoke-AzLoginForAccess -Reason $LoginReason
+            continue
+        }
+
+        if ($outputText) {
+            Write-Host $outputText
+        }
+        Fail $FailureMessage
+    }
+}
+
 function Test-CopilotPluginRegistered {
     param(
         [Parameter(Mandatory = $true)][string]$PluginName
@@ -112,13 +168,18 @@ function Resolve-LatestUniversalPackageVersion {
         [Parameter(Mandatory = $true)][string]$PackageName
     )
 
-    $json = & az devops invoke `
-        --organization $Organization `
-        --area packaging --resource packages `
-        --route-parameters project=$ProjectName feedId=$FeedName `
-        --query-parameters protocolType=upack packageNameQuery=$PackageName includeAllVersions=true `
-        --api-version 7.1 --output json --only-show-errors
-    if ($LASTEXITCODE -ne 0 -or -not $json) {
+    $json = Invoke-AzureDevOpsCommandWithRetry `
+        -Command {
+            & az devops invoke `
+                --organization $Organization `
+                --area packaging --resource packages `
+                --route-parameters project=$ProjectName feedId=$FeedName `
+                --query-parameters protocolType=upack packageNameQuery=$PackageName includeAllVersions=true `
+                --api-version 7.1 --output json --only-show-errors
+        } `
+        -FailureMessage "Failed to query package versions for '$PackageName' from feed '$FeedName'." `
+        -LoginReason "Azure DevOps feed access failed while listing versions for '$PackageName'."
+    if (-not $json) {
         Fail "Failed to query package versions for '$PackageName' from feed '$FeedName'."
     }
 
@@ -176,6 +237,40 @@ function Invoke-PrereqBootstrap {
     }
 }
 
+function Test-AzureDevOpsProjectAccess {
+    param(
+        [Parameter(Mandatory = $true)][string]$Organization,
+        [Parameter(Mandatory = $true)][string]$ProjectName
+    )
+
+    Invoke-AzureDevOpsCommandWithRetry `
+        -Command {
+            & az devops project show --organization $Organization --project $ProjectName --only-show-errors
+        } `
+        -FailureMessage (@(
+            "Azure DevOps authentication failed for organization '$Organization' and project '$ProjectName'.",
+            "Run one of the following and re-run this script:",
+            "  1) az login                           (AAD/MSA identity with org access)",
+            "  2) az devops login --organization $Organization   (PAT auth)",
+            "See: https://aka.ms/azure-devops-cli-auth"
+        ) -join [Environment]::NewLine) `
+        -LoginReason "Azure DevOps project access failed for '$ProjectName'."
+    return $true
+}
+
+function Invoke-UniversalPackageDownload {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+
+    Invoke-AzureDevOpsCommandWithRetry `
+        -Command { & az @Arguments } `
+        -FailureMessage "Artifact download failed for $PackageName." `
+        -LoginReason "Azure DevOps feed access failed while downloading '$PackageName'."
+    return $true
+}
+
 if ($BootstrapPrereqs) {
     Invoke-PrereqBootstrap
 }
@@ -225,18 +320,7 @@ try { & az account show --only-show-errors *> $null } catch {
 
 # Set defaults and verify DevOps auth up front so package download errors are actionable.
 & az devops configure --defaults organization=$Org project=$Project --only-show-errors 2>$null
-try {
-    & az devops project show --organization $Org --project $Project --only-show-errors *> $null
-} catch {
-    $msg = @(
-        "Azure DevOps authentication failed for organization '$Org' and project '$Project'.",
-        "Run one of the following and re-run this script:",
-        "  1) az login                           (AAD/MSA identity with org access)",
-        "  2) az devops login --organization $Org   (PAT auth)",
-        "See: https://aka.ms/azure-devops-cli-auth"
-    ) -join [Environment]::NewLine
-    Fail $msg
-}
+[void](Test-AzureDevOpsProjectAccess -Organization $Org -ProjectName $Project)
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "x64" }
 $rid = "win32-$arch"
@@ -264,8 +348,7 @@ if ($assetExists) {
     }
     $verArgs = @("--version", $resolvedVersion)
     $dlArgs = @("artifacts", "universal", "download", "--organization", $Org, "--project", $Project, "--scope", "project", "--feed", $Feed, "--name", $pkgName) + @($verArgs) + @("--path", $InstallDir, "--only-show-errors")
-    & az @dlArgs
-    if ($LASTEXITCODE -ne 0) { Fail "Artifact download failed for $pkgName." }
+    [void](Invoke-UniversalPackageDownload -Arguments $dlArgs -PackageName $pkgName)
 }
 
 if (-not (Test-Path $serve)) { Fail "Agent-server assets missing typeagent-serve.mjs (unexpected layout)." }
@@ -322,10 +405,7 @@ if ($PluginSource -ne "") {
         "--path", $pluginSourceDir,
         "--only-show-errors"
     )
-    & az @pluginDlArgs
-    if ($LASTEXITCODE -ne 0) {
-        Fail "Plugin download failed for $PluginPackageName."
-    }
+    [void](Invoke-UniversalPackageDownload -Arguments $pluginDlArgs -PackageName $PluginPackageName)
 }
 
 if (-not (Test-Path $pluginConfig)) {
