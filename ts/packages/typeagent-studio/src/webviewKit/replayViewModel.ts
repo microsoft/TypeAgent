@@ -13,16 +13,14 @@
 import type {
     ActionDelta,
     ReplayCacheState,
-    ReplayMissPolicy,
-    ReplaySummary,
     VersionSpec,
 } from "@typeagent/core/replay";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 import {
     classifyReplayRow,
-    formatReplaySummaryLine,
     type ReplayRowStatus,
 } from "../replayPresentation.js";
+import { collapseAndTruncate } from "../textFormatting.js";
 
 type StudioReplayMethod = StudioReplayResult["method"];
 type ReplayRunError = NonNullable<StudioReplayResult["error"]>;
@@ -50,8 +48,7 @@ const STATUS_LABEL: Record<ReplayRowStatus, string> = {
 };
 
 function collapse(text: string, max = 120): string {
-    const s = text.replace(/\s+/g, " ").trim();
-    return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s;
+    return collapseAndTruncate(text, max);
 }
 
 /**
@@ -106,13 +103,6 @@ export const IMPACT_FILTER_ORDER: ReplayRowStatus[] = [
     "equal",
 ];
 
-/** The difference statuses — everything except `equal`. */
-const DIFFERENCE_STATUSES: ReplayRowStatus[] = [
-    "changed",
-    "new-match",
-    "lost-match",
-];
-
 export interface ImpactFilterChip {
     status: ReplayRowStatus;
     /** Human word for the status, e.g. "changed". */
@@ -122,12 +112,23 @@ export interface ImpactFilterChip {
 }
 
 /**
- * The default active filter: differences only (`equal` hidden) so the report
- * opens focused on what changed between versions rather than burying a handful
- * of regressions under a long list of unchanged rows.
+ * The default active filter: every status, so a fresh run opens on the "All"
+ * view and the user sees the complete result before narrowing down.
  */
 export function defaultImpactFilters(): Set<ReplayRowStatus> {
-    return new Set<ReplayRowStatus>(DIFFERENCE_STATUSES);
+    return new Set<ReplayRowStatus>(IMPACT_FILTER_ORDER);
+}
+
+/**
+ * True when the active set hides nothing that has rows — i.e. the "All" pill is
+ * lit. Statuses with a zero count are ignored so an empty `equal` bucket does
+ * not keep "All" from reading as active.
+ */
+export function allStatusesActive(
+    chips: readonly ImpactFilterChip[],
+    active: ReadonlySet<ReplayRowStatus>,
+): boolean {
+    return chips.every((chip) => chip.count === 0 || active.has(chip.status));
 }
 
 /** Per-status chip descriptors (counts taken from the received rows). */
@@ -194,11 +195,8 @@ export function impactEmptyState(): ImpactEmptyState {
     };
 }
 
-/** One-line headline for a replay summary (reused from the command surface). */
-export function toImpactSummaryLine(summary: ReplaySummary): string {
-    return formatReplaySummaryLine(summary);
-}
-
+/** Per-method caveat text explaining how faithfully each replay method reflects
+ *  real dispatch. */
 const METHOD_NOTE: Record<StudioReplayMethod, string | undefined> = {
     identity: undefined,
     "static-grammar":
@@ -246,28 +244,6 @@ export function parseVersionInput(raw: string | undefined): VersionSpec {
     return { kind: "git", ref: value };
 }
 
-/** Short label for a version: the git ref, or `working tree`. */
-export function describeVersion(spec: VersionSpec): string {
-    return spec.kind === "workingTree" ? "working tree" : spec.ref;
-}
-
-/** A `Comparing A → B` line built from the summary's resolved versions. */
-export function toImpactComparisonLine(summary: ReplaySummary): string {
-    return `Comparing ${describeVersion(summary.versionA)} \u2192 ${describeVersion(
-        summary.versionB,
-    )}`;
-}
-
-/** One labelled field in the Impact Report context header. */
-export interface ImpactHeaderField {
-    label: string;
-    value: string;
-    /** Hover text explaining what the field means. */
-    tooltip: string;
-}
-
-const PLACEHOLDER = "\u2014";
-
 const METHOD_LABEL: Record<StudioReplayMethod, string> = {
     identity: "identity",
     "static-grammar": "static grammar",
@@ -275,77 +251,8 @@ const METHOD_LABEL: Record<StudioReplayMethod, string> = {
     "construction-cache": "construction cache",
 };
 
-const FIDELITY_LABEL: Record<StudioReplayMethod, string> = {
-    identity: "baseline (no grammar diff)",
-    "static-grammar": "indicative",
-    "schema-grammar": "indicative (schema-enriched)",
-    "construction-cache": "faithful cache hits, indicative grammar",
-};
-
-/**
- * Short label for how a single A/B side resolved, rendered under that side's
- * version field. The construction cache is live-only, so a git ref reads
- * `schema-enriched grammar`/`static grammar` while only a working-tree side can
- * show `construction cache` — making the asymmetry explicit instead of letting
- * the single run-level method chip imply the cache served both sides.
- */
+/** Short label for how a side resolved actions, e.g. "schema-enriched grammar".
+ *  Used as hover detail rather than a visible column. */
 export function toSideMethodLabel(method: StudioReplayMethod): string {
     return METHOD_LABEL[method];
-}
-
-/**
- * The provenance band shown above the controls: what this report pertains to
- * (`repo · agent · method · fidelity · sandbox · policy`). Deliberately omits a
- * sandbox id — neither the identity nor the static-grammar method runs in a
- * sandbox (they read grammar source from git / the working tree), so labelling
- * one would falsely imply the result reflects a loaded runtime agent. A real
- * sandbox label only becomes meaningful with the full-fidelity replay path.
- */
-export function toImpactHeaderFields(input: {
-    repo?: string;
-    agent?: string;
-    method?: StudioReplayMethod;
-    missPolicy?: ReplayMissPolicy;
-}): ImpactHeaderField[] {
-    const method = input.method;
-    return [
-        {
-            label: "repo",
-            value:
-                input.repo && input.repo.length > 0 ? input.repo : PLACEHOLDER,
-            tooltip: "The workspace repository this report runs against.",
-        },
-        {
-            label: "agent",
-            value:
-                input.agent && input.agent.length > 0
-                    ? input.agent
-                    : PLACEHOLDER,
-            tooltip: "The agent whose corpus is being replayed.",
-        },
-        {
-            label: "method",
-            value: method ? METHOD_LABEL[method] : PLACEHOLDER,
-            tooltip:
-                "How utterances are resolved into actions for the compare.",
-        },
-        {
-            label: "fidelity",
-            value: method ? FIDELITY_LABEL[method] : PLACEHOLDER,
-            tooltip:
-                "How faithfully the result reflects real dispatch. Static-grammar replay is indicative, not authoritative.",
-        },
-        {
-            label: "sandbox",
-            value: "not used",
-            tooltip:
-                "Static-grammar replay reads grammar from git / the working tree and is not sandbox-bound. A sandbox is only used by the full-fidelity replay path.",
-        },
-        {
-            label: "policy",
-            value: input.missPolicy ?? PLACEHOLDER,
-            tooltip:
-                "Cache-miss policy for the run. needs-explanation stays deterministic (no LLM calls).",
-        },
-    ];
 }

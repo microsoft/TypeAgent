@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import * as path from "node:path";
 import { WebviewKitPanel } from "./webviewKit/host.js";
 import {
     parseWebviewMessage,
@@ -35,10 +34,6 @@ export function openImpactReport(
     let lastResult:
         | { requestId: number; payload: StudioReplayResult }
         | undefined;
-
-    const repoName =
-        repoRoot !== undefined ? path.basename(repoRoot) : undefined;
-    const repoField = repoName !== undefined ? { repoName } : {};
 
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
@@ -87,7 +82,7 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agents: [], connected: false, ...repoField });
+            post({ type: "init", agents: [], connected: false });
             return;
         }
         let agents: string[] = [];
@@ -96,7 +91,7 @@ export function openImpactReport(
         } catch {
             // Connected but listing failed; surface an empty agent list.
         }
-        post({ type: "init", agents, connected: true, ...repoField });
+        post({ type: "init", agents, connected: true });
         // Recover a result computed while the panel was hidden/reloaded.
         if (lastResult) {
             post({

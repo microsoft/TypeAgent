@@ -22,8 +22,6 @@ export type HostToWebviewMessage =
           agents: string[];
           /** Whether the studio service channel is reachable. */
           connected: boolean;
-          /** Workspace repository name for the context header (basename). */
-          repoName?: string;
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }

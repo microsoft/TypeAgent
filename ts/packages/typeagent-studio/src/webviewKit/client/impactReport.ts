@@ -17,15 +17,13 @@ import type {
 } from "../protocol.js";
 import {
     toImpactRows,
-    toImpactSummaryLine,
     toImpactMethodNote,
     toImpactErrorLine,
-    toImpactComparisonLine,
-    toImpactHeaderFields,
     toSideMethodLabel,
     buildImpactFilterChips,
     filterImpactRows,
     defaultImpactFilters,
+    allStatusesActive,
     impactFilterNote,
     impactEmptyState,
     allRowsEqual,
@@ -43,7 +41,6 @@ interface PanelState {
     selectedAgent?: string;
     versionA?: string;
     versionB?: string;
-    repoName?: string;
     lastResult?: PersistedResult;
 }
 interface VsCodeApi {
@@ -67,9 +64,8 @@ let latestRequestId = 0;
 // Run controls are re-enabled after a run only when this holds, so a result /
 // error never re-enables Run while the service is unavailable.
 let controlsAvailable = false;
-// Repo name for the context header (from `init`, falls back to persisted state).
-let repoName: string | undefined;
-// The last result rendered, so the header reflects its method/policy.
+// The last result rendered, so the fidelity tooltip and per-side resolution
+// reflect the current run; also gates the first-run empty state.
 let lastRenderedResult: StudioReplayResult | undefined;
 // Rows from the last rendered result and the run's true total, kept so the
 // status filter can re-render the table without re-fetching.
@@ -82,7 +78,6 @@ const activeFilters = defaultImpactFilters();
 const root = document.getElementById("root")!;
 
 // --- Static shell ---------------------------------------------------------
-const headerEl = el("div", "context-header");
 const toolbar = el("div", "toolbar");
 const statusEl = el("span", "status");
 const agentSelect = document.createElement("select");
@@ -91,7 +86,6 @@ agentSelect.setAttribute("aria-label", "Agent to replay");
 agentSelect.title = "The agent whose corpus is replayed and compared.";
 agentSelect.addEventListener("change", () => {
     persistState({ selectedAgent: agentSelect.value });
-    renderHeader();
 });
 // Two version fields drive the A→B compare. Defaults express the "find a
 // regression" journey: baseline HEAD vs the live working tree (your edits).
@@ -101,10 +95,10 @@ const versionBInput = versionField(
     "working tree",
     "working tree",
 );
-const runButton = button("Run replay", () => runReplay());
+const runButton = iconButton("\u25b6", "Run replay", () => runReplay());
 runButton.title =
     "Replay the corpus against both versions and compare actions.";
-const reconnectButton = button("Reconnect", () => {
+const reconnectButton = iconButton("\u21bb", "Reconnect", () => {
     vscode.postMessage({ type: "reconnect" });
 });
 reconnectButton.title = "Re-attempt the connection to the studio service.";
@@ -117,41 +111,24 @@ toolbar.append(
     statusEl,
 );
 
-const summaryEl = el("div", "summary");
-const comparisonEl = el("div", "comparison");
 const bannerEl = el("div", "banner");
 const filtersEl = el("div", "filters");
 const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
 
-root.append(
-    headerEl,
-    toolbar,
-    bannerEl,
-    summaryEl,
-    comparisonEl,
-    filtersEl,
-    emptyStateEl,
-    tableWrap,
-);
+root.append(toolbar, bannerEl, filtersEl, emptyStateEl, tableWrap);
 
 setControlsEnabled(false);
 restoreSelection();
-renderHeader();
 
 // --- Messaging ------------------------------------------------------------
 window.addEventListener("message", (event: MessageEvent) => {
     const msg = event.data as HostToWebviewMessage;
     switch (msg.type) {
         case "init":
-            if (msg.repoName !== undefined) {
-                repoName = msg.repoName;
-                persistState({ repoName });
-            }
             populateAgents(msg.agents);
             controlsAvailable = msg.connected && msg.agents.length > 0;
             setControlsEnabled(controlsAvailable);
-            renderHeader();
             renderEmptyState();
             setStatus(
                 msg.connected
@@ -203,8 +180,6 @@ function runReplay(): void {
     persistState({ selectedAgent: agent, versionA, versionB });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
-    summaryEl.textContent = "";
-    comparisonEl.textContent = "";
     bannerEl.textContent = "";
     bannerEl.className = "banner";
     filtersEl.textContent = "";
@@ -217,7 +192,6 @@ function runReplay(): void {
 
 function renderResult(result: StudioReplayResult, restored = false): void {
     lastRenderedResult = result;
-    renderHeader();
     // Reset every output region first so a render fully *replaces* the previous
     // one. `renderResult` runs more than once per result on navigate-away/back:
     // `restoreSelection` paints the persisted snapshot, then the host re-pushes
@@ -226,43 +200,31 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     // second table instead of upgrading the snapshot in place.
     bannerEl.className = "banner";
     bannerEl.textContent = "";
-    summaryEl.textContent = "";
-    comparisonEl.textContent = "";
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
     tableWrap.textContent = "";
-    versionAInput.sub.textContent = "";
-    versionBInput.sub.textContent = "";
+    statusEl.title = "";
     currentRows = [];
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
         bannerEl.className = "banner banner-error";
         bannerEl.textContent = toImpactErrorLine(result.error);
-        summaryEl.textContent = "";
-        comparisonEl.textContent = toImpactComparisonLine(result.summary);
-        tableWrap.textContent = "";
         setStatus(restored ? "Restored — replay aborted." : "Replay aborted.");
         return;
     }
 
-    const note = toImpactMethodNote(result.method);
-    if (note) {
-        bannerEl.className = "banner banner-note";
-        bannerEl.textContent = note;
-    } else {
-        bannerEl.className = "banner";
-        bannerEl.textContent = "";
-    }
-
-    // Per-side method under each version field: a git ref can never consult the
-    // live construction cache, so this makes the A/B asymmetry explicit.
-    versionAInput.sub.textContent = toSideMethodLabel(result.methodA);
-    versionBInput.sub.textContent = toSideMethodLabel(result.methodB);
-
-    summaryEl.textContent = toImpactSummaryLine(result.summary);
-    comparisonEl.textContent = toImpactComparisonLine(result.summary);
+    // The fidelity caveat (e.g. "indicative, not authoritative") and how each
+    // side resolved are kept as hover detail rather than visible banners so the
+    // report stays compact without losing the warning.
+    statusEl.title = toImpactMethodNote(result.method) ?? "";
+    versionAInput.input.title = `Base (A) resolved via ${toSideMethodLabel(
+        result.methodA,
+    )}`;
+    versionBInput.input.title = `Compare (B) resolved via ${toSideMethodLabel(
+        result.methodB,
+    )}`;
 
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
     currentTotal = result.summary.rowCount;
@@ -271,10 +233,11 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     renderTable();
 
     const shown = currentRows.length;
+    const ms = result.summary.duration;
     setStatus(
         restored
             ? `Restored from last run — Run for live results (${shown} row(s)).`
-            : `Done — ${shown} row(s).`,
+            : `Done — ${shown} row(s) \u00b7 ${ms}ms.`,
     );
 }
 
@@ -288,26 +251,63 @@ function renderFilters(): void {
         return;
     }
     filtersEl.hidden = false;
+
+    // The "All" pill resets the view to every row; it reads as active whenever
+    // nothing with rows is hidden.
+    filtersEl.appendChild(
+        chipButton(
+            "All",
+            currentRows.length,
+            allStatusesActive(chips, activeFilters),
+            false,
+            selectAllFilters,
+        ),
+    );
+
     for (const chip of chips) {
-        const button = document.createElement("button");
-        button.type = "button";
         const isActive = activeFilters.has(chip.status);
         const isEmpty = chip.count === 0;
-        const classes = ["filter-chip"];
-        if (isActive) classes.push("is-active");
-        if (isEmpty) classes.push("is-empty");
-        button.className = classes.join(" ");
-        button.setAttribute("aria-pressed", String(isActive));
-        button.textContent = `${chip.label} ${chip.count}`;
         // A status with no rows is nothing to filter on — show it for context
         // (a count of 0 is informative) but make it inert.
-        if (isEmpty) {
-            button.disabled = true;
-        } else {
-            button.addEventListener("click", () => toggleFilter(chip.status));
-        }
-        filtersEl.appendChild(button);
+        filtersEl.appendChild(
+            chipButton(chip.label, chip.count, isActive, isEmpty, () =>
+                toggleFilter(chip.status),
+            ),
+        );
     }
+}
+
+/** Build one filter pill button. Empty (zero-count) chips render inert. */
+function chipButton(
+    label: string,
+    count: number,
+    isActive: boolean,
+    isEmpty: boolean,
+    onClick: () => void,
+): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    const classes = ["filter-chip"];
+    if (isActive) classes.push("is-active");
+    if (isEmpty) classes.push("is-empty");
+    button.className = classes.join(" ");
+    button.setAttribute("aria-pressed", String(isActive));
+    button.textContent = `${label} ${count}`;
+    if (isEmpty) {
+        button.disabled = true;
+    } else {
+        button.addEventListener("click", onClick);
+    }
+    return button;
+}
+
+/** Reset the active filter to every status (the "All" view). */
+function selectAllFilters(): void {
+    for (const status of defaultImpactFilters()) {
+        activeFilters.add(status);
+    }
+    renderFilters();
+    renderTable();
 }
 
 /** Toggle one status in the active filter and re-render the table in place. */
@@ -399,37 +399,6 @@ function renderEmptyState(): void {
     emptyStateEl.hidden = false;
 }
 
-/** Render the provenance band (`repo · agent · method · …`) from what we know. */
-function renderHeader(): void {
-    const agent = agentSelect.value || vscode.getState()?.selectedAgent;
-    const fields = toImpactHeaderFields({
-        ...(repoName !== undefined ? { repo: repoName } : {}),
-        ...(agent ? { agent } : {}),
-        ...(lastRenderedResult
-            ? {
-                  method: lastRenderedResult.method,
-                  missPolicy: lastRenderedResult.summary.missPolicy,
-              }
-            : {}),
-    });
-    headerEl.textContent = "";
-    fields.forEach((f, i) => {
-        if (i > 0) {
-            const sep = el("span", "context-sep");
-            sep.textContent = "·";
-            headerEl.appendChild(sep);
-        }
-        const item = el("span", "context-item");
-        item.title = f.tooltip;
-        const label = el("span", "context-label");
-        label.textContent = `${f.label}:`;
-        const value = el("span", "context-value");
-        value.textContent = f.value;
-        item.append(label, value);
-        headerEl.appendChild(item);
-    });
-}
-
 function populateAgents(agents: string[]): void {
     const previous = vscode.getState()?.selectedAgent;
     agentSelect.textContent = "";
@@ -446,7 +415,6 @@ function populateAgents(agents: string[]): void {
 
 function restoreSelection(): void {
     const state = vscode.getState();
-    repoName = state?.repoName;
     const previous = state?.selectedAgent;
     if (previous) {
         const opt = document.createElement("option");
@@ -521,9 +489,18 @@ function cell(text: string, className?: string): HTMLTableCellElement {
     return td;
 }
 
-function button(label: string, onClick: () => void): HTMLButtonElement {
+/** A compact icon button (e.g. ▶ run, ↻ reconnect). `glyph` is the visible
+ *  symbol; `label` is the accessible name and hover title. */
+function iconButton(
+    glyph: string,
+    label: string,
+    onClick: () => void,
+): HTMLButtonElement {
     const b = document.createElement("button");
-    b.textContent = label;
+    b.className = "icon-button";
+    b.textContent = glyph;
+    b.setAttribute("aria-label", label);
+    b.title = label;
     b.addEventListener("click", onClick);
     return b;
 }
@@ -534,7 +511,7 @@ function versionField(
     label: string,
     value: string,
     placeholder: string,
-): { wrap: HTMLElement; input: HTMLInputElement; sub: HTMLElement } {
+): { wrap: HTMLElement; input: HTMLInputElement } {
     const wrap = el("label", "version-field");
     const text = document.createElement("span");
     text.className = "version-label";
@@ -553,12 +530,6 @@ function versionField(
             runReplay();
         }
     });
-    // Filled in after a run with how this side actually resolved (e.g.
-    // "construction cache" vs "schema-enriched grammar"), so the per-side
-    // method is visible right under the field rather than collapsed into the
-    // single run-level chip.
-    const sub = el("span", "version-method");
-    sub.textContent = "";
-    wrap.append(text, input, sub);
-    return { wrap, input, sub };
+    wrap.append(text, input);
+    return { wrap, input };
 }

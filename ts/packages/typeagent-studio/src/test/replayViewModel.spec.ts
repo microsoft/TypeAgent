@@ -3,20 +3,17 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ActionDelta, ReplaySummary } from "@typeagent/core/replay";
+import type { ActionDelta } from "@typeagent/core/replay";
 import {
     toImpactRows,
-    toImpactSummaryLine,
     toImpactMethodNote,
     toImpactErrorLine,
     parseVersionInput,
-    describeVersion,
-    toImpactComparisonLine,
-    toImpactHeaderFields,
     toSideMethodLabel,
     buildImpactFilterChips,
     filterImpactRows,
     defaultImpactFilters,
+    allStatusesActive,
     impactFilterNote,
     impactEmptyState,
     allRowsEqual,
@@ -116,27 +113,6 @@ test("toSideMethodLabel gives a short per-side label", () => {
     assert.equal(toSideMethodLabel("identity"), "identity");
 });
 
-test("toImpactSummaryLine renders a headline", () => {
-    const summary = {
-        runId: "r1",
-        agent: "player",
-        versionA: { kind: "workingTree" },
-        versionB: { kind: "workingTree" },
-        corpusSize: 3,
-        rowCount: 3,
-        equalCount: 3,
-        changedCount: 0,
-        newMatchCount: 0,
-        lostMatchCount: 0,
-        collisionDelta: 0,
-        duration: 42,
-    } as ReplaySummary;
-    const line = toImpactSummaryLine(summary);
-    assert.ok(line.includes("player"));
-    assert.ok(line.includes("3 rows"));
-    assert.ok(line.includes("42ms"));
-});
-
 test("toImpactMethodNote labels static-grammar but stays silent for identity", () => {
     assert.equal(toImpactMethodNote("identity"), undefined);
     const note = toImpactMethodNote("static-grammar");
@@ -184,73 +160,6 @@ test("parseVersionInput treats blanks/keywords as working tree, else a git ref",
     });
 });
 
-test("describeVersion and toImpactComparisonLine read the resolved versions", () => {
-    assert.equal(describeVersion({ kind: "workingTree" }), "working tree");
-    assert.equal(describeVersion({ kind: "git", ref: "HEAD" }), "HEAD");
-    const line = toImpactComparisonLine({
-        versionA: { kind: "git", ref: "HEAD" },
-        versionB: { kind: "workingTree" },
-    } as ReplaySummary);
-    assert.ok(line.includes("HEAD"));
-    assert.ok(line.includes("working tree"));
-    assert.ok(line.includes("\u2192"));
-});
-
-function headerValue(
-    fields: ReturnType<typeof toImpactHeaderFields>,
-    label: string,
-): string | undefined {
-    return fields.find((f) => f.label === label)?.value;
-}
-
-test("toImpactHeaderFields fills placeholders before a run", () => {
-    const fields = toImpactHeaderFields({});
-    // Every field present with a tooltip.
-    assert.deepEqual(
-        fields.map((f) => f.label),
-        ["repo", "agent", "method", "fidelity", "sandbox", "policy"],
-    );
-    assert.ok(fields.every((f) => f.tooltip.length > 0));
-    assert.equal(headerValue(fields, "repo"), "\u2014");
-    assert.equal(headerValue(fields, "agent"), "\u2014");
-    assert.equal(headerValue(fields, "method"), "\u2014");
-    assert.equal(headerValue(fields, "policy"), "\u2014");
-    // Sandbox is honestly "not used" — the static-grammar path is not sandbox-bound.
-    assert.equal(headerValue(fields, "sandbox"), "not used");
-});
-
-test("toImpactHeaderFields reflects a static-grammar run as indicative", () => {
-    const fields = toImpactHeaderFields({
-        repo: "TypeAgent",
-        agent: "player",
-        method: "static-grammar",
-        missPolicy: "needs-explanation",
-    });
-    assert.equal(headerValue(fields, "repo"), "TypeAgent");
-    assert.equal(headerValue(fields, "agent"), "player");
-    assert.equal(headerValue(fields, "method"), "static grammar");
-    assert.equal(headerValue(fields, "fidelity"), "indicative");
-    assert.equal(headerValue(fields, "policy"), "needs-explanation");
-    assert.equal(headerValue(fields, "sandbox"), "not used");
-});
-
-test("toImpactHeaderFields labels the identity baseline distinctly", () => {
-    const fields = toImpactHeaderFields({ method: "identity" });
-    assert.equal(headerValue(fields, "method"), "identity");
-    assert.ok(/baseline/i.test(headerValue(fields, "fidelity")!));
-});
-
-test("toImpactHeaderFields labels a construction-cache run", () => {
-    const fields = toImpactHeaderFields({
-        repo: "TypeAgent",
-        agent: "player",
-        method: "construction-cache",
-        missPolicy: "needs-explanation",
-    });
-    assert.equal(headerValue(fields, "method"), "construction cache");
-    assert.ok(/cache/i.test(headerValue(fields, "fidelity")!));
-});
-
 // A spread of every status for the filter helpers: 2 equal, 1 each of the
 // three difference kinds.
 function mixedRows() {
@@ -278,15 +187,34 @@ test("buildImpactFilterChips counts each status in fixed order", () => {
     assert.ok(chips.every((c) => c.label.length > 0));
 });
 
-test("defaultImpactFilters hides equal rows so the report opens on differences", () => {
+test("defaultImpactFilters shows every status so the report opens on All", () => {
     const active = defaultImpactFilters();
-    assert.ok(!active.has("equal"));
-    assert.ok(active.has("changed"));
-    assert.ok(active.has("new-match"));
-    assert.ok(active.has("lost-match"));
+    for (const status of IMPACT_FILTER_ORDER) {
+        assert.ok(active.has(status));
+    }
     const shown = filterImpactRows(mixedRows(), active);
-    assert.equal(shown.length, 3);
-    assert.ok(shown.every((r) => r.status !== "equal"));
+    assert.equal(shown.length, mixedRows().length);
+});
+
+test("allStatusesActive is true only when nothing with rows is hidden", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    assert.ok(allStatusesActive(chips, defaultImpactFilters()));
+    const noEqual = new Set<ReplayRowStatus>(
+        IMPACT_FILTER_ORDER.filter((s) => s !== "equal"),
+    );
+    // equal has rows in the fixture, so hiding it drops out of the All view.
+    assert.ok(!allStatusesActive(chips, noEqual));
+});
+
+test("allStatusesActive ignores statuses with no rows", () => {
+    // Only equal rows: the empty difference buckets must not block the All view.
+    const chips = buildImpactFilterChips(
+        toImpactRows([
+            row({ equal: true, utteranceId: "e1" }),
+            row({ equal: true, utteranceId: "e2" }),
+        ]),
+    );
+    assert.ok(allStatusesActive(chips, new Set<ReplayRowStatus>(["equal"])));
 });
 
 test("filterImpactRows keeps only rows whose status is active", () => {
@@ -298,8 +226,14 @@ test("filterImpactRows keeps only rows whose status is active", () => {
 
 test("impactFilterNote describes the non-empty hidden statuses", () => {
     const chips = buildImpactFilterChips(mixedRows());
-    const note = impactFilterNote(chips, defaultImpactFilters());
-    // The 2 equal rows are hidden by default.
+    // Hide equal explicitly (the All default shows everything).
+    const differences = new Set<ReplayRowStatus>([
+        "changed",
+        "new-match",
+        "lost-match",
+    ]);
+    const note = impactFilterNote(chips, differences);
+    // The 2 equal rows are hidden.
     assert.ok(note);
     assert.ok(/2 rows hidden/.test(note!));
     assert.ok(/equal/.test(note!));

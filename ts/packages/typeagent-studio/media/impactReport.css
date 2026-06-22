@@ -18,50 +18,6 @@ body {
   display: none !important;
 }
 
-.context-header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 10px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 2px;
-  background: var(
-    --vscode-editorWidget-background,
-    var(--vscode-editor-background)
-  );
-}
-
-.context-header:empty {
-  display: none;
-}
-
-.context-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  cursor: help;
-}
-
-.context-label {
-  color: var(--vscode-descriptionForeground);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 10px;
-}
-
-.context-value {
-  color: var(--vscode-foreground);
-  font-weight: 600;
-}
-
-.context-sep {
-  color: var(--vscode-descriptionForeground);
-  opacity: 0.6;
-}
-
 .toolbar {
   display: flex;
   align-items: center;
@@ -88,6 +44,12 @@ body {
   cursor: default;
 }
 
+.icon-button {
+  padding: 3px 9px;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .agent-select {
   color: var(--vscode-dropdown-foreground);
   background: var(--vscode-dropdown-background);
@@ -98,18 +60,8 @@ body {
 
 .version-field {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-}
-
-.version-method {
-  flex-basis: 100%;
-  text-align: right;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-  font-style: italic;
-  min-height: 13px;
 }
 
 .version-label {
@@ -126,24 +78,9 @@ body {
   border-radius: 2px;
 }
 
-.comparison {
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.comparison:empty {
-  display: none;
-}
-
 .status {
   color: var(--vscode-descriptionForeground);
   margin-left: auto;
-}
-
-.summary {
-  font-weight: 600;
-  margin-bottom: 8px;
 }
 
 .banner {
@@ -156,12 +93,6 @@ body {
 
 .banner:empty {
   display: none;
-}
-
-.banner-note {
-  color: var(--vscode-descriptionForeground);
-  background: var(--vscode-textBlockQuote-background);
-  border-left-color: var(--vscode-charts-yellow);
 }
 
 .banner-error {
