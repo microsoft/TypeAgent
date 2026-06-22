@@ -7,6 +7,7 @@ import {
     buildSandboxRootNodes,
     type SandboxTreeNode,
 } from "./sandboxTreePresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 import type { SandboxSource } from "./sandboxSource.js";
 
 /** View id contributed in package.json. */
@@ -21,14 +22,10 @@ export const SANDBOX_VIEW_ID = "typeagentStudioSandboxes";
  * surfaced by the dedicated status-bar item, not as a row here).
  */
 export class SandboxTreeProvider
-    implements vscode.TreeDataProvider<SandboxTreeNode>, vscode.Disposable
+    extends BaseStudioTreeProvider<SandboxTreeNode>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        SandboxTreeNode | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private readonly subscription: { dispose(): void };
-    private connected = false;
 
     // Initial-load gate: until the first connect + sandbox restore settles, the
     // root `getChildren` awaits this so VS Code keeps the view's native loading
@@ -43,18 +40,10 @@ export class SandboxTreeProvider
     private readyTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(private readonly source: SandboxSource) {
+        super();
         this.subscription = source.onSandboxChanged(() => this.refresh());
         this.readyTimer = setTimeout(() => this.markReady(), 20_000);
         this.readyTimer.unref?.();
-    }
-
-    /** Reflect the studio service connection state (drives the empty view). */
-    setConnected(connected: boolean): void {
-        if (connected === this.connected) {
-            return;
-        }
-        this.connected = connected;
-        this.refresh();
     }
 
     /**
@@ -75,23 +64,16 @@ export class SandboxTreeProvider
         this.refresh();
     }
 
-    refresh(): void {
-        this.emitter.fire(undefined);
+    protected collapsibleState(
+        node: SandboxTreeNode,
+    ): vscode.TreeItemCollapsibleState {
+        return node.hasChildren
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.None;
     }
 
-    getTreeItem(node: SandboxTreeNode): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            node.label,
-            node.hasChildren
-                ? vscode.TreeItemCollapsibleState.Expanded
-                : vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = node.id;
-        item.description = node.description;
-        item.tooltip = node.tooltip;
-        item.contextValue = node.contextValue;
+    protected decorate(item: vscode.TreeItem, node: SandboxTreeNode): void {
         item.iconPath = iconForNode(node);
-        return item;
     }
 
     async getChildren(node?: SandboxTreeNode): Promise<SandboxTreeNode[]> {
@@ -123,7 +105,7 @@ export class SandboxTreeProvider
         }
         this.resolveReady();
         this.subscription.dispose();
-        this.emitter.dispose();
+        super.dispose();
     }
 }
 
