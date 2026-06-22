@@ -54,6 +54,13 @@ console.log(`   Output:         ${outputDir}`);
 if (stagedAgentDir) console.log(`   Agent dir:      ${stagedAgentDir}`);
 if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
 
+if (rid !== "win32-x64") {
+    console.error(
+        `❌ Unsupported RID for MSI build: ${rid}. Currently supported: win32-x64`,
+    );
+    process.exit(1);
+}
+
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const wxsDir = path.resolve(__dirname, "../installers/wix");
 const wxsFile = path.join(wxsDir, "TypeAgent-AgentServer.wxs");
@@ -249,8 +256,8 @@ if (!skipDownload) {
 // ── Step 2: Generate marketplace.json ─────────────────────────────────────────
 console.log(`\n📝 Generating marketplace.json...`);
 fs.mkdirSync(marketplaceDir, { recursive: true });
-const semverVersion =
-    version
+const pluginSemverVersion =
+    pluginVersion
         .replace(/[^0-9.]/g, ".")
         .replace(/\.{2,}/g, ".")
         .replace(/\.$/, "") || "0.0.1";
@@ -286,13 +293,13 @@ const marketplace = {
     owner: { name: "Microsoft", email: "typeagent@microsoft.com" },
     metadata: {
         description: "TypeAgent Copilot CLI plugin",
-        version: semverVersion,
+        version: pluginSemverVersion,
     },
     plugins: [
         {
             name: "typeagent",
             description: "TypeAgent integration for Copilot CLI",
-            version: semverVersion,
+            version: pluginSemverVersion,
             source: "./copilot-plugin",
         },
     ],
