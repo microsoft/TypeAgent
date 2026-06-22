@@ -58,7 +58,7 @@ function Invoke-Copilot {
     }
 
     if (-not $AllowFailure -and $exitCode -ne 0) {
-        throw "Copilot command failed with exit code $exitCode: copilot $($Args -join ' ')"
+        throw "Copilot command failed with exit code ${exitCode}: copilot $($Args -join ' ')"
     }
 
     return ($output | Out-String)
@@ -84,7 +84,12 @@ function Ensure-LocalPluginMarketplace {
     if (Test-Path $marketplacePluginDir) {
         Remove-Item -Recurse -Force $marketplacePluginDir
     }
+    # Copy the source directory to the plugins directory, then rename to plugin name
+    $tempCopyPath = Join-Path $pluginsRoot (Split-Path -Leaf $PluginSourceDir)
     Copy-Item -Path $PluginSourceDir -Destination $pluginsRoot -Recurse -Force
+    if ($tempCopyPath -ne $marketplacePluginDir -and (Test-Path $tempCopyPath)) {
+        Rename-Item -Path $tempCopyPath -NewName (Split-Path -Leaf $marketplacePluginDir) -Force
+    }
 
     $manifest = $null
     if (Test-Path $manifestPath) {
@@ -149,11 +154,21 @@ function Ensure-LocalPluginMarketplace {
 
 function Find-CopilotCli {
     try {
+        # Try to get the command; if it exists, return its source
         $cmd = Get-Command copilot -ErrorAction SilentlyContinue
-        return $cmd?.Source
+        if ($cmd) {
+            return $cmd.Source
+        }
+        # If not found via Get-Command (e.g., when running with -NoProfile),
+        # try invoking it to see if it's available on PATH
+        $testOutput = & copilot --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return "copilot (on PATH)"
+        }
     } catch {
-        return $null
+        # Silently ignore
     }
+    return $null
 }
 
 $copilotPath = Find-CopilotCli
@@ -195,11 +210,11 @@ try {
 
     $marketplaceRoot = Join-Path $env:USERPROFILE ".copilot\marketplaces\typeagent-local"
     Write-Log "Updating local marketplace at: $marketplaceRoot"
-    $manifestPath = Ensure-LocalPluginMarketplace \
-        -MarketplaceRoot $marketplaceRoot \
-        -PluginName "typeagent" \
-        -PluginSourceDir $pluginSourceDir \
-        -PluginDescription "TypeAgent integration for Copilot CLI" \
+    $manifestPath = Ensure-LocalPluginMarketplace `
+        -MarketplaceRoot $marketplaceRoot `
+        -PluginName "typeagent" `
+        -PluginSourceDir $pluginSourceDir `
+        -PluginDescription "TypeAgent integration for Copilot CLI" `
         -PluginVersion $pluginVersion
     Write-Log "Marketplace manifest updated: $manifestPath"
 
