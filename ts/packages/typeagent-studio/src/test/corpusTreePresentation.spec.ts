@@ -84,10 +84,10 @@ test("buildCorpusEntryNodes surfaces a feedback badge when present", () => {
         entry({
             id: "a",
             source: "feedback",
-            feedback: { rating: "negative", recordedAt: 1 },
+            feedback: { rating: "down", recordedAt: 1 },
         }),
     ]);
-    assert.equal(nodes[0].description, "feedback: negative");
+    assert.equal(nodes[0].description, "feedback: down");
 });
 
 test("truncateUtterance collapses whitespace and caps length", () => {
