@@ -1,0 +1,177 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Live / smoke sanity tests for the TypeAgent TypeScript workspace.
+#
+# Azure DevOps port of .github/workflows/smoke-tests.yml. Differences from the
+# GitHub Actions version, and why:
+#   * The fork-PR permission gating (actions-cool/check-user-permission) is
+#     dropped. That check existed to protect secrets on the PUBLIC OSS repo;
+#     on an internal Azure DevOps project, Key Vault / secret access is already
+#     governed by project permissions and the service connection's RBAC.
+#   * "Setup Git LF" is dropped because .gitattributes already pins `* text
+#     eol=lf`, so checkout produces LF on every OS regardless of core.autocrlf.
+#   * dorny/paths-filter is replaced by the trigger `paths` filter below.
+#   * azure/login (OIDC) is replaced by a service-principal login: the CLIENT_ID
+#     / TENANT_ID / CLIENT_SECRET variables are passed to getKeys.mjs as AZURE_*
+#     env vars, which it consumes via DefaultAzureCredential ->
+#     EnvironmentCredential. A secret-free Workload Identity Federation variant
+#     is documented inline at the Get Keys step.
+#
+# Prerequisites:
+#   * GitHub service connection - created when you set up this pipeline via
+#     StartRight (per the eng.ms integrate-ado guide). It lets Azure Pipelines
+#     read the repo AND report each run's status back to the PR. No YAML needed.
+#   * Pipeline variables (define in the pipeline UI or a linked variable group;
+#     mark the credential ones as secret):
+#       - REGISTRY         npm registry URL used by include-prepare-repo.yml to
+#                          restore dependencies (internal Azure Artifacts feed).
+#       - CLIENT_ID        service principal (app) ID, its home
+#       - TENANT_ID        tenant, and target
+#       - SUBSCRIPTION_ID  subscription for reading 'build-pipeline-kv'.
+#       - CLIENT_SECRET    secret for that service principal. REQUIRED for a
+#                          silent CI login (see the Get Keys step); without it
+#                          getKeys falls back to interactive login and hangs.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/**
+      - pipelines/azure-smoke-tests.yml
+
+# Run on PRs targeting main so a failing smoke test blocks the PR. This
+# pipeline's source is a GitHub repo, so Azure Pipelines reports each PR run's
+# status back to GitHub automatically; make it blocking by adding it as a
+# required status check in the branch-protection rule for `main`.
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/**
+      - pipelines/azure-smoke-tests.yml
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: nodeVersion
+    value: "22"
+  # Mirrors the GitHub workflow's env.NODE_OPTIONS. Non-secret pipeline variables
+  # are surfaced to every script step as environment variables; secret variables
+  # (CLIENT_ID / TENANT_ID / CLIENT_SECRET / SUBSCRIPTION_ID) must be mapped
+  # explicitly via `env:` (done at the Get Keys step).
+  - name: NODE_OPTIONS
+    value: --max_old_space_size=8192
+
+jobs:
+  - job: shell_and_cli
+    displayName: Shell & CLI smoke tests
+    # Generous cap: the Linux leg can run the shell smoke (60m) + live (60m)
+    # tests back to back. Requires purchased parallelism for hosted agents.
+    timeoutInMinutes: 150
+    strategy:
+      # Both legs run independently; one failing does not cancel the other
+      # (equivalent to the GitHub matrix's fail-fast: false).
+      matrix:
+        linux:
+          image: ubuntu-latest
+        windows:
+          image: windows-latest
+    pool:
+      vmImage: $(image)
+    steps:
+      # Checkout + internal npm registry auth + Node + pnpm install
+      # (--frozen-lockfile --strict-peer-dependencies).
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
+
+      # keytar links against libsecret at runtime on Linux; install before any
+      # TypeAgent process (CLI / shell) loads the native module.
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: Install libsecret-1-0
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+      - script: |
+          pnpm exec playwright install --with-deps
+        displayName: Install Playwright Browsers
+        workingDirectory: $(buildDirectory)/packages/shell
+
+      - script: |
+          npm run build
+        displayName: Build
+        workingDirectory: $(buildDirectory)
+
+      # Azure login + secret retrieval. getKeys.mjs authenticates via
+      # DefaultAzureCredential -> EnvironmentCredential using the service
+      # principal below, then writes ts/config.local.yaml. The three IDs mirror
+      # the GitHub workflow's federated-login inputs; CLIENT_SECRET is required
+      # here for a silent login — without it getKeys launches an interactive
+      # browser login and this step hangs until it times out.
+      #
+      # Secret-free alternative (Workload Identity Federation; matches the
+      # original OIDC, nothing to rotate). Create an ARM service connection with
+      # WIF, then replace this whole step with:
+      #   - task: AzureCLI@2
+      #     displayName: Get Keys
+      #     inputs:
+      #       azureSubscription: <your-ARM-WIF-service-connection>
+      #       scriptType: pscore
+      #       scriptLocation: inlineScript
+      #       workingDirectory: $(buildDirectory)
+      #       inlineScript: node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+      - script: |
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+        displayName: Get Keys
+        workingDirectory: $(buildDirectory)
+        env:
+          AZURE_CLIENT_ID: $(CLIENT_ID)
+          AZURE_TENANT_ID: $(TENANT_ID)
+          AZURE_CLIENT_SECRET: $(CLIENT_SECRET)
+          AZURE_SUBSCRIPTION_ID: $(SUBSCRIPTION_ID)
+
+      # pwsh gives consistent single-quote argument grouping on Windows and
+      # Linux (matches the default shells GitHub Actions used).
+      - pwsh: |
+          npm run start:dev 'prompt' 'why is the sky blue'
+        displayName: Test CLI - smoke
+        workingDirectory: $(buildDirectory)/packages/cli
+
+      - script: |
+          npm run shell:test
+        displayName: Shell Tests - full (Windows)
+        workingDirectory: $(buildDirectory)/packages/shell
+        timeoutInMinutes: 60
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+
+      - bash: |
+          Xvfb :99 -screen 0 1600x1200x24 &
+          export DISPLAY=:99
+          npm run shell:smoke
+        displayName: Shell Tests - smoke (Linux)
+        workingDirectory: $(buildDirectory)/packages/shell
+        timeoutInMinutes: 60
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+      - bash: |
+          npm run test:live
+        displayName: Live Tests (Linux)
+        workingDirectory: $(buildDirectory)
+        timeoutInMinutes: 60
+        continueOnError: true
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+      # Remove provisioned secrets even if a prior step failed.
+      - pwsh: |
+          node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
+          node -e "try{require('fs').unlinkSync('./config.local.yaml');}catch(e){}"
+        displayName: Clean up Keys
+        workingDirectory: $(buildDirectory)
+        condition: always()
