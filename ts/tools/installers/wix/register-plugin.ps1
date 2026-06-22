@@ -36,6 +36,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Test-Command {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
 function Write-Log {
     param([Parameter(Mandatory = $true)][string]$Message)
     $timestamp = (Get-Date).ToString("s")
@@ -165,32 +170,77 @@ function Ensure-LocalPluginMarketplace {
     return $manifestPath
 }
 
+function Test-VsCodeCopilotShimPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $shimRoot = Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli"
+    try {
+        $resolvedPath = (Resolve-Path -Path $Path -ErrorAction SilentlyContinue).Path
+        $resolvedShimRoot = (Resolve-Path -Path $shimRoot -ErrorAction SilentlyContinue).Path
+        if ($resolvedPath -and $resolvedShimRoot) {
+            return $resolvedPath.StartsWith($resolvedShimRoot, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+    catch {
+        # If resolution fails, fall back to string test below.
+    }
+
+    return $Path -like "*$([IO.Path]::DirectorySeparatorChar)Code$([IO.Path]::DirectorySeparatorChar)User$([IO.Path]::DirectorySeparatorChar)globalStorage$([IO.Path]::DirectorySeparatorChar)github.copilot-chat$([IO.Path]::DirectorySeparatorChar)copilotCli*"
+}
+
 function Find-CopilotCli {
     $candidates = @()
+    $rejectedShimPaths = @()
 
     try {
-        # VS Code Copilot Chat installs shims here; prefer .bat on Windows.
-        $candidates += (Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli\copilot.bat")
-        $candidates += (Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli\copilot.ps1")
+        # 1) Optional explicit override for deterministic installs.
+        if ($env:COPILOT_CLI_PATH) {
+            $candidates += $env:COPILOT_CLI_PATH
+        }
 
+        # 2) Typical npm global shims on Windows.
+        $candidates += (Join-Path $env:APPDATA "npm\copilot.cmd")
+        $candidates += (Join-Path $env:APPDATA "npm\copilot.ps1")
+
+        # 2b) Winget links location (common for copilot.exe installs).
+        $candidates += (Join-Path $env:LOCALAPPDATA "Microsoft\\WinGet\\Links\\copilot.exe")
+
+        # 3) PATH discovery, similar to install-typeagent.ps1.
         $cmd = Get-Command copilot -ErrorAction SilentlyContinue
         if ($cmd) {
             $candidates += $cmd.Source
         }
 
         foreach ($candidate in ($candidates | Select-Object -Unique)) {
-            if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
-                return $candidate
+            if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
             }
+
+            if (-not (Test-Path $candidate)) {
+                continue
+            }
+
+            if (Test-VsCodeCopilotShimPath -Path $candidate) {
+                $rejectedShimPaths += $candidate
+                continue
+            }
+
+            return $candidate
         }
 
-        # Final fallback: resolve from PATH at runtime.
-        $null = & copilot --version 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            return "copilot"
+        # Final fallback: if command exists and is not a VS Code shim, use it by name.
+        if (Test-Command -Name "copilot") {
+            $pathResolved = (Get-Command copilot -ErrorAction SilentlyContinue).Source
+            if (-not [string]::IsNullOrWhiteSpace($pathResolved) -and -not (Test-VsCodeCopilotShimPath -Path $pathResolved)) {
+                return "copilot"
+            }
         }
     } catch {
         # Fall through and report not found.
+    }
+
+    if ($rejectedShimPaths.Count -gt 0) {
+        Write-Log "Rejected VS Code wrapper path(s) for MSI context: $($rejectedShimPaths -join '; ')"
     }
 
     return $null
@@ -207,7 +257,7 @@ try {
     Write-Log "Uninstall: $Uninstall"
 
     if (-not $copilotPath) {
-        throw "GitHub Copilot CLI not found on PATH."
+        throw "GitHub Copilot CLI not found in MSI-safe locations. Install @github/copilot globally (for example at %APPDATA%\\npm\\copilot.cmd) or set COPILOT_CLI_PATH."
     }
 
     Write-Log "Found Copilot CLI: $copilotPath"
