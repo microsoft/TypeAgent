@@ -168,3 +168,60 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
         await close();
     }
 });
+
+test("heartbeat keeps a healthy connection alive (no false positives)", async () => {
+    const stub = await startStubServer();
+    let closed = false;
+    // Short period so several beats elapse quickly; the ws server auto-pongs,
+    // so the watchdog must NOT terminate a healthy socket.
+    const client = await StudioServiceClient.connect({
+        endpoint: stub.endpoint,
+        heartbeatMs: 25,
+        onClose: () => {
+            closed = true;
+        },
+    });
+    assert.ok(client);
+    try {
+        await new Promise((r) => setTimeout(r, 200)); // ~8 beats
+        assert.equal(closed, false, "healthy connection must stay open");
+        const info = await client!.getStudioInfo();
+        assert.equal(info.repoRootInfo.repoRoot, "/repo/ts");
+    } finally {
+        client!.close();
+        await stub.close();
+    }
+});
+
+test("heartbeat detects an unresponsive service (no clean close)", async () => {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    server.on("connection", (socket) => {
+        // Go silent: pause the underlying TCP socket so incoming pings are
+        // never read/auto-ponged — emulates a half-open/dead peer that never
+        // sends a clean WebSocket close frame.
+        (socket as unknown as { _socket?: { pause(): void } })._socket?.pause();
+    });
+    const port = (server.address() as { port: number }).port;
+    const detectClose = new Promise<void>((resolve, reject) => {
+        const guard = setTimeout(
+            () => reject(new Error("heartbeat did not detect the dead peer")),
+            3000,
+        );
+        guard.unref?.();
+        void StudioServiceClient.connect({
+            endpoint: `ws://127.0.0.1:${port}`,
+            heartbeatMs: 25,
+            onClose: () => {
+                clearTimeout(guard);
+                resolve();
+            },
+        });
+    });
+    try {
+        await detectClose; // resolves only when the watchdog terminates
+    } finally {
+        for (const c of server.clients) c.terminate();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+});

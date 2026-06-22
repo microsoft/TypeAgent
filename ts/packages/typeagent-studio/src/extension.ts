@@ -501,6 +501,7 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         ),
     );
+
     const statusBar = new StudioStatusBar(serviceRuntime);
     context.subscriptions.push(
         statusBar,
@@ -799,6 +800,18 @@ export function activate(context: vscode.ExtensionContext): void {
         connection.onStateChanged((state) => {
             renderServiceStatus(state);
             const connected = state === "connected";
+
+            // Drive the views' connection-aware empty states: when disconnected
+            // each tree renders nothing so its `viewsWelcome` "connect" content
+            // shows instead of a misleading "no data" placeholder.
+            void vscode.commands.executeCommand(
+                "setContext",
+                "typeagentStudio.serviceConnected",
+                connected,
+            );
+            corpusTree.setConnected(connected);
+            eventLog.setConnected(connected);
+            collisions.setConnected(connected);
 
             sandboxTree.setConnected(connected);
             if (connected && !sandboxesRestored) {

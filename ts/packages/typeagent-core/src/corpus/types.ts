@@ -4,15 +4,13 @@
 import type { FeedbackCategory, FeedbackRating } from "../events/types.js";
 
 /**
- * F0.2 — Corpus federation type surface.
- *
- * See `docs/plans/vscode-devx/05-implementation-plan.md` §4.
+ * Corpus federation type surface.
  *
  * A "corpus" here is the union of utterance examples used to evaluate an
  * agent. Entries come from four kinds of sources federated into a single
  * view: in-repo files committed alongside the agent, captures recorded
  * locally during interactive use, external sources declared in
- * `.typeagent/studio.json`, and feedback rows produced by F0.4.
+ * `.typeagent/studio.json`, and feedback rows.
  */
 export type CorpusSource = "in-repo" | "captures" | "external" | "feedback";
 

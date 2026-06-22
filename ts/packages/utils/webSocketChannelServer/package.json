@@ -32,6 +32,7 @@
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
     "ws": "^8.21.0"
   },

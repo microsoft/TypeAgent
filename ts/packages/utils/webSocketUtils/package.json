@@ -13,7 +13,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./originAllowlist": "./dist/originAllowlist.js"
+    "./originAllowlist": "./dist/originAllowlist.js",
+    "./heartbeat": "./dist/heartbeat.js"
   },
   "files": [
     "dist",

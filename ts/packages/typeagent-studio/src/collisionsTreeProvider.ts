@@ -43,10 +43,20 @@ export class CollisionsTreeProvider
     private skipped: GrammarScanSkip[] = [];
     private seq = 0;
     private generation = 0;
+    private connected = false;
 
     constructor(source: CollisionsSource) {
         this.source = source;
         this.install(++this.generation);
+    }
+
+    /** Reflect the studio service connection state (drives the empty view). */
+    setConnected(connected: boolean): void {
+        if (connected === this.connected) {
+            return;
+        }
+        this.connected = connected;
+        this.refresh();
     }
 
     /**
@@ -116,6 +126,17 @@ export class CollisionsTreeProvider
 
     getChildren(row?: CollisionRow): CollisionRow[] {
         if (!row) {
+            // Disconnected with nothing to show: render nothing so the view's
+            // welcome content ("connect to the Studio service") shows instead
+            // of a misleading "No collisions detected" check — nothing was
+            // actually scanned.
+            if (
+                !this.connected &&
+                this.entries.length === 0 &&
+                this.skipped.length === 0
+            ) {
+                return [];
+            }
             return buildCollisionRows(this.entries, this.skipped);
         }
         if (row.kind === "skipped-group") {

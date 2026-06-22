@@ -14,7 +14,47 @@ test("parseWebviewMessage accepts well-formed messages", () => {
     });
     assert.deepEqual(
         parseWebviewMessage({ type: "run", requestId: 3, agent: "player" }),
-        { type: "run", requestId: 3, agent: "player" },
+        {
+            type: "run",
+            requestId: 3,
+            agent: "player",
+            versionA: "",
+            versionB: "",
+        },
+    );
+    // Version fields are carried through when supplied as strings.
+    assert.deepEqual(
+        parseWebviewMessage({
+            type: "run",
+            requestId: 4,
+            agent: "player",
+            versionA: "HEAD",
+            versionB: "working tree",
+        }),
+        {
+            type: "run",
+            requestId: 4,
+            agent: "player",
+            versionA: "HEAD",
+            versionB: "working tree",
+        },
+    );
+    // Non-string version fields fall back to empty (→ working tree downstream).
+    assert.deepEqual(
+        parseWebviewMessage({
+            type: "run",
+            requestId: 5,
+            agent: "player",
+            versionA: 42,
+            versionB: null,
+        }),
+        {
+            type: "run",
+            requestId: 5,
+            agent: "player",
+            versionA: "",
+            versionB: "",
+        },
     );
 });
 

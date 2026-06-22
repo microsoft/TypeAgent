@@ -22,6 +22,8 @@ export type HostToWebviewMessage =
           agents: string[];
           /** Whether the studio service channel is reachable. */
           connected: boolean;
+          /** Workspace repository name for the context header (basename). */
+          repoName?: string;
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }
@@ -34,8 +36,16 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
     /** The webview finished loading and is ready to receive `init`. */
     | { type: "ready" }
-    /** Request a replay of `agent`'s corpus (deterministic policy). */
-    | { type: "run"; requestId: number; agent: string }
+    /** Request a replay of `agent`'s corpus comparing two versions. */
+    | {
+          type: "run";
+          requestId: number;
+          agent: string;
+          /** Raw base (A) version field; empty/"working tree" → working tree. */
+          versionA: string;
+          /** Raw compare (B) version field; empty/"working tree" → working tree. */
+          versionB: string;
+      }
     /** Re-attempt the service connection. */
     | { type: "reconnect" };
 
@@ -52,14 +62,25 @@ export function parseWebviewMessage(
         case "reconnect":
             return { type: msg.type };
         case "run": {
-            const m = value as { requestId?: unknown; agent?: unknown };
+            const m = value as {
+                requestId?: unknown;
+                agent?: unknown;
+                versionA?: unknown;
+                versionB?: unknown;
+            };
             if (
                 typeof m.requestId === "number" &&
                 Number.isInteger(m.requestId) &&
                 m.requestId >= 0 &&
                 typeof m.agent === "string"
             ) {
-                return { type: "run", requestId: m.requestId, agent: m.agent };
+                return {
+                    type: "run",
+                    requestId: m.requestId,
+                    agent: m.agent,
+                    versionA: typeof m.versionA === "string" ? m.versionA : "",
+                    versionB: typeof m.versionB === "string" ? m.versionB : "",
+                };
             }
             return undefined;
         }

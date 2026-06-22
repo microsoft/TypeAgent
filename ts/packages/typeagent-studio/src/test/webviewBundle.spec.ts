@@ -41,3 +41,31 @@ test(
         );
     },
 );
+
+// The static-grammar replay resolver compiles grammars that use built-in
+// entities (Ordinal/Cardinal), which reads `builtInEntities.agr` from disk next
+// to the bundle. esbuild copies it into `dist/`; without it the service throws
+// ENOENT at replay time. Guard the copy step so packaging can't silently regress.
+const builtInEntitiesAsset = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "dist",
+    "builtInEntities.agr",
+);
+
+test(
+    "build copies builtInEntities.agr next to the bundles",
+    { skip: !hasBundle },
+    () => {
+        assert.ok(
+            existsSync(builtInEntitiesAsset),
+            "dist/builtInEntities.agr must ship for static-grammar replay",
+        );
+        const text = readFileSync(builtInEntitiesAsset, "utf8");
+        assert.ok(
+            text.length > 0,
+            "built-in entities grammar must be non-empty",
+        );
+    },
+);
