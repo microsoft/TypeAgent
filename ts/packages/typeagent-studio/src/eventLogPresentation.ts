@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
+import { collapseAndTruncate } from "./textFormatting.js";
 
 /**
  * Pure, vscode-free mapping from structured events to event-log row
@@ -179,8 +180,5 @@ function buildEventTooltip(event: StudioEvent): string {
 }
 
 function quote(value: string): string {
-    const collapsed = value.replace(/\s+/g, " ").trim();
-    const capped =
-        collapsed.length > 60 ? `${collapsed.slice(0, 59)}\u2026` : collapsed;
-    return `"${capped}"`;
+    return `"${collapseAndTruncate(value, 60)}"`;
 }

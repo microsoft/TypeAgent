@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { CorpusEntry, CorpusSource } from "@typeagent/core/corpus";
+import { collapseAndTruncate } from "./textFormatting.js";
 
 /**
  * Pure, vscode-free mapping from federated corpus entries to tree-node
@@ -150,11 +151,7 @@ export function formatCorpusSource(source: CorpusSource): string {
 }
 
 export function truncateUtterance(utterance: string): string {
-    const collapsed = utterance.replace(/\s+/g, " ").trim();
-    if (collapsed.length <= MAX_UTTERANCE_LENGTH) {
-        return collapsed;
-    }
-    return `${collapsed.slice(0, MAX_UTTERANCE_LENGTH - 1)}\u2026`;
+    return collapseAndTruncate(utterance, MAX_UTTERANCE_LENGTH);
 }
 
 function countBySource(
