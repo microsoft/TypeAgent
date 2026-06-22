@@ -110,9 +110,9 @@
 
     <!-- Pass the PowerShell command as CustomActionData to the deferred CA -->
     <SetProperty Id="RegisterCopilotPlugin"
-                 Before="RegisterCopilotPlugin"
-                 Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\cmd.exe&quot; /c &quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]register-plugin.ps1&quot; -InstallDir &quot;[TYPEAGENTROOT]&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-register-plugin.log&quot;" />
+           Before="RegisterCopilotPlugin"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]register-plugin.ps1&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-register-plugin.log&quot;" />
 
     <CustomAction Id="RegisterCopilotPlugin"
                   BinaryKey="WixCA"
@@ -123,9 +123,9 @@
 
     <!-- Unregister on uninstall -->
     <SetProperty Id="UnregisterCopilotPlugin"
-                 Before="UnregisterCopilotPlugin"
-                 Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\cmd.exe&quot; /c &quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]register-plugin.ps1&quot; -Uninstall -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-register-plugin.log&quot;" />
+           Before="UnregisterCopilotPlugin"
+           Sequence="execute"
+           Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]register-plugin.ps1&quot; -Uninstall -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-register-plugin.log&quot;" />
 
     <CustomAction Id="UnregisterCopilotPlugin"
                   BinaryKey="WixCA"

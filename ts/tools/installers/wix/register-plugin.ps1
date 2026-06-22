@@ -50,15 +50,26 @@ function Invoke-Copilot {
         [switch]$AllowFailure
     )
 
-    Write-Log "Running: copilot $($Args -join ' ')"
-    $output = & copilot @Args 2>&1
+    if (-not $script:CopilotCommand) {
+        throw "Copilot CLI command path is not initialized."
+    }
+
+    $copilotCmdText = "$script:CopilotCommand $($Args -join ' ')"
+    Write-Log "Running: $copilotCmdText"
+
+    if ($script:CopilotCommand -like "*.ps1") {
+        $output = & pwsh -NoProfile -ExecutionPolicy Bypass -File $script:CopilotCommand @Args 2>&1
+    }
+    else {
+        $output = & $script:CopilotCommand @Args 2>&1
+    }
     $exitCode = $LASTEXITCODE
     foreach ($line in @($output)) {
         Write-Log "copilot> $line"
     }
 
     if (-not $AllowFailure -and $exitCode -ne 0) {
-        throw "Copilot command failed with exit code ${exitCode}: copilot $($Args -join ' ')"
+        throw "Copilot command failed with exit code ${exitCode}: $script:CopilotCommand $($Args -join ' ')"
     }
 
     return ($output | Out-String)
@@ -148,30 +159,45 @@ function Ensure-LocalPluginMarketplace {
     }
     $manifest.plugins = $existingPlugins
 
-    $manifest | ConvertTo-Json -Depth 20 | Set-Content -Path $manifestPath -Encoding UTF8
+    $manifestJson = $manifest | ConvertTo-Json -Depth 20
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($manifestPath, $manifestJson, $utf8NoBom)
     return $manifestPath
 }
 
 function Find-CopilotCli {
+    $candidates = @()
+
     try {
-        # Try to get the command; if it exists, return its source
+        # VS Code Copilot Chat installs shims here; prefer .bat on Windows.
+        $candidates += (Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli\copilot.bat")
+        $candidates += (Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli\copilot.ps1")
+
         $cmd = Get-Command copilot -ErrorAction SilentlyContinue
         if ($cmd) {
-            return $cmd.Source
+            $candidates += $cmd.Source
         }
-        # If not found via Get-Command (e.g., when running with -NoProfile),
-        # try invoking it to see if it's available on PATH
-        $testOutput = & copilot --version 2>&1
+
+        foreach ($candidate in ($candidates | Select-Object -Unique)) {
+            if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
+                return $candidate
+            }
+        }
+
+        # Final fallback: resolve from PATH at runtime.
+        $null = & copilot --version 2>&1
         if ($LASTEXITCODE -eq 0) {
-            return "copilot (on PATH)"
+            return "copilot"
         }
     } catch {
-        # Silently ignore
+        # Fall through and report not found.
     }
+
     return $null
 }
 
 $copilotPath = Find-CopilotCli
+$script:CopilotCommand = $copilotPath
 New-Item -ItemType Directory -Force -Path (Split-Path -Path $LogPath -Parent) | Out-Null
 Set-Content -Path $LogPath -Value ""
 
