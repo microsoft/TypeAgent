@@ -198,6 +198,7 @@
     "@typeagent/core": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "ansi_up": "^6.0.6",
     "chat-ui": "workspace:*",

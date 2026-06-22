@@ -88,7 +88,7 @@ test("StudioServiceSandboxSource delegates lifecycle + routes sandbox events", a
 test("StudioServiceSandboxSource: reads empty / mutations reject when disconnected", async () => {
     const connection = new StudioServiceConnection(undefined, {
         endpoint: "ws://127.0.0.1:1",
-        backoffMs: [10_000],
+        baseBackoffMs: 10_000,
     });
     const source = new StudioServiceSandboxSource(connection);
     try {
