@@ -11,20 +11,20 @@ import {
     reproduceSchemaSourceHash,
 } from "../src/replay/constructionCacheResolver.js";
 
-// The spec runs from `dist/test`; the committed fixture lives in the source
-// `test/fixtures` dir next to `dist`. Resolve it relative to the package root.
+// Validate against the real, shipped player construction cache that lives
+// alongside the agent's construction code, rather than a hand-maintained copy
+// that can drift from it. The spec runs from `dist/test`; resolve the file
+// relative to the package root.
 const PKG_ROOT = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../..",
 );
-const FIXTURE = path.join(
+const FIXTURE = path.resolve(
     PKG_ROOT,
-    "test",
-    "fixtures",
-    "playerConstructions.json",
+    "../defaultAgentProvider/data/explainer/v5/constructions.json",
 );
 
-/** The single namespace name (`player,<hash>`) stored in the fixture. */
+/** The single namespace name (`player,<hash>`) stored in the cache file. */
 function fixtureNamespace(): { name: string; hash: string } {
     const json = JSON.parse(readFileSync(FIXTURE, "utf8")) as {
         constructionNamespaces: { name: string }[];
