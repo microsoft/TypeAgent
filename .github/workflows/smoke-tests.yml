@@ -7,10 +7,12 @@ name: smoke-tests
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-  pull_request_target:
-    branches: ["main"]
+  # These smoke tests have been moved to Azure DevOps so that we can use Workload Identity Flow (secretless) auth. 
+  # Disabled the GitHub trigger for now. If you want to run them on GitHub, re-enable this trigger.
+  # push:
+  #   branches: ["main"]
+  # pull_request_target:
+  #   branches: ["main"]
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

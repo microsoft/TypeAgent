@@ -1,0 +1,213 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Live / smoke sanity tests for the TypeAgent TypeScript workspace.
+#
+# Azure DevOps port of .github/workflows/smoke-tests.yml. Differences from the
+# GitHub Actions version, and why:
+#   * The fork-PR permission gating (actions-cool/check-user-permission) is
+#     dropped. That check existed to protect secrets on the PUBLIC OSS repo;
+#     on an internal Azure DevOps project, Key Vault / secret access is already
+#     governed by project permissions and the service connection's RBAC.
+#   * "Setup Git LF" is dropped because .gitattributes already pins `* text
+#     eol=lf`, so checkout produces LF on every OS regardless of core.autocrlf.
+#   * dorny/paths-filter is replaced by the trigger `paths` filter below.
+#   * azure/login (OIDC) is preserved via an Azure Resource Manager service
+#     connection that uses Workload Identity Federation. A single AzureCLI@2
+#     task performs the federated (secret-free) login, pulls the secrets, and
+#     publishes AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE so
+#     the quick CLI smoke step authenticates to Azure OpenAI through
+#     @azure/identity's WorkloadIdentityCredential. The long-running shell and
+#     live suites each take a fresh per-step login instead (they can outlive this
+#     token). Nothing to rotate.
+#
+# Prerequisites:
+#   * GitHub service connection - created when you set up this pipeline via
+#     StartRight (per the eng.ms integrate-ado guide). It lets Azure Pipelines
+#     read the repo AND report each run's status back to the PR. No YAML needed.
+#   * Azure Resource Manager service connection (Workload Identity Federation) -
+#     'MSOCTO-ADO-Service-Connection'. The Get Keys step's AzureCLI@2 task uses
+#     it to log in without any stored secret or certificate. Its backing service
+#     principal must hold the 'Key Vault Secrets User' RBAC role on the
+#     'build-pipeline-kv' vault (the vault uses RBAC authorization, not access
+#     policies). Authorize the pipeline to use the connection on first run.
+#   * Pipeline variables (define in the pipeline UI or a linked variable group):
+#       - REGISTRY         npm registry URL used by include-prepare-repo.yml to
+#                          restore dependencies (internal Azure Artifacts feed).
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/**
+      - pipelines/azure-smoke-tests.yml
+
+# Run on PRs targeting main so a failing smoke test blocks the PR. This
+# pipeline's source is a GitHub repo, so Azure Pipelines reports each PR run's
+# status back to GitHub automatically; make it blocking by adding it as a
+# required status check in the branch-protection rule for `main`.
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/**
+      - pipelines/azure-smoke-tests.yml
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: nodeVersion
+    value: "22"
+  # Mirrors the GitHub workflow's env.NODE_OPTIONS. Non-secret pipeline variables
+  # are surfaced to every script step as environment variables. Azure auth no
+  # longer needs secret variables — the "Azure login + Get Keys" step signs in
+  # through the WIF service connection (see below).
+  - name: NODE_OPTIONS
+    value: --max_old_space_size=8192
+
+jobs:
+  - job: shell_and_cli
+    displayName: Shell & CLI smoke tests
+    # Generous cap: the Linux leg can run the shell smoke (60m) + live (60m)
+    # tests back to back. Requires purchased parallelism for hosted agents.
+    timeoutInMinutes: 150
+    strategy:
+      # Both legs run independently; one failing does not cancel the other
+      # (equivalent to the GitHub matrix's fail-fast: false).
+      matrix:
+        linux:
+          image: ubuntu-latest
+        windows:
+          image: windows-latest
+    pool:
+      vmImage: $(image)
+    steps:
+      # Checkout + internal npm registry auth + Node + pnpm install
+      # (--frozen-lockfile --strict-peer-dependencies).
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
+
+      # keytar links against libsecret at runtime on Linux; install before any
+      # TypeAgent process (CLI / shell) loads the native module.
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: Install libsecret-1-0
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+      - script: |
+          pnpm exec playwright install --with-deps
+        displayName: Install Playwright Browsers
+        workingDirectory: $(buildDirectory)/packages/shell
+
+      - script: |
+          npm run build
+        displayName: Build
+        workingDirectory: $(buildDirectory)
+
+      # Single federated (WIF) login for the whole job. addSpnToEnvironment
+      # surfaces the service connection's OIDC token; we persist it to a file and
+      # publish the three variables that @azure/identity's
+      # WorkloadIdentityCredential (part of DefaultAzureCredential v4) reads —
+      # AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE — so the
+      # quick CLI smoke step reaches Azure OpenAI without its own AzureCLI task.
+      # getKeys runs here too, while az is signed in, and writes
+      # ts/config.local.yaml. The connection's service principal needs
+      # 'Key Vault Secrets User' on 'build-pipeline-kv' and 'Cognitive Services
+      # OpenAI User' on the Azure OpenAI resource(s).
+      #
+      # NOTE: the OIDC token is short-lived (~15 min). Only the immediate CLI
+      # smoke step relies on this shared login. Every long-running suite (the
+      # shell tests and Live Tests) can run past the token's lifetime, so each
+      # takes its own fresh AzureCLI@2 login below instead.
+      - task: AzureCLI@2
+        displayName: Azure login + Get Keys
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: pscore
+          scriptLocation: inlineScript
+          addSpnToEnvironment: true
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            $tokenFile = Join-Path "$(Agent.TempDirectory)" "wif-federated-token.txt"
+            Set-Content -Path $tokenFile -Value "$env:idToken" -NoNewline
+            Write-Host "##vso[task.setvariable variable=AZURE_CLIENT_ID]$env:servicePrincipalId"
+            Write-Host "##vso[task.setvariable variable=AZURE_TENANT_ID]$env:tenantId"
+            Write-Host "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN_FILE]$tokenFile"
+            node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+
+      # pwsh gives consistent single-quote argument grouping on Windows and
+      # Linux. Authenticates to Azure OpenAI via the AZURE_* WIF variables the
+      # login step published.
+      - pwsh: |
+          npm run start:dev 'prompt' 'why is the sky blue'
+        displayName: Test CLI - smoke
+        workingDirectory: $(buildDirectory)/packages/cli
+
+      # Long-running suite: it can run past the shared login's ~15-min token
+      # window, so it takes its own AzureCLI@2 task for a fresh federated
+      # `az login`. We first clear the three published AZURE_* variables (they
+      # persist job-wide): otherwise DefaultAzureCredential would try
+      # WorkloadIdentityCredential against the now-stale token file, and a failed
+      # assertion exchange is a hard error that stops the chain before it reaches
+      # this task's fresh AzureCliCredential. Clearing them makes it fall through.
+      - task: AzureCLI@2
+        displayName: Shell Tests - full (Windows)
+        timeoutInMinutes: 60
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: pscore
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)/packages/shell
+          inlineScript: |
+            'AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_FEDERATED_TOKEN_FILE' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+            npm run shell:test
+
+      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
+      # rationale as "Shell Tests - full" above.
+      - task: AzureCLI@2
+        displayName: Shell Tests - smoke (Linux)
+        timeoutInMinutes: 60
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)/packages/shell
+          inlineScript: |
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+            Xvfb :99 -screen 0 1600x1200x24 &
+            export DISPLAY=:99
+            npm run shell:smoke
+
+      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
+      # rationale as "Shell Tests - full" above. Non-blocking (continueOnError)
+      # so a late auth issue won't fail the run.
+      - task: AzureCLI@2
+        displayName: Live Tests (Linux)
+        timeoutInMinutes: 60
+        continueOnError: true
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+            npm run test:live
+
+      # Remove provisioned secrets even if a prior step failed.
+      - pwsh: |
+          node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
+          node -e "try{require('fs').unlinkSync('./config.local.yaml');}catch(e){}"
+        displayName: Clean up Keys
+        workingDirectory: $(buildDirectory)
+        condition: always()
