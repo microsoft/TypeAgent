@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * F4.1 — vscode-free formatting for replay/compare results.
+ * vscode-free formatting for replay/compare results.
  *
  * Turns the core engine's {@link ActionDelta} rows and {@link ReplaySummary}
  * into display-ready labels for a quick pick / output channel. Kept pure so the

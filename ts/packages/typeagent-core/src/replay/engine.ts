@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * F4.1 — `replayCorpus()` engine.
+ * `replayCorpus()` engine.
  *
  * A deterministic, dependency-injected replay/compare engine. It evaluates each
  * corpus utterance against two agent versions (A and B) via an injected
@@ -11,8 +11,7 @@
  *
  * The engine owns only the comparison mechanics — corpus access, building an
  * agent from a git ref, dispatch, and miss-policy resolution are all injected so
- * the engine stays pure, fast, and unit-testable. See
- * `docs/plans/vscode-devx/05-implementation-plan.md` §9.
+ * the engine stays pure, fast, and unit-testable.
  */
 
 import type { CollisionDetectedEvent } from "../events/types.js";

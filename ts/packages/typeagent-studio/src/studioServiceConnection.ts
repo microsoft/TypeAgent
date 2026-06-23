@@ -49,7 +49,14 @@ export class StudioServiceConnection {
             token?: string;
         } = {},
     ) {
-        this.backoffMs = options.backoffMs ?? [2000, 4000, 8000, 15000];
+        const DEFAULT_BACKOFF = [2000, 4000, 8000, 15000];
+        // Guard against an empty array: a 0-length backoff would index to -1 →
+        // `undefined` delay → `setTimeout(_, undefined)` fires immediately,
+        // spinning reconnect in a tight CPU loop.
+        this.backoffMs =
+            options.backoffMs && options.backoffMs.length > 0
+                ? options.backoffMs
+                : DEFAULT_BACKOFF;
         this.endpoint = options.endpoint;
         this.token = options.token;
     }

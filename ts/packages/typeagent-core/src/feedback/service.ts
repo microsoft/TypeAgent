@@ -22,9 +22,9 @@ export interface FeedbackServiceOptions {
 }
 
 /**
- * Canonical F0.4 wrapper around feedback operations.
+ * Canonical wrapper around feedback operations.
  *
- * Write path delegates to the backend using PR #2341 operation names.
+ * Write path delegates to the backend using its operation names.
  * Read path prefers backend-native list support when available; otherwise it
  * falls back to an internal materialized cache of records made via this
  * service instance.

@@ -24,8 +24,11 @@ import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const config = require("./getKeys.config.json");
 
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -60,6 +63,67 @@ function runCommand(cmd, args, options = {}) {
     return result.status === 0;
 }
 
+function resolveCertPassword() {
+    // Use getCert.mjs get-password so auth goes through the same Azure SDK
+    // credential chain that pull already uses — az CLI child processes don't
+    // inherit the AzureCLI@2 task auth context reliably.
+    console.log(`   Resolving cert password via getCert.mjs get-password...`);
+    const result = spawnSync(
+        "node",
+        [path.join(__dirname, "getCert.mjs"), "get-password"],
+        { encoding: "utf8" },
+    );
+
+    if (result.status !== 0) {
+        const fromEnv = process.env.MSI_SIGNING_CERT_PASSWORD?.trim();
+        if (fromEnv) {
+            console.warn(
+                "⚠️  getCert.mjs get-password failed; falling back to MSI_SIGNING_CERT_PASSWORD.",
+            );
+            return fromEnv;
+        }
+        const certVaultName = config?.cert?.vault ?? "aisystems";
+        const passwordSecretName =
+            config?.cert?.passwordSecretName ??
+            "TypeAgent-Development-Certificate-Password";
+        console.error(
+            `❌ Could not resolve MSI certificate password. Ensure az is logged in and can read '${passwordSecretName}' from vault '${certVaultName}'.`,
+        );
+        if (result.stderr) {
+            console.error(result.stderr.trim());
+        }
+        process.exit(1);
+    }
+
+    // getCert can emit extra login/status lines in CI; extract the temp file path line.
+    const combinedOutput = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const lines = combinedOutput
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const pathLikeLine = [...lines]
+        .reverse()
+        .find((line) => /^[A-Za-z]:\\.+\.txt$/i.test(line));
+    const tmpFilePath = pathLikeLine ?? result.stdout?.trim();
+    if (!tmpFilePath || !fs.existsSync(tmpFilePath)) {
+        console.error(
+            `❌ getCert.mjs get-password succeeded but temp file not found: ${tmpFilePath}`,
+        );
+        process.exit(1);
+    }
+
+    try {
+        const password = fs.readFileSync(tmpFilePath, "utf8").trim();
+        fs.unlinkSync(tmpFilePath);
+        return password;
+    } catch (e) {
+        console.error(
+            `❌ Failed to read password from temp file: ${e.message}`,
+        );
+        process.exit(1);
+    }
+}
+
 // Step 1: Pull cert from Key Vault (unless verify-only)
 if (!verifyOnly) {
     console.log(`\n📥 Pulling TypeAgent dev certificate from Key Vault...`);
@@ -78,8 +142,7 @@ if (!verifyOnly) {
 if (!verifyOnly) {
     console.log(`\n✍️  Signing MSI with TypeAgent-Development-Certificate...`);
 
-    // Cert password should be passed as env var or read from pipeline secret
-    const certPassword = process.env.MSI_SIGNING_CERT_PASSWORD || "test123";
+    const certPassword = resolveCertPassword();
     const pfxPath = path.join(
         os.homedir(),
         ".typeagent/TypeAgent-Development-Certificate.pfx",

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Skeleton package. Subsystems land in P-1; see docs/plans/vscode-devx/05-implementation-plan.md.
+// Core type definitions and services shared across TypeAgent subsystems.
 export const VERSION = "0.0.1";
 
 export * as events from "./events/index.js";

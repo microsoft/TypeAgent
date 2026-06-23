@@ -2,12 +2,15 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import * as path from "node:path";
 import { WebviewKitPanel } from "./webviewKit/host.js";
 import {
     parseWebviewMessage,
     type HostToWebviewMessage,
 } from "./webviewKit/protocol.js";
+import { parseVersionInput } from "./webviewKit/replayViewModel.js";
 import { StudioServiceClient } from "./studioServiceClient.js";
+import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
 
@@ -25,6 +28,17 @@ export function openImpactReport(
 ): void {
     let client: StudioServiceClient | undefined;
     let connecting: Promise<StudioServiceClient | undefined> | undefined;
+    // The last completed result + its request id. Re-posted whenever the webview
+    // signals `ready` so a run that finished while the iframe was torn down (the
+    // panel is `retainContextWhenHidden: false`, so hidden panels drop posts) is
+    // recovered on reveal — the webview dedupes by request id.
+    let lastResult:
+        | { requestId: number; payload: StudioReplayResult }
+        | undefined;
+
+    const repoName =
+        repoRoot !== undefined ? path.basename(repoRoot) : undefined;
+    const repoField = repoName !== undefined ? { repoName } : {};
 
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
@@ -73,7 +87,7 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agents: [], connected: false });
+            post({ type: "init", agents: [], connected: false, ...repoField });
             return;
         }
         let agents: string[] = [];
@@ -82,7 +96,15 @@ export function openImpactReport(
         } catch {
             // Connected but listing failed; surface an empty agent list.
         }
-        post({ type: "init", agents, connected: true });
+        post({ type: "init", agents, connected: true, ...repoField });
+        // Recover a result computed while the panel was hidden/reloaded.
+        if (lastResult) {
+            post({
+                type: "result",
+                requestId: lastResult.requestId,
+                payload: lastResult.payload,
+            });
+        }
     };
 
     const handleMessage = async (raw: unknown): Promise<void> => {
@@ -111,12 +133,17 @@ export function openImpactReport(
             }
             const payload = await c.replayCorpus({
                 agent: msg.agent,
-                // The shell uses the deterministic policy (working tree vs
-                // working tree → an all-equal baseline) to prove the channel
-                // and the ActionDelta contract without a two-version build.
+                // The launch controls choose the two versions to compare
+                // (default: HEAD → working tree, the "find a regression"
+                // journey). The static-grammar resolver builds each side and
+                // the deterministic `needs-explanation` policy keeps the run
+                // free of LLM calls.
+                versionA: parseVersionInput(msg.versionA),
+                versionB: parseVersionInput(msg.versionB),
                 missPolicy: "needs-explanation",
             });
             post({ type: "result", requestId: msg.requestId, payload });
+            lastResult = { requestId: msg.requestId, payload };
         } catch (e) {
             post({
                 type: "error",

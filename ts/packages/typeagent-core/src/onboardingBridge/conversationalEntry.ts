@@ -32,7 +32,7 @@ const SCHEMA_AUTHOR_PATTERNS = [
 ];
 
 /**
- * F0.7 lightweight conversational entry routing.
+ * Lightweight conversational entry routing.
  *
  * Routes existing conversational paths to either `onboarding` or
  * `schemaAuthor` without introducing a new conversational agent.

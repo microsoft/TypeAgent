@@ -4,11 +4,9 @@
 import type { SandboxState } from "../events/types.js";
 
 /**
- * F0.1 — Sandbox lifecycle type surface.
+ * Sandbox lifecycle type surface.
  *
- * See `docs/plans/vscode-devx/05-implementation-plan.md` §3.
- *
- * The MVP supports two execution modes:
+ * Two execution modes are supported:
  *  - `inmemory`: dispatcher runs in the extension host. Fast, no IPC. The
  *    initial Studio demo path.
  *  - `subprocess`: dispatcher runs in a child Node process; lands with the
@@ -17,9 +15,9 @@ import type { SandboxState } from "../events/types.js";
 export type SandboxMode = "subprocess" | "inmemory";
 
 /**
- * Placeholder health type. F0.5 owns the authoritative shape; until it
- * lands, sandbox status reports a coarse literal so consumers can render
- * a badge without coupling to a not-yet-defined object.
+ * Placeholder health type until the authoritative shape lands. Sandbox status
+ * reports a coarse literal so consumers can render a badge without coupling to
+ * a not-yet-defined object.
  */
 export type HealthStatus = "unknown" | "healthy" | "warning" | "error";
 
@@ -33,7 +31,7 @@ export interface SandboxConfig {
     agents: string[];
     /** Environment variables (model keys etc.) injected at start. */
     env?: Record<string, string>;
-    /** Sandbox-scoped telemetry opt-out; honored by F0.4. */
+    /** Sandbox-scoped telemetry opt-out; honored by the feedback subsystem. */
     telemetryOptOut?: boolean;
 }
 
