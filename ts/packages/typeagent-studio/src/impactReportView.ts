@@ -20,9 +20,21 @@ import {
     resolveVersionProvenance,
 } from "./gitRefProvider.js";
 import { StudioServiceClient } from "./studioServiceClient.js";
+import type { StudioConnectionState } from "./studioServiceConnection.js";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
+
+/** The slice of the shared {@link StudioServiceConnection} the report needs: the
+ *  service target for its dedicated replay client, plus the live connection
+ *  state so the webview can show one connection indicator and auto-reconnect. */
+export interface ImpactReportConnection {
+    getTarget(): { endpoint: string; token: string } | undefined;
+    readonly currentState: StudioConnectionState;
+    onStateChanged(listener: (state: StudioConnectionState) => void): {
+        dispose(): void;
+    };
+}
 
 /**
  * Open (or reveal) the Impact Report webview for a single `agent` — the first
@@ -36,11 +48,16 @@ const VIEW_TYPE = "typeagentStudio.impactReport";
 export function openImpactReport(
     context: vscode.ExtensionContext,
     repoRoot: string | undefined,
-    getTarget: () => { endpoint: string; token: string } | undefined,
+    connection: ImpactReportConnection,
     agent: string,
 ): void {
     let client: StudioServiceClient | undefined;
     let connecting: Promise<StudioServiceClient | undefined> | undefined;
+    // Set once the webview has loaded and asked for state; until then, posts are
+    // dropped (the iframe isn't listening yet) so we defer to the `ready` pull.
+    let webviewReady = false;
+    // Subscription to the shared connection's state, disposed with the panel.
+    let stateSub: { dispose(): void } | undefined;
     // The last completed result + its request id. Re-posted whenever the webview
     // signals `ready` so a run that finished while the iframe was torn down (the
     // panel is `retainContextWhenHidden: false`, so hidden panels drop posts) is
@@ -67,6 +84,8 @@ export function openImpactReport(
         stylePath: ["media", "impactReport.css"],
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
+            stateSub?.dispose();
+            stateSub = undefined;
             client?.close();
             client = undefined;
             connecting = undefined;
@@ -85,7 +104,7 @@ export function openImpactReport(
             // Reach the same standalone service the shared connection uses (the
             // agent no longer serves the runtime, so there is no discovery
             // fallback); a dedicated client keeps heavy replay off the shared one.
-            const target = getTarget();
+            const target = connection.getTarget();
             connecting = StudioServiceClient.connect({
                 ...(repoRoot !== undefined ? { repoRoot } : {}),
                 ...(target !== undefined
@@ -284,12 +303,19 @@ export function openImpactReport(
         if (!msg) {
             return;
         }
-        if (msg.type === "ready" || msg.type === "reconnect") {
-            if (msg.type === "reconnect") {
+        if (msg.type === "ready") {
+            // The webview is now listening: report the live connection state and,
+            // when connected, dial a fresh client and push init. Disconnected /
+            // connecting states leave the controls off — the shared connection's
+            // auto-reconnect drives the next init (no manual button).
+            webviewReady = true;
+            postConnection(connection.currentState);
+            if (connection.currentState === "connected") {
                 client?.close();
                 client = undefined;
+                connecting = undefined;
+                await sendInit();
             }
-            await sendInit();
             return;
         }
         if (msg.type === "pickVersion") {
@@ -355,4 +381,26 @@ export function openImpactReport(
             });
         }
     };
+
+    const postConnection = (state: StudioConnectionState): void => {
+        post({ type: "connection", state });
+    };
+
+    // Mirror the shared connection so the webview shows a single connection
+    // indicator and reconnects without a button. On each (re)connect, drop the
+    // dedicated replay client so the next init/run dials a fresh socket to the
+    // live service. The immediate fire on subscribe lands before the webview is
+    // ready (guarded), so the `ready` pull seeds the first state.
+    stateSub = connection.onStateChanged((state) => {
+        if (!webviewReady) {
+            return;
+        }
+        postConnection(state);
+        if (state === "connected") {
+            client?.close();
+            client = undefined;
+            connecting = undefined;
+            void sendInit();
+        }
+    });
 }

@@ -524,12 +524,13 @@ export function activate(context: vscode.ExtensionContext): void {
                 "Connected to the standalone Studio service for this workspace.";
         } else if (state === "connecting") {
             serviceStatusBar.text = "$(sync~spin) Studio: connecting…";
-            serviceStatusBar.tooltip =
-                "Launching / connecting to the Studio service…";
+            serviceStatusBar.tooltip = "Connecting to the Studio service…";
         } else {
-            serviceStatusBar.text = "$(debug-disconnect) Studio: disconnected";
+            // Disconnected always schedules an auto-retry (backoff), so frame it
+            // as reconnecting rather than a dead end needing a manual button.
+            serviceStatusBar.text = "$(sync~spin) Studio: reconnecting…";
             serviceStatusBar.tooltip =
-                "Studio service not connected. Click to retry (or run `typeagent-studio serve`).";
+                "Studio service unavailable — reconnecting automatically. Click to retry now (or run `typeagent-studio serve`).";
         }
         serviceStatusBar.show();
     };
@@ -584,7 +585,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 openImpactReport(
                     context,
                     repoRootInfo.repoRoot,
-                    () => connection.getTarget(),
+                    connection,
                     agent,
                 );
             },

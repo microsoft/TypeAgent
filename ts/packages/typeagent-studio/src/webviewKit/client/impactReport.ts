@@ -16,6 +16,7 @@ import type {
     HostToWebviewMessage,
     WebviewToHostMessage,
     ReplaySide,
+    ConnectionState,
 } from "../protocol.js";
 import {
     toImpactRows,
@@ -143,10 +144,11 @@ const runButton = toolButton("play", "Run", () => runReplay(), {
 });
 runButton.title =
     "Replay the corpus against both versions and compare actions.";
-const reconnectButton = toolButton("refresh", "Reconnect", () => {
-    vscode.postMessage({ type: "reconnect" });
-});
-reconnectButton.title = "Re-attempt the connection to the studio service.";
+
+// A single connection indicator (no manual reconnect button): it mirrors the
+// shared service connection and reflects auto-reconnect. Painted by
+// `renderConnection` from the host's `connection` messages.
+const connectionPill = el("div", "conn-pill");
 
 actionBar.append(
     group(codicon("library"), agentNameEl),
@@ -154,7 +156,7 @@ actionBar.append(
     group(versionAButton.button, swapButton, versionBButton.button),
     spacer(),
     runButton,
-    reconnectButton,
+    connectionPill,
 );
 
 // A slim sub-bar under the toolbar carries the run provenance (the concrete
@@ -178,6 +180,7 @@ contentEl.append(notificationEl, filtersEl, emptyStateEl, tableWrap, detailEl);
 root.append(actionBar, subBar, contentEl);
 
 setControlsEnabled(false);
+renderConnection("connecting");
 restoreSelection();
 renderVersionButtons();
 
@@ -191,13 +194,25 @@ window.addEventListener("message", (event: MessageEvent) => {
             controlsAvailable = msg.connected && msg.available;
             setControlsEnabled(controlsAvailable);
             renderEmptyState();
+            // The connection pill conveys reachability; keep the status line for
+            // the agent-specific caveat (or clear it when all is well).
             setStatus(
                 msg.connected
                     ? msg.available
-                        ? "Connected."
-                        : `Connected — no corpus found for ${msg.agent}.`
-                    : "Studio service not found — start an agent-server with the studio agent enabled.",
+                        ? ""
+                        : `No corpus found for ${msg.agent}.`
+                    : "Couldn't reach the Studio service.",
             );
+            break;
+        case "connection":
+            renderConnection(msg.state);
+            // While not connected, keep the controls off and drop any stale
+            // status text; a reconnect re-pushes init, which re-enables them.
+            if (msg.state !== "connected") {
+                controlsAvailable = false;
+                setControlsEnabled(false);
+                setStatus("");
+            }
             break;
         case "status":
             setStatus(msg.text);
@@ -854,4 +869,22 @@ function renderAgentName(): void {
     agentNameEl.title = currentAgent
         ? `This report compares the "${currentAgent}" agent's corpus across two versions.`
         : "";
+}
+
+/** Paint the single connection indicator from the shared connection state.
+ *  Disconnected is shown as "reconnecting" because the host auto-retries. */
+function renderConnection(state: ConnectionState): void {
+    connectionPill.className = `conn-pill conn-${state}`;
+    connectionPill.textContent = "";
+    if (state === "connected") {
+        connectionPill.append(codicon("circle-filled"), text("Connected"));
+        connectionPill.title = "Connected to the Studio service.";
+    } else if (state === "connecting") {
+        connectionPill.append(codicon("sync"), text("Connecting…"));
+        connectionPill.title = "Connecting to the Studio service…";
+    } else {
+        connectionPill.append(codicon("sync"), text("Reconnecting…"));
+        connectionPill.title =
+            "Studio service unavailable — reconnecting automatically.";
+    }
 }

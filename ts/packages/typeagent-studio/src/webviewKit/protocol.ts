@@ -22,6 +22,11 @@ import {
 /** Which launch-control side a version applies to. */
 export type ReplaySide = "a" | "b";
 
+/** Shared service connection state mirrored to the webview. Declared here (not
+ *  imported from the node-only connection module) so the browser bundle stays
+ *  free of node/ws; the values match `StudioConnectionState`. */
+export type ConnectionState = "disconnected" | "connecting" | "connected";
+
 /** Messages the extension host posts to the webview. */
 export type HostToWebviewMessage =
     /** Initial (or restored) state + connection on load. */
@@ -37,6 +42,9 @@ export type HostToWebviewMessage =
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }
+    /** The shared service connection state, so the webview can show a single
+     *  connection indicator and reflect auto-reconnect (no manual button). */
+    | { type: "connection"; state: ConnectionState }
     /** A completed replay result for a prior `run` request. */
     | {
           type: "result";
@@ -65,9 +73,7 @@ export type WebviewToHostMessage =
           versionB: VersionSpec;
       }
     /** Ask the host to open a native version QuickPick for one side. */
-    | { type: "pickVersion"; side: ReplaySide }
-    /** Re-attempt the service connection. */
-    | { type: "reconnect" };
+    | { type: "pickVersion"; side: ReplaySide };
 
 function narrowSide(value: unknown): ReplaySide | undefined {
     return value === "a" || value === "b" ? value : undefined;
@@ -83,7 +89,6 @@ export function parseWebviewMessage(
     const msg = value as { type?: unknown };
     switch (msg.type) {
         case "ready":
-        case "reconnect":
             return { type: msg.type };
         case "pickVersion": {
             const side = narrowSide((value as { side?: unknown }).side);

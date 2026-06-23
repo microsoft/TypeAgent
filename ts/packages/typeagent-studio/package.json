@@ -454,22 +454,22 @@
     "viewsWelcome": [
       {
         "view": "typeagentStudioSandboxes",
-        "contents": "The TypeAgent Studio service isn't connected, so sandboxes can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "contents": "Connecting to the TypeAgent Studio service…\nThis is automatic — the **Studio** item in the status bar shows the live connection state. If it never connects, open this workspace's `ts` folder or run `typeagent-studio serve`.",
         "when": "!typeagentStudio.serviceConnected"
       },
       {
         "view": "typeagentStudioCorpora",
-        "contents": "The TypeAgent Studio service isn't connected, so corpora can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "contents": "Connecting to the TypeAgent Studio service…\nThis is automatic — the **Studio** item in the status bar shows the live connection state.",
         "when": "!typeagentStudio.serviceConnected"
       },
       {
         "view": "typeagentStudioEvents",
-        "contents": "The TypeAgent Studio service isn't connected, so events can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "contents": "Connecting to the TypeAgent Studio service…\nThis is automatic — the **Studio** item in the status bar shows the live connection state.",
         "when": "!typeagentStudio.serviceConnected"
       },
       {
         "view": "typeagentStudioCollisions",
-        "contents": "The TypeAgent Studio service isn't connected, so grammar collisions can't be analyzed yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "contents": "Connecting to the TypeAgent Studio service…\nThis is automatic — the **Studio** item in the status bar shows the live connection state.",
         "when": "!typeagentStudio.serviceConnected"
       }
     ]

@@ -101,6 +101,12 @@ body {
 .codicon-library::before {
   content: "\eb9c";
 }
+.codicon-circle-filled::before {
+  content: "\ea71";
+}
+.codicon-sync::before {
+  content: "\ea77";
+}
 
 /* --- Action bar (the native editor toolbar) ------------------------------ */
 .action-bar {
@@ -152,6 +158,54 @@ body {
 
 .bar-group > .codicon-library {
   color: var(--vscode-descriptionForeground);
+}
+
+/* Single connection indicator (replaces a manual reconnect button). Colour
+   tracks state; the icon spins while (re)connecting to signal auto-retry. */
+.conn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+}
+
+.conn-pill .codicon {
+  font-size: 13px;
+}
+
+.conn-connected {
+  color: var(--vscode-foreground);
+}
+
+.conn-connected .codicon-circle-filled {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #3fb950));
+}
+
+.conn-connecting .codicon-sync,
+.conn-disconnected .codicon-sync {
+  color: var(--vscode-descriptionForeground);
+  animation: conn-spin 1.4s linear infinite;
+}
+
+@keyframes conn-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conn-pill .codicon-sync {
+    animation: none;
+  }
 }
 
 /* Picker controls read as native dropdowns: value + trailing chevron. */

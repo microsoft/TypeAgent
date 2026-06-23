@@ -9,9 +9,6 @@ test("parseWebviewMessage accepts well-formed messages", () => {
     assert.deepEqual(parseWebviewMessage({ type: "ready" }), {
         type: "ready",
     });
-    assert.deepEqual(parseWebviewMessage({ type: "reconnect" }), {
-        type: "reconnect",
-    });
     assert.deepEqual(parseWebviewMessage({ type: "pickVersion", side: "a" }), {
         type: "pickVersion",
         side: "a",
@@ -91,6 +88,8 @@ test("parseWebviewMessage rejects malformed / hostile input", () => {
     assert.equal(parseWebviewMessage({ type: "bogus" }), undefined);
     // The agent is now fixed per panel — there is no agent picker message.
     assert.equal(parseWebviewMessage({ type: "pickAgent" }), undefined);
+    // Reconnect is automatic — the webview no longer sends a reconnect message.
+    assert.equal(parseWebviewMessage({ type: "reconnect" }), undefined);
     // pickVersion requires a valid side.
     assert.equal(parseWebviewMessage({ type: "pickVersion" }), undefined);
     assert.equal(
