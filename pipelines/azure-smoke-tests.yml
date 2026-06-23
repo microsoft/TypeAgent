@@ -183,7 +183,14 @@ jobs:
           workingDirectory: $(buildDirectory)/packages/shell
           inlineScript: |
             unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
-            Xvfb :99 -screen 0 1600x1200x24 &
+            # Start Xvfb with its stdio fully detached from this script and kill
+            # it on exit. A backgrounded Xvfb inherits the task's stdout/stderr;
+            # if it stays alive after the tests finish, the agent never sees EOF
+            # on those pipes and the step hangs ("The STDIO streams did not close
+            # within 10 seconds of the exit event from process '/usr/bin/bash'").
+            Xvfb :99 -screen 0 1600x1200x24 </dev/null >/dev/null 2>&1 &
+            XVFB_PID=$!
+            trap 'kill "$XVFB_PID" 2>/dev/null || true' EXIT
             export DISPLAY=:99
             npm run shell:smoke
 
