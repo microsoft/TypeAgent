@@ -10,6 +10,50 @@ body {
   margin: 0;
 }
 
+.context-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
+}
+
+.context-header:empty {
+  display: none;
+}
+
+.context-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  cursor: help;
+}
+
+.context-label {
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.context-value {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.context-sep {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -44,6 +88,46 @@ body {
   border-radius: 2px;
 }
 
+.version-field {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.version-method {
+  flex-basis: 100%;
+  text-align: right;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-style: italic;
+  min-height: 13px;
+}
+
+.version-label {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.version-input {
+  width: 9em;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-dropdown-border));
+  padding: 3px 6px;
+  border-radius: 2px;
+}
+
+.comparison {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.comparison:empty {
+  display: none;
+}
+
 .status {
   color: var(--vscode-descriptionForeground);
   margin-left: auto;
@@ -52,6 +136,33 @@ body {
 .summary {
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+.banner {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  border-left: 3px solid transparent;
+  font-size: 12px;
+}
+
+.banner:empty {
+  display: none;
+}
+
+.banner-note {
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-textBlockQuote-background);
+  border-left-color: var(--vscode-charts-yellow);
+}
+
+.banner-error {
+  color: var(
+    --vscode-inputValidation-errorForeground,
+    var(--vscode-errorForeground)
+  );
+  background: var(--vscode-inputValidation-errorBackground);
+  border-left-color: var(--vscode-errorForeground);
 }
 
 table {

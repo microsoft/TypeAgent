@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
+import { attachClientHeartbeat } from "@typeagent/websocket-utils/heartbeat";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type {
@@ -42,6 +43,8 @@ export class StudioServiceClient {
         private readonly repoRoot: string | undefined,
         private readonly endpoint: string,
         private readonly token: string | undefined,
+        /** Resolved heartbeat period; re-applied on every reconnect. `0` off. */
+        private readonly heartbeatMs: number,
     ) {}
 
     /**
@@ -65,6 +68,15 @@ export class StudioServiceClient {
         endpoint?: string;
         /** Capability token presented as `Authorization: Bearer`. */
         token?: string;
+        /**
+         * Liveness-heartbeat period in ms (default 10s). The client pings the
+         * service every period and terminates the socket if a pong hasn't
+         * arrived since the previous ping — so a silently-dropped service (an
+         * abrupt kill, a crash, or a half-open socket that never emits `close`)
+         * is detected instead of leaving a stale "connected" state. `0`
+         * disables the heartbeat. Exposed for tests.
+         */
+        heartbeatMs?: number;
     }): Promise<StudioServiceClient | undefined> {
         if (options.endpoint === undefined) {
             return undefined;
@@ -80,6 +92,8 @@ export class StudioServiceClient {
         if (options.onClose) {
             socket.on("close", options.onClose);
         }
+        const heartbeatMs = options.heartbeatMs ?? 10_000;
+        attachClientHeartbeat(socket, { intervalMs: heartbeatMs });
         const callHandlers: StudioClientCallFunctions = {
             studioEvent: (event: StudioEvent) => options.onEvent?.(event),
         };
@@ -101,6 +115,7 @@ export class StudioServiceClient {
             options.repoRoot,
             options.endpoint,
             options.token,
+            heartbeatMs,
         );
     }
 
@@ -120,6 +135,13 @@ export class StudioServiceClient {
         }
         const socket = attempt.socket;
         socket.on("close", onClose);
+        // Re-arm liveness on the fresh socket: without this the ping/pong
+        // watchdog would exist only for the first socket, so every reconnect
+        // after the first drop would again be unable to detect a silently
+        // half-open peer — the exact stale-"connected" failure the heartbeat
+        // was added to fix. The previous socket's heartbeat self-stops on its
+        // own `close`, so this re-attaches rather than leaks.
+        attachClientHeartbeat(socket, { intervalMs: this.heartbeatMs });
         this.rpc.rebind(createWebSocketRpcChannel(socket));
         this.socket = socket;
         return true;

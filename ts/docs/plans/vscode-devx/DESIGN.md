@@ -106,7 +106,9 @@ Inside `typeagent-core`, six primitives carry the weight of the design.
 1. **Sandbox lifecycle** — start, stop, and restart isolated agent-server
    instances (subprocess or in-memory). Studio never touches the developer's
    personal TypeAgent profile. Sandboxes always run under a Studio-owned
-   profile directory, so experiments don't leak into everyday usage.
+   profile directory, so experiments don't leak into everyday usage. A sandbox
+   is a _co-loaded agent set_; today it is a filtered view over shared repo
+   source, evolving toward a per-sandbox copy-on-write overlay (see §3.6).
 2. **Corpus federation** — three source types (in-repo
    `corpus/<agent>.utterances.jsonl`, per-user captures, and external sources
    declared in `.typeagent/studio.json`) federated into a single typed query
@@ -153,7 +155,8 @@ and Live Trace are a single renderer module with two modes (replay vs tail).
    for the live event stream.
 
 Plus three tree views (Sandboxes, Corpora, Trace history) and a status-bar
-indicator.
+indicator. An **active-sandbox selector** scopes the per-sandbox views (Corpora,
+Collisions, Event Log) to the selected sandbox's co-loaded agent set — see §3.6.
 
 ### 3.4 What lives where on the screen
 
@@ -285,6 +288,67 @@ client stack are unchanged.
 > `createStudioRuntime` as a bootstrap. Both are migrated to the standalone-service
 > topology per the implementation plan's phasing (extract the host → re-point the
 > extension → thin agent proxy → cleanup).
+
+### 3.6 What a sandbox is — from filtered view to copy-on-write overlay
+
+A **sandbox** is a named set of co-loaded agents running under a Studio-owned
+profile (§3.2 #1). Two properties of that definition drive the rest of the UI:
+
+- **Composition is per-sandbox.** _Which_ agents are co-loaded is the sandbox's
+  own state, and it is what makes **collisions** intrinsically per-sandbox: two
+  agents can only collide if they are loaded into the same dispatcher, so a
+  collision is a function of the co-loaded set, not a global property. A scan that
+  unions every agent across every sandbox reports overlaps that can never fire.
+- **Source is the axis we are evolving.** Today a sandbox loads each agent
+  **directly from the shared repo working tree** (`packages/agents/<name>`, via the
+  loader's ordered _agent roots_). So the sandbox is a **filtered _view_** over
+  one set of source files: schema/grammar/manifest edits are **repo-global** —
+  every sandbox that loads that agent sees them on its next restart. The sandbox
+  scopes _what you observe and analyze_, not _what you change_.
+
+**Where this is going — the isolated overlay (a full debugging experience).**
+The target end state gives each sandbox an **isolated, copy-on-write overlay** of
+its agents' source, so tuning is **sandbox-local**: two sandboxes can hold
+divergent versions of the same agent and you can change one without touching the
+other (true A/B). This turns a sandbox from a filtered view into a real
+**debugging workspace**, analogous to a git worktree/branch per experiment.
+
+The architecture already has the seam: the agent loader probes an **ordered list
+of agent roots**, so an overlay is _additive_ — give each sandbox a higher-priority
+root that shadows the base:
+
+```
+sandbox.agentRoots = [ <sandbox-overlay>/agents , <repo>/packages/agents ]
+```
+
+An edited agent resolves from the overlay; an untouched one falls through to the
+repo. Concretely, the overlay model implies:
+
+1. **Substrate** — a copy-on-write overlay dir under
+   `~/.typeagent/sandboxes/<id>/agents/` (lighter MVP), or a git worktree/branch
+   per sandbox (real git semantics, heavier). Both plug into `agentRoots`.
+2. **Compare axis shifts** — the replay/Impact Report axis becomes
+   **sandbox-overlay vs base** (or sandbox A vs B), complementing today's
+   _working-tree vs HEAD_ git-ref comparison: "what did _my isolated edits_
+   change," per sandbox.
+3. **Debug affordances** — hot-reload the overlay on edit, step the dispatch
+   (breakpoints in handlers), inspect the typed action + trace (the J5 trace
+   investigator is the seed), and a collision re-scan scoped to that sandbox's
+   co-loaded set.
+4. **Lifecycle = branch workflow** — create a sandbox _from_ a base (HEAD / a
+   branch / another sandbox), tune in isolation, then **promote** (merge overlay →
+   repo) or **discard**. Corpus _captures_ are already sandbox-originated, so the
+   corpus slice isolates cleanly too; the in-repo seed and feedback labels stay
+   agent-keyed and shared.
+
+**UI: a sandbox selector, not nested trees.** Because Corpora, Collisions, and the
+Event Log are all properly _per-sandbox_, the activity bar carries a single
+**active-sandbox selector** that scopes those views to the selected sandbox's
+co-loaded agent set — keeping the trees flat and readable rather than nesting a
+full corpus/collisions subtree under every sandbox node. The selector scopes
+**visibility and analysis** today; once overlays land, the _same_ selector scopes
+**mutation** too — edits write the selected sandbox's overlay instead of the
+shared repo.
 
 ---
 

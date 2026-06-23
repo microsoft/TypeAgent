@@ -18,9 +18,9 @@ import {
 } from "./types.js";
 
 /**
- * Provider hook for feedback rows. F0.4 implements this against the live
- * dispatcher feedback sink; until then the default is empty so the rest of
- * F0.2 can land independently.
+ * Provider hook for feedback rows. Supplied as an injected provider against the
+ * live dispatcher feedback sink; the default is empty so the corpus service can
+ * operate without it.
  */
 export type FeedbackEntryProvider = (agent: string) => Promise<CorpusEntry[]>;
 
@@ -47,7 +47,7 @@ interface StudioConfigFile {
  *  - in-repo  : `<repoRoot>/corpus/<agent>.utterances.jsonl`
  *  - captures : `<profileDir>/captures/<agent>/*.jsonl`
  *  - external : files declared in `<repoRoot>/.typeagent/studio.json`
- *  - feedback : supplied by an injected provider (F0.4 owns the real wiring)
+ *  - feedback : supplied by an injected provider
  *
  * Promotion is the only write that touches the in-repo file; everything
  * else writes inside the profile directory or the studio config.

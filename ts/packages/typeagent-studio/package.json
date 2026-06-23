@@ -37,7 +37,8 @@
       {
         "command": "typeagent-studio.openImpactReport",
         "title": "Open Impact Report",
-        "category": "TypeAgent Studio"
+        "category": "TypeAgent Studio",
+        "icon": "$(graph)"
       },
       {
         "command": "typeagent-studio.hello",
@@ -329,6 +330,11 @@
           "group": "navigation@2"
         },
         {
+          "command": "typeagent-studio.openImpactReport",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@0"
+        },
+        {
           "command": "typeagent-studio.refreshCorpora",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@1"
@@ -445,7 +451,29 @@
           "icon": "$(beaker)"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "typeagentStudioSandboxes",
+        "contents": "The TypeAgent Studio service isn't connected, so sandboxes can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "when": "!typeagentStudio.serviceConnected"
+      },
+      {
+        "view": "typeagentStudioCorpora",
+        "contents": "The TypeAgent Studio service isn't connected, so corpora can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "when": "!typeagentStudio.serviceConnected"
+      },
+      {
+        "view": "typeagentStudioEvents",
+        "contents": "The TypeAgent Studio service isn't connected, so events can't be shown yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "when": "!typeagentStudio.serviceConnected"
+      },
+      {
+        "view": "typeagentStudioCollisions",
+        "contents": "The TypeAgent Studio service isn't connected, so grammar collisions can't be analyzed yet.\n[Connect to Studio service](command:typeagent-studio.connectStudioService)\nOr open this workspace so Studio can launch it, or run `typeagent-studio serve`.",
+        "when": "!typeagentStudio.serviceConnected"
+      }
+    ]
   },
   "activationEvents": [
     "onStartupFinished",
@@ -497,6 +525,7 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/core": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
     "ws": "^8.21.0"
   },

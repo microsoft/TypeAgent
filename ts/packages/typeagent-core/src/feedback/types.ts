@@ -51,7 +51,7 @@ export interface FeedbackTopOptions {
     limit: number;
 }
 
-/** Minimal backend contract matching PR #2341-style RPC operation names. */
+/** Minimal backend contract matching the dispatcher RPC operation names. */
 export interface FeedbackBackend {
     recordUserFeedback(input: FeedbackRecordInput): Promise<void>;
     recordUserHide(requestId: string): Promise<void>;
@@ -76,7 +76,7 @@ export interface FeedbackService {
 
 /**
  * Optional extension for services that can project feedback rows into corpus
- * entries directly (used by F0.2 `FileCorpusService.feedbackProvider`).
+ * entries directly (used by `FileCorpusService.feedbackProvider`).
  */
 export interface FeedbackCorpusProjector {
     toCorpusEntries(agent: string): Promise<CorpusEntry[]>;

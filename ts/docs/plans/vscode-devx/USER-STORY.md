@@ -58,27 +58,43 @@ feedback labels we already collect.
 
 ## 3. A concrete end-to-end story
 
-> **Aïda builds a `thermostat` agent, tunes it, and ships a change safely.**
+> **Aïda builds a `thermostat` agent, tunes it with an AI agent, and ships a
+> change safely.**
 >
-> 1. **Author (J1).** She runs **New Agent**, describes the agent in plain
->    English, and the `onboarding` agent runs seven revisitable phases —
+> 1. **Author (J1).** She runs **New Agent**, describes the agent in her own
+>    words, and the `onboarding` agent runs seven revisitable phases —
 >    Discovery → PhraseGen → SchemaGen → GrammarGen → Scaffolder → Testing →
 >    Packaging. She clicks **Install into sandbox**, types _"set the living room
 >    to 68"_ in the shell, and it works. No hand-copied files, no `pnpm`
 >    incantations.
-> 2. **Tune the schema (J2).** Real captures arrive. She loads the federated
->    corpus, filters to 👎 utterances, and finds a missing `SetSchedule` action.
->    She adds it; a collision with `SetTemperature` surfaces _inline_ before she
->    commits.
-> 3. **Tune the grammar (J3).** _"make it warmer"_ misses. She adds phrasings to
->    the `.agr` and confirms coverage went up.
-> 4. **Find regressions (J4 — the payoff).** She replays the whole corpus,
->    _working tree_ vs _HEAD_. The **Impact Report** shows action-level deltas
->    annotated with feedback: green where she fixed a known-bad response, red
->    where she may have broken something users liked.
-> 5. **Investigate (J5).** A red row → the full dispatch trace → the exact
->    grammar line that mis-matched.
-> 6. **Ship.** The health gate passes; she commits.
+> 2. **Delegate the tuning (J2/J3, agent).** Real captures arrive. Aïda sets the
+>    intent — _"cover these twenty 👎 utterances and don't regress the 👍 set"_ —
+>    and hands the mechanical loop to an AI agent (the `studio` agent, or Copilot
+>    in the editor). It adds the missing **set-a-schedule** capability and new
+>    phrasings for it, and before changing anything it checks the **collision
+>    scan** so the new phrasings don't quietly steal utterances meant for
+>    _set-the-temperature_ — or, just as easily, ones already owned by another
+>    agent, like the calendar or timer agent's scheduling phrasings.
+> 3. **Find regressions (J4 — the payoff).** The agent re-runs the whole corpus
+>    twice — once against her in-progress edits, once against the last committed
+>    version — and compares the two, action by action: green where a known-bad
+>    response is now correct, red where an utterance users had liked now resolves
+>    differently. It reads that comparison as structured data, the same result the
+>    **Impact Report** shows Aïda visually. The agent keeps the green wins and
+>    backs out the edits that caused red.
+> 4. **Finish the long tail herself.** The agent reports two utterances it
+>    couldn't cover safely — _"make it warmer"_ and a scheduling phrasing it judged
+>    too ambiguous to touch. Aïda adds those phrasings by hand, re-runs the
+>    comparison, and confirms coverage went up with no new red rows.
+> 5. **Investigate (J5).** One stubborn red row → she opens its full trace and
+>    follows it down to the exact grammar line that mis-matched. She fixes it.
+> 6. **Ship.** The health gate passes. The commit — and the one change to a
+>    👍-validated action — stay behind Aïda's sign-off; she reviews and commits.
+>
+> The agent and Aïda work against the _same_ underlying state — one shared event
+> history and one corpus — so what the agent changed and what she sees in the
+> Impact Report never diverge. This is the **hybrid** mode of
+> [§5](#5-three-interaction-modes).
 
 ## 4. Current state vs. the story
 

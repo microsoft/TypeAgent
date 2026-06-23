@@ -26,11 +26,21 @@ export class CorpusTreeProvider
     >();
     readonly onDidChangeTreeData = this.emitter.event;
     private readonly subscription: { dispose(): void };
+    private connected = false;
 
     constructor(private readonly source: CorpusSource) {
         // Loaded-agent set drives the agent rows, so refresh on sandbox
         // lifecycle changes (agent load/unload) as well as manual refresh.
         this.subscription = source.onSandboxChanged(() => this.refresh());
+    }
+
+    /** Reflect the studio service connection state (drives the empty view). */
+    setConnected(connected: boolean): void {
+        if (connected === this.connected) {
+            return;
+        }
+        this.connected = connected;
+        this.refresh();
     }
 
     refresh(): void {
@@ -51,15 +61,29 @@ export class CorpusTreeProvider
         item.tooltip = node.tooltip;
         item.contextValue = node.contextValue;
         item.iconPath = iconForNode(node);
-        // Note: the seed empty-state node intentionally has no click command —
-        // creating a file is done via its explicit inline action (with a
-        // confirmation) so a corpus file is never written just by selecting
-        // the row.
+        // The seed empty-state row is clickable: selecting it runs the same
+        // seed command as its inline button. The command shows a modal
+        // confirmation before writing, so a corpus file is never created just
+        // by selecting the row — this makes the row's affordance match the
+        // obvious expectation (the bare inline `+` was easy to miss).
+        if (node.contextValue === "corpusAgentSeed") {
+            item.command = {
+                command: "typeagent-studio.seedInRepoCorpus",
+                title: "Seed in-repo corpus",
+                arguments: [node],
+            };
+        }
         return item;
     }
 
     async getChildren(node?: CorpusTreeNode): Promise<CorpusTreeNode[]> {
         if (!node) {
+            // Disconnected: render nothing so the view's welcome content
+            // ("connect to the Studio service") shows instead of a misleading
+            // "No corpora available" placeholder.
+            if (!this.connected) {
+                return [];
+            }
             return buildCorpusAgentNodes(await this.source.listCorpusAgents());
         }
         if (node.kind === "agent" && node.agent) {
@@ -89,7 +113,7 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
             return new vscode.ThemeIcon("comment");
         case "empty":
             return new vscode.ThemeIcon(
-                node.contextValue === "corpusAgentSeed" ? "add" : "info",
+                node.contextValue === "corpusAgentSeed" ? "new-file" : "info",
             );
         default:
             return new vscode.ThemeIcon("info");

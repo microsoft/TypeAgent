@@ -2,8 +2,41 @@
 // Licensed under the MIT License.
 
 import * as esbuild from "esbuild";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const watch = process.argv.includes("--watch");
+
+/**
+ * Studio imports the `@typeagent/telemetry` barrel for logging/profiling
+ * symbols, but never creates the MongoDB logger sink. The barrel still pulls
+ * the full `mongodb` driver into the node bundles (its client-side-encryption
+ * crypto callbacks embed PEM `-----BEGIN/END PRIVATE KEY-----` delimiters that
+ * trip vsce's secret scanner). Alias `mongodb` to an inert stub so the real
+ * driver never ships, keeping the package secret-free and much smaller.
+ */
+const nodeBundleAlias = {
+    mongodb: path.resolve("src/stubs/mongodbStub.cjs"),
+};
+
+/**
+ * Copy runtime assets the bundled code reads from disk into `dist/` so they
+ * ship in the `.vsix` and resolve next to the bundle at runtime.
+ *
+ * `action-grammar`'s built-in entity loader (`builtInFileLoader.ts`) reads
+ * `builtInEntities.agr` relative to its module dir, checking `<dir>/…` first
+ * (the bundled case, where `<dir>` is `dist/`). Compiling any grammar that uses
+ * built-in entities (Ordinal/Cardinal — the player grammar does) exercises this
+ * path, e.g. in the Impact Report's static-grammar replay. Without the asset the
+ * service throws ENOENT, so copy it beside both the extension and service bundles.
+ */
+function copyRuntimeAssets() {
+    fs.mkdirSync("dist", { recursive: true });
+    const builtInEntities = path.resolve(
+        "../actionGrammar/src/builtInEntities.agr",
+    );
+    fs.copyFileSync(builtInEntities, "dist/builtInEntities.agr");
+}
 
 /** @type {import('esbuild').BuildOptions} */
 const extensionConfig = {
@@ -11,6 +44,7 @@ const extensionConfig = {
     bundle: true,
     outfile: "dist/extension.js",
     external: ["vscode"],
+    alias: nodeBundleAlias,
     format: "cjs",
     platform: "node",
     target: "node20",
@@ -43,6 +77,7 @@ const serviceConfig = {
     bundle: true,
     outfile: "dist/studio-service.js",
     external: ["vscode"],
+    alias: nodeBundleAlias,
     format: "cjs",
     platform: "node",
     target: "node20",
@@ -80,9 +115,11 @@ if (watch) {
     await ctx.watch();
     await serviceCtx.watch();
     await webviewCtx.watch();
+    copyRuntimeAssets();
     console.log("typeagent-studio: watching…");
 } else {
     await esbuild.build(extensionConfig);
     await esbuild.build(serviceConfig);
     await esbuild.build(webviewConfig);
+    copyRuntimeAssets();
 }

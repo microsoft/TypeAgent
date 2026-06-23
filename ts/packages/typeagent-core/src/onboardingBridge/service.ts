@@ -28,7 +28,7 @@ export interface InMemoryOnboardingBridgeOptions {
 }
 
 /**
- * F1.1 backend scaffold with deterministic in-memory semantics.
+ * Backend scaffold with deterministic in-memory semantics.
  *
  * The extension host can persist snapshots externally; this core service keeps
  * policy and stale-detection behavior centralized.
