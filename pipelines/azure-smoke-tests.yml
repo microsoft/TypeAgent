@@ -119,23 +119,23 @@ jobs:
       # Secret-free alternative (Workload Identity Federation; matches the
       # original OIDC, nothing to rotate). Create an ARM service connection with
       # WIF, then replace this whole step with:
-      #   - task: AzureCLI@2
-      #     displayName: Get Keys
-      #     inputs:
-      #       azureSubscription: <your-ARM-WIF-service-connection>
-      #       scriptType: pscore
-      #       scriptLocation: inlineScript
-      #       workingDirectory: $(buildDirectory)
-      #       inlineScript: node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
-      - script: |
-          node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+      - task: AzureCLI@2
         displayName: Get Keys
-        workingDirectory: $(buildDirectory)
-        env:
-          AZURE_CLIENT_ID: $(CLIENT_ID)
-          AZURE_TENANT_ID: $(TENANT_ID)
-          AZURE_CLIENT_SECRET: $(CLIENT_SECRET)
-          AZURE_SUBSCRIPTION_ID: $(SUBSCRIPTION_ID)
+        inputs:
+          azureSubscription: <your-ARM-WIF-service-connection>
+          scriptType: pscore
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)
+          inlineScript: node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+      # - script: |
+      #     node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+      #   displayName: Get Keys
+      #   workingDirectory: $(buildDirectory)
+      #   env:
+      #     AZURE_CLIENT_ID: $(CLIENT_ID)
+      #     AZURE_TENANT_ID: $(TENANT_ID)
+      #     AZURE_CLIENT_SECRET: $(CLIENT_SECRET)
+      #     AZURE_SUBSCRIPTION_ID: $(SUBSCRIPTION_ID)
 
       # pwsh gives consistent single-quote argument grouping on Windows and
       # Linux (matches the default shells GitHub Actions used).
