@@ -85,6 +85,11 @@ export const webapi: ClientAPI = {
     continuousSpeechProcessing: async (_) => {
         throw new Error("Not implemented");
     },
+    conversationBarEnabled: async () => {
+        // Web/mobile clients do not host or connect to a multi-conversation
+        // agent server, so the conversation switcher is hidden.
+        return false;
+    },
     conversationList: async () => {
         // Not supported on mobile
         return [];

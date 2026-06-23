@@ -86,6 +86,10 @@ export interface ClientAPI {
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
 
     // Conversation management
+    // Whether the multi-conversation switcher should be shown. True only when
+    // connected to a separate agent server (--connect); false when the shell
+    // hosts the agent server in-process (standalone) or for web/mobile clients.
+    conversationBarEnabled(): Promise<boolean>;
     conversationList(): Promise<ConversationInfo[]>;
     conversationCreate(name: string): Promise<ConversationInfo>;
     conversationSwitch(
