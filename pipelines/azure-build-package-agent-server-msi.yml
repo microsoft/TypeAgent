@@ -51,7 +51,6 @@ parameters:
     default: win32-x64
     values:
       - win32-x64
-      - win32-arm64
     displayName: "RID (Runtime ID)"
 
 jobs:
