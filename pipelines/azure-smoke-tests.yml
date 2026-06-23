@@ -121,10 +121,10 @@ jobs:
       # OpenAI User' on the Azure OpenAI resource(s).
       #
       # NOTE: the OIDC token is short-lived (~15 min). A step that first calls
-      # Azure OpenAI long after this one (e.g. Live Tests, which start after the
-      # up-to-60-min shell suite) can see it expire; give such a step its own
-      # AzureCLI@2 task if it needs a guaranteed-fresh login. Live Tests are
-      # non-blocking (continueOnError) so a late expiry won't fail the run.
+      # Azure OpenAI long after this one can see it expire. The quick CLI smoke
+      # and the shell suites call Azure OpenAI early enough to use this shared
+      # login; Live Tests run after the up-to-60-min shell suite, so they get
+      # their own AzureCLI@2 task (a fresh federated login) below.
       - task: AzureCLI@2
         displayName: Azure login + Get Keys
         inputs:
@@ -165,13 +165,31 @@ jobs:
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
-      - bash: |
-          npm run test:live
+      # Live Tests run after the up-to-60-min shell suite, by which point the
+      # federated token the "Azure login + Get Keys" step published (~15 min
+      # lifetime) is long expired. So this step gets its own AzureCLI@2 task,
+      # which performs a fresh federated `az login` at start.
+      #
+      # We first clear the three published AZURE_* variables for this step only.
+      # They persist as job-wide env vars, so without this DefaultAzureCredential
+      # would try WorkloadIdentityCredential against the stale token file — a
+      # failed assertion exchange is a hard error that stops the chain, so it
+      # would never reach the fresh AzureCliCredential from this task's az login.
+      # Unsetting them makes the chain fall through to AzureCliCredential.
+      # Non-blocking (continueOnError) so a late auth issue won't fail the run.
+      - task: AzureCLI@2
         displayName: Live Tests (Linux)
-        workingDirectory: $(buildDirectory)
         timeoutInMinutes: 60
         continueOnError: true
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+            npm run test:live
 
       # Remove provisioned secrets even if a prior step failed.
       - pwsh: |
