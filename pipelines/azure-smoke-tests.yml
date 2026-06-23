@@ -13,10 +13,11 @@
 #     eol=lf`, so checkout produces LF on every OS regardless of core.autocrlf.
 #   * dorny/paths-filter is replaced by the trigger `paths` filter below.
 #   * azure/login (OIDC) is preserved via an Azure Resource Manager service
-#     connection that uses Workload Identity Federation: the Get Keys step runs
-#     inside an AzureCLI@2 task, which performs the federated (secret-free)
-#     login. getKeys.mjs then authenticates via DefaultAzureCredential ->
-#     AzureCliCredential, reusing that session. Nothing to rotate.
+#     connection that uses Workload Identity Federation. A single AzureCLI@2
+#     task performs the federated (secret-free) login, pulls the secrets, and
+#     publishes AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE so
+#     the later plain test steps authenticate to Azure OpenAI through
+#     @azure/identity's WorkloadIdentityCredential. Nothing to rotate.
 #
 # Prerequisites:
 #   * GitHub service connection - created when you set up this pipeline via
@@ -61,8 +62,8 @@ variables:
     value: "22"
   # Mirrors the GitHub workflow's env.NODE_OPTIONS. Non-secret pipeline variables
   # are surfaced to every script step as environment variables. Azure auth no
-  # longer needs secret variables — the Get Keys step logs in through the WIF
-  # service connection (see below).
+  # longer needs secret variables — the "Azure login + Get Keys" step signs in
+  # through the WIF service connection (see below).
   - name: NODE_OPTIONS
     value: --max_old_space_size=8192
 
@@ -108,25 +109,41 @@ jobs:
         displayName: Build
         workingDirectory: $(buildDirectory)
 
-      # Azure login + secret retrieval, secret-free via Workload Identity
-      # Federation. The AzureCLI@2 task signs in to Azure using the WIF service
-      # connection (no stored secret/cert — it exchanges a short-lived OIDC
-      # token at runtime). getKeys.mjs then authenticates via
-      # DefaultAzureCredential -> AzureCliCredential, reusing that az session,
-      # and writes ts/config.local.yaml. Reading 'build-pipeline-kv' relies on
-      # the connection's service principal holding the 'Key Vault Secrets User'
-      # RBAC role on the vault.
+      # Single federated (WIF) login for the whole job. addSpnToEnvironment
+      # surfaces the service connection's OIDC token; we persist it to a file and
+      # publish the three variables that @azure/identity's
+      # WorkloadIdentityCredential (part of DefaultAzureCredential v4) reads —
+      # AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE — so the
+      # later plain test steps reach Azure OpenAI without each needing its own
+      # AzureCLI task. getKeys runs here too, while az is signed in, and writes
+      # ts/config.local.yaml. The connection's service principal needs
+      # 'Key Vault Secrets User' on 'build-pipeline-kv' and 'Cognitive Services
+      # OpenAI User' on the Azure OpenAI resource(s).
+      #
+      # NOTE: the OIDC token is short-lived (~15 min). A step that first calls
+      # Azure OpenAI long after this one (e.g. Live Tests, which start after the
+      # up-to-60-min shell suite) can see it expire; give such a step its own
+      # AzureCLI@2 task if it needs a guaranteed-fresh login. Live Tests are
+      # non-blocking (continueOnError) so a late expiry won't fail the run.
       - task: AzureCLI@2
-        displayName: Get Keys
+        displayName: Azure login + Get Keys
         inputs:
           azureSubscription: 'MSOCTO-ADO-Service-Connection'
           scriptType: pscore
           scriptLocation: inlineScript
+          addSpnToEnvironment: true
           workingDirectory: $(buildDirectory)
-          inlineScript: node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+          inlineScript: |
+            $tokenFile = Join-Path "$(Agent.TempDirectory)" "wif-federated-token.txt"
+            Set-Content -Path $tokenFile -Value "$env:idToken" -NoNewline
+            Write-Host "##vso[task.setvariable variable=AZURE_CLIENT_ID]$env:servicePrincipalId"
+            Write-Host "##vso[task.setvariable variable=AZURE_TENANT_ID]$env:tenantId"
+            Write-Host "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN_FILE]$tokenFile"
+            node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
 
       # pwsh gives consistent single-quote argument grouping on Windows and
-      # Linux (matches the default shells GitHub Actions used).
+      # Linux. Authenticates to Azure OpenAI via the AZURE_* WIF variables the
+      # login step published.
       - pwsh: |
           npm run start:dev 'prompt' 'why is the sky blue'
         displayName: Test CLI - smoke
