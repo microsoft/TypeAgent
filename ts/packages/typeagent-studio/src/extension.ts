@@ -554,15 +554,40 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
         ),
-        // Open the Impact Report webview — the first greenfield client of the
-        // service channel (replay over the channel; webview never opens a
-        // socket).
+        // Open a per-agent Impact Report. Launched from the graph icon on a
+        // Corpora agent row (the node carries the agent); when invoked without a
+        // row, fall back to a quick pick so a keybinding still works.
         vscode.commands.registerCommand(
             "typeagent-studio.openImpactReport",
-            () =>
-                openImpactReport(context, repoRootInfo.repoRoot, () =>
-                    connection.getTarget(),
-                ),
+            async (node?: { agent?: string }) => {
+                let agent = node?.agent;
+                if (!agent) {
+                    const agents = await serviceRuntime.listCorpusAgents();
+                    if (agents.length === 0) {
+                        vscode.window.showInformationMessage(
+                            "No agents have a corpus to replay. Load an agent into a sandbox first.",
+                        );
+                        return;
+                    }
+                    agent =
+                        agents.length === 1
+                            ? agents[0]
+                            : await vscode.window.showQuickPick(agents, {
+                                  title: "Open Impact Report",
+                                  placeHolder:
+                                      "Select an agent to open a report for",
+                              });
+                    if (!agent) {
+                        return;
+                    }
+                }
+                openImpactReport(
+                    context,
+                    repoRootInfo.repoRoot,
+                    () => connection.getTarget(),
+                    agent,
+                );
+            },
         ),
     );
 

@@ -36,6 +36,30 @@ function copyRuntimeAssets() {
         "../actionGrammar/src/builtInEntities.agr",
     );
     fs.copyFileSync(builtInEntities, "dist/builtInEntities.agr");
+    copyCodiconFont();
+}
+
+/**
+ * Copy the codicon icon font next to the webview stylesheet so the Impact Report
+ * can render VS Code's native icon set. `media/` is a `localResourceRoot`, so the
+ * webview can load the font under the existing `font-src ${cspSource}` policy; the
+ * stylesheet `@font-face`s it by the relative `codicon.ttf` path. The `.ttf` is
+ * generated (gitignored) and shipped in the `.vsix` from disk by vsce.
+ */
+function copyCodiconFont() {
+    const candidates = [
+        path.resolve("node_modules/@vscode/codicons/dist/codicon.ttf"),
+        path.resolve("../../node_modules/@vscode/codicons/dist/codicon.ttf"),
+    ];
+    const src = candidates.find((p) => fs.existsSync(p));
+    if (src) {
+        fs.mkdirSync("media", { recursive: true });
+        fs.copyFileSync(src, "media/codicon.ttf");
+    } else {
+        console.warn(
+            "typeagent-studio: codicon.ttf not found; icons will fall back to text.",
+        );
+    }
 }
 
 /** @type {import('esbuild').BuildOptions} */

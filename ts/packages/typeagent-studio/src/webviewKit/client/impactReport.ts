@@ -30,6 +30,7 @@ import {
     impactEmptyState,
     allRowsEqual,
     formatProvenanceLine,
+    formatVersionProvenance,
     toActionDiff,
     type ImpactRow,
     type ReplayRowStatus,
@@ -102,7 +103,8 @@ let openDetailId: string | undefined;
 // focused on regressions rather than a wall of unchanged rows.
 const activeFilters = defaultImpactFilters();
 // The current selection driving a run. Versions are typed specs resolved by the
-// host's git picker (or the defaults); the agent comes from the agent picker.
+// host's git picker (or the defaults); the agent is fixed for the panel (set
+// from the host `init`, shown read-only and in the tab title).
 let currentAgent: string | undefined;
 let versionA: ResolvedVersion = DEFAULT_VERSION_A;
 let versionB: ResolvedVersion = DEFAULT_VERSION_B;
@@ -110,53 +112,70 @@ let versionB: ResolvedVersion = DEFAULT_VERSION_B;
 const root = document.getElementById("root")!;
 
 // --- Static shell ---------------------------------------------------------
-const toolbar = el("div", "toolbar");
-const statusEl = el("span", "status");
-// The agent and both versions are chosen through native VS Code QuickPicks the
-// host opens (the webview can't shell out to git); each control is a button that
-// shows the current selection and asks the host to open the relevant picker.
-const agentButton = pickerButton(
-    "agent",
-    "The agent whose corpus is replayed and compared.",
-    () => vscode.postMessage({ type: "pickAgent" }),
-);
-const versionAButton = pickerButton(
-    "Base (A)",
+// A native-feeling action bar: the agent this report is scoped to (read-only —
+// the report is opened per agent from the Corpora view), the A ⇄ B version
+// dropdowns, then the primary Run action and a reconnect button. Both versions
+// are chosen through native VS Code QuickPicks the host opens (the webview can't
+// shell out to git); each control shows the current selection and asks the host
+// to open the relevant picker.
+const actionBar = el("div", "action-bar");
+
+// The agent is fixed for the panel's lifetime; show it (also in the tab title)
+// so a report placed side-by-side with another stays self-identifying.
+const agentNameEl = el("span", "agent-name");
+const versionAButton = picker(
     "Choose the base (A) version to compare from.",
     () => vscode.postMessage({ type: "pickVersion", side: "a" }),
+    "A",
 );
-const versionBButton = pickerButton(
-    "Compare (B)",
+const versionBButton = picker(
     "Choose the compare (B) version to compare to.",
     () => vscode.postMessage({ type: "pickVersion", side: "b" }),
+    "B",
 );
-const swapButton = iconButton("\u21c4", "Swap A and B", () => swapVersions());
+const swapButton = toolButton("arrow-swap", "Swap A and B", () =>
+    swapVersions(),
+);
 swapButton.title = "Swap the base (A) and compare (B) versions.";
-const runButton = iconButton("\u25b6", "Run replay", () => runReplay());
+const runButton = toolButton("play", "Run", () => runReplay(), {
+    primary: true,
+    text: "Run",
+});
 runButton.title =
     "Replay the corpus against both versions and compare actions.";
-const reconnectButton = iconButton("\u21bb", "Reconnect", () => {
+const reconnectButton = toolButton("refresh", "Reconnect", () => {
     vscode.postMessage({ type: "reconnect" });
 });
 reconnectButton.title = "Re-attempt the connection to the studio service.";
-toolbar.append(
-    agentButton.wrap,
-    versionAButton.wrap,
-    swapButton,
-    versionBButton.wrap,
+
+actionBar.append(
+    group(codicon("library"), agentNameEl),
+    separator(),
+    group(versionAButton.button, swapButton, versionBButton.button),
+    spacer(),
     runButton,
     reconnectButton,
-    statusEl,
 );
 
-const bannerEl = el("div", "banner");
+// A slim sub-bar under the toolbar carries the run provenance (the concrete
+// commits each side ran against) and the live status text.
+const subBar = el("div", "sub-bar");
+const provenanceEl = el("span", "provenance");
+const statusEl = el("span", "status");
+subBar.append(provenanceEl, statusEl);
+
+// The scrolling content region: an inline error notification, the status filter,
+// first-run guidance, the results list, and the drill-in detail pane.
+const contentEl = el("div", "content");
+const notificationEl = el("div", "notification");
 const filtersEl = el("div", "filters");
 const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
 const detailEl = el("div", "detail-pane");
 detailEl.hidden = true;
+contentEl.append(notificationEl, filtersEl, emptyStateEl, tableWrap, detailEl);
 
-root.append(toolbar, bannerEl, filtersEl, emptyStateEl, tableWrap, detailEl);
+root.append(actionBar, subBar, contentEl);
 
 setControlsEnabled(false);
 restoreSelection();
@@ -167,15 +186,16 @@ window.addEventListener("message", (event: MessageEvent) => {
     const msg = event.data as HostToWebviewMessage;
     switch (msg.type) {
         case "init":
-            adoptAgents(msg.agents);
-            controlsAvailable = msg.connected && msg.agents.length > 0;
+            currentAgent = msg.agent;
+            renderAgentName();
+            controlsAvailable = msg.connected && msg.available;
             setControlsEnabled(controlsAvailable);
             renderEmptyState();
             setStatus(
                 msg.connected
-                    ? msg.agents.length > 0
+                    ? msg.available
                         ? "Connected."
-                        : "Connected — no corpus agents found."
+                        : `Connected — no corpus found for ${msg.agent}.`
                     : "Studio service not found — start an agent-server with the studio agent enabled.",
             );
             break;
@@ -184,12 +204,6 @@ window.addEventListener("message", (event: MessageEvent) => {
             break;
         case "versionPicked":
             applyVersionPick(msg.side, msg.resolved);
-            break;
-        case "agentPicked":
-            currentAgent = msg.agent;
-            renderAgentButton();
-            persistState({ selectedAgent: msg.agent });
-            renderEmptyState();
             break;
         case "result":
             // Accept the matching run, or — when no run has been issued since
@@ -228,8 +242,8 @@ function runReplay(): void {
     persistState({ selectedAgent: agent, versionA, versionB });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
-    bannerEl.textContent = "";
-    bannerEl.className = "banner";
+    clearNotification();
+    provenanceEl.textContent = "";
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
@@ -278,8 +292,8 @@ function renderResult(
     // the full result on `ready` (recovery). The table is built with
     // `appendChild`, so without this clear the recovery render would append a
     // second table instead of upgrading the snapshot in place.
-    bannerEl.className = "banner";
-    bannerEl.textContent = "";
+    clearNotification();
+    provenanceEl.textContent = "";
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
@@ -291,8 +305,7 @@ function renderResult(
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
-        bannerEl.className = "banner banner-error";
-        bannerEl.textContent = toImpactErrorLine(result.error);
+        showNotification(toImpactErrorLine(result.error));
         setStatus(restored ? "Restored — replay aborted." : "Replay aborted.");
         return;
     }
@@ -311,8 +324,7 @@ function renderResult(
     // The provenance line pins the report to the concrete commits it ran
     // against, so a later branch move doesn't make a bare HEAD label lie.
     if (provenance) {
-        bannerEl.className = "banner banner-provenance";
-        bannerEl.textContent = formatProvenanceLine(provenance);
+        renderProvenance(provenance);
     }
 
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
@@ -341,6 +353,10 @@ function renderFilters(): void {
     }
     filtersEl.hidden = false;
 
+    const label = el("span", "filters-label");
+    label.append(codicon("list-filter"), document.createTextNode("Filter"));
+    filtersEl.appendChild(label);
+
     // The "All" pill resets the view to every row; it reads as active whenever
     // nothing with rows is hidden.
     filtersEl.appendChild(
@@ -359,20 +375,27 @@ function renderFilters(): void {
         // A status with no rows is nothing to filter on — show it for context
         // (a count of 0 is informative) but make it inert.
         filtersEl.appendChild(
-            chipButton(chip.label, chip.count, isActive, isEmpty, () =>
-                toggleFilter(chip.status),
+            chipButton(
+                chip.label,
+                chip.count,
+                isActive,
+                isEmpty,
+                () => toggleFilter(chip.status),
+                chip.status,
             ),
         );
     }
 }
 
-/** Build one filter pill button. Empty (zero-count) chips render inert. */
+/** Build one filter pill button. Empty (zero-count) chips render inert. A
+ *  `status` adds a colour dot mirroring the row status colour. */
 function chipButton(
     label: string,
     count: number,
     isActive: boolean,
     isEmpty: boolean,
     onClick: () => void,
+    status?: ReplayRowStatus,
 ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
@@ -381,7 +404,15 @@ function chipButton(
     if (isEmpty) classes.push("is-empty");
     button.className = classes.join(" ");
     button.setAttribute("aria-pressed", String(isActive));
-    button.textContent = `${label} ${count}`;
+    if (status) {
+        const dot = el("span", `chip-dot status-${status}`);
+        button.appendChild(dot);
+    }
+    const text = document.createElement("span");
+    text.textContent = label;
+    const countEl = el("span", "chip-count");
+    countEl.textContent = String(count);
+    button.append(text, countEl);
     if (isEmpty) {
         button.disabled = true;
     } else {
@@ -416,27 +447,25 @@ function renderTable(): void {
     const rows = filterImpactRows(currentRows, activeFilters);
 
     const table = document.createElement("table");
+    const thead = document.createElement("thead");
     const head = document.createElement("tr");
-    for (const h of [
-        "Utterance",
-        "Status",
-        "Base (A)",
-        "Compare (B)",
-        "Latency",
-    ]) {
+    for (const h of ["Utterance", "Status", "Base (A)", "Compare (B)", ""]) {
         const th = document.createElement("th");
-        th.textContent = h;
+        th.textContent = h || "Latency";
+        if (!h) th.setAttribute("aria-label", "Latency");
         head.appendChild(th);
     }
-    table.appendChild(head);
+    thead.appendChild(head);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
 
     for (const row of rows) {
         const tr = document.createElement("tr");
         tr.appendChild(cell(row.utterance));
-        tr.appendChild(cell(row.statusLabel, `status-${row.status}`));
+        tr.appendChild(statusCell(row.status, row.statusLabel));
         tr.appendChild(cell(row.resolutionA, "resolution"));
         tr.appendChild(cell(row.resolutionB, "resolution"));
-        tr.appendChild(cell(row.latency, "latency"));
+        tr.appendChild(latencyCell(row));
         // Difference rows drill into an action A/B diff; equal rows have nothing
         // to compare, so they stay inert.
         if (row.status !== "equal" && currentRawById.has(row.utteranceId)) {
@@ -455,8 +484,9 @@ function renderTable(): void {
                 }
             });
         }
-        table.appendChild(tr);
+        tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
     tableWrap.appendChild(table);
 
     const chips = buildImpactFilterChips(currentRows);
@@ -520,19 +550,32 @@ function renderDetail(delta: ActionDelta): void {
     title.textContent = collapseWhitespace(delta.utterance);
     title.title = delta.utterance;
     const meta = el("span", "detail-meta");
-    meta.textContent = diff.onlyB
-        ? "new match (no action on A)"
-        : diff.onlyA
-          ? "lost match (no action on B)"
-          : diff.identical
-            ? "actions identical"
-            : `+${diff.addedCount} \u2212${diff.removedCount}`;
-    const close = iconButton("\u2715", "Close detail", () => closeDetail());
+    if (diff.onlyB) {
+        meta.append(codicon("diff-added"), text("new match (no action on A)"));
+    } else if (diff.onlyA) {
+        meta.append(
+            codicon("diff-removed"),
+            text("lost match (no action on B)"),
+        );
+    } else if (diff.identical) {
+        meta.append(codicon("pass"), text("actions identical"));
+    } else {
+        const added = el("span", "added");
+        added.textContent = `+${diff.addedCount}`;
+        const removed = el("span", "removed");
+        removed.textContent = `\u2212${diff.removedCount}`;
+        meta.append(added, removed);
+    }
+    const close = toolButton("close", "Close detail", () => closeDetail());
     close.classList.add("detail-close");
     header.append(title, meta, close);
 
     const legend = el("div", "detail-legend");
-    legend.textContent = "Base (A) \u2192 Compare (B)";
+    legend.append(
+        text("Base (A)"),
+        codicon("arrow-right"),
+        text("Compare (B)"),
+    );
 
     const body = el("pre", "detail-diff");
     for (const line of diff.lines) {
@@ -565,38 +608,26 @@ function renderEmptyState(): void {
     }
     emptyStateEl.textContent = "";
     const state = impactEmptyState();
+    const icon = codicon("git-compare");
     const title = el("div", "empty-state-title");
     title.textContent = state.title;
     const hint = el("div", "empty-state-hint");
     hint.textContent = state.hint;
-    emptyStateEl.append(title, hint);
+    emptyStateEl.append(icon, title, hint);
     emptyStateEl.hidden = false;
-}
-
-function adoptAgents(agents: string[]): void {
-    // Keep the persisted/selected agent if still available; otherwise default to
-    // the first agent so a newcomer can run without opening the picker first.
-    if (currentAgent && agents.includes(currentAgent)) {
-        // keep it
-    } else if (agents.length > 0) {
-        currentAgent = agents[0];
-        persistState({ selectedAgent: currentAgent });
-    }
-    renderAgentButton();
 }
 
 function restoreSelection(): void {
     const state = vscode.getState();
-    if (state?.selectedAgent) {
-        currentAgent = state.selectedAgent;
-    }
     if (state?.versionA) {
         versionA = state.versionA;
     }
     if (state?.versionB) {
         versionB = state.versionB;
     }
-    renderAgentButton();
+    // The agent is authoritative from the host `init`; until it arrives, show a
+    // neutral placeholder rather than a stale persisted value.
+    renderAgentName();
     // Re-render the last result immediately so navigating away and back doesn't
     // blank the report. The host also re-pushes the full result on `ready`
     // (recovery), which upgrades this possibly-truncated snapshot.
@@ -646,7 +677,6 @@ function persistResult(
 function setControlsEnabled(enabled: boolean): void {
     runButton.disabled = !enabled;
     swapButton.disabled = !enabled;
-    agentButton.button.disabled = !enabled;
     versionAButton.button.disabled = !enabled;
     versionBButton.button.disabled = !enabled;
 }
@@ -662,56 +692,155 @@ function el(tag: string, className: string): HTMLElement {
     return node;
 }
 
-function cell(text: string, className?: string): HTMLTableCellElement {
+function text(value: string): Text {
+    return document.createTextNode(value);
+}
+
+/** A codicon glyph element (VS Code's icon font). `name` matches a
+ *  `.codicon-<name>` rule in the stylesheet. */
+function codicon(name: string): HTMLElement {
+    return el("span", `codicon codicon-${name}`);
+}
+
+function cell(value: string, className?: string): HTMLTableCellElement {
     const td = document.createElement("td");
-    td.textContent = text;
+    td.textContent = value;
     if (className) {
         td.className = className;
     }
     return td;
 }
 
-/** A compact icon button (e.g. ▶ run, ↻ reconnect). `glyph` is the visible
- *  symbol; `label` is the accessible name and hover title. */
-function iconButton(
-    glyph: string,
+/** Map a row status to its codicon glyph (diff add/modify/remove, or pass). */
+function statusIcon(status: ReplayRowStatus): string {
+    switch (status) {
+        case "changed":
+            return "diff-modified";
+        case "new-match":
+            return "diff-added";
+        case "lost-match":
+            return "diff-removed";
+        default:
+            return "pass";
+    }
+}
+
+/** The status cell: a coloured codicon + label, like VS Code's diff decorations. */
+function statusCell(
+    status: ReplayRowStatus,
+    label: string,
+): HTMLTableCellElement {
+    const td = document.createElement("td");
+    td.className = "col-status";
+    const wrap = el("span", `status-cell status-${status}`);
+    wrap.append(codicon(statusIcon(status)), text(label));
+    td.appendChild(wrap);
+    return td;
+}
+
+/** The latency cell, with a faint expand chevron revealed on hover for rows that
+ *  drill into a detail diff. */
+function latencyCell(row: ImpactRow): HTMLTableCellElement {
+    const td = document.createElement("td");
+    td.className = "latency";
+    const value = el("span", "latency-value");
+    value.textContent = row.latency;
+    td.appendChild(value);
+    return td;
+}
+
+interface ToolButtonOptions {
+    /** Render with the primary button fill (used for the one Run action). */
+    primary?: boolean;
+    /** Optional visible label next to the icon. */
+    text?: string;
+}
+
+/** A toolbar button carrying a codicon (and optional label). `icon` matches a
+ *  `.codicon-<icon>` rule; `label` is the accessible name and hover title. */
+function toolButton(
+    icon: string,
     label: string,
     onClick: () => void,
+    opts: ToolButtonOptions = {},
 ): HTMLButtonElement {
     const b = document.createElement("button");
-    b.className = "icon-button";
-    b.textContent = glyph;
+    b.type = "button";
+    b.className = opts.primary ? "tool-button is-primary" : "tool-button";
+    b.append(codicon(icon));
+    if (opts.text) {
+        b.append(text(opts.text));
+    }
     b.setAttribute("aria-label", label);
     b.title = label;
     b.addEventListener("click", onClick);
     return b;
 }
 
-/** A labelled picker button (e.g. "Base (A)") that shows the current selection
- *  and asks the host to open the relevant native QuickPick on click. */
-function pickerButton(
-    label: string,
+/** A dropdown-style picker button: an optional side tag (A/B), the current
+ *  selection, and a trailing chevron. Asks the host to open a native QuickPick
+ *  on click. */
+function picker(
     description: string,
     onClick: () => void,
-): { wrap: HTMLElement; button: HTMLButtonElement; value: HTMLElement } {
-    const wrap = el("label", "picker-field");
-    const text = document.createElement("span");
-    text.className = "picker-label";
-    text.textContent = label;
+    sideTag?: string,
+): { button: HTMLButtonElement; value: HTMLElement } {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "picker-button";
+    button.className = "picker";
     button.title = description;
-    button.setAttribute("aria-label", `${label}: choose`);
-    const value = document.createElement("span");
-    value.className = "picker-value";
-    button.appendChild(value);
+    button.setAttribute("aria-label", description);
+    if (sideTag) {
+        const tag = el("span", "picker-side");
+        tag.textContent = sideTag;
+        button.appendChild(tag);
+    }
+    const value = el("span", "picker-value");
+    button.append(value, codicon("chevron-down"));
     button.addEventListener("click", onClick);
-    wrap.append(text, button);
-    return { wrap, button, value };
+    return { button, value };
 }
 
-/** Paint both version buttons with their current labels and tooltips. */
+/** A grouped cluster of action-bar controls. */
+function group(...children: Node[]): HTMLElement {
+    const g = el("div", "bar-group");
+    g.append(...children);
+    return g;
+}
+
+/** A thin vertical separator between action-bar groups. */
+function separator(): HTMLElement {
+    return el("div", "bar-sep");
+}
+
+/** A flexible spacer that pushes trailing controls to the right edge. */
+function spacer(): HTMLElement {
+    return el("div", "bar-spacer");
+}
+
+/** Show an inline error notification in the content area. */
+function showNotification(message: string): void {
+    notificationEl.textContent = "";
+    notificationEl.append(codicon("error"), text(message));
+}
+
+/** Clear the inline error notification. */
+function clearNotification(): void {
+    notificationEl.textContent = "";
+}
+
+/** Paint the provenance strip: the concrete identity each side ran against. */
+function renderProvenance(provenance: RunProvenance): void {
+    provenanceEl.textContent = "";
+    provenanceEl.title = formatProvenanceLine(provenance);
+    provenanceEl.append(
+        text(formatVersionProvenance(provenance.a)),
+        codicon("arrow-right"),
+        text(formatVersionProvenance(provenance.b)),
+    );
+}
+
+/** Paint both version pickers with their current labels and tooltips. */
 function renderVersionButtons(): void {
     versionAButton.value.textContent = versionA.label;
     versionAButton.button.title = versionA.tooltip;
@@ -719,7 +848,10 @@ function renderVersionButtons(): void {
     versionBButton.button.title = versionB.tooltip;
 }
 
-/** Paint the agent button with the current selection (or a prompt). */
-function renderAgentButton(): void {
-    agentButton.value.textContent = currentAgent ?? "Select agent";
+/** Paint the read-only agent label with the current (host-fixed) selection. */
+function renderAgentName(): void {
+    agentNameEl.textContent = currentAgent ?? "—";
+    agentNameEl.title = currentAgent
+        ? `This report compares the "${currentAgent}" agent's corpus across two versions.`
+        : "";
 }

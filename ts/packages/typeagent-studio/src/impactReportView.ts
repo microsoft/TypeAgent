@@ -25,16 +25,19 @@ import type { StudioReplayResult } from "@typeagent/core/runtime";
 const VIEW_TYPE = "typeagentStudio.impactReport";
 
 /**
- * Open (or reveal) the Impact Report webview — the first greenfield client of
- * the `studio` service channel. The webview never opens a socket: it asks the
- * extension host (here) to run a replay, and the host drives the agent's runtime
- * over the channel (`listCorpusAgents` / `replayCorpus`) and posts typed results
+ * Open (or reveal) the Impact Report webview for a single `agent` — the first
+ * greenfield client of the `studio` service channel. One panel exists per agent
+ * (keyed by `instanceKey`), so reports for different agents open as separate
+ * tabs the user can place side-by-side. The webview never opens a socket: it
+ * asks the extension host (here) to run a replay, and the host drives the
+ * agent's runtime over the channel (`replayCorpus`) and posts typed results
  * back. The channel client is owned per-panel and closed on dispose.
  */
 export function openImpactReport(
     context: vscode.ExtensionContext,
     repoRoot: string | undefined,
     getTarget: () => { endpoint: string; token: string } | undefined,
+    agent: string,
 ): void {
     let client: StudioServiceClient | undefined;
     let connecting: Promise<StudioServiceClient | undefined> | undefined;
@@ -58,7 +61,8 @@ export function openImpactReport(
 
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
-        title: "Studio Impact Report",
+        instanceKey: agent,
+        title: `Impact Report — ${agent}`,
         scriptPath: ["dist", "webview", "impactReport.js"],
         stylePath: ["media", "impactReport.css"],
         onMessage: (raw) => void handleMessage(raw),
@@ -103,16 +107,19 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agents: [], connected: false });
+            post({ type: "init", agent, connected: false, available: false });
             return;
         }
-        let agents: string[] = [];
+        // Confirm this agent still has a corpus to replay so the webview can
+        // explain an empty/unavailable state rather than failing a run blindly.
+        let available = false;
         try {
-            agents = await c.listCorpusAgents();
+            const agents = await c.listCorpusAgents();
+            available = agents.includes(agent);
         } catch {
-            // Connected but listing failed; surface an empty agent list.
+            // Connected but listing failed; treat as unavailable for now.
         }
-        post({ type: "init", agents, connected: true });
+        post({ type: "init", agent, connected: true, available });
         // Recover a result computed while the panel was hidden/reloaded.
         if (lastResult) {
             post({
@@ -272,37 +279,6 @@ export function openImpactReport(
         }
     };
 
-    const pickAgent = async (): Promise<void> => {
-        const c = await ensureClient();
-        if (!c) {
-            post({
-                type: "error",
-                message: "Not connected to the studio service.",
-            });
-            return;
-        }
-        let agents: string[] = [];
-        try {
-            agents = await c.listCorpusAgents();
-        } catch {
-            // Listing failed; nothing to pick.
-        }
-        if (agents.length === 0) {
-            void vscode.window.showInformationMessage(
-                "No corpus agents are available to replay.",
-            );
-            return;
-        }
-        const choice = await vscode.window.showQuickPick(agents, {
-            title: "Impact Report — agent",
-            placeHolder: "Select an agent corpus to replay",
-        });
-        if (!choice) {
-            return;
-        }
-        post({ type: "agentPicked", agent: choice });
-    };
-
     const handleMessage = async (raw: unknown): Promise<void> => {
         const msg = parseWebviewMessage(raw);
         if (!msg) {
@@ -318,10 +294,6 @@ export function openImpactReport(
         }
         if (msg.type === "pickVersion") {
             await pickVersion(msg.side);
-            return;
-        }
-        if (msg.type === "pickAgent") {
-            await pickAgent();
             return;
         }
         // msg.type === "run"
@@ -352,7 +324,9 @@ export function openImpactReport(
                 provenance = { a, b, runAt: Date.now() };
             }
             const payload = await c.replayCorpus({
-                agent: msg.agent,
+                // The panel is scoped to a single agent; use that authoritative
+                // agent rather than trusting the webview's echoed value.
+                agent,
                 // The launch controls choose the two versions to compare
                 // (default: HEAD → working tree, the "find a regression"
                 // journey). The static-grammar resolver builds each side and

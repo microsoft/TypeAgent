@@ -1,125 +1,412 @@
 /* Copyright (c) Microsoft Corporation.
    Licensed under the MIT License. */
 
+/* The codicon icon font ships next to this stylesheet (copied from
+   @vscode/codicons at build time) so the report can use VS Code's native icon
+   set under the webview's font-src policy. */
+@font-face {
+  font-family: "codicon";
+  font-display: block;
+  src: url("codicon.ttf") format("truetype");
+}
+
+:root {
+  --ta-gap: 6px;
+  --ta-radius: 4px;
+  --ta-row-height: 22px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
 body {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
-  padding: 12px;
+  padding: 0;
   margin: 0;
 }
 
-/* Class display rules (e.g. `.filters { display: flex }`) outrank the UA
-   `[hidden] { display: none }` by specificity, so an explicit rule is needed
-   for `el.hidden` to actually hide flex containers (the CSP forbids inline
-   `style=""`, so visibility is toggled via the hidden attribute). */
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Class display rules outrank the UA `[hidden] { display: none }` by
+   specificity, so an explicit rule is needed for `el.hidden` to hide flex
+   containers (the CSP forbids inline `style=""`). */
 [hidden] {
   display: none !important;
 }
 
-.toolbar {
+/* --- Codicon base -------------------------------------------------------- */
+.codicon {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.codicon-play::before {
+  content: "\eb2c";
+}
+.codicon-refresh::before {
+  content: "\eb37";
+}
+.codicon-arrow-swap::before {
+  content: "\ebcb";
+}
+.codicon-chevron-down::before {
+  content: "\eab4";
+}
+.codicon-close::before {
+  content: "\ea76";
+}
+.codicon-diff-added::before {
+  content: "\eadc";
+}
+.codicon-diff-modified::before {
+  content: "\eade";
+}
+.codicon-diff-removed::before {
+  content: "\eadf";
+}
+.codicon-pass::before {
+  content: "\eba4";
+}
+.codicon-error::before {
+  content: "\ea87";
+}
+.codicon-warning::before {
+  content: "\ea6c";
+}
+.codicon-arrow-right::before {
+  content: "\ea9c";
+}
+.codicon-list-filter::before {
+  content: "\eb83";
+}
+.codicon-git-compare::before {
+  content: "\eafd";
+}
+.codicon-library::before {
+  content: "\eb9c";
+}
+
+/* --- Action bar (the native editor toolbar) ------------------------------ */
+.action-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--ta-gap);
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  padding: 6px 10px;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  flex: 0 0 auto;
 }
 
-.toolbar button {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-  border: none;
-  padding: 4px 12px;
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.toolbar button:hover:not(:disabled) {
-  background: var(--vscode-button-hoverBackground);
-}
-
-.toolbar button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.icon-button {
-  padding: 3px 9px;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.picker-field {
+.bar-group {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.picker-label {
+.bar-spacer {
+  flex: 1 1 auto;
+}
+
+.bar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--vscode-panel-border);
+}
+
+.bar-prefix {
   color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The read-only agent label: the report's subject, paired with a library icon
+   in the action bar (also reflected in the panel tab title). */
+.agent-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--vscode-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18em;
+}
+
+.bar-group > .codicon-library {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Picker controls read as native dropdowns: value + trailing chevron. */
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 20em;
+  min-width: 6em;
+  height: 24px;
+  padding: 0 6px 0 8px;
+  color: var(--vscode-dropdown-foreground);
+  background: var(--vscode-dropdown-background);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: var(--ta-radius);
+  cursor: pointer;
+  font-family: inherit;
   font-size: 12px;
 }
 
-/* Picker buttons read as dropdowns, not primary actions, so override the
-   .toolbar button fill with the dropdown palette. */
-.toolbar button.picker-button {
-  color: var(--vscode-dropdown-foreground);
-  background: var(--vscode-dropdown-background);
-  border: 1px solid var(--vscode-dropdown-border);
-  padding: 3px 8px;
-  min-width: 7em;
-  max-width: 18em;
-  text-align: left;
-}
-
-.toolbar button.picker-button:hover:not(:disabled) {
+.picker:hover:not(:disabled) {
   background: var(
     --vscode-list-hoverBackground,
     var(--vscode-dropdown-background)
   );
 }
 
+.picker:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.picker:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .picker-value {
-  display: inline-block;
-  max-width: 16em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
+}
+
+.picker .codicon-chevron-down {
+  font-size: 12px;
+  margin-left: auto;
+  color: var(--vscode-descriptionForeground);
+}
+
+.picker-side {
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Toolbar icon buttons (run, swap, reconnect, close). */
+.tool-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ta-radius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.tool-button:hover:not(:disabled) {
+  background: var(
+    --vscode-toolbar-hoverBackground,
+    var(--vscode-list-hoverBackground)
+  );
+}
+
+.tool-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.tool-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The Run button is the one primary action, so it carries the button fill. */
+.tool-button.is-primary {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  padding: 0 12px;
+  font-weight: 600;
+}
+
+.tool-button.is-primary:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/* --- Sub-bar: provenance + run status ------------------------------------ */
+.sub-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  min-height: 22px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.sub-bar:empty {
+  display: none;
+}
+
+.provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provenance .codicon-arrow-right {
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 .status {
   color: var(--vscode-descriptionForeground);
   margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.banner {
-  margin-bottom: 8px;
-  padding: 6px 10px;
-  border-radius: 2px;
-  border-left: 3px solid transparent;
+/* --- Inline notification (errors) ---------------------------------------- */
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border-radius: var(--ta-radius);
+  border: 1px solid
+    var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  background: var(--vscode-inputValidation-errorBackground);
+  color: var(
+    --vscode-inputValidation-errorForeground,
+    var(--vscode-foreground)
+  );
   font-size: 12px;
 }
 
-.banner:empty {
+.notification:empty {
   display: none;
 }
 
-.banner-error {
-  color: var(
-    --vscode-inputValidation-errorForeground,
-    var(--vscode-errorForeground)
-  );
-  background: var(--vscode-inputValidation-errorBackground);
-  border-left-color: var(--vscode-errorForeground);
+.notification .codicon {
+  color: var(--vscode-errorForeground);
+  flex: 0 0 auto;
 }
 
-.banner-provenance {
+/* --- Scrolling content area ---------------------------------------------- */
+.content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0 0 16px;
+}
+
+/* --- Filter segmented control -------------------------------------------- */
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px 4px;
+}
+
+.filters-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
   color: var(--vscode-descriptionForeground);
-  background: var(--vscode-textBlockQuote-background);
-  border-left-color: var(--vscode-textLink-foreground);
-  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  height: 20px;
+  padding: 0 9px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.filter-chip:hover:not(:disabled) {
+  border-color: var(--vscode-focusBorder);
+}
+
+.filter-chip:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.filter-chip .chip-count {
+  color: var(--vscode-descriptionForeground);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chip.is-active {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border-color: var(--vscode-badge-background);
+}
+
+.filter-chip.is-active .chip-count {
+  color: var(--vscode-badge-foreground);
+}
+
+.filter-chip.is-empty {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.filter-chip:disabled {
+  cursor: default;
+}
+
+/* A status dot mirrors the row status colour on each chip. The status-* classes
+   set the text colour; the dot fills from currentColor. */
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+/* --- Results list (styled like a native tree/list) ----------------------- */
+.table-wrap {
+  padding: 4px 0 0;
 }
 
 table {
@@ -128,29 +415,63 @@ table {
   font-size: 13px;
 }
 
-th {
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   text-align: left;
   color: var(--vscode-descriptionForeground);
+  background: var(--vscode-editor-background);
   border-bottom: 1px solid var(--vscode-panel-border);
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
-td {
-  padding: 3px 8px;
-  border-bottom: 1px solid var(--vscode-panel-border);
-  vertical-align: top;
+tbody td {
+  padding: 0 10px;
+  height: var(--ta-row-height);
+  border: none;
+  vertical-align: middle;
+}
+
+tbody tr {
+  border-bottom: 1px solid transparent;
+}
+
+tbody tr:hover td {
+  background: var(--vscode-list-hoverBackground);
+}
+
+td.col-status {
+  white-space: nowrap;
+}
+
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-cell .codicon {
+  font-size: 14px;
 }
 
 td.resolution {
-  color: var(--vscode-descriptionForeground);
+  color: var(--vscode-foreground);
   white-space: nowrap;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
 }
 
 td.latency {
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .status-equal {
@@ -173,9 +494,9 @@ tr.row-clickable {
   cursor: pointer;
 }
 
-tr.row-clickable:hover td,
-tr.row-clickable:focus-visible td {
-  background: var(--vscode-list-hoverBackground);
+tr.row-clickable:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 tr.row-open td {
@@ -183,21 +504,29 @@ tr.row-open td {
   color: var(--vscode-list-activeSelectionForeground);
 }
 
+tr.row-open td.resolution,
+tr.row-open td.latency {
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* --- Detail pane (a peek-style action diff) ------------------------------ */
 .detail-pane {
-  margin-top: 12px;
+  margin: 10px 12px 0;
   border: 1px solid var(--vscode-panel-border);
-  border-radius: 4px;
+  border-radius: var(--ta-radius);
   background: var(
     --vscode-editorWidget-background,
     var(--vscode-editor-background)
   );
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+  overflow: hidden;
 }
 
 .detail-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--vscode-panel-border);
 }
 
@@ -209,9 +538,24 @@ tr.row-open td {
 }
 
 .detail-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-meta .added {
+  color: var(
+    --vscode-charts-green,
+    var(--vscode-gitDecoration-addedResourceForeground)
+  );
+}
+
+.detail-meta .removed {
+  color: var(--vscode-errorForeground);
 }
 
 .detail-close {
@@ -219,23 +563,28 @@ tr.row-open td {
 }
 
 .detail-legend {
-  padding: 4px 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 0;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
 
 .detail-diff {
   margin: 0;
-  padding: 8px 10px;
+  padding: 8px 12px 10px;
   overflow-x: auto;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .diff-line {
   display: block;
   white-space: pre;
+  padding: 0 4px;
+  border-radius: 2px;
 }
 
 .diff-added {
@@ -261,68 +610,34 @@ tr.row-open td {
 .truncation {
   color: var(--vscode-descriptionForeground);
   font-style: italic;
-  margin-top: 8px;
+  padding: 8px 12px 0;
 }
 
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 4px;
-}
-
-.filter-chip {
-  font-family: inherit;
-  font-size: 11px;
-  padding: 2px 10px;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
-  cursor: pointer;
-}
-
-.filter-chip:hover {
-  border-color: var(--vscode-focusBorder);
-}
-
-.filter-chip.is-active {
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-  border-color: var(--vscode-badge-background);
-}
-
-.filter-chip.is-empty {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.filter-chip:disabled {
-  cursor: default;
-}
-
-.filter-chip:disabled:hover {
-  border-color: var(--vscode-panel-border);
-}
-
+/* --- Empty state (first-run guidance) ------------------------------------ */
 .empty-state {
-  border: 1px dashed var(--vscode-panel-border);
-  border-radius: 4px;
-  padding: 18px 16px;
-  margin-top: 12px;
-  background: var(
-    --vscode-editorWidget-background,
-    var(--vscode-editor-background)
-  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  max-width: 36em;
+  margin: 48px auto 0;
+  padding: 24px;
+}
+
+.empty-state .codicon {
+  font-size: 38px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.5;
 }
 
 .empty-state-title {
   font-weight: 600;
-  margin-bottom: 6px;
+  font-size: 14px;
 }
 
 .empty-state-hint {
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
 }

@@ -311,6 +311,10 @@
         {
           "command": "typeagent-studio.focusSandboxes",
           "when": "false"
+        },
+        {
+          "command": "typeagent-studio.openImpactReport",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -323,11 +327,6 @@
           "command": "typeagent-studio.refreshSandboxes",
           "when": "view == typeagentStudioSandboxes",
           "group": "navigation@2"
-        },
-        {
-          "command": "typeagent-studio.openImpactReport",
-          "when": "view == typeagentStudioCorpora",
-          "group": "navigation@0"
         },
         {
           "command": "typeagent-studio.refreshCorpora",
@@ -408,6 +407,11 @@
         },
         {
           "command": "typeagent-studio.addExternalCorpus",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.openImpactReport",
           "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
           "group": "inline@0"
         },
@@ -527,6 +531,7 @@
     "@types/debug": "^4.1.0",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.10",
+    "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.28.1",
     "mkdirp": "^3.0.1",

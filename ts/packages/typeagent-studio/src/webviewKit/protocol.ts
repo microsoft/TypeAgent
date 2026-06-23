@@ -27,10 +27,13 @@ export type HostToWebviewMessage =
     /** Initial (or restored) state + connection on load. */
     | {
           type: "init";
-          /** Corpus agents available to replay (channel `listCorpusAgents`). */
-          agents: string[];
+          /** The agent this report is scoped to (fixed at panel open). */
+          agent: string;
           /** Whether the studio service channel is reachable. */
           connected: boolean;
+          /** Whether `agent` has a corpus available to replay (channel
+           *  `listCorpusAgents`). */
+          available: boolean;
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }
@@ -45,9 +48,7 @@ export type HostToWebviewMessage =
     /** A failure for a prior `run` request (or general error). */
     | { type: "error"; requestId?: number; message: string }
     /** Result of a host version QuickPick (omitted message ⇒ user cancelled). */
-    | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion }
-    /** Result of a host agent QuickPick (omitted message ⇒ user cancelled). */
-    | { type: "agentPicked"; agent: string };
+    | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion };
 
 /** Messages the webview posts to the extension host. */
 export type WebviewToHostMessage =
@@ -65,8 +66,6 @@ export type WebviewToHostMessage =
       }
     /** Ask the host to open a native version QuickPick for one side. */
     | { type: "pickVersion"; side: ReplaySide }
-    /** Ask the host to open a native agent QuickPick. */
-    | { type: "pickAgent" }
     /** Re-attempt the service connection. */
     | { type: "reconnect" };
 
@@ -85,7 +84,6 @@ export function parseWebviewMessage(
     switch (msg.type) {
         case "ready":
         case "reconnect":
-        case "pickAgent":
             return { type: msg.type };
         case "pickVersion": {
             const side = narrowSide((value as { side?: unknown }).side);
