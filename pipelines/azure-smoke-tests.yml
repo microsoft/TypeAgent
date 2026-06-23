@@ -16,8 +16,10 @@
 #     connection that uses Workload Identity Federation. A single AzureCLI@2
 #     task performs the federated (secret-free) login, pulls the secrets, and
 #     publishes AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE so
-#     the later plain test steps authenticate to Azure OpenAI through
-#     @azure/identity's WorkloadIdentityCredential. Nothing to rotate.
+#     the quick CLI smoke step authenticates to Azure OpenAI through
+#     @azure/identity's WorkloadIdentityCredential. The long-running shell and
+#     live suites each take a fresh per-step login instead (they can outlive this
+#     token). Nothing to rotate.
 #
 # Prerequisites:
 #   * GitHub service connection - created when you set up this pipeline via
@@ -114,17 +116,16 @@ jobs:
       # publish the three variables that @azure/identity's
       # WorkloadIdentityCredential (part of DefaultAzureCredential v4) reads —
       # AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_FEDERATED_TOKEN_FILE — so the
-      # later plain test steps reach Azure OpenAI without each needing its own
-      # AzureCLI task. getKeys runs here too, while az is signed in, and writes
+      # quick CLI smoke step reaches Azure OpenAI without its own AzureCLI task.
+      # getKeys runs here too, while az is signed in, and writes
       # ts/config.local.yaml. The connection's service principal needs
       # 'Key Vault Secrets User' on 'build-pipeline-kv' and 'Cognitive Services
       # OpenAI User' on the Azure OpenAI resource(s).
       #
-      # NOTE: the OIDC token is short-lived (~15 min). A step that first calls
-      # Azure OpenAI long after this one can see it expire. The quick CLI smoke
-      # and the shell suites call Azure OpenAI early enough to use this shared
-      # login; Live Tests run after the up-to-60-min shell suite, so they get
-      # their own AzureCLI@2 task (a fresh federated login) below.
+      # NOTE: the OIDC token is short-lived (~15 min). Only the immediate CLI
+      # smoke step relies on this shared login. Every long-running suite (the
+      # shell tests and Live Tests) can run past the token's lifetime, so each
+      # takes its own fresh AzureCLI@2 login below instead.
       - task: AzureCLI@2
         displayName: Azure login + Get Keys
         inputs:
@@ -149,34 +150,46 @@ jobs:
         displayName: Test CLI - smoke
         workingDirectory: $(buildDirectory)/packages/cli
 
-      - script: |
-          npm run shell:test
+      # Long-running suite: it can run past the shared login's ~15-min token
+      # window, so it takes its own AzureCLI@2 task for a fresh federated
+      # `az login`. We first clear the three published AZURE_* variables (they
+      # persist job-wide): otherwise DefaultAzureCredential would try
+      # WorkloadIdentityCredential against the now-stale token file, and a failed
+      # assertion exchange is a hard error that stops the chain before it reaches
+      # this task's fresh AzureCliCredential. Clearing them makes it fall through.
+      - task: AzureCLI@2
         displayName: Shell Tests - full (Windows)
-        workingDirectory: $(buildDirectory)/packages/shell
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: pscore
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)/packages/shell
+          inlineScript: |
+            'AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_FEDERATED_TOKEN_FILE' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+            npm run shell:test
 
-      - bash: |
-          Xvfb :99 -screen 0 1600x1200x24 &
-          export DISPLAY=:99
-          npm run shell:smoke
+      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
+      # rationale as "Shell Tests - full" above.
+      - task: AzureCLI@2
         displayName: Shell Tests - smoke (Linux)
-        workingDirectory: $(buildDirectory)/packages/shell
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+        inputs:
+          azureSubscription: 'MSOCTO-ADO-Service-Connection'
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)/packages/shell
+          inlineScript: |
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+            Xvfb :99 -screen 0 1600x1200x24 &
+            export DISPLAY=:99
+            npm run shell:smoke
 
-      # Live Tests run after the up-to-60-min shell suite, by which point the
-      # federated token the "Azure login + Get Keys" step published (~15 min
-      # lifetime) is long expired. So this step gets its own AzureCLI@2 task,
-      # which performs a fresh federated `az login` at start.
-      #
-      # We first clear the three published AZURE_* variables for this step only.
-      # They persist as job-wide env vars, so without this DefaultAzureCredential
-      # would try WorkloadIdentityCredential against the stale token file — a
-      # failed assertion exchange is a hard error that stops the chain, so it
-      # would never reach the fresh AzureCliCredential from this task's az login.
-      # Unsetting them makes the chain fall through to AzureCliCredential.
-      # Non-blocking (continueOnError) so a late auth issue won't fail the run.
+      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
+      # rationale as "Shell Tests - full" above. Non-blocking (continueOnError)
+      # so a late auth issue won't fail the run.
       - task: AzureCLI@2
         displayName: Live Tests (Linux)
         timeoutInMinutes: 60
