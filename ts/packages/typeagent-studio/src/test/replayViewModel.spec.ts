@@ -9,6 +9,12 @@ import {
     toImpactMethodNote,
     toImpactErrorLine,
     parseVersionInput,
+    narrowVersionSpec,
+    coerceVersionSpec,
+    formatVersionProvenance,
+    formatProvenanceLine,
+    stableStringify,
+    toActionDiff,
     toSideMethodLabel,
     buildImpactFilterChips,
     filterImpactRows,
@@ -158,6 +164,157 @@ test("parseVersionInput treats blanks/keywords as working tree, else a git ref",
         kind: "git",
         ref: "my-branch",
     });
+});
+
+test("narrowVersionSpec validates an untrusted spec object", () => {
+    assert.deepEqual(narrowVersionSpec({ kind: "workingTree" }), {
+        kind: "workingTree",
+    });
+    assert.deepEqual(narrowVersionSpec({ kind: "git", ref: "HEAD" }), {
+        kind: "git",
+        ref: "HEAD",
+    });
+    // Whitespace-only / empty / wrong-typed refs are rejected.
+    assert.equal(narrowVersionSpec({ kind: "git", ref: "" }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "git", ref: "   " }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "git", ref: 5 }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "bogus" }), undefined);
+    assert.equal(narrowVersionSpec(undefined), undefined);
+    assert.equal(narrowVersionSpec("HEAD"), undefined);
+    // A valid ref is trimmed.
+    assert.deepEqual(narrowVersionSpec({ kind: "git", ref: " v1 " }), {
+        kind: "git",
+        ref: "v1",
+    });
+});
+
+test("coerceVersionSpec accepts typed specs, strings, else working tree", () => {
+    // Typed spec from a picker selection.
+    assert.deepEqual(coerceVersionSpec({ kind: "git", ref: "HEAD" }), {
+        kind: "git",
+        ref: "HEAD",
+    });
+    // Raw string falls back to parseVersionInput.
+    assert.deepEqual(coerceVersionSpec("my-branch"), {
+        kind: "git",
+        ref: "my-branch",
+    });
+    assert.deepEqual(coerceVersionSpec("working tree"), {
+        kind: "workingTree",
+    });
+    // A malformed object defaults to the working tree rather than throwing.
+    assert.deepEqual(coerceVersionSpec({ kind: "git", ref: "" }), {
+        kind: "workingTree",
+    });
+    assert.deepEqual(coerceVersionSpec(null), { kind: "workingTree" });
+    assert.deepEqual(coerceVersionSpec(42), { kind: "workingTree" });
+});
+
+test("formatVersionProvenance / formatProvenanceLine summarise a run", () => {
+    assert.equal(
+        formatVersionProvenance({
+            label: "HEAD (main)",
+            workingTree: false,
+            sha: "a1b2c3d",
+        }),
+        "HEAD (main) @ a1b2c3d",
+    );
+    assert.equal(
+        formatVersionProvenance({ label: "HEAD", workingTree: false }),
+        "HEAD",
+    );
+    assert.equal(
+        formatVersionProvenance({
+            label: "working tree",
+            workingTree: true,
+            sha: "a1b2c3d",
+        }),
+        "working tree (on a1b2c3d)",
+    );
+    assert.equal(
+        formatProvenanceLine({
+            a: { label: "HEAD (main)", workingTree: false, sha: "a1b2c3d" },
+            b: { label: "working tree", workingTree: true, sha: "a1b2c3d" },
+            runAt: 0,
+        }),
+        "Ran HEAD (main) @ a1b2c3d \u2192 working tree (on a1b2c3d)",
+    );
+});
+
+test("stableStringify sorts object keys so reorders aren't diffed", () => {
+    assert.equal(
+        stableStringify({ b: 1, a: { d: 2, c: 3 } }),
+        stableStringify({ a: { c: 3, d: 2 }, b: 1 }),
+    );
+});
+
+test("toActionDiff marks identical actions regardless of key order", () => {
+    const diff = toActionDiff(
+        row({
+            equal: true,
+            actionA: { name: "play", value: 1 },
+            actionB: { value: 1, name: "play" },
+        }),
+    );
+    assert.equal(diff.identical, true);
+    assert.equal(diff.onlyA, false);
+    assert.equal(diff.onlyB, false);
+    assert.equal(diff.addedCount, 0);
+    assert.equal(diff.removedCount, 0);
+    assert.ok(diff.lines.every((l) => l.kind === "context"));
+});
+
+test("toActionDiff produces added/removed lines for a changed action", () => {
+    const diff = toActionDiff(
+        row({
+            equal: false,
+            actionA: { name: "play", track: "despacito" },
+            actionB: { name: "play", track: "bohemian" },
+        }),
+    );
+    assert.equal(diff.identical, false);
+    assert.ok(diff.addedCount >= 1);
+    assert.ok(diff.removedCount >= 1);
+    // The unchanged "name" line stays as context.
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "context" && l.text.includes('"name"'),
+        ),
+    );
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "removed" && l.text.includes("despacito"),
+        ),
+    );
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "added" && l.text.includes("bohemian"),
+        ),
+    );
+});
+
+test("toActionDiff flags a new match (no action on A)", () => {
+    const diff = toActionDiff(row({ equal: false, actionB: { name: "play" } }));
+    assert.equal(diff.onlyB, true);
+    assert.equal(diff.onlyA, false);
+    assert.equal(diff.identical, false);
+    // A side renders the "(no action)" placeholder as a removed line.
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "removed" && l.text.includes("(no action)"),
+        ),
+    );
+});
+
+test("toActionDiff flags a lost match (no action on B)", () => {
+    const diff = toActionDiff(row({ equal: false, actionA: { name: "play" } }));
+    assert.equal(diff.onlyA, true);
+    assert.equal(diff.onlyB, false);
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "added" && l.text.includes("(no action)"),
+        ),
+    );
 });
 
 // A spread of every status for the filter helpers: 2 equal, 1 each of the

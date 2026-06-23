@@ -11,9 +11,11 @@
  */
 
 import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type { ActionDelta } from "@typeagent/core/replay";
 import type {
     HostToWebviewMessage,
     WebviewToHostMessage,
+    ReplaySide,
 } from "../protocol.js";
 import {
     toImpactRows,
@@ -27,20 +29,39 @@ import {
     impactFilterNote,
     impactEmptyState,
     allRowsEqual,
+    formatProvenanceLine,
+    toActionDiff,
     type ImpactRow,
     type ReplayRowStatus,
+    type ResolvedVersion,
+    type RunProvenance,
 } from "../replayViewModel.js";
+
+/** Default base (A): the last commit — the baseline of the regression journey. */
+const DEFAULT_VERSION_A: ResolvedVersion = {
+    spec: { kind: "git", ref: "HEAD" },
+    label: "HEAD",
+    tooltip: "Last commit (HEAD).",
+};
+/** Default compare (B): the live working tree (your uncommitted edits). */
+const DEFAULT_VERSION_B: ResolvedVersion = {
+    spec: { kind: "workingTree" },
+    label: "working tree",
+    tooltip: "Your uncommitted edits in the working tree.",
+};
 
 /** A completed result persisted so the report survives navigate-away/reload. */
 interface PersistedResult {
     payload: StudioReplayResult;
+    /** Resolved identity of both sides, captured at run time. */
+    provenance?: RunProvenance;
     /** Epoch ms the run completed, for the "restored" hint. */
     runAt: number;
 }
 interface PanelState {
     selectedAgent?: string;
-    versionA?: string;
-    versionB?: string;
+    versionA?: ResolvedVersion;
+    versionB?: ResolvedVersion;
     lastResult?: PersistedResult;
 }
 interface VsCodeApi {
@@ -71,30 +92,46 @@ let lastRenderedResult: StudioReplayResult | undefined;
 // status filter can re-render the table without re-fetching.
 let currentRows: ImpactRow[] = [];
 let currentTotal = 0;
+// Raw deltas of the current result keyed by utterance id, so a row drill-in can
+// build the action A/B diff without the host re-sending the payload.
+let currentRawById = new Map<string, ActionDelta>();
+// The utterance id whose drill-in detail is open, or undefined when closed; kept
+// so a filter re-render can re-assert (or drop) the open detail.
+let openDetailId: string | undefined;
 // Active status filter; defaults to differences-only so the report opens
 // focused on regressions rather than a wall of unchanged rows.
 const activeFilters = defaultImpactFilters();
+// The current selection driving a run. Versions are typed specs resolved by the
+// host's git picker (or the defaults); the agent comes from the agent picker.
+let currentAgent: string | undefined;
+let versionA: ResolvedVersion = DEFAULT_VERSION_A;
+let versionB: ResolvedVersion = DEFAULT_VERSION_B;
 
 const root = document.getElementById("root")!;
 
 // --- Static shell ---------------------------------------------------------
 const toolbar = el("div", "toolbar");
 const statusEl = el("span", "status");
-const agentSelect = document.createElement("select");
-agentSelect.className = "agent-select";
-agentSelect.setAttribute("aria-label", "Agent to replay");
-agentSelect.title = "The agent whose corpus is replayed and compared.";
-agentSelect.addEventListener("change", () => {
-    persistState({ selectedAgent: agentSelect.value });
-});
-// Two version fields drive the A→B compare. Defaults express the "find a
-// regression" journey: baseline HEAD vs the live working tree (your edits).
-const versionAInput = versionField("Base (A)", "HEAD", "HEAD");
-const versionBInput = versionField(
-    "Compare (B)",
-    "working tree",
-    "working tree",
+// The agent and both versions are chosen through native VS Code QuickPicks the
+// host opens (the webview can't shell out to git); each control is a button that
+// shows the current selection and asks the host to open the relevant picker.
+const agentButton = pickerButton(
+    "agent",
+    "The agent whose corpus is replayed and compared.",
+    () => vscode.postMessage({ type: "pickAgent" }),
 );
+const versionAButton = pickerButton(
+    "Base (A)",
+    "Choose the base (A) version to compare from.",
+    () => vscode.postMessage({ type: "pickVersion", side: "a" }),
+);
+const versionBButton = pickerButton(
+    "Compare (B)",
+    "Choose the compare (B) version to compare to.",
+    () => vscode.postMessage({ type: "pickVersion", side: "b" }),
+);
+const swapButton = iconButton("\u21c4", "Swap A and B", () => swapVersions());
+swapButton.title = "Swap the base (A) and compare (B) versions.";
 const runButton = iconButton("\u25b6", "Run replay", () => runReplay());
 runButton.title =
     "Replay the corpus against both versions and compare actions.";
@@ -103,9 +140,10 @@ const reconnectButton = iconButton("\u21bb", "Reconnect", () => {
 });
 reconnectButton.title = "Re-attempt the connection to the studio service.";
 toolbar.append(
-    agentSelect,
-    versionAInput.wrap,
-    versionBInput.wrap,
+    agentButton.wrap,
+    versionAButton.wrap,
+    swapButton,
+    versionBButton.wrap,
     runButton,
     reconnectButton,
     statusEl,
@@ -115,18 +153,21 @@ const bannerEl = el("div", "banner");
 const filtersEl = el("div", "filters");
 const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
+const detailEl = el("div", "detail-pane");
+detailEl.hidden = true;
 
-root.append(toolbar, bannerEl, filtersEl, emptyStateEl, tableWrap);
+root.append(toolbar, bannerEl, filtersEl, emptyStateEl, tableWrap, detailEl);
 
 setControlsEnabled(false);
 restoreSelection();
+renderVersionButtons();
 
 // --- Messaging ------------------------------------------------------------
 window.addEventListener("message", (event: MessageEvent) => {
     const msg = event.data as HostToWebviewMessage;
     switch (msg.type) {
         case "init":
-            populateAgents(msg.agents);
+            adoptAgents(msg.agents);
             controlsAvailable = msg.connected && msg.agents.length > 0;
             setControlsEnabled(controlsAvailable);
             renderEmptyState();
@@ -141,6 +182,15 @@ window.addEventListener("message", (event: MessageEvent) => {
         case "status":
             setStatus(msg.text);
             break;
+        case "versionPicked":
+            applyVersionPick(msg.side, msg.resolved);
+            break;
+        case "agentPicked":
+            currentAgent = msg.agent;
+            renderAgentButton();
+            persistState({ selectedAgent: msg.agent });
+            renderEmptyState();
+            break;
         case "result":
             // Accept the matching run, or — when no run has been issued since
             // this load (id still 0) — a host recovery re-push of the last
@@ -148,8 +198,8 @@ window.addEventListener("message", (event: MessageEvent) => {
             // so a genuinely stale earlier result can't then overwrite it.
             if (latestRequestId === 0 || msg.requestId === latestRequestId) {
                 latestRequestId = msg.requestId;
-                renderResult(msg.payload);
-                persistResult(msg.payload);
+                renderResult(msg.payload, false, msg.provenance);
+                persistResult(msg.payload, msg.provenance);
                 setControlsEnabled(controlsAvailable);
             }
             break;
@@ -169,14 +219,12 @@ vscode.postMessage({ type: "ready" });
 
 // --- Behavior -------------------------------------------------------------
 function runReplay(): void {
-    const agent = agentSelect.value;
+    const agent = currentAgent;
     if (!agent) {
         return;
     }
     requestId += 1;
     latestRequestId = requestId;
-    const versionA = versionAInput.input.value;
-    const versionB = versionBInput.input.value;
     persistState({ selectedAgent: agent, versionA, versionB });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
@@ -186,11 +234,43 @@ function runReplay(): void {
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
     currentRows = [];
+    currentRawById = new Map();
+    closeDetail();
     tableWrap.textContent = "";
-    vscode.postMessage({ type: "run", requestId, agent, versionA, versionB });
+    vscode.postMessage({
+        type: "run",
+        requestId,
+        agent,
+        versionA: versionA.spec,
+        versionB: versionB.spec,
+    });
 }
 
-function renderResult(result: StudioReplayResult, restored = false): void {
+/** Apply a version selection from the host picker to one side. */
+function applyVersionPick(side: ReplaySide, resolved: ResolvedVersion): void {
+    if (side === "a") {
+        versionA = resolved;
+    } else {
+        versionB = resolved;
+    }
+    renderVersionButtons();
+    persistState({ versionA, versionB });
+}
+
+/** Swap the base (A) and compare (B) versions. */
+function swapVersions(): void {
+    const tmp = versionA;
+    versionA = versionB;
+    versionB = tmp;
+    renderVersionButtons();
+    persistState({ versionA, versionB });
+}
+
+function renderResult(
+    result: StudioReplayResult,
+    restored = false,
+    provenance?: RunProvenance,
+): void {
     lastRenderedResult = result;
     // Reset every output region first so a render fully *replaces* the previous
     // one. `renderResult` runs more than once per result on navigate-away/back:
@@ -206,6 +286,8 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     tableWrap.textContent = "";
     statusEl.title = "";
     currentRows = [];
+    currentRawById = new Map(result.rows.map((r) => [r.utteranceId, r]));
+    closeDetail();
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
@@ -219,12 +301,19 @@ function renderResult(result: StudioReplayResult, restored = false): void {
     // side resolved are kept as hover detail rather than visible banners so the
     // report stays compact without losing the warning.
     statusEl.title = toImpactMethodNote(result.method) ?? "";
-    versionAInput.input.title = `Base (A) resolved via ${toSideMethodLabel(
+    versionAButton.button.title = `${versionA.tooltip}\nResolved via ${toSideMethodLabel(
         result.methodA,
     )}`;
-    versionBInput.input.title = `Compare (B) resolved via ${toSideMethodLabel(
+    versionBButton.button.title = `${versionB.tooltip}\nResolved via ${toSideMethodLabel(
         result.methodB,
     )}`;
+
+    // The provenance line pins the report to the concrete commits it ran
+    // against, so a later branch move doesn't make a bare HEAD label lie.
+    if (provenance) {
+        bannerEl.className = "banner banner-provenance";
+        bannerEl.textContent = formatProvenanceLine(provenance);
+    }
 
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
     currentTotal = result.summary.rowCount;
@@ -348,6 +437,24 @@ function renderTable(): void {
         tr.appendChild(cell(row.resolutionA, "resolution"));
         tr.appendChild(cell(row.resolutionB, "resolution"));
         tr.appendChild(cell(row.latency, "latency"));
+        // Difference rows drill into an action A/B diff; equal rows have nothing
+        // to compare, so they stay inert.
+        if (row.status !== "equal" && currentRawById.has(row.utteranceId)) {
+            tr.classList.add("row-clickable");
+            if (row.utteranceId === openDetailId) {
+                tr.classList.add("row-open");
+            }
+            tr.tabIndex = 0;
+            tr.setAttribute("role", "button");
+            tr.title = "Show the action A/B diff for this utterance.";
+            tr.addEventListener("click", () => openDetail(row.utteranceId));
+            tr.addEventListener("keydown", (e: KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openDetail(row.utteranceId);
+                }
+            });
+        }
         table.appendChild(tr);
     }
     tableWrap.appendChild(table);
@@ -379,6 +486,73 @@ function renderTable(): void {
     }
 }
 
+/** Open the row drill-in for `utteranceId`, rendering the action A/B diff. The
+ *  raw delta is looked up from the current result; a missing id closes the pane
+ *  (e.g. the row was filtered out by a status change). */
+function openDetail(utteranceId: string): void {
+    const delta = currentRawById.get(utteranceId);
+    if (!delta) {
+        closeDetail();
+        return;
+    }
+    openDetailId = utteranceId;
+    renderDetail(delta);
+    // Re-render the table so the open row gets its highlight.
+    renderTable();
+    detailEl.scrollIntoView({ block: "nearest" });
+}
+
+/** Hide and clear the drill-in detail pane. */
+function closeDetail(): void {
+    openDetailId = undefined;
+    detailEl.hidden = true;
+    detailEl.textContent = "";
+}
+
+/** Paint the detail pane: a header (utterance + close) and the unified A/B diff
+ *  of the two resolved actions. */
+function renderDetail(delta: ActionDelta): void {
+    detailEl.textContent = "";
+    const diff = toActionDiff(delta);
+
+    const header = el("div", "detail-header");
+    const title = el("span", "detail-title");
+    title.textContent = collapseWhitespace(delta.utterance);
+    title.title = delta.utterance;
+    const meta = el("span", "detail-meta");
+    meta.textContent = diff.onlyB
+        ? "new match (no action on A)"
+        : diff.onlyA
+          ? "lost match (no action on B)"
+          : diff.identical
+            ? "actions identical"
+            : `+${diff.addedCount} \u2212${diff.removedCount}`;
+    const close = iconButton("\u2715", "Close detail", () => closeDetail());
+    close.classList.add("detail-close");
+    header.append(title, meta, close);
+
+    const legend = el("div", "detail-legend");
+    legend.textContent = "Base (A) \u2192 Compare (B)";
+
+    const body = el("pre", "detail-diff");
+    for (const line of diff.lines) {
+        const span = document.createElement("span");
+        span.className = `diff-line diff-${line.kind}`;
+        const sign =
+            line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " ";
+        span.textContent = `${sign} ${line.text}\n`;
+        body.appendChild(span);
+    }
+
+    detailEl.append(header, legend, body);
+    detailEl.hidden = false;
+}
+
+/** Collapse runs of whitespace to single spaces for a compact one-line header. */
+function collapseWhitespace(text: string): string {
+    return text.replace(/\s+/g, " ").trim();
+}
+
 /**
  * First-run guidance: shown only before any replay has run and once the
  * controls are usable, so a newcomer knows what the report does and how to
@@ -399,41 +573,39 @@ function renderEmptyState(): void {
     emptyStateEl.hidden = false;
 }
 
-function populateAgents(agents: string[]): void {
-    const previous = vscode.getState()?.selectedAgent;
-    agentSelect.textContent = "";
-    for (const a of agents) {
-        const opt = document.createElement("option");
-        opt.value = a;
-        opt.textContent = a;
-        agentSelect.appendChild(opt);
+function adoptAgents(agents: string[]): void {
+    // Keep the persisted/selected agent if still available; otherwise default to
+    // the first agent so a newcomer can run without opening the picker first.
+    if (currentAgent && agents.includes(currentAgent)) {
+        // keep it
+    } else if (agents.length > 0) {
+        currentAgent = agents[0];
+        persistState({ selectedAgent: currentAgent });
     }
-    if (previous && agents.includes(previous)) {
-        agentSelect.value = previous;
-    }
+    renderAgentButton();
 }
 
 function restoreSelection(): void {
     const state = vscode.getState();
-    const previous = state?.selectedAgent;
-    if (previous) {
-        const opt = document.createElement("option");
-        opt.value = previous;
-        opt.textContent = previous;
-        agentSelect.appendChild(opt);
-        agentSelect.value = previous;
+    if (state?.selectedAgent) {
+        currentAgent = state.selectedAgent;
     }
-    if (state?.versionA !== undefined) {
-        versionAInput.input.value = state.versionA;
+    if (state?.versionA) {
+        versionA = state.versionA;
     }
-    if (state?.versionB !== undefined) {
-        versionBInput.input.value = state.versionB;
+    if (state?.versionB) {
+        versionB = state.versionB;
     }
+    renderAgentButton();
     // Re-render the last result immediately so navigating away and back doesn't
     // blank the report. The host also re-pushes the full result on `ready`
     // (recovery), which upgrades this possibly-truncated snapshot.
     if (state?.lastResult) {
-        renderResult(state.lastResult.payload, true);
+        renderResult(
+            state.lastResult.payload,
+            true,
+            state.lastResult.provenance,
+        );
     }
 }
 
@@ -454,19 +626,29 @@ function persistState(extra: Partial<PanelState>): void {
 }
 
 /** Persist a completed result (row-capped) so a reload re-renders it. */
-function persistResult(payload: StudioReplayResult): void {
+function persistResult(
+    payload: StudioReplayResult,
+    provenance?: RunProvenance,
+): void {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
             ? { ...payload, rows: payload.rows.slice(0, MAX_PERSISTED_ROWS) }
             : payload;
-    persistState({ lastResult: { payload: bounded, runAt: Date.now() } });
+    persistState({
+        lastResult: {
+            payload: bounded,
+            runAt: Date.now(),
+            ...(provenance ? { provenance } : {}),
+        },
+    });
 }
 
 function setControlsEnabled(enabled: boolean): void {
     runButton.disabled = !enabled;
-    agentSelect.disabled = !enabled;
-    versionAInput.input.disabled = !enabled;
-    versionBInput.input.disabled = !enabled;
+    swapButton.disabled = !enabled;
+    agentButton.button.disabled = !enabled;
+    versionAButton.button.disabled = !enabled;
+    versionBButton.button.disabled = !enabled;
 }
 
 function setStatus(text: string): void {
@@ -505,31 +687,39 @@ function iconButton(
     return b;
 }
 
-/** A labelled version text field (e.g. "Base (A)"): label + input wrapped for
- *  the toolbar. `value` seeds the default; `placeholder` hints the keyword. */
-function versionField(
+/** A labelled picker button (e.g. "Base (A)") that shows the current selection
+ *  and asks the host to open the relevant native QuickPick on click. */
+function pickerButton(
     label: string,
-    value: string,
-    placeholder: string,
-): { wrap: HTMLElement; input: HTMLInputElement } {
-    const wrap = el("label", "version-field");
+    description: string,
+    onClick: () => void,
+): { wrap: HTMLElement; button: HTMLButtonElement; value: HTMLElement } {
+    const wrap = el("label", "picker-field");
     const text = document.createElement("span");
-    text.className = "version-label";
+    text.className = "picker-label";
     text.textContent = label;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "version-input";
-    input.value = value;
-    input.placeholder = placeholder;
-    input.setAttribute(
-        "aria-label",
-        `${label} version (git ref or working tree)`,
-    );
-    input.addEventListener("keydown", (e: KeyboardEvent) => {
-        if (e.key === "Enter" && !runButton.disabled) {
-            runReplay();
-        }
-    });
-    wrap.append(text, input);
-    return { wrap, input };
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "picker-button";
+    button.title = description;
+    button.setAttribute("aria-label", `${label}: choose`);
+    const value = document.createElement("span");
+    value.className = "picker-value";
+    button.appendChild(value);
+    button.addEventListener("click", onClick);
+    wrap.append(text, button);
+    return { wrap, button, value };
+}
+
+/** Paint both version buttons with their current labels and tooltips. */
+function renderVersionButtons(): void {
+    versionAButton.value.textContent = versionA.label;
+    versionAButton.button.title = versionA.tooltip;
+    versionBButton.value.textContent = versionB.label;
+    versionBButton.button.title = versionB.tooltip;
+}
+
+/** Paint the agent button with the current selection (or a prompt). */
+function renderAgentButton(): void {
+    agentButton.value.textContent = currentAgent ?? "Select agent";
 }

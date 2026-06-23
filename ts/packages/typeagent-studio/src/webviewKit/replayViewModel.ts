@@ -244,6 +244,45 @@ export function parseVersionInput(raw: string | undefined): VersionSpec {
     return { kind: "git", ref: value };
 }
 
+/**
+ * Narrow an untrusted value (e.g. a version object posted by the webview after a
+ * QuickPick selection) into a typed {@link VersionSpec}, or `undefined` when it
+ * is not a well-formed spec. The host must NOT trust an arbitrary object the
+ * webview sends, so every `run` spec is re-validated here before it reaches the
+ * replay engine.
+ */
+export function narrowVersionSpec(value: unknown): VersionSpec | undefined {
+    if (typeof value !== "object" || value === null) {
+        return undefined;
+    }
+    const v = value as { kind?: unknown; ref?: unknown };
+    if (v.kind === "workingTree") {
+        return { kind: "workingTree" };
+    }
+    if (v.kind === "git" && typeof v.ref === "string" && v.ref.trim() !== "") {
+        return { kind: "git", ref: v.ref.trim() };
+    }
+    return undefined;
+}
+
+/**
+ * Coerce an untrusted version field from a `run` message into a
+ * {@link VersionSpec}. A well-formed typed spec (from a picker selection) is
+ * taken as-is after validation; a raw string falls back to
+ * {@link parseVersionInput} (the legacy text-field / test seam); anything else
+ * defaults to the working tree.
+ */
+export function coerceVersionSpec(value: unknown): VersionSpec {
+    const narrowed = narrowVersionSpec(value);
+    if (narrowed) {
+        return narrowed;
+    }
+    if (typeof value === "string") {
+        return parseVersionInput(value);
+    }
+    return { kind: "workingTree" };
+}
+
 const METHOD_LABEL: Record<StudioReplayMethod, string> = {
     identity: "identity",
     "static-grammar": "static grammar",
@@ -255,4 +294,186 @@ const METHOD_LABEL: Record<StudioReplayMethod, string> = {
  *  Used as hover detail rather than a visible column. */
 export function toSideMethodLabel(method: StudioReplayMethod): string {
     return METHOD_LABEL[method];
+}
+
+/**
+ * A version the user selected through a picker: the typed spec the host will run
+ * plus the resolved, human-readable label/tooltip to show in the launch control.
+ */
+export interface ResolvedVersion {
+    spec: VersionSpec;
+    /** Short display label, e.g. "HEAD (main)", "v1.2.0", "a1b2c3d fix rule". */
+    label: string;
+    /** Full meaning, shown as the control's hover title. */
+    tooltip: string;
+}
+
+/** The concrete identity a side actually ran against, captured at run time so a
+ *  bare `HEAD`/branch label (which goes stale when the branch moves) or drifting
+ *  working-tree content is pinned to the commit the report reflects. */
+export interface VersionProvenance {
+    /** The display label the run used (e.g. "HEAD (main)"). */
+    label: string;
+    /** The resolved commit SHA, when the side is a git ref. */
+    sha?: string;
+    /** True when the side is the live working tree (uncommitted edits). */
+    workingTree: boolean;
+}
+
+/** Provenance for a completed run: the resolved identity of both sides plus when
+ *  the run completed. Persisted with the report so it stays self-describing. */
+export interface RunProvenance {
+    a: VersionProvenance;
+    b: VersionProvenance;
+    /** Epoch ms the run was issued. */
+    runAt: number;
+}
+
+/** Short label for one side's captured identity, e.g. "working tree",
+ *  "HEAD (main) @ a1b2c3d", or just the label when no SHA was resolved. */
+export function formatVersionProvenance(p: VersionProvenance): string {
+    if (p.workingTree) {
+        return p.sha ? `working tree (on ${p.sha})` : "working tree";
+    }
+    return p.sha ? `${p.label} @ ${p.sha}` : p.label;
+}
+
+/** One-line provenance summary for the report header/tooltip, e.g.
+ *  "Ran HEAD (main) @ a1b2c3d \u2192 working tree". */
+export function formatProvenanceLine(p: RunProvenance): string {
+    return `Ran ${formatVersionProvenance(p.a)} \u2192 ${formatVersionProvenance(
+        p.b,
+    )}`;
+}
+
+/** The kind of a unified-diff line: present on both sides, only B (added), or
+ *  only A (removed). */
+export type DiffLineKind = "context" | "added" | "removed";
+
+export interface DiffLine {
+    kind: DiffLineKind;
+    text: string;
+}
+
+/** A row drill-in's action A → B comparison, as a unified line diff of the two
+ *  resolved actions serialised to canonical (key-sorted) pretty JSON. */
+export interface ActionDiff {
+    lines: DiffLine[];
+    /** Lines present only on side B. */
+    addedCount: number;
+    /** Lines present only on side A. */
+    removedCount: number;
+    /** Both sides resolved an action and they serialise identically. */
+    identical: boolean;
+    /** Side A resolved no action (a new match in B). */
+    onlyB: boolean;
+    /** Side B resolved no action (a lost match from A). */
+    onlyA: boolean;
+}
+
+/** Placeholder shown for a side that resolved no action. */
+const NO_ACTION_TEXT = "(no action)";
+/** LCS is O(n·m); above this product fall back to a naive replace-block diff so
+ *  a pathologically large action can't lock up the webview. */
+const DIFF_LCS_CELL_BUDGET = 250_000;
+
+/** Recursively sort object keys so two equivalent actions serialise identically
+ *  regardless of key insertion order (a property reorder isn't a real change). */
+function sortValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(sortValue);
+    }
+    if (value !== null && typeof value === "object") {
+        const out: Record<string, unknown> = {};
+        for (const key of Object.keys(
+            value as Record<string, unknown>,
+        ).sort()) {
+            out[key] = sortValue((value as Record<string, unknown>)[key]);
+        }
+        return out;
+    }
+    return value;
+}
+
+/** Canonical pretty JSON (sorted keys, 2-space indent) for diffing actions. */
+export function stableStringify(value: unknown): string {
+    return JSON.stringify(sortValue(value), null, 2);
+}
+
+/** Unified line diff of `a` → `b` via LCS, with a naive fallback for very large
+ *  inputs (all A removed, then all B added). */
+function diffLines(a: string[], b: string[]): DiffLine[] {
+    const n = a.length;
+    const m = b.length;
+    if (n * m > DIFF_LCS_CELL_BUDGET) {
+        return [
+            ...a.map((text): DiffLine => ({ kind: "removed", text })),
+            ...b.map((text): DiffLine => ({ kind: "added", text })),
+        ];
+    }
+    // dp[i][j] = LCS length of a[i:] and b[j:].
+    const dp: number[][] = Array.from({ length: n + 1 }, () =>
+        new Array<number>(m + 1).fill(0),
+    );
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            dp[i][j] =
+                a[i] === b[j]
+                    ? dp[i + 1][j + 1] + 1
+                    : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+    }
+    const out: DiffLine[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+        if (a[i] === b[j]) {
+            out.push({ kind: "context", text: a[i] });
+            i++;
+            j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+            out.push({ kind: "removed", text: a[i] });
+            i++;
+        } else {
+            out.push({ kind: "added", text: b[j] });
+            j++;
+        }
+    }
+    while (i < n) {
+        out.push({ kind: "removed", text: a[i] });
+        i++;
+    }
+    while (j < m) {
+        out.push({ kind: "added", text: b[j] });
+        j++;
+    }
+    return out;
+}
+
+/**
+ * Build the A→B action diff for a row drill-in from the {@link ActionDelta} we
+ * already have — no engine round-trip. A side that resolved no action (a new or
+ * lost match) is rendered against the `(no action)` placeholder so the diff still
+ * reads as a clean add/remove block.
+ */
+export function toActionDiff(row: ActionDelta): ActionDiff {
+    const aPresent = row.actionA !== undefined;
+    const bPresent = row.actionB !== undefined;
+    const aText = aPresent ? stableStringify(row.actionA) : NO_ACTION_TEXT;
+    const bText = bPresent ? stableStringify(row.actionB) : NO_ACTION_TEXT;
+    const lines = diffLines(aText.split("\n"), bText.split("\n"));
+    let addedCount = 0;
+    let removedCount = 0;
+    for (const line of lines) {
+        if (line.kind === "added") addedCount++;
+        else if (line.kind === "removed") removedCount++;
+    }
+    return {
+        lines,
+        addedCount,
+        removedCount,
+        identical: aPresent && bPresent && aText === bText,
+        onlyB: !aPresent && bPresent,
+        onlyA: aPresent && !bPresent,
+    };
 }

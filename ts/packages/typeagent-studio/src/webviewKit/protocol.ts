@@ -12,6 +12,15 @@
  */
 
 import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type { VersionSpec } from "@typeagent/core/replay";
+import {
+    coerceVersionSpec,
+    type ResolvedVersion,
+    type RunProvenance,
+} from "./replayViewModel.js";
+
+/** Which launch-control side a version applies to. */
+export type ReplaySide = "a" | "b";
 
 /** Messages the extension host posts to the webview. */
 export type HostToWebviewMessage =
@@ -26,9 +35,19 @@ export type HostToWebviewMessage =
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }
     /** A completed replay result for a prior `run` request. */
-    | { type: "result"; requestId: number; payload: StudioReplayResult }
+    | {
+          type: "result";
+          requestId: number;
+          payload: StudioReplayResult;
+          /** Resolved identity of both sides, captured at run time. */
+          provenance?: RunProvenance;
+      }
     /** A failure for a prior `run` request (or general error). */
-    | { type: "error"; requestId?: number; message: string };
+    | { type: "error"; requestId?: number; message: string }
+    /** Result of a host version QuickPick (omitted message ⇒ user cancelled). */
+    | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion }
+    /** Result of a host agent QuickPick (omitted message ⇒ user cancelled). */
+    | { type: "agentPicked"; agent: string };
 
 /** Messages the webview posts to the extension host. */
 export type WebviewToHostMessage =
@@ -39,13 +58,21 @@ export type WebviewToHostMessage =
           type: "run";
           requestId: number;
           agent: string;
-          /** Raw base (A) version field; empty/"working tree" → working tree. */
-          versionA: string;
-          /** Raw compare (B) version field; empty/"working tree" → working tree. */
-          versionB: string;
+          /** Validated base (A) version spec. */
+          versionA: VersionSpec;
+          /** Validated compare (B) version spec. */
+          versionB: VersionSpec;
       }
+    /** Ask the host to open a native version QuickPick for one side. */
+    | { type: "pickVersion"; side: ReplaySide }
+    /** Ask the host to open a native agent QuickPick. */
+    | { type: "pickAgent" }
     /** Re-attempt the service connection. */
     | { type: "reconnect" };
+
+function narrowSide(value: unknown): ReplaySide | undefined {
+    return value === "a" || value === "b" ? value : undefined;
+}
 
 /** Narrow an untrusted value into a {@link WebviewToHostMessage}. */
 export function parseWebviewMessage(
@@ -58,7 +85,12 @@ export function parseWebviewMessage(
     switch (msg.type) {
         case "ready":
         case "reconnect":
+        case "pickAgent":
             return { type: msg.type };
+        case "pickVersion": {
+            const side = narrowSide((value as { side?: unknown }).side);
+            return side ? { type: "pickVersion", side } : undefined;
+        }
         case "run": {
             const m = value as {
                 requestId?: unknown;
@@ -72,12 +104,15 @@ export function parseWebviewMessage(
                 m.requestId >= 0 &&
                 typeof m.agent === "string"
             ) {
+                // Accept either a typed spec (picker selection) or a raw string
+                // (legacy text field / test seam); always re-validate host-side
+                // rather than trusting the webview's object.
                 return {
                     type: "run",
                     requestId: m.requestId,
                     agent: m.agent,
-                    versionA: typeof m.versionA === "string" ? m.versionA : "",
-                    versionB: typeof m.versionB === "string" ? m.versionB : "",
+                    versionA: coerceVersionSpec(m.versionA),
+                    versionB: coerceVersionSpec(m.versionB),
                 };
             }
             return undefined;
