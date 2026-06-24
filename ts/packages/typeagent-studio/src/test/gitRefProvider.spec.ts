@@ -140,7 +140,9 @@ test("resolveRef returns undefined for empty input", async () => {
 });
 
 test("resolveVersionProvenance pins a git ref to its short SHA", async () => {
-    const exec = stubExec({ "rev-parse --short HEAD": "a1b2c3d\n" });
+    const exec = stubExec({
+        "rev-parse --short --end-of-options": "a1b2c3d\n",
+    });
     const prov = await resolveVersionProvenance(
         { kind: "git", ref: "HEAD" },
         exec,
@@ -150,6 +152,20 @@ test("resolveVersionProvenance pins a git ref to its short SHA", async () => {
         workingTree: false,
         sha: "a1b2c3d",
     });
+});
+
+test("resolveVersionProvenance guards a ref with --end-of-options", async () => {
+    let captured: string[] = [];
+    const exec: GitExec = async (args) => {
+        captured = args;
+        return "a1b2c3d\n";
+    };
+    await resolveVersionProvenance({ kind: "git", ref: "--output=evil" }, exec);
+    // `--end-of-options` must precede the ref so a leading-dash ref can't be
+    // parsed as a git option.
+    const eo = captured.indexOf("--end-of-options");
+    assert.ok(eo >= 0, "expected --end-of-options in the rev-parse args");
+    assert.equal(captured[eo + 1], "--output=evil");
 });
 
 test("resolveVersionProvenance records the HEAD a working tree sits on", async () => {

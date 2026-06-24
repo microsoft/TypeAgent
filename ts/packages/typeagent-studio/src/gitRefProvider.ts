@@ -243,6 +243,10 @@ export async function resolveRef(
         "-n",
         "1",
         `--format=%h${FS}%s`,
+        // `--end-of-options` stops git from parsing a ref that begins with `-`
+        // (e.g. a typed `--output=…`) as an option; `--` then guards against a
+        // ref that collides with a path name.
+        "--end-of-options",
         `${input}^{commit}`,
         "--",
     ]);
@@ -289,7 +293,11 @@ export async function resolveVersionProvenance(
     }
     const base: VersionProvenance = { label: spec.ref, workingTree: false };
     try {
-        const sha = (await exec(["rev-parse", "--short", spec.ref])).trim();
+        // `--end-of-options` keeps a webview-supplied ref that starts with `-`
+        // from being parsed as a git option.
+        const sha = (
+            await exec(["rev-parse", "--short", "--end-of-options", spec.ref])
+        ).trim();
         return sha ? { ...base, sha } : base;
     } catch {
         return base;
