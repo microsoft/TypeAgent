@@ -524,7 +524,7 @@ td.resolution {
 td.latency {
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 

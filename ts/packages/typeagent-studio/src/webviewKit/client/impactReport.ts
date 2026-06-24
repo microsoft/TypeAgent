@@ -100,6 +100,10 @@ let currentRawById = new Map<string, ActionDelta>();
 // The utterance id whose drill-in detail is open, or undefined when closed; kept
 // so a filter re-render can re-assert (or drop) the open detail.
 let openDetailId: string | undefined;
+// The utterance id of the visually selected row (turns blue). Tracked separately
+// from openDetailId so equal rows — which have no A/B diff to show — can still
+// read as "selected" while the detail pane stays closed.
+let selectedId: string | undefined;
 // Active status filter; defaults to differences-only so the report opens
 // focused on regressions rather than a wall of unchanged rows.
 const activeFilters = defaultImpactFilters();
@@ -464,10 +468,30 @@ function renderTable(): void {
     const table = document.createElement("table");
     const thead = document.createElement("thead");
     const head = document.createElement("tr");
-    for (const h of ["Utterance", "Status", "Base (A)", "Compare (B)", ""]) {
+    const headers: { label: string; title: string; ariaLabel?: string }[] = [
+        {
+            label: "Utterance",
+            title: "The corpus utterance that was replayed.",
+        },
+        {
+            label: "Status",
+            title: "How Base (A) and Compare (B) compare for this utterance.",
+        },
+        {
+            label: "Base (A)",
+            title: "How Base (A) resolved the utterance (cache state).",
+        },
+        {
+            label: "Compare (B)",
+            title: "How Compare (B) resolved the utterance (cache state).",
+        },
+        { label: "", title: LATENCY_TOOLTIP, ariaLabel: "Latency" },
+    ];
+    for (const h of headers) {
         const th = document.createElement("th");
-        th.textContent = h || "Latency";
-        if (!h) th.setAttribute("aria-label", "Latency");
+        th.textContent = h.label || "Latency";
+        th.title = h.title;
+        if (h.ariaLabel) th.setAttribute("aria-label", h.ariaLabel);
         head.appendChild(th);
     }
     thead.appendChild(head);
@@ -478,24 +502,44 @@ function renderTable(): void {
         const tr = document.createElement("tr");
         tr.appendChild(cell(row.utterance));
         tr.appendChild(statusCell(row.status, row.statusLabel));
-        tr.appendChild(cell(row.resolutionA, "resolution"));
-        tr.appendChild(cell(row.resolutionB, "resolution"));
+        tr.appendChild(
+            cell(
+                row.resolutionA,
+                "resolution",
+                resolutionTooltip(row.resolutionA),
+            ),
+        );
+        tr.appendChild(
+            cell(
+                row.resolutionB,
+                "resolution",
+                resolutionTooltip(row.resolutionB),
+            ),
+        );
         tr.appendChild(latencyCell(row));
-        // Difference rows drill into an action A/B diff; equal rows have nothing
-        // to compare, so they stay inert.
-        if (row.status !== "equal" && currentRawById.has(row.utteranceId)) {
+        // Every row is clickable. Difference rows drill into an action A/B diff;
+        // equal rows have nothing to compare, so a click just clears any open
+        // detail pane.
+        if (currentRawById.has(row.utteranceId)) {
+            const isDiff = row.status !== "equal";
             tr.classList.add("row-clickable");
-            if (row.utteranceId === openDetailId) {
+            if (row.utteranceId === selectedId) {
                 tr.classList.add("row-open");
             }
             tr.tabIndex = 0;
             tr.setAttribute("role", "button");
-            tr.title = "Show the action A/B diff for this utterance.";
-            tr.addEventListener("click", () => openDetail(row.utteranceId));
+            tr.title = isDiff
+                ? "Show the action A/B diff for this utterance."
+                : "Equal row — click to close the detail diff.";
+            const activate = () =>
+                isDiff
+                    ? openDetail(row.utteranceId)
+                    : selectEqualRow(row.utteranceId);
+            tr.addEventListener("click", activate);
             tr.addEventListener("keydown", (e: KeyboardEvent) => {
                 if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    openDetail(row.utteranceId);
+                    activate();
                 }
             });
         }
@@ -541,15 +585,27 @@ function openDetail(utteranceId: string): void {
         return;
     }
     openDetailId = utteranceId;
+    selectedId = utteranceId;
     renderDetail(delta);
     // Re-render the table so the open row gets its highlight.
     renderTable();
     detailEl.scrollIntoView({ block: "nearest" });
 }
 
-/** Hide and clear the drill-in detail pane. */
+/** Select an equal row: it has no A/B diff, so just highlight it and close any
+ *  open detail pane. */
+function selectEqualRow(utteranceId: string): void {
+    selectedId = utteranceId;
+    openDetailId = undefined;
+    detailEl.hidden = true;
+    detailEl.textContent = "";
+    renderTable();
+}
+
+/** Hide the drill-in detail pane and clear the row selection. */
 function closeDetail(): void {
     openDetailId = undefined;
+    selectedId = undefined;
     detailEl.hidden = true;
     detailEl.textContent = "";
 }
@@ -581,7 +637,10 @@ function renderDetail(delta: ActionDelta): void {
         removed.textContent = `\u2212${diff.removedCount}`;
         meta.append(added, removed);
     }
-    const close = toolButton("close", "Close detail", () => closeDetail());
+    const close = toolButton("close", "Close detail", () => {
+        closeDetail();
+        renderTable();
+    });
     close.classList.add("detail-close");
     header.append(title, meta, close);
 
@@ -717,13 +776,55 @@ function codicon(name: string): HTMLElement {
     return el("span", `codicon codicon-${name}`);
 }
 
-function cell(value: string, className?: string): HTMLTableCellElement {
+function cell(
+    value: string,
+    className?: string,
+    title?: string,
+): HTMLTableCellElement {
     const td = document.createElement("td");
     td.textContent = value;
     if (className) {
         td.className = className;
     }
+    if (title) {
+        td.title = title;
+    }
     return td;
+}
+
+const STATUS_TOOLTIP: Record<ReplayRowStatus, string> = {
+    equal: "Equal — Base (A) and Compare (B) resolved to the same action; nothing changed.",
+    changed:
+        "Changed — both sides resolved an action, but the two actions differ.",
+    "new-match":
+        "New match — Compare (B) resolved an action where Base (A) did not.",
+    "lost-match":
+        "Lost match — Base (A) resolved an action but Compare (B) no longer does.",
+};
+
+const LATENCY_TOOLTIP =
+    "Resolution latency in milliseconds — Base (A) / Compare (B).";
+
+/** Human description of a per-side resolution token (see `sideToken` in the
+ *  replay view model for how a raw cache state becomes one of these). */
+function resolutionTooltip(token: string): string {
+    switch (token) {
+        case "hit":
+        case "hit\u00b7cache":
+            return "Hit — the action was served from the construction cache.";
+        case "miss":
+            return "Miss — no construction matched this utterance.";
+        case "miss\u00b7grammar":
+            return "Miss — no cached construction matched; this side fell through to the grammar.";
+        case "needs-explanation":
+            return "Needs explanation — no cached construction matched and the miss policy skipped the LLM, so the utterance needs an explanation (LLM) to resolve.";
+        case "llm-resolved":
+            return "LLM resolved — the action was produced by calling the live language model.";
+        case "skipped":
+            return "Skipped — this utterance was not evaluated on this side.";
+        default:
+            return token;
+    }
 }
 
 /** Map a row status to its codicon glyph (diff add/modify/remove, or pass). */
@@ -747,6 +848,7 @@ function statusCell(
 ): HTMLTableCellElement {
     const td = document.createElement("td");
     td.className = "col-status";
+    td.title = STATUS_TOOLTIP[status];
     const wrap = el("span", `status-cell status-${status}`);
     wrap.append(codicon(statusIcon(status)), text(label));
     td.appendChild(wrap);
@@ -758,6 +860,7 @@ function statusCell(
 function latencyCell(row: ImpactRow): HTMLTableCellElement {
     const td = document.createElement("td");
     td.className = "latency";
+    td.title = LATENCY_TOOLTIP;
     const value = el("span", "latency-value");
     value.textContent = row.latency;
     td.appendChild(value);
