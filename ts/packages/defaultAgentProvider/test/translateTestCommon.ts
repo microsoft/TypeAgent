@@ -342,6 +342,32 @@ function checkPossibleMatch(
     }
 }
 
+// The translator may return a bare host (e.g. "jsbach.net") where the canonical
+// form carries a scheme ("http://jsbach.net"). The browser treats the two
+// equivalently, so normalize a scheme-less host by prepending "http://" before
+// comparison. Applied symmetrically to expected and received values, so it can
+// only widen matches — never introduce a false failure.
+function hasUrlScheme(value: string): boolean {
+    return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+}
+function isBareHost(value: string): boolean {
+    return (
+        !hasUrlScheme(value) &&
+        /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(value)
+    );
+}
+function normalizeUrlParams(action: TypeAgentAction) {
+    const params = action.parameters as Record<string, unknown> | undefined;
+    if (params === undefined) {
+        return;
+    }
+    for (const [name, value] of Object.entries(params)) {
+        if (typeof value === "string" && isBareHost(value)) {
+            params[name] = `http://${value}`;
+        }
+    }
+}
+
 function validateExpectedAction(
     match: ActionMatchWithAlternates[],
     action: TypeAgentAction,
@@ -374,8 +400,12 @@ function validateExpectedAction(
     }
 
     const possibleMatches = filtered.flatMap(expandAlternates);
+    for (const possibleMatch of possibleMatches) {
+        normalizeUrlParams(possibleMatch.action);
+    }
     const normalizedAction = structuredClone(action);
     normalizeAction(normalizedAction);
+    normalizeUrlParams(normalizedAction);
     if (possibleMatches.length === 1) {
         checkPossibleMatch(normalizedAction, possibleMatches[0]);
         return;
