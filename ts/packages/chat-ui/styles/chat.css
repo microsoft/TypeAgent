@@ -18,6 +18,13 @@
   font-family: inherit;
 }
 
+/* The `display: flex` above overrides the user-agent `[hidden]` rule, so an
+   explicit override is required for the `hidden` property to actually hide the
+   bar (e.g. the Electron shell hides it in local-only mode). */
+.conversation-name-bar[hidden] {
+  display: none;
+}
+
 .conversation-name-label {
   flex-shrink: 0;
   color: var(--chat-conversation-muted-foreground, #666);

@@ -221,6 +221,9 @@ const api: ClientAPI = {
     },
 
     // Conversation management
+    conversationBarEnabled: () => {
+        return ipcRenderer.invoke("conversation-bar-enabled");
+    },
     conversationList: () => {
         return ipcRenderer.invoke("conversation-list");
     },
