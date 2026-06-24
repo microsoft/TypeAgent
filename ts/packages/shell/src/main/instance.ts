@@ -763,11 +763,20 @@ export function initializeInstance(
 
     const shellWindow = new ShellWindow(shellSettings, inputOnly);
 
-    // Register conversation management IPC handlers (local-only backend for now;
-    // remote backend would be wired in when connect mode gains multi-conversation).
+    // Register conversation management IPC handlers. Starts with a local
+    // placeholder backend; the real backend (the embedded in-process agent
+    // server, or the remote one when launched with --connect) is swapped in
+    // once the dispatcher is ready.
     const conversationBackend = createLocalConversationBackend();
     let cleanupConversationIpc =
         registerConversationIpcHandlers(conversationBackend);
+
+    // The conversation bar (multi-conversation switcher) is only surfaced when
+    // the shell is connected to a separate agent server (--connect). When the
+    // shell hosts the agent server in-process (standalone), there is a single
+    // embedded conversation, so the switcher stays hidden in the renderer.
+    const conversationBarEnabled = connect !== undefined;
+    ipcMain.handle("conversation-bar-enabled", () => conversationBarEnabled);
 
     // Watch user-settings.json so that changes made via @settings (e.g. from the
     // CLI or NL) hot-reload shell settings immediately without a restart.
@@ -1021,6 +1030,7 @@ export function initializeInstance(
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
         cleanupConversationIpc();
+        ipcMain.removeHandler("conversation-bar-enabled");
         userSettingsWatcher?.close();
         userSettingsDirWatcher.close();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
