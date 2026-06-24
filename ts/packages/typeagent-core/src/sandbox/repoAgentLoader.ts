@@ -73,8 +73,8 @@ export function createRepoAgentLoader(
         _sandboxId: string,
         agentRef: string,
     ): Promise<Omit<SandboxAgentInfo, "loadedAt">> => {
-        const name = resolveAgentName(agentRef);
         const agentRoots = resolveAgentRoots(options.agentRoots, repoRoot);
+        const name = resolveAgentName(agentRef, agentRoots);
         const files = await discoverAgentFiles(agentRoots, name);
 
         const located =
