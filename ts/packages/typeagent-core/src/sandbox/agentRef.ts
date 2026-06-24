@@ -17,17 +17,14 @@ export function resolveAgentName(
     agentRef: string,
     agentRoots?: readonly string[],
 ): string {
-    let normalized = agentRef.replace(/\\/g, "/");
-    while (normalized.endsWith("/")) {
-        normalized = normalized.slice(0, -1);
-    }
+    const normalized = stripTrailingSlashes(agentRef.replace(/\\/g, "/"));
 
     // Prefer deriving the name relative to a configured agent root: the first
     // segment after the root is the agent's package dir. Try the longest (most
     // specific) matching root so nested roots resolve correctly.
     if (agentRoots && agentRoots.length > 0) {
         const roots = [...agentRoots]
-            .map((r) => r.replace(/\\/g, "/").replace(/\/+$/, ""))
+            .map((r) => stripTrailingSlashes(r.replace(/\\/g, "/")))
             .filter((r) => r.length > 0)
             .sort((a, b) => b.length - a.length);
         for (const root of roots) {
@@ -54,4 +51,13 @@ export function resolveAgentName(
     }
     const tail = normalized.split("/").pop() ?? agentRef;
     return tail.replace(/\.[^.]+$/, "") || agentRef;
+}
+
+/** Strip any trailing `/` characters without a backtracking-prone regex. */
+function stripTrailingSlashes(p: string): string {
+    let end = p.length;
+    while (end > 0 && p[end - 1] === "/") {
+        end--;
+    }
+    return p.slice(0, end);
 }
