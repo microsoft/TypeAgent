@@ -36,13 +36,37 @@ export abstract class BaseStudioTreeProvider<TNode extends StudioTreeNode>
     readonly onDidChangeTreeData = this.emitter.event;
     protected connected = false;
 
+    // While disconnected, the root `getChildren` awaits this gate so VS Code
+    // keeps the view's native loading bar showing (rather than a premature
+    // empty view). It resolves on connect and re-arms on disconnect.
+    private connectGate = newGate();
+
     /** Reflect the studio service connection state (drives the empty view). */
     setConnected(connected: boolean): void {
         if (connected === this.connected) {
             return;
         }
         this.connected = connected;
+        if (connected) {
+            this.connectGate.resolve();
+        } else {
+            // Re-arm so a dropped connection re-shows the loading bar.
+            this.connectGate = newGate();
+        }
         this.refresh();
+    }
+
+    /**
+     * Hold the native loading bar until the service connects. Call this at the
+     * root of {@link getChildren} (before fetching) so every view shows a
+     * consistent "loading" state while connecting instead of a stale empty view.
+     * Resolves immediately once connected (or on dispose).
+     */
+    protected async whenConnected(): Promise<void> {
+        if (this.connected) {
+            return;
+        }
+        await this.connectGate.promise;
     }
 
     refresh(): void {
@@ -73,6 +97,17 @@ export abstract class BaseStudioTreeProvider<TNode extends StudioTreeNode>
     protected decorate(_item: vscode.TreeItem, _node: TNode): void {}
 
     dispose(): void {
+        // Release anyone awaiting the gate so pending getChildren settle.
+        this.connectGate.resolve();
         this.emitter.dispose();
     }
+}
+
+/** A one-shot resolvable promise used to gate the loading bar on connection. */
+function newGate(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+        resolve = r;
+    });
+    return { promise, resolve };
 }

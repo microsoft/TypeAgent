@@ -106,12 +106,11 @@ export class CollisionsTreeProvider
         }
     }
 
-    getChildren(row?: CollisionRow): CollisionRow[] {
+    async getChildren(row?: CollisionRow): Promise<CollisionRow[]> {
         if (!row) {
-            // Disconnected with nothing to show: render nothing so the view's
-            // welcome content ("connect to the Studio service") shows instead
-            // of a misleading "No collisions detected" check — nothing was
-            // actually scanned.
+            // Show the native loading bar while connecting; once connected,
+            // render scanned collisions (or the "no collisions" placeholder).
+            await this.whenConnected();
             if (
                 !this.connected &&
                 this.entries.length === 0 &&

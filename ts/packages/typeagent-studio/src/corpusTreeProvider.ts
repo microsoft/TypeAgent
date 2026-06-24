@@ -61,9 +61,9 @@ export class CorpusTreeProvider
 
     async getChildren(node?: CorpusTreeNode): Promise<CorpusTreeNode[]> {
         if (!node) {
-            // Disconnected: render nothing so the view's welcome content
-            // ("connect to the Studio service") shows instead of a misleading
-            // "No corpora available" placeholder.
+            // Show the native loading bar while connecting; once connected,
+            // fetch and render rows (or the "no corpora" placeholder).
+            await this.whenConnected();
             if (!this.connected) {
                 return [];
             }

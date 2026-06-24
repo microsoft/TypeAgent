@@ -71,13 +71,13 @@ export class EventLogTreeProvider
         );
     }
 
-    getChildren(row?: EventLogRow): EventLogRow[] {
+    async getChildren(row?: EventLogRow): Promise<EventLogRow[]> {
         if (row) {
             return [];
         }
-        // Disconnected with nothing buffered: render nothing so the view's
-        // welcome content ("connect to the Studio service") shows instead of a
-        // misleading "No events yet" placeholder.
+        // Show the native loading bar while connecting; once connected, render
+        // buffered events (or the "no events yet" placeholder).
+        await this.whenConnected();
         if (!this.connected && this.entries.length === 0) {
             return [];
         }

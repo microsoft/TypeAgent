@@ -32,6 +32,8 @@ export class StudioServiceConnection {
     private generation = 0;
     private connecting: Promise<boolean> | undefined;
     private retryTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Epoch ms of the next scheduled reconnect attempt (while disconnected). */
+    private nextRetryAtMs: number | undefined;
     private readonly backoff: Backoff;
     private autoRetry = false;
     private disposed = false;
@@ -87,6 +89,12 @@ export class StudioServiceConnection {
 
     get currentState(): StudioConnectionState {
         return this.state;
+    }
+
+    /** When disconnected and auto-retrying, the epoch ms of the next attempt;
+     *  otherwise undefined. Lets a status indicator show a live countdown. */
+    get nextRetryAt(): number | undefined {
+        return this.state === "disconnected" ? this.nextRetryAtMs : undefined;
     }
 
     /** The live client, or `undefined` when not connected. */
@@ -225,13 +233,16 @@ export class StudioServiceConnection {
             return;
         }
         const delay = this.backoff.next();
+        this.nextRetryAtMs = Date.now() + delay;
         this.retryTimer = setTimeout(() => {
             this.retryTimer = undefined;
+            this.nextRetryAtMs = undefined;
             void this.connect();
         }, delay);
     }
 
     private cancelRetry(): void {
+        this.nextRetryAtMs = undefined;
         if (this.retryTimer !== undefined) {
             clearTimeout(this.retryTimer);
             this.retryTimer = undefined;
