@@ -104,8 +104,8 @@ let openDetailId: string | undefined;
 // from openDetailId so equal rows — which have no A/B diff to show — can still
 // read as "selected" while the detail pane stays closed.
 let selectedId: string | undefined;
-// Active status filter; defaults to differences-only so the report opens
-// focused on regressions rather than a wall of unchanged rows.
+// Active status filter; defaults to all statuses (the "All" pill is lit), so a
+// fresh report shows every row and the user narrows with the filter chips.
 const activeFilters = defaultImpactFilters();
 // The current selection driving a run. Versions are typed specs resolved by the
 // host's git picker (or the defaults); the agent is fixed for the panel (set
@@ -119,7 +119,8 @@ const root = document.getElementById("root")!;
 // --- Static shell ---------------------------------------------------------
 // A native-feeling action bar: the agent this report is scoped to (read-only —
 // the report is opened per agent from the Corpora view), the A ⇄ B version
-// dropdowns, then the primary Run action and a reconnect button. Both versions
+// dropdowns, then the primary Run action and a connection indicator (the views
+// auto-reconnect, so there is no manual reconnect button). Both versions
 // are chosen through native VS Code QuickPicks the host opens (the webview can't
 // shell out to git); each control shows the current selection and asks the host
 // to open the relevant picker.

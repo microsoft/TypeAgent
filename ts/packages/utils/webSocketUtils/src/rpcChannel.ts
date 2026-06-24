@@ -23,7 +23,7 @@ export function createWebSocketRpcChannel(socket: WebSocket): RpcChannel {
     socket.on("message", (data: WebSocket.RawData) => {
         let message: unknown;
         try {
-            message = JSON.parse(data.toString());
+            message = JSON.parse(rawDataToString(data));
         } catch {
             return; // ignore non-JSON frames
         }
@@ -32,4 +32,24 @@ export function createWebSocketRpcChannel(socket: WebSocket): RpcChannel {
     socket.on("close", () => adapter.notifyDisconnected());
 
     return adapter.channel;
+}
+
+/**
+ * Decode a `ws` frame to a UTF-8 string. `ws` can deliver a frame as a string,
+ * a `Buffer`, an `ArrayBuffer`, or an array of `Buffer`s (depending on the
+ * socket's `binaryType` and fragmentation), so decode each shape explicitly —
+ * a bare `data.toString()` on an `ArrayBuffer`/`Buffer[]` yields garbage and
+ * would silently drop valid RPC messages.
+ */
+function rawDataToString(data: WebSocket.RawData): string {
+    if (typeof data === "string") {
+        return data;
+    }
+    if (Array.isArray(data)) {
+        return Buffer.concat(data).toString("utf8");
+    }
+    if (data instanceof ArrayBuffer) {
+        return Buffer.from(data).toString("utf8");
+    }
+    return (data as Buffer).toString("utf8");
 }
