@@ -93,6 +93,18 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "source":
             return new vscode.ThemeIcon("folder");
         case "entry":
+            if (node.feedbackRating === "up") {
+                return new vscode.ThemeIcon(
+                    "thumbsup",
+                    new vscode.ThemeColor("testing.iconPassed"),
+                );
+            }
+            if (node.feedbackRating === "down") {
+                return new vscode.ThemeIcon(
+                    "thumbsdown",
+                    new vscode.ThemeColor("testing.iconFailed"),
+                );
+            }
             return new vscode.ThemeIcon("comment");
         case "empty":
             return new vscode.ThemeIcon(

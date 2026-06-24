@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import type { TooltipModel } from "./tooltipModel.js";
 
 /**
  * The descriptor fields every Studio tree row/node shares. Each view's
@@ -13,7 +14,7 @@ export interface StudioTreeNode {
     id: string;
     label: string;
     description?: string;
-    tooltip?: string;
+    tooltip?: TooltipModel;
     contextValue?: string;
 }
 
@@ -80,7 +81,9 @@ export abstract class BaseStudioTreeProvider<TNode extends StudioTreeNode>
         );
         item.id = node.id;
         item.description = node.description;
-        item.tooltip = node.tooltip;
+        item.tooltip = node.tooltip
+            ? renderMarkdownTooltip(node.tooltip)
+            : undefined;
         item.contextValue = node.contextValue;
         this.decorate(item, node);
         return item;
@@ -110,4 +113,41 @@ function newGate(): { promise: Promise<void>; resolve: () => void } {
         resolve = r;
     });
     return { promise, resolve };
+}
+
+/**
+ * Render a {@link TooltipModel} into a VS Code hover card: an optional bold
+ * title, one `**Label:** value` row per field (values in `code` when `mono`),
+ * and an optional trailing italic hint. Rows use a hard line break so the card
+ * stays compact rather than double-spaced.
+ */
+function renderMarkdownTooltip(model: TooltipModel): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.supportThemeIcons = true;
+    const lines: string[] = [];
+    if (model.title) {
+        lines.push(`**${escapeMarkdown(model.title)}**`);
+    }
+    for (const field of model.fields) {
+        const value = field.mono
+            ? `\`${escapeInlineCode(field.value)}\``
+            : escapeMarkdown(field.value);
+        lines.push(`**${escapeMarkdown(field.label)}:** ${value}`);
+    }
+    if (model.hint) {
+        lines.push(`_${escapeMarkdown(model.hint)}_`);
+    }
+    // Two trailing spaces force a hard break without a blank paragraph between.
+    md.appendMarkdown(lines.join("  \n"));
+    return md;
+}
+
+/** Escape the markdown control characters that would otherwise format a value. */
+function escapeMarkdown(text: string): string {
+    return text.replace(/([\\`*_{}\[\]()#+\-.!|<>])/g, "\\$1");
+}
+
+/** Backticks can't appear inside an inline code span, so neutralize them. */
+function escapeInlineCode(text: string): string {
+    return text.replace(/`/g, "'");
 }

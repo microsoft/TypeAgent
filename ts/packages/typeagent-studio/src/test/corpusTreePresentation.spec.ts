@@ -79,7 +79,7 @@ test("buildCorpusEntryNodes filters to the requested source and labels by uttera
     assert.equal(nodes[0].description, undefined);
 });
 
-test("buildCorpusEntryNodes surfaces a feedback badge when present", () => {
+test("buildCorpusEntryNodes surfaces feedback via the row rating when present", () => {
     const nodes = buildCorpusEntryNodes("player", "feedback", [
         entry({
             id: "a",
@@ -87,7 +87,9 @@ test("buildCorpusEntryNodes surfaces a feedback badge when present", () => {
             feedback: { rating: "down", recordedAt: 1 },
         }),
     ]);
-    assert.equal(nodes[0].description, "feedback: down");
+    // Feedback is conveyed by the row icon, not a description badge.
+    assert.equal(nodes[0].description, undefined);
+    assert.equal(nodes[0].feedbackRating, "down");
 });
 
 test("truncateUtterance collapses whitespace and caps length", () => {

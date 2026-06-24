@@ -3,6 +3,7 @@
 
 import type { StudioEvent, StudioEventType } from "@typeagent/core/events";
 import { collapseAndTruncate } from "./textFormatting.js";
+import { type TooltipField, type TooltipModel } from "./tooltipModel.js";
 
 /**
  * Pure, vscode-free mapping from structured events to event-log row
@@ -25,7 +26,7 @@ export interface EventLogRow {
     id: string;
     label: string;
     description?: string;
-    tooltip?: string;
+    tooltip?: TooltipModel;
     contextValue?: string;
     eventType?: StudioEventType;
     hasChildren: boolean;
@@ -162,21 +163,21 @@ function formatEventDescription(event: StudioEvent): string {
     return event.agent ? `${time} · ${event.agent}` : time;
 }
 
-function buildEventTooltip(event: StudioEvent): string {
-    const lines: string[] = [
-        `${event.type} @ ${new Date(event.ts).toISOString()}`,
-        `sandbox: ${event.sandboxId}`,
+function buildEventTooltip(event: StudioEvent): TooltipModel {
+    const fields: TooltipField[] = [
+        { label: "Time", value: new Date(event.ts).toISOString(), mono: true },
+        { label: "Sandbox", value: event.sandboxId, mono: true },
     ];
     if (event.agent) {
-        lines.push(`agent: ${event.agent}`);
+        fields.push({ label: "Agent", value: event.agent });
     }
     if (event.requestId) {
-        lines.push(`requestId: ${event.requestId}`);
+        fields.push({ label: "Request", value: event.requestId, mono: true });
     }
     if (event.runId) {
-        lines.push(`runId: ${event.runId}`);
+        fields.push({ label: "Run", value: event.runId, mono: true });
     }
-    return lines.join("\n");
+    return { title: event.type, fields };
 }
 
 function quote(value: string): string {
