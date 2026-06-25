@@ -10,7 +10,10 @@
  * `vscode`, or node built-ins (so it bundles for the browser).
  */
 
-import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type {
+    StudioReplayResult,
+    StudioReplayMode,
+} from "@typeagent/core/runtime";
 import type { ActionDelta } from "@typeagent/core/replay";
 import type {
     HostToWebviewMessage,
@@ -64,6 +67,7 @@ interface PanelState {
     selectedAgent?: string;
     versionA?: ResolvedVersion;
     versionB?: ResolvedVersion;
+    mode?: StudioReplayMode;
     lastResult?: PersistedResult;
 }
 interface VsCodeApi {
@@ -113,6 +117,31 @@ const activeFilters = defaultImpactFilters();
 let currentAgent: string | undefined;
 let versionA: ResolvedVersion = DEFAULT_VERSION_A;
 let versionB: ResolvedVersion = DEFAULT_VERSION_B;
+// Which deterministic dispatch path the next run models. `nfa-grammar` (default)
+// matches both sides against the compiled grammar only — symmetric, no cache.
+// `completionBased-cache` lets the working-tree side consult the live
+// construction cache first (the default-dispatcher path). Persisted with the
+// version selection so a reload keeps the chosen mode.
+let mode: StudioReplayMode = "nfa-grammar";
+
+/** Short toolbar label for each replay mode. */
+const MODE_LABEL: Record<StudioReplayMode, string> = {
+    "nfa-grammar": "Grammar",
+    "completionBased-cache": "Cache",
+};
+/** Hover copy explaining each mode and that the button toggles between them. */
+const MODE_TOOLTIP: Record<StudioReplayMode, string> = {
+    "nfa-grammar":
+        "Grammar mode: both versions match against the compiled grammar only — " +
+        "the construction cache is never consulted, so A and B stay symmetric. " +
+        "Cleanest signal for what a grammar or schema edit changed. " +
+        "Click to switch to Cache mode.",
+    "completionBased-cache":
+        "Cache mode: the working-tree side consults the live construction cache " +
+        "before the grammar (the default dispatcher path), so a cache hit reflects " +
+        "what the dispatcher would serve. Asymmetric — a B-side cache hit can mask " +
+        "a grammar regression. Click to switch to Grammar mode.",
+};
 
 const root = document.getElementById("root")!;
 
@@ -143,6 +172,16 @@ const swapButton = toolButton("arrow-swap", "Swap A and B", () =>
     swapVersions(),
 );
 swapButton.title = "Swap the base (A) and compare (B) versions.";
+
+// A two-state toggle for the replay mode. Only two modes exist, so a click
+// flips between them (no dropdown). Built by hand (not `toolButton`) so we keep
+// a handle on the label node and update it in place from `renderModeButton`.
+const modeButton = document.createElement("button");
+modeButton.type = "button";
+modeButton.className = "tool-button";
+const modeButtonText = text("");
+modeButton.append(codicon("settings"), modeButtonText);
+modeButton.addEventListener("click", () => cycleMode());
 const runButton = toolButton("play", "Run", () => runReplay(), {
     primary: true,
     text: "Run",
@@ -159,6 +198,8 @@ actionBar.append(
     group(codicon("library"), agentNameEl),
     separator(),
     group(versionAButton.button, swapButton, versionBButton.button),
+    separator(),
+    group(modeButton),
     spacer(),
     runButton,
     connectionPill,
@@ -188,6 +229,7 @@ setControlsEnabled(false);
 renderConnection("connecting");
 restoreSelection();
 renderVersionButtons();
+renderModeButton();
 
 // --- Messaging ------------------------------------------------------------
 window.addEventListener("message", (event: MessageEvent) => {
@@ -259,7 +301,7 @@ function runReplay(): void {
     }
     requestId += 1;
     latestRequestId = requestId;
-    persistState({ selectedAgent: agent, versionA, versionB });
+    persistState({ selectedAgent: agent, versionA, versionB, mode });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
     clearNotification();
@@ -277,7 +319,25 @@ function runReplay(): void {
         agent,
         versionA: versionA.spec,
         versionB: versionB.spec,
+        mode,
     });
+}
+
+/** Flip the replay mode between its two states and persist the choice. */
+function cycleMode(): void {
+    mode = mode === "nfa-grammar" ? "completionBased-cache" : "nfa-grammar";
+    renderModeButton();
+    persistState({ mode });
+}
+
+/** Paint the mode toggle's label and tooltip from the current `mode`. */
+function renderModeButton(): void {
+    modeButtonText.textContent = MODE_LABEL[mode];
+    modeButton.title = MODE_TOOLTIP[mode];
+    modeButton.setAttribute(
+        "aria-label",
+        `Replay mode: ${MODE_LABEL[mode]}. ${MODE_TOOLTIP[mode]}`,
+    );
 }
 
 /** Apply a version selection from the host picker to one side. */
@@ -700,6 +760,9 @@ function restoreSelection(): void {
     if (state?.versionB) {
         versionB = state.versionB;
     }
+    if (state?.mode) {
+        mode = state.mode;
+    }
     // The agent is authoritative from the host `init`; until it arrives, show a
     // neutral placeholder rather than a stale persisted value.
     renderAgentName();
@@ -754,6 +817,7 @@ function setControlsEnabled(enabled: boolean): void {
     swapButton.disabled = !enabled;
     versionAButton.button.disabled = !enabled;
     versionBButton.button.disabled = !enabled;
+    modeButton.disabled = !enabled;
 }
 
 function setStatus(text: string): void {
