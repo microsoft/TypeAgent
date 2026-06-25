@@ -53,6 +53,66 @@ export async function activate(
     }
 
     const manager = new SessionManager(connection);
+    const itemLabels = new Map<string, string>();
+
+    function updateConversationItem(
+        item: vscode.ChatSessionItem,
+        info: { conversationId: string; name: string; createdAt?: string },
+    ): void {
+        itemLabels.set(info.conversationId, info.name);
+        item.label = info.name;
+        item.tooltip = new vscode.MarkdownString(
+            `**${info.name}**\n\n\`${info.conversationId}\``,
+        );
+        if (info.createdAt !== undefined) {
+            item.timing = timingFor(info.createdAt);
+        }
+    }
+
+    async function syncRenamedItem(
+        item: vscode.ChatSessionItem,
+    ): Promise<void> {
+        const conversationId = conversationIdFrom(item.resource);
+        if (isUntitledConversation(conversationId)) {
+            return;
+        }
+        const previous = itemLabels.get(conversationId);
+        if (previous === undefined) {
+            itemLabels.set(conversationId, item.label);
+            return;
+        }
+        const requested = item.label.trim();
+        if (requested.length === 0 || requested === previous) {
+            if (requested.length === 0) {
+                updateConversationItem(item, {
+                    conversationId,
+                    name: previous,
+                });
+            }
+            return;
+        }
+
+        try {
+            await connection.renameConversation(conversationId, requested, {
+                nameCollisionBehavior: "appendNumber",
+            });
+            const updated = (await connection.listConversations()).find(
+                (info) => info.conversationId === conversationId,
+            );
+            updateConversationItem(
+                item,
+                updated ?? { conversationId, name: requested },
+            );
+        } catch (e) {
+            updateConversationItem(item, {
+                conversationId,
+                name: previous,
+            });
+            vscode.window.showErrorMessage(
+                `TypeAgent: failed to rename conversation: ${(e as Error).message}`,
+            );
+        }
+    }
 
     context.subscriptions.push({
         dispose: () => {
@@ -70,10 +130,7 @@ export async function activate(
                         resourceFor(info.conversationId),
                         info.name,
                     );
-                    item.tooltip = new vscode.MarkdownString(
-                        `**${info.name}**\n\n\`${info.conversationId}\``,
-                    );
-                    item.timing = timingFor(info.createdAt);
+                    updateConversationItem(item, info);
                     return item;
                 });
                 controller.items.replace(items);
@@ -94,12 +151,14 @@ export async function activate(
             const name = seed
                 ? seed.slice(0, 40)
                 : `VS Code Chat ${new Date().toLocaleTimeString()}`;
-            const created = await connection.createConversation(name);
+            const created = await connection.createConversation(name, {
+                nameCollisionBehavior: "appendNumber",
+            });
             const item = controller.createChatSessionItem(
                 resourceFor(created.conversationId),
                 created.name,
             );
-            item.timing = timingFor(created.createdAt);
+            updateConversationItem(item, created);
             controller.items.add(item);
             return item;
         } catch (e) {
@@ -107,6 +166,11 @@ export async function activate(
             throw e;
         }
     };
+    context.subscriptions.push(
+        controller.onDidChangeChatSessionItemState((item) => {
+            void syncRenamedItem(item);
+        }),
+    );
 
     const participant = vscode.chat.createChatParticipant(
         PARTICIPANT_ID,

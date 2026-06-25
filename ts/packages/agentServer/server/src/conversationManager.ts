@@ -6,7 +6,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
     DispatcherConnectOptions,
+    ConversationNameCollisionOptions,
+    CreateConversationOptions,
     ConversationInfo,
+    RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
 import type {
@@ -48,7 +51,10 @@ type PersistedMetadata = {
 };
 
 export type ConversationManager = {
-    createConversation(name: string): Promise<ConversationInfo>;
+    createConversation(
+        name: string,
+        options?: CreateConversationOptions,
+    ): Promise<ConversationInfo>;
     /**
      * Resolve a conversation ID. If undefined, returns the default conversation,
      * creating one if none exist.
@@ -77,7 +83,11 @@ export type ConversationManager = {
         connectionId: string,
     ): Promise<void>;
     listConversations(name?: string): ConversationInfo[];
-    renameConversation(conversationId: string, newName: string): Promise<void>;
+    renameConversation(
+        conversationId: string,
+        newName: string,
+        options?: RenameConversationOptions,
+    ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     close(): Promise<void>;
 };
@@ -375,6 +385,60 @@ export async function createConversationManager(
         }
     }
 
+    function isNameAvailable(name: string, selfId?: string): boolean {
+        const norm = name.trim().toLowerCase();
+        for (const [id, record] of conversations) {
+            if (id === selfId) continue;
+            if (record.name.trim().toLowerCase() === norm) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function splitNumberSuffix(name: string): {
+        baseName: string;
+        suffix: number;
+    } {
+        const match = /^(.*) \((\d+)\)$/.exec(name);
+        if (match === null || match[1].length === 0) {
+            return { baseName: name, suffix: 0 };
+        }
+        return { baseName: match[1], suffix: Number(match[2]) };
+    }
+
+    function resolveAvailableName(
+        name: string,
+        options?: ConversationNameCollisionOptions,
+        selfId?: string,
+    ): string {
+        const behavior = options?.nameCollisionBehavior ?? "error";
+        if (behavior === "error") {
+            ensureNameAvailable(name, selfId);
+            return name;
+        }
+        if (behavior !== "appendNumber") {
+            throw new Error(`Unknown name collision behavior: ${behavior}`);
+        }
+        if (isNameAvailable(name, selfId)) {
+            return name;
+        }
+
+        const requested = splitNumberSuffix(name.trim());
+        const baseNorm = requested.baseName.trim().toLowerCase();
+        let maxSuffix = 0;
+        for (const record of conversations.values()) {
+            if (record.conversationId === selfId) continue;
+            const existing = splitNumberSuffix(record.name.trim());
+            if (existing.baseName.trim().toLowerCase() === baseNorm) {
+                maxSuffix = Math.max(maxSuffix, existing.suffix);
+            }
+        }
+        const resolved = `${requested.baseName} (${maxSuffix + 1})`;
+        validateConversationName(resolved);
+        return resolved;
+    }
+
     // Sweep orphaned ephemeral conversations left behind by unclean CLI exits
     {
         const toSweep: string[] = [];
@@ -408,14 +472,17 @@ export async function createConversationManager(
     }
 
     const manager: ConversationManager = {
-        async createConversation(name: string): Promise<ConversationInfo> {
+        async createConversation(
+            name: string,
+            options?: CreateConversationOptions,
+        ): Promise<ConversationInfo> {
             validateConversationName(name);
-            ensureNameAvailable(name);
+            const resolvedName = resolveAvailableName(name, options);
             const conversationId = randomUUID();
             const createdAt = new Date().toISOString();
             const record: ConversationRecord = {
                 conversationId,
-                name,
+                name: resolvedName,
                 createdAt,
                 lastActiveAt: Date.now(),
                 sharedDispatcher: undefined,
@@ -425,11 +492,11 @@ export async function createConversationManager(
             conversations.set(conversationId, record);
             await saveMetadata();
             debugConversation(
-                `Conversation created: "${name}" (${conversationId})`,
+                `Conversation created: "${resolvedName}" (${conversationId})`,
             );
             return {
                 conversationId,
-                name,
+                name: resolvedName,
                 clientCount: 0,
                 createdAt,
             };
@@ -601,17 +668,22 @@ export async function createConversationManager(
         async renameConversation(
             conversationId: string,
             newName: string,
+            options?: RenameConversationOptions,
         ): Promise<void> {
             validateConversationName(newName);
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
-            ensureNameAvailable(newName, conversationId);
-            record.name = newName;
+            const resolvedName = resolveAvailableName(
+                newName,
+                options,
+                conversationId,
+            );
+            record.name = resolvedName;
             await saveMetadata();
             debugConversation(
-                `Conversation renamed: "${newName}" (${conversationId})`,
+                `Conversation renamed: "${resolvedName}" (${conversationId})`,
             );
         },
 

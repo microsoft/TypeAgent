@@ -17,6 +17,20 @@ export type ConversationInfo = {
     createdAt: string; // ISO 8601
 };
 
+export type ConversationNameCollisionBehavior = "error" | "appendNumber";
+
+export type ConversationNameCollisionOptions = {
+    /**
+     * How to handle an existing conversation with the same name.
+     * Defaults to "error".
+     */
+    nameCollisionBehavior?: ConversationNameCollisionBehavior;
+};
+
+export type CreateConversationOptions = ConversationNameCollisionOptions;
+
+export type RenameConversationOptions = ConversationNameCollisionOptions;
+
 export type JoinConversationResult = {
     connectionId: string;
     conversationId: string;
@@ -48,11 +62,15 @@ export type AgentServerInvokeFunctions = {
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;
     leaveConversation: (conversationId: string) => Promise<void>;
-    createConversation: (name: string) => Promise<ConversationInfo>;
+    createConversation: (
+        name: string,
+        options?: CreateConversationOptions,
+    ) => Promise<ConversationInfo>;
     listConversations: (name?: string) => Promise<ConversationInfo[]>;
     renameConversation: (
         conversationId: string,
         newName: string,
+        options?: RenameConversationOptions,
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;

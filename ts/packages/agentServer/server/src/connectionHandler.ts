@@ -187,8 +187,8 @@ export function createAgentServerConnectionHandler(
                 );
             },
 
-            createConversation: async (name: string) => {
-                return conversationManager.createConversation(name);
+            createConversation: async (name, options) => {
+                return conversationManager.createConversation(name, options);
             },
 
             listConversations: async (name?: string) => {
@@ -198,10 +198,12 @@ export function createAgentServerConnectionHandler(
             renameConversation: async (
                 conversationId: string,
                 newName: string,
+                options,
             ) => {
                 return conversationManager.renameConversation(
                     conversationId,
                     newName,
+                    options,
                 );
             },
 
