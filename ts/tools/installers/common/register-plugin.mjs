@@ -33,7 +33,8 @@ function parseArgs(argv) {
         else if (a === "--marketplace-name") opts.marketplaceName = argv[++i];
         else if (a === "--marketplace-root") opts.marketplaceRoot = argv[++i];
         else if (a === "--plugin-name") opts.pluginName = argv[++i];
-        else if (a === "--plugin-description") opts.pluginDescription = argv[++i];
+        else if (a === "--plugin-description")
+            opts.pluginDescription = argv[++i];
         else if (a === "--plugin-version") opts.pluginVersion = argv[++i];
         else if (a === "--log-path") opts.logPath = argv[++i];
         else if (a === "--copilot-path") opts.copilotPath = argv[++i];
@@ -156,7 +157,9 @@ function ensureLocalPluginMarketplace({
         try {
             manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
         } catch {
-            logger.write("Existing marketplace.json is invalid JSON; recreating.");
+            logger.write(
+                "Existing marketplace.json is invalid JSON; recreating.",
+            );
             manifest = null;
         }
     }
@@ -196,19 +199,30 @@ function ensureLocalPluginMarketplace({
         manifest.metadata.version = "1.0.0";
     }
 
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    fs.writeFileSync(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+    );
     return manifestPath;
 }
 
 function resolvePluginMetadata(opts) {
     const pluginJsonPath = path.join(opts.pluginSourceDir, "plugin.json");
-    const pluginMcpServer = path.join(opts.pluginSourceDir, "dist", "mcp", "server.js");
+    const pluginMcpServer = path.join(
+        opts.pluginSourceDir,
+        "dist",
+        "mcp",
+        "server.js",
+    );
 
     if (!fs.existsSync(pluginJsonPath)) {
         throw new Error(`Plugin source missing plugin.json: ${pluginJsonPath}`);
     }
     if (!fs.existsSync(pluginMcpServer)) {
-        throw new Error(`Plugin source missing MCP server entrypoint: ${pluginMcpServer}`);
+        throw new Error(
+            `Plugin source missing MCP server entrypoint: ${pluginMcpServer}`,
+        );
     }
 
     let pluginVersion = opts.pluginVersion;
@@ -219,7 +233,9 @@ function resolvePluginMetadata(opts) {
             pluginVersion = manifest.version;
         }
         if (
-            (!pluginDescription || pluginDescription === "TypeAgent integration for Copilot CLI") &&
+            (!pluginDescription ||
+                pluginDescription ===
+                    "TypeAgent integration for Copilot CLI") &&
             typeof manifest.description === "string" &&
             manifest.description.trim()
         ) {
