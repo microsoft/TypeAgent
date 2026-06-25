@@ -32,6 +32,24 @@
     "watch": "node esbuild.mjs --watch"
   },
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "typeagent",
+        "name": "typeagent",
+        "fullName": "TypeAgent",
+        "description": "TypeAgent personal agent"
+      }
+    ],
+    "chatSessions": [
+      {
+        "type": "typeagent",
+        "name": "typeagent",
+        "displayName": "TypeAgent",
+        "description": "TypeAgent personal agent",
+        "icon": "$(typeagent-logo)",
+        "when": "true"
+      }
+    ],
     "commands": [
       {
         "command": "typeagentChat.renameSessionCustom",
@@ -42,6 +60,25 @@
         "title": "Delete TypeAgent Session"
       }
     ],
+    "configuration": {
+      "title": "TypeAgent Chat",
+      "properties": {
+        "typeagentChat.serverUrl": {
+          "type": "string",
+          "default": "ws://localhost:8999",
+          "description": "WebSocket URL of the TypeAgent agent server"
+        }
+      }
+    },
+    "icons": {
+      "typeagent-logo": {
+        "description": "TypeAgent logo",
+        "default": {
+          "fontPath": "media/typeagent-icons.woff",
+          "fontCharacter": "\\F101"
+        }
+      }
+    },
     "menus": {
       "chat/chatSessions": [
         {
@@ -67,43 +104,6 @@
           "group": "1_edit@9"
         }
       ]
-    },
-    "chatParticipants": [
-      {
-        "id": "typeagent",
-        "name": "typeagent",
-        "fullName": "TypeAgent",
-        "description": "TypeAgent personal agent"
-      }
-    ],
-    "chatSessions": [
-      {
-        "type": "typeagent",
-        "name": "typeagent",
-        "displayName": "TypeAgent",
-        "description": "TypeAgent personal agent",
-        "icon": "$(typeagent-logo)",
-        "when": "true"
-      }
-    ],
-    "configuration": {
-      "title": "TypeAgent Chat",
-      "properties": {
-        "typeagentChat.serverUrl": {
-          "type": "string",
-          "default": "ws://localhost:8999",
-          "description": "WebSocket URL of the TypeAgent agent server"
-        }
-      }
-    },
-    "icons": {
-      "typeagent-logo": {
-        "description": "TypeAgent logo",
-        "default": {
-          "fontPath": "media/typeagent-icons.woff",
-          "fontCharacter": "\\F101"
-        }
-      }
     }
   },
   "activationEvents": [
