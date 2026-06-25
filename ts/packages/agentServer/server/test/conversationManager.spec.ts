@@ -58,6 +58,39 @@ describe("ConversationManager createConversation", () => {
         );
         await manager.close();
     });
+
+    test("increments from requested numeric suffix when appending", async () => {
+        const manager = await createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            await createTempDir(),
+        );
+
+        await manager.createConversation("Project");
+        await manager.createConversation("Project (2)");
+
+        const created = await manager.createConversation("Project (2)", {
+            nameCollisionBehavior: "appendNumber",
+        });
+
+        expect(created.name).toBe("Project (3)");
+        await manager.close();
+    });
+
+    test("treats trimmed names as collisions by default", async () => {
+        const manager = await createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            await createTempDir(),
+        );
+
+        await manager.createConversation("Project");
+
+        await expect(manager.createConversation("  Project  ")).rejects.toThrow(
+            /already exists/i,
+        );
+        await manager.close();
+    });
 });
 
 describe("ConversationManager renameConversation", () => {
@@ -98,6 +131,27 @@ describe("ConversationManager renameConversation", () => {
         await expect(
             manager.renameConversation(target.conversationId, "project"),
         ).rejects.toThrow(/already exists/i);
+        await manager.close();
+    });
+
+    test("allows self-rename with appendNumber without adding suffix", async () => {
+        const manager = await createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            await createTempDir(),
+        );
+
+        const target = await manager.createConversation("Project");
+
+        await manager.renameConversation(target.conversationId, "Project", {
+            nameCollisionBehavior: "appendNumber",
+        });
+
+        expect(
+            manager
+                .listConversations()
+                .find((c) => c.conversationId === target.conversationId)?.name,
+        ).toBe("Project");
         await manager.close();
     });
 });
