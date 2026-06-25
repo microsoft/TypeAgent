@@ -86,6 +86,8 @@
       <Component Id="RegisterScriptComponent" Guid="*">
         <File Id="RegisterPluginPs1" Name="register-plugin.ps1"
               Source="$(var.InstallerSourceDir)\register-plugin.ps1" />
+        <File Id="RegisterPluginMjs" Name="register-plugin.mjs"
+              Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
         <RemoveFolder Id="RemoveTypeAgentFolder" Directory="TYPEAGENTROOT" On="uninstall" />
       </Component>
     </DirectoryRef>
