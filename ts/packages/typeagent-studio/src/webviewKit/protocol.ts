@@ -11,7 +11,10 @@
  * touches a socket (the security boundary).
  */
 
-import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type {
+    StudioReplayResult,
+    StudioReplayMode,
+} from "@typeagent/core/runtime";
 import type { VersionSpec } from "@typeagent/core/replay";
 import {
     coerceVersionSpec,
@@ -71,12 +74,23 @@ export type WebviewToHostMessage =
           versionA: VersionSpec;
           /** Validated compare (B) version spec. */
           versionB: VersionSpec;
+          /** Which deterministic dispatch path to model. */
+          mode: StudioReplayMode;
       }
     /** Ask the host to open a native version QuickPick for one side. */
     | { type: "pickVersion"; side: ReplaySide };
 
 function narrowSide(value: unknown): ReplaySide | undefined {
     return value === "a" || value === "b" ? value : undefined;
+}
+
+/**
+ * Narrow an untrusted mode into a {@link StudioReplayMode}, defaulting unknown
+ * or missing values to the grammar-only `nfa-grammar` baseline (the safer,
+ * cache-free default the runtime also falls back to).
+ */
+function narrowMode(value: unknown): StudioReplayMode {
+    return value === "completionBased-cache" ? value : "nfa-grammar";
 }
 
 /** Narrow an untrusted value into a {@link WebviewToHostMessage}. */
@@ -100,6 +114,7 @@ export function parseWebviewMessage(
                 agent?: unknown;
                 versionA?: unknown;
                 versionB?: unknown;
+                mode?: unknown;
             };
             if (
                 typeof m.requestId === "number" &&
@@ -116,6 +131,7 @@ export function parseWebviewMessage(
                     agent: m.agent,
                     versionA: coerceVersionSpec(m.versionA),
                     versionB: coerceVersionSpec(m.versionB),
+                    mode: narrowMode(m.mode),
                 };
             }
             return undefined;

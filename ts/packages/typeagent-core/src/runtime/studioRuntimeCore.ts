@@ -233,6 +233,21 @@ export interface PackagingHealthGateResult {
     checkedAgent?: string;
 }
 
+/**
+ * Which deterministic dispatch path replay models:
+ * - `nfa-grammar` (default) — grammar-only matching through the real NFA grammar
+ *   store, symmetric for both versions. The construction cache is NOT consulted
+ *   (faithful to the dispatcher's `grammarSystem: "nfa"` mode, where cache
+ *   validation is intentionally skipped). The cleanest signal for "what did my
+ *   `.agr` edit change", since A and B are equivalent environments.
+ * - `completionBased-cache` — the live working-tree side additionally consults
+ *   the agent's real per-session construction cache before the grammar match
+ *   (faithful to the dispatcher's default `completionBased` mode). Asymmetric:
+ *   only the working-tree side reads the cache, so a cache hit can mask or fake a
+ *   grammar regression. Opt-in for "what would my default dispatcher likely do".
+ */
+export type StudioReplayMode = "nfa-grammar" | "completionBased-cache";
+
 /** Request shape for {@link StudioRuntime.replayCorpus}. Versions and miss
  *  policy default to a deterministic working-tree self-compare. */
 export interface StudioReplayRequest {
@@ -241,6 +256,8 @@ export interface StudioReplayRequest {
     versionA?: VersionSpec;
     versionB?: VersionSpec;
     missPolicy?: ReplayMissPolicy;
+    /** Deterministic dispatch path to model. Defaults to `nfa-grammar`. */
+    mode?: StudioReplayMode;
 }
 
 /**
@@ -546,6 +563,15 @@ export interface CreateStudioRuntimeOptions {
      * deterministic identity replay over each entry's captured `expectedAction`.
      */
     replayResolver?: ReplayActionResolver;
+    /**
+     * Resolves the live construction-cache layer for the working-tree side of a
+     * replay. Injected so tests can exercise the mode gating (the default
+     * discovers the dispatcher's live cache from the instance dir, which a test
+     * can't fabricate). Only consulted in `completionBased-cache` mode.
+     */
+    resolveConstructionCache?: (
+        target: GrammarReplayTarget,
+    ) => Promise<ConstructionCacheLayer | undefined>;
     collisions?: CollisionService;
     /**
      * Scans agents' compiled grammars for collisions. Injected so tests can
@@ -995,6 +1021,7 @@ export function createStudioRuntimeCore(
             return feedback.list(filter);
         },
         async replayCorpus(request) {
+            const mode: StudioReplayMode = request.mode ?? "nfa-grammar";
             const replayOptions = {
                 agent: request.agent,
                 corpus: request.corpus ?? {},
@@ -1024,12 +1051,21 @@ export function createStudioRuntimeCore(
                 );
                 if (target !== undefined) {
                     // Best-effort consult of the agent's live per-session
-                    // construction cache for the working-tree side. Hash-gated to
-                    // the current schema exactly as the dispatcher gates it, so a
-                    // schema edit invalidates the cached constructions (→ stale →
-                    // grammar fallback) rather than reporting a phantom cache hit.
+                    // construction cache for the working-tree side — but ONLY in
+                    // `completionBased-cache` mode. In the default `nfa-grammar`
+                    // mode the dispatcher does not consult the cache (grammar
+                    // rules alone decide the match), so replay stays grammar-only
+                    // and A/B-symmetric. Hash-gated to the current schema exactly
+                    // as the dispatcher gates it, so a schema edit invalidates the
+                    // cached constructions (→ stale → grammar fallback) rather
+                    // than reporting a phantom cache hit.
                     const constructionCache =
-                        await resolveConstructionCacheLayer(target);
+                        mode === "completionBased-cache"
+                            ? await (
+                                  options.resolveConstructionCache ??
+                                  resolveConstructionCacheLayer
+                              )(target)
+                            : undefined;
 
                     const grammarResolver = createGrammarReplayResolver({
                         target,

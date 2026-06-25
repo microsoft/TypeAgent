@@ -360,6 +360,10 @@ export function openImpactReport(
                 // free of LLM calls.
                 versionA: msg.versionA,
                 versionB: msg.versionB,
+                // The webview's mode toggle selects which deterministic dispatch
+                // path to model (grammar-only vs construction-cache-first); the
+                // runtime defaults unknown/missing to the cache-free baseline.
+                mode: msg.mode,
                 missPolicy: "needs-explanation",
             });
             post({
