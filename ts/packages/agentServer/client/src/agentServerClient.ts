@@ -24,8 +24,10 @@ import {
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
     DispatcherConnectOptions,
+    CreateConversationOptions,
     ConversationInfo,
     JoinConversationResult,
+    RenameConversationOptions,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -105,9 +107,16 @@ export type AgentServerConnection = {
         options?: DispatcherConnectOptions,
     ): Promise<ConversationDispatcher>;
     leaveConversation(conversationId: string): Promise<void>;
-    createConversation(name: string): Promise<ConversationInfo>;
+    createConversation(
+        name: string,
+        options?: CreateConversationOptions,
+    ): Promise<ConversationInfo>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
-    renameConversation(conversationId: string, newName: string): Promise<void>;
+    renameConversation(
+        conversationId: string,
+        newName: string,
+        options?: RenameConversationOptions,
+    ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
     /**
@@ -238,8 +247,11 @@ export function createAgentServerConnection(
             await rpc.invoke("leaveConversation", conversationId);
         },
 
-        async createConversation(name: string): Promise<ConversationInfo> {
-            return rpc.invoke("createConversation", name);
+        async createConversation(
+            name: string,
+            options?: CreateConversationOptions,
+        ): Promise<ConversationInfo> {
+            return rpc.invoke("createConversation", name, options);
         },
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {
@@ -249,8 +261,14 @@ export function createAgentServerConnection(
         async renameConversation(
             conversationId: string,
             newName: string,
+            options?: RenameConversationOptions,
         ): Promise<void> {
-            return rpc.invoke("renameConversation", conversationId, newName);
+            return rpc.invoke(
+                "renameConversation",
+                conversationId,
+                newName,
+                options,
+            );
         },
 
         async deleteConversation(conversationId: string): Promise<void> {
