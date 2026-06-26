@@ -95,13 +95,22 @@ export interface WildcardMatchValidator {
 }
 
 /**
- * Agents whose `validateWildcardMatch` is a pure/deterministic function of the
- * action (no network, no external process, no live session state):
- * - `timer` — `tryParseWhen` on the action params; context ignored.
+ * Agents whose `validateWildcardMatch` validates cleanly during replay — a
+ * deterministic function of the action that does NOT depend on live session
+ * state (verified end-to-end against the real built modules):
+ * - `timer` — `tryParseWhen` on the action params; context ignored. Rejects a
+ *   wildcard that isn't a real duration/timestamp.
  * - `list` — `simpleNoun` heuristic over the action; context ignored.
- * - `player` — reads `context.agentContext.spotify`, but returns `true` when it
- *   is absent (our stub context has none), faithfully self-degrading like a
- *   dispatcher session with no Spotify login.
+ *
+ * `player` is deliberately EXCLUDED even though its source returns `true` when
+ * `context.agentContext.spotify` is absent. It runs `execMode: "separate"`, so
+ * the loader returns an RPC proxy to a child process that reconstructs its OWN
+ * `SessionContext` — where `agentContext` is `undefined`, not our stub's `{}`.
+ * The child then throws `Cannot read properties of undefined (reading 'spotify')`
+ * before reaching its self-degrade guard. And even if it didn't throw, it can
+ * only ever return `true` without a live Spotify client, so it adds no fidelity.
+ * It would just fail-open with an `errored` diagnostic and a misleading
+ * "degraded" indicator — so we keep it grammar-only.
  *
  * `weather`/`markdown`/`photo`/`androidMobile`/`taskflow`/`powershell` are NOT
  * here: weather geocodes over the network, and the others are unverified.
@@ -109,7 +118,6 @@ export interface WildcardMatchValidator {
 export const DEFAULT_WILDCARD_VALIDATION_ALLOWLIST: readonly string[] = [
     "timer",
     "list",
-    "player",
 ];
 
 export interface CreateWildcardMatchValidatorOptions {
@@ -119,12 +127,14 @@ export interface CreateWildcardMatchValidatorOptions {
 }
 
 /**
- * A no-op `SessionContext`-shaped stub for replay validation. The few validators
- * we allowlist either ignore the context (timer/list) or read only
- * `agentContext` (player, which self-degrades when its client is absent). The
- * object exposes `agentContext: {}` — NOT `undefined`, which would make
- * `player`'s `context.agentContext.spotify` throw before its fallback — and the
- * interactive methods throw, since a validator that calls them is out of the
+ * A no-op `SessionContext`-shaped stub for replay validation. The validators we
+ * allowlist (timer/list) ignore the context entirely; the stub still exposes
+ * `agentContext: {}` — NOT `undefined` — so that any in-process validator that
+ * defensively reads `context.agentContext.<x>` degrades gracefully instead of
+ * throwing. (Out-of-process agents like `player` reconstruct their own context
+ * in the child and never see this stub, which is why `player` is excluded from
+ * the default allowlist — see {@link DEFAULT_WILDCARD_VALIDATION_ALLOWLIST}.)
+ * The interactive methods throw, since a validator that calls them is out of the
  * supported set and should fail-open via the wrapper's try/catch.
  */
 export function createReplaySessionContextStub(): Record<string, unknown> {

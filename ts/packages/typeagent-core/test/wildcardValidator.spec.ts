@@ -133,10 +133,13 @@ describe("createWildcardMatchValidator", () => {
         expect(outcome.diagnostic).toBe("no-validator");
     });
 
-    it("does not throw for a player-style validator reading agentContext (empty stub)", async () => {
-        // Mirrors the real player validator: reads context.agentContext.spotify
-        // and returns true when the client is absent. Our stub uses
-        // `agentContext: {}` (NOT undefined), so this must not throw.
+    it("does not throw for an in-process validator reading agentContext (empty stub)", async () => {
+        // A hypothetical in-process validator that reads context.agentContext
+        // and returns true when its client is absent. Our stub uses
+        // `agentContext: {}` (NOT undefined), so this must not throw. (The real
+        // player validator has this shape but runs out-of-process, so it's
+        // excluded from the default allowlist; here we override the allowlist to
+        // exercise the stub's defensive behaviour directly.)
         const playerLike: ReplayValidatableAgent = {
             async validateWildcardMatch(_a, context) {
                 const spotify = (
@@ -150,6 +153,7 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("player", {
             loader: fakeLoader({ player: playerLike }),
+            allowlist: ["player"],
         });
         const outcome = await validator.validateMatch([action("playTrack")]);
         expect(outcome.rejected).toBe(false);
@@ -187,10 +191,9 @@ describe("createWildcardMatchValidator", () => {
         expect(log.unloaded).toEqual([]);
     });
 
-    it("ships timer/list/player as the default allowlist", () => {
+    it("ships timer/list as the default allowlist", () => {
         expect([...DEFAULT_WILDCARD_VALIDATION_ALLOWLIST].sort()).toEqual([
             "list",
-            "player",
             "timer",
         ]);
     });

@@ -375,7 +375,7 @@ function renderValidateButton(): void {
         ? "Wildcard validation ON: the working-tree side additionally runs the " +
           "agent's real validateWildcardMatch over its wildcard matches (the " +
           "dispatcher's post-match step), dropping a match the agent rejects. " +
-          "Only for allowlisted agents (timer, list, player); a no-op otherwise. " +
+          "Only for allowlisted agents (timer, list); a no-op otherwise. " +
           "Click to turn off."
         : "Wildcard validation OFF: matches are taken from the grammar alone. " +
           "Click to additionally run the agent's real validateWildcardMatch on " +
