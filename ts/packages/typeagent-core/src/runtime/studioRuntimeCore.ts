@@ -63,12 +63,17 @@ import {
     ReplayVersionBuildError,
     type ReplayRunError,
     type GrammarReplayTarget,
+    type GrammarReplayResolver,
 } from "../replay/grammarResolver.js";
 import {
     computeWorkingTreeSchemaHash,
     loadConstructionCacheLayer,
     type ConstructionCacheLayer,
 } from "../replay/constructionCacheResolver.js";
+import type {
+    WildcardMatchValidator,
+    WildcardValidationDiagnostic,
+} from "../replay/wildcardValidator.js";
 import type { CollisionDetectedEvent } from "../events/index.js";
 import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
@@ -258,6 +263,15 @@ export interface StudioReplayRequest {
     missPolicy?: ReplayMissPolicy;
     /** Deterministic dispatch path to model. Defaults to `nfa-grammar`. */
     mode?: StudioReplayMode;
+    /**
+     * Opt-in: additionally run the agent's real `validateWildcardMatch` over the
+     * working-tree side's wildcard grammar matches (the dispatcher's post-match
+     * validation step). Default off. Only takes effect when the runtime was given
+     * a `resolveWildcardValidator` and the agent is in the validation allowlist;
+     * otherwise it is a no-op. Working-tree side only; fail-open. See
+     * {@link StudioReplayResult.wildcardValidation}.
+     */
+    validateWildcards?: boolean;
 }
 
 /**
@@ -303,10 +317,28 @@ export interface StudioReplayResult {
     methodA: StudioReplayMethod;
     methodB: StudioReplayMethod;
     /**
+     * Set when the opt-in wildcard validation actually consulted the agent's
+     * `validateWildcardMatch` (a wildcard match occurred on the working-tree
+     * side). Omitted when validation was off or never reached a wildcard match.
+     */
+    wildcardValidation?: StudioWildcardValidationInfo;
+    /**
      * Set when a version failed to materialize or compile. The run is aborted
      * with an empty summary rather than emitting fabricated regression rows.
      */
     error?: ReplayRunError;
+}
+
+/**
+ * Reports the opt-in wildcard-validation pass (replay fidelity rung L4a). Only
+ * present when validation was enabled AND consulted on at least one wildcard
+ * match. `diagnostics` lists fail-open reasons (e.g. the agent's module
+ * couldn't load, or its validator threw), so the UI can show that validation
+ * degraded rather than silently claiming full fidelity.
+ */
+export interface StudioWildcardValidationInfo {
+    applied: boolean;
+    diagnostics: WildcardValidationDiagnostic[];
 }
 
 export interface StudioCollisionScanRequest {
@@ -572,6 +604,18 @@ export interface CreateStudioRuntimeOptions {
     resolveConstructionCache?: (
         target: GrammarReplayTarget,
     ) => Promise<ConstructionCacheLayer | undefined>;
+    /**
+     * Builds the agent's wildcard-match validator for an opt-in
+     * (`validateWildcards`) replay run. Returns `undefined` when the host can't
+     * validate this agent (e.g. not in the allowlist, or no agent loader
+     * available), in which case replay stays grammar-only. Injected because the
+     * production loader pulls the dispatcher's agent providers, which live
+     * outside this dependency-light package; tests inject a fake-loader-backed
+     * validator. The runtime disposes the returned validator at run end.
+     */
+    resolveWildcardValidator?: (
+        agentName: string,
+    ) => WildcardMatchValidator | undefined;
     collisions?: CollisionService;
     /**
      * Scans agents' compiled grammars for collisions. Injected so tests can
@@ -1039,6 +1083,10 @@ export function createStudioRuntimeCore(
             let method: StudioReplayMethod = "identity";
             let methodA: StudioReplayMethod = "identity";
             let methodB: StudioReplayMethod = "identity";
+            // Opt-in wildcard validator (L4a); kept in scope so its diagnostics
+            // can be read after the run and it can be disposed (unload the agent).
+            let wildcardValidator: WildcardMatchValidator | undefined;
+            let activeGrammarResolver: GrammarReplayResolver | undefined;
             if (
                 resolver === undefined &&
                 replayOptions.missPolicy === "needs-explanation" &&
@@ -1067,13 +1115,29 @@ export function createStudioRuntimeCore(
                               )(target)
                             : undefined;
 
+                    // Opt-in: build the agent's wildcard validator so the
+                    // working-tree side runs the dispatcher's real post-match
+                    // `validateWildcardMatch`. `undefined` when the host has no
+                    // loader or the agent isn't validatable — replay then stays
+                    // grammar-only (a silent no-op, not an error).
+                    wildcardValidator =
+                        request.validateWildcards === true
+                            ? options.resolveWildcardValidator?.(
+                                  replayOptions.agent,
+                              )
+                            : undefined;
+
                     const grammarResolver = createGrammarReplayResolver({
                         target,
                         repoRoot,
                         ...(constructionCache !== undefined
                             ? { constructionCache }
                             : {}),
+                        ...(wildcardValidator !== undefined
+                            ? { wildcardValidator }
+                            : {}),
                     });
+                    activeGrammarResolver = grammarResolver;
                     const labelFor = (): StudioReplayMethod =>
                         grammarResolver.constructionCacheStatus === "valid"
                             ? "construction-cache"
@@ -1116,6 +1180,7 @@ export function createStudioRuntimeCore(
                                   ? "schema-grammar"
                                   : "static-grammar";
                     } catch (err) {
+                        await wildcardValidator?.dispose();
                         if (err instanceof ReplayVersionBuildError) {
                             return abortedReplayResult(
                                 replayOptions,
@@ -1143,10 +1208,26 @@ export function createStudioRuntimeCore(
             });
 
             const rows: ActionDelta[] = [];
-            for await (const row of handle.rows) {
-                rows.push(row);
+            try {
+                for await (const row of handle.rows) {
+                    rows.push(row);
+                }
+            } finally {
+                await wildcardValidator?.dispose();
             }
             const summary = await handle.summary;
+            // Surface the wildcard-validation pass only when it actually ran on a
+            // wildcard match (so a run that never hit a wildcard doesn't claim a
+            // validation it never performed).
+            const wildcardValidation: StudioWildcardValidationInfo | undefined =
+                activeGrammarResolver?.wildcardValidationApplied === true
+                    ? {
+                          applied: true,
+                          diagnostics: [
+                              ...(wildcardValidator?.diagnostics ?? []),
+                          ],
+                      }
+                    : undefined;
             return {
                 runId: handle.runId,
                 summary,
@@ -1154,6 +1235,9 @@ export function createStudioRuntimeCore(
                 method,
                 methodA,
                 methodB,
+                ...(wildcardValidation !== undefined
+                    ? { wildcardValidation }
+                    : {}),
             };
         },
         reportCollision(event) {

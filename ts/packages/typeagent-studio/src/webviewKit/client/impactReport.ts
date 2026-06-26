@@ -13,6 +13,8 @@
 import type {
     StudioReplayResult,
     StudioReplayMode,
+    StudioWildcardValidationInfo,
+    WildcardValidationDiagnostic,
 } from "@typeagent/core/runtime";
 import type { ActionDelta } from "@typeagent/core/replay";
 import type {
@@ -68,6 +70,7 @@ interface PanelState {
     versionA?: ResolvedVersion;
     versionB?: ResolvedVersion;
     mode?: StudioReplayMode;
+    validateWildcards?: boolean;
     lastResult?: PersistedResult;
 }
 interface VsCodeApi {
@@ -123,6 +126,14 @@ let versionB: ResolvedVersion = DEFAULT_VERSION_B;
 // construction cache first (the default-dispatcher path). Persisted with the
 // version selection so a reload keeps the chosen mode.
 let mode: StudioReplayMode = "nfa-grammar";
+
+// Opt-in wildcard validation (replay fidelity rung L4a). When lit, the run asks
+// the host to additionally run the agent's real `validateWildcardMatch` over the
+// working-tree side's wildcard matches. Off by default; persisted with the rest
+// of the selection so a reload keeps the choice. The host/runtime no-op it when
+// no validator is wired (e.g. the packaged build) and report that back via
+// `wildcardValidation.diagnostics`, which `renderValidationNote` surfaces.
+let validateWildcards = false;
 
 /** Short toolbar label for each replay mode. */
 const MODE_LABEL: Record<StudioReplayMode, string> = {
@@ -182,6 +193,14 @@ modeButton.className = "tool-button";
 const modeButtonText = text("");
 modeButton.append(codicon("settings"), modeButtonText);
 modeButton.addEventListener("click", () => cycleMode());
+// A two-state toggle for opt-in wildcard validation (L4a). Built by hand like
+// `modeButton` so we keep a handle on its label and lit state.
+const validateButton = document.createElement("button");
+validateButton.type = "button";
+validateButton.className = "tool-button";
+const validateButtonText = text("");
+validateButton.append(codicon("verified"), validateButtonText);
+validateButton.addEventListener("click", () => toggleValidateWildcards());
 const runButton = toolButton("play", "Run", () => runReplay(), {
     primary: true,
     text: "Run",
@@ -199,7 +218,7 @@ actionBar.append(
     separator(),
     group(versionAButton.button, swapButton, versionBButton.button),
     separator(),
-    group(modeButton),
+    group(modeButton, validateButton),
     spacer(),
     runButton,
     connectionPill,
@@ -209,8 +228,9 @@ actionBar.append(
 // commits each side ran against) and the live status text.
 const subBar = el("div", "sub-bar");
 const provenanceEl = el("span", "provenance");
+const validationEl = el("span", "validation-note");
 const statusEl = el("span", "status");
-subBar.append(provenanceEl, statusEl);
+subBar.append(provenanceEl, validationEl, statusEl);
 
 // The scrolling content region: an inline error notification, the status filter,
 // first-run guidance, the results list, and the drill-in detail pane.
@@ -230,6 +250,7 @@ renderConnection("connecting");
 restoreSelection();
 renderVersionButtons();
 renderModeButton();
+renderValidateButton();
 
 // --- Messaging ------------------------------------------------------------
 window.addEventListener("message", (event: MessageEvent) => {
@@ -301,11 +322,18 @@ function runReplay(): void {
     }
     requestId += 1;
     latestRequestId = requestId;
-    persistState({ selectedAgent: agent, versionA, versionB, mode });
+    persistState({
+        selectedAgent: agent,
+        versionA,
+        versionB,
+        mode,
+        validateWildcards,
+    });
     setControlsEnabled(false);
     setStatus(`Replaying ${agent}…`);
     clearNotification();
     provenanceEl.textContent = "";
+    validationEl.textContent = "";
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
@@ -320,6 +348,7 @@ function runReplay(): void {
         versionA: versionA.spec,
         versionB: versionB.spec,
         mode,
+        validateWildcards,
     });
 }
 
@@ -328,6 +357,34 @@ function cycleMode(): void {
     mode = mode === "nfa-grammar" ? "completionBased-cache" : "nfa-grammar";
     renderModeButton();
     persistState({ mode });
+}
+
+/** Toggle opt-in wildcard validation and persist the choice. */
+function toggleValidateWildcards(): void {
+    validateWildcards = !validateWildcards;
+    renderValidateButton();
+    persistState({ validateWildcards });
+}
+
+/** Paint the wildcard-validation toggle's label, tooltip, and lit state. */
+function renderValidateButton(): void {
+    validateButtonText.textContent = "Validate";
+    validateButton.classList.toggle("is-active", validateWildcards);
+    validateButton.setAttribute("aria-pressed", String(validateWildcards));
+    const tip = validateWildcards
+        ? "Wildcard validation ON: the working-tree side additionally runs the " +
+          "agent's real validateWildcardMatch over its wildcard matches (the " +
+          "dispatcher's post-match step), dropping a match the agent rejects. " +
+          "Only for allowlisted agents (timer, list, player); a no-op otherwise. " +
+          "Click to turn off."
+        : "Wildcard validation OFF: matches are taken from the grammar alone. " +
+          "Click to additionally run the agent's real validateWildcardMatch on " +
+          "wildcard matches (allowlisted agents only).";
+    validateButton.title = tip;
+    validateButton.setAttribute(
+        "aria-label",
+        `Wildcard validation ${validateWildcards ? "on" : "off"}. ${tip}`,
+    );
 }
 
 /** Paint the mode toggle's label and tooltip from the current `mode`. */
@@ -374,6 +431,8 @@ function renderResult(
     // second table instead of upgrading the snapshot in place.
     clearNotification();
     provenanceEl.textContent = "";
+    validationEl.textContent = "";
+    validationEl.classList.remove("is-degraded");
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
@@ -407,6 +466,10 @@ function renderResult(
         renderProvenance(provenance);
     }
 
+    // Surface the opt-in wildcard-validation outcome (L4a), including an honest
+    // "unavailable" state when the validator couldn't load (e.g. packaged build).
+    renderValidationNote(result.wildcardValidation);
+
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
     currentTotal = result.summary.rowCount;
 
@@ -420,6 +483,85 @@ function renderResult(
             ? `Restored from last run — Run for live results (${shown} row(s)).`
             : `Done — ${shown} row(s) \u00b7 ${ms}ms.`,
     );
+}
+
+/** Paint the wildcard-validation outcome (L4a) into the sub-bar, or clear it.
+ *  Shown only when validation actually ran on a wildcard match; a clean pass is
+ *  neutral, a degraded/unavailable pass warns so the report stays honest. */
+function renderValidationNote(
+    info: StudioWildcardValidationInfo | undefined,
+): void {
+    validationEl.textContent = "";
+    validationEl.classList.remove("is-degraded");
+    if (!info || !info.applied) {
+        return;
+    }
+    const { icon, label, detail, degraded } = describeValidation(
+        info.diagnostics,
+    );
+    validationEl.classList.toggle("is-degraded", degraded);
+    validationEl.title = detail;
+    validationEl.append(codicon(icon), text(label));
+}
+
+/** Map the validation diagnostics to a compact label + hover detail. An empty
+ *  diagnostics list means the validator ran cleanly; otherwise we surface the
+ *  most significant fail-open reason so the run never overclaims fidelity. */
+function describeValidation(diagnostics: WildcardValidationDiagnostic[]): {
+    icon: string;
+    label: string;
+    detail: string;
+    degraded: boolean;
+} {
+    if (diagnostics.length === 0) {
+        return {
+            icon: "verified",
+            label: "wildcard-validated",
+            detail:
+                "The working-tree side ran the agent's real validateWildcardMatch " +
+                "over its wildcard matches; any match the agent rejected was dropped.",
+            degraded: false,
+        };
+    }
+    if (diagnostics.includes("load-failed")) {
+        return {
+            icon: "warning",
+            label: "validation unavailable",
+            detail:
+                "Wildcard validation was requested but the agent module couldn't be " +
+                "loaded (e.g. the packaged build ships no agent code), so matches " +
+                "fell back to the grammar alone.",
+            degraded: true,
+        };
+    }
+    if (diagnostics.includes("agent-not-in-allowlist")) {
+        return {
+            icon: "info",
+            label: "validation skipped",
+            detail:
+                "This agent isn't in the validation allowlist, so its validator " +
+                "wasn't run and matches came from the grammar alone.",
+            degraded: true,
+        };
+    }
+    if (diagnostics.includes("no-validator")) {
+        return {
+            icon: "info",
+            label: "no validator",
+            detail:
+                "This agent exposes no validateWildcardMatch, so validation made " +
+                "no change to the grammar matches.",
+            degraded: true,
+        };
+    }
+    return {
+        icon: "warning",
+        label: "validation degraded",
+        detail:
+            "The agent's validator threw while checking a wildcard match; the match " +
+            "was kept (fail-open) so the run stayed grammar-faithful.",
+        degraded: true,
+    };
 }
 
 /** Paint the status filter chips for the rows of the current result. */
@@ -763,6 +905,9 @@ function restoreSelection(): void {
     if (state?.mode) {
         mode = state.mode;
     }
+    if (state?.validateWildcards !== undefined) {
+        validateWildcards = state.validateWildcards === true;
+    }
     // The agent is authoritative from the host `init`; until it arrives, show a
     // neutral placeholder rather than a stale persisted value.
     renderAgentName();
@@ -818,6 +963,7 @@ function setControlsEnabled(enabled: boolean): void {
     versionAButton.button.disabled = !enabled;
     versionBButton.button.disabled = !enabled;
     modeButton.disabled = !enabled;
+    validateButton.disabled = !enabled;
 }
 
 function setStatus(text: string): void {

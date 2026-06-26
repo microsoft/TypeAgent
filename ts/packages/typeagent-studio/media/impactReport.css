@@ -307,6 +307,13 @@ body {
   background: var(--vscode-button-hoverBackground);
 }
 
+/* A lit two-state toggle (e.g. the wildcard-validation switch) when active. */
+.tool-button.is-active {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background: var(--vscode-inputOption-activeBackground);
+  border-color: var(--vscode-inputOption-activeBorder, transparent);
+}
+
 /* --- Sub-bar: provenance + run status ------------------------------------ */
 .sub-bar {
   display: flex;
@@ -346,6 +353,24 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The wildcard-validation outcome of the last run; sits next to provenance.
+   Tinted by severity: a clean pass is neutral, a degraded/unavailable pass
+   warns so the report never silently claims a fidelity it didn't reach. */
+.validation-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+}
+
+.validation-note.is-degraded {
+  color: var(
+    --vscode-editorWarning-foreground,
+    var(--vscode-descriptionForeground)
+  );
 }
 
 /* --- Inline notification (errors) ---------------------------------------- */

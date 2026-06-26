@@ -14,6 +14,7 @@ import {
     FileWorkspaceState,
     studioWorkspaceStateFile,
 } from "./fileWorkspaceState.js";
+import { createDefaultWildcardValidatorResolver } from "./wildcardValidation.js";
 
 /**
  * Candidate repository roots for Studio to inspect, most-specific first. The
@@ -130,11 +131,17 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
         // Recover a pre-canonical snapshot for this workspace, if any, before
         // the runtime reads its persisted state.
         migrateLegacyWorkspaceState(stateFile, resolved);
-        runtime = createStudioRuntimeCore({
-            workspaceState: new FileWorkspaceState(stateFile),
-            globalStorageFsPath: studioProfileDir(),
-            workspaceFolderFsPaths: candidates,
-        });
+        runtime = createStudioRuntimeCore(
+            {
+                workspaceState: new FileWorkspaceState(stateFile),
+                globalStorageFsPath: studioProfileDir(),
+                workspaceFolderFsPaths: candidates,
+            },
+            {
+                resolveWildcardValidator:
+                    createDefaultWildcardValidatorResolver(),
+            },
+        );
         runtimeCache.set(key, runtime);
     }
     return runtime;

@@ -100,7 +100,12 @@ const serviceConfig = {
     entryPoints: ["../studio-service/src/main.ts"],
     bundle: true,
     outfile: "dist/studio-service.js",
-    external: ["vscode"],
+    // `default-agent-provider` is dynamically imported by the replay wildcard
+    // validator (fidelity rung L4a). It drags in the whole dispatcher + every
+    // agent, so it must NOT be inlined here. Marked external, it resolves from
+    // `node_modules` on the in-repo `typeagent-studio serve` dev path and simply
+    // fails the dynamic import (→ grammar-only replay) in the packaged `.vsix`.
+    external: ["vscode", "default-agent-provider"],
     alias: nodeBundleAlias,
     format: "cjs",
     platform: "node",

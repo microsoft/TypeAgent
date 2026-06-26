@@ -16,3 +16,21 @@ export * from "./studioRegistryProtocol.js";
 export * from "./studioServiceAuth.js";
 export * from "./studioWorkspaceId.js";
 export { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
+
+// Wildcard-match validation (replay fidelity rung L4a). Re-exported here so the
+// service host can wire a real `ReplayAppAgentLoader` (the production loader
+// lives outside this dependency-light package) without reaching into `replay/`.
+export {
+    createWildcardMatchValidator,
+    createReplaySessionContextStub,
+    matchActionPayloads,
+    DEFAULT_WILDCARD_VALIDATION_ALLOWLIST,
+} from "../replay/wildcardValidator.js";
+export type {
+    ReplayAppAgentLoader,
+    ReplayValidatableAgent,
+    WildcardMatchValidator,
+    WildcardValidationOutcome,
+    WildcardValidationDiagnostic,
+    CreateWildcardMatchValidatorOptions,
+} from "../replay/wildcardValidator.js";

@@ -38,6 +38,7 @@
     "@typeagent/core": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
+    "default-agent-provider": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {

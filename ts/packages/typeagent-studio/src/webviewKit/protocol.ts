@@ -76,6 +76,12 @@ export type WebviewToHostMessage =
           versionB: VersionSpec;
           /** Which deterministic dispatch path to model. */
           mode: StudioReplayMode;
+          /**
+           * Opt-in: additionally run the agent's real `validateWildcardMatch`
+           * over the working-tree side's wildcard matches (replay fidelity rung
+           * L4a). Off unless the user lit the validation toggle.
+           */
+          validateWildcards: boolean;
       }
     /** Ask the host to open a native version QuickPick for one side. */
     | { type: "pickVersion"; side: ReplaySide };
@@ -115,6 +121,7 @@ export function parseWebviewMessage(
                 versionA?: unknown;
                 versionB?: unknown;
                 mode?: unknown;
+                validateWildcards?: unknown;
             };
             if (
                 typeof m.requestId === "number" &&
@@ -132,6 +139,8 @@ export function parseWebviewMessage(
                     versionA: coerceVersionSpec(m.versionA),
                     versionB: coerceVersionSpec(m.versionB),
                     mode: narrowMode(m.mode),
+                    // Opt-in and conservative: only an explicit `true` enables it.
+                    validateWildcards: m.validateWildcards === true,
                 };
             }
             return undefined;

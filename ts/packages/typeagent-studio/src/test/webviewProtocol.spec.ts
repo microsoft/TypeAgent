@@ -28,6 +28,7 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: { kind: "workingTree" },
             versionB: { kind: "workingTree" },
             mode: "nfa-grammar",
+            validateWildcards: false,
         },
     );
     // String version fields are coerced (legacy text-field / test seam).
@@ -39,6 +40,7 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: "HEAD",
             versionB: "working tree",
             mode: "completionBased-cache",
+            validateWildcards: true,
         }),
         {
             type: "run",
@@ -47,10 +49,12 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: { kind: "git", ref: "HEAD" },
             versionB: { kind: "workingTree" },
             mode: "completionBased-cache",
+            validateWildcards: true,
         },
     );
     // Typed specs from a picker selection are validated and taken as-is; an
-    // unknown mode value falls back to the grammar-only baseline.
+    // unknown mode value falls back to the grammar-only baseline, and a
+    // non-boolean validateWildcards falls back to off.
     assert.deepEqual(
         parseWebviewMessage({
             type: "run",
@@ -59,6 +63,7 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: { kind: "git", ref: "v1.0" },
             versionB: { kind: "workingTree" },
             mode: "bogus-mode",
+            validateWildcards: "yes",
         }),
         {
             type: "run",
@@ -67,6 +72,7 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: { kind: "git", ref: "v1.0" },
             versionB: { kind: "workingTree" },
             mode: "nfa-grammar",
+            validateWildcards: false,
         },
     );
     // Non-string / malformed version fields fall back to the working tree.
@@ -85,6 +91,7 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             versionA: { kind: "workingTree" },
             versionB: { kind: "workingTree" },
             mode: "nfa-grammar",
+            validateWildcards: false,
         },
     );
 });
