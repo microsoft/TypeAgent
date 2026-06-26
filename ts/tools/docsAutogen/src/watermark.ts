@@ -7,9 +7,9 @@ import { Git } from "./git.js";
  * Conventional name of the lightweight tag that records the SHA of
  * the most recent docs-autogen run.
  *
- * The `docs-generate` workflow advances this tag at the end of every
- * non-dry-run dispatch (and seeds it on the first run), so each run
- * diffs against the commit the previous run was based on.
+ * The `azure-docs-generate` Azure DevOps pipeline advances this tag at
+ * the end of every non-dry-run run (and seeds it on the first run), so
+ * each run diffs against the commit the previous run was based on.
  */
 export const WATERMARK_TAG = "docs-bot/last-run";
 
@@ -26,9 +26,10 @@ export async function readWatermark(git: Git): Promise<string | null> {
 
 /**
  * Move (or create) the watermark tag to point at `sha` locally.
- * The caller is responsible for pushing the tag. The CI workflow
- * advances + pushes the tag directly via git after a successful
- * non-dry-run dispatch; these helpers exist for local/tooling use.
+ * The caller is responsible for pushing the tag. The
+ * `azure-docs-generate` pipeline advances + pushes the tag directly via
+ * git after a successful non-dry-run run; these helpers exist for
+ * local/tooling use.
  */
 export async function writeWatermark(git: Git, sha: string): Promise<void> {
     const ok = await git.setTag(WATERMARK_TAG, sha);

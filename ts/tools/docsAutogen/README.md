@@ -3,10 +3,11 @@
 On-demand regeneration of `README.AUTOGEN.md` companion files for every
 package under `ts/packages/**` in the TypeAgent monorepo.
 
-This package implements the workflow described in
+This package implements the regeneration described in
 [`ts/docs/architecture/doc-autogen.md`](../../docs/architecture/doc-autogen.md).
-It is intended to be invoked manually from CI via `workflow_dispatch`
-(no schedule) and exposes a CLI (`docs-autogen`) for local invocation.
+It is intended to be invoked manually from CI via the
+`azure-docs-generate` Azure DevOps pipeline (no schedule) and exposes a
+CLI (`docs-autogen`) for local invocation.
 
 > **Important:** `docs-autogen` writes to a parallel
 > `README.AUTOGEN.md` file alongside each package's hand-written
@@ -130,65 +131,65 @@ instead of starting from scratch.
 
 ## Operations
 
-### CI workflow
+### CI topology (split across two platforms)
 
-The on-demand GitHub Action lives at
-[`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml).
-It is **not** scheduled — runs are triggered manually via
-`workflow_dispatch` with the same flags the CLI exposes. The job is
-bound to the `development-fork` GitHub environment (the same
-environment used by `smoke-tests.yml` and `build-docker-container.yml`)
-so federated-credential exchange against the existing build-pipeline
-Entra App registration succeeds and `getKeys.mjs` can read
-`build-pipeline-kv` for Azure OpenAI credentials.
+Regeneration and PR creation run on **different** platforms, because no
+single platform can do both halves without storing a secret:
 
-> **First-time pipeline setup** — installing the GitHub App,
-> provisioning secrets and variables, and validating the first run
-> — is covered in
+| Stage                                    | Platform                                                                                               | Auth                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Regenerate docs (calls Azure OpenAI)     | Azure DevOps — [`pipelines/azure-docs-generate.yml`](../../../pipelines/azure-docs-generate.yml)       | Workload Identity Federation via the `MSOCTO-ADO-Service-Connection` (secretless)        |
+| Push the `automated/docs-readmes` branch | Azure DevOps (same pipeline)                                                                           | persisted credentials of the GitHub App connection that backs `checkout` (no stored PAT) |
+| Open / update the PR                     | GitHub Actions — [`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml) | native, ephemeral `GITHUB_TOKEN`                                                         |
+
+Why split: authoring the docs calls Azure OpenAI, which now requires
+secretless WIF; GitHub federated credentials are being deprecated and
+stored secrets / PATs are not permitted, so the Azure work must run in
+Azure DevOps. But Azure DevOps cannot write to GitHub without a stored
+token, so opening the PR is delegated back to GitHub Actions, where
+`GITHUB_TOKEN` is auto-minted per run. The ADO pipeline only _pushes a
+branch_ (via the GitHub App connection); the force-push triggers the
+GitHub workflow, which opens the PR. Each platform writes only with its
+own managed identity.
+
+> **First-time setup** — the WIF service connection, the GitHub App
+> connection's read/write code permission, and the `build-pipeline-kv`
+> RBAC roles — is covered in
 > [`ts/docs/architecture/doc-autogen-setup.md`](../../docs/architecture/doc-autogen-setup.md).
-> The summary below is reference-only; do not use it as a substitute
-> for the setup guide on a fresh repo.
 
-Required repository configuration (provision once):
+Prerequisites (provision once):
 
-| Kind     | Name                       | Purpose                                 |
-| -------- | -------------------------- | --------------------------------------- |
-| variable | `DOCS_BOT_APP_ID`          | GitHub App that opens the generated PR  |
-| secret   | `DOCS_BOT_APP_PRIVATE_KEY` | Private key for the same GitHub App     |
-| secret   | `AZURE_OPENAI_ENDPOINT`    | Azure OpenAI endpoint URL               |
-| secret   | `AZURE_OPENAI_API_KEY`     | Azure OpenAI key (or wire OIDC instead) |
-
-The GitHub App needs `contents: write` and `pull-requests: write` on
-this repo. Until those are provisioned the workflow will run but fail
-at the "Generate GitHub App token" step — that's safe (it cannot
-modify anything before that step).
+| Where                  | Name                                       | Purpose                                                                                                                                                   |
+| ---------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADO service connection | `MSOCTO-ADO-Service-Connection` (ARM, WIF) | Secretless Azure login; its SP needs `Key Vault Secrets User` on `build-pipeline-kv` and `Cognitive Services OpenAI User` on the Azure OpenAI resource(s) |
+| ADO service connection | GitHub App connection backing `checkout`   | Must have **read/write access to code** so the branch + watermark-tag push succeed                                                                        |
+| ADO pipeline variable  | `REGISTRY`                                 | Internal npm feed for dependency restore                                                                                                                  |
 
 ### Triggering manually
 
-From the GitHub UI: **Actions → docs-generate → Run workflow**. The
-dispatch form mirrors the CLI flags:
+From Azure DevOps: run the **azure-docs-generate** pipeline. The run
+parameters mirror the CLI flags:
 
-- `dry-run` — analyse and render only, never write or open a PR.
+- `dryRun` — analyse and render only, never push or open a PR.
 - `packages` — comma-separated list to override change detection.
 - `since` — git ref to diff against, overriding the watermark.
 - `llm` — toggle the AI authoring (default on; off emits placeholder
   documentation alongside the deterministic Reference).
-- `max-packages` — per-run cap (default 25).
+- `maxPackages` — per-run cap (default 100).
 
-The workflow advances the `docs-bot/last-run` watermark to the run's
-commit at the end of every non-dry-run dispatch (see "Watermark
-lifecycle" below), so each run only regenerates packages whose source
-changed since the previous run.
+The pipeline advances the `docs-bot/last-run` watermark to the run's
+commit at the end of every non-dry-run run (see "Watermark lifecycle"
+below), so each run only regenerates packages whose source changed
+since the previous run.
 
 ### Watermark lifecycle
 
 The watermark is a lightweight git tag pointing at the SHA of the
-commit a prior run was generated against. The workflow's "Advance docs
-watermark" step force-pushes it to the run's commit on every
-successful non-dry-run dispatch, and **seeds it on the first run** (the
-tag doesn't exist yet). Operators can still advance, reset, or delete
-it by hand to control the default diff baseline used when `since` is
-left blank:
+commit a prior run was generated against. The pipeline's "Advance docs
+watermark" step force-pushes it to the run's commit on every successful
+non-dry-run run, and **seeds it on the first run** (the tag doesn't
+exist yet). Operators can still advance, reset, or delete it by hand to
+control the default diff baseline used when `since` is left blank:
 
 ```bash
 # Inspect the current watermark.
@@ -196,12 +197,12 @@ git fetch origin --tags
 git rev-parse refs/tags/docs-bot/last-run
 
 # Force the watermark to a specific commit (e.g. force a full re-sweep
-# of everything changed since <sha> on the next dispatch).
+# of everything changed since <sha> on the next run).
 git tag -f docs-bot/last-run <sha>
 git push origin docs-bot/last-run --force
 
-# Delete the watermark entirely. The next default-branch dispatch then
-# has no baseline and falls back to the first-run full sweep (every
+# Delete the watermark entirely. The next default-branch run then has
+# no baseline and falls back to the first-run full sweep (every
 # eligible package); supply `since` explicitly to scope it instead.
 git tag -d docs-bot/last-run
 git push origin :refs/tags/docs-bot/last-run
@@ -209,13 +210,13 @@ git push origin :refs/tags/docs-bot/last-run
 
 ### First-run bootstrap
 
-No manual bootstrap is required. On the first dispatch the watermark
-tag does not exist; on the default branch with no watermark the CLI
+No manual bootstrap is required. On the first run the watermark tag
+does not exist; on the default branch with no watermark the CLI
 performs a **full sweep** (regenerates every eligible package, bounded
-by `max-packages`), and the workflow then seeds the tag. To seed
+by `maxPackages`), and the pipeline then seeds the tag. To seed
 immediately without a full sweep, tag a known-good SHA on `main` by
 hand (`git tag -f docs-bot/last-run <sha> && git push origin
-docs-bot/last-run --force`) or dispatch once with `since: main`.
+docs-bot/last-run --force`) or run once with `since: main`.
 
 ### Cost expectations
 
