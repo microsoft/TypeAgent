@@ -175,39 +175,47 @@ dispatch form mirrors the CLI flags:
   documentation alongside the deterministic Reference).
 - `max-packages` — per-run cap (default 25).
 
-The workflow never advances the `docs-bot/last-run` watermark — there
-is no scheduled run to protect against — so any dispatch is safely
-idempotent against the operator's chosen `since` baseline.
+The workflow advances the `docs-bot/last-run` watermark to the run's
+commit at the end of every non-dry-run dispatch (see "Watermark
+lifecycle" below), so each run only regenerates packages whose source
+changed since the previous run.
 
-### Resetting the watermark
+### Watermark lifecycle
 
 The watermark is a lightweight git tag pointing at the SHA of the
-commit a prior run was generated against. The workflow no longer
-auto-advances it; operators advance, reset, or delete it by hand to
-control the default diff baseline used when `since` is left blank:
+commit a prior run was generated against. The workflow's "Advance docs
+watermark" step force-pushes it to the run's commit on every
+successful non-dry-run dispatch, and **seeds it on the first run** (the
+tag doesn't exist yet). Operators can still advance, reset, or delete
+it by hand to control the default diff baseline used when `since` is
+left blank:
 
 ```bash
 # Inspect the current watermark.
 git fetch origin --tags
 git rev-parse refs/tags/docs-bot/last-run
 
-# Force the watermark to a specific commit (e.g. force a full re-sweep).
+# Force the watermark to a specific commit (e.g. force a full re-sweep
+# of everything changed since <sha> on the next dispatch).
 git tag -f docs-bot/last-run <sha>
 git push origin docs-bot/last-run --force
 
-# Delete the watermark entirely (subsequent dispatches that omit
-# `since` will fall back to "regenerate everything"; supply `since`
-# explicitly to avoid that).
+# Delete the watermark entirely. The next default-branch dispatch then
+# has no baseline and falls back to the first-run full sweep (every
+# eligible package); supply `since` explicitly to scope it instead.
 git tag -d docs-bot/last-run
 git push origin :refs/tags/docs-bot/last-run
 ```
 
 ### First-run bootstrap
 
-If the watermark tag does not exist, dispatches that leave `since`
-blank have no diff baseline. Either tag a known-good SHA on `main`
-manually, or use `workflow_dispatch` with `since: main` (or any other
-ref) to seed.
+No manual bootstrap is required. On the first dispatch the watermark
+tag does not exist; on the default branch with no watermark the CLI
+performs a **full sweep** (regenerates every eligible package, bounded
+by `max-packages`), and the workflow then seeds the tag. To seed
+immediately without a full sweep, tag a known-good SHA on `main` by
+hand (`git tag -f docs-bot/last-run <sha> && git push origin
+docs-bot/last-run --force`) or dispatch once with `since: main`.
 
 ### Cost expectations
 

@@ -23,6 +23,13 @@
 # and opens a single batched PR. Prior open bot PRs are closed with
 # --delete-branch so only one is ever live at a time.
 #
+# Baseline bootstrapping: on the first run the `docs-bot/last-run` tag
+# does not exist yet. On the default branch with no watermark the CLI
+# regenerates every eligible package (cold-start full sweep), and the
+# "Advance docs watermark" step below seeds the tag at the run's commit.
+# Every subsequent dispatch advances that tag, so later runs only
+# regenerate packages whose source changed since the previous run.
+#
 # AI authoring of the documentation body uses Azure OpenAI via
 # packages/aiclient. The deterministic Reference appendix (entry
 # points, dependencies, files of interest, agent surface, action list)
@@ -380,6 +387,26 @@ jobs:
             --title "docs: regenerate package README.AUTOGEN.md files ($(date +%Y-%m-%d))" \
             --body "$BODY" \
             --label "documentation"
+
+      # ── Advance (or seed) the docs watermark ────────────────────────
+      # Move the `docs-bot/last-run` tag to the commit this run was
+      # based on (the checked-out default-branch SHA) so the *next*
+      # dispatch diffs only source changed since here. On the very first
+      # run the tag doesn't exist yet, so this also seeds it: combined
+      # with the CLI's first-run full sweep (default branch + no
+      # watermark), run #1 documents every package and runs #2+ are
+      # incremental. Safe to advance even on no-change runs — only `src`
+      # and `package.json` are watched inputs, so neither this tag nor a
+      # later merge of the generated README.AUTOGEN.md PR retriggers
+      # regeneration. Runs on success of the regen step (skipped Create
+      # PR step does not block it) and never on a dry run. Uses the
+      # persisted actions/checkout credentials (contents: write) to push.
+      - name: Advance docs watermark
+        if: ${{ success() && inputs.dry-run != true }}
+        run: |
+          git tag -f docs-bot/last-run "${GITHUB_SHA}"
+          git push origin --force \
+            "refs/tags/docs-bot/last-run:refs/tags/docs-bot/last-run"
 
       # ── Job summary ─────────────────────────────────────────────────
       - name: Job summary

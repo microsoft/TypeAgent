@@ -90,8 +90,8 @@ workflows already trust.
 │   │     - close prior open bot PRs (--delete-branch)           │
 │   │     - push branch automated/docs-readmes-<date>-<run>      │
 │   │     - gh pr create with summary table                      │
-│   └── (watermark tag docs-bot/last-run is NOT auto-advanced;   │
-│        operators move it by hand to control the next baseline) │
+│   └── advance/seed watermark tag docs-bot/last-run to this     │
+│        run's commit (non-dry-run); next run diffs from here    │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -153,17 +153,25 @@ are handled consistently with the rest of the codebase.
 ### Watermark
 
 A lightweight git tag, `docs-bot/last-run`, points at the SHA of the
-commit a prior run was generated against. The workflow does **not**
-auto-advance it — there is no scheduled run to protect against. The
-tag exists purely as the default diff baseline for dispatches that
-omit the `since` input; operators move it forward by hand when they
-want subsequent default-baseline dispatches to start later.
+commit the previous run was generated against. The `docs-generate`
+workflow **advances** it to the current run's commit at the end of
+every non-dry-run dispatch (the "Advance docs watermark" step), so the
+tag tracks the last scanned default-branch commit and each dispatch
+only regenerates packages whose source changed since the prior run.
+Operators can still move it by hand (see the docs-autogen README,
+"Watermark lifecycle") to repoint the default diff baseline.
 
-First-run behaviour when the tag is absent: pre-seed the tag manually
-to current `main` and treat the first dispatch (with `since` blank)
-as a no-op. The alternative — regenerating ~85 packages without an
-AUTOGEN block in a single run — exceeds the cost cap and produces an
-unreviewable PR.
+First-run behaviour when the tag is absent: on the default branch with
+no watermark the CLI does a **cold-start full sweep**, regenerating
+every eligible package (bounded by `max-packages`), and the workflow
+seeds the tag at that run's commit. This is gated to the default branch
+plus missing-watermark case via the `onDefaultBranch` flag on the
+resolver's `source: "none"` result; other no-baseline cases (e.g. a
+detached HEAD) stay a no-op. Run #1 therefore documents everything and
+runs #2+ are incremental. `README.AUTOGEN.md` / `README.md` are not
+watched inputs (only `src/` and `package.json` are), so neither
+advancing the tag nor merging the generated docs PR retriggers
+regeneration.
 
 ### README AUTOGEN region
 
@@ -432,7 +440,9 @@ default based on the current branch:
   exactly the packages a contributor has changed in their PR branch,
   without typing package names.
 - If `HEAD` is `main`, falls back to the watermark tag
-  (`docs-bot/last-run`), matching the bot's behaviour.
+  (`docs-bot/last-run`) if present, or — on the first run with no
+  watermark — a full sweep of every eligible package, matching the
+  bot's behaviour.
 
 This makes the most common contributor case ("regenerate the docs
 for my PR") a flag-free invocation. Explicit flags always override.
@@ -470,12 +480,12 @@ GitHub Actions UI without any local setup. The `Run workflow`
 dropdown lets you pick the branch the workflow runs against; the
 same smart-`since` default applies.
 
-| Input       | Default | Effect                                                                                                        |
-| ----------- | ------- | ------------------------------------------------------------------------------------------------------------- |
-| `dry-run`   | `false` | Generate and report only; do not commit or open a PR.                                                         |
-| `packages`  | `""`    | Comma-separated package names. When set, overrides any change-detection.                                      |
-| `since`     | `""`    | Override the change-detection ref. Empty = smart default (merge-base if on a branch, watermark if on `main`). |
-| `force-all` | `false` | Regenerate every package. Requires `dry-run` _or_ workflow approval, never both off.                          |
+| Input       | Default | Effect                                                                                                                                                            |
+| ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dry-run`   | `false` | Generate and report only; do not commit or open a PR.                                                                                                             |
+| `packages`  | `""`    | Comma-separated package names. When set, overrides any change-detection.                                                                                          |
+| `since`     | `""`    | Override the change-detection ref. Empty = smart default (merge-base if on a branch; watermark if on `main`, or a first-run full sweep when no watermark exists). |
+| `force-all` | `false` | Regenerate every package. Requires `dry-run` _or_ workflow approval, never both off.                                                                              |
 
 Common uses:
 
@@ -488,10 +498,10 @@ Common uses:
 
 A manually-dispatched run still respects all safety guards
 (Trademarks block check, `SecretAgents/` exclusion, link
-validation, structural validation, supersede prior PRs). It does
-**not** advance the watermark — the workflow never moves the tag —
-so a manual refresh of one package does not "consume" the diff
-window for the next dispatch.
+validation, structural validation, supersede prior PRs). It
+**advances** the watermark at the end of a successful non-dry-run
+dispatch, so the next default-baseline dispatch diffs only source
+changed since this run.
 
 ### Per-PR override (deferred to v2)
 
@@ -503,18 +513,18 @@ v2 extension.
 
 ## Cost and safety guards
 
-| Guard                      | Mechanism                                                                                                   |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Cost cap                   | Per-run package cap (default 25); per-package byte cap on source slice; per-call token budget.              |
-| Section length caps        | Files of interest=10, Used by=10, External deps=20, Key concepts=8, Overview=500 words hard.                |
-| Total document cap         | ~2000 words rendered; safety net for pathological packages.                                                 |
-| Trademarks block integrity | Re-validated against `policyChecks/npmPackage.mjs` after every regeneration.                                |
-| `SecretAgents/` exclusion  | Hard-coded path filter in change detection. Never globbed.                                                  |
-| Fork-PR safety             | Workflow only runs on `workflow_dispatch` from the default branch; no PR-triggered path that leaks secrets. |
-| Loop prevention            | Workflow has no `push` / `pull_request` trigger — operator-initiated only.                                  |
-| Concurrency                | `cancel-in-progress: false`. Two runs cannot interleave; the older one finishes and is superseded.          |
-| Watermark protection       | Workflow never auto-advances `docs-bot/last-run`; operators move it by hand.                                |
-| Environment binding        | Job declares `environment: development-fork`; FIC subject claim is scoped accordingly.                      |
+| Guard                      | Mechanism                                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Cost cap                   | Per-run package cap (default 25); per-package byte cap on source slice; per-call token budget.                       |
+| Section length caps        | Files of interest=10, Used by=10, External deps=20, Key concepts=8, Overview=500 words hard.                         |
+| Total document cap         | ~2000 words rendered; safety net for pathological packages.                                                          |
+| Trademarks block integrity | Re-validated against `policyChecks/npmPackage.mjs` after every regeneration.                                         |
+| `SecretAgents/` exclusion  | Hard-coded path filter in change detection. Never globbed.                                                           |
+| Fork-PR safety             | Workflow only runs on `workflow_dispatch` from the default branch; no PR-triggered path that leaks secrets.          |
+| Loop prevention            | Workflow has no `push` / `pull_request` trigger — operator-initiated only.                                           |
+| Concurrency                | `cancel-in-progress: false`. Two runs cannot interleave; the older one finishes and is superseded.                   |
+| Watermark advance          | Workflow advances/seeds `docs-bot/last-run` to each run's commit (non-dry-run); operators can still move it by hand. |
+| Environment binding        | Job declares `environment: development-fork`; FIC subject claim is scoped accordingly.                               |
 
 ## Authentication
 
