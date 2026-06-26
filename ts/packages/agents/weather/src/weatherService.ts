@@ -32,13 +32,27 @@ export interface DailyForecast {
 
 /**
  * Geocode a location string to coordinates using Open-Meteo Geocoding API
+ *
+ * The Open-Meteo geocoding API only matches the `name` parameter against a
+ * single place name, so a full query like "Seattle, Washington, United States"
+ * returns no results. To make it robust, we send only the primary place name
+ * (the first comma-separated token) and use the remaining tokens as hints to
+ * disambiguate among the candidates (matching against admin1/admin2/country).
  */
 export async function geocodeLocation(
     location: string,
 ): Promise<Coordinates | null> {
     try {
-        const encodedLocation = encodeURIComponent(location);
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodedLocation}&count=1&language=en&format=json`;
+        const parts = location
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+
+        const name = parts.length > 0 ? parts[0] : location.trim();
+        const hints = parts.slice(1).map((s) => s.toLowerCase());
+
+        const encodedName = encodeURIComponent(name);
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodedName}&count=10&language=en&format=json`;
 
         const response = await fetch(url);
         if (!response.ok) {
@@ -47,15 +61,61 @@ export async function geocodeLocation(
 
         const data = (await response.json()) as any;
 
-        if (!data.results || data.results.length === 0) {
+        const results: any[] = data.results ?? [];
+        if (results.length === 0) {
             return null;
         }
 
-        const result = data.results[0];
+        // Score each candidate by how many of the disambiguation hints it
+        // matches against its administrative/country fields. Fall back to the
+        // first (highest-ranked) result when no hints are provided or none
+        // match.
+        const scoreResult = (result: any): number => {
+            if (hints.length === 0) {
+                return 0;
+            }
+            const fields = [
+                result.admin1,
+                result.admin2,
+                result.admin3,
+                result.admin4,
+                result.country,
+                result.country_code,
+            ]
+                .filter((f): f is string => typeof f === "string")
+                .map((f) => f.toLowerCase());
+
+            return hints.reduce(
+                (count, hint) =>
+                    fields.some((f) => f.includes(hint)) ? count + 1 : count,
+                0,
+            );
+        };
+
+        let best = results[0];
+        let bestScore = scoreResult(best);
+        for (let i = 1; i < results.length; i++) {
+            const score = scoreResult(results[i]);
+            if (score > bestScore) {
+                best = results[i];
+                bestScore = score;
+            }
+        }
+
+        // Build a friendly display name including the state/region when
+        // available so callers can confirm the resolved location.
+        const nameParts = [best.name];
+        if (best.admin1 && best.admin1 !== best.name) {
+            nameParts.push(best.admin1);
+        }
+        if (best.country) {
+            nameParts.push(best.country);
+        }
+
         return {
-            latitude: result.latitude,
-            longitude: result.longitude,
-            name: result.name + (result.country ? `, ${result.country}` : ""),
+            latitude: best.latitude,
+            longitude: best.longitude,
+            name: nameParts.join(", "),
         };
     } catch (error) {
         console.error("Geocoding error:", error);
