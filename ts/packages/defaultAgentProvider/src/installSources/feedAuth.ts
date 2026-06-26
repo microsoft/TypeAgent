@@ -1,0 +1,126 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const execFileAsync = promisify(execFile);
+
+// Azure DevOps resource GUID (design §4.1, §12 Q8).
+const AZURE_DEVOPS_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798";
+
+export class FeedAuthError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "FeedAuthError";
+    }
+}
+
+type CachedToken = { token: string; expiresAt: number };
+let cachedToken: CachedToken | undefined;
+
+// Injection seam for tests: an optional command runner returning the raw JSON
+// output of `az account get-access-token`.
+export type AzTokenRunner = () => Promise<string>;
+
+async function defaultAzRunner(): Promise<string> {
+    try {
+        const { stdout } = await execFileAsync(
+            "az",
+            [
+                "account",
+                "get-access-token",
+                "--resource",
+                AZURE_DEVOPS_RESOURCE,
+                "--output",
+                "json",
+            ],
+            { shell: process.platform === "win32" },
+        );
+        return stdout;
+    } catch (e: any) {
+        const detail = e?.stderr?.toString?.() ?? e?.message ?? String(e);
+        throw new FeedAuthError(
+            `Could not get an Azure DevOps access token from the Azure CLI. ` +
+                `Run 'az login' and try again.\n${detail}`,
+        );
+    }
+}
+
+/**
+ * Mint (or reuse) a short-lived Azure DevOps bearer token via the Azure CLI.
+ * Cached in memory until shortly before expiry; re-minted on demand. Throws an
+ * actionable `az login` hint when `az` is missing or logged out (§12 Q8).
+ */
+export async function getFeedAccessToken(
+    runner: AzTokenRunner = defaultAzRunner,
+): Promise<string> {
+    const now = Date.now();
+    // Reuse the cached token until ~60s before expiry so a long-running install
+    // never starts with a token that expires mid-flight.
+    if (cachedToken && cachedToken.expiresAt - now > 60_000) {
+        return cachedToken.token;
+    }
+    const stdout = await runner();
+    let parsed: { accessToken?: string; expiresOn?: string };
+    try {
+        parsed = JSON.parse(stdout);
+    } catch {
+        throw new FeedAuthError(
+            `Unexpected 'az account get-access-token' output. Run 'az login' and try again.`,
+        );
+    }
+    if (!parsed.accessToken) {
+        throw new FeedAuthError(
+            `No access token returned by the Azure CLI. Run 'az login' and try again.`,
+        );
+    }
+    const parsedExpiry = parsed.expiresOn
+        ? Date.parse(parsed.expiresOn)
+        : Number.NaN;
+    const expiresAt = Number.isNaN(parsedExpiry)
+        ? now + 30 * 60_000
+        : parsedExpiry;
+    cachedToken = { token: parsed.accessToken, expiresAt };
+    return cachedToken.token;
+}
+
+/**
+ * Write a throwaway npm userconfig (.npmrc) carrying the bearer token scoped to
+ * `registry`. Returns the temp file path; the caller removes it (and its
+ * directory) after the install. Nothing persists (design §4.1, §12 Q8).
+ */
+export async function writeTransientNpmAuth(
+    registry: string,
+    runner: AzTokenRunner = defaultAzRunner,
+): Promise<string> {
+    const token = await getFeedAccessToken(runner);
+    // registry "https://.../registry/" -> auth key is the path without scheme.
+    const authKey = registry.replace(/^https:/, "");
+    const base = registry.replace(/registry\/?$/, "");
+    const npmrc =
+        `${base}:_authToken=${token}\n` +
+        `${authKey}:_authToken=${token}\n` +
+        `${authKey}:always-auth=true\n`;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-npmauth-"));
+    const file = path.join(dir, ".npmrc");
+    fs.writeFileSync(file, npmrc, { mode: 0o600 });
+    return file;
+}
+
+/** Remove a transient npm auth file and its temp directory. */
+export function removeTransientNpmAuth(file: string): void {
+    try {
+        fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    } catch {
+        // best effort; nothing sensitive persists beyond process lifetime
+    }
+}
+
+// For tests: clear the in-memory token cache.
+export function clearTokenCacheForTest(): void {
+    cachedToken = undefined;
+}

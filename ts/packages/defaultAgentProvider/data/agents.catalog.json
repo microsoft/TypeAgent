@@ -1,0 +1,60 @@
+{
+  "description": "Bundled agent catalog (design §3, §7). Each entry is an NpmAppAgentInfo plus an optional `preinstall` flag. Entries flagged `preinstall: true` are pre-installed at first run (launch behavior unchanged, §12 Q1). Resolved by the bundled catalog source (`catalog: \"<bundled>\"`).",
+  "agents": {
+    "player": { "name": "music", "preinstall": true },
+    "localPlayer": { "name": "music-local", "preinstall": true },
+    "calendar": { "name": "calendar", "preinstall": true },
+    "email": { "name": "email", "preinstall": true },
+    "list": { "name": "list-agent", "preinstall": true },
+    "browser": { "name": "browser-typeagent", "preinstall": true },
+    "desktop": { "name": "desktop-automation", "preinstall": true },
+    "code": { "name": "code-agent", "preinstall": true },
+    "chat": { "name": "chat-agent", "execMode": "dispatcher", "preinstall": true },
+    "photo": { "name": "photo-agent", "execMode": "separate", "preinstall": true },
+    "greeting": {
+      "name": "greeting-agent",
+      "execMode": "dispatcher",
+      "preinstall": true
+    },
+    "image": {
+      "name": "image-agent",
+      "execMode": "dispatcher",
+      "preinstall": true
+    },
+    "markdown": { "name": "markdown-agent", "preinstall": true },
+    "montage": { "name": "montage-agent", "preinstall": true },
+    "video": {
+      "name": "video-agent",
+      "execMode": "dispatcher",
+      "preinstall": true
+    },
+    "settings": {
+      "name": "settings-agent",
+      "execMode": "dispatcher",
+      "preinstall": true
+    },
+    "weather": { "name": "weather-agent", "preinstall": true },
+    "taskflow": {
+      "name": "taskflow-typeagent",
+      "execMode": "dispatcher",
+      "preinstall": true
+    },
+    "powershell": { "name": "powershell-typeagent", "preinstall": true },
+    "screencapture": {
+      "name": "screencapture-agent",
+      "execMode": "separate",
+      "preinstall": true
+    },
+    "workflow": { "name": "workflow-agent", "preinstall": true },
+    "utility": { "name": "utility-typeagent", "preinstall": true },
+    "onboarding": { "name": "onboarding-agent", "preinstall": true },
+    "studio": { "name": "studio-agent", "preinstall": true },
+    "osNotifications": { "name": "os-notifications-agent", "preinstall": true },
+    "timer": { "name": "timer-agent", "preinstall": true },
+    "github-cli": { "name": "github-cli-agent", "preinstall": true },
+    "windowsClock": { "name": "windowsclock-agent", "preinstall": true },
+    "visualStudio": { "name": "visualstudio-agent", "preinstall": true },
+    "discord": { "name": "discord-agent", "preinstall": true },
+    "ipconfig": { "name": "ipconfig-agent", "preinstall": true }
+  }
+}

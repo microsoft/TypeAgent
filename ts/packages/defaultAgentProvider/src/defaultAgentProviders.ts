@@ -21,12 +21,24 @@ import {
 } from "./utils/config.js";
 import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 import { getPackageFilePath } from "./utils/getPackageFilePath.js";
+import { loadBundledCatalog } from "./installSources/catalog.js";
 
 let defaultAppAgentProvider: AppAgentProvider | undefined;
 function getDefaultNpmAppAgentProvider(configName?: string): AppAgentProvider {
     if (defaultAppAgentProvider === undefined) {
+        // Milestone 1.2 (temporary): for the default config, read the bundled
+        // catalog (agents.catalog.json) instead of config.json `agents`, to
+        // verify the data move before the provider collapse in Milestone 2.
+        // The catalog entries are NpmAppAgentInfo + an optional `preinstall`
+        // flag, which createNpmAppAgentProvider ignores. Named configs (e.g.
+        // "test", "all") still read their config.<name>.json `agents` so their
+        // distinct agent sets are unchanged.
+        const agents =
+            configName === undefined
+                ? loadBundledCatalog().agents
+                : getProviderConfig(configName).agents;
         defaultAppAgentProvider = createNpmAppAgentProvider(
-            getProviderConfig(configName).agents,
+            agents,
             getPackageFilePath("./package.json"),
         );
     }
