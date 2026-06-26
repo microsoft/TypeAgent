@@ -231,7 +231,7 @@ The result is the cached package list: `listAgents()` returns it (for `@install`
 
 _One shared root, not one per feed._ All `feed` sources install into the same root, so the single installed-agent provider (§4.4) needs only **one `requirePath`** for feed-resolved modules. Two feeds publishing the same package name is last-writer-wins on disk (rare - configured `scopes` are normally feed-exclusive) and is never ambiguous at the dispatcher level because dispatcher agent names are unique (§5, Q18). Per-feed isolation (a root per source) is deferred; it would require the provider to resolve each `module` record against a per-source root.
 
-_Module resolution roots._ A `module`-bearing record (§4.2) does not store its own `node_modules` location; the provider picks the root from the record's **provenance**: a **feed** record resolves `module` from the configured `installDir`, while a **bundled-catalog** (`<bundled>`) record resolves `module` from the **app bundle's own `node_modules`** (where shipped agents already live - today's `getDefaultNpmAppAgentProvider` resolves against the `defaultAgentProvider` package). `path`/`workspace` records resolve from their explicit `path` and ignore this entirely. So the default host constructs the installed-agent provider with this small source-kind -> root map; it is the only place install location is interpreted.
+_Module resolution roots._ A `module`-bearing record (§4.2) does not store its own `node_modules` location; the provider resolves `module` from runtime roots, not from the live source registry: first the configured shared `installDir` (for feed-installed modules), then the app bundle's own `node_modules` (for bundled-catalog modules). `path`/`workspace` records resolve from their explicit `path` and ignore this entirely. This keeps runtime loading stable even when a host's configured sources differ or a source is later removed: already-installed records still load; only source-driven operations (`@update`, re-resolve) are affected.
 
 _Configuration._ The shared feed install root is configurable via `installSources.installDir` (§6), defaulting to `<instanceDir>/installedAgents`. It supports `${ENV}` expansion like other config paths. `uninstall` drops the record but does not prune the package from this root (disk-only cruft - §11).
 
@@ -459,14 +459,16 @@ A feed auth failure surfaces an actionable hint with the exact `az login` comman
 ### `@update`
 
 ```
-@update <name>            # bump an installed agent to a newer version
+@update <name> [<range>]   # refresh/update an installed agent
 ```
 
-`@install` over an **existing** name is an error, not a silent reinstall. `@update <name>` looks up the record and re-resolves it against its **recorded source**, using the record's original ref for that source kind:
+`@install` over an **existing** name is an error, not a silent reinstall. `@update` looks up the record and re-resolves it against its **recorded source**:
 
-- **feed** - re-resolve the _unpinned_ module against the feed, picking up a newer published version.
+- **feed** - resolve against the newest version, optionally constrained by `<range>` (for example `^1.4`, `~2.0`, `>=3 <4`). If `<range>` is omitted, update targets the latest available version.
 - **path** - re-materialize from the recorded `path` (picks up a moved/rebuilt local agent); a refresh.
 - **catalog** - re-look-up the agent's short name in the catalog (picks up an entry that now points elsewhere).
+
+If the recorded source is no longer configured on this host, the installed agent remains usable at runtime but `@update` fails with an actionable error (re-add the source to update, or uninstall).
 
 It then rewrites the record and re-registers the refreshed provider (§4.6). Mechanically it is the remove-then-add of §4.7 with re-resolution through the recorded source, so the installer interface stays at just `install` / `uninstall`. For `path`/`catalog` with no upstream change, `@update` is a harmless refresh rather than an error.
 
@@ -478,10 +480,12 @@ It then rewrites the record and re-registers the refreshed provider (§4.6). Mec
 @source add feed <name> --registry <url> [--scope <scope>]...
 @source add catalog <name> --catalog <path>
 @source add path <name> [--baseDir <path>]
-@source remove <name>
+@source remove <name> [--force]
 ```
 
 Validation on `add`: unique name, well-formed registry URL (`feed`), readable catalog JSON (`catalog`). `@source order` and `add`/`remove` persist to the instance `installSources` block. `order` entries that name an unknown or removed source are **ignored with a warning** (not a hard error), and configured sources missing from `order` are still usable via `--source` but are not auto-probed (§6).
+
+`@source remove` warns when installed records still reference that source. Without `--force`, removal aborts after the warning. With `--force`, removal proceeds: those already-installed agents remain loadable, but future `@update` for them fails until the source is added back.
 
 ## 6. Configuration
 
@@ -545,6 +549,8 @@ flowchart TD
 
 ### One-time migration (the cost of clean-slate)
 
+Backward compatibility is **best effort** for one release and may be dropped if a path turns out non-trivial or brittle in implementation. The priority is correctness of the new install-source model.
+
 - **`externalAgentsConfig.json` -> `agents.json`.** A startup shim reads any legacy `externalAgentsConfig.json` and migrates **only `path` entries** into `InstalledAgentRecord` form (`source: "path"`), then renames the old file. Legacy npm/feed entries (installed via `TYPEAGENT_FEED_REGISTRY`) are **dropped** rather than guessed into a `feed` source - the user re-installs them from the configured feed (§12 Q14). One release of shim code, then delete.
 - **`data/config.json` `agents` map -> bundled catalog JSON** with `preinstall` flags. Mechanical.
 - Dev instances can simply be reset instead of migrated.
@@ -602,15 +608,15 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 2. **Shadowing (Q2).** Resolution stays first-match-wins and silent. `@install --where` and `@source list` (which show the order) are the inspection tools; no ambiguity warning or error.
 3. **Feed cache (Q3).** The cached feed package list has a ~1h TTL. Offline, the cache is served as-is and the feed is skipped in the walk rather than failing the install.
 4. **find / materialize commitment (Q4).** `find` returning `undefined` is a non-match and the ordered walk continues. The commitment applies only after a match: a source whose `find` matched must `materialize` or hard-error - no silent fall-through. With an explicit `--source`, a non-match is itself a hard error.
-5. **agents.json writes + install serialization (Q5).** The instanceDir is already single-owner per session, so an in-process async mutex is sufficient (no cross-process file lock). The mutex wraps the **whole install op** - `resolve` -> `materialize` -> record write - not just the JSON write, so concurrent installs can't interleave `npm install` into the shared feed install root (`installDir`, §4.1) or race the read-modify-write of `agents.json`. Atomic temp+rename is a cheap optional safeguard.
+5. **agents.json writes + install serialization (Q5).** We rely on the existing dispatcher/host instance-dir lock for cross-process exclusivity where persistence is enabled, and keep an in-process async mutex for install sequencing (`resolve` -> `materialize` -> record write). No second global lock layer is introduced in the installer. Atomic temp+rename remains a cheap safeguard.
 6. **Catalog fields (Q6).** Catalog entries carry full `NpmAppAgentInfo` (`execMode`, etc.) plus the optional `preinstall` flag.
-7. **Update (Q7).** Version bumps use an explicit `@update <name>` (re-resolve the unpinned module against the recorded source). `@install` over an existing name is an error. Implemented as `uninstall` + `install`, so the installer interface stays at two methods.
+7. **Update (Q7).** Version bumps use `@update <name> [<range>]`. For feed installs, `<range>` constrains the target; with no range, update targets latest. `@install` over an existing name is an error. Implemented as `uninstall` + `install`, so the installer interface stays at two methods.
 8. **Auth UX (Q8).** Feed auth uses a short-lived bearer token from the **Azure CLI** (`az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798`) injected into a transient npm auth config - no persistent `.npmrc` / `vsts-npm-auth` / `azureauth` state. Failures (missing or logged-out `az`) surface an actionable `az login` hint.
 9. **Supply-chain (Q9).** Deferred / out of scope: the feed's publish access is the trust boundary today. Tracked in §11.
 10. **Naming (Q10).** Keep `catalog` for the source kind and `ref` for the install argument.
 11. **Uninstall/update teardown (Q11).** `uninstall` reuses the existing `agents.removeAgent` path (`unloadAppAgent` + schema/grammar/embedding teardown + warning-level collision re-scan). `@update` chains remove + add and drops the old record **only after** the new one materializes, so a failed update is a no-op (§4.7).
 12. **Agent keyword policy (Q12).** The `typeagent-agent` keyword marker is enforced by a **new** rule added to the existing `repo-policy-check.mjs` (not a pre-existing gate); it fails the build when a package that looks like an agent (`AppAgentManifest` export / `@typeagent/agent-sdk` dependency) lacks the keyword (§4.1).
-13. **@update across kinds (Q13).** `@update` re-resolves against the recorded source per kind: feed picks up a newer version; path re-materializes the recorded path; catalog re-looks-up the short name. No upstream change is a harmless refresh, not an error (§5).
+13. **@update across kinds (Q13).** `@update` re-resolves against the recorded source per kind: feed picks the newest version (optionally constrained by `<range>`); path re-materializes the recorded path; catalog re-looks-up the short name. No upstream change is a harmless refresh, not an error (§5).
 14. **Migration drops feed entries (Q14).** The `externalAgentsConfig.json -> agents.json` shim migrates only `path` entries. Legacy npm/feed entries (via `TYPEAGENT_FEED_REGISTRY`) are dropped and re-installed from the configured `feed` source, avoiding a guess about which feed a legacy entry came from (§8).
 15. **First-run partial failure (Q15).** If a flagged builtin fails to materialize at first run, it is logged as a warning and skipped; launch continues and the agent can be `@install`ed later. Pre-install never aborts startup (§7).
 16. **Feed execMode default (Q16).** A feed-installed agent (no catalog entry to carry `execMode`) defaults to `separate` (SeparateProcess) unless its package manifest specifies otherwise (§4.1).
@@ -618,3 +624,5 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 18. **Install name validation + uniqueness (Q18).** `@install <name>` validates that `<name>` is a legal dispatcher identifier and is not already used by **any** provider (installed records, inline/system, or MCP), before `materialize` - so a bad or colliding name fails fast without touching disk or the feed (§5).
 19. **Catalog sources are local-only (Q19).** A `catalog` points at a local filesystem path (or `<bundled>`); remote catalog URLs are not supported (they would need feed-style fetch/cache/auth). Remote distribution is the `feed` source's job (§3).
 20. **Feed install location is a single shared, configurable root (Q20).** All `feed` sources `npm install` into one shared npm root, default `<instanceDir>/installedAgents` (replacing today's `externalagents`), configurable via `installSources.installDir`. One root means the installed-agent provider needs one `requirePath` for feed modules; the provider selects the resolution root by record provenance (feed -> `installDir`, bundled catalog -> app bundle `node_modules`, path -> explicit `path`). The root holds only a `package.json` marker with no persistent credentials (auth is the transient per-install `--userconfig`, §4.1). Per-feed isolated roots are deferred (§4.1).
+21. **Source removal + existing installs (Q21).** Removing a source warns when installed records reference it. If removal proceeds (`--force`), those records remain loadable, but `@update` for them fails until the source is re-added.
+22. **Backward-compat policy (Q22).** Migration/back-compat is best effort for one release and may be dropped when implementation is not trivial; correctness and operability of the new model take priority.
