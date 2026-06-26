@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0804a208445d076d3b304616a92d7cf159da3ac5391fb2060312ba56177be392 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a51eec350526837f7bfc53321ee1024f4a77502f8d6a444deba855cedcd598af -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -81,17 +81,17 @@ External: _None at runtime._
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
+- [browser-typeagent](../../../packages/agents/browser/README.md)
 - [chat-ui](../../../packages/chat-ui/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
-- [command-executor-mcp](../../../packages/commandExecutor/README.md)
-- _…and 3 more workspace consumers._
+- _…and 6 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/clientIO.ts`, `./src/dispatcher.ts`, …and 6 more under `./src/`.
+`./src/index.ts`, `./src/awaitCommand.ts`, `./src/clientIO.ts`, …and 7 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

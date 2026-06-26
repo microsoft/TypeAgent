@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=fd72eb79a0acaf58e42096c5f41f4552459515394b0f2baa37fe46f95e6e27d9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=54e996f4a4941ad55485d095dc1a8759769a93ee816470beb24ed4c317fdc567 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/config — AI-generated documentation
@@ -35,8 +35,13 @@ To use the `@typeagent/config` package, you need to set up the following environ
 - `AZURE_OPENAI_`: This variable is used to configure Azure OpenAI settings.
 - `JEST_WORKER_ID`: This variable is used for Jest testing.
 - `TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS`: This variable allows Key Vault integration during tests.
+- `TYPEAGENT_CONFIG_DEFAULTS`: This variable specifies the path to the default configuration YAML file.
+- `TYPEAGENT_CONFIG_DIR`: This variable specifies the directory where configuration files are located.
+- `TYPEAGENT_CONFIG_LOCAL`: This variable specifies the path to the local configuration YAML file.
 - `TYPEAGENT_CONFIG_SECRET`: This variable specifies the secret name for the configuration in Azure Key Vault.
 - `TYPEAGENT_CONFIG_VAULT`: This variable specifies the Azure Key Vault name.
+- `TYPEAGENT_DOTENV`: This variable specifies the path to the `.env` file.
+- `TYPEAGENT_USER_DATA_DIR`: This variable specifies the directory for user data.
 
 Refer to the hand-written README for detailed instructions on obtaining these values.
 
@@ -88,16 +93,16 @@ External: `@azure/identity`, `@azure/keyvault-secrets`, `debug`, `dotenv`, `js-y
 
 ### Used by
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/thoughts](../../packages/mcp/thoughts/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
+- [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
 - [agent-server](../../packages/agentServer/server/README.md)
 - [agent-shell](../../packages/shell/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
 - _…and 20 more workspace consumers._
 
 ### Files of interest
@@ -106,16 +111,21 @@ External: `@azure/identity`, `@azure/keyvault-secrets`, `debug`, `dotenv`, `js-y
 
 ### Environment variables
 
-_5 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_10 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AZURE_OPENAI_`
 - `JEST_WORKER_ID`
 - `TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS`
+- `TYPEAGENT_CONFIG_DEFAULTS`
+- `TYPEAGENT_CONFIG_DIR`
+- `TYPEAGENT_CONFIG_LOCAL`
 - `TYPEAGENT_CONFIG_SECRET`
 - `TYPEAGENT_CONFIG_VAULT`
+- `TYPEAGENT_DOTENV`
+- `TYPEAGENT_USER_DATA_DIR`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

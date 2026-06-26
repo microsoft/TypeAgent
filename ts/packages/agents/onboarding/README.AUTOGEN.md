@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d3716bc7cc0306c068825be0148130443972fd584cd6f03e90dd25aca349c5c0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fc213451d35052fdc029a0534d841ce6abc80fc0cefe611bf456b4995ad8b5db -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -27,7 +27,10 @@ These actions enable the automation of integrating new applications by crawling 
 
 ## Setup
 
-To set up the onboarding-agent, you need to configure the `TYPEAGENT_UIA_HELPER` environment variable. This variable is essential for the UI Automation crawling feature, which is experimental and used for discovering actions in Windows desktop applications.
+To set up the onboarding-agent, you need to configure the following environment variables:
+
+- `TYPEAGENT_UIA_HELPER`: This variable is essential for the UI Automation crawling feature, which is experimental and used for discovering actions in Windows desktop applications.
+- `__PORT_ENV__`: This variable specifies the port environment for the agent.
 
 For detailed setup instructions, including how to obtain the value for `TYPEAGENT_UIA_HELPER`, refer to the hand-written README.
 
@@ -72,12 +75,12 @@ By following these steps, you can add new capabilities to the onboarding-agent, 
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
 
@@ -100,7 +103,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _…and 59 more under `./src/`._
+- _…and 76 more under `./src/`._
 
 ### Agent surface
 
@@ -111,9 +114,10 @@ External: `debug`, `typechat`
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `TYPEAGENT_UIA_HELPER`
+- `__PORT_ENV__`
 
 ### Actions
 
@@ -128,6 +132,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

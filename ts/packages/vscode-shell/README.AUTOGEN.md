@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b3731ca131733fa729a6ba6e94eaaeda98bace0904065681ff97ebb6c3a2d856 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e41563b4438ed83ae729682064a0ea0d83b0649e7fd8c6f57e0b1294d36a4c4a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -101,7 +101,7 @@ By following these steps, you can effectively extend the functionality of the `v
 
 ### Entry points
 
-- default → [./dist/extension.js](./dist/extension.js)
+- default → `./dist/extension.cjs` _(not found on disk)_
 
 ### Dependencies
 
@@ -112,6 +112,7 @@ Workspace:
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
+- [@typeagent/core](../../packages/typeagent-core/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -125,6 +126,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `ws`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

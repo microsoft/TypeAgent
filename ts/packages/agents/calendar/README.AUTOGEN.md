@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=30ea2a1089d61cec4f70adf48a952acdf3ccab0f4d8bbc9d7fd7de7feb256cdb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=90bb746fa549ed42564cd6b239f2c91a3adf193f1531bef1ba779abb1f15235c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # calendar — AI-generated documentation
@@ -76,9 +76,9 @@ Start by exploring the existing schema, grammar, and handler files to understand
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [graph-utils](../../../packages/agents/agentUtils/graphUtils/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -99,6 +99,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

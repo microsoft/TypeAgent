@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=479d4dcdc4ea1d2f833e39097d641c553f85df86a0b3e21a5682c68c9502d63d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=18f9eb22a1bc3f2a1e25641d9dbbe53c9009c5b2791405b802994017b1128af8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # visualstudio-agent — AI-generated documentation
@@ -89,10 +89,10 @@ By following these steps, you can extend the functionality of the `visualstudio-
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
-- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
+- [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
 External: `debug`, `ws`
 
@@ -124,6 +124,6 @@ _21 actions declared in the schema, none yet implemented in [`./src/visualStudio
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

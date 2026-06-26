@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=03d2acfcaddd14ce570e0691f2287a20027fdc3ba4fc21499194debe925da1c2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=aeced7188dadb5d7a717a4b67ba3116b5d650c9e8f130e3bd4026c548eb2e49d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-agent — AI-generated documentation
@@ -69,7 +69,7 @@ Workspace:
 
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -101,6 +101,6 @@ _2 actions implemented by this agent, parsed deterministically from `./src/image
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

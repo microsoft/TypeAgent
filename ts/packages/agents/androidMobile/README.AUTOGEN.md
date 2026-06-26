@@ -24,7 +24,7 @@ This agent supports the following actions:
 - `searchNearby`: Opens the maps application and performs a location search.
 - `automateUI`: Automates UI tasks on the phone.
 
-These actions enable the agent to interact with the mobile device's core functionalities, providing a range of automation capabilities.
+These actions enable the agent to interact with the mobile device's core functionalities, providing a range of automation capabilities. The agent can be used to enhance user experience by automating routine tasks and integrating mobile device operations into larger workflows.
 
 ## Setup
 
@@ -129,6 +129,6 @@ _5 actions implemented by this agent, parsed deterministically from `./src/andro
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cc5b2a63640a21c1197b34721f5abcb7f88b98fe023d270056ad5509b343045f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6ed71f8e665806eef369f1c14a975a12b6552704b2c85ad1bca8298a0d73680c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # desktop-automation — AI-generated documentation
@@ -100,11 +100,11 @@ By following these steps, you can extend the functionality of the `desktop-autom
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [agent-cache](../../../packages/cache/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -137,6 +137,6 @@ _31 actions declared in the schema, none yet implemented in [`./src/actionHandle
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9333524395eebf0349a02acfa2cde42045d5eee0fbd29bf60c7473f2fe155086 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=bdb0b773989463abdafd92bcf6922414d0b0cf6c6ab17b08f052334244ef6178 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-rpc — AI-generated documentation
@@ -24,7 +24,7 @@ The `ClientIO` component handles user interactions and display management. It in
 
 ### Dispatcher
 
-The `Dispatcher` component processes commands and manages dynamic displays. It includes actions such as `processCommand`, `getDynamicDisplay`, `getTemplateSchema`, `getTemplateCompletion`, `getCommandCompletion`, `checkCache`, `close`, and `getStatus`. These actions allow the dispatcher to handle commands, retrieve display information, and manage templates.
+The `Dispatcher` component processes commands and manages dynamic displays. It includes actions such as `submitCommand`, `getDynamicDisplay`, `getTemplateSchema`, `getTemplateCompletion`, `getCommandCompletion`, `checkCache`, `close`, and `getStatus`. These actions allow the dispatcher to handle commands, retrieve display information, and manage templates.
 
 ## Setup
 
@@ -108,6 +108,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

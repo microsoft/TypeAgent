@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5ceb819f21a0b2c60c5a9f39aa9647e04cbcfa3f04e370b3ed43072612b26cef -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b972288ccbca8682354b11886772d9ccdec2f0136f9d76551ac286070f263971 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -80,17 +80,19 @@ By following these steps and utilizing the provided interfaces and utilities, yo
 - `./helpers/action` → [./dist/helpers/actionHelpers.js](./dist/helpers/actionHelpers.js)
 - `./helpers/command` → [./dist/helpers/commandHelpers.js](./dist/helpers/commandHelpers.js)
 - `./helpers/display` → [./dist/helpers/displayHelpers.js](./dist/helpers/displayHelpers.js)
+- `./node` → [./dist/node/cliPath.js](./dist/node/cliPath.js)
 
 ### Dependencies
 
-Workspace: _None._
+Workspace:
+
+- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 
 External: `debug`, `type-fest`
 
 ### Used by
 
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
-- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
@@ -99,7 +101,8 @@ External: `debug`, `type-fest`
 - [agent-cli](../../packages/cli/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-shell](../../packages/shell/README.md)
-- _…and 46 more workspace consumers._
+- [android-mobile-agent](../../packages/agents/androidMobile/README.md)
+- _…and 47 more workspace consumers._
 
 ### Files of interest
 
@@ -113,10 +116,10 @@ External: `debug`, `type-fest`
 - [./src/helpers/commandHelpers.ts](./src/helpers/commandHelpers.ts)
 - [./src/helpers/displayHelpers.ts](./src/helpers/displayHelpers.ts)
 - [./src/helpers/parameterHelpers.ts](./src/helpers/parameterHelpers.ts)
-- _…and 5 more under `./src/`._
+- _…and 6 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

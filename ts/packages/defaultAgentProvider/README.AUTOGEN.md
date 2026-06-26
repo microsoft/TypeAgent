@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=840e26ef2b56e8cf94d2d130cdbc137adc38b9967ef5b3bb1d516d643725b221 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d734e2d04f0211bc3edf459edba467cb782cdc6a04296349258f294f74e00d72 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -45,7 +45,7 @@ To set up the `default-agent-provider` package, follow these steps:
    pnpm install
    ```
 
-3. Ensure the configuration files are correctly set up in the `./data/` directory. These files, such as `config.json` or `config.<name>.json`, define the agents and servers to be used.
+3. Set the `TYPEAGENT_FEED_REGISTRY` environment variable. This variable is required for the package to function correctly. Refer to the hand-written README for detailed instructions on how to obtain and set this value.
 
 For detailed setup instructions, refer to the hand-written README.
 
@@ -93,15 +93,15 @@ By following these steps, you can customize and extend the default agent provide
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [android-mobile-agent](../../packages/agents/androidMobile/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - [calendar](../../packages/agents/calendar/README.md)
@@ -127,6 +127,7 @@ Workspace:
 - powershell-typeagent
 - [screencapture-agent](../../packages/agents/screencapture/README.md)
 - [settings-agent](../../packages/agents/settings/README.md)
+- studio-agent
 - taskflow-typeagent
 - [telemetry](../../packages/telemetry/README.md)
 - [timer-agent](../../packages/agents/timer/README.md)
@@ -155,8 +156,14 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 `./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 16 more under `./src/`.
 
+### Environment variables
+
+_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TYPEAGENT_FEED_REGISTRY`
+
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

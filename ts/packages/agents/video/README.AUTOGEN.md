@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9db20de69a7523f9b1d323a119c18334180214c83cf63d34d450fab1e8246bbc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cce4b8ac5281282d97339c19e4eca9f6edf80263e183b837535bc8f68037c6fb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # video-agent — AI-generated documentation
@@ -77,7 +77,7 @@ Workspace:
 
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -108,6 +108,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/videoA
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

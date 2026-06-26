@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=38d558c722a4c2edae23b4137a4b80410e85ebb904f3f0ce6ac79e3750cdf8f2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6d08d5bcdecdd212e39bfe81a026fb4eff1cfc66a7827c658581a9a4443fc474 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-ui — AI-generated documentation
@@ -42,11 +42,13 @@ The package is structured as follows:
 
 - [src/index.ts](./src/index.ts): Exports the main components and types.
 - [src/backend.ts](./src/backend.ts): Defines the `GrammarBackend` interface, which mirrors the `grammar-tools-core` service interface.
-- [src/fixture/index.ts](./src/fixture/index.ts): Exports the `FixtureBackend` for development and testing.
+- src/fixture/index.ts: Exports the `FixtureBackend` for development and testing.
 - [src/gt-completion-panel.ts](./src/gt-completion-panel.ts): Implements the `GtCompletionPanel` component.
 - [src/gt-coverage-heatmap.ts](./src/gt-coverage-heatmap.ts): Implements the `GtCoverageHeatmap` component.
 - [src/gt-debug-panel.ts](./src/gt-debug-panel.ts): Implements the `GtDebugPanel` component.
 - [src/gt-diff-view.ts](./src/gt-diff-view.ts): Implements the `GtDiffView` component.
+- [src/gt-rule-list.ts](./src/gt-rule-list.ts): Implements the `GtRuleList` component.
+- [src/gt-source-view.ts](./src/gt-source-view.ts): Implements the `GtSourceView` component.
 
 ### Component Details
 
@@ -118,10 +120,10 @@ External: `lit`
 
 ### Files of interest
 
-`./src/fixture/index.ts`, `./src/index.ts`, `./src/backend.ts`, …and 11 more under `./src/`.
+`./src/index.ts`, `./src/backend.ts`, `./src/gt-completion-panel.ts`, …and 9 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

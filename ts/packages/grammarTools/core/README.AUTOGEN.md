@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=50192329cea7296de3460d850c464cb32ed7b4ca12d32f90fff1effb59016e21 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7a12ce9e908fcd4536cfe2bd59904e8fd9f80a53bfc93642261e3f9437304505 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-core — AI-generated documentation
@@ -81,12 +81,13 @@ By following these steps, you can effectively extend the capabilities of `gramma
 
 Workspace:
 
-- [action-grammar](../../../packages/actionGrammar/README.md)
+- [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 
 External: _None at runtime._
 
 ### Used by
 
+- [@typeagent/core](../../../packages/typeagent-core/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agr-language](../../../extensions/agr-language/README.md)
 - grammar-tools-cli
@@ -98,6 +99,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-core docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-core docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

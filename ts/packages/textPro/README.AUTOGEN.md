@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8a6b6c446d3f4bd4d24c671f8be0de459b7c4737be83c04ae5882bc0ba10c811 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2ff69a22686ae45255e14e1535d5006f20edd9c7b5f12862848815e9149446f3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # textpro — AI-generated documentation
@@ -44,8 +44,6 @@ The `textpro` package is organized into several key files, each responsible for 
 - [common.ts](./src/common.ts): Contains utility functions like `escapeMarkdownText` for escaping special characters in markdown text.
 - [html.ts](./src/html.ts): Provides functions for converting HTML to text, simplifying HTML, and converting HTML to markdown.
 - [markdown.ts](./src/markdown.ts): Handles markdown parsing, tokenization, and chunking.
-
-The package uses the `cheerio` library for HTML manipulation and the `marked` library for markdown parsing.
 
 ### Key Components
 
@@ -93,6 +91,6 @@ External: `cheerio`, `marked`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter textpro docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter textpro docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

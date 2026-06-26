@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=14eaf887baa8e8e0ec64e81b20664b8f103afe6e4f36d2ce812a65f881f58bb0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0b78eca89672771908038a6fa85c76ac674759920c221adecabe08812ede926e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -91,16 +91,17 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Used by
 
+- [agent-shell](../../packages/shell/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
 - [vscode-shell](../../packages/vscode-shell/README.md)
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/contextMenu.ts`, …and 5 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/contextMenu.ts`, …and 9 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c45bc3722e40a1bcb330fd03150fc6bba46346556a4e0b5be3023764124ef5d9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=228e29910d631664437c159e35e6b020a8d25d2cda857fb235b9486455dc5d7c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-schema — AI-generated documentation
@@ -75,17 +75,17 @@ External: `debug`, `typescript`
 
 ### Used by
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
+- [@typeagent/action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../packages/actionSchemaCompiler/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
-- [action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/core](../../packages/typeagent-core/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - [cache-rest-endpoint](../../examples/cacheRESTEndpoint/README.md)
-- [default-agent-provider](../../packages/defaultAgentProvider/README.md)
-- _…and 4 more workspace consumers._
+- _…and 5 more workspace consumers._
 
 ### Files of interest
 
@@ -93,6 +93,6 @@ External: `debug`, `typescript`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

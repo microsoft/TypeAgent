@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c95811c705d8b4085f51133a381a4697d08198ffb6f6df0df0b7377b4eb09242 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7b5960683dbd896d1e3cb7b72065ebb223b818991ecf1fc439a0a5dded1bd6b5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin — AI-generated documentation
@@ -24,6 +24,7 @@ To set up the `@typeagent/copilot-plugin`, you need to configure several environ
 
 - `CLAUDE_PLUGIN_DATA`
 - `HOOK_TYPE`
+- `TYPEAGENT_DEMO_STATE_PATH`
 - `TYPEAGENT_HOST`
 - `TYPEAGENT_MODE`
 - `TYPEAGENT_PLUGIN_DATA`
@@ -110,6 +111,6 @@ _7 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
