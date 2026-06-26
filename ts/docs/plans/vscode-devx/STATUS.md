@@ -22,11 +22,11 @@ than an in-memory stand-in.
 | Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks                                              | ✅ status bar                                                      | ❌ no real schema parse / grammar compile                                  | ✅     |
 | Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json`                                | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                                              | ✅     |
 | Feedback (thumbs up/down → corpus)                             | ✅                                                                          | ✅ command                                                         | n/a                                                                        | ✅     |
-| Replay / compare engine                                        | ✅ static-grammar, schema-enriched (L1) & construction-cache (L2) resolvers | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar + live construction cache (L1–L2); no two-version build (L3–L4) | ✅     |
+| Replay / compare engine                                        | ✅ schema-enriched grammar (L1), construction-cache (L2), selectable two-mode (grammar/cache) + opt-in live wildcard validation (L4a) | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar + live construction cache + working-tree wildcard validation; no two-version build-from-ref (L4b, deferred to P-7) | ✅     |
 | Onboarding bridge (snapshot/restore, stale detection)          | ✅                                                                          | ✅ commands                                                        | ❌ in-memory bridge                                                        | ✅     |
 | Repo-root detection (find `packages/agents`)                   | ✅                                                                          | ✅ warn toast + status bar                                         | n/a                                                                        | ✅     |
 | Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                                          | ✅ singleton-panel host                                            | —                                                                          | ✅     |
-| Impact Report webview                                          | ✅ `replayCorpus` over channel                                              | ✅ context header, A/B controls, durable state                     | 🟡 grammar + construction-cache replay (L1–L2)                             | ✅     |
+| Impact Report webview                                          | ✅ `replayCorpus` over channel                                              | ✅ context header, A/B controls, Grammar/Cache + Validate toggles, durable state | 🟡 grammar + construction-cache + working-tree wildcard validation (L1–L2, L4a) | ✅     |
 | Player corpus capture                                          | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
 | Schema Studio                                                  | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
 | Live Trace                                                     | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
@@ -41,7 +41,7 @@ Impact Report) is **progressing but not yet closed**:
   builder, singleton-panel host, typed host↔webview protocol, browser-neutral
   replay view model) and the Impact Report webview are built and tested — the
   foundation Schema Studio, Wizard, Trace, and Live Trace will reuse.
-- **Replay has climbed the fidelity ladder to L2.** Beyond the original identity
+- **Replay has climbed the fidelity ladder to L4a.** Beyond the original identity
   resolver, replay now runs **static-grammar** matching, **schema-enriched
   grammar** matching (L1: the agent's grammar is enriched with checked-variable
   metadata from its action schema and matched through the real `GrammarStore`),
@@ -52,8 +52,12 @@ Impact Report) is **progressing but not yet closed**:
   a phantom hit). The construction cache is consulted for the **working tree
   only** (caches are runtime artifacts, never committed / never read at a git
   ref) and degrades cleanly to L1 when no live cache is found or it has gone
-  stale. Results are still indicative for grammar-resolved rows — **L3–L4**
-  (deterministic dispatch, build-from-git-ref two-version sandboxes) remain, and
+  stale. Two replay **modes** are now selectable in the Impact Report (grammar-only
+  vs. construction-cache), and an opt-in **live wildcard validation** pass (L4a)
+  runs the agent's real `validateWildcardMatch` over working-tree wildcard matches
+  (`timer`/`list`; fail-open + diagnostics). Results are still indicative for
+  grammar-resolved rows — **L4b** (build-from-git-ref two-version sandboxes)
+  remains and is **deferred to P-7** (post-Gate-C, per the implementation plan);
   there is no git-worktree build of two versions yet.
 - **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
   it; without capture the Impact Report would have no real labelled corpus.
@@ -171,7 +175,12 @@ Ready to start (smallest → larger):
    core corpus.
 4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
-   agent's `ValidateChange` and the webview both consume).
+   agent's `ValidateChange` and the webview both consume). **Largely done:** the
+   grammar replay path (L1 schema-enriched, L2 construction-cache, two selectable
+   modes, L4a opt-in wildcard validation) is live and validated against the
+   contract. The remaining fidelity rung **L4b** (build-from-ref two-version
+   sandboxes) is **deferred to P-7** (post-Gate-C). **Live priority is now #3
+   (player corpus capture) → Gate C measurement** — the headline acceptance bar.
 5. **Active-sandbox selector + per-sandbox scoping** (plan phase **P-7a**;
    sequenced **after** the single-sandbox E2E closes) — collisions and corpora are
    intrinsically per-sandbox (a collision is a function of the co-loaded agent
