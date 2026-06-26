@@ -227,6 +227,14 @@ The result is the cached package list: `listAgents()` returns it (for `@install`
 
 **Feed install execMode.** A feed-installed agent has no catalog entry to carry `execMode`, so `materialize` defaults it to `separate` (SeparateProcess) unless the package's own manifest specifies otherwise. `path`/`catalog` installs continue to take `execMode` from their catalog entry (§3, Q6).
 
+**Feed install location.** A `feed.materialize` runs `npm install` into a **single shared npm root under the instance dir**, defaulting to `<instanceDir>/installedAgents/` (the clean-slate replacement for today's `<instanceDir>/externalagents/`). The root holds only a private `package.json` marker; packages land under its `node_modules/`. It carries **no persistent `.npmrc` or credentials** - feed auth is the transient per-install `--userconfig` from _Feed auth_ above, and the registry is passed explicitly on the `npm install` command line - so nothing about a feed's identity or token persists in the root. The whole install op (incl. this `npm install`) is serialized behind the in-process mutex (§12 Q5) so concurrent installs never interleave into the shared `node_modules`.
+
+_One shared root, not one per feed._ All `feed` sources install into the same root, so the single installed-agent provider (§4.4) needs only **one `requirePath`** for feed-resolved modules. Two feeds publishing the same package name is last-writer-wins on disk (rare - configured `scopes` are normally feed-exclusive) and is never ambiguous at the dispatcher level because dispatcher agent names are unique (§5, Q18). Per-feed isolation (a root per source) is deferred; it would require the provider to resolve each `module` record against a per-source root.
+
+_Module resolution roots._ A `module`-bearing record (§4.2) does not store its own `node_modules` location; the provider picks the root from the record's **provenance**: a **feed** record resolves `module` from the configured `installDir`, while a **bundled-catalog** (`<bundled>`) record resolves `module` from the **app bundle's own `node_modules`** (where shipped agents already live - today's `getDefaultNpmAppAgentProvider` resolves against the `defaultAgentProvider` package). `path`/`workspace` records resolve from their explicit `path` and ignore this entirely. So the default host constructs the installed-agent provider with this small source-kind -> root map; it is the only place install location is interpreted.
+
+_Configuration._ The shared feed install root is configurable via `installSources.installDir` (§6), defaulting to `<instanceDir>/installedAgents`. It supports `${ENV}` expansion like other config paths. `uninstall` drops the record but does not prune the package from this root (disk-only cruft - §11).
+
 ### 4.2 Installed record (single shape the provider loads)
 
 ```ts
@@ -268,7 +276,7 @@ Persisted as the single `agents.json` (replacing both the bundled `agents` map a
 }
 ```
 
-A record carries **exactly one resolution handle**: `module` (package name, npm-resolved) **or** `path` (filesystem-resolved). A `feed` install and the bundled `<bundled>` catalog's entries resolve by package name out of a shared `node_modules`, so they carry `module` and no `path`. A `path`/`workspace` catalog and a `path` install resolve from the filesystem, so they carry `path` and **omit `module`** - the package name is unused at load time (today's loader already ignores `NpmAppAgentInfo.name` in its `info.path` branch) and is derivable from `path/package.json` if ever needed for display. The presence of `path` is the discriminator at load time (§12 Q17).
+A record carries **exactly one resolution handle**: `module` (package name, npm-resolved) **or** `path` (filesystem-resolved). A `feed` install and the bundled `<bundled>` catalog's entries resolve by package name, so they carry `module` and no `path` - the provider picks which `node_modules` root to resolve that `module` against from the record's provenance (feed -> `installDir`, bundled -> app bundle; see §4.1 _Module resolution roots_). A `path`/`workspace` catalog and a `path` install resolve from the filesystem, so they carry `path` and **omit `module`** - the package name is unused at load time (today's loader already ignores `NpmAppAgentInfo.name` in its `info.path` branch) and is derivable from `path/package.json` if ever needed for display. The presence of `path` is the discriminator at load time (§12 Q17).
 
 ### 4.3 Installer (single entry point)
 
@@ -326,6 +334,76 @@ export interface AppAgentInstaller {
 ```
 
 So the rule stays coherent: **inject an installer and you get both `@install` and `@source`; inject none and you get neither** - matching today's "no installer, no `@install`" behavior. A host that brings its own `appAgentProviders` and no installer never sees a source.
+
+#### Code / API organization (where each piece lives)
+
+The packages and their dependency direction are **unchanged**; only the contents of two of them grow. The narrow waist is the rule: **interfaces live in `agent-dispatcher`; the feed/npm/Azure implementation lives in `default-agent-provider`.** The dispatcher core never learns what a feed, an npm registry, or `az` is.
+
+```mermaid
+flowchart BT
+    types["@typeagent/dispatcher-types<br/>(pure types)"]
+    disp["agent-dispatcher (core)<br/>createDispatcher, DispatcherOptions,<br/>AppAgentProvider, AppAgentInstaller,<br/>+ NEW installSource.ts INTERFACES:<br/>InstallSource*, InstallSourceRegistry,<br/>InstalledAgentRecord"]
+    node["dispatcher-node-providers<br/>createNpmAppAgentProvider, NpmAppAgentInfo"]
+    dflt["default-agent-provider<br/>getDefaultAppAgentProviders,<br/>getDefaultAppAgentInstaller<br/>+ NEW IMPL: registry, path/catalog/feed<br/>sources, feed auth (az), npm install"]
+    disp --> types
+    node --> disp
+    dflt --> disp
+    dflt --> node
+```
+
+| Package | Owns | New in this design |
+| --- | --- | --- |
+| `agent-dispatcher` (core) | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the `@install` / `@update` / `@source` command **handlers** | `installSource.ts` **interfaces** (`InstallSourceKind/Config`, `InstallSource`, `ResolvedCandidate`, `InstallSourceRegistry`, `InstalledAgentRecord`); `sources?()` added to `AppAgentInstaller` |
+| `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo` | unchanged (still the npm loading mechanism §10) |
+| `default-agent-provider` | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller` | the **registry + source implementations**, feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog |
+
+Why the split matters: the `@source` handler in the dispatcher core only references the `InstallSourceRegistry` **interface** (reached via `context.agentInstaller.sources()`), so the core compiles and runs with **no dependency** on Azure DevOps, npm, or `az`. A host that wants the source machinery pulls it in by depending on `default-agent-provider`; a host that doesn't, doesn't.
+
+The three host shapes as concrete wiring (imports are exactly today's; the default recipe is byte-for-byte unchanged):
+
+```ts
+// 1. Default host (shell / agentServer / api) - UNCHANGED call sites.
+import { createDispatcher } from "agent-dispatcher";
+import {
+  getDefaultAppAgentProviders,   // now returns [ installedProvider, mcpProvider ]
+  getDefaultAppAgentInstaller,   // now owns the registry internally
+} from "default-agent-provider";
+
+await createDispatcher({
+  appAgentProviders: getDefaultAppAgentProviders(instanceDir),
+  agentInstaller: getDefaultAppAgentInstaller(instanceDir), // -> @install + @source
+});
+```
+
+```ts
+// 2. Custom / test host (e.g. onboarding/runTests) - own providers, no installer.
+import { createDispatcher } from "agent-dispatcher";
+import { createNpmAppAgentProvider } from "dispatcher-node-providers";
+
+await createDispatcher({
+  appAgentProviders: [createNpmAppAgentProvider(myAgents, requirePath)],
+  // no agentInstaller -> no @install / @update / @source. Zero source code reaches it.
+});
+```
+
+```ts
+// 3. Embedder wanting sources WITHOUT default-agent-provider - implement the
+//    interfaces from agent-dispatcher directly (no Azure/npm feed code pulled in).
+import {
+  createDispatcher,
+  type AppAgentInstaller,
+  type InstallSourceRegistry,
+} from "agent-dispatcher";
+
+const installer: AppAgentInstaller = {
+  install: /* ... */,
+  uninstall: /* ... */,
+  sources: () => myRegistry, // a host-built InstallSourceRegistry
+};
+await createDispatcher({ appAgentProviders, agentInstaller: installer });
+```
+
+So a host developer's choice is a single axis: **which `AppAgentInstaller` (if any) do I inject?** Inject `getDefaultAppAgentInstaller` for the batteries-included feed/catalog/path registry; inject a hand-built one to bring your own sources; inject none to opt out entirely. No host ever imports a source kind or the registry from `agent-dispatcher` core to *run* agents - only an embedder *building* an installer touches those interface types.
 
 ### 4.6 Post-install: making the agent live (no restart)
 
@@ -416,6 +494,10 @@ Sources and their resolution **order** are seeded from app config and extended a
     // user-configurable resolution order (first match wins). Names not listed
     // here are still usable via --source but are not auto-probed.
     "order": ["path", "workspace", "builtin", "typeagent"],
+    // shared npm root that ALL feed sources install into (§4.1 "Feed install
+    // location"). Optional; defaults to "<instanceDir>/installedAgents".
+    // Supports ${ENV} expansion.
+    "installDir": "${TYPEAGENT_INSTANCE_DIR}/installedAgents",
     "sources": [
       { "kind": "path", "name": "path" },
       { "kind": "catalog", "name": "builtin", "catalog": "<bundled>" },
@@ -512,7 +594,7 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 
 1. **Supply-chain hardening.** A `feed` install runs arbitrary `npm` lifecycle scripts. Today the trust boundary is **who can publish to the Azure Artifacts feed** (internal, access-controlled), so we ship without an extra gate. Revisit if self-serve install ever opens to less-trusted feeds; options then include npm provenance / signature verification (Sigstore attestations proving a package was built from a known repo + CI and not tampered with in the registry) or a trust prompt for unknown scopes.
 2. **Pre-install curation.** The exact list of default agents to later demote from `preinstall` to installable-on-demand. §12 decides to start with the full current set; trimming it is a follow-up.
-3. **Uninstall leaves `node_modules` cruft.** Dropping a feed agent's record and unloading it does not `npm uninstall`/prune the package from the shared `instanceDir/externalagents/node_modules` (disk-only cruft, no runtime effect). An uninstall-time or periodic prune is a follow-up.
+3. **Uninstall leaves `node_modules` cruft.** Dropping a feed agent's record and unloading it does not `npm uninstall`/prune the package from the shared feed install root (`installSources.installDir`, default `<instanceDir>/installedAgents/node_modules`; §4.1) (disk-only cruft, no runtime effect). An uninstall-time or periodic prune is a follow-up.
 
 ## 12. Decision log
 
@@ -520,7 +602,7 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 2. **Shadowing (Q2).** Resolution stays first-match-wins and silent. `@install --where` and `@source list` (which show the order) are the inspection tools; no ambiguity warning or error.
 3. **Feed cache (Q3).** The cached feed package list has a ~1h TTL. Offline, the cache is served as-is and the feed is skipped in the walk rather than failing the install.
 4. **find / materialize commitment (Q4).** `find` returning `undefined` is a non-match and the ordered walk continues. The commitment applies only after a match: a source whose `find` matched must `materialize` or hard-error - no silent fall-through. With an explicit `--source`, a non-match is itself a hard error.
-5. **agents.json writes + install serialization (Q5).** The instanceDir is already single-owner per session, so an in-process async mutex is sufficient (no cross-process file lock). The mutex wraps the **whole install op** - `resolve` -> `materialize` -> record write - not just the JSON write, so concurrent installs can't interleave `npm install` into the shared `instanceDir/externalagents/node_modules` (§4.1) or race the read-modify-write of `agents.json`. Atomic temp+rename is a cheap optional safeguard.
+5. **agents.json writes + install serialization (Q5).** The instanceDir is already single-owner per session, so an in-process async mutex is sufficient (no cross-process file lock). The mutex wraps the **whole install op** - `resolve` -> `materialize` -> record write - not just the JSON write, so concurrent installs can't interleave `npm install` into the shared feed install root (`installDir`, §4.1) or race the read-modify-write of `agents.json`. Atomic temp+rename is a cheap optional safeguard.
 6. **Catalog fields (Q6).** Catalog entries carry full `NpmAppAgentInfo` (`execMode`, etc.) plus the optional `preinstall` flag.
 7. **Update (Q7).** Version bumps use an explicit `@update <name>` (re-resolve the unpinned module against the recorded source). `@install` over an existing name is an error. Implemented as `uninstall` + `install`, so the installer interface stays at two methods.
 8. **Auth UX (Q8).** Feed auth uses a short-lived bearer token from the **Azure CLI** (`az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798`) injected into a transient npm auth config - no persistent `.npmrc` / `vsts-npm-auth` / `azureauth` state. Failures (missing or logged-out `az`) surface an actionable `az login` hint.
@@ -535,3 +617,4 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 17. **`module` is optional, present only for npm-resolved records (Q17).** A record carries exactly one resolution handle: `module` (package name - `feed` installs and the `<bundled>` catalog's module-only entries) **or** `path` (`path`/`workspace` catalogs and `path` installs). Path-resolved records omit `module`; it is unused at load time and derivable from `path/package.json`. This matches today's loader, which already ignores `NpmAppAgentInfo.name` in its `info.path` branch. The only field change is that today's `NpmAppAgentInfo.name` (package name) maps to the record's `module`, while the agent name (today the config map key) becomes the record's `name`.
 18. **Install name validation + uniqueness (Q18).** `@install <name>` validates that `<name>` is a legal dispatcher identifier and is not already used by **any** provider (installed records, inline/system, or MCP), before `materialize` - so a bad or colliding name fails fast without touching disk or the feed (§5).
 19. **Catalog sources are local-only (Q19).** A `catalog` points at a local filesystem path (or `<bundled>`); remote catalog URLs are not supported (they would need feed-style fetch/cache/auth). Remote distribution is the `feed` source's job (§3).
+20. **Feed install location is a single shared, configurable root (Q20).** All `feed` sources `npm install` into one shared npm root, default `<instanceDir>/installedAgents` (replacing today's `externalagents`), configurable via `installSources.installDir`. One root means the installed-agent provider needs one `requirePath` for feed modules; the provider selects the resolution root by record provenance (feed -> `installDir`, bundled catalog -> app bundle `node_modules`, path -> explicit `path`). The root holds only a `package.json` marker with no persistent credentials (auth is the transient per-install `--userconfig`, §4.1). Per-feed isolated roots are deferred (§4.1).
