@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8dc062ffea944bf7b96c649a3235aecbc4729909c446000a72fdcf260eac827a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c13d751c2ee0d1c60238905a0b1910029a9ab8e57fcbc4967f34e8afcea774e5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # settings-agent — AI-generated documentation
@@ -56,9 +56,9 @@ By following these steps, you can extend the functionality of the settings agent
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
 - [chat-agent](../../../packages/agents/chat/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
@@ -82,6 +82,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

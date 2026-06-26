@@ -3,16 +3,16 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6bdf546c48ec4b6d3d860deabd6889ee932cbc3cc05e99a7f74662d8c342b517 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a3b726e4fe1092571a72970beec0ed4cef6263904e815ac75cfadef90e73a259 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# action-grammar — AI-generated documentation
+# @typeagent/action-grammar — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It parses, compiles, and matches natural language input against predefined grammar rules to produce structured JSON action objects. This allows user utterances to be converted into typed actions that can be processed by agents.
+The `@typeagent/action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It parses, compiles, and matches natural language input against predefined grammar rules to produce structured JSON action objects. This allows user utterances to be converted into typed actions that can be processed by agents.
 
 ## What it does
 
@@ -28,7 +28,7 @@ The package also includes utilities for grammar serialization, dynamic loading, 
 
 ## Setup
 
-To use the `action-grammar` package, ensure you have the following dependencies installed:
+To use the `@typeagent/action-grammar` package, ensure you have the following dependencies installed:
 
 - `@anthropic-ai/claude-agent-sdk`
 - `debug`
@@ -69,7 +69,7 @@ The package is structured into several key components:
 
 ## How to extend
 
-To extend the `action-grammar` package, follow these steps:
+To extend the `@typeagent/action-grammar` package, follow these steps:
 
 1. **Add new grammar rules**:
 
@@ -108,13 +108,15 @@ For a starting point, open [grammarRuleParser.ts](./src/grammarRuleParser.ts) to
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ### Used by
 
-- [action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/core](../../packages/typeagent-core/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -122,6 +124,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - grammar-tools-cli
 - grammar-tools-core
+- [snips-bench](../../examples/snipsBench/README.md)
 
 ### Files of interest
 
@@ -135,10 +138,10 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 - [./src/builtInEntities.agr](./src/builtInEntities.agr)
 - [./src/builtInEntities.ts](./src/builtInEntities.ts)
 - [./src/builtInFileLoader.ts](./src/builtInFileLoader.ts)
-- _…and 54 more under `./src/`._
+- _…and 56 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

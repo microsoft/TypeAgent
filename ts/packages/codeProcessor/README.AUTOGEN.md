@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a8c90fe833cf8b512fa06d07d7c6e99af9206bee93e55e5dd43f7733d7517671 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c061bdfba6c98e5d95d5fb8bafa11e8fa22897b1d3ab9b6187a00f1f2399bb24 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-processor — AI-generated documentation
@@ -93,7 +93,7 @@ By following these steps, you can effectively extend the capabilities of the `co
 
 Workspace:
 
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [knowledge-processor](../../packages/knowledgeProcessor/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 
@@ -111,6 +111,6 @@ External: `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-processor docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-processor docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

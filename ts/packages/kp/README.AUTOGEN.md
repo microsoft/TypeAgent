@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e91fe2c708345f9dd1b503bff9da174beee3575059fbfd13f4bc833a3fd72491 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8c860a567260033be51b4e20b4a6d7c901861639a480e4aa9ca4136b6d40b8e0 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # kp — AI-generated documentation
@@ -76,7 +76,8 @@ By following these steps, you can effectively extend the `kp` package and contri
 
 Workspace:
 
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `better-sqlite3`, `debug`, `typechat`
 
@@ -86,7 +87,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `better-sqlite3`, `debug`, `typechat
 
 ### Files of interest
 
-`./src/index.ts`, `./src/answerGenerator.ts`, `./src/groupIndex.ts`, …and 11 more under `./src/`.
+`./src/index.ts`, `./src/answerGenerator.ts`, `./src/cliPath.ts`, …and 12 more under `./src/`.
 
 ### Environment variables
 
@@ -96,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter kp docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter kp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

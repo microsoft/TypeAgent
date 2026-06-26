@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=565defef6a41aad52d3f63c15581ed01814a024479818e0072c1b685aaa392d7 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c82d8234be9cbc440a5388cef1d2b96f4f2e92245f6c37676b696f3db017962e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/common-utils — AI-generated documentation
@@ -112,15 +112,15 @@ By following these steps, you can effectively extend the `@typeagent/common-util
 
 ### Dependencies
 
-Workspace:
-
-- [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+Workspace: _None._
 
 External: `chalk`, `debug`
 
 ### Used by
 
+- [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
+- [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [agent-cache](../../../packages/cache/README.md)
 - [agent-cli](../../../packages/cli/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
@@ -128,16 +128,14 @@ External: `chalk`, `debug`
 - [agent-shell](../../../packages/shell/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - [cache-rest-endpoint](../../../examples/cacheRESTEndpoint/README.md)
-- [debug-doc-generator-example](../../../examples/debugDocGenerator/README.md)
-- [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
-- _…and 11 more workspace consumers._
+- _…and 14 more workspace consumers._
 
 ### Files of interest
 
-`./src/base64Browser.ts`, `./src/base64Node.ts`, `./src/indexBrowser.ts`, …and 8 more under `./src/`.
+`./src/base64Browser.ts`, `./src/base64Node.ts`, `./src/cliPath.ts`, …and 9 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=fb2ea14bbc3513682d42cfa748e749678f29b5ce5803da947f3498a7c78aa2ea -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e811e89391643cf6608c673151d88fc4f27992a5c1efccac6871176f934f8016 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -98,6 +98,7 @@ By following these steps, you can extend the capabilities of the `browser-typeag
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema](../../../packages/actionSchema/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-flows](../../../packages/agent-flows/README.md)
@@ -105,11 +106,12 @@ Workspace:
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
+- [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 - [azure-ai-foundry](../../../packages/azure-ai-foundry/README.md)
 - [chat-ui](../../../packages/chat-ui/README.md)
 - [conversation-memory](../../../packages/memory/conversation/README.md)
@@ -119,7 +121,7 @@ Workspace:
 - [textpro](../../../packages/textPro/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
 - [website-memory](../../../packages/memory/website/README.md)
-- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
+- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `@mozilla/readability`, `@popperjs/core`, `bootstrap`, `chalk`, `cheerio`, `cytoscape`, `cytoscape-dagre`, `dagre`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`, `html-to-text`
 
@@ -143,7 +145,7 @@ _…and 17 more not shown._
 - [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
 - [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
 - [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 285 more under `./src/`._
+- _…and 286 more under `./src/`._
 
 ### Environment variables
 
@@ -154,6 +156,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

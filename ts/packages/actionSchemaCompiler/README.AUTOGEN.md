@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=862cef56a4d4a2bdb41b75ef82dd14c2c1ac66642f7fee477b2f0f1e4b636107 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2016278c69bdb09681f4406312389141a0b8e734da29e477929a7db825e8a4e1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-schema-compiler — AI-generated documentation
@@ -86,7 +86,7 @@ External: `@oclif/core`, `@oclif/plugin-help`
 - [image-agent](../../packages/agents/image/README.md)
 - ipconfig-agent
 - [list-agent](../../packages/agents/list/README.md)
-- _…and 16 more workspace consumers._
+- _…and 17 more workspace consumers._
 
 ### Files of interest
 
@@ -94,6 +94,6 @@ External: `@oclif/core`, `@oclif/plugin-help`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema-compiler docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema-compiler docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

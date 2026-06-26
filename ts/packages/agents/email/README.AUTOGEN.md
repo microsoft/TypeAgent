@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=aa2e2450a1010ca810db07832f9aedf86d71298dc634ac207d0a8c4a056c1ae9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7a8c5feaaf4195c4e4fe3a0de7f1f77c516370564a778b60ec520f41d8f052bb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # email — AI-generated documentation
@@ -72,7 +72,7 @@ Workspace:
 
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [graph-utils](../../../packages/agents/agentUtils/graphUtils/README.md)
 - kp
 - [typeagent](../../../packages/typeagent/README.md)
@@ -107,6 +107,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

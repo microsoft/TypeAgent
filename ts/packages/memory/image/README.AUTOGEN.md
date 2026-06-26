@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=95ccf4eb04c11d5beb2e6bf244775ae0aebcba42d6f89009c5f2904d218421b3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7bce0714b8e70b7b5ff6cfa7ed4c6a6f1b936fa8869aa1d5ac2da3702b240d0a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-memory — AI-generated documentation
@@ -83,7 +83,7 @@ By following these steps, you can effectively extend the `image-memory` package 
 
 Workspace:
 
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
 - [memory-storage](../../../packages/memory/storage/README.md)
@@ -106,6 +106,6 @@ External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=88de2560c339c76edc3e2e3be768ea7f2d2aab9b9a549cfb943d098d24bdfc3a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a07f533a03e4f2c1bd09ac3d8a453ddcdb21e01f8d7bd3dd06746bf3c6f2d35b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cache — AI-generated documentation
@@ -93,11 +93,11 @@ By following these steps, you can effectively extend and customize the `agent-ca
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [telemetry](../../packages/telemetry/README.md)
 - [test-lib](../../packages/testLib/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
@@ -106,6 +106,7 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ### Used by
 
+- [@typeagent/core](../../packages/typeagent-core/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cache-explorer](../../packages/cacheExplorer/README.md)
 - [agent-cli](../../packages/cli/README.md)
@@ -132,6 +133,6 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cache docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cache docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

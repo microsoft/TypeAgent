@@ -3,16 +3,16 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ac5837025b8a56a960b79349c25cdbaa2e487d26914e128a9109a27585e8775b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=931ed6e53c5b837453000e95ecca4bed37b3b27dd680227465ea535b189078fe -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# aiclient — AI-generated documentation
+# @typeagent/aiclient — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `aiclient` package is a TypeScript library designed to facilitate interactions with various AI APIs used by the Microsoft AI Systems team. It is primarily intended for sample agents and examples within the TypeAgent project.
+The `@typeagent/aiclient` package is a TypeScript library designed to facilitate interactions with various AI APIs used by the Microsoft AI Systems team. It is primarily intended for sample agents and examples within the TypeAgent project.
 
 ## What it does
 
@@ -108,7 +108,7 @@ External: `@azure/identity`, `@github/copilot-sdk`, `async`, `debug`, `typechat`
 - [agent-shell](../../packages/shell/README.md)
 - [azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
-- _…and 38 more workspace consumers._
+- _…and 40 more workspace consumers._
 
 ### Files of interest
 
@@ -116,6 +116,6 @@ External: `@azure/identity`, `@github/copilot-sdk`, `async`, `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

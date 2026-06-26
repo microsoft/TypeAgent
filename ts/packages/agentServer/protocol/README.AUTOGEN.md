@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=15245dd7d46948aa1e1d6a70e59f81361d9b0949b907acb2026a0ff4c8387989 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e16073e9159e67715583e87d2030527cedb9826207178e7676560e0221a0efad -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-protocol — AI-generated documentation
@@ -114,6 +114,7 @@ External: _None at runtime._
 - [agent-shell](../../../packages/shell/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
+- [vscode-chat](../../../packages/vscode-chat/README.md)
 - [vscode-shell](../../../packages/vscode-shell/README.md)
 
 ### Files of interest
@@ -122,6 +123,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

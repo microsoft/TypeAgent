@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dab46e54e83202ae26b3f18a3d6dcac3b774201b713d0775d12025f972711769 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d499a347f3cb12cc16c43e1a942063848d5f5ff16cb4e57846ddf5db0fa82464 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typechat-utils — AI-generated documentation
@@ -81,7 +81,7 @@ By following these steps, you can effectively extend the `typechat-utils` packag
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 
 External: `@azure-rest/maps-search`, `chalk`, `date-fns`, `debug`, `exifreader`, `typechat`
@@ -106,6 +106,6 @@ External: `@azure-rest/maps-search`, `chalk`, `date-fns`, `debug`, `exifreader`,
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typechat-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typechat-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

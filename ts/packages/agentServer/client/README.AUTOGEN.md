@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ce70db5ac4de0270a226dc2569196a21ea472ac9364e30a1cd63728510846139 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d431ed8c6e2a113ed693ec920748b03c6b0a6a6278ebe5a58fe1d6e85c4e5102 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -39,6 +39,10 @@ The package is structured into several key files:
 - **[index.ts](./src/index.ts)**: Exports the main functions and types used by external clients.
 - **[agentServerClient.ts](./src/agentServerClient.ts)**: Contains the core implementation for connecting to the agentServer, managing conversations, and ensuring the server is running.
 - **[discovery.ts](./src/discovery.ts)**: Provides functionality for discovering the dynamically-assigned port of an in-process agent.
+- **[conversation/index.ts](./src/conversation/index.ts)**: Contains shared conversation-lifecycle helpers for clients of the agent server.
+- **[conversation/lifecycle.ts](./src/conversation/lifecycle.ts)**: Implements connection-level lifecycle helpers shared by every client that joins an agent server.
+- **[conversation/manage.ts](./src/conversation/manage.ts)**: Implements the dispatcher's `manage-conversation` client-action surface.
+- **[conversation/naming.ts](./src/conversation/naming.ts)**: Provides conversation name primitives and utilities.
 
 ### Key Functions and Classes
 
@@ -68,6 +72,7 @@ By following these steps, you can effectively extend the capabilities of the `@t
 ### Entry points
 
 - default → [./dist/index.js](./dist/index.js)
+- `./conversation` → [./dist/conversation/index.js](./dist/conversation/index.js)
 - `./discovery` → [./dist/discovery.js](./dist/discovery.js)
 
 ### Dependencies
@@ -91,16 +96,23 @@ External: `debug`, `isomorphic-ws`
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
+- [studio-service](../../../packages/studio-service/README.md)
 - tools-scripts
-- [uri-handler](../../../packages/uriHandler/README.md)
-- _…and 1 more workspace consumers._
+- _…and 4 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/agentServerClient.ts`, `./src/discovery.ts`, …and 1 more under `./src/`.
+- [./src/conversation/index.ts](./src/conversation/index.ts)
+- [./src/index.ts](./src/index.ts)
+- [./src/agentServerClient.ts](./src/agentServerClient.ts)
+- [./src/conversation/lifecycle.ts](./src/conversation/lifecycle.ts)
+- [./src/conversation/manage.ts](./src/conversation/manage.ts)
+- [./src/conversation/naming.ts](./src/conversation/naming.ts)
+- [./src/discovery.ts](./src/discovery.ts)
+- [./src/tsconfig.json](./src/tsconfig.json)
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

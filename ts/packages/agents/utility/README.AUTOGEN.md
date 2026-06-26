@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=021ac978661b96da3b730555b699bfd6aa6f32a6469bbf42479cee2b45d10112 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ee14eeb625bbb18bd88c1be0ab4186a974451dbc8228795d5bc64a6b6a625bb1 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # utility-typeagent — AI-generated documentation
@@ -75,9 +75,9 @@ By following these steps, you can extend the capabilities of the `utility-typeag
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text`, `puppeteer`, `puppeteer-extra`, `puppeteer-extra-plugin-stealth`
@@ -96,6 +96,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
