@@ -43,7 +43,7 @@ enough to run on every collision, deterministic (explainable, testable), and tha
 
 ### Idea in one line
 
-Give each agent a set of topic keywords, derive a keyword profile of the recent
+Give each agent a set of keywords, derive a keyword profile of the recent
 conversation, and at collision time pick the candidate whose keywords are closest
 to what the conversation is about — deferring to the existing tiers whenever the
 topical signal is weak or ambiguous.
@@ -67,13 +67,14 @@ topical signal is weak or ambiguous.
   through to the existing tiers.
 - **G5.** Off by default, per-point opt-in, fully observable via existing
   telemetry — matching the subsystem's soft-rollout posture.
-- **G6.** No required LLM. Keyword sourcing has a deterministic, drift-proof
-  default; LLM distillation is an _optional_ quality boost.
+- **G6.** No _required_ LLM, and none on the hot path. Production _prefers_ a one-off LLM
+  distillation for quality, with a deterministic, drift-proof lexical floor as the guaranteed
+  fallback — so an LLM is never required and never called during collision resolution.
 
 ### Non-goals
 
-- Not replacing `user-clarify`/`priority`/learned preferences — it composes with
-  them and defers on abstention.
+- Not replacing `user-clarify`/`priority`/learned preferences. It runs as an
+  earlier tier and, on abstain, hands the same candidate set to them unchanged.
 - Not an embedding/NLU re-architecture. Core matching is lexical. Embedding
   soft-match is an optional, flagged enhancement only.
 - Not a durable per-user profile. The conversation profile is session-scoped.
@@ -87,14 +88,17 @@ the per-turn context vector in the middle, and the collision-time decision on th
 
 ```
 ═══════════════════════════════════════════════════════════════════════════════
-  A. KEYWORDS — build/author time, frozen before runtime          (§5–§6)
+  A. KEYWORDS — produced before runtime, two sources                (§5–§6)
 ═══════════════════════════════════════════════════════════════════════════════
-   agent schema text ──► B-2 lexical extract ─┐
-   misroute phrases  ──► B-3 phrase mining   ─┤─►  keyword set per (schema, action)
-   LLM (offline)     ──► B-1 distill         ─┘                 │
-   collision-keywords.json ──► override (add / remove / replace)┘
-                                                                ▼
-                                       keyword index:  schema.action → { keywords }
+   ── Source 1: keyword file (holds one keyword vector per (schema, action)) ──
+   agent schema text ──► lexical extract (floor) ──┐
+   LLM (one-off, preferred) ──► distill ───────────┴─►  keyword vector ────────────┐
+                                                                                    │
+   ── Source 2: sidecar overrides (optional, layered, configurable) ──              │
+   user tuning · misroute phrases · user preferences ──► collision-keywords.json ──┤
+                                                           (add / remove / replace) │
+                                                                                    ▼
+                                        keyword index:  schema.action → { keywords }
 
 ═══════════════════════════════════════════════════════════════════════════════
   B. CONTEXT VECTOR — runtime, once per user turn                  (§7–§8, §12)
@@ -107,7 +111,7 @@ the per-turn context vector in the middle, and the collision-time decision on th
 ═══════════════════════════════════════════════════════════════════════════════
   C. RESOLVE — at a Stage-1 grammar collision                      (§4, §9–§11)
 ═══════════════════════════════════════════════════════════════════════════════
-        keyword sets (A)                    context vector (B)
+        keyword vectors (A)                 context vector (B)
                   └──────────────┬──────────────┘
                                  ▼
               D-4 scorer:  Σ  decayed-frequency × candidate-local-IDF        (§9)
@@ -122,11 +126,14 @@ the per-turn context vector in the middle, and the collision-time decision on th
               affordance              — never worse than today
 ```
 
-**Reading it:** A produces a static keyword set per `(schema, action)`; B maintains a live,
-decayed keyword-frequency map of the conversation; at a collision, C scores each colliding
-candidate's keyword set against that map and either resolves (deterministically, no LLM) or
-abstains to today's behavior. The only LLM in the whole picture is the _optional, offline_
-B-1 distiller — the runtime hot path is LLM-free and deterministic.
+**Reading it:** A produces a keyword vector per `(schema, action)` from two sources — an
+always-present _keyword file_ (extracted from the schema) plus an optional _sidecar_ of layered
+overrides; B maintains a live, decayed keyword-frequency map of the conversation; at a
+collision, C scores each colliding candidate's keyword vector against that map and either resolves
+(deterministically, no LLM) or abstains to today's behavior. The only LLM in the whole picture
+is the _one-off_ distillation that produces the keyword vectors at onboarding/backfill (with
+deterministic lexical extraction as the fallback floor) — the runtime hot path that reads them
+is LLM-free and deterministic.
 
 ---
 
@@ -245,33 +252,41 @@ contextSelector covers the first and defers the second. `static` is a build-time
 - **`neighborhoods.json`** (`session.ts:295-306`, `collisionResolution.ts:30-39`) is the
   runtime-loaded collision-_detection_ registry. It is **not** where keyword overrides live
   (those are a separate `collision-keywords.json` sidecar, §5) — but its recorded misroute
-  phrases are a deterministic **source** for keyword production (§6 B-3).
+  phrases are a deterministic **source** for the misroute sidecar layer (§6.2).
 
 ---
 
 ## 5. Part A — Where keyword data lives
 
-> **✅ DECIDED: keywords are attached to each individual action, and can be hand-tuned at
-> runtime via a small override file — without rebuilding or re-shipping the agent.**
-> Each action gets a default keyword set (auto-derived, §6), and a separate
-> `collision-keywords.json` sidecar lets you **add / remove / replace** keywords for the
-> handful of actions that actually collide; it stores only those deltas and hot-reloads as
-> data. (Indices: _A-2_ = per-action granularity, matching the `(schema, action)` collision
-> identity; _A-3_ = the sidecar override.) Rejected alternatives — keywords at the
-> whole-agent level, or in per-user profile state — are in §15.
+> **✅ DECIDED: keyword data lives in exactly two places — an auto-derived per-action
+> keyword file, plus an optional hand-tuning sidecar.**
+>
+> 1. **Derived defaults (the keyword file).** Every `(schema, action)` gets a keyword vector
+>    auto-derived from the schema (how it's produced is §6). This is the baseline —
+>    nothing is hand-authored, and it tracks the live schema automatically.
+> 2. **Override sidecar (`collision-keywords.json`).** A small, separate file that can
+>    **add / remove / replace** keywords for the handful of actions that actually collide.
+>    It stores only deltas over the derived defaults and hot-reloads as data — no rebuild
+>    or re-ship.
+>
+> Keywords are keyed **per individual action** (matching the `(schema, action)` collision
+> identity), not per whole agent — so two schemas of one multi-domain agent can't end up
+> with identical vectors. (Indices: _A-2_ = per-action granularity; _A-3_ = the sidecar.)
+> Rejected alternatives — whole-agent-level keywords, or per-user profile state — are in §15.
 
-**Why this split.** Two forces pull in different directions: _correctness_
-(granularity must match the `(schema, action)` collision identity, or two schemas of
-one multi-domain agent get identical vectors and permanently abstain) pulls
-toward per-schema; _evolvability_ (tune the colliding few without re-shipping an
-agent) pulls toward a runtime sidecar. A-2 supplies the first, A-3 the second.
-Derived-at-load sourcing (§6 B-2) means the "home" question largely dissolves —
-there is nothing to store except optional overrides.
+**Why this split.** Two forces pull in different directions. _Correctness_ pulls
+toward per-action granularity: the keyword identity must match the `(schema, action)`
+collision identity, or two schemas of one multi-domain agent get identical vectors and
+permanently abstain — which is exactly what the **derived per-action defaults** provide.
+_Evolvability_ pulls toward a runtime override: the colliding few must be tunable without
+re-shipping an agent — which is what the **sidecar** provides. And because the defaults are
+derived rather than hand-authored (§6), the "home" question largely dissolves — there is
+nothing to store except optional overrides.
 
 ### 5.1 How the sidecar works (mechanism)
 
 The override file is its **own** sidecar — a `collision-keywords.json`, **not**
-`neighborhoods.json` (which keeps its separate collision-detection role; see §6 B-3). It
+`neighborhoods.json` (which keeps its separate collision-detection role). It
 works the same way that registry does _mechanically_ — a plain JSON artifact on disk,
 separate from any agent's code, loaded at runtime — keyed by `(schema, action)` and storing
 only **deltas** over the derived defaults:
@@ -284,7 +299,7 @@ only **deltas** over the derived defaults:
 }
 ```
 
-**Effective keyword set** for a `(schema, action)`:
+**Effective keyword vector** for a `(schema, action)`:
 
 ```
 effective = derived(schema.action)  ∪  override.add  −  override.remove
@@ -360,55 +375,77 @@ Two ergonomics notes that connect to later parts:
 
 ## 6. Part B — How keyword vectors are produced
 
-> **✅ DECIDED: every action's keywords come from a layered stack — automatically extracted
-> from its own schema text (always available), optionally improved by an offline LLM pass,
-> and optionally enriched from real misroute examples — with manual overrides on top.**
-> The layers, highest priority first:
+> **✅ DECIDED: keyword vectors are produced two ways — **standard onboarding extraction**
+> (automatic, runs for every action) and **ad-hoc tuning** (optional, refines only the
+> actions that actually collide).**
 >
 > ```
-> effective keywords =  manual override (§5 sidecar)       // human fixes — top priority
->                    ▷  LLM-distilled  (+ misroute phrases) // quality layer, where present
->                    ▷  lexical-from-schema                 // always-on floor, every action
+> keyword vector =  standard extraction  (automatic — every action, at onboarding)
+>                +  ad-hoc tuning         (optional — only actions that collide)
 > ```
 >
-> The lexical floor guarantees _every_ action has keywords on day one (no authoring needed,
-> drift-proof); the other layers add quality only where it's worth it. (Indices: _B-2_ =
-> lexical floor, _B-1_ = LLM distillation, _B-3_ = misroute-phrase mining.) The rejected
-> alternative — generating keywords from embedding clusters (_B-4_) — is in §15.
+> 1. **Standard extraction (the default producer).** When an action first appears — at one of
+>    **three moments**: a step in the **onboarding flow** (new agents), a one-time **backfill**
+>    (already-shipped agents), or **dynamic generation** (agents/actions created at runtime, e.g.
+>    flow creation) — a keyword vector is produced for it, with **no authoring required**.
+>    **LLM distillation is the preferred producer**: a one-off, higher-quality pass we expect to
+>    beat raw lexical output (it adds synonyms the schema never says, normalizes phrasing).
+>    **Lexical extraction is the deterministic fallback floor** — it guarantees a vector for
+>    _every_ action even when no LLM ran (dynamic runtime agents where a synchronous model call
+>    is undesirable, agents not yet distilled, or LLM-less environments) and underpins the §10
+>    full-coverage guard. We don't avoid LLM calls on principle; we only keep them from becoming a
+>    **hard runtime dependency or repeated requirement** — and a one-off distillation is neither.
+> 2. **Ad-hoc tuning (optional refinement).** For the handful of actions that actually collide,
+>    the vector can be sharpened by three optional, independently-toggleable layers: **user
+>    tuning** (manual keyword edits), **misroute tuning** (deltas mined from real misroute
+>    phrases in `neighborhoods.json`), and **user preferences** (deltas derived from learned
+>    routing preferences).
+>
+> Each action's **baseline vector is produced once** by standard extraction (at its onboarding /
+> backfill / dynamic-generation moment) and is not recomputed thereafter; ad-hoc tuning is layered
+> on afterward as additional, **lightweight** refinements. Extraction itself may use an LLM where
+> quality matters — the offline distillation pass, and optionally when generating keyword vectors for
+> dynamically-added actions — so it is **not** strictly LLM-free. What _is_ guaranteed
+> deterministic and LLM-free is the **collision-time scoring path that reads these vectors (§9)**.
+> (_Where_ the produced vectors are stored — the always-present keyword file vs. the tuning
+> sidecar — is §5; this section is only about how they are produced, and no action-schema field is
+> added either way.) The rejected alternative — generating keywords from embedding clusters — is
+> in §15.
 
-### 6.1 The three sources
+### 6.1 Standard extraction (every action, at onboarding)
 
-- **B-2 — lexical-from-schema at load (the floor).** A deterministic extractor mines each
-  agent's own schema text — manifest + schema `description`, de-camelCased action names
-  (`addItems`→"add items"), parameter names + their JSDoc comments, optionally `.agr`
-  grammar literals — minus stopwords and generic CRUD verbs. Recomputed every boot, so it
-  is **drift-proof** and covers **every agent including runtime/dynamic ones**
-  (`allowDynamicAgents`). This guarantees the §10 full-coverage guard always has something
-  to work with. Lower quality (identifier-ish); cannot invent synonyms the schema never
-  mentions.
-- **B-1 — LLM distillation (the quality layer).** An offline/author-time LLM pass produces
-  higher-quality keywords _and synonyms the schema never says_ (`sheet`→`spreadsheet`),
-  committed alongside the agent. Accepted costs: a **one-time backfill** of the existing
-  agents as part of rollout, and **drift** (committed artifacts go stale) — to be mitigated
-  later by an **automated refresh pipeline** in the spirit of the doc-autogen pipelines.
-  Determinism is preserved because distillation is offline; the runtime stays model-free.
-- **B-3 — mine `neighborhoods.json` misroute phrases (the discriminative boost).** The
-  registry records, per known-confusable cluster, the _real user phrases_ that misrouted
-  between its members. Mining those yields keywords drawn from how users _actually_ phrase
-  each intent — concentrated on exactly the hard, colliding pairs. It covers only agents
-  already in the registry (a small **curated set of empirically-colliding clusters, not a
-  roster of all agents**), so it is a boost, never the base.
+This is the default producer. **LLM distillation is preferred** (a one-off, higher-quality pass
+run at onboarding/backfill); **lexical extraction is the deterministic floor** that guarantees a
+vector whenever no LLM ran. Either way it runs as a step in the **onboarding flow** (and the
+equivalent backfill / dynamic-generation moments), so every action gets a vector with no
+authoring.
 
-### 6.2 B-2 and B-3 are one deterministic extractor, two corpora (no LLM)
+**LLM distillation (the preferred producer).** A one-off LLM pass — run at onboarding and the
+backfill, or at generation time for a dynamically-added action — produces higher-quality
+keywords _and synonyms the schema never says_ (`sheet`→`spreadsheet`), normalizes phrasing, and
+is committed/stored alongside the agent. We expect it to beat raw lexical output, so it is the
+default where a model is available. Accepted costs: **drift** (stored artifacts go stale) —
+mitigated later by an **automated refresh pipeline** in the spirit of the doc-autogen pipelines.
+It runs **once** per action and is never on the collision-time hot path, so it adds no runtime
+LLM dependency.
 
-A common point of confusion: **B-3 does not need an LLM.** B-2 and B-3 share a single
-deterministic lexical extractor and differ only in the _input corpus_:
+**Lexical extraction (the deterministic fallback floor).** A deterministic extractor mines each
+agent's own schema text — manifest + schema `description`, de-camelCased action names
+(`addItems`→"add items"), parameter names + their JSDoc comments, optionally `.agr` grammar
+literals — minus stopwords and generic CRUD verbs. It is **drift-proof** (recomputed from the
+live schema) and covers **every agent including runtime/dynamic ones** (`allowDynamicAgents`),
+so it guarantees a vector — and thus the §10 full-coverage guard — even when distillation hasn't
+run (not-yet-distilled agents, dynamic agents where a synchronous model call is undesirable, or
+LLM-less environments). Lower quality (identifier-ish); it cannot invent synonyms the schema
+never mentions, which is exactly why distillation is preferred when available.
 
-| Source  | Input corpus                                    | LLM?                                             |
-| ------- | ----------------------------------------------- | ------------------------------------------------ |
-| **B-2** | the agent's own schema text                     | no                                               |
-| **B-3** | real misroute phrases from `neighborhoods.json` | no — the phrases are pre-existing committed data |
-| **B-1** | schema + samples, distilled by a model          | yes — offline only                               |
+**Three lifecycle moments — a vector always ends up existing:**
+
+| Moment                 | Applies to                                             | What runs                                                                                           |
+| ---------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Onboarding flow**    | a newly-onboarded agent                                | LLM distillation (preferred), lexical fallback — as a step in the onboarding flow                   |
+| **Initial backfill**   | agents that shipped before this feature                | a one-time LLM-distillation pass over the existing roster (lexical fallback)                        |
+| **Dynamic generation** | agents/actions created at runtime (e.g. flow creation) | lexical extraction at load — optionally LLM-distilled if a model is available; no build step (§6.3) |
 
 The extractor is classic IR, no model call:
 
@@ -416,51 +453,72 @@ The extractor is classic IR, no model call:
 1. tokenize + canonicalize (NFKC, lowercase, strip punctuation)
 2. drop stopwords + generic CRUD verbs (add/get/update/remove/show/…)
 3. count term frequency across the corpus
-4. (for a colliding pair) distinctive-terms weighting — rank a term by how much more it
-   appears in this member's corpus than the sibling's (TF-difference / log-odds-ratio),
-   so shared/ambiguous tokens cancel and discriminating tokens rise
-5. emit the top-N as the keyword set
+4. emit the top-N as the keyword vector
 ```
+
+### 6.2 Ad-hoc tuning (only the colliding few)
+
+Tuning refines the extracted vector for the handful of actions that actually collide. Its
+overrides can be sourced from three layers, merged in a configurable priority; each is optional
+and independently toggleable:
+
+- **User tuning (manual).** Explicit add / remove / replace edits a human makes after seeing a
+  misroute (the `@collision keywords …` flow, §5.3). Highest intent clarity, lowest volume.
+- **Misroute tuning (auto-derived from real phrases).** `neighborhoods.json` records, per
+  known-confusable cluster, the _real user phrases_ that misrouted between its members. A
+  deterministic extractor mines those into discriminative keyword deltas — concentrated on
+  exactly the hard, colliding pairs. It covers only clusters already in the registry, so it is
+  a boost, never the base.
+- **User preferences (learned).** Learned routing preferences (`@collision preferences`) can
+  contribute deltas that bias a colliding set toward the user's observed choice — expressed as
+  keyword weight rather than a hard pin.
+
+Because the misroute and preference layers are auto-derived, the merge is **configurable**: a
+deployment can run manual-only, manual + misroute, or all three.
+
+**Misroute tuning shares the keyword-file extractor — still no LLM.** The misroute layer reuses
+the same deterministic extractor as the keyword file, differing only in the input corpus
+(misroute phrases instead of schema text). For a colliding pair it adds a distinctive-terms
+step — rank a term by how much more it appears in this member's phrases than the sibling's
+(TF-difference / log-odds-ratio) — so shared/ambiguous tokens cancel and discriminating tokens
+rise.
 
 > The misroute phrases in `neighborhoods.json` were themselves LLM-generated in the offline
 > corpus run that built the registry — but that is committed _source data_, like a
 > human-written schema description. The extraction on top is mechanical, and **runtime is
 > never involved**.
 
-### 6.3 Worked example — B-3 on a real cluster
-
-From the shipped registry, the cluster `calendar.findTodaysEvents` ↔
-`taskflow.dailyAgendaEmail` records 9 phrases the user _intended_ for
-`taskflow.dailyAgendaEmail` but that misrouted to `calendar.findTodaysEvents`:
+**Worked example — misroute mining on a real cluster.** From the shipped registry, the cluster
+`calendar.findTodaysEvents` ↔ `taskflow.dailyAgendaEmail` records 9 phrases the user _intended_
+for `taskflow.dailyAgendaEmail` but that misrouted to `calendar.findTodaysEvents`:
 
 > "Email me today's agenda." · "Could you send me an email with my schedule for today?" ·
 > "Shoot me today's calendar events." · "Send me an email with today's calendar events."
 
-Extraction (steps 1–5) for `taskflow.dailyAgendaEmail`:
+Extraction for `taskflow.dailyAgendaEmail`:
 
 - raw tokens → `email, agenda, schedule, send, inbox, calendar, events, today`
-- distinctive-terms vs the `calendar` sibling: `today`, `calendar`, `events` appear for
-  _both_ intents (they are _why_ the two collide) → cancel; `email`, `agenda`, `send`,
-  `inbox` are unique to the email intent → rise
-- emitted keywords → **`email, agenda, send, inbox`**
+- distinctive-terms vs the `calendar` sibling: `today`, `calendar`, `events` appear for _both_
+  intents (they are _why_ the two collide) → cancel; `email`, `agenda`, `send`, `inbox` are
+  unique to the email intent → rise
+- emitted keyword deltas → **`email, agenda, send, inbox`**
 
-At runtime, if the conversation has been about email (context map `{ email:6, send:3,
-inbox:2 }`) and the user says _"get me today's agenda"_ — colliding the two actions — those
-mined keywords overlap the conversation for `taskflow` and not for `calendar`, so
-contextSelector resolves to `taskflow.dailyAgendaEmail`. The phrases became keywords; the
-keywords feed the normal scorer (§9).
+At runtime, if the conversation has been about email (context map `{ email:6, send:3, inbox:2 }`)
+and the user says _"get me today's agenda"_ — colliding the two actions — those mined keywords
+overlap the conversation for `taskflow` and not for `calendar`, so contextSelector resolves to
+`taskflow.dailyAgendaEmail`. The phrases became override keywords; the keywords feed the normal
+scorer (§9).
 
-### 6.4 When extraction runs (performance)
+### 6.3 When extraction runs (performance)
 
-The B-2 extractor is pure string processing — **no model, no I/O beyond text already parsed
-at agent registration**. At the real scale (~30 agents, a few KB of schema text each → ~10k
-tokens total) it is **low-single-digit-milliseconds total** — rounding error next to what
-boot already does (grammar NFA compilation, loading the embedding model for
-`semanticSearchActionSchema`). The cross-agent discriminativeness is _not_ a boot cost
-either: we use **candidate-local** weighting computed at collision time over the 2–3
-colliding candidates (§10), so boot only produces each agent's keyword _set_.
+This concerns the **lexical fallback floor** — the deterministic path. (LLM distillation, the
+preferred producer, is a one-off onboarding/backfill cost that never touches boot or the
+collision-time hot path.)
 
-A concrete sketch:
+The lexical extractor is pure string processing — no model, no I/O beyond text already parsed at
+agent registration. At real scale (~30 agents, ~10k tokens total) it is low-single-digit
+milliseconds — rounding error next to grammar NFA compilation and embedding-model load already
+on the boot path. A concrete sketch:
 
 ```ts
 function extractKeywords(schema): string[] {
@@ -485,64 +543,50 @@ function extractKeywords(schema): string[] {
 }
 ```
 
-The only real cost risk is a **heavy NLP dependency** (large stemmer/lemmatizer/tokenizer).
-Mitigation: a tiny rule-based Porter stemmer, or skip stemming in v1 and lean on the §12
-canonicalizer; stopwords/generic-verbs are small `Set`s.
-
-Even so, if "don't touch boot time" is a hard rule, extraction can be moved off the hot
-boot path entirely. Strategies, in preference order:
-
-| Strategy                                                     | When it runs                                                  | Boot cost              | Notes                                                                                             |
-| ------------------------------------------------------------ | ------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------- |
-| **Build-time precompute** _(recommended for shipped agents)_ | at agent **build**; emit `<agent>.keywords.json` into `dist/` | **zero**               | Mirrors the existing `.agr`→`.ag.json` / `.pas.json` artifact pipeline; boot just reads the file. |
-| **Content-hash cache**                                       | once, then cached by schema hash/mtime                        | ~zero after first boot | Re-extract only when the schema changes; lives in the agent cache dir. Covers dynamic agents.     |
-| **Lazy / on-demand**                                         | first time an agent participates in a collision               | zero at boot           | Collisions are rare → most agents never extracted; sub-ms when one is.                            |
-| **Inline at registration**                                   | every boot, piggybacking the existing schema parse            | a few ms total         | Simplest; likely fine as-is given the cost analysis above.                                        |
-
-**Recommendation:** **build-time precompute (zero boot cost, fits the repo's existing
-compiled-artifact pattern) for shipped agents**, plus a **content-hash cache / lazy
-extraction for dynamically-added agents** (`allowDynamicAgents`) that have no build step.
-Zero cost for the common case, correctness for runtime-added agents.
+**Recommendation:** to keep even that off the boot path, **precompute at build time** for
+shipped agents (emit `<agent>.keywords.json` into `dist/`, mirroring the `.ag.json` / `.pas.json`
+pipeline — zero boot cost), with a **content-hash cache / lazy extraction** for dynamically-added
+agents that have no build step. The only real cost risk is a heavy NLP dependency; a tiny
+rule-based stemmer (or skipping stemming in v1, leaning on the §12 canonicalizer) avoids it.
 
 ---
 
 ## 7. Part C(i) — Conversation signal source
 
-> **✅ DECIDED: the conversation signal comes from a swappable source. For v1 it's the words
-> from the user's recent requests; a clean seam lets a richer "extracted topics" source
-> replace it later without touching the scorer.** contextSelector reads the conversation
-> through one interface (`getRecentConversationSignal()`), with two implementations:
+> **✅ DECIDED: the conversation signal comes from a swappable source. V1 reads the words from
+> the user's recent requests — chosen for _simplicity and to get initial benchmarks fast_. V2
+> swaps to knowPro's extracted topics/entities, which is the **intended destination**: the
+> conversation-memory system that already owns this data is the architecturally correct place to
+> read it from.** contextSelector reads the conversation through one interface
+> (`getRecentConversationSignal()`), with two implementations:
 >
-> - **v1 (now):** contextSelector keeps its own short buffer of recent **raw user-request
->   text**, tokenized into a keyword-frequency map. Deterministic, no LLM, and — crucially —
->   works in agent-server mode (the connected mode the CLI always uses).
-> - **v2 (later):** the richer **topics and entities** that the conversation-memory system
->   (knowPro) already extracts, once that extraction is turned on in agent-server mode.
+> - **v1 (now — simplicity / benchmarking):** contextSelector keeps its own short buffer of
+>   recent **raw user-request text**, tokenized into a keyword-frequency map. Deterministic, no
+>   LLM, no new dependency, and — crucially — works in agent-server mode (the connected mode the
+>   CLI always uses). Good enough to validate the scorer and gather initial numbers.
+> - **v2 (intended):** the richer **topics and entities** that the conversation-memory system
+>   (knowPro) already extracts. This is where the signal _should_ come from — knowPro is the
+>   system of record for conversation history — so V2 is the target, pending that extraction
+>   being available in agent-server mode.
 >
-> The seam is what makes the v1→v2 swap a drop-in.
+> The seam is what makes the v1→v2 swap a drop-in; V1 is the pragmatic start, V2 the
+> architecturally correct end state.
 
-### Reasoning & context — what this section decides and why it's tricky
+### Reasoning & context
 
-This section decides **where the context vector's data comes from** — the conversation
-half of the scorer (§4). The vector should capture _what the user has recently been
-talking about_, so the natural raw material is the user's own recent messages.
+This section decides **where the context vector's data comes from**. The natural raw material is
+the user's own recent messages — but two facts make it non-trivial, both **decisive because our
+target is agent-server mode** (the connected mode the CLI always uses):
 
-Two facts make this non-trivial, and both are **decisive because our deployment target is
-agent-server mode** — the connected mode the CLI always uses, and the mode we assume _all_
-traffic goes through. Anything that only works in the in-process Electron shell is not good
-enough:
+1. The dispatcher's conversation stores (`ChatHistory`, knowPro memory) are populated only when
+   knowledge-extraction is on, and agent-server turns it _off_ for cost — so the data we'd reach
+   for first **isn't there in our target mode** (§7.1).
+2. The correct long-term source — knowPro's extracted topics/entities, owned by the
+   conversation-memory system of record — isn't usable for v1 yet: it's LLM-produced
+   (non-deterministic) and currently unpopulated in agent-server mode (§7.3).
 
-1. The dispatcher's conversation stores (`ChatHistory`, knowPro memory) are **populated
-   conditionally**, and agent-server deliberately turns the relevant knowledge-extraction
-   _off_ (a cost/performance choice — extraction is per-message LLM/embedding work). So the
-   data we'd reach for first simply **isn't there in our target mode** (§7.1).
-2. The genuinely ideal source — knowPro's _extracted topics and entities_ — is both richer
-   and the wrong fit for v1: it is LLM-produced (non-deterministic) and currently
-   unpopulated in agent-server mode (§7.3).
-
-That combination is why the decision above is a **source seam**: ship a deterministic,
-always-available source now, and leave a clean upgrade path to the richer source later —
-without the scorer caring which implementation is behind it.
+Hence the **source seam**: ship a deterministic, always-available source now (simple, good for
+benchmarking) behind a clean upgrade path to knowPro — without the scorer caring which is behind it.
 
 ### 7.1 Why not source from `ChatHistory` (the agent-server finding)
 
@@ -591,9 +635,11 @@ keyword extraction) into the context-vector frequency map.
   set), never rebuild it — recomputing would be wasteful and could drift the determinism
   contract (§12).
 
-### 7.3 V2 — knowPro extracted topics + entities (the richer source, later)
+### 7.3 V2 — knowPro extracted topics + entities (the intended source)
 
-knowPro already defines exactly the shape we want (`knowledgeSchema.ts:25-66`):
+knowPro is the conversation-memory system of record, so reading the signal from it — rather
+than a contextSelector-owned buffer — is the architecturally correct end state. It already
+defines exactly the shape we want (`knowledgeSchema.ts:25-66`):
 
 ```ts
 type ConcreteEntity = {
@@ -611,16 +657,18 @@ type KnowledgeResponse = {
 
 - **`topics: string[]`** is already a distilled keyword list — the same shape as our agent
   keyword vectors — and entity `type[]` / `name` are keyword-like. A context vector built
-  from these would be richer and pre-canonicalized.
-- **The tradeoff (why it's V2, not V1):** knowPro knowledge is **LLM-extracted per
-  message**, so it is (a) **non-deterministic** and (b) only exists when extraction runs —
-  which agent-server disables today for cost. Extraction is _async / queued_, so _reading_
-  already-extracted topics is not a hot-path LLM call — but the data must first be
-  populated. This mirrors the **B-1-vs-B-2** split on the agent side: a deterministic
-  lexical baseline, with an optional richer LLM-backed tier.
+  from these would be richer, pre-canonicalized, and sourced from the system that properly owns
+  conversation history.
+- **Why V1 ships first anyway:** knowPro knowledge is **LLM-extracted per message**, so it is
+  (a) **non-deterministic** and (b) only exists when extraction runs — which agent-server
+  disables today for cost. Extraction is _async / queued_, so _reading_ already-extracted topics
+  is not a hot-path LLM call — but the data must first be populated. So V1's contextSelector-owned
+  buffer is the pragmatic starting point for simplicity and benchmarking; the swap to knowPro
+  happens once that extraction is available in agent-server mode.
 
-So V1 is not so much "thrown away" as **promoted to a deterministic baseline** once V2
-lands behind the same seam.
+So V1 is not so much "thrown away" as a **deterministic stepping stone**: it validates the
+scorer and yields the first benchmarks, then V2 takes over the signal from knowPro — the system
+that rightly owns conversation history — behind the same seam.
 
 ---
 
@@ -678,21 +726,33 @@ over within a few turns instead of lingering until they age out of the window.
 
 ## 9. Part D — Scoring algorithm
 
-> **✅ DECIDED: score each candidate by how much the recent conversation overlaps its
-> keywords — counting most the words that uniquely point to one candidate, and ignoring words
-> the colliding candidates share.** A word both candidates list can't break the tie, so it's
-> cancelled out; a word unique to one candidate, and frequent in the conversation, drives the
-> score. Keyword _order_ is ignored (each candidate's keywords are just a set). The richer
-> **log-odds / Naive-Bayes** scorer is a documented upgrade for later (it needs labeled data
-> we don't have yet); plain cosine similarity was considered and rejected. (Index: _D-4_ =
-> this candidate-local IDF-weighted overlap; _D-5_ = the log-odds upgrade; _D-1_ = the
-> rejected cosine.)
+> **✅ DECIDED: score with TF-IDF now, and evaluate embedding similarity later — those are the
+> only two approaches on the roadmap.** The scorer ranks each candidate by how much the recent
+> conversation overlaps its keywords, counting most the words that uniquely point to one
+> candidate and cancelling words the colliding candidates share (candidate-local IDF). Keyword
+> _order_ is ignored (each candidate's keywords are a set). This evolves in lockstep with the
+> §7 signal source:
+>
+> 1. **Now — simple context vectors → TF-IDF.** V1's raw-token context vector feeds the
+>    candidate-local IDF-weighted overlap below. Deterministic, explainable, no dependency.
+> 2. **Next — knowPro entities → TF-IDF (same scorer).** When the signal source swaps to
+>    knowPro's topics/entities (§7.3 V2), they project into the same `{ key → weight }` map and
+>    feed the **same** TF-IDF scorer unchanged — the source seam means no scorer rewrite.
+> 3. **Later — knowPro via embedding similarity (evaluated).** Once knowPro is the source, we
+>    also evaluate **semantic** matching (embedding cosine between the conversation's
+>    topics/entities and each candidate's keyword vector) to bridge vocabulary gaps TF-IDF's
+>    exact-token overlap can't (e.g. `"spreadsheet editing"` ↔ `excel`). This is the one case
+>    that genuinely departs from TF-IDF, and it stays a flagged enhancement (§2 non-goal).
+>
+> Explicitly **not** on the roadmap: plain cosine, plain dot-product (no IDF), BM25, and
+> log-odds/Naive-Bayes. They were evaluated and set aside (below); the forward path is
+> TF-IDF → embeddings, not these. (Index: _D-4_ = the chosen TF-IDF overlap.)
 
 ```
 score(a) = Σ_{ token ∈ C ∩ K_a }  C[token] × disc(token)
 
   C[token]    = decay-weighted conversational frequency (§8)             — "how much talked about"
-  K_a         = candidate a's keyword SET (flattened; order ignored)     — §6
+  K_a         = candidate a's keyword vector (flattened; order ignored)  — §6
   disc(token) = candidate-local IDF over the colliding set:              — "how distinguishing"
                   token in keywords of all colliding candidates → ~0  (cancels, like "the")
                   token unique to one candidate                 → high (distinguishes)
@@ -704,83 +764,36 @@ tokens fired and why.
 
 ### Reasoning & context
 
-The scorer consumes the two data inputs from §4: the context vector `C` (decay-weighted
-frequency map, §8) and each candidate's keyword set `K_a` (§6). It answers: _how much does
-the recent conversation overlap each candidate's keywords, weighted toward tokens that
-actually distinguish the candidates?_
+The scorer consumes the two §4 inputs: the context vector `C` (decay-weighted frequency map,
+§8) and each candidate's keyword vector `K_a` (§6). Two sub-decisions shape it:
 
-**Why not cosine (D-1).** Cosine measures the _angle_ between vectors, so `{excel:1}` and
-`{excel:100}` score identically — it cannot tell "mentioned once" from "the whole
-conversation," and it rewards tiny keyword vectors. That makes a fixed confidence threshold
-uncalibratable. The live options (D-2…D-5) all share the property that **magnitude tracks
-evidence**; D-4 is the simplest of them.
+**Candidate-local, not global, IDF.** Global IDF (documents = all ~30 agents) is noisy and
+non-local — installing an unrelated agent that also lists "item" would shift `idf("item")` and
+perturb _excel-vs-list_ routing. Candidate-local IDF (documents = just the 2–3 colliding
+candidates) asks only "does this token distinguish _these_ candidates?": shared tokens cancel
+(`~0`), unique tokens score high. Computed fresh per collision, immune to unrelated agents, cheap.
 
-**Why D-4 over D-5 (log-odds) for v1.** D-5 yields a calibrated probability, which is
-genuinely nicer — but that benefit only matters once we're tuning thresholds against real
-data, and it costs smoothing + per-class normalization to specify. D-4 already has every
-property v1 needs (evidence-tracking magnitude, explainability, clean fit with the §10
-evidence gate), so D-5 is the **documented upgrade**, not the starting point.
+**Flattened keyword sets (order ignored).** `disc` and `C[token]` already encode which keywords
+matter; position is a noisier third proxy, and the ranks come from crude counts or LLM ordering.
+So `posWeight = 1` always (the list is a **set**), with all weighting from `C × disc`. Capped
+positional weighting is parked as a tuning lever if benchmarks show rank-0 keywords are
+under-counted.
 
-**Sub-decision 1 — discriminativeness: candidate-local, not global IDF.** IDF
-(inverse document frequency) down-weights tokens that appear across many "documents." Two
-flavors: _global_ (documents = all ~30 agents) is noisy at that scale and **non-local** —
-installing an unrelated agent that also lists "item" would shift `idf("item")` and thus
-perturb _excel-vs-list_ routing. _Candidate-local_ (documents = just the 2–3 colliding
-candidates) instead asks "does this token distinguish _these_ candidates?": a token both
-share cancels (`~0`), a token unique to one scores high. It is computed fresh per collision,
-immune to unrelated agents, and cheap.
+### The scoring roadmap — TF-IDF now, embeddings later
 
-**Sub-decision 2 — positional weighting: flattened (order ignored).** Keyword lists come out
-frequency-ranked, so an order exists, and one _could_ weight earlier keywords more. We don't,
-for v1:
-
-- `disc` (candidate-local IDF) and `C[token]` (conversational frequency) **already encode
-  "which keywords matter"** — position is a third, weaker, noisier proxy for the same thing,
-  and our ranks come from crude frequency counts (B-2) or LLM ordering (B-1), so they aren't
-  trustworthy enough to lean on.
-- Stacking _position × disc × frequency_ is three uncalibrated multipliers — exactly where a
-  quirk in one factor can dominate. `reciprocal` weighting in particular can make a token the
-  user is clearly discussing nearly worthless just because it ranks late in a list (e.g.
-  `8 × 1 × 1/8 = 1.0` vs `8 × 1 × 1.0 = 8.0`), letting position override real signal.
-
-Flattening = `posWeight = 1` always, i.e. the keyword list is a **set** ("is this token one
-of the candidate's keywords?"), with all the weighting coming from `C × disc`. Capped
-positional weighting is parked as a tuning lever if local benchmarks ever show rank-0 keywords
-are under-counted.
-
-### The D-spectrum — why D-4 is the sweet spot
-
-The five options are points on one spectrum around D-4; evaluating the neighbors shows why
-each is rejected, subsumed, or deferred:
+D-4 (TF-IDF) ships and stays unchanged as the signal source moves from raw tokens to knowPro
+entities (the source seam, §7). The one forward step that adds genuinely new power is
+**embedding similarity** — matching on _meaning_ rather than exact tokens, to bridge gaps like
+`"spreadsheet editing"` ↔ `excel` that lexical overlap can't:
 
 ```
-D-2 (dot product) ──+ candidate-local IDF + flatten ─► D-4 (chosen) ──+ tf-saturation/length-norm ─► D-3 (BM25)
-   "too naive"                                          the sweet spot          "more machinery, marginal here"
-
-                          D-4 ──+ probabilities estimated from labeled data ─► D-5 (log-odds)
-                                                                                "needs data we don't have yet"
+simple context vectors ─► D-4 TF-IDF ─► knowPro entities ─► D-4 TF-IDF ─► embedding similarity (evaluated)
+   (§7 V1 source)         (now)          (§7 V2 source)      (same scorer)   (semantic match, flagged)
 ```
 
-- **D-1 cosine — rejected.** Angle-only: `{excel:1}` and `{excel:100}` score identically; a
-  fixed confidence threshold is uncalibratable.
-- **D-2 weighted dot product — subsumed.** D-4 _is_ a weighted dot product; D-2 without IDF
-  is "D-4 minus discriminativeness" → long-list/keyword-stuffing bias and generic shared
-  tokens inflate both candidates. Choosing candidate-local IDF already rejects it.
-- **D-3 BM25-lite — deferred refinement.** Adds tf-saturation + length-normalization, but
-  it's built for long, length-varied documents; our ~8-token keyword lists are tiny and
-  uniform, so length-norm does little, and its `k1`/`b` params have no data to tune. TF
-  runaway is already bounded by our **decay** (§8) + the **evidence gate** (§10); if mild
-  saturation is wanted, a one-line sublinear `1+log(f)` buys most of it. Borrow BM25 only if
-  local benchmarks show a token-dominance or length-bias pathology.
-- **D-5 log-odds / Naive-Bayes — documented upgrade (data-gated).** The per-token term
-  `log[P(t|a1)/P(t|a2)]` _is_ what candidate-local IDF approximates (shared tokens cancel,
-  unique tokens dominate) — so D-4 is essentially a **smoothing-free log-odds**. Real D-5
-  needs `P(token|a)`, which we'd have to fabricate from tiny keyword lists today: that forces
-  **mandatory smoothing whose parameter dominates the result** (no data to set it), its
-  "calibrated probability" is **illusory without labeled data** (still needs fixture
-  calibration), and the **independence assumption inflates confidence** on correlated topic
-  tokens. It earns its place only once a **labeled collision
-  corpus** (from local benchmarks/fixtures) lets us estimate `P(token|a)` from data — exactly why it's the upgrade, not v1.
+The other lexical formulas (cosine, dot-product, BM25, log-odds) were evaluated and set aside —
+they lose information D-4 keeps or add untunable machinery that buys little on tiny, uniform
+keyword lists (per-option rationale in §15). The forward path is TF-IDF → embeddings, not these.
 
 ---
 
@@ -801,7 +814,7 @@ score, contextSelector runs four checks, in order. **All four must pass to resol
 any one means abstain.
 
 1. **Coverage check** — _do all the colliding candidates even have keywords?_ If any
-   candidate's keyword set is empty, abstain. (Otherwise an agent with keywords would beat an
+   candidate's keyword vector is empty, abstain. (Otherwise an agent with keywords would beat an
    agent without them just for being covered — not because the conversation favored it.)
 2. **History-only** — _score from what was said before this request._ The current message
    itself is excluded, so contextSelector reflects the _conversation_, not the words in the
@@ -832,18 +845,12 @@ Notice every resolve/abstain is **explainable from counts** — e.g. "resolved t
 matched {spreadsheet, formula, cell} (3 ≥ 2), mass 17, runner-up 0." That readability is
 exactly what the local benchmark output needs to calibrate the thresholds.
 
-### Reasoning & the rejected options
+### Why this rule
 
-The evidence gate is what makes a _count-based_ score safe to threshold — it directly asks
-"enough signal?" and "clear winner?" in units you can read, instead of an opaque similarity
-number. Because D-4's candidate-local IDF already cancels shared tokens, the runner-up often
-scores ~0, so an **absolute** margin is clean and avoids divide-by-zero.
-
-| Option                                                    | Why not                                                                                                                                                                                         |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **E-1** absolute threshold + margin on a **cosine** score | Cosine magnitude isn't calibratable across conversations (§9); we dropped cosine anyway.                                                                                                        |
-| **E-3** relative ratio `s1/s2 ≥ ρ`                        | The runner-up is frequently ~0 (shared tokens cancel), so the ratio explodes / divides by zero; needs an awkward floor. Pairs naturally with D-5 (log-odds) — revisit if we adopt that upgrade. |
-| **E-4** z-score / rank-gap                                | Needs a population of candidate scores to be stable; our collisions are usually just 2 candidates, where a z-score is meaningless.                                                              |
+The evidence gate is what makes a _count-based_ score safe to threshold — it asks "enough
+signal?" and "clear winner?" in units you can read, instead of an opaque similarity number.
+Because D-4's candidate-local IDF cancels shared tokens, the runner-up often scores ~0, so an
+**absolute** margin is clean and avoids the divide-by-zero a relative ratio would hit.
 
 **Thresholds to calibrate (on fixtures, biased toward abstention):** `minUniqueTokens`
 (start 2), `minMass`, and `margin`. A missed opportunity is cheaper than a wrong silent
@@ -868,49 +875,33 @@ reroute, so tune conservative.
 
 ### 11.1 Where to insert (F)
 
-| Option                                                        | Pros                                                                                    | Cons                                                                                                    |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **F-1** New standalone tier on **both** paths                 | Symmetric coverage.                                                                     | **Two separate insertions**; duplicates wiring; llmSelect side saves no LLM.                            |
-| **F-2** **Grammar/cache path only**                           | The **only** place it avoids an LLM; one insertion; biggest concrete win.               | Embedding-path collisions unaddressed (acceptable — they already run LLM-free selection).               |
-| **F-3** **Inside `resolvePreferenceClarify`** (shared policy) | **One change covers both paths**; reuses the consent/learning model; least new surface. | Couples to the `preference-clarify` strategy plumbing; needs care so it composes with Tier-1/registry.  |
-| **F-4** Dynamic `priorityOrder` feeding existing `priority`   | Tiny surface; reuses a shipped strategy.                                                | Re-derives priority per request (surprising for a "static" knob); no evidence gate / abstain semantics. |
-
-**Why F-2.** contextSelector behaves like a deterministic fast-path on the grammar path:
-**confident → pick the winning Stage-1 match (no LLM); abstain → get out of the way and let
-the request proceed to the LLM path.** This is the only place it avoids an LLM,
-it's one insertion, and it matches the natural request flow (§4). The
-llmSelect insertion is a _different, lower-value_ feature (a deterministic tiebreak
-when we're already committed to the LLM — **no cost saving**), so it is **out of
-scope for v1**. F-3 (extend `resolvePreferenceClarify`) is worth it _only_ if we
-later want that both-path coverage plus the consent/learning reuse from a
-single change; otherwise it adds plumbing for the low-value half.
+**Why the grammar/cache path only (F-2).** contextSelector behaves like a deterministic
+fast-path there: **confident → pick the winning Stage-1 match (no LLM); abstain → get out of
+the way and let the request proceed to the LLM path.** This is the **only** place it avoids an
+LLM, it's one insertion, and it matches the natural request flow (§4). Inserting at the
+embedding/`llmSelect` tie is a _different, lower-value_ feature — a deterministic tiebreak when
+we're already committed to the LLM, with **no cost saving** — so it is out of v1 scope.
+Extending `resolvePreferenceClarify` (F-3) is worth it _only_ if we later want both-path
+coverage plus consent/learning reuse from a single change. (Full option table in §15.)
 
 #### Abstain semantics (what the fallback is)
 
-On the grammar path Stage 1 _already_ produced a match, so "abstain" has two possible
-fallbacks — pick deliberately:
-
-| Abstain target                                                                 | Behavior                                                                             | Pros                                                                                                            | Cons                                                                                                                                                                               |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Defer to the configured strategy** (`first-match`/`priority`/`user-clarify`) | Stays on the cache path (no LLM) unless the strategy itself clarifies.               | Least-surprising; preserves today's behavior exactly; cheap.                                                    | Doesn't match "low confidence ⇒ let the LLM decide" — a static strategy still resolves it.                                                                                         |
-| **Escalate to the LLM path** (re-translate)                                    | Treats contextSelector as a pure shortcut; on low confidence the smart path decides. | Conceptually clean ("deterministic shortcut, else LLM"); matches the intuition that ambiguity deserves the LLM. | Discards the Stage-1 match and forces an LLM call on every low-confidence collision (cost/latency); the LLM's own schema pick may land on the same agent `first-match` would have. |
-
-**Why configurable, default defer-to-strategy.** Default _defer-to-strategy_
-(preserves current behavior, zero added LLM cost) with an explicit
-`escalate-to-llm` fallback option for callers who prefer "confident shortcut, else
-LLM." Either way, **abstain never makes the decision worse than today** — it only
-chooses _which_ existing fallback runs.
+On the grammar path Stage 1 _already_ produced a match, so "abstain" picks between two
+fallbacks: **defer to the configured strategy** (`first-match`/`priority`/`user-clarify`) —
+stays on the cache path, preserves today's behavior exactly, zero added cost — or
+**escalate to the LLM path** (re-translate) — conceptually clean ("deterministic shortcut, else
+LLM") but forces an LLM call on every low-confidence collision. **Default: defer-to-strategy**,
+with `escalate-to-llm` as an opt-in. Either way, abstain never makes the decision worse than
+today — it only chooses _which_ existing fallback runs.
 
 ### 11.2 UX — what the user sees when it resolves
 
-| Option                                                                          | Pros                                                                                                                   | Cons                                                                                                            |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **U-1** Pure-silent reroute                                                     | Zero friction; full LLM-avoidance.                                                                                     | **First zero-consent invisible reroute in the product**; no correction affordance; erodes trust on wrong picks. |
-| **U-2** Visible affordance ("↪ routed to Excel — recent topic · change")       | Cheap; transparent; keeps the LLM-avoidance win; one-tap correct.                                                      | Slight UI noise on every topical resolve.                                                                       |
-| **U-3** First-time confirm → write a **learned preference** → silent thereafter | Bridges into the **existing consent/trust model**; turns contextSelector into a _bootstrapper_ for Tier-1 preferences. | First hit costs a confirm; needs the preference-write plumbing (already exists).                                |
-
-**Decision recap (see §11 DECIDED block):** **U-2** when enabled; U-1 silent only as an
-explicit opt-in; **U-3 documented as the enhancement** (it pairs with F-3 if taken later).
+When enabled, contextSelector shows a small non-blocking note on a reroute — **U-2**:
+_"↪ routed to Excel — recent topic · change"_ — cheap, transparent, keeps the LLM-avoidance
+win, and one-tap correctable. A pure-silent reroute (U-1) is opt-in only (it would be the
+product's first zero-consent invisible reroute). A "first-time confirm → write a learned
+preference → silent thereafter" variant (U-3) is documented as a future enhancement that
+bootstraps Tier-1 preferences (pairs with F-3 if taken later).
 
 ### 11.3 Config surface (Part H)
 
@@ -971,10 +962,12 @@ _different_ routing decision. This is a requirements checklist, not an either/or
   not elapsed time — otherwise the same conversation scores differently on a fast vs. slow
   replay, breaking fixture tests and benchmark replay.
 
-**Note on the keyword pipeline.** B-1 distilled keywords (and the V2 knowPro source, §7.3)
-are LLM-generated and therefore non-deterministic — **but only at author/extraction time**.
-The committed/extracted artifact is frozen before runtime, so the hot path that reads it
-stays fully deterministic. The LLM in the keyword pipeline does **not** violate G3.
+**Note on the keyword pipeline.** LLM-distilled keywords (and the V2 knowPro source, §7.3)
+are LLM-generated and therefore non-deterministic — **but only when the vector is produced**
+(the offline distillation pass, or keyword-vector generation for a dynamically-added action). Each
+action's vector is fixed once at that point and is not recomputed per request, so the
+**collision-time scoring path that reads it stays fully deterministic**. The LLM in the
+keyword pipeline does **not** violate G3.
 
 ---
 
@@ -982,17 +975,17 @@ stays fully deterministic. The LLM in the keyword pipeline does **not** violate 
 
 ### 13.1 What ships (the complete core design, as one change)
 
-| Part            | Pick                                                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A — home        | **A-2 × A-3** (§5): schema/action-granular derived defaults + a live-tunable `collision-keywords.json` sidecar override                                |
-| B — source      | **Layered B-1+B-2+B-3** (§6): B-2 lexical floor + B-1 distilled quality + B-3 misroute-phrase mining                                                   |
-| C(i) — signal   | **V1 source seam** (§7): user-message tokens from a contextSelector-owned raw-request ring buffer                                                      |
-| C(ii) — model   | **Recency-decayed ring buffer** (§8): `λ=0.9`, `N=20`                                                                                                  |
-| D — scorer      | **D-4** candidate-local IDF-weighted token overlap (TF-IDF), flattened keyword sets (§9)                                                               |
-| E — decision    | full-coverage guard + history-only + **E-2** evidence gate (§10)                                                                                       |
-| F — integration | **F-2** grammar/cache path only — confident ⇒ no-LLM shortcut; abstain ⇒ fall through (abstain fallback configurable, default defer-to-strategy) (§11) |
-| U — UX          | **U-2** visible non-blocking affordance when enabled (invisible while off) (§11.2)                                                                     |
-| H — config      | 7-field type, only `detect` exposed via `@config` (§11.3)                                                                                              |
+| Part            | Pick                                                                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A — home        | **A-2 × A-3** (§5): schema/action-granular derived defaults + a live-tunable `collision-keywords.json` sidecar override                                                                                                                                   |
+| B — source      | **Two keyword sources** (§6): an always-present keyword vector per action (LLM distillation **preferred**, deterministic lexical extraction as the fallback floor) plus an optional, layered _sidecar_ (user tuning · misroute mining · user preferences) |
+| C(i) — signal   | **V1 source seam** (§7): user-message tokens from a contextSelector-owned raw-request ring buffer                                                                                                                                                         |
+| C(ii) — model   | **Recency-decayed ring buffer** (§8): `λ=0.9`, `N=20`                                                                                                                                                                                                     |
+| D — scorer      | **D-4** candidate-local IDF-weighted token overlap (TF-IDF), flattened keyword vectors (§9)                                                                                                                                                               |
+| E — decision    | full-coverage guard + history-only + **E-2** evidence gate (§10)                                                                                                                                                                                          |
+| F — integration | **F-2** grammar/cache path only — confident ⇒ no-LLM shortcut; abstain ⇒ fall through (abstain fallback configurable, default defer-to-strategy) (§11)                                                                                                    |
+| U — UX          | **U-2** visible non-blocking affordance when enabled (invisible while off) (§11.2)                                                                                                                                                                        |
+| H — config      | 7-field type, only `detect` exposed via `@config` (§11.3)                                                                                                                                                                                                 |
 
 All of the above ship **together** as v1: no manifest change, no onboarding-LLM in the hot
 path, one integration point, a fixed correctness guard, and a trust-preserving affordance.
@@ -1003,10 +996,13 @@ Delivers the named excel↔list scenario.
 Pulled in later only where local benchmarks show v1 abstaining too often or mis-resolving —
 each explicitly **out of v1 scope**: the **V2 knowPro topic/entity source** (§7.3; requires
 enabling agent-server-mode extraction first), per-action / sub-schema vectors, capped
-**agent-of-record** (C-3; lock-in risk), **BM25 (D-3)** / **log-odds (D-5)** scoring
-(D-5 needs a labeled corpus), the **F-3 both-path / embedding-path coverage** (deterministic
-tiebreak only — no LLM saved), **U-3 learned-preference bootstrap** (confirm-then-learn), and
-**embedding soft-match** for synonyms.
+**agent-of-record** (C-3; lock-in risk), **embedding-similarity scoring** (the planned step-3
+upgrade once knowPro is the source — semantic match for synonyms, §9), the **F-3 both-path /
+embedding-path coverage** (deterministic tiebreak only — no LLM saved), and **U-3
+learned-preference bootstrap** (confirm-then-learn).
+
+> The alternative lexical scorers (BM25, log-odds/Naive-Bayes) are **not** deferred upgrades —
+> they were evaluated and rejected (§9); the intended scoring evolution is TF-IDF → embeddings.
 
 ### 13.3 Known gaps (accepted for v1)
 
@@ -1037,7 +1033,7 @@ A full end-to-end trace exercising every locked decision. Running collision: the
 _"add a row"_, which the grammar matches for both `excel.addRow` and `list.addItems`
 (Stage 1, §4).
 
-**Candidates — flattened keyword sets (§6, §9)** — shared by both scenarios below.
+**Candidates — flattened keyword vectors (§6, §9)** — shared by both scenarios below.
 
 - `excel.addRow` → `{excel, spreadsheet, cell, formula, pivot table, workbook, row, column}`
 - `list.addItems` → `{list, item, todo, grocery, shopping, checklist}`
@@ -1074,7 +1070,7 @@ sets, so each is fully distinguishing (`disc = 1`). `score(a) = Σ_{t ∈ C ∩ 
 
 **Decision — the four checks (§10), in order.**
 
-1. **Coverage** — both candidates have non-empty keyword sets ✓
+1. **Coverage** — both candidates have non-empty keyword vectors ✓
 2. **History-only** — `C` was built from turns _before_ "add a row" ✓
 3. **Evidence gate** — excel matched 5 distinct tokens (≥ `minUniqueTokens` 2) ✓, mass 5.54 (≥ `minMass`) ✓
 4. **Clear-winner margin** — 5.54 vs 0, decisive ✓
@@ -1155,14 +1151,17 @@ decision uses both (A-2 defaults + A-3 overrides)._
 
 ### Part B — keyword production (decided §6)
 
-| Rejected option                                   | Why not                                                                                                                                                                                                                                                                |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **B-4** embedding-cluster action vectors → labels | Heavier and opaque, and the labeling step usually needs an LLM — collapsing back into B-1's drift/dependency profile without B-1's review/control. (Whether the _scorer_ may use embeddings is a separate open Part D question; embedding-derived _keywords_ are out.) |
+| Rejected option                               | Why not                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Embedding-cluster action vectors → labels** | Heavier and opaque, and the labeling step usually needs an LLM — collapsing back into the offline-distillation drift/dependency profile without its review/control. (Whether the _scorer_ may use embeddings is a separate open Part D question; embedding-derived _keywords_ are out.) |
 
-_Folded into the decision rather than rejected: **B-1**, **B-2**, **B-3** are layered
-(floor + quality + discriminative boost), not competitors — see §6. "B-2-only" and
-"B-1-only" were considered: B-2-only loses synonyms/quality; B-1-only loses guaranteed
-coverage of un-distilled and dynamic agents — so the stack uses all three._
+_Folded into the decision rather than rejected: LLM distillation, lexical extraction, and
+misroute mining are **layered, not competitors** — see §6. Each action's vector prefers
+**LLM distillation** (higher quality — synonyms the schema never says) and falls back to a
+**deterministic lexical floor** that guarantees coverage of every action (including
+un-distilled and dynamic agents); misroute mining and learned preferences then sharpen only the
+colliding few via the sidecar. Distillation-only loses guaranteed coverage; lexical-only loses
+quality — so distillation is preferred with lexical as the floor._
 
 ### Part C(i) — conversation signal source (decided §7)
 
@@ -1172,19 +1171,46 @@ coverage of un-distilled and dynamic agents — so the stack uses all three._
 | **C-3** agent-of-record (recent winners)                 | Self-reinforcing feedback loop → lock-in on a prior winner; needs caps + same-pair exclusion before it's safe. Deferred behind local benchmark data.                                                                  |
 | **C-2 via `ChatHistory` entities** as the primary signal | The entities that survive agent-server mode are _action-result_ (system-output) entities, not the user's phrasing — output-biased. The richer user-topic signal is V2 (knowPro topics/entities) instead.              |
 
-_Folded into the decision: V1 raw-token map (deterministic, agent-server-safe) and V2
-knowPro topics/entities (richer, LLM-backed) behind one source seam — see §7._
+_Folded into the decision: V1 raw-token map (deterministic, agent-server-safe — a simple start
+for benchmarking) and V2 knowPro topics/entities (the intended source, owned by the
+conversation-memory system of record) behind one source seam — see §7._
 
 ### Part D — scoring algorithm (decided §9)
 
-| Rejected / deferred                          | Why                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D-1** pure cosine                          | Angle-only ⇒ `{excel:1}` and `{excel:100}` score identically; rewards tiny vectors; fixed confidence threshold uncalibratable.                                                                                                                                                                                                                                                                            |
-| **D-2** weighted dot product (no IDF)        | "D-4 minus discriminativeness" — long-list/keyword-stuffing bias; generic shared tokens inflate both candidates. Choosing candidate-local IDF already subsumes it.                                                                                                                                                                                                                                        |
-| **D-3** BM25-lite                            | Built for long, length-varied documents; our ~8-token keyword lists are tiny/uniform so length-norm does little, and `k1`/`b` have no data to tune. TF runaway already bounded by decay (§8) + the evidence gate (§10); a sublinear `1+log(f)` is a lighter option. **Deferred refinement** if local benchmarks show token-dominance/length-bias.                                                         |
-| **D-5** log-odds / Naive-Bayes               | The per-token `log[P(t\|a1)/P(t\|a2)]` is what candidate-local IDF approximates (D-4 ≈ smoothing-free log-odds). Real D-5 must fabricate `P(token\|a)` from tiny keyword lists → mandatory smoothing whose parameter dominates, illusory calibration without labeled data, and independence-assumption overconfidence. **Documented upgrade**, gated on a labeled collision corpus from local benchmarks. |
-| **Positional weighting** (reciprocal/capped) | Order signal is a third, noisier proxy already covered by `disc × C`; stacking three uncalibrated multipliers risks one factor dominating. **Flattened (set)** for v1; capped positional weighting parked as a tuning lever.                                                                                                                                                                              |
+| Rejected (not on the roadmap)                | Why                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-1** pure cosine                          | Angle-only ⇒ `{excel:1}` and `{excel:100}` score identically; rewards tiny vectors; fixed confidence threshold uncalibratable.                                                                                                                                                                                                                                                                              |
+| **D-2** weighted dot product (no IDF)        | "D-4 minus discriminativeness" — long-list/keyword-stuffing bias; generic shared tokens inflate both candidates. Choosing candidate-local IDF already subsumes it.                                                                                                                                                                                                                                          |
+| **D-3** BM25-lite                            | Built for long, length-varied documents; our ~8-token keyword lists are tiny/uniform so length-norm does little, and `k1`/`b` have no data to tune. TF runaway already bounded by decay (§8) + the evidence gate (§10). **Not pursued** — the intended next step is embeddings, not a lexical refinement.                                                                                                   |
+| **D-5** log-odds / Naive-Bayes               | The per-token `log[P(t\|a1)/P(t\|a2)]` is what candidate-local IDF approximates (D-4 ≈ smoothing-free log-odds). A "real" D-5 must fabricate `P(token\|a)` from tiny keyword lists → mandatory smoothing whose parameter dominates, illusory calibration without labeled data, independence-assumption overconfidence. **Not pursued** — D-4 already captures the useful part; the next gain is embeddings. |
+| **Positional weighting** (reciprocal/capped) | Order signal is a third, noisier proxy already covered by `disc × C`; stacking three uncalibrated multipliers risks one factor dominating. **Flattened (set)** for v1; capped positional weighting parked as a tuning lever.                                                                                                                                                                                |
 
-_Folded into the decision: **D-4** = candidate-local IDF-weighted token overlap with
-flattened keyword sets — the sweet spot between too-naive (D-2) and over-engineered
-(D-3/D-5); see §9._
+_Folded into the decision: the scoring roadmap is **TF-IDF now → embedding similarity later**.
+**D-4** = candidate-local IDF-weighted token overlap with flattened keyword vectors (ships now,
+unchanged when the source becomes knowPro entities); **embedding similarity** is the one
+forward step that adds semantic matching (evaluated once knowPro is the source, flagged per §2).
+Cosine/dot-product/BM25/log-odds are evaluated and set aside, not deferred upgrades — see §9._
+
+### Part E — decision rule (decided §10)
+
+| Rejected option                                           | Why                                                                                                           |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **E-1** absolute threshold + margin on a **cosine** score | Cosine magnitude isn't calibratable across conversations (§9); cosine dropped anyway.                         |
+| **E-3** relative ratio `s1/s2 ≥ ρ`                        | Runner-up is frequently ~0 (shared tokens cancel) → ratio explodes / divides by zero; needs an awkward floor. |
+| **E-4** z-score / rank-gap                                | Needs a population of candidate scores; collisions are usually 2 candidates, where a z-score is meaningless.  |
+
+_Chosen: an **absolute** evidence gate (`minUniqueTokens` + `minMass`) plus an absolute
+discriminative `margin` — readable in count units and divide-by-zero-free; see §10._
+
+### Part F — integration & UX (decided §11)
+
+| Rejected option                                    | Why                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **F-1** standalone tier on **both** paths          | Two insertions; duplicates wiring; the llmSelect side saves no LLM.                                                                                    |
+| **F-3** inside `resolvePreferenceClarify`          | One change covers both paths and reuses consent/learning — but couples to `preference-clarify` plumbing; revisit only if both-path coverage is wanted. |
+| **F-4** dynamic `priorityOrder` feeding `priority` | Re-derives priority per request (surprising for a "static" knob); no evidence gate / abstain semantics.                                                |
+| **U-1** pure-silent reroute                        | Product's first zero-consent invisible reroute; no correction affordance. Opt-in only.                                                                 |
+| **U-3** confirm-once → learned preference → silent | Bridges into the existing consent model and bootstraps Tier-1 prefs — documented as a future enhancement (pairs with F-3).                             |
+
+_Chosen: **F-2** grammar/cache-path-only insertion (the only place it avoids an LLM), abstain
+defaults to deferring to today's strategy, and **U-2** a visible non-blocking affordance; see §11._
