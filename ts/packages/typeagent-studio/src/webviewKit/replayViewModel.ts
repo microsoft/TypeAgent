@@ -323,8 +323,6 @@ export interface FidelityMatrixView {
     /** How side B was realized, e.g. "source (git ref)". */
     realizationB: string;
     rows: FidelityMatrixRow[];
-    /** A "build-from-ref would add X" hint shown when a side is source-only. */
-    preflight?: string;
 }
 
 const FIDELITY_LAYER_ORDER: { key: FidelityLayer; label: string }[] = [
@@ -345,9 +343,8 @@ const FIDELITY_REALIZATION_LABEL: Record<
 
 /**
  * Map the core {@link SideFidelity} descriptor into a render-ready matrix:
- * one row per deterministic layer with each side's status + reason, plus a
- * preflight hint when a side only materialized source at a git ref (so a build
- * -from-ref pass would unlock the live-only layers). Pure + browser-neutral.
+ * one row per deterministic layer with each side's status + reason. Pure +
+ * browser-neutral.
  */
 export function toFidelityMatrix(
     sideFidelity: SideFidelity | undefined,
@@ -362,25 +359,11 @@ export function toFidelityMatrix(
             b: toFidelityCell(sideFidelity.B.layers[key]),
         }),
     );
-    const sources: string[] = [];
-    if (sideFidelity.A.realization === "source") {
-        sources.push("A");
-    }
-    if (sideFidelity.B.realization === "source") {
-        sources.push("B");
-    }
-    const view: FidelityMatrixView = {
+    return {
         realizationA: FIDELITY_REALIZATION_LABEL[sideFidelity.A.realization],
         realizationB: FIDELITY_REALIZATION_LABEL[sideFidelity.B.realization],
         rows,
     };
-    if (sources.length > 0) {
-        const plural = sources.length > 1;
-        view.preflight =
-            `Side ${sources.join(" & ")} ${plural ? "are" : "is"} materialized source read at a git ref. ` +
-            `Building from the ref would let ${plural ? "them" : "it"} run the construction cache and the agent's real wildcard validation — not yet available.`;
-    }
-    return view;
 }
 
 function toFidelityCell(report: FidelityCell): FidelityCell {

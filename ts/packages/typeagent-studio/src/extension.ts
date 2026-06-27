@@ -327,8 +327,20 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
+    // In-repo corpus files (`<repoRoot>/corpus/<agent>.utterances.jsonl`) are
+    // edited outside the extension (e.g. after "Seed in-repo corpus..." opens the
+    // new file for the user to paste utterances). Watch them so the Corpora tree
+    // refreshes on save/create/delete instead of only on manual refresh.
+    const corpusWatcher = vscode.workspace.createFileSystemWatcher(
+        "**/*.utterances.jsonl",
+    );
+    const refreshOnCorpusChange = () => corpusTree.refresh();
+    corpusWatcher.onDidCreate(refreshOnCorpusChange);
+    corpusWatcher.onDidChange(refreshOnCorpusChange);
+    corpusWatcher.onDidDelete(refreshOnCorpusChange);
     context.subscriptions.push(
         corpusTree,
+        corpusWatcher,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),

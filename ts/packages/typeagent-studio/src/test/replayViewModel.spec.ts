@@ -465,8 +465,6 @@ test("toFidelityMatrix produces one row per layer in order", () => {
     );
     assert.equal(view!.realizationA, "built (live)");
     assert.equal(view!.realizationB, "built (live)");
-    // No source side → no preflight hint.
-    assert.equal(view!.preflight, undefined);
 });
 
 test("toFidelityMatrix carries per-side status and reason", () => {
@@ -485,24 +483,4 @@ test("toFidelityMatrix carries per-side status and reason", () => {
     assert.equal(cacheRow!.a.status, "ran");
     assert.equal(cacheRow!.b.status, "unavailable");
     assert.equal(cacheRow!.b.reason, "no cache at a ref");
-});
-
-test("toFidelityMatrix adds a preflight hint for a single source side", () => {
-    const view = toFidelityMatrix({
-        A: fidelityReport("built-live"),
-        B: fidelityReport("source"),
-    });
-    assert.ok(view);
-    assert.ok(view!.preflight);
-    assert.ok(/Side B is /.test(view!.preflight!));
-});
-
-test("toFidelityMatrix pluralizes the preflight hint for two source sides", () => {
-    const view = toFidelityMatrix({
-        A: fidelityReport("source"),
-        B: fidelityReport("source"),
-    });
-    assert.ok(view);
-    assert.ok(view!.preflight);
-    assert.ok(/Side A & B are /.test(view!.preflight!));
 });

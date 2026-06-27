@@ -137,23 +137,15 @@ let mode: StudioReplayMode = "nfa-grammar";
 // `wildcardValidation.diagnostics`, which `renderValidationNote` surfaces.
 let validateWildcards = false;
 
-/** Short toolbar label for each replay mode. */
-const MODE_LABEL: Record<StudioReplayMode, string> = {
-    "nfa-grammar": "Grammar",
-    "completionBased-cache": "Cache",
+/** Concise hover copy for the Cache on/off toggle. */
+const CACHE_TOOLTIP: Record<"on" | "off", string> = {
+    on: "Cache on: the working-tree side consults the live construction cache before the grammar. Click to turn off.",
+    off: "Cache off: both sides match grammar only and stay symmetric. Click to turn on.",
 };
-/** Hover copy explaining each mode and that the button toggles between them. */
-const MODE_TOOLTIP: Record<StudioReplayMode, string> = {
-    "nfa-grammar":
-        "Grammar mode: both versions match against the compiled grammar only — " +
-        "the construction cache is never consulted, so A and B stay symmetric. " +
-        "Cleanest signal for what a grammar or schema edit changed. " +
-        "Click to switch to Cache mode.",
-    "completionBased-cache":
-        "Cache mode: the working-tree side consults the live construction cache " +
-        "before the grammar (the default dispatcher path), so a cache hit reflects " +
-        "what the dispatcher would serve. Asymmetric — a B-side cache hit can mask " +
-        "a grammar regression. Click to switch to Grammar mode.",
+/** Concise hover copy for the Wildcard validation on/off toggle. */
+const VALIDATE_TOOLTIP: Record<"on" | "off", string> = {
+    on: "Wildcard validation on: the working-tree side runs the agent's real validator over wildcard matches (allowlisted agents only). Click to turn off.",
+    off: "Wildcard validation off: matches come from the grammar alone. Click to turn on.",
 };
 
 const root = document.getElementById("root")!;
@@ -186,23 +178,34 @@ const swapButton = toolButton("arrow-swap", "Swap A and B", () =>
 );
 swapButton.title = "Swap the base (A) and compare (B) versions.";
 
-// A two-state toggle for the replay mode. Only two modes exist, so a click
-// flips between them (no dropdown). Built by hand (not `toolButton`) so we keep
-// a handle on the label node and update it in place from `renderModeButton`.
-const modeButton = document.createElement("button");
-modeButton.type = "button";
-modeButton.className = "tool-button";
-const modeButtonText = text("");
-modeButton.append(codicon("settings"), modeButtonText);
-modeButton.addEventListener("click", () => cycleMode());
-// A two-state toggle for opt-in wildcard validation (L4a). Built by hand like
-// `modeButton` so we keep a handle on its label and lit state.
-const validateButton = document.createElement("button");
-validateButton.type = "button";
-validateButton.className = "tool-button";
-const validateButtonText = text("");
-validateButton.append(codicon("verified"), validateButtonText);
-validateButton.addEventListener("click", () => toggleValidateWildcards());
+// Replay options (construction cache, wildcard validation) are advanced knobs
+// that most runs leave at their defaults, so they live behind a gear popover
+// rather than cluttering the toolbar. Each is a VS Code-themed on/off switch
+// (see `.switch` in the stylesheet); the gear lights up while the popover open.
+const cacheSwitch = settingsSwitch(
+    "Cache",
+    () => mode === "completionBased-cache",
+    () => toggleCache(),
+    (on) => CACHE_TOOLTIP[on ? "on" : "off"],
+);
+const validateSwitch = settingsSwitch(
+    "Wildcard validation",
+    () => validateWildcards,
+    () => toggleValidateWildcards(),
+    (on) => VALIDATE_TOOLTIP[on ? "on" : "off"],
+);
+const settingsPopover = el("div", "settings-popover");
+settingsPopover.setAttribute("role", "group");
+settingsPopover.setAttribute("aria-label", "Replay options");
+settingsPopover.hidden = true;
+settingsPopover.append(cacheSwitch.row, validateSwitch.row);
+const settingsButton = toolButton("settings-gear", "Replay options", () =>
+    toggleSettingsPopover(),
+);
+settingsButton.setAttribute("aria-haspopup", "true");
+settingsButton.setAttribute("aria-expanded", "false");
+const settingsGroup = el("div", "bar-group settings-group");
+settingsGroup.append(settingsButton, settingsPopover);
 const runButton = toolButton("play", "Run", () => runReplay(), {
     primary: true,
     text: "Run",
@@ -220,7 +223,7 @@ actionBar.append(
     separator(),
     group(versionAButton.button, swapButton, versionBButton.button),
     separator(),
-    group(modeButton, validateButton),
+    settingsGroup,
     spacer(),
     runButton,
     connectionPill,
@@ -261,8 +264,26 @@ setControlsEnabled(false);
 renderConnection("connecting");
 restoreSelection();
 renderVersionButtons();
-renderModeButton();
-renderValidateButton();
+cacheSwitch.render();
+validateSwitch.render();
+
+// Dismiss the replay-options popover on an outside click or Escape, the way a
+// native menu behaves. The gear's own click is inside `settingsGroup`, so it
+// toggles without this handler immediately re-closing it.
+document.addEventListener("click", (event) => {
+    if (
+        !settingsPopover.hidden &&
+        !settingsGroup.contains(event.target as Node)
+    ) {
+        toggleSettingsPopover(false);
+    }
+});
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !settingsPopover.hidden) {
+        toggleSettingsPopover(false);
+        settingsButton.focus();
+    }
+});
 
 // --- Messaging ------------------------------------------------------------
 window.addEventListener("message", (event: MessageEvent) => {
@@ -364,49 +385,27 @@ function runReplay(): void {
     });
 }
 
-/** Flip the replay mode between its two states and persist the choice. */
-function cycleMode(): void {
+/** Flip the construction cache on/off and persist the choice. */
+function toggleCache(): void {
     mode = mode === "nfa-grammar" ? "completionBased-cache" : "nfa-grammar";
-    renderModeButton();
+    cacheSwitch.render();
     persistState({ mode });
 }
 
 /** Toggle opt-in wildcard validation and persist the choice. */
 function toggleValidateWildcards(): void {
     validateWildcards = !validateWildcards;
-    renderValidateButton();
+    validateSwitch.render();
     persistState({ validateWildcards });
 }
 
-/** Paint the wildcard-validation toggle's label, tooltip, and lit state. */
-function renderValidateButton(): void {
-    validateButtonText.textContent = "Validate";
-    validateButton.classList.toggle("is-active", validateWildcards);
-    validateButton.setAttribute("aria-pressed", String(validateWildcards));
-    const tip = validateWildcards
-        ? "Wildcard validation ON: the working-tree side additionally runs the " +
-          "agent's real validateWildcardMatch over its wildcard matches (the " +
-          "dispatcher's post-match step), dropping a match the agent rejects. " +
-          "Only for allowlisted agents (timer, list); a no-op otherwise. " +
-          "Click to turn off."
-        : "Wildcard validation OFF: matches are taken from the grammar alone. " +
-          "Click to additionally run the agent's real validateWildcardMatch on " +
-          "wildcard matches (allowlisted agents only).";
-    validateButton.title = tip;
-    validateButton.setAttribute(
-        "aria-label",
-        `Wildcard validation ${validateWildcards ? "on" : "off"}. ${tip}`,
-    );
-}
-
-/** Paint the mode toggle's label and tooltip from the current `mode`. */
-function renderModeButton(): void {
-    modeButtonText.textContent = MODE_LABEL[mode];
-    modeButton.title = MODE_TOOLTIP[mode];
-    modeButton.setAttribute(
-        "aria-label",
-        `Replay mode: ${MODE_LABEL[mode]}. ${MODE_TOOLTIP[mode]}`,
-    );
+/** Open/close the replay-options popover. Pass `force` to set a specific
+ *  state; omit to flip the current one. */
+function toggleSettingsPopover(force?: boolean): void {
+    const open = force ?? settingsPopover.hidden;
+    settingsPopover.hidden = !open;
+    settingsButton.classList.toggle("is-active", open);
+    settingsButton.setAttribute("aria-expanded", String(open));
 }
 
 /** Apply a version selection from the host picker to one side. */
@@ -485,7 +484,7 @@ function renderResult(
     renderValidationNote(result.wildcardValidation);
 
     // The per-side fidelity matrix: which deterministic layers actually ran on
-    // each version, plus a build-from-ref preflight when a side is source-only.
+    // each version.
     renderFidelity(result.sideFidelity);
 
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
@@ -590,8 +589,8 @@ const FIDELITY_STATUS_ICON: Record<FidelityCell["status"], string> = {
 
 /** Render the per-side fidelity matrix into a collapsible panel, or hide it.
  *  Surfaces which deterministic layers ran on each version (A/B) with a status
- *  icon + hover reason, plus a build-from-ref preflight when a side is source
- *  -only — so the report is honest about exactly what it exercised. */
+ *  icon + hover reason — so the report is honest about exactly what it
+ *  exercised. */
 function renderFidelity(
     sideFidelity: StudioReplayResult["sideFidelity"] | undefined,
 ): void {
@@ -628,12 +627,6 @@ function renderFidelity(
         );
     }
     details.append(grid);
-
-    if (view.preflight) {
-        const preflight = el("div", "fidelity-preflight");
-        preflight.append(codicon("lightbulb"), text(view.preflight));
-        details.append(preflight);
-    }
 
     fidelityEl.append(details);
     fidelityEl.hidden = false;
@@ -1059,8 +1052,13 @@ function setControlsEnabled(enabled: boolean): void {
     swapButton.disabled = !enabled;
     versionAButton.button.disabled = !enabled;
     versionBButton.button.disabled = !enabled;
-    modeButton.disabled = !enabled;
-    validateButton.disabled = !enabled;
+    settingsButton.disabled = !enabled;
+    cacheSwitch.button.disabled = !enabled;
+    validateSwitch.button.disabled = !enabled;
+    // A run shouldn't leave the options popover hanging open.
+    if (!enabled) {
+        toggleSettingsPopover(false);
+    }
 }
 
 function setStatus(text: string): void {
@@ -1203,9 +1201,43 @@ function toolButton(
     return b;
 }
 
-/** A dropdown-style picker button: an optional side tag (A/B), the current
- *  selection, and a trailing chevron. Asks the host to open a native QuickPick
- *  on click. */
+/** A labelled VS Code-themed on/off switch for the replay-options popover.
+ *  `getState`/`onToggle` bind it to a boolean; `tooltipFor` supplies concise
+ *  hover copy per state. Returns the row, the switch button (so callers can
+ *  disable it), and a `render` that repaints from the current state. */
+function settingsSwitch(
+    label: string,
+    getState: () => boolean,
+    onToggle: () => void,
+    tooltipFor: (on: boolean) => string,
+): { row: HTMLElement; button: HTMLButtonElement; render: () => void } {
+    const row = el("div", "switch-row");
+    const labelEl = el("span", "switch-label");
+    labelEl.textContent = label;
+    labelEl.id = `switch-${label.replace(/\s+/g, "-").toLowerCase()}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "switch";
+    button.setAttribute("role", "switch");
+    button.setAttribute("aria-labelledby", labelEl.id);
+    const offText = el("span", "switch-text switch-off");
+    offText.textContent = "OFF";
+    const onText = el("span", "switch-text switch-on");
+    onText.textContent = "ON";
+    button.append(offText, onText, el("span", "switch-knob"));
+    button.addEventListener("click", () => onToggle());
+    row.append(labelEl, button);
+    const render = () => {
+        const on = getState();
+        button.classList.toggle("is-on", on);
+        button.setAttribute("aria-checked", String(on));
+        const tip = tooltipFor(on);
+        button.title = tip;
+        row.title = tip;
+    };
+    return { row, button, render };
+}
+
 function picker(
     description: string,
     onClick: () => void,
