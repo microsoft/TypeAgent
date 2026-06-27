@@ -102,7 +102,7 @@ list agent patterns
 ```
 
 Full pattern reference (file layouts, manifest flags, example code) is in
-[docs/architecture/agent-patterns.md](../../../../docs/architecture/agent-patterns.md).
+[docs/architecture/agents/agent-patterns.md](../../../../docs/architecture/agents/agent-patterns.md).
 
 **What the scaffolder generates per pattern**
 

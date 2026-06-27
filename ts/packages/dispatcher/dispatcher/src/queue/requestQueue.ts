@@ -100,7 +100,7 @@ interface InternalEntry extends QueuedRequest {
 /**
  * Per-conversation request queue owned by the Dispatcher. Replaces implicit
  * serialization-via-`commandLock` with an explicit FIFO pipeline. See
- * `docs/architecture/messageQueueing.md` for the broader design.
+ * `docs/architecture/core/messageQueueing.md` for the broader design.
  */
 export class RequestQueue {
     private readonly tail: InternalEntry[] = [];

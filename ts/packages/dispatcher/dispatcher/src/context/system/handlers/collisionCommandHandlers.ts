@@ -40,7 +40,7 @@ import { getCollisionPreferenceCommandHandlers } from "./collisionPreferenceHand
 // buffer.  Lets a tester confirm in-flight that detection is firing during
 // a Phase 1 / Phase 2 experiment without shelling out to the per-session
 // JSONL file.  See the soft-rollout plan
-// (`docs/architecture/collision-rollout.md`) for the surrounding workflow.
+// (`docs/architecture/collision/collision-rollout.md`) for the surrounding workflow.
 // ---------------------------------------------------------------------------
 
 const VALID_KINDS: readonly CollisionEventKind[] = [

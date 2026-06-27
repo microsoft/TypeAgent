@@ -12,7 +12,7 @@ chunk is on the critical path - land it first.
 ## TL;DR
 
 Add the minimum hooks to
-[`packages/actionGrammar`](../../../packages/actionGrammar) needed by
+[`packages/actionGrammar`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar) needed by
 `grammar-tools-core`:
 
 1. Full source spans on parsed nodes (for diagnostics and go-to-def).
@@ -22,7 +22,7 @@ Add the minimum hooks to
 ## Scope
 
 - Audit
-  [`grammarRuleParser.ts`](../../../packages/actionGrammar/src/grammarRuleParser.ts)
+  [`grammarRuleParser.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarRuleParser.ts)
   for source spans on every relevant AST node (rule name, parameter
   list, rule reference, string part, wildcard, etc.). Existing nodes
   carry a single `pos?: number` (start offset only); add an `end?: number`
@@ -34,7 +34,7 @@ Add the minimum hooks to
   with no source counterpart leave `id` undefined.
 - Add an opt-in `trace?: (event: TraceEvent) => void` parameter to the
   rule-level matcher in
-  [`grammarMatcher.ts`](../../../packages/actionGrammar/src/grammarMatcher.ts).
+  [`grammarMatcher.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarMatcher.ts).
 - Define the `TraceEvent` type (rule entered, part attempted, success /
   fail, slot env after step, position). Event identity must include a
   stable rule + part identifier so coverage can aggregate hits.
@@ -183,7 +183,7 @@ from the absence of a top-level `ruleExited.matched`.
   `grammar-tools-core`?~~ Lives in `actionGrammar` (matcher owns the
   contract); `grammar-tools-core` re-exports.
 - Do source spans round-trip through the serializer
-  ([`grammarSerializer.ts`](../../../packages/actionGrammar/src/grammarSerializer.ts))?
+  ([`grammarSerializer.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarSerializer.ts))?
   If not, snapshot-loaded grammars cannot offer go-to-def to source. May
   be acceptable if snapshots only target the debug panel, not the editor.
 - ~~Are AST paths stable across formatter round-trip?~~ Moot: `PartId`
@@ -196,7 +196,7 @@ from the absence of a top-level `ruleExited.matched`.
 ## Verification
 
 - Existing
-  [`packages/actionGrammar/test`](../../../packages/actionGrammar/test)
+  [`packages/actionGrammar/test`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar/test)
   suite stays green.
 - New tests assert source spans on a representative `.agr` AST.
 - New tests assert ordered trace events for a known grammar / input pair.

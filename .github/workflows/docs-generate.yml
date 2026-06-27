@@ -43,7 +43,7 @@
 # needed. A future iteration can swap this for an installable
 # GitHub App identity (e.g. once `microsoft-typeagent-docs-bot` is
 # approved on the `microsoft` org) to re-enable downstream CI; see
-# `ts/docs/architecture/doc-autogen-setup.md` for that path.
+# `ts/docs/architecture/doc-pipeline/doc-autogen-setup.md` for that path.
 #
 # Auth model (Azure side): GitHub Actions exchanges its OIDC token
 # for an Azure AD bearer token via `azure/login@v2`, then
@@ -370,7 +370,7 @@ jobs:
                 hallucinated APIs).
           - [ ] Confirm no hand-written \`README.md\` has been modified.
 
-          See [\`ts/docs/architecture/doc-autogen.md\`](../blob/main/ts/docs/architecture/doc-autogen.md) for design details.
+          See [\`ts/docs/architecture/doc-pipeline/doc-autogen.md\`](../blob/main/ts/docs/architecture/doc-pipeline/doc-autogen.md) for design details.
           PREOF
           )
 

@@ -12,7 +12,7 @@
 // learned preference survives across sessions:
 //   <instanceDir>/collisionPreferences.json
 //
-// See docs/architecture/collision-rollout.md for the design.
+// See docs/architecture/collision/collision-rollout.md for the design.
 
 import fs from "node:fs";
 import path from "node:path";

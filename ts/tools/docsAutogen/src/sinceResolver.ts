@@ -45,7 +45,7 @@ export interface ResolveSinceOptions {
 /**
  * Resolve the "since" ref for a docs-autogen run, applying the
  * smart-default logic described in
- * `ts/docs/architecture/doc-autogen.md`:
+ * `ts/docs/architecture/doc-pipeline/doc-autogen.md`:
  *
  *  1. If `--since <ref>` was passed, use it verbatim.
  *  2. Else, if the current branch differs from the default branch

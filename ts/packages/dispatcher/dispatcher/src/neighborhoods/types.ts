@@ -3,7 +3,7 @@
 
 // Shared types for the ambiguity-action-neighborhoods feature. Phase 0 (preview)
 // only uses the in-memory shapes; Phases 1+ persist them to JSON via the same
-// types. See `docs/architecture/collision-rollout.md` for the design.
+// types. See `docs/architecture/collision/collision-rollout.md` for the design.
 
 export interface NeighborhoodMember {
     schemaName: string;

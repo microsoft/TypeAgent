@@ -396,7 +396,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         return sortedMatches;
     }
 
-    // Architecture: docs/architecture/completion.md — §2 Cache Layer
+    // Architecture: docs/architecture/core/completion.md — §2 Cache Layer
     public completion(
         input: string,
         options?: MatchOptions,

@@ -14,8 +14,8 @@ G.1–G.3 are mutually independent.
 ## TL;DR
 
 Express + Vite SPA modeled on
-[`packages/cacheExplorer`](../../../packages/cacheExplorer) and
-[`packages/knowledgeVisualizer`](../../../packages/knowledgeVisualizer),
+[`packages/cacheExplorer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cacheExplorer) and
+[`packages/knowledgeVisualizer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/knowledgeVisualizer),
 hosting Monaco + monaco-languageclient against the same LSP server the
 VS Code extension uses, plus the shared debug panel from chunk 04.
 

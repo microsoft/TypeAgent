@@ -7,12 +7,12 @@ Blocks: 04, and transitively 03 / 05 / 06. Decision unblocks Track D.
 
 The shared widget bundle in chunk 04 must embed cleanly in three hosts:
 a VS Code webview, a Vite SPA in a browser, and a `BrowserWindow` inside
-[`packages/shell`](../../../../packages/shell). The repo currently has no
+[`packages/shell`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell). The repo currently has no
 React or Lit dependency at the package level (Vite is already used by
 shell, browser agent, and markdown agent;
-[`packages/knowledgeVisualizer`](../../../../packages/knowledgeVisualizer)
+[`packages/knowledgeVisualizer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/knowledgeVisualizer)
 uses D3 with vanilla DOM;
-[`packages/cacheExplorer`](../../../../packages/cacheExplorer) is webpack +
+[`packages/cacheExplorer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cacheExplorer) is webpack +
 vanilla DOM).
 
 ## Options
@@ -51,10 +51,10 @@ in a vacuum and may be premature. Resolve in this order:
    any visualization needs.
 2. **Survey existing visualization libraries in the repo** and decide
    whether any of them carry their weight here:
-   - D3 (used in [`packages/knowledgeVisualizer`](../../../../packages/knowledgeVisualizer))
+   - D3 (used in [`packages/knowledgeVisualizer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/knowledgeVisualizer))
      - good for graph / tree / coverage heat-map style views.
    - Vanilla DOM + small helpers
-     ([`packages/cacheExplorer`](../../../../packages/cacheExplorer)) -
+     ([`packages/cacheExplorer`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cacheExplorer)) -
      low-ceremony if components stay simple.
    - Vite-based tooling already in shell, browser agent, markdown
      agent.
