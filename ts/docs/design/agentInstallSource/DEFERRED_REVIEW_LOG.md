@@ -175,3 +175,17 @@
   files are already sorted, so the gate is green. Reordering the rule list (or sorting inside
   the rule) would couple the rule to `sort-package-json` for no enforcement gain.
 - **Follow-up:** none.
+
+### 2026-06-28 — Multi-host boot consistency is smoke-test scope, not unit scope
+- **Milestone / gate:** Final gate
+- **Kind:** Test gap
+- **Raised by:** final-gate test-gap round 1
+- **Summary:** No single test boots shell + agentServer + api against one fresh instance dir
+  and confirms all three hosts see the same installed agents from `agents.json`.
+- **Why not addressed:** This is a cross-process, multi-package integration concern that the
+  unit suite cannot realistically express; it belongs in the smoke-test pipeline
+  (`pipelines/azure-smoke-tests.yml`). The per-host wiring is unit-covered (each caller
+  passes `agentInstaller`), and the record read/write path is covered by the store/provider
+  specs. Cross-process `@source` restart persistence is now covered hermetically by the
+  registry reload round-trip test.
+- **Follow-up:** consider a smoke-test scenario if host wiring diverges.

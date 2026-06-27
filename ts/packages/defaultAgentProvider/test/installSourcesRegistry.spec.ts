@@ -131,6 +131,8 @@ describe("InstallSourceRegistry add/remove/persist", () => {
 
         registry.remove("a");
         expect(registry.list()).toEqual([]);
+        // remove also drops the name from the resolution order.
+        expect(registry.order().map((s) => s.name)).toEqual([]);
         expect(persisted.length).toBe(2);
     });
 
@@ -183,6 +185,49 @@ describe("InstallSourceRegistry add/remove/persist", () => {
         );
         registry.setOrder(["a", "b", "a"]);
         expect(registry.order().map((s) => s.name)).toEqual(["a", "b"]);
+    });
+
+    it("sources and order survive a reload from the persisted snapshot", () => {
+        // Simulate a restart: capture what the first registry persists, then
+        // build a fresh registry from that snapshot and confirm the configured
+        // sources and resolution order round-trip (design §6).
+        let snapshot: { configs: InstallSourceConfig[]; order: string[] } = {
+            configs: [],
+            order: [],
+        };
+        const installDir = tmpInstallDir();
+        const first = createInstallSourceRegistry(
+            [{ kind: "path", name: "path" }],
+            ["path"],
+            {
+                installDir,
+                persist: (configs, order) => {
+                    snapshot = { configs, order };
+                },
+            },
+        );
+        first.add({
+            kind: "catalog",
+            name: "builtin",
+            catalog: writeCatalog("reload", { x: { name: "mod-x" } }),
+        });
+        first.setOrder(["builtin", "path"]);
+
+        const reloaded = createInstallSourceRegistry(
+            snapshot.configs,
+            snapshot.order,
+            { installDir },
+        );
+        expect(
+            reloaded
+                .list()
+                .map((c) => c.name)
+                .sort(),
+        ).toEqual(["builtin", "path"]);
+        expect(reloaded.order().map((s) => s.name)).toEqual([
+            "builtin",
+            "path",
+        ]);
     });
 });
 

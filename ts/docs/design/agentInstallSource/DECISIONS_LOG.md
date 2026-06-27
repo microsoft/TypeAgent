@@ -222,3 +222,17 @@
   first run; deleting it now would strand un-migrated installs. The `agents` map removal is
   coupled to the indexing-registry rework deferred past this feature.
 - **Design updated?** no (follow-up: file an issue to delete the shim next release)
+
+### 2026-06-28 — Catalog entry with neither path nor name fails fast
+- **Milestone / item:** Final gate (catalogSource)
+- **Type:** Unspecified
+- **Design ref:** §4.2, §12 Q17 (exactly one resolution handle)
+- **Decision:** `catalogSource.find` now throws a clear error when a matched catalog entry
+  carries neither a `path` nor a package `name`, instead of producing a record with no
+  resolution handle that would only fail (opaquely) at load time.
+- **Rationale:** Q17 requires every record to have exactly one handle. A handle-less entry is
+  a catalog authoring mistake; failing at resolve time (when the user references that key)
+  gives an actionable message and never persists a malformed record. An unknown key still
+  returns `undefined` (non-match) so the ordered walk continues — only a *present but
+  malformed* entry throws. (Found in final-gate review round 2.)
+- **Design updated?** no (enforces the existing §4.2/Q17 invariant)

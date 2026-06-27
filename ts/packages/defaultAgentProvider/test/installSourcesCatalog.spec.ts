@@ -85,6 +85,18 @@ describe("catalogSource", () => {
         expect(await source.find("nope")).toBeUndefined();
     });
 
+    it("find fails fast for an entry with neither path nor name (Q17)", async () => {
+        const file = writeCatalog({ broken: {} });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        await expect(source.find("broken")).rejects.toThrow(
+            /neither 'path' nor 'name'/,
+        );
+    });
+
     it("listAgents enumerates the catalog keys", async () => {
         const file = writeCatalog({
             player: { name: "music" },

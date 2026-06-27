@@ -336,7 +336,7 @@ Low-risk hygiene milestone, so a single round each (then green gate + commit).
 
 ---
 
-## Final Gate — Branch-wide review 🔴 (full 2 + 2)
+## Final Gate — Branch-wide review ✅ (full 2 + 2)
 
 After Milestone 4 is committed, run the **full gate one more time over the entire branch diff**
 (`git diff <base>...HEAD`), not just a single milestone. This catches issues that only emerge from the
@@ -353,6 +353,12 @@ by the incremental passes, and end-to-end behavior across the unified flow.
   (e.g. first-run pre-install → `@install` from feed → `@update` → `@uninstall`).
 - **Green gate + final commit:** full build/lint/test green; make a final review commit
   (`dispatcher: branch-wide review fixes (final gate)`) and open the PR.
+
+> **Outcome:** Review r1/r2 + test-gap r1/r2 complete. One MAJOR fixed — `catalogSource.find`
+> now fails fast on an entry with neither `path` nor `name` (§4.2/Q17) instead of persisting a
+> handle-less record. Added a registry reload round-trip test (sources + order survive a restart),
+> a catalog malformed-entry test, and an `order()`-drops-on-remove assertion. Full build green,
+> `defaultAgentProvider` suite 3844 passing, policy checks green. See DECISIONS_LOG / DEFERRED_REVIEW_LOG.
 
 ---
 

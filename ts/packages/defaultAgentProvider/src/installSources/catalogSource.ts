@@ -65,6 +65,16 @@ export function createCatalogSource(
             const resolvedPath = entry.path
                 ? path.resolve(catalogDir, entry.path)
                 : undefined;
+            // A matched entry must carry exactly one resolution handle: a
+            // `path` or a package `name` (-> module). An entry with neither is a
+            // malformed catalog authoring error; fail fast here (§4.2, Q17)
+            // rather than persisting a handle-less record that only blows up at
+            // load time.
+            if (resolvedPath === undefined && entry.name === undefined) {
+                throw new Error(
+                    `catalog source '${config.name}': entry '${ref}' has neither 'path' nor 'name'`,
+                );
+            }
             // `ref` carries the matched catalog key so materialize can use it
             // as the default dispatcher name (not propagated to the record;
             // catalog records have no `ref`).
