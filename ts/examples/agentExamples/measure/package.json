@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "Measure is an agent that maintains a simple database of measurements.",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

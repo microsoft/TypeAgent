@@ -28,6 +28,7 @@
 ## Entries
 
 ### 2025-06-18 — Source config fail-fast validation (path/catalog readability)
+
 - **Milestone / gate:** M1 gate
 - **Kind:** Review finding
 - **Raised by:** review round 1 (finding 3, minor)
@@ -36,6 +37,7 @@
 - **Follow-up:** none.
 
 ### 2025-06-18 — Feed cache file symlink safety
+
 - **Milestone / gate:** M1 gate
 - **Kind:** Review finding
 - **Raised by:** review round 1 (finding 4, minor)
@@ -44,6 +46,7 @@
 - **Follow-up:** none.
 
 ### 2025-06-18 — Transient npm auth file mode on Windows
+
 - **Milestone / gate:** M1 gate
 - **Kind:** Review finding
 - **Raised by:** review round 1 (finding 5, minor)
@@ -52,6 +55,7 @@
 - **Follow-up:** none.
 
 ### 2026-06-27 — `getProviderConfig` first-config singleton cache
+
 - **Milestone / gate:** M2 gate
 - **Kind:** Review finding
 - **Raised by:** review round 2 (major #2)
@@ -60,6 +64,7 @@
 - **Follow-up:** none (revisit only if multi-config-per-process is ever introduced).
 
 ### 2026-06-27 — Indexing registry skips non-builtin (feed/path) agents
+
 - **Milestone / gate:** M2 gate
 - **Kind:** Review finding
 - **Raised by:** review round 2 (major #1)
@@ -68,6 +73,7 @@
 - **Follow-up:** M4 cleanup of the `config.json` `agents` map will revisit whether indexing should consult installed records.
 
 ### 2026-06-27 — execMode propagation through installed records not asserted end-to-end
+
 - **Milestone / gate:** M2 gate
 - **Kind:** Test gap
 - **Raised by:** test-gap round 2 (gap #3, MED)
@@ -76,6 +82,7 @@
 - **Follow-up:** none (consider a fixture-based load test if execMode routing changes).
 
 ### 2026-06-28 — Feed `@update <range>` building `module@range` not unit-tested
+
 - **Milestone / gate:** M3 gate
 - **Kind:** Test gap
 - **Raised by:** test-gap round 1 & 2 (deferred)
@@ -88,6 +95,7 @@
 - **Follow-up:** add if the installer factory ever gains a DI seam for the registry.
 
 ### 2026-06-28 — Catalog renamed-install re-lookup not covered end-to-end
+
 - **Milestone / gate:** M3 gate
 - **Kind:** Test gap
 - **Raised by:** test-gap round 1 & 2 (deferred)
@@ -102,6 +110,7 @@
   logic changes).
 
 ### 2026-06-28 — `UpdateCommandHandler` happy-path call order not unit-tested
+
 - **Milestone / gate:** M3 gate
 - **Kind:** Test gap
 - **Raised by:** test-gap round 1 & 2 (deferred)
@@ -116,6 +125,7 @@
 - **Follow-up:** none.
 
 ### 2026-06-28 — `displayResult` not awaited in the @source/@update handlers
+
 - **Milestone / gate:** M3 gate
 - **Kind:** Review finding
 - **Raised by:** review round 2 (minor)
@@ -128,6 +138,7 @@
 - **Follow-up:** none (consider a sweep if handler display calls are ever standardized).
 
 ### 2026-06-28 — `@source add` duplicate-name error path not unit-tested
+
 - **Milestone / gate:** M3 gate
 - **Kind:** Test gap
 - **Raised by:** test-gap round 2 (LOW)
@@ -136,4 +147,31 @@
   a no-op `jest.fn`).
 - **Why not addressed:** The duplicate guard is the registry's responsibility and is covered
   by the registry's own tests; the handler merely propagates the error without wrapping.
+- **Follow-up:** none.
+
+### 2026-06-28 — No isolated unit test for the `agent-keyword` policy rule
+
+- **Milestone / gate:** M4 gate
+- **Kind:** Test gap
+- **Raised by:** test-gap round 1
+- **Summary:** `tools/scripts/policyChecks/agentKeyword.mjs` has no positive/negative fixture
+  unit test.
+- **Why not addressed:** `ts/tools/scripts` has no jest/node:test harness (unlike
+  `tools/docsAutogen`); standing one up for a pure, single-purpose rule is disproportionate.
+  The full-repo `npm run check:policy` run is an effective integration test (it classified
+  all 134 package.json files — 36 agents flagged, 98 non-agents untouched) and is wired into
+  CI (`pipelines/azure-build-ts.yml`), so a future agent missing the keyword fails the build.
+- **Follow-up:** none (add a fixture test if a scripts test harness is ever introduced).
+
+### 2026-06-28 — `agent-keyword` autofix needs a second `--fix` pass to sort
+
+- **Milestone / gate:** M4 gate
+- **Kind:** Review finding
+- **Raised by:** review round 1 (minor)
+- **Summary:** The `sort-package-json` rule runs before `agent-keyword` in the same pass, so
+  a freshly auto-added `keywords` field is left unsorted until the next `--fix` pass.
+- **Why not addressed:** This only affects `--fix` ergonomics, not enforcement. CI runs
+  `check:policy` **without** `--fix` and merely verifies; all committed agent package.json
+  files are already sorted, so the gate is green. Reordering the rule list (or sorting inside
+  the rule) would couple the rule to `sort-package-json` for no enforcement gain.
 - **Follow-up:** none.

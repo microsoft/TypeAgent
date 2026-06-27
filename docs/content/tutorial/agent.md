@@ -3,7 +3,6 @@ layout: docs
 title: Building Agents for TypeAgent Dispatcher
 ---
 
-
 TypeAgent [Shell](../../../ts/packages/shell) and [CLI](../../../ts/packages/cli) are built using [TypeAgent Dispatcher](../../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](../../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli).
 
 This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](../../../ts/examples/agentExamples/echo/) and [Measure Agent](../../../ts/examples/agentExamples/measure/).
@@ -152,7 +151,7 @@ async function initializeEchoContext(): Promise<EchoActionContext> {
 
 async function executeEchoAction(
   action: TypeAgentAction<EchoAction>,
-  context: ActionContext<EchoActionContext>
+  context: ActionContext<EchoActionContext>,
 ) {
   // The context created in initializeEchoContext is returned in the action context.
   const echoContext = context.sessionContext.agentContext;
@@ -222,6 +221,25 @@ In the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli), i
 ```
 
 The `Echo` agent should be in the list and enabled.
+
+`@install` resolves the agent against the configured **install sources** in priority
+order. To install from a specific source, pass `--source <name>`; to see which source a
+`ref` would resolve to without installing, pass `--where`:
+
+```
+@install echo <path to echo package> --source path
+@install echo echo-agent --where
+```
+
+Manage the sources and their order with the `@source` group, and refresh an installed
+agent against its recorded source with `@update`:
+
+```
+@source list                       # show sources and the resolution order
+@source add path local --baseDir <dir>
+@source order local builtin        # set a priority prefix; the rest is appended
+@update echo                       # re-resolve echo from the source it came from
+```
 
 ### Step 4: See the `Echo` agent in action
 

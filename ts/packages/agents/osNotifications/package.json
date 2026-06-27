@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into TypeAgent chat as ephemeral toasts/inline messages",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

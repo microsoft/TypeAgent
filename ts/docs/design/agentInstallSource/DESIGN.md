@@ -1,6 +1,6 @@
 # AppAgent Install Sources - Design Doc
 
-> Status: **Draft for review**
+> Status: **Implemented**
 > Scope: `ts/packages/dispatcher` (provider + installer + registry interfaces), `ts/packages/defaultAgentProvider` (provider + installer impl, config), `@install` / `@source` command handlers.
 > Framing: **clean-slate**. This design assumes we are free to change the provider/installer interfaces and the on-disk config formats without preserving backward compatibility. A one-time migration is described in §8.
 
@@ -351,11 +351,11 @@ flowchart BT
     dflt --> node
 ```
 
-| Package | Owns | New in this design |
-| --- | --- | --- |
-| `agent-dispatcher` (core) | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the `@install` / `@update` / `@source` command **handlers** | `installSource.ts` **interfaces** (`InstallSourceKind/Config`, `InstallSource`, `ResolvedCandidate`, `InstallSourceRegistry`, `InstalledAgentRecord`); `sources?()` added to `AppAgentInstaller` |
-| `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo` | unchanged (still the npm loading mechanism §10) |
-| `default-agent-provider` | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller` | the **registry + source implementations**, feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog |
+| Package                     | Owns                                                                                                                                                      | New in this design                                                                                                                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agent-dispatcher` (core)   | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the `@install` / `@update` / `@source` command **handlers** | `installSource.ts` **interfaces** (`InstallSourceKind/Config`, `InstallSource`, `ResolvedCandidate`, `InstallSourceRegistry`, `InstalledAgentRecord`); `sources?()` added to `AppAgentInstaller` |
+| `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo`                                                                                                            | unchanged (still the npm loading mechanism §10)                                                                                                                                                  |
+| `default-agent-provider`    | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`                                                                                              | the **registry + source implementations**, feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog                                                                    |
 
 Why the split matters: the `@source` handler in the dispatcher core only references the `InstallSourceRegistry` **interface** (reached via `context.agentInstaller.sources()`), so the core compiles and runs with **no dependency** on Azure DevOps, npm, or `az`. A host that wants the source machinery pulls it in by depending on `default-agent-provider`; a host that doesn't, doesn't.
 
@@ -365,8 +365,8 @@ The three host shapes as concrete wiring (imports are exactly today's; the defau
 // 1. Default host (shell / agentServer / api) - UNCHANGED call sites.
 import { createDispatcher } from "agent-dispatcher";
 import {
-  getDefaultAppAgentProviders,   // now returns [ installedProvider, mcpProvider ]
-  getDefaultAppAgentInstaller,   // now owns the registry internally
+  getDefaultAppAgentProviders, // now returns [ installedProvider, mcpProvider ]
+  getDefaultAppAgentInstaller, // now owns the registry internally
 } from "default-agent-provider";
 
 await createDispatcher({
@@ -403,7 +403,7 @@ const installer: AppAgentInstaller = {
 await createDispatcher({ appAgentProviders, agentInstaller: installer });
 ```
 
-So a host developer's choice is a single axis: **which `AppAgentInstaller` (if any) do I inject?** Inject `getDefaultAppAgentInstaller` for the batteries-included feed/catalog/path registry; inject a hand-built one to bring your own sources; inject none to opt out entirely. No host ever imports a source kind or the registry from `agent-dispatcher` core to *run* agents - only an embedder *building* an installer touches those interface types.
+So a host developer's choice is a single axis: **which `AppAgentInstaller` (if any) do I inject?** Inject `getDefaultAppAgentInstaller` for the batteries-included feed/catalog/path registry; inject a hand-built one to bring your own sources; inject none to opt out entirely. No host ever imports a source kind or the registry from `agent-dispatcher` core to _run_ agents - only an embedder _building_ an installer touches those interface types.
 
 ### 4.6 Post-install: making the agent live (no restart)
 

@@ -7,6 +7,7 @@ import path from "node:path";
 import { rules as copyrightHeadersRules } from "./policyChecks/copyrightHeaders.mjs";
 import { rules as npmPackageRules } from "./policyChecks/npmPackage.mjs";
 import { rules as invisibleUnicodeRules } from "./policyChecks/invisibleUnicode.mjs";
+import { rules as agentKeywordRules } from "./policyChecks/agentKeyword.mjs";
 import chalk from "chalk";
 
 /********************************************************
@@ -17,6 +18,7 @@ const rules = [
     ...copyrightHeadersRules,
     ...npmPackageRules,
     ...invisibleUnicodeRules,
+    ...agentKeywordRules,
 ];
 
 /********************************************************

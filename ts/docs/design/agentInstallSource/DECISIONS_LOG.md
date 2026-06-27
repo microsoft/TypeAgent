@@ -29,6 +29,7 @@
 ## Entries
 
 ### 2026-06-26 — Default provider reads bundled catalog only for the default config
+
 - **Milestone / item:** M1 / 1.2
 - **Type:** Unspecified
 - **Design ref:** §3, §7 (plan 1.2 step 4)
@@ -44,6 +45,7 @@
 - **Design updated?** no (temporary M1 scaffolding; replaced by the single provider in M2)
 
 ### 2026-06-26 — `ExecutionMode` defined as a string union in dispatcher core
+
 - **Milestone / item:** M1 / 1.1
 - **Type:** Unspecified
 - **Design ref:** §4.1, §4.2 (sketches use `execMode?: ExecutionMode`)
@@ -55,10 +57,11 @@
 - **Design updated?** no (interface-level detail consistent with the design)
 
 ### 2026-06-26 — Corrupt user catalog degrades; corrupt bundled catalog fails loud
+
 - **Milestone / item:** M1 / 1.3
 - **Type:** Unspecified
 - **Design ref:** §4.1 (ordered resolve walk)
-- **Decision:** `catalogSource.find`/`listAgents` catch read/parse errors for a *user*
+- **Decision:** `catalogSource.find`/`listAgents` catch read/parse errors for a _user_
   catalog and degrade to "no agents" (debug-logged) so the ordered resolve walk continues
   to the next source. A corrupt/unreadable **bundled** catalog (`"<bundled>"`) instead
   throws loudly, since it is a build artifact and a failure there is a packaging bug.
@@ -70,6 +73,7 @@
 - **Design updated?** no (robustness detail consistent with the design)
 
 ### 2026-06-27 — Multi-root module resolution via a combine facade over one provider per root
+
 - **Milestone / item:** M2 / 2.1
 - **Type:** Unspecified
 - **Design ref:** §4.1, §6, Q20
@@ -81,12 +85,13 @@
   `setTraceNamespaces`. Path records always resolve against the app bundle (their path is
   absolute); module records probe each root via `createRequire(root).resolve(...)`.
 - **Rationale:** A single `createRequire` root cannot resolve modules installed under a
-  separate install dir *and* modules bundled with the app. The design's "single installed
+  separate install dir _and_ modules bundled with the app. The design's "single installed
   provider" intent is preserved because the facade exposes exactly one `AppAgentProvider`
   to the dispatcher; the multi-root split is an internal detail (Q20).
 - **Design updated?** no (resolution detail consistent with §4.1/§6)
 
 ### 2026-06-27 — Legacy migration skips names already seeded by a builtin
+
 - **Milestone / item:** M2 / 2.3
 - **Type:** Unspecified
 - **Design ref:** §4.1, §8 (legacy `externalAgentsConfig.json` migration)
@@ -100,6 +105,7 @@
 - **Design updated?** no (migration robustness detail)
 
 ### 2026-06-27 — `getProviderConfig` keeps its first-config singleton cache
+
 - **Milestone / item:** M2 / 2.4
 - **Type:** Unspecified
 - **Design ref:** §7
@@ -113,6 +119,7 @@
 - **Design updated?** no (known constraint; see DEFERRED_REVIEW_LOG)
 
 ### 2026-06-27 — Indexing service registry resolves builtins only
+
 - **Milestone / item:** M2 / 2.4
 - **Type:** Unspecified
 - **Design ref:** §7
@@ -125,6 +132,7 @@
 - **Design updated?** no (intentional; revisit in M4)
 
 ### 2026-06-28 — `@update`/`@source remove` data access lives on the installer, not the dispatcher core
+
 - **Milestone / item:** M3 / 3.1
 - **Type:** Deviation
 - **Design ref:** §4.3, §5 (plan 3.1 said "AppAgentInstaller interface unchanged")
@@ -141,6 +149,7 @@
 - **Design updated?** no (interface addition consistent with §4.3 intent)
 
 ### 2026-06-28 — install/update preserve the re-resolution key in `ref`
+
 - **Milestone / item:** M3 / 3.1
 - **Type:** Unspecified
 - **Design ref:** §5 (`@update` re-resolves against the recorded source), §12 Q13
@@ -156,6 +165,7 @@
 - **Design updated?** no (record-field usage detail consistent with §5/§12 Q13)
 
 ### 2026-06-28 — `@source order` appends the remaining configured sources
+
 - **Milestone / item:** M3 / 3.2
 - **Type:** Unspecified
 - **Design ref:** §5 (order is a subset), §6 (full configured set)
@@ -168,6 +178,7 @@
 - **Design updated?** no (command-surface detail consistent with §5/§6)
 
 ### 2026-06-28 — `@update` overwrites the record only after a successful materialize
+
 - **Milestone / item:** M3 / 3.1
 - **Type:** Unspecified
 - **Design ref:** §4.7, §12 Q13
@@ -180,3 +191,34 @@
 - **Rationale:** Matches the design's materialize-first guarantee (Q13) so an update never
   leaves the user with a half-installed or missing agent.
 - **Design updated?** no (consistent with §4.7/§12 Q13)
+
+### 2026-06-28 — Agent detection keys on the `./agent/manifest` export
+
+- **Milestone / item:** M4 / 4.1
+- **Type:** Unspecified
+- **Design ref:** §4.1, §12 Q12 (feed-enumeration marker)
+- **Decision:** The `agent-keyword` repo-policy rule classifies a package as an app agent
+  when its `package.json` `exports` object has a `"./agent/manifest"` key, and then
+  requires `"typeagent-agent"` in `keywords`. Detection does **not** use the
+  `@typeagent/agent-sdk` dependency.
+- **Rationale:** `./agent/manifest` is the exact subpath the npm agent provider resolves to
+  load an agent, so it is the authoritative, false-positive-free marker. Many infrastructure
+  packages depend on `@typeagent/agent-sdk` without being agents, so a dependency-based
+  heuristic would over-match. Verified: all 36 packages with the export carry the keyword,
+  and no non-agent package does.
+- **Design updated?** no (enforcement detail consistent with §4.1/§12 Q12)
+
+### 2026-06-28 — Migration shim and `config.json` agents map retained for one release
+
+- **Milestone / item:** M4 / 4.2
+- **Type:** Unspecified
+- **Design ref:** §8, §12 Q14 (legacy migration)
+- **Decision:** M4 removed the already-dead `getDefaultNpmAppAgentProvider` /
+  `getExternalAppAgentProvider` / `installNpm` / `isNpmSpecifier` (all gone by M2), but
+  deliberately keeps the `externalAgentsConfig.json` migration shim (read + rename to
+  `.migrated`) and the builtin `config.json` `agents` map (still read by the indexing
+  registry) for one release.
+- **Rationale:** The shim must survive at least one release so existing instances migrate on
+  first run; deleting it now would strand un-migrated installs. The `agents` map removal is
+  coupled to the indexing-registry rework deferred past this feature.
+- **Design updated?** no (follow-up: file an issue to delete the shim next release)
