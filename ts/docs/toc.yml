@@ -1,8 +1,6 @@
-- name: Home
-  href: index.md
 - name: Overview
   href: overview/toc.yml
-  topicHref: overview/index.md
+  topicHref: index.md
 - name: Architecture
   href: architecture/toc.yml
   topicHref: architecture/index.md

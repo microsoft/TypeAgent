@@ -90,7 +90,13 @@ const ARCH_GROUPS = [
             "collision-analysis.md",
             "collision-rollout.md",
             "context-weighted-collision-resolution-design.md",
+            "collision-optimize-cookbook.md",
         ],
+    },
+    {
+        dir: "memory",
+        name: "Memory",
+        files: ["memory.md"],
     },
     {
         dir: "agents",

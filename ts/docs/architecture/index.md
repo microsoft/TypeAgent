@@ -33,6 +33,13 @@ choose. These docs cover detection, resolution strategies, and rollout:
 - [Collision analysis](./collision/collision-analysis.md)
 - [Collision rollout](./collision/collision-rollout.md)
 - [Context-weighted resolution — design](./collision/context-weighted-collision-resolution-design.md)
+- [`@collision optimize` cookbook](./collision/collision-optimize-cookbook.md)
+
+## Memory
+
+- [Memory architecture](./memory/memory.md) — how TypeAgent's conversational
+  memory works using **Structured RAG** (indexing and querying agent
+  conversations), implemented in the `knowPro` package.
 
 ## Agents & conversations
 
@@ -73,10 +80,9 @@ See the contributor-facing summary in
 
 ## Related reference
 
-- **Memory / Structured RAG** — the memory subsystem is implemented primarily
-  in the [`knowPro`](../packages/index.md) package. A conceptual overview lives
-  on the public docs site
-  ([memory.md](https://github.com/microsoft/TypeAgent/blob/main/docs/content/architecture/memory.md)).
+- **Memory / Structured RAG** — see [Memory architecture](./memory/memory.md);
+  the subsystem is implemented primarily in the
+  [`knowPro`](../packages/index.md) package.
 - **Packages** — every library that the architecture above is built from is in
   the [Packages](../packages/index.md) section.
 - **Agents** — the plugins the dispatcher routes to are in the

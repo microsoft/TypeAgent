@@ -9,7 +9,7 @@ knowledge, one home_ — no duplicated content to keep in sync.
 DocFX builds from `ts/docs` directly, so almost everything is a **native file**
 in this tree and needs no copying:
 
-- **Conceptual content** — the [Overview](../overview/index.md), this contributor
+- **Conceptual content** — the [Overview](../index.md), this contributor
   guide, and the [templates](../templates/package-page.md) — is authored here.
 - **Architecture deep dives** live under `ts/docs/architecture/**` and are edited
   in place; the build does not copy them.
