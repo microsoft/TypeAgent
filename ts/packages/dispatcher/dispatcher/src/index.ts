@@ -19,11 +19,7 @@ export type {
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {
-    InstallSourceKind,
-    PathSourceConfig,
-    FeedSourceConfig,
-    CatalogSourceConfig,
-    InstallSourceConfig,
+    InstallSourceInfo,
     ResolvedCandidate,
     InstalledAgentRecord,
     InstallSource,

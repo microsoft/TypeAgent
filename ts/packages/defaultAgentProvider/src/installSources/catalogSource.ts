@@ -6,9 +6,9 @@ import registerDebug from "debug";
 import {
     InstallSource,
     InstalledAgentRecord,
-    CatalogSourceConfig,
     ResolvedCandidate,
 } from "agent-dispatcher";
+import { CatalogSourceConfig } from "./config.js";
 import {
     AgentCatalog,
     BUNDLED_CATALOG,

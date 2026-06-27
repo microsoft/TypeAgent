@@ -15,6 +15,7 @@ import {
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
 import { InstalledAgentRecord } from "agent-dispatcher";
+import { DefaultInstallSourceRegistry } from "../src/installSources/registry.js";
 
 function tmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -247,12 +248,12 @@ describe("getDefaultAppAgentInstaller", () => {
         ).rejects.toThrow(/unknown source/);
     });
 
-    it("persists registry changes to the instance config (powers @source)", () => {
+    it("persists registry changes to the instance config (powers @source)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer = getDefaultAppAgentInstaller(instanceDir);
-        const registry = installer.sources?.();
-        registry!.add({ kind: "path", name: "extra" });
-        registry!.setOrder(["extra", "path"]);
+        const registry = installer.sources?.() as DefaultInstallSourceRegistry;
+        registry.add({ kind: "path", name: "extra" });
+        registry.setOrder(["extra", "path"]);
         const cfg = JSON.parse(
             fs.readFileSync(path.join(instanceDir, "config.json"), "utf8"),
         );

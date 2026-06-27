@@ -256,13 +256,50 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-const commandInterface = getCommandInterface(systemHandlers);
+// The host (via `AppAgentInstaller.sourceCommands()`) contributes the typed
+// `@source add` subcommands. They are merged into the static `@source` table
+// here, per call, so the dispatcher core never learns the source-kind taxonomy.
+// `getCommands`/`executeCommand`/`getCommandCompletion` all resolve against the
+// merged table; `@help` uses it too so the host commands show up in usage.
+export function getSystemHandlers(
+    systemContext: CommandHandlerContext | undefined,
+): CommandHandlerTable {
+    const sourceCommands = systemContext?.agentInstaller?.sourceCommands?.();
+    if (sourceCommands === undefined) {
+        return systemHandlers;
+    }
+    const source = systemHandlers.commands.source as CommandHandlerTable;
+    return {
+        ...systemHandlers,
+        commands: {
+            ...systemHandlers.commands,
+            source: {
+                ...source,
+                commands: {
+                    ...source.commands,
+                    add: sourceCommands,
+                },
+            },
+        },
+    };
+}
 
 export const systemAgent: AppAgent = {
     getTemplateSchema: getSystemTemplateSchema,
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
-    getCommands: commandInterface.getCommands,
-    getCommandCompletion: commandInterface.getCommandCompletion,
-    executeCommand: commandInterface.executeCommand,
+    getCommands: async (context) =>
+        getSystemHandlers(context.agentContext as CommandHandlerContext),
+    getCommandCompletion: async (commands, params, names, context, direction) =>
+        getCommandInterface(
+            getSystemHandlers(context.agentContext as CommandHandlerContext),
+        ).getCommandCompletion?.(commands, params, names, context, direction) ?? {
+            groups: [],
+        },
+    executeCommand: async (commands, params, context, attachments) =>
+        getCommandInterface(
+            getSystemHandlers(
+                context.sessionContext.agentContext as CommandHandlerContext,
+            ),
+        ).executeCommand(commands, params, context, attachments),
 } as AppAgent;

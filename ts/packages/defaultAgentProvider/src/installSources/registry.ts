@@ -4,17 +4,27 @@
 import registerDebug from "debug";
 import {
     InstallSource,
-    InstallSourceConfig,
+    InstallSourceInfo,
     InstallSourceRegistry,
     InstalledAgentRecord,
     ResolvedCandidate,
 } from "agent-dispatcher";
+import { InstallSourceConfig } from "./config.js";
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource, FeedSourceDeps } from "./feedSource.js";
 import { AsyncMutex } from "./mutex.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:registry");
+
+/**
+ * The host's registry: the core `InstallSourceRegistry` plus the typed,
+ * programmatic `add(config)` used by seeding, tests, and the host-contributed
+ * `@source add` command handlers (see `getAddSourceCommandHandlers`).
+ */
+export interface DefaultInstallSourceRegistry extends InstallSourceRegistry {
+    add(config: InstallSourceConfig): void;
+}
 
 export interface RegistryDeps {
     // Shared npm root all feed sources install into (design §4.1, §12 Q20).
@@ -58,7 +68,7 @@ export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     initialOrder: string[],
     deps: RegistryDeps,
-): InstallSourceRegistry {
+): DefaultInstallSourceRegistry {
     const mutex = deps.mutex ?? new AsyncMutex();
     const configs = new Map<string, InstallSourceConfig>();
     const sources = new Map<string, InstallSource>();
@@ -74,6 +84,32 @@ export function createInstallSourceRegistry(
 
     function persist(): void {
         deps.persist?.(Array.from(configs.values()), [...orderNames]);
+    }
+
+    // The host-rendered one-line summary the core shows for `@source list`. This
+    // is where the kind taxonomy is interpreted (the core never sees it).
+    function describe(config: InstallSourceConfig): string {
+        switch (config.kind) {
+            case "feed":
+                return config.registry;
+            case "catalog":
+                return config.catalog;
+            case "path":
+                return config.baseDir ?? "(default base)";
+            default: {
+                const exhaustive: never = config;
+                return String(exhaustive);
+            }
+        }
+    }
+
+    function addConfig(config: InstallSourceConfig): void {
+        if (configs.has(config.name)) {
+            throw new Error(`source '${config.name}' already exists`);
+        }
+        configs.set(config.name, config);
+        sources.set(config.name, buildSource(config, deps));
+        persist();
     }
 
     function orderedSources(): InstallSource[] {
@@ -128,8 +164,12 @@ export function createInstallSourceRegistry(
     }
 
     return {
-        list(): InstallSourceConfig[] {
-            return Array.from(configs.values());
+        list(): InstallSourceInfo[] {
+            return Array.from(configs.values()).map((config) => ({
+                name: config.name,
+                kind: config.kind,
+                detail: describe(config),
+            }));
         },
         get(name: string): InstallSource | undefined {
             return sources.get(name);
@@ -142,12 +182,7 @@ export function createInstallSourceRegistry(
             persist();
         },
         add(config: InstallSourceConfig): void {
-            if (configs.has(config.name)) {
-                throw new Error(`source '${config.name}' already exists`);
-            }
-            configs.set(config.name, config);
-            sources.set(config.name, buildSource(config, deps));
-            persist();
+            addConfig(config);
         },
         remove(name: string): void {
             if (!configs.has(name)) {

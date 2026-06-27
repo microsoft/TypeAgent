@@ -5,65 +5,25 @@
 //
 // These are pure interfaces that live in the dispatcher core. The concrete
 // implementations (path / catalog / feed sources, the registry, feed auth,
-// npm install, REST enumeration) live in `default-agent-provider`. The
-// dispatcher core never learns what a feed, an npm registry, or `az` is.
-//
-// Two layers, deliberately distinct:
-//   *SourceConfig  - plain declarative data (what's in instance config)
-//   InstallSource  - the live runtime object the registry builds from a config
+// npm install, REST enumeration) AND the concrete source *config* taxonomy
+// (what a feed / catalog / path source is configured with) live in
+// `default-agent-provider`. The dispatcher core never learns what a feed, an
+// npm registry, or `az` is: it knows only the opaque `InstallSourceInfo` it
+// renders for `@source list`. The host owns "how a source is added" - it
+// contributes the typed `@source add` command handlers (via
+// `AppAgentInstaller.sourceCommands`), including any auth UI.
 
 /**
- * The three install-source kinds (design §3). There is deliberately no
- * separate `builtin` kind: the bundled agents are a `catalog` source whose
- * JSON ships in the app (`catalog: "<bundled>"`).
+ * The opaque, host-rendered summary of one configured source for `@source
+ * list`. `kind` and `detail` are display strings the host produces; the core
+ * does not interpret them (it deliberately does not know the kind taxonomy or
+ * each kind's config fields).
  */
-export type InstallSourceKind = "path" | "catalog" | "feed";
-
-/**
- * A `path` source validates a filesystem path the user supplies. `ref` is a
- * filesystem path; `find` is a `stat` (instant); not enumerable.
- */
-export interface PathSourceConfig {
-    kind: "path";
-    name: string; // conventionally "path"
-    baseDir?: string; // base for relative refs; default cwd / instance dir
+export interface InstallSourceInfo {
+    readonly name: string;
+    readonly kind: string; // host's label, e.g. "feed" / "catalog" / "path"
+    readonly detail: string; // host's one-line summary, e.g. the registry URL
 }
-
-/**
- * A `feed` source `npm install`s against an Azure Artifacts registry. `ref` is
- * an npm specifier / name; `find` is a membership check against a cached
- * package list; enumerable (cached list).
- *
- * Auth: a short-lived bearer token minted by the Azure CLI
- * (`az account get-access-token`), injected into a transient npm auth config -
- * no persistent .npmrc creds / vsts-npm-auth / azureauth state.
- */
-export interface FeedSourceConfig {
-    kind: "feed";
-    name: string; // e.g. "typeagent"
-    registry: string; // Azure Artifacts npm registry URL
-    scopes: string[]; // e.g. ["@typeagent", "@secretagents"]
-}
-
-/**
- * A `catalog` source looks up a JSON list of available agents (name ->
- * `NpmAppAgentInfo` plus an optional `preinstall` flag). `ref` is an agent
- * short name; `find` is a map lookup (instant); enumerable.
- *
- * The catalog is a local filesystem path (or the sentinel `"<bundled>"` for
- * the catalog that ships in the app); remote URLs are not supported (§12 Q19).
- * Relative package paths resolve against the catalog's dir.
- */
-export interface CatalogSourceConfig {
-    kind: "catalog";
-    name: string; // e.g. "builtin", "workspace"
-    catalog: string; // local filesystem path to the catalog JSON, or "<bundled>"
-}
-
-export type InstallSourceConfig =
-    | PathSourceConfig
-    | FeedSourceConfig
-    | CatalogSourceConfig;
 
 /**
  * The result of a source's `find`: which source matched and how the agent
@@ -100,13 +60,13 @@ export interface InstalledAgentRecord {
 }
 
 /**
- * A live install source built from an `InstallSourceConfig`. Implements a
- * two-phase contract so the registry can probe cheaply (`find`) before doing
- * any real work (`materialize`) (design §4.1).
+ * A live install source built from a host config. Implements a two-phase
+ * contract so the registry can probe cheaply (`find`) before doing any real
+ * work (`materialize`) (design §4.1).
  */
 export interface InstallSource {
     readonly name: string;
-    readonly kind: InstallSourceKind;
+    readonly kind: string; // host's kind label; the core does not interpret it
     /**
      * CHEAP + side-effect free: can this source resolve `ref`? A match is a
      * commitment - if `find` returns a candidate, `materialize` must succeed.
@@ -125,15 +85,15 @@ export interface InstallSource {
  * (design §4.1). `@source` talks to the registry; the installer just uses it.
  */
 export interface InstallSourceRegistry {
-    list(): InstallSourceConfig[];
+    // Opaque, host-rendered summaries for `@source list`. The core does not
+    // know the kind taxonomy or each kind's config fields.
+    list(): InstallSourceInfo[];
     get(name: string): InstallSource | undefined;
 
     // user-configurable resolution ORDER (first match wins).
     order(): InstallSource[];
     setOrder(names: string[]): void;
 
-    // runtime configuration, persisted to instance config.
-    add(config: InstallSourceConfig): void;
     remove(name: string): void;
 
     // resolve a ref: explicit source, else walk the configured order.

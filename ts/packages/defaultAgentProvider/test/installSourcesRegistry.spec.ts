@@ -7,7 +7,7 @@ import path from "node:path";
 import { createInstallSourceRegistry } from "../src/installSources/registry.js";
 import { moduleNameFromSpec } from "../src/installSources/feedSource.js";
 import { clearTokenCacheForTest } from "../src/installSources/feedAuth.js";
-import { InstallSourceConfig } from "agent-dispatcher";
+import { InstallSourceConfig } from "../src/installSources/config.js";
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

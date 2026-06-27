@@ -1,0 +1,213 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { getAddSourceCommandHandlers } from "../src/installSources/addSource.js";
+
+// `getAddSourceCommandHandlers` owns the per-kind `@source add` grammar +
+// validation. The dispatcher core merges these typed handlers into `@source`
+// (via `AppAgentInstaller.sourceCommands`) and parses the args/flags; here we
+// invoke each handler directly with already-parsed params and assert the
+// config it hands to `registry.add` (or the validation error it throws).
+
+// Minimal fake registry capturing the configs the handlers add.
+function makeRegistry() {
+    const added: any[] = [];
+    return {
+        added,
+        registry: {
+            add: (config: any) => added.push(config),
+        } as any,
+    };
+}
+
+// Minimal ActionContext: displayResult only needs actionIO.appendDisplay.
+function fakeContext(): any {
+    return {
+        actionIO: {
+            appendDisplay: () => {},
+            setDisplay: () => {},
+            takeAction: () => {},
+        },
+    };
+}
+
+// Run a handler and return the single config it added.
+async function run(
+    kind: "feed" | "catalog" | "path",
+    args: any,
+    flags: any = {},
+) {
+    const { added, registry } = makeRegistry();
+    const handlers = getAddSourceCommandHandlers(registry);
+    const handler = handlers.commands[kind] as any;
+    await handler.run(fakeContext(), { args, flags });
+    return added[0];
+}
+
+// Run a handler expecting it to throw.
+function runExpectThrow(
+    kind: "feed" | "catalog" | "path",
+    args: any,
+    flags: any = {},
+) {
+    const { registry } = makeRegistry();
+    const handlers = getAddSourceCommandHandlers(registry);
+    const handler = handlers.commands[kind] as any;
+    return handler.run(fakeContext(), { args, flags });
+}
+
+describe("getAddSourceCommandHandlers", () => {
+    it("exposes feed, catalog, and path subcommands", () => {
+        const { registry } = makeRegistry();
+        const handlers = getAddSourceCommandHandlers(registry);
+        expect(Object.keys(handlers.commands).sort()).toEqual([
+            "catalog",
+            "feed",
+            "path",
+        ]);
+    });
+
+    describe("feed", () => {
+        it("requires a registry url", async () => {
+            await expect(
+                runExpectThrow("feed", { name: "f" }, { registry: undefined }),
+            ).rejects.toThrow(/--registry/);
+        });
+
+        it("rejects a non-https url", async () => {
+            await expect(
+                runExpectThrow(
+                    "feed",
+                    { name: "f" },
+                    { registry: "http://example.com/feed" },
+                ),
+            ).rejects.toThrow(/https/);
+        });
+
+        it("rejects a malformed url", async () => {
+            await expect(
+                runExpectThrow(
+                    "feed",
+                    { name: "f" },
+                    { registry: "not-a-url" },
+                ),
+            ).rejects.toThrow(/well-formed URL/);
+        });
+
+        it("builds a well-formed feed config with repeatable scopes", async () => {
+            expect(
+                await run(
+                    "feed",
+                    { name: "f" },
+                    {
+                        registry: "https://pkgs.example.com/feed/",
+                        scope: ["@a", "@b"],
+                    },
+                ),
+            ).toEqual({
+                kind: "feed",
+                name: "f",
+                registry: "https://pkgs.example.com/feed/",
+                scopes: ["@a", "@b"],
+            });
+        });
+
+        it("defaults scopes to an empty list", async () => {
+            expect(
+                await run(
+                    "feed",
+                    { name: "f" },
+                    { registry: "https://pkgs.example.com/feed/" },
+                ),
+            ).toEqual({
+                kind: "feed",
+                name: "f",
+                registry: "https://pkgs.example.com/feed/",
+                scopes: [],
+            });
+        });
+    });
+
+    describe("path", () => {
+        it("builds a path config without a baseDir", async () => {
+            expect(await run("path", { name: "local" })).toEqual({
+                kind: "path",
+                name: "local",
+            });
+        });
+
+        it("builds a path config with an optional baseDir", async () => {
+            expect(
+                await run("path", { name: "local" }, { baseDir: "/agents" }),
+            ).toEqual({
+                kind: "path",
+                name: "local",
+                baseDir: "/agents",
+            });
+        });
+    });
+
+    describe("catalog", () => {
+        it("requires a catalog path", async () => {
+            await expect(
+                runExpectThrow(
+                    "catalog",
+                    { name: "c" },
+                    { catalog: undefined },
+                ),
+            ).rejects.toThrow(/--catalog/);
+        });
+
+        it("registers a source for a readable JSON file", async () => {
+            const file = path.join(
+                fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-")),
+                "catalog.json",
+            );
+            fs.writeFileSync(file, JSON.stringify({ agents: {} }));
+            expect(
+                await run("catalog", { name: "c" }, { catalog: file }),
+            ).toEqual({
+                kind: "catalog",
+                name: "c",
+                catalog: file,
+            });
+        });
+
+        it("reports an inaccessible file distinctly from bad JSON", async () => {
+            const missing = path.join(
+                os.tmpdir(),
+                "ta-no-such-catalog-xyz.json",
+            );
+            await expect(
+                runExpectThrow("catalog", { name: "c" }, { catalog: missing }),
+            ).rejects.toThrow(/not accessible/);
+        });
+
+        it("rejects a file that is not valid JSON", async () => {
+            const file = path.join(
+                fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-")),
+                "catalog.json",
+            );
+            fs.writeFileSync(file, "{ not json");
+            await expect(
+                runExpectThrow("catalog", { name: "c" }, { catalog: file }),
+            ).rejects.toThrow(/not valid JSON/);
+        });
+
+        it("accepts a catalog path containing spaces", async () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta cat "));
+            const file = path.join(dir, "catalog.json");
+            fs.writeFileSync(file, JSON.stringify({ agents: {} }));
+            expect(
+                await run("catalog", { name: "c" }, { catalog: file }),
+            ).toEqual({
+                kind: "catalog",
+                name: "c",
+                catalog: file,
+            });
+        });
+    });
+});

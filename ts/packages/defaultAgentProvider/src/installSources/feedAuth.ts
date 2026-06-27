@@ -9,6 +9,13 @@ import path from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+// Feed auth (design §4.1, §12 Q8). A short-lived bearer token is minted by the
+// Azure CLI (`az account get-access-token`) and injected into a transient npm
+// auth config for the duration of a single install - no persistent .npmrc
+// creds / vsts-npm-auth / azureauth state. This is the implementation of the
+// `feed` source's auth; it is private to the host (default-agent-provider) and
+// the dispatcher core knows nothing about it.
+
 // Azure DevOps resource GUID (design §4.1, §12 Q8).
 const AZURE_DEVOPS_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798";
 

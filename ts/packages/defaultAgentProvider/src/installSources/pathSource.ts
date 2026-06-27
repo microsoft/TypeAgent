@@ -6,9 +6,9 @@ import path from "node:path";
 import {
     InstallSource,
     InstalledAgentRecord,
-    PathSourceConfig,
     ResolvedCandidate,
 } from "agent-dispatcher";
+import { PathSourceConfig } from "./config.js";
 import { expandPath } from "./paths.js";
 
 // `path` source (design §3, §4.1, §4.2, §12 Q17).

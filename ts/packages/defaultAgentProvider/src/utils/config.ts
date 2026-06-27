@@ -3,7 +3,7 @@
 
 import { glob } from "glob";
 import { NpmAppAgentInfo } from "dispatcher-node-providers";
-import { InstallSourceConfig } from "agent-dispatcher";
+import { InstallSourceConfig } from "../installSources/config.js";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 import { McpAppAgentConfig, McpAppAgentInfo } from "../mcpAgentProvider.js";

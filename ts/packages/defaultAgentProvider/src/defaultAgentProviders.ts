@@ -4,12 +4,12 @@
 import {
     AppAgentProvider,
     AppAgentInstaller,
-    InstallSourceConfig,
     InstalledAgentRecord,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
     DispatcherOptions,
 } from "agent-dispatcher";
+import { InstallSourceConfig } from "./installSources/config.js";
 
 import path from "node:path";
 import {
@@ -28,6 +28,7 @@ import {
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
 import { createInstallSourceRegistry } from "./installSources/registry.js";
+import { getAddSourceCommandHandlers } from "./installSources/addSource.js";
 import { AsyncMutex } from "./installSources/mutex.js";
 
 /**
@@ -228,10 +229,9 @@ export function getDefaultAppAgentInstaller(
                     break;
                 }
                 default: {
-                    const exhaustive: never = source.kind;
                     throw new Error(
                         `unknown source kind for '${name}': ${String(
-                            exhaustive,
+                            source.kind,
                         )}`,
                     );
                 }
@@ -256,6 +256,12 @@ export function getDefaultAppAgentInstaller(
         },
         sources() {
             return registry;
+        },
+        sourceCommands() {
+            // The host owns the `@source add` grammar: feed/catalog/path
+            // subcommands with typed flags + validation, bound to this
+            // registry. The dispatcher core merges them into `@source`.
+            return getAddSourceCommandHandlers(registry);
         },
         recordsUsingSource(sourceName: string): string[] {
             const agents = readAgentsJson(instanceDir)?.agents ?? {};

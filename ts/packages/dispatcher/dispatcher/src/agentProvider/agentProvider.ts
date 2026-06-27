@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { InstallSourceRegistry } from "./installSource.js";
 
 export interface AppAgentProvider {
@@ -46,6 +47,11 @@ export interface AppAgentInstaller {
     // Host-owned registry powering @source (design §4.5); absent -> @source
     // unavailable.
     sources?(): InstallSourceRegistry;
+    // Host-contributed `@source add` subcommands, merged into the system
+    // `@source` table by the system agent. The host owns the per-kind grammar,
+    // typed flags, validation, and any auth UI; the dispatcher core never
+    // learns the source-kind taxonomy. Absent -> `@source add` unavailable.
+    sourceCommands?(): CommandHandlerTable;
     // Names of installed agents whose record was acquired from `sourceName`.
     // Powers `@source remove`'s "still referenced" warning. Optional for the
     // same layering reason as `update` (the core handler cannot read records).

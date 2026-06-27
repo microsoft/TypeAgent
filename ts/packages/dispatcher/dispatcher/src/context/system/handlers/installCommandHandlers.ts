@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import fs from "node:fs";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -15,10 +14,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    InstallSourceConfig,
-    InstallSourceRegistry,
-} from "../../../agentProvider/installSource.js";
+import { InstallSourceRegistry } from "../../../agentProvider/installSource.js";
 import { AppAgentInstaller } from "../../../agentProvider/agentProvider.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
@@ -211,33 +207,19 @@ class SourceListCommandHandler implements CommandHandler {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const { registry } = getRegistry(systemContext.agentInstaller);
-        const configs = registry.list();
+        const infos = registry.list();
         const order = registry.order().map((source) => source.name);
         const lines: string[] = [];
         lines.push(`Resolution order: [${order.join(", ")}]`);
         lines.push("Sources:");
-        for (const config of configs) {
-            const inOrder = order.includes(config.name)
-                ? `#${order.indexOf(config.name) + 1}`
+        for (const info of infos) {
+            const inOrder = order.includes(info.name)
+                ? `#${order.indexOf(info.name) + 1}`
                 : "(not in order)";
-            let detail: string;
-            switch (config.kind) {
-                case "feed":
-                    detail = config.registry;
-                    break;
-                case "catalog":
-                    detail = config.catalog;
-                    break;
-                case "path":
-                    detail = config.baseDir ?? "(default base)";
-                    break;
-                default: {
-                    const exhaustive: never = config;
-                    detail = String(exhaustive);
-                }
-            }
+            // `kind` and `detail` are opaque, host-rendered strings; the core
+            // does not interpret them.
             lines.push(
-                `  ${config.name} [${config.kind}] ${inOrder} ${detail}`,
+                `  ${info.name} [${info.kind}] ${inOrder} ${info.detail}`,
             );
         }
         displayResult(lines.join("\n"), context);
@@ -283,141 +265,6 @@ class SourceOrderCommandHandler implements CommandHandler {
         const order = [...givenKnown, ...rest];
         registry.setOrder(order);
         displayResult(`Resolution order: [${order.join(", ")}]`, context);
-    }
-}
-
-class SourceAddFeedCommandHandler implements CommandHandler {
-    public readonly description = "Add a feed (npm registry) source";
-    public readonly parameters = {
-        args: {
-            name: { description: "Unique source name", type: "string" },
-        },
-        flags: {
-            registry: {
-                description: "Azure Artifacts npm registry URL",
-                char: "r",
-                type: "string",
-                optional: true,
-            },
-            scope: {
-                description: "npm scope to enumerate (repeatable)",
-                char: "s",
-                type: "string",
-                multiple: true,
-                optional: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const { registry } = getRegistry(systemContext.agentInstaller);
-        const { name } = params.args;
-        const url = params.flags.registry;
-        if (url === undefined) {
-            throw new Error("--registry <url> is required for a feed source");
-        }
-        let parsed: URL;
-        try {
-            parsed = new URL(url);
-        } catch {
-            throw new Error(`'${url}' is not a well-formed URL`);
-        }
-        if (parsed.protocol !== "https:") {
-            throw new Error(`feed registry URL must be https: '${url}'`);
-        }
-        const config: InstallSourceConfig = {
-            kind: "feed",
-            name,
-            registry: url,
-            scopes: params.flags.scope ?? [],
-        };
-        registry.add(config);
-        displayResult(`Added feed source '${name}'.`, context);
-    }
-}
-
-class SourceAddCatalogCommandHandler implements CommandHandler {
-    public readonly description = "Add a catalog (JSON file) source";
-    public readonly parameters = {
-        args: {
-            name: { description: "Unique source name", type: "string" },
-        },
-        flags: {
-            catalog: {
-                description: "Path to the catalog JSON file",
-                char: "c",
-                type: "string",
-                optional: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const { registry } = getRegistry(systemContext.agentInstaller);
-        const { name } = params.args;
-        const catalog = params.flags.catalog;
-        if (catalog === undefined) {
-            throw new Error(
-                "--catalog <path> is required for a catalog source",
-            );
-        }
-        try {
-            JSON.parse(fs.readFileSync(catalog, "utf8"));
-        } catch (e) {
-            const err = e as NodeJS.ErrnoException;
-            if (err.code === "ENOENT" || err.code === "EACCES") {
-                throw new Error(
-                    `catalog file '${catalog}' is not accessible: ${err.message}`,
-                );
-            }
-            throw new Error(
-                `catalog '${catalog}' is not valid JSON: ${err.message}`,
-            );
-        }
-        const config: InstallSourceConfig = {
-            kind: "catalog",
-            name,
-            catalog,
-        };
-        registry.add(config);
-        displayResult(`Added catalog source '${name}'.`, context);
-    }
-}
-
-class SourceAddPathCommandHandler implements CommandHandler {
-    public readonly description = "Add a filesystem path source";
-    public readonly parameters = {
-        args: {
-            name: { description: "Unique source name", type: "string" },
-        },
-        flags: {
-            baseDir: {
-                description: "Base directory for relative refs",
-                char: "b",
-                type: "string",
-                optional: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const { registry } = getRegistry(systemContext.agentInstaller);
-        const { name } = params.args;
-        const config: InstallSourceConfig = { kind: "path", name };
-        if (params.flags.baseDir !== undefined) {
-            config.baseDir = params.flags.baseDir;
-        }
-        registry.add(config);
-        displayResult(`Added path source '${name}'.`, context);
     }
 }
 
@@ -472,14 +319,9 @@ export function getSourceCommandHandlers(): CommandHandlerTable {
         commands: {
             list: new SourceListCommandHandler(),
             order: new SourceOrderCommandHandler(),
-            add: {
-                description: "Add an install source",
-                commands: {
-                    feed: new SourceAddFeedCommandHandler(),
-                    catalog: new SourceAddCatalogCommandHandler(),
-                    path: new SourceAddPathCommandHandler(),
-                },
-            },
+            // `add` is contributed by the host via
+            // `AppAgentInstaller.sourceCommands()` and merged in by the system
+            // agent: the host owns the per-kind grammar, flags, and validation.
             remove: new SourceRemoveCommandHandler(),
         },
     };

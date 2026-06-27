@@ -8,9 +8,9 @@ import { promisify } from "node:util";
 import {
     InstallSource,
     InstalledAgentRecord,
-    FeedSourceConfig,
     ResolvedCandidate,
 } from "agent-dispatcher";
+import { FeedSourceConfig } from "./config.js";
 import {
     AzTokenRunner,
     getFeedAccessToken,

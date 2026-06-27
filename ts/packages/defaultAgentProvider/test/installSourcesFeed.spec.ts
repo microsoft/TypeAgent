@@ -15,7 +15,7 @@ import {
     FeedAuthError,
     getFeedAccessToken,
 } from "../src/installSources/feedAuth.js";
-import { FeedSourceConfig } from "agent-dispatcher";
+import { FeedSourceConfig } from "../src/installSources/config.js";
 
 const REGISTRY =
     "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";

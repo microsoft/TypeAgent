@@ -2,9 +2,6 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect, jest } from "@jest/globals";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { ActionContext } from "@typeagent/agent-sdk";
 // Force the commandHandlerContext module graph (which includes systemAgent's
 // top-level `new InstallCommandHandler()`) to evaluate first, so importing the
@@ -213,17 +210,21 @@ describe("UpdateCommandHandler", () => {
     });
 });
 
-// A fake registry covering the surface the @source handlers touch.
+// A fake registry covering the surface the @source handlers touch. `list`
+// returns the opaque `InstallSourceInfo` the core renders. `@source add` is
+// host-contributed (via `AppAgentInstaller.sourceCommands`), so the core
+// registry fake no longer needs an add seam.
 function makeRegistry(overrides: any = {}) {
-    const configs = overrides.configs ?? [{ kind: "path", name: "path" }];
-    const orderNames = overrides.order ?? configs.map((c: any) => c.name);
+    const infos = overrides.infos ?? [
+        { name: "path", kind: "path", detail: "(default base)" },
+    ];
+    const orderNames = overrides.order ?? infos.map((c: any) => c.name);
     return {
-        list: jest.fn(() => configs),
+        list: jest.fn(() => infos),
         order: jest.fn(() =>
             orderNames.map((name: string) => ({ name, kind: "path" })),
         ),
         setOrder: jest.fn(),
-        add: jest.fn(),
         remove: jest.fn(),
         get: jest.fn(),
         resolve: jest.fn(),
@@ -246,7 +247,6 @@ describe("@source command handlers", () => {
     const table = getSourceCommandHandlers();
     const list = table.commands.list as any;
     const order = table.commands.order as any;
-    const add = (table.commands.add as any).commands;
     const remove = table.commands.remove as any;
 
     it("list reports the order and configured sources", async () => {
@@ -258,13 +258,12 @@ describe("@source command handlers", () => {
 
     it("list renders the order and each source with its position", async () => {
         const registry = makeRegistry({
-            configs: [
-                { kind: "path", name: "path" },
+            infos: [
+                { name: "path", kind: "path", detail: "(default base)" },
                 {
-                    kind: "feed",
                     name: "typeagent",
-                    registry: "https://feed.example.com/",
-                    scopes: [],
+                    kind: "feed",
+                    detail: "https://feed.example.com/",
                 },
             ],
             order: ["path", "typeagent"],
@@ -279,9 +278,9 @@ describe("@source command handlers", () => {
 
     it("order keeps the requested subset first and appends the rest", async () => {
         const registry = makeRegistry({
-            configs: [
-                { kind: "path", name: "path" },
-                { kind: "catalog", name: "builtin", catalog: "<bundled>" },
+            infos: [
+                { name: "path", kind: "path", detail: "(default base)" },
+                { name: "builtin", kind: "catalog", detail: "<bundled>" },
             ],
             order: ["path", "builtin"],
         });
@@ -301,9 +300,9 @@ describe("@source command handlers", () => {
 
     it("order deduplicates repeated source names", async () => {
         const registry = makeRegistry({
-            configs: [
-                { kind: "path", name: "path" },
-                { kind: "catalog", name: "builtin", catalog: "<bundled>" },
+            infos: [
+                { name: "path", kind: "path", detail: "(default base)" },
+                { name: "builtin", kind: "catalog", detail: "<bundled>" },
             ],
             order: ["path", "builtin"],
         });
@@ -315,9 +314,9 @@ describe("@source command handlers", () => {
 
     it("order with no names leaves the configured set intact", async () => {
         const registry = makeRegistry({
-            configs: [
-                { kind: "path", name: "path" },
-                { kind: "catalog", name: "builtin", catalog: "<bundled>" },
+            infos: [
+                { name: "path", kind: "path", detail: "(default base)" },
+                { name: "builtin", kind: "catalog", detail: "<bundled>" },
             ],
             order: ["path", "builtin"],
         });
@@ -325,117 +324,6 @@ describe("@source command handlers", () => {
             args: { names: [] },
         });
         expect(registry.setOrder).toHaveBeenCalledWith(["path", "builtin"]);
-    });
-
-    it("add feed requires a registry url", async () => {
-        const registry = makeRegistry();
-        await expect(
-            add.feed.run(fakeActionContext(sourceContext(registry)), {
-                args: { name: "f" },
-                flags: { registry: undefined, scope: undefined },
-            }),
-        ).rejects.toThrow(/--registry/);
-        expect(registry.add).not.toHaveBeenCalled();
-    });
-
-    it("add feed rejects a non-https url", async () => {
-        const registry = makeRegistry();
-        await expect(
-            add.feed.run(fakeActionContext(sourceContext(registry)), {
-                args: { name: "f" },
-                flags: {
-                    registry: "http://example.com/feed",
-                    scope: undefined,
-                },
-            }),
-        ).rejects.toThrow(/https/);
-    });
-
-    it("add feed registers a well-formed feed source", async () => {
-        const registry = makeRegistry();
-        await add.feed.run(fakeActionContext(sourceContext(registry)), {
-            args: { name: "f" },
-            flags: {
-                registry: "https://pkgs.example.com/feed/",
-                scope: ["@scope"],
-            },
-        });
-        expect(registry.add).toHaveBeenCalledWith({
-            kind: "feed",
-            name: "f",
-            registry: "https://pkgs.example.com/feed/",
-            scopes: ["@scope"],
-        });
-    });
-
-    it("add path registers a path source with an optional baseDir", async () => {
-        const registry = makeRegistry();
-        await add.path.run(fakeActionContext(sourceContext(registry)), {
-            args: { name: "local" },
-            flags: { baseDir: "/agents" },
-        });
-        expect(registry.add).toHaveBeenCalledWith({
-            kind: "path",
-            name: "local",
-            baseDir: "/agents",
-        });
-    });
-
-    it("add catalog requires a catalog path", async () => {
-        const registry = makeRegistry();
-        await expect(
-            add.catalog.run(fakeActionContext(sourceContext(registry)), {
-                args: { name: "c" },
-                flags: { catalog: undefined },
-            }),
-        ).rejects.toThrow(/--catalog/);
-        expect(registry.add).not.toHaveBeenCalled();
-    });
-
-    it("add catalog registers a source for a readable JSON file", async () => {
-        const registry = makeRegistry();
-        const file = path.join(
-            fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-")),
-            "catalog.json",
-        );
-        fs.writeFileSync(file, JSON.stringify({ agents: {} }));
-        await add.catalog.run(fakeActionContext(sourceContext(registry)), {
-            args: { name: "c" },
-            flags: { catalog: file },
-        });
-        expect(registry.add).toHaveBeenCalledWith({
-            kind: "catalog",
-            name: "c",
-            catalog: file,
-        });
-    });
-
-    it("add catalog reports an inaccessible file distinctly from bad JSON", async () => {
-        const registry = makeRegistry();
-        const missing = path.join(os.tmpdir(), "ta-no-such-catalog-xyz.json");
-        await expect(
-            add.catalog.run(fakeActionContext(sourceContext(registry)), {
-                args: { name: "c" },
-                flags: { catalog: missing },
-            }),
-        ).rejects.toThrow(/not accessible/);
-        expect(registry.add).not.toHaveBeenCalled();
-    });
-
-    it("add catalog rejects a file that is not valid JSON", async () => {
-        const registry = makeRegistry();
-        const file = path.join(
-            fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-")),
-            "catalog.json",
-        );
-        fs.writeFileSync(file, "{ not json");
-        await expect(
-            add.catalog.run(fakeActionContext(sourceContext(registry)), {
-                args: { name: "c" },
-                flags: { catalog: file },
-            }),
-        ).rejects.toThrow(/not valid JSON/);
-        expect(registry.add).not.toHaveBeenCalled();
     });
 
     it("remove warns and aborts when a source is still referenced", async () => {
