@@ -222,24 +222,11 @@ In the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli), i
 
 The `Echo` agent should be in the list and enabled.
 
-`@install` resolves the agent against the configured **install sources** in priority
-order. To install from a specific source, pass `--source <name>`; to see which source a
-`ref` would resolve to without installing, pass `--where`:
-
-```
-@install echo <path to echo package> --source path
-@install echo echo-agent --where
-```
-
-Manage the sources and their order with the `@source` group, and refresh an installed
-agent against its recorded source with `@update`:
-
-```
-@source list                       # show sources and the resolution order
-@source add path local --baseDir <dir>
-@source order local builtin        # set a priority prefix; the rest is appended
-@update echo                       # re-resolve echo from the source it came from
-```
+> `@install` can resolve an agent from more than one place (a local path, a
+> bundled catalog, or a package feed). You can control which source is used,
+> preview where a `ref` would resolve, refresh an installed agent with
+> `@update`, and manage sources with the `@source` group. See
+> [Agent Install Sources](../reference/install-sources.md) for the full command reference.
 
 ### Step 4: See the `Echo` agent in action
 
