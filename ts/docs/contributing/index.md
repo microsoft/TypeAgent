@@ -22,6 +22,27 @@ appears in the wiki automatically — never copy content into a second place.
 [How the wiki is structured](./wiki-structure.md) explains why, and how DocFX
 assembles these sources into one site.
 
+## Build & preview locally
+
+Before opening a PR, build the site to check your changes. Two steps — stage the
+package docs and regenerate navigation, then run DocFX:
+
+```bash
+# one-time: install DocFX (needs the .NET SDK)
+dotnet tool install -g docfx
+
+# 1. stage package/agent docs + regenerate the generated TOCs
+node ts/docs/scripts/build-wiki.mjs
+
+# 2. build to ts/docs/_site/  (or use --serve for live reload at :8080)
+docfx build ts/docs/docfx.json
+docfx ts/docs/docfx.json --serve
+```
+
+> Always run `node ts/docs/scripts/build-wiki.mjs` **before** `docfx build` — a
+> fresh checkout has no staged package docs or generated `toc.yml` files until it
+> runs. See [Build the wiki locally](./build-locally.md) for details.
+
 ## Common tasks
 
 - **[Add or edit a page](./add-a-page.md)** — the general workflow, including how
