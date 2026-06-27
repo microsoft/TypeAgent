@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 - name: Contributing
   href: index.md
 - name: How the wiki is structured

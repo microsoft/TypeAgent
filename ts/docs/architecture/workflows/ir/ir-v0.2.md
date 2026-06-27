@@ -491,8 +491,8 @@ conversion, use `math.floor`, `math.round`, or `math.ceil`.
 The [future/](../../../design/workflowSystem/ir/future) directory contains sketches for future IR
 extensions. Their status relative to v0.2:
 
-| Sketch                                            | v0.2 status                                                                                                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sketch                                              | v0.2 status                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [foreach.md](./future/foreach.md)                   | Superseded by `forkMap` for the parallel case. Sequential foreach remains a separate post-v0.2 concern (the `map` DSL built-in lowers to v0.1 `loop`). |
 | [block-scope.md](./future/block-scope.md)           | Independent of v0.2. Still planned for the future.                                                                                                     |
 | [edge-scoped-bind.md](./future/edge-scoped-bind.md) | Independent of v0.2. Still planned for the future.                                                                                                     |

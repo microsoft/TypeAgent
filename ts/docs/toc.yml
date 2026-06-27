@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 - name: Overview
   href: overview/toc.yml
   topicHref: index.md
