@@ -68,3 +68,58 @@
   masking a packaging defect in the shipped catalog would hide real bugs, so the bundled
   path stays fail-fast (raised in M1 gate review round 2).
 - **Design updated?** no (robustness detail consistent with the design)
+
+### 2026-06-27 — Multi-root module resolution via a combine facade over one provider per root
+- **Milestone / item:** M2 / 2.1
+- **Type:** Unspecified
+- **Design ref:** §4.1, §6, Q20
+- **Decision:** `createInstalledAppAgentProvider` groups records by their resolved module
+  root (the install dir vs. the app bundle), builds one `createNpmAppAgentProvider` per
+  group, and presents them through `combineAppAgentProviders` — a small facade that routes
+  `getAppAgentManifest`/`loadAppAgent`/`unloadAppAgent` by agent name (pre-built
+  `owners` map for O(1) routing), unions `getAppAgentNames`, and broadcasts
+  `setTraceNamespaces`. Path records always resolve against the app bundle (their path is
+  absolute); module records probe each root via `createRequire(root).resolve(...)`.
+- **Rationale:** A single `createRequire` root cannot resolve modules installed under a
+  separate install dir *and* modules bundled with the app. The design's "single installed
+  provider" intent is preserved because the facade exposes exactly one `AppAgentProvider`
+  to the dispatcher; the multi-root split is an internal detail (Q20).
+- **Design updated?** no (resolution detail consistent with §4.1/§6)
+
+### 2026-06-27 — Legacy migration skips names already seeded by a builtin
+- **Milestone / item:** M2 / 2.3
+- **Type:** Unspecified
+- **Design ref:** §4.1, §8 (legacy `externalAgentsConfig.json` migration)
+- **Decision:** `migrateLegacyExternalAgents` migrates only legacy `path` entries (source
+  `"path"`, resolved against the instance dir), drops module-only/feed legacy entries, and
+  **skips any name already present in the seeded records** (collision guard added in gate
+  review round 1). The old file is renamed to `.migrated`.
+- **Rationale:** A legacy path entry must not silently shadow a builtin catalog agent of
+  the same name on first-run seeding. Dropping module/feed legacy entries is safe because
+  those are re-resolved from the (now authoritative) install sources. (Gate review r1.)
+- **Design updated?** no (migration robustness detail)
+
+### 2026-06-27 — `getProviderConfig` keeps its first-config singleton cache
+- **Milestone / item:** M2 / 2.4
+- **Type:** Unspecified
+- **Design ref:** §7
+- **Decision:** `getProviderConfig(configName?)` retains its existing singleton cache (it
+  loads the first `configName` seen and ignores later names). Reviewed in gate round 2 and
+  left unchanged.
+- **Rationale:** TypeAgent runs one config per process. No-arg callers (mcp, constructions,
+  indexing) are meant to read the active named config. Switching to a per-name `Map` would
+  regress named-config processes by letting an unrelated no-arg call pin the default config.
+  Documented as a known constraint rather than changed.
+- **Design updated?** no (known constraint; see DEFERRED_REVIEW_LOG)
+
+### 2026-06-27 — Indexing service registry resolves builtins only
+- **Milestone / item:** M2 / 2.4
+- **Type:** Unspecified
+- **Design ref:** §7
+- **Decision:** `getIndexingServiceRegistry` continues to resolve agents from the config's
+  `agents` map (builtins). Feed/path-installed agents are absent there and are warn-skipped
+  rather than resolved.
+- **Rationale:** Indexing services are a property of builtin agents only; the `config.json`
+  `agents` map is the authoritative builtin list until M4 cleanup. Pre-existing behavior,
+  clarified with a comment (gate review r2).
+- **Design updated?** no (intentional; revisit in M4)

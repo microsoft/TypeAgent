@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import { InstallSourceRegistry } from "./installSource.js";
 
 export interface AppAgentProvider {
     getAppAgentNames(): string[];
@@ -22,16 +23,20 @@ export interface AppAgentProvider {
 }
 
 export interface AppAgentInstaller {
+    // Install `ref`. With no sourceName, the registry walks the configured
+    // resolution order (design §4.1) and the first matching source wins; an
+    // explicit sourceName bypasses the order. Returns a freshly built provider
+    // for the just-installed agent so the dispatcher can register it into the
+    // live session without a restart (design §4.6).
     install(
         name: string,
-        moduleName: string,
-        packagePath: string,
-    ): AppAgentProvider;
-    // Install from an npm specifier (e.g. "@scope/agent@1.2.3"), resolving the
-    // package from the configured feed. Optional: providers that only support
-    // path-based install omit it.
-    installNpm?(name: string, spec: string): Promise<AppAgentProvider>;
-    uninstall(name: string): void;
+        ref: string,
+        sourceName?: string,
+    ): Promise<AppAgentProvider>;
+    uninstall(name: string): Promise<void>;
+    // Host-owned registry powering @source (design §4.5); absent -> @source
+    // unavailable.
+    sources?(): InstallSourceRegistry;
 }
 
 export interface ConstructionProvider {

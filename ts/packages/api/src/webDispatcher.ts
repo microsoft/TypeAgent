@@ -16,6 +16,7 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
+    getDefaultAppAgentInstaller,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -50,6 +51,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
+        agentInstaller: getDefaultAppAgentInstaller(instanceDir),
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),

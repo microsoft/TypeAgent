@@ -3,23 +3,15 @@
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import fs from "node:fs";
 import {
     CommandHandlerContext,
     installAppProvider,
 } from "../../commandHandlerContext.js";
-import path from "node:path";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { expandHome } from "../../../utils/fsUtils.js";
 
-// Heuristic: an npm specifier like "@scope/name@1.2.3" or "name@^1", but not a
-// filesystem path (those are handled by existence check before this is called).
-function isNpmSpecifier(s: string): boolean {
-    if (s.includes("\\") || s.includes(":") || /^[.~/]/.test(s)) {
-        return false;
-    }
-    return /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(@[^/\\]+)?$/i.test(s);
-}
+// A legal dispatcher agent identifier (matches existing agent names such as
+// "github-cli", "osNotifications").
+const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 export class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
@@ -29,10 +21,26 @@ export class InstallCommandHandler implements CommandHandler {
                 description: "Name of the agent",
                 type: "string",
             },
-            agent: {
+            ref: {
                 description:
-                    "Path of an agent package directory/tar file, or an npm specifier (e.g. @scope/agent@1.2.3) to install from the feed",
+                    "Reference to install: a filesystem path, a catalog short name, or a feed specifier. Interpreted by the matching source in the configured order.",
                 type: "string",
+            },
+        },
+        flags: {
+            source: {
+                description:
+                    "Resolve only against this named source, bypassing the order.",
+                char: "s",
+                type: "string",
+                optional: true,
+            },
+            where: {
+                description:
+                    "Dry run: report which source would resolve the ref without installing.",
+                char: "w",
+                type: "boolean",
+                default: false,
             },
         },
     } as const;
@@ -45,41 +53,48 @@ export class InstallCommandHandler implements CommandHandler {
         if (installer === undefined) {
             throw new Error("Agent installer not available");
         }
-        const { args } = params;
-        const { name, agent } = args;
-        const fullPath = path.resolve(expandHome(agent));
-        if (!fs.existsSync(fullPath)) {
-            // Not an on-disk path — try it as an npm specifier from the feed.
-            if (!isNpmSpecifier(agent)) {
-                throw new Error(
-                    `Agent path '${fullPath}' does not exist and '${agent}' is not a valid npm specifier`,
-                );
+        const { args, flags } = params;
+        const { name, ref } = args;
+        const sourceName = flags.source ?? undefined;
+
+        // --where: report which source would win without installing (§5).
+        if (flags.where) {
+            const registry = installer.sources?.();
+            if (registry === undefined) {
+                throw new Error("Install sources are not available");
             }
-            if (installer.installNpm === undefined) {
-                throw new Error(
-                    "Installing from an npm specifier is not supported by this installer",
+            const candidate = await registry.where(ref);
+            if (candidate === undefined) {
+                const order = registry
+                    .order()
+                    .map((s) => s.name)
+                    .join(", ");
+                displayResult(
+                    `No source would resolve '${ref}'. Order: [${order}]`,
+                    context,
                 );
+                return;
             }
-            const provider = await installer.installNpm(name, agent);
-            await installAppProvider(systemContext, provider);
+            const handle = candidate.path ?? candidate.module ?? ref;
             displayResult(
-                `Agent '${name}' installed from '${agent}'.`,
+                `'${ref}' would resolve via source '${candidate.source}' (${handle}).`,
                 context,
             );
             return;
         }
-        const packageJsonPath = path.join(fullPath, "package.json");
-        if (!fs.existsSync(packageJsonPath)) {
+
+        // Name validation runs BEFORE materialize so a bad or colliding name
+        // fails fast without touching disk or the feed (design §5, §12 Q18).
+        if (!AGENT_NAME_RE.test(name)) {
             throw new Error(
-                `Agent path '${fullPath}' is not a NPM package. Missing 'package.json'`,
+                `'${name}' is not a legal agent name (letters, digits, '-' and '_'; must start with a letter).`,
             );
         }
+        if (systemContext.agents.isAppAgentName(name)) {
+            throw new Error(`Agent '${name}' already exists`);
+        }
 
-        const moduleName = JSON.parse(
-            fs.readFileSync(packageJsonPath, "utf8"),
-        ).name;
-
-        const provider = installer.install(name, moduleName, fullPath);
+        const provider = await installer.install(name, ref, sourceName);
         await installAppProvider(systemContext, provider);
         displayResult(`Agent '${name}' installed.`, context);
     }
@@ -106,7 +121,7 @@ export class UninstallCommandHandler implements CommandHandler {
         }
 
         const name = params.args.name;
-        installer.uninstall(name);
+        await installer.uninstall(name);
 
         await systemContext.agents.removeAgent(
             name,

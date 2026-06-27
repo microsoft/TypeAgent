@@ -13,6 +13,7 @@ import {
 } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
+    getDefaultAppAgentInstaller,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
@@ -166,6 +167,7 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
+                agentInstaller: getDefaultAppAgentInstaller(instanceDir),
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
