@@ -9,7 +9,7 @@ TypeAgent Dispatcher is the core component of the TypeAgent repo that explores h
 
 Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the application agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
 
-See [dispatcher architecture](../../../docs/content/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
+See [dispatcher architecture](../../../docs/content/architecture/core/dispatcher.md) doc for more details on the design of the dispatcher component.
 
 ## Usage - Natural Language Requests
 
@@ -252,9 +252,9 @@ The trash icon on a message bubble routes through a separate persistence path. T
 
 When two or more agents can plausibly handle the same user input, the dispatcher needs a policy for picking a winner. The default ("first-match") preserves legacy behavior — silently take the first validated match — but the dispatcher also supports detecting collisions across four points and applying one of four configurable resolution strategies. This subsystem is **off by default**; opt in per detection point via session config.
 
-> **Soft-rollout plan:** see [`collision-rollout.md`](../../../docs/architecture/collision-rollout.md) for the staged experiment plan (observability first, then strategy A/B), tester opt-in protocol, telemetry pipeline, and Cosmos query reference. That document is the canonical record for any experiment touching this subsystem — update it as experiments run.
+> **Soft-rollout plan:** see [`collision-rollout.md`](../../../docs/architecture/collision/collision-rollout.md) for the staged experiment plan (observability first, then strategy A/B), tester opt-in protocol, telemetry pipeline, and Cosmos query reference. That document is the canonical record for any experiment touching this subsystem — update it as experiments run.
 >
-> **Analysis tooling:** see [`collision-analysis.md`](../../../docs/architecture/collision-analysis.md) for the user guide to the data + analysis surface — `@collision similar` / `@collision probe` / `@collision corpus *` / `@collision neighborhoods preview`, the three interactive HTML visualizations, and the operational scripts that exercise them.
+> **Analysis tooling:** see [`collision-analysis.md`](../../../docs/architecture/collision/collision-analysis.md) for the user guide to the data + analysis surface — `@collision similar` / `@collision probe` / `@collision corpus *` / `@collision neighborhoods preview`, the three interactive HTML visualizations, and the operational scripts that exercise them.
 
 ### Detection points
 

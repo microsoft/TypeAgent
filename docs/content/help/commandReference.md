@@ -423,7 +423,7 @@ Usage: `@config log db off`
 
 Usage: `@config collision`
 
-Default subcommand renders a status table showing each detection point's `detect` toggle, current strategy, calibration knobs (classifier / topN / threshold / scorer), the priority order, multipleActionBehavior, and telemetry settings. The system ships off by default; opt in per-point during a soft-rollout experiment ([`collision-rollout.md`](../../../ts/docs/architecture/collision-rollout.md) is the playbook).
+Default subcommand renders a status table showing each detection point's `detect` toggle, current strategy, calibration knobs (classifier / topN / threshold / scorer), the priority order, multipleActionBehavior, and telemetry settings. The system ships off by default; opt in per-point during a soft-rollout experiment ([`collision-rollout.md`](../../../ts/docs/architecture/collision/collision-rollout.md) is the playbook).
 
 ## @config collision &lt;point&gt; detect on|off - Toggle a detection point
 

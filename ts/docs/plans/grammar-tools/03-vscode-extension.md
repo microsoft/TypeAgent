@@ -12,7 +12,7 @@ mutually independent and individually deliverable.
 ## TL;DR
 
 Promote
-[`extensions/agr-language`](../../../extensions/agr-language) from a
+[`extensions/agr-language`](https://github.com/microsoft/TypeAgent/tree/main/ts/extensions/agr-language) from a
 syntax-only extension to a full LSP client + webview debug panel host,
 backed by `grammar-tools-core`. Coverage and diff surfaces ship
 incrementally as B.3 / B.4 land.
@@ -62,6 +62,6 @@ Grouped by PLAN Track C item.
 ## Verification
 
 - Manual E2E checklist on
-  [`extensions/agr-language/sample.agr`](../../../extensions/agr-language/sample.agr)
+  [`extensions/agr-language/sample.agr`](https://github.com/microsoft/TypeAgent/blob/main/ts/extensions/agr-language/sample.agr)
   and on a real agent grammar (e.g. `player`).
 - Snapshot tests for LSP responses against fixture grammars.

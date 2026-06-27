@@ -1991,7 +1991,7 @@ export class AgentServerBridge {
     }
 
     // manage-conversation handler — routed from NL and `@conversation` slash
-    // commands. See ts/docs/architecture/agentServerConversations.md.
+    // commands. See ts/docs/architecture/agents/agentServerConversations.md.
     private async handleManageConversation(
         requestId: any,
         payload: any,

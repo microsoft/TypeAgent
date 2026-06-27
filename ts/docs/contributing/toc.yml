@@ -1,0 +1,24 @@
+- name: Contributing
+  href: index.md
+- name: How the wiki is structured
+  href: wiki-structure.md
+- name: Add or edit a page
+  href: add-a-page.md
+- name: Add a package
+  href: add-a-package.md
+- name: Add an agent
+  href: add-an-agent.md
+- name: The doc-autogen pipeline
+  href: doc-autogen.md
+- name: Style guide
+  href: style-guide.md
+- name: Build the wiki locally
+  href: build-locally.md
+- name: Templates
+  items:
+    - name: Package page
+      href: ../templates/package-page.md
+    - name: Agent page
+      href: ../templates/agent-page.md
+    - name: Architecture doc
+      href: ../templates/architecture-doc.md

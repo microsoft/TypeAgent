@@ -1,0 +1,10 @@
+- name: Overview
+  href: index.md
+- name: What is TypeAgent?
+  href: what-is-typeagent.md
+- name: Design principles
+  href: principles.md
+- name: Getting started
+  href: getting-started.md
+- name: Glossary
+  href: glossary.md

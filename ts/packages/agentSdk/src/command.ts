@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
-// getCommandCompletion): docs/architecture/completion.md — §3 Agent SDK
+// getCommandCompletion): docs/architecture/core/completion.md — §3 Agent SDK
 
 import { ActionResult } from "./action.js";
 import { ActionContext, SessionContext } from "./agentInterface.js";
@@ -59,7 +59,7 @@ export type CommandDescriptors =
 //
 // String-literal union types that flow through the completion pipeline
 // (grammar → cache → dispatcher → shell).  Each describes one axis of
-// the completion result.  See docs/architecture/completion.md for full
+// the completion result.  See docs/architecture/core/completion.md for full
 // semantics and merge rules.
 //
 // AfterWildcard and SeparatorMode are intentionally duplicated in

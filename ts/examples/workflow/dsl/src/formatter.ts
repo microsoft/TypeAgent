@@ -6,7 +6,7 @@
  *
  * Round-trips a parsed `WorkflowDecl` back to canonical DSL text. Preserves
  * `leadingComments` attached to AST nodes (see "Comments not preserved in
- * AST" in docs/design/workflowSystem/dsl/dsl-v0.1-gap.md and dsl-v0.1.md
+ * AST" in docs/architecture/workflows/dsl/dsl-v0.1-gap.md and dsl-v0.1.md
  * section 6).
  *
  * Goals:

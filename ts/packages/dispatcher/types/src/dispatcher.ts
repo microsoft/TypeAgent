@@ -89,7 +89,7 @@ export type CommandResult = {
     actionTokenUsage?: CompletionUsageStats;
 };
 
-// Architecture: docs/architecture/completion.md — Data flow / Key types
+// Architecture: docs/architecture/core/completion.md — Data flow / Key types
 export type CommandCompletionResult = {
     // Index into the input where the resolved prefix ends and the
     // filter/completion region begins.  input[0..startIndex) is fully
@@ -208,7 +208,7 @@ export interface Dispatcher {
      *   `entry.completion`.
      *
      * The drain loop, fan-out, and cancellation semantics are described in
-     * `docs/architecture/messageQueueing.md`.
+     * `docs/architecture/core/messageQueueing.md`.
      *
      * @param command user request to process. Requests that start with '@' are direct commands, otherwise treated as natural language.
      * @param attachments encoded image attachments forwarded to the inner dispatcher.

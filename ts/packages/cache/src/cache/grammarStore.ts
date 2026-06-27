@@ -275,7 +275,7 @@ export class GrammarStoreImpl implements GrammarStore {
         return sortMatches(matches);
     }
 
-    // Architecture: docs/architecture/completion.md — §2 Cache Layer
+    // Architecture: docs/architecture/core/completion.md — §2 Cache Layer
     public completion(
         input: string,
         options?: MatchOptions,

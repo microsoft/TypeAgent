@@ -2031,7 +2031,7 @@ class ConfigModelProviderCommandHandler implements CommandHandler {
 // `@config collision …` — runtime config surface for action-collision detection.
 //
 // Why this exists: the collision detection subsystem ships off-by-default,
-// and the soft-rollout plan (`docs/architecture/collision-rollout.md`)
+// and the soft-rollout plan (`docs/architecture/collision/collision-rollout.md`)
 // requires testers to opt in per detection point without hand-editing the
 // session JSON.  This handler is the M1 milestone: the shell-level toggle
 // that drives every Phase 1/2 experiment.  All flips route through
