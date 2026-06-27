@@ -301,6 +301,45 @@ export type StudioReplayMethod =
     | "schema-grammar"
     | "construction-cache";
 
+/**
+ * The deterministic fidelity layers a replay side can exercise, mirroring the
+ * dispatcher's path: grammar match → schema enrichment → construction cache →
+ * wildcard validation → full dispatch. The Impact Report surfaces a per-side
+ * matrix of these so the run is honest about exactly what it ran (and what
+ * building from a ref would add) instead of over-claiming fidelity.
+ */
+export type FidelityLayer =
+    | "grammar"
+    | "schemaEnrichment"
+    | "constructionCache"
+    | "wildcardValidation"
+    | "dispatch";
+
+export type FidelityLayerStatus = "ran" | "skipped" | "unavailable";
+
+export interface FidelityLayerReport {
+    status: FidelityLayerStatus;
+    /** Short human reason (shown as hover detail). */
+    reason: string;
+}
+
+/**
+ * How fully a side's version was realized: `built-live` (the working tree — real
+ * compiled agent code) or `source` (only grammar/schema text materialized at a
+ * git ref via `git show`; no build, so live-only layers can't run).
+ */
+export type FidelityRealization = "built-live" | "source";
+
+export interface FidelityReport {
+    realization: FidelityRealization;
+    layers: Record<FidelityLayer, FidelityLayerReport>;
+}
+
+export interface SideFidelity {
+    A: FidelityReport;
+    B: FidelityReport;
+}
+
 export interface StudioReplayResult {
     runId: string;
     summary: ReplaySummary;
@@ -323,7 +362,13 @@ export interface StudioReplayResult {
      */
     wildcardValidation?: StudioWildcardValidationInfo;
     /**
-     * Set when a version failed to materialize or compile. The run is aborted
+     * Per-side fidelity descriptor: how each version was realized and which
+     * deterministic layers actually ran. Derived purely from signals the replay
+     * already computed (per-side method, mode, version kind, the L4a validation
+     * pass) so the Impact Report can show an honest "what ran" matrix.
+     */
+    sideFidelity: SideFidelity;
+    /**
      * with an empty summary rather than emitting fabricated regression rows.
      */
     error?: ReplayRunError;
@@ -339,6 +384,194 @@ export interface StudioReplayResult {
 export interface StudioWildcardValidationInfo {
     applied: boolean;
     diagnostics: WildcardValidationDiagnostic[];
+}
+
+const FIDELITY_DISPATCH_REASON =
+    "Full dispatcher path (LLM translation + action handlers) is not run — replay is deterministic grammar/cache matching only.";
+
+export interface DeriveSideFidelityInput {
+    versionA: VersionSpec;
+    versionB: VersionSpec;
+    methodA: StudioReplayMethod;
+    methodB: StudioReplayMethod;
+    mode: StudioReplayMode;
+    validateWildcards: boolean;
+    wildcardValidation?: StudioWildcardValidationInfo;
+}
+
+/**
+ * Derive the per-side {@link SideFidelity} from signals the replay already
+ * produced. Pure and deterministic so it is unit-testable and reusable by any
+ * client. Wildcard validation only ever runs on the working-tree side, so the
+ * single `wildcardValidation` info (when present) is interpreted per side.
+ */
+export function deriveSideFidelity(
+    input: DeriveSideFidelityInput,
+): SideFidelity {
+    return {
+        A: deriveFidelityReport(
+            input.versionA,
+            input.methodA,
+            input.mode,
+            input.validateWildcards,
+            input.wildcardValidation,
+        ),
+        B: deriveFidelityReport(
+            input.versionB,
+            input.methodB,
+            input.mode,
+            input.validateWildcards,
+            input.wildcardValidation,
+        ),
+    };
+}
+
+function deriveFidelityReport(
+    version: VersionSpec,
+    method: StudioReplayMethod,
+    mode: StudioReplayMode,
+    validateWildcards: boolean,
+    wildcardValidation: StudioWildcardValidationInfo | undefined,
+): FidelityReport {
+    const isWorkingTree = version.kind === "workingTree";
+    return {
+        realization: isWorkingTree ? "built-live" : "source",
+        layers: {
+            grammar: fidelityGrammarLayer(method),
+            schemaEnrichment: fidelitySchemaEnrichmentLayer(method),
+            constructionCache: fidelityConstructionCacheLayer(
+                method,
+                isWorkingTree,
+                mode,
+            ),
+            wildcardValidation: fidelityWildcardValidationLayer(
+                isWorkingTree,
+                validateWildcards,
+                wildcardValidation,
+            ),
+            dispatch: {
+                status: "unavailable",
+                reason: FIDELITY_DISPATCH_REASON,
+            },
+        },
+    };
+}
+
+function fidelityGrammarLayer(method: StudioReplayMethod): FidelityLayerReport {
+    if (method === "identity") {
+        return {
+            status: "skipped",
+            reason: "Identity baseline — surfaces each entry's captured action without evaluating a grammar.",
+        };
+    }
+    return {
+        status: "ran",
+        reason: "Utterances matched through the real grammar store (NFA + sortMatches), the same engine the dispatcher uses.",
+    };
+}
+
+function fidelitySchemaEnrichmentLayer(
+    method: StudioReplayMethod,
+): FidelityLayerReport {
+    if (method === "schema-grammar" || method === "construction-cache") {
+        return {
+            status: "ran",
+            reason: "Grammar enriched with checked_wildcard metadata from the agent's action schema before compilation.",
+        };
+    }
+    if (method === "static-grammar") {
+        return {
+            status: "skipped",
+            reason: "Agent action-schema not discoverable at this version — matched the bare grammar (still indicative).",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Identity baseline — no grammar evaluated.",
+    };
+}
+
+function fidelityConstructionCacheLayer(
+    method: StudioReplayMethod,
+    isWorkingTree: boolean,
+    mode: StudioReplayMode,
+): FidelityLayerReport {
+    if (method === "construction-cache") {
+        return {
+            status: "ran",
+            reason: "Consulted the agent's live construction cache (the dispatcher's first check), hash-gated to the current schema.",
+        };
+    }
+    if (!isWorkingTree) {
+        return {
+            status: "unavailable",
+            reason: "Construction caches are runtime artifacts, never committed — they cannot be read at a git ref.",
+        };
+    }
+    if (mode === "completionBased-cache") {
+        return {
+            status: "skipped",
+            reason: "No live cache was discovered, or it was stale versus the current schema → grammar fallback.",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Grammar mode — the construction cache is intentionally not consulted (keeps matches A/B-symmetric).",
+    };
+}
+
+function fidelityWildcardValidationLayer(
+    isWorkingTree: boolean,
+    validateWildcards: boolean,
+    wildcardValidation: StudioWildcardValidationInfo | undefined,
+): FidelityLayerReport {
+    if (!isWorkingTree) {
+        return {
+            status: "unavailable",
+            reason: "The agent's validator code isn't built at a git ref — validation runs on the working-tree side only.",
+        };
+    }
+    if (!validateWildcards) {
+        return {
+            status: "skipped",
+            reason: "Validate toggle is off.",
+        };
+    }
+    if (wildcardValidation?.applied === true) {
+        const diagnostics = wildcardValidation.diagnostics;
+        if (diagnostics.includes("load-failed")) {
+            return {
+                status: "unavailable",
+                reason: "Agent module couldn't be loaded (e.g. a packaged build ships no agent code) — matches fell back to the grammar.",
+            };
+        }
+        if (diagnostics.includes("agent-not-in-allowlist")) {
+            return {
+                status: "skipped",
+                reason: "Agent isn't in the validation allowlist — its validator wasn't run.",
+            };
+        }
+        if (diagnostics.includes("no-validator")) {
+            return {
+                status: "skipped",
+                reason: "Agent exposes no validateWildcardMatch — validation made no change.",
+            };
+        }
+        if (diagnostics.includes("errored")) {
+            return {
+                status: "ran",
+                reason: "Validator threw on a match; the match was kept fail-open so the run stayed grammar-faithful.",
+            };
+        }
+        return {
+            status: "ran",
+            reason: "Ran the agent's real validateWildcardMatch over its wildcard matches; rejected matches were dropped.",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Validation enabled but did not run — no wildcard match occurred, or the agent isn't validatable.",
+    };
 }
 
 export interface StudioCollisionScanRequest {
@@ -656,6 +889,8 @@ function abortedReplayResult(
     options: Parameters<typeof replayCorpus>[0],
     error: ReplayRunError,
     method: StudioReplayMethod = "static-grammar",
+    mode: StudioReplayMode = "nfa-grammar",
+    validateWildcards = false,
 ): StudioReplayResult {
     const runId = `replay-error-${Date.now().toString(36)}`;
     return {
@@ -667,6 +902,14 @@ function abortedReplayResult(
         method,
         methodA: method,
         methodB: method,
+        sideFidelity: deriveSideFidelity({
+            versionA: options.versionA,
+            versionB: options.versionB,
+            methodA: method,
+            methodB: method,
+            mode,
+            validateWildcards,
+        }),
         summary: {
             runId,
             agent: options.agent,
@@ -1194,6 +1437,8 @@ export function createStudioRuntimeCore(
                                     message: err.message,
                                 },
                                 labelFor(),
+                                mode,
+                                request.validateWildcards === true,
                             );
                         }
                         throw err;
@@ -1235,6 +1480,17 @@ export function createStudioRuntimeCore(
                 method,
                 methodA,
                 methodB,
+                sideFidelity: deriveSideFidelity({
+                    versionA: replayOptions.versionA,
+                    versionB: replayOptions.versionB,
+                    methodA,
+                    methodB,
+                    mode,
+                    validateWildcards: request.validateWildcards === true,
+                    ...(wildcardValidation !== undefined
+                        ? { wildcardValidation }
+                        : {}),
+                }),
                 ...(wildcardValidation !== undefined
                     ? { wildcardValidation }
                     : {}),

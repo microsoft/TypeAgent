@@ -15,7 +15,12 @@ import type {
     ReplayCacheState,
     VersionSpec,
 } from "@typeagent/core/replay";
-import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type {
+    SideFidelity,
+    FidelityLayer,
+    FidelityLayerStatus,
+    StudioReplayResult,
+} from "@typeagent/core/runtime";
 import {
     classifyReplayRow,
     type ReplayRowStatus,
@@ -294,6 +299,92 @@ const METHOD_LABEL: Record<StudioReplayMethod, string> = {
  *  Used as hover detail rather than a visible column. */
 export function toSideMethodLabel(method: StudioReplayMethod): string {
     return METHOD_LABEL[method];
+}
+
+/** One cell of the fidelity matrix: a layer's status on one side plus the
+ *  reason to show on hover. */
+export interface FidelityCell {
+    status: FidelityLayerStatus;
+    reason: string;
+}
+
+/** One row of the fidelity matrix: a deterministic layer and its A/B status. */
+export interface FidelityMatrixRow {
+    /** Display label for the layer, e.g. "Construction cache". */
+    layer: string;
+    a: FidelityCell;
+    b: FidelityCell;
+}
+
+/** Render-ready per-side fidelity matrix for the Impact Report. */
+export interface FidelityMatrixView {
+    /** How side A was realized, e.g. "built (live)". */
+    realizationA: string;
+    /** How side B was realized, e.g. "source (git ref)". */
+    realizationB: string;
+    rows: FidelityMatrixRow[];
+    /** A "build-from-ref would add X" hint shown when a side is source-only. */
+    preflight?: string;
+}
+
+const FIDELITY_LAYER_ORDER: { key: FidelityLayer; label: string }[] = [
+    { key: "grammar", label: "Grammar match" },
+    { key: "schemaEnrichment", label: "Schema enrichment" },
+    { key: "constructionCache", label: "Construction cache" },
+    { key: "wildcardValidation", label: "Wildcard validation" },
+    { key: "dispatch", label: "Full dispatch" },
+];
+
+const FIDELITY_REALIZATION_LABEL: Record<
+    SideFidelity["A"]["realization"],
+    string
+> = {
+    "built-live": "built (live)",
+    source: "source (git ref)",
+};
+
+/**
+ * Map the core {@link SideFidelity} descriptor into a render-ready matrix:
+ * one row per deterministic layer with each side's status + reason, plus a
+ * preflight hint when a side only materialized source at a git ref (so a build
+ * -from-ref pass would unlock the live-only layers). Pure + browser-neutral.
+ */
+export function toFidelityMatrix(
+    sideFidelity: SideFidelity | undefined,
+): FidelityMatrixView | undefined {
+    if (!sideFidelity) {
+        return undefined;
+    }
+    const rows: FidelityMatrixRow[] = FIDELITY_LAYER_ORDER.map(
+        ({ key, label }) => ({
+            layer: label,
+            a: toFidelityCell(sideFidelity.A.layers[key]),
+            b: toFidelityCell(sideFidelity.B.layers[key]),
+        }),
+    );
+    const sources: string[] = [];
+    if (sideFidelity.A.realization === "source") {
+        sources.push("A");
+    }
+    if (sideFidelity.B.realization === "source") {
+        sources.push("B");
+    }
+    const view: FidelityMatrixView = {
+        realizationA: FIDELITY_REALIZATION_LABEL[sideFidelity.A.realization],
+        realizationB: FIDELITY_REALIZATION_LABEL[sideFidelity.B.realization],
+        rows,
+    };
+    if (sources.length > 0) {
+        const plural = sources.length > 1;
+        view.preflight =
+            `Side ${sources.join(" & ")} ${plural ? "are" : "is"} materialized source read at a git ref. ` +
+            `Building from the ref would let ${plural ? "them" : "it"} run the construction cache and the agent's real wildcard validation — not yet available.`;
+    }
+    return view;
+}
+
+function toFidelityCell(report: FidelityCell): FidelityCell {
+    return { status: report.status, reason: report.reason };
 }
 
 /**

@@ -400,6 +400,100 @@ body {
   flex: 0 0 auto;
 }
 
+/* --- Per-side fidelity matrix -------------------------------------------- */
+.fidelity-panel {
+  margin: 8px 12px 0;
+}
+
+.fidelity-panel[hidden] {
+  display: none;
+}
+
+.fidelity-details {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--ta-radius);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  padding: 0 10px;
+}
+
+.fidelity-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  user-select: none;
+}
+
+.fidelity-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fidelity-grid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 14px;
+  padding: 4px 0 10px;
+  font-size: 12px;
+}
+
+.fidelity-head {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.fidelity-grid .fidelity-head:not(:first-child),
+.fidelity-grid .fidelity-cell {
+  justify-self: center;
+  text-align: center;
+}
+
+.fidelity-layer {
+  color: var(--vscode-foreground);
+}
+
+.fidelity-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.fidelity-cell.is-ran {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #3fb950));
+}
+
+.fidelity-cell.is-skipped {
+  color: var(--vscode-descriptionForeground);
+}
+
+.fidelity-cell.is-unavailable {
+  color: var(
+    --vscode-editorWarning-foreground,
+    var(--vscode-descriptionForeground)
+  );
+}
+
+.fidelity-preflight {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 0 10px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.fidelity-preflight .codicon {
+  flex: 0 0 auto;
+  color: var(--vscode-charts-yellow, var(--vscode-descriptionForeground));
+}
+
 /* --- Scrolling content area ---------------------------------------------- */
 .content {
   flex: 1 1 auto;

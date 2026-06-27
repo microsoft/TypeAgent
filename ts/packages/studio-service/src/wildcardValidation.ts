@@ -15,6 +15,14 @@
  * serve` dev path, and cleanly throws → no-ops in the packaged `.vsix` (which
  * ships without `node_modules`). Wildcard validation is opt-in and fail-open, so
  * when the provider is unavailable replay simply stays grammar-only.
+ *
+ * NOTE: `default-agent-provider` is intentionally NOT a package.json dependency
+ * of this service. `default-agent-provider` aggregates every agent including
+ * `studio-agent`, which depends on this service — declaring the dep here closes
+ * a build cycle (studio-service → default-agent-provider → studio-agent →
+ * studio-service). Because the import is external + dynamic, the dependency is
+ * owned by the bundling host (`typeagent-studio`, a leaf nothing depends on),
+ * whose `node_modules` the external import resolves against at runtime.
  */
 
 import {
@@ -50,8 +58,16 @@ async function loadProviders(): Promise<AppAgentProviderLike[] | undefined> {
     if (providersPromise === undefined) {
         providersPromise = (async () => {
             try {
+                // Indirect the specifier through a variable so TypeScript does
+                // not statically resolve the module: `default-agent-provider` is
+                // deliberately not a build-time dependency of this service (it
+                // would close a studio-service → default-agent-provider →
+                // studio-agent → studio-service build cycle). It is resolved at
+                // runtime from the bundling extension's `node_modules`, and the
+                // result is cast to the local structural type below.
+                const specifier = "default-agent-provider";
                 const mod = (await import(
-                    "default-agent-provider"
+                    specifier
                 )) as DefaultAgentProviderModule;
                 return mod.getDefaultAppAgentProviders(undefined);
             } catch {

@@ -105,6 +105,10 @@ const serviceConfig = {
     // agent, so it must NOT be inlined here. Marked external, it resolves from
     // `node_modules` on the in-repo `typeagent-studio serve` dev path and simply
     // fails the dynamic import (→ grammar-only replay) in the packaged `.vsix`.
+    // The dependency is declared on THIS extension (not studio-service) so it
+    // resolves against the extension's `node_modules` here, and to avoid a build
+    // cycle: studio-service is aggregated by studio-agent, which default-agent
+    // -provider in turn depends on. See studio-service/src/wildcardValidation.ts.
     external: ["vscode", "default-agent-provider"],
     alias: nodeBundleAlias,
     format: "cjs",

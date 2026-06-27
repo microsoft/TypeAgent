@@ -24,8 +24,10 @@ import {
     impactEmptyState,
     allRowsEqual,
     IMPACT_FILTER_ORDER,
+    toFidelityMatrix,
     type ReplayRowStatus,
 } from "../webviewKit/replayViewModel.js";
+import type { SideFidelity } from "@typeagent/core/runtime";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
     return {
@@ -421,4 +423,86 @@ test("impactEmptyState gives first-run guidance", () => {
     assert.ok(state.title.length > 0);
     assert.ok(/base/i.test(state.hint));
     assert.ok(/compare/i.test(state.hint));
+});
+
+function fidelityReport(
+    realization: SideFidelity["A"]["realization"],
+    overrides: Partial<SideFidelity["A"]["layers"]> = {},
+): SideFidelity["A"] {
+    const ran = { status: "ran", reason: "ran reason" } as const;
+    return {
+        realization,
+        layers: {
+            grammar: { ...ran },
+            schemaEnrichment: { ...ran },
+            constructionCache: { ...ran },
+            wildcardValidation: { ...ran },
+            dispatch: { status: "unavailable", reason: "no dispatch" },
+            ...overrides,
+        },
+    };
+}
+
+test("toFidelityMatrix returns undefined when no descriptor", () => {
+    assert.equal(toFidelityMatrix(undefined), undefined);
+});
+
+test("toFidelityMatrix produces one row per layer in order", () => {
+    const view = toFidelityMatrix({
+        A: fidelityReport("built-live"),
+        B: fidelityReport("built-live"),
+    });
+    assert.ok(view);
+    assert.deepEqual(
+        view!.rows.map((r) => r.layer),
+        [
+            "Grammar match",
+            "Schema enrichment",
+            "Construction cache",
+            "Wildcard validation",
+            "Full dispatch",
+        ],
+    );
+    assert.equal(view!.realizationA, "built (live)");
+    assert.equal(view!.realizationB, "built (live)");
+    // No source side → no preflight hint.
+    assert.equal(view!.preflight, undefined);
+});
+
+test("toFidelityMatrix carries per-side status and reason", () => {
+    const view = toFidelityMatrix({
+        A: fidelityReport("built-live"),
+        B: fidelityReport("source", {
+            constructionCache: {
+                status: "unavailable",
+                reason: "no cache at a ref",
+            },
+        }),
+    });
+    assert.ok(view);
+    const cacheRow = view!.rows.find((r) => r.layer === "Construction cache");
+    assert.ok(cacheRow);
+    assert.equal(cacheRow!.a.status, "ran");
+    assert.equal(cacheRow!.b.status, "unavailable");
+    assert.equal(cacheRow!.b.reason, "no cache at a ref");
+});
+
+test("toFidelityMatrix adds a preflight hint for a single source side", () => {
+    const view = toFidelityMatrix({
+        A: fidelityReport("built-live"),
+        B: fidelityReport("source"),
+    });
+    assert.ok(view);
+    assert.ok(view!.preflight);
+    assert.ok(/Side B is /.test(view!.preflight!));
+});
+
+test("toFidelityMatrix pluralizes the preflight hint for two source sides", () => {
+    const view = toFidelityMatrix({
+        A: fidelityReport("source"),
+        B: fidelityReport("source"),
+    });
+    assert.ok(view);
+    assert.ok(view!.preflight);
+    assert.ok(/Side A & B are /.test(view!.preflight!));
 });

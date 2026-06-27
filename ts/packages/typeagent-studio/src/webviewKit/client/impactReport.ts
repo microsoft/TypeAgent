@@ -38,10 +38,12 @@ import {
     formatProvenanceLine,
     formatVersionProvenance,
     toActionDiff,
+    toFidelityMatrix,
     type ImpactRow,
     type ReplayRowStatus,
     type ResolvedVersion,
     type RunProvenance,
+    type FidelityCell,
 } from "../replayViewModel.js";
 
 /** Default base (A): the last commit — the baseline of the regression journey. */
@@ -232,16 +234,26 @@ const validationEl = el("span", "validation-note");
 const statusEl = el("span", "status");
 subBar.append(provenanceEl, validationEl, statusEl);
 
-// The scrolling content region: an inline error notification, the status filter,
-// first-run guidance, the results list, and the drill-in detail pane.
+// The scrolling content region: an inline error notification, the per-side
+// fidelity matrix, the status filter, first-run guidance, the results list, and
+// the drill-in detail pane.
 const contentEl = el("div", "content");
 const notificationEl = el("div", "notification");
+const fidelityEl = el("div", "fidelity-panel");
+fidelityEl.hidden = true;
 const filtersEl = el("div", "filters");
 const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
 const detailEl = el("div", "detail-pane");
 detailEl.hidden = true;
-contentEl.append(notificationEl, filtersEl, emptyStateEl, tableWrap, detailEl);
+contentEl.append(
+    notificationEl,
+    fidelityEl,
+    filtersEl,
+    emptyStateEl,
+    tableWrap,
+    detailEl,
+);
 
 root.append(actionBar, subBar, contentEl);
 
@@ -433,6 +445,8 @@ function renderResult(
     provenanceEl.textContent = "";
     validationEl.textContent = "";
     validationEl.classList.remove("is-degraded");
+    fidelityEl.textContent = "";
+    fidelityEl.hidden = true;
     filtersEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
@@ -469,6 +483,10 @@ function renderResult(
     // Surface the opt-in wildcard-validation outcome (L4a), including an honest
     // "unavailable" state when the validator couldn't load (e.g. packaged build).
     renderValidationNote(result.wildcardValidation);
+
+    // The per-side fidelity matrix: which deterministic layers actually ran on
+    // each version, plus a build-from-ref preflight when a side is source-only.
+    renderFidelity(result.sideFidelity);
 
     currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
     currentTotal = result.summary.rowCount;
@@ -562,6 +580,85 @@ function describeValidation(diagnostics: WildcardValidationDiagnostic[]): {
             "was kept (fail-open) so the run stayed grammar-faithful.",
         degraded: true,
     };
+}
+
+const FIDELITY_STATUS_ICON: Record<FidelityCell["status"], string> = {
+    ran: "pass-filled",
+    skipped: "circle-slash",
+    unavailable: "circle-large-outline",
+};
+
+/** Render the per-side fidelity matrix into a collapsible panel, or hide it.
+ *  Surfaces which deterministic layers ran on each version (A/B) with a status
+ *  icon + hover reason, plus a build-from-ref preflight when a side is source
+ *  -only — so the report is honest about exactly what it exercised. */
+function renderFidelity(
+    sideFidelity: StudioReplayResult["sideFidelity"] | undefined,
+): void {
+    fidelityEl.textContent = "";
+    fidelityEl.hidden = true;
+    const view = toFidelityMatrix(sideFidelity);
+    if (!view) {
+        return;
+    }
+
+    const details = document.createElement("details");
+    details.className = "fidelity-details";
+    const summary = document.createElement("summary");
+    summary.className = "fidelity-summary";
+    summary.append(
+        codicon("layers"),
+        text(
+            `Fidelity \u00b7 A: ${view.realizationA} \u00b7 B: ${view.realizationB}`,
+        ),
+    );
+    details.append(summary);
+
+    const grid = el("div", "fidelity-grid");
+    grid.append(
+        fidelityHeadCell("Layer"),
+        fidelityHeadCell("A"),
+        fidelityHeadCell("B"),
+    );
+    for (const row of view.rows) {
+        grid.append(
+            fidelityLayerCell(row.layer),
+            fidelityStatusCell(row.a),
+            fidelityStatusCell(row.b),
+        );
+    }
+    details.append(grid);
+
+    if (view.preflight) {
+        const preflight = el("div", "fidelity-preflight");
+        preflight.append(codicon("lightbulb"), text(view.preflight));
+        details.append(preflight);
+    }
+
+    fidelityEl.append(details);
+    fidelityEl.hidden = false;
+}
+
+function fidelityHeadCell(label: string): HTMLElement {
+    const cell = el("span", "fidelity-head");
+    cell.textContent = label;
+    return cell;
+}
+
+function fidelityLayerCell(label: string): HTMLElement {
+    const cell = el("span", "fidelity-layer");
+    cell.textContent = label;
+    return cell;
+}
+
+function fidelityStatusCell(cellInfo: FidelityCell): HTMLElement {
+    const cell = el("span", `fidelity-cell is-${cellInfo.status}`);
+    cell.title = cellInfo.reason;
+    cell.append(
+        codicon(FIDELITY_STATUS_ICON[cellInfo.status]),
+        text(cellInfo.status),
+    );
+    return cell;
 }
 
 /** Paint the status filter chips for the rows of the current result. */
