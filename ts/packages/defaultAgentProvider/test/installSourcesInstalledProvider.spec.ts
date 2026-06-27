@@ -64,6 +64,25 @@ function pathOnlyInstanceDir(): string {
     return dir;
 }
 
+// Build a standalone loadable agent directory (package.json exports +
+// manifest.json) for the `path` source to install/refresh from.
+function makePathAgentDir(emojiChar: string): string {
+    const dir = tmpDir("ta-pathagent-");
+    fs.writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({
+            name: "ta-path-agent",
+            version: "1.0.0",
+            exports: { "./agent/manifest": "./manifest.json" },
+        }),
+    );
+    fs.writeFileSync(
+        path.join(dir, "manifest.json"),
+        JSON.stringify({ emojiChar }),
+    );
+    return dir;
+}
+
 describe("createInstalledAppAgentProvider", () => {
     it("loads a bundled module record against the app bundle root", async () => {
         const records: Record<string, InstalledAgentRecord> = {
@@ -250,5 +269,97 @@ describe("getDefaultAppAgentInstaller", () => {
         expect(fs.existsSync(path.join(instanceDir, "agents.json"))).toBe(
             false,
         );
+    });
+
+    it("update re-materializes a path agent and keeps the record", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("p", agentDir);
+
+        const provider = await installer.update!("p");
+        expect(provider.getAppAgentNames()).toEqual(["p"]);
+        const record = readAgentsJson(instanceDir)!.agents.p;
+        expect(record.path).toBe(path.resolve(agentDir));
+        expect(record.source).toBe("path");
+    });
+
+    it("preserves the re-resolution key (ref) across update", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("p", agentDir);
+
+        // A path install has no resolved `ref`; install fills it with the
+        // supplied lookup key so a later @update can re-resolve.
+        const afterInstall = readAgentsJson(instanceDir)!.agents.p;
+        expect(afterInstall.ref).toBe(agentDir);
+
+        await installer.update!("p");
+        const afterUpdate = readAgentsJson(instanceDir)!.agents.p;
+        // The fix under test: update must not drop the re-resolution key.
+        expect(afterUpdate.ref).toBeDefined();
+        expect(afterUpdate.ref).toBe(afterUpdate.path);
+    });
+
+    it("update picks up a changed manifest from the recorded path", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = makePathAgentDir("🧪");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("p", agentDir);
+
+        // Edit the on-disk agent, then update.
+        fs.writeFileSync(
+            path.join(agentDir, "manifest.json"),
+            JSON.stringify({ emojiChar: "🚀" }),
+        );
+        const provider = await installer.update!("p");
+        const manifest = await provider.getAppAgentManifest("p");
+        expect(manifest.emojiChar).toBe("🚀");
+    });
+
+    it("a failed update leaves the old record intact (no-op)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("p", agentDir);
+        const before = readAgentsJson(instanceDir)!.agents.p;
+
+        // Remove the on-disk target so re-resolution can no longer materialize.
+        fs.rmSync(agentDir, { recursive: true, force: true });
+        await expect(installer.update!("p")).rejects.toThrow();
+
+        const after = readAgentsJson(instanceDir)!.agents.p;
+        expect(after).toEqual(before);
+    });
+
+    it("update rejects an unknown agent", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await expect(installer.update!("missing")).rejects.toThrow(/not found/);
+    });
+
+    it("update fails when the recorded source is no longer configured", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("p", agentDir);
+        // Drop the only configured source out from under the record.
+        installer.sources!().remove("path");
+        await expect(installer.update!("p")).rejects.toThrow(
+            /no longer configured/,
+        );
+    });
+
+    it("recordsUsingSource lists agents acquired from a source", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const a = tmpDir("ta-agent-a-");
+        const b = tmpDir("ta-agent-b-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await installer.install("a", a);
+        await installer.install("b", b);
+        const using = installer.recordsUsingSource!("path").sort();
+        expect(using).toEqual(["a", "b"]);
+        expect(installer.recordsUsingSource!("nosuch")).toEqual([]);
     });
 });

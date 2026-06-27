@@ -123,3 +123,60 @@
   `agents` map is the authoritative builtin list until M4 cleanup. Pre-existing behavior,
   clarified with a comment (gate review r2).
 - **Design updated?** no (intentional; revisit in M4)
+
+### 2026-06-28 — `@update`/`@source remove` data access lives on the installer, not the dispatcher core
+- **Milestone / item:** M3 / 3.1
+- **Type:** Deviation
+- **Design ref:** §4.3, §5 (plan 3.1 said "AppAgentInstaller interface unchanged")
+- **Decision:** Added three **optional** methods to `AppAgentInstaller`:
+  `update(name, range?)`, `sources()`, and `recordsUsingSource(sourceName)`. The dispatcher
+  core handlers (`UpdateCommandHandler`, `@source remove`) call these instead of reading
+  `agents.json` directly.
+- **Rationale:** The dispatcher core must never import `default-agent-provider` and cannot
+  read `agents.json` (that record store lives in the installer's package). `@update` needs
+  the recorded provenance to re-resolve, and `@source remove` needs the list of records
+  using a source to warn. Putting that logic behind optional installer methods keeps the
+  layering rule intact while the core handlers stay thin. Methods are optional so alternate
+  installers (e.g. test doubles) need not implement them.
+- **Design updated?** no (interface addition consistent with §4.3 intent)
+
+### 2026-06-28 — install/update preserve the re-resolution key in `ref`
+- **Milestone / item:** M3 / 3.1
+- **Type:** Unspecified
+- **Design ref:** §5 (`@update` re-resolves against the recorded source), §12 Q13
+- **Decision:** When a resolved record has no `ref` (catalog and path records — catalog
+  `materialize` leaves it unset, path records never set it), `install` and `update` fill
+  `record.ref` with the supplied lookup key (catalog key or path). `recordToNpmInfo` never
+  reads `ref`, so this is inert at load time but lets `@update` re-look-up a catalog agent
+  installed under a different name than its catalog key, and re-materialize a path agent.
+  `update` re-applies the same fill after re-resolution so repeated updates never drop it
+  (caught in M3 gate review r2).
+- **Rationale:** Without preserving the key, a renamed catalog install loses the only handle
+  back to its source entry and `@update` would fail or mis-resolve.
+- **Design updated?** no (record-field usage detail consistent with §5/§12 Q13)
+
+### 2026-06-28 — `@source order` appends the remaining configured sources
+- **Milestone / item:** M3 / 3.2
+- **Type:** Unspecified
+- **Design ref:** §5 (order is a subset), §6 (full configured set)
+- **Decision:** `@source order <names...>` treats the given names as a priority prefix:
+  unknown names are warned and skipped, the known subset is de-duplicated and kept first,
+  then every remaining configured source (in `registry.list()` order) is appended. An empty
+  name list therefore leaves the configured set intact in its current list order.
+- **Rationale:** Reordering must never silently drop a configured source (§6). Treating the
+  argument as a prefix lets users promote a source without re-typing the whole order.
+- **Design updated?** no (command-surface detail consistent with §5/§6)
+
+### 2026-06-28 — `@update` overwrites the record only after a successful materialize
+- **Milestone / item:** M3 / 3.1
+- **Type:** Unspecified
+- **Design ref:** §4.7, §12 Q13
+- **Decision:** `update` resolves+materializes the new version first and overwrites
+  `agents.json` only after that succeeds, under the registry mutex. A failed materialize
+  (e.g. the recorded path was removed) leaves the old record — and the running agent —
+  intact (verified by a no-op test). The on-disk record is the source of truth; if the
+  post-write `removeAgent`/`installAppProvider` re-registration throws, the next restart
+  reconciles from disk (accepted per §4.7, NIT in gate review r2).
+- **Rationale:** Matches the design's materialize-first guarantee (Q13) so an update never
+  leaves the user with a half-installed or missing agent.
+- **Design updated?** no (consistent with §4.7/§12 Q13)

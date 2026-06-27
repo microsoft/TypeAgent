@@ -58,6 +58,8 @@ import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import {
     InstallCommandHandler,
     UninstallCommandHandler,
+    UpdateCommandHandler,
+    getSourceCommandHandlers,
 } from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
@@ -136,6 +138,8 @@ export const systemHandlers: CommandHandlerTable = {
         env: getEnvCommandHandlers(),
         install: new InstallCommandHandler(),
         uninstall: new UninstallCommandHandler(),
+        update: new UpdateCommandHandler(),
+        source: getSourceCommandHandlers(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),

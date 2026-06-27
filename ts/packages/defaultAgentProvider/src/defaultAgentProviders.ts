@@ -144,6 +144,14 @@ export function getDefaultAppAgentInstaller(
             const resolved = await registry.resolve(ref, sourceName);
             // The installer assigns the authoritative dispatcher name.
             const record: InstalledAgentRecord = { ...resolved, name };
+            // Preserve the user-supplied lookup key so `@update` can
+            // re-resolve a catalog agent installed under a different name than
+            // its catalog key (catalog `materialize` leaves `ref` unset). Feed
+            // records already carry their specifier in `ref`; this only fills
+            // the gap for catalog/path records.
+            if (record.ref === undefined) {
+                record.ref = ref;
+            }
             // Persist the record under the same serialization domain.
             await mutex.runExclusive(async () => {
                 const current = readAgentsJson(instanceDir) ?? { agents: {} };
@@ -165,8 +173,95 @@ export function getDefaultAppAgentInstaller(
                 writeAgentsJson(instanceDir, current);
             });
         },
+        async update(name: string, range?: string): Promise<AppAgentProvider> {
+            // Look up the recorded provenance and re-resolve against its
+            // recorded source (design §5). The whole materialize runs first;
+            // the old record is overwritten only after it succeeds, so a failed
+            // update leaves the old agent intact (design §4.7, §12 Q13).
+            const existing = readAgentsJson(instanceDir)?.agents[name];
+            if (existing === undefined) {
+                throw new Error(`Agent '${name}' not found`);
+            }
+            const source = registry.get(existing.source);
+            if (source === undefined) {
+                throw new Error(
+                    `Source '${existing.source}' for agent '${name}' is no longer configured; ` +
+                        `re-add it with '@source add' to update, or '@uninstall ${name}'.`,
+                );
+            }
+            // Build the re-resolution ref from the record, per source kind.
+            let ref: string;
+            switch (source.kind) {
+                case "feed": {
+                    // Re-resolve the package, optionally constrained by range;
+                    // omitting range targets the latest available version.
+                    const moduleName = existing.module;
+                    if (moduleName === undefined) {
+                        throw new Error(
+                            `Feed record for '${name}' is missing its 'module' (corrupt record).`,
+                        );
+                    }
+                    ref =
+                        range !== undefined
+                            ? `${moduleName}@${range}`
+                            : moduleName;
+                    break;
+                }
+                case "path": {
+                    // Re-materialize from the recorded path (picks up a moved /
+                    // rebuilt local agent).
+                    if (existing.path === undefined) {
+                        throw new Error(
+                            `Agent '${name}' has no recorded path to refresh.`,
+                        );
+                    }
+                    ref = existing.path;
+                    break;
+                }
+                case "catalog": {
+                    // Re-look-up the catalog key. Prefer the preserved lookup
+                    // key (`ref`, set at install) so renamed installs still
+                    // re-resolve; fall back to the dispatcher name for older
+                    // records (it equals the key for builtins / same-name
+                    // installs).
+                    ref = existing.ref ?? existing.name;
+                    break;
+                }
+                default: {
+                    const exhaustive: never = source.kind;
+                    throw new Error(
+                        `unknown source kind for '${name}': ${String(
+                            exhaustive,
+                        )}`,
+                    );
+                }
+            }
+            // Materialize the new version (serialized by the registry mutex).
+            const resolved = await registry.resolve(ref, existing.source);
+            const record: InstalledAgentRecord = { ...resolved, name };
+            // Preserve the re-resolution key across updates, the same way
+            // install does, so repeated `@update`s of a renamed catalog agent
+            // keep re-looking-up the original key (catalog `materialize` leaves
+            // `ref` unset).
+            if (record.ref === undefined) {
+                record.ref = ref;
+            }
+            // Overwrite only after a successful materialize (§12 Q13).
+            await mutex.runExclusive(async () => {
+                const current = readAgentsJson(instanceDir) ?? { agents: {} };
+                current.agents[name] = record;
+                writeAgentsJson(instanceDir, current);
+            });
+            return buildProviderFor({ [name]: record });
+        },
         sources() {
             return registry;
+        },
+        recordsUsingSource(sourceName: string): string[] {
+            const agents = readAgentsJson(instanceDir)?.agents ?? {};
+            return Object.values(agents)
+                .filter((record) => record.source === sourceName)
+                .map((record) => record.name);
         },
     };
 }

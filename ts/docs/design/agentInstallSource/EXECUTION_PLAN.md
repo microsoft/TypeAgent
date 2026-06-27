@@ -262,7 +262,7 @@ no installer → no `@install`/`@source`, by design).
 
 ---
 
-## Milestone 3 — Update & source-management commands 🟡 (behavior-changing)
+## Milestone 3 — Update & source-management commands ✅ (behavior-changing)
 
 **Goal.** Complete the command UX with the additive `@update` and `@source` groups. Purely additive on top
 of Milestone 2 — the installer interface is unchanged (`@update` is `uninstall`+`install` internally).
@@ -270,7 +270,7 @@ of Milestone 2 — the installer interface is unchanged (`@update` is `uninstall
 **Why it's a self-contained unit.** It adds two independent command surfaces with no change to the
 provider/installer contracts; reviewable and testable as command-handler behavior + config persistence.
 
-### 3.1 — `@update <name>` (design §5, §4.7) 🟡
+### 3.1 — `@update <name>` (design §5, §4.7) ✅
 
 Re-resolve against the **recorded source** per kind (feed bump / path refresh / catalog re-lookup);
 remove-then-add, dropping the old record **only after** the new one materializes, so a failed update is a
@@ -278,7 +278,7 @@ no-op (Q13). Register the handler in `systemAgent.ts`.
 
 **Checkpoint:** `@update` refreshes across all three kinds; a failed update leaves the old agent intact.
 
-### 3.2 — `@source` group (design §5, §6) 🟡
+### 3.2 — `@source` group (design §5, §6) ✅
 
 `list` / `order <name>...` / `add feed|catalog|path` / `remove`, validating uniqueness, well-formed
 registry URL (`feed`), readable catalog JSON (`catalog`); persists to the instance `installSources` block;

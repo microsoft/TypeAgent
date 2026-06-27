@@ -34,9 +34,22 @@ export interface AppAgentInstaller {
         sourceName?: string,
     ): Promise<AppAgentProvider>;
     uninstall(name: string): Promise<void>;
+    // Refresh an installed agent by re-resolving it against its recorded
+    // source (feed bump / path refresh / catalog re-lookup), constrained by an
+    // optional version `range` for feed sources. The old record is dropped only
+    // after the new one materializes, so a failed update is a no-op (design §5,
+    // §4.7, §12 Q13). Returns a freshly built provider for re-registration.
+    // Optional: a host whose installer cannot read its record store omits it
+    // and `@update` is unavailable. Lives on the installer (not a core handler)
+    // because the dispatcher core never reads `agents.json` (layering).
+    update?(name: string, range?: string): Promise<AppAgentProvider>;
     // Host-owned registry powering @source (design §4.5); absent -> @source
     // unavailable.
     sources?(): InstallSourceRegistry;
+    // Names of installed agents whose record was acquired from `sourceName`.
+    // Powers `@source remove`'s "still referenced" warning. Optional for the
+    // same layering reason as `update` (the core handler cannot read records).
+    recordsUsingSource?(sourceName: string): string[];
 }
 
 export interface ConstructionProvider {
