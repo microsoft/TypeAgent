@@ -13,14 +13,6 @@
 //   InstallSource  - the live runtime object the registry builds from a config
 
 /**
- * The execution mode for a loaded agent. Mirrors the values used by the npm
- * provider's loader (`"separate"` => SeparateProcess, `"dispatcher"` =>
- * DispatcherProcess). Defined here as a string union so the dispatcher core
- * does not depend on `dispatcher-node-providers` (which would be a cycle).
- */
-export type ExecutionMode = "separate" | "dispatcher";
-
-/**
  * The three install-source kinds (design §3). There is deliberately no
  * separate `builtin` kind: the bundled agents are a `catalog` source whose
  * JSON ships in the app (`catalog: "<bundled>"`).
@@ -83,7 +75,10 @@ export interface ResolvedCandidate {
     module?: string; // package name (npm-resolved; omitted when path-resolved)
     ref?: string; // feed specifier/version
     path?: string; // catalog / path result
-    execMode?: ExecutionMode;
+    // Opaque, kind-specific metadata for the loader named by the resulting
+    // record's `kind` (e.g. npm: `{ execMode }`). The dispatcher core does not
+    // interpret it; the owning provider does.
+    loaderConfig?: Record<string, unknown>;
 }
 
 /**
@@ -99,7 +94,9 @@ export interface InstalledAgentRecord {
     path?: string; // present for catalog / path installs
     source: string; // provenance, required
     ref?: string; // feed specifier/version
-    execMode?: ExecutionMode;
+    // Opaque, kind-specific metadata interpreted by the loader named by `kind`
+    // (e.g. npm: `{ execMode }`). The dispatcher core does not interpret it.
+    loaderConfig?: Record<string, unknown>;
 }
 
 /**

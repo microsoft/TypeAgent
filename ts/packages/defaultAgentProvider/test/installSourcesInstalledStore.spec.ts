@@ -61,7 +61,7 @@ describe("seedRecordsFromBundledCatalog", () => {
     it("carries execMode from catalog entries", () => {
         const records = seedRecordsFromBundledCatalog();
         // chat -> execMode "dispatcher" in the bundled catalog
-        expect(records.chat.execMode).toBe("dispatcher");
+        expect(records.chat.loaderConfig?.execMode).toBe("dispatcher");
     });
 });
 
@@ -72,7 +72,7 @@ describe("seedRecordsFromConfig", () => {
         expect(records.calendar).toBeDefined();
         expect(records.calendar.module).toBe("calendar");
         expect(records.calendar.source).toBe("builtin");
-        expect(records.chat.execMode).toBe("dispatcher");
+        expect(records.chat.loaderConfig?.execMode).toBe("dispatcher");
     });
 });
 

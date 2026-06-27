@@ -9,12 +9,15 @@ import {
     AgentProcess,
     createAgentProcess,
 } from "./process/agentProcessShim.js";
-import { AppAgentProvider } from "agent-dispatcher";
+import type { AppAgentProvider } from "agent-dispatcher";
 
-const enum ExecutionMode {
-    SeparateProcess = "separate",
-    DispatcherProcess = "dispatcher",
-}
+/**
+ * The execution mode for a loaded agent: `"separate"` => SeparateProcess,
+ * `"dispatcher"` => DispatcherProcess. Owned here because process model is a
+ * loader concern; install sources carry it opaquely in a record's
+ * `loaderConfig` and the dispatcher core never learns about it.
+ */
+export type ExecutionMode = "separate" | "dispatcher";
 
 export type NpmAppAgentInfo = {
     name: string;
@@ -140,8 +143,8 @@ async function loadModuleAgent(
         handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
     }
 
-    const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
-    if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
+    const execMode: ExecutionMode = info.execMode ?? "separate";
+    if (enableExecutionMode() && execMode === "separate") {
         return createAgentProcess(appAgentName, handlerPath);
     }
 

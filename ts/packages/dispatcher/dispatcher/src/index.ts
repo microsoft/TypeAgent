@@ -19,7 +19,6 @@ export type {
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {
-    ExecutionMode,
     InstallSourceKind,
     PathSourceConfig,
     FeedSourceConfig,

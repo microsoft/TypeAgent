@@ -85,7 +85,7 @@ export function createCatalogSource(
                 candidate.module = entry.name;
             }
             if (entry.execMode !== undefined) {
-                candidate.execMode = entry.execMode;
+                candidate.loaderConfig = { execMode: entry.execMode };
             }
             return candidate;
         },
@@ -98,8 +98,8 @@ export function createCatalogSource(
                 kind: "npm",
                 source: config.name,
             };
-            if (candidate.execMode !== undefined) {
-                record.execMode = candidate.execMode;
+            if (candidate.loaderConfig !== undefined) {
+                record.loaderConfig = candidate.loaderConfig;
             }
             // Exactly one resolution handle (§4.2, Q17).
             if (candidate.path !== undefined) {

@@ -74,7 +74,7 @@ function recordFromCatalogEntry(
         record.module = entry.name;
     }
     if (entry.execMode !== undefined) {
-        record.execMode = entry.execMode;
+        record.loaderConfig = { execMode: entry.execMode };
     }
     return record;
 }
@@ -164,7 +164,7 @@ export function migrateLegacyExternalAgents(
                     source: "path",
                 };
                 if (info.execMode !== undefined) {
-                    record.execMode = info.execMode;
+                    record.loaderConfig = { execMode: info.execMode };
                 }
                 records[name] = record;
                 debug(`migration: migrated legacy path agent '${name}'`);
@@ -214,10 +214,9 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     if (record.path !== undefined) {
         info.path = record.path;
     }
-    if (record.execMode !== undefined) {
-        info.execMode = record.execMode as NonNullable<
-            NpmAppAgentInfo["execMode"]
-        >;
+    const execMode = record.loaderConfig?.execMode;
+    if (execMode !== undefined) {
+        info.execMode = execMode as NonNullable<NpmAppAgentInfo["execMode"]>;
     }
     return info;
 }

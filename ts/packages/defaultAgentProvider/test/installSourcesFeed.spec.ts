@@ -138,7 +138,7 @@ describe("feedSource.find", () => {
         expect(candidate).toBeDefined();
         expect(candidate!.module).toBe("@typeagent/spelunker-agent");
         expect(candidate!.ref).toBe("@typeagent/spelunker-agent@1.4.0");
-        expect(candidate!.execMode).toBe("separate");
+        expect(candidate!.loaderConfig?.execMode).toBe("separate");
     });
 
     it("serves a fresh cache without calling the network", async () => {
@@ -323,7 +323,7 @@ describe("feedSource.materialize", () => {
         );
         expect(record.module).toBe("@typeagent/a-agent");
         expect(record.ref).toBe("@typeagent/a-agent@1.0.0");
-        expect(record.execMode).toBe("separate");
+        expect(record.loaderConfig?.execMode).toBe("separate");
         expect(record.name).toBe("a-agent");
     });
 });

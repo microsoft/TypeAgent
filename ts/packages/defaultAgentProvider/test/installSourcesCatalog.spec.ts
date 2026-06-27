@@ -72,7 +72,7 @@ describe("catalogSource", () => {
             catalog: file,
         });
         const record = await source.materialize((await source.find("chat"))!);
-        expect(record.execMode).toBe("dispatcher");
+        expect(record.loaderConfig?.execMode).toBe("dispatcher");
     });
 
     it("find returns undefined for an unknown short name (non-match)", async () => {

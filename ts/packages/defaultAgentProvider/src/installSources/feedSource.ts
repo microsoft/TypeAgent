@@ -295,7 +295,7 @@ export function createFeedSource(
                 source: config.name,
                 module: moduleName,
                 ref,
-                execMode: "separate", // §12 Q16
+                loaderConfig: { execMode: "separate" }, // §12 Q16
             };
         },
         async materialize(
@@ -340,7 +340,9 @@ export function createFeedSource(
                 module: moduleName,
                 source: config.name,
                 ref: spec,
-                execMode: candidate.execMode ?? "separate",
+                loaderConfig: {
+                    execMode: candidate.loaderConfig?.execMode ?? "separate",
+                },
             };
         },
         async listAgents(): Promise<string[]> {

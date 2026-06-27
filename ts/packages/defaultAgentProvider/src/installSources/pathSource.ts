@@ -55,8 +55,8 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
                 path: candidate.path,
                 source: config.name,
             };
-            if (candidate.execMode !== undefined) {
-                record.execMode = candidate.execMode;
+            if (candidate.loaderConfig !== undefined) {
+                record.loaderConfig = candidate.loaderConfig;
             }
             return record;
         },
