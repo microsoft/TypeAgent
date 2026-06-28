@@ -179,8 +179,9 @@ describe("getDefaultAppAgentInstaller", () => {
         const agentDir = tmpDir("ta-agent-");
         const installer = getDefaultAppAgentInstaller(instanceDir);
 
-        const provider = await installer.install("myagent", agentDir);
-        expect(provider.getAppAgentNames()).toEqual(["myagent"]);
+        const result = await installer.install("myagent", agentDir);
+        expect(result.provider.getAppAgentNames()).toEqual(["myagent"]);
+        expect(result.source).toBe("path");
 
         const onDisk = readAgentsJson(instanceDir);
         expect(onDisk).toBeDefined();

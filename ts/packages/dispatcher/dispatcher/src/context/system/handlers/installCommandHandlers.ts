@@ -7,7 +7,10 @@ import {
     CommandHandlerContext,
     installAppProvider,
 } from "../../commandHandlerContext.js";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayStatus,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
@@ -118,9 +121,21 @@ export class InstallCommandHandler implements CommandHandler {
             throw new Error(`Agent '${name}' already exists`);
         }
 
-        const provider = await installer.install(name, ref, sourceName);
+        displayStatus(`Resolving '${ref}'...`, context);
+        const { provider, source } = await installer.install(
+            name,
+            ref,
+            sourceName,
+        );
+        displayStatus(
+            `Found '${ref}' in source '${source}'. Installing as '${name}'...`,
+            context,
+        );
         await installAppProvider(systemContext, provider);
-        displayResult(`Agent '${name}' installed.`, context);
+        displayResult(
+            `Agent '${name}' installed from source '${source}'.`,
+            context,
+        );
     }
 }
 

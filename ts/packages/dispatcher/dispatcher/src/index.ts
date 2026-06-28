@@ -16,6 +16,7 @@ export type {
 export type {
     AppAgentProvider,
     AppAgentInstaller,
+    InstallResult,
     InstalledAgentInfo,
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";

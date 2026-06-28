@@ -71,10 +71,13 @@ describe("getAddSourceCommandHandlers", () => {
     });
 
     describe("feed", () => {
-        it("requires a registry url", async () => {
-            await expect(
-                runExpectThrow("feed", { name: "f" }, { registry: undefined }),
-            ).rejects.toThrow(/--registry/);
+        it("allows an env-backed registry (no url)", async () => {
+            expect(
+                await run("feed", { name: "f" }, { registry: undefined }),
+            ).toEqual({
+                kind: "feed",
+                name: "f",
+            });
         });
 
         it("rejects a non-https url", async () => {
@@ -115,7 +118,7 @@ describe("getAddSourceCommandHandlers", () => {
             });
         });
 
-        it("defaults scopes to an empty list", async () => {
+        it("omits scopes when none given", async () => {
             expect(
                 await run(
                     "feed",
@@ -126,7 +129,6 @@ describe("getAddSourceCommandHandlers", () => {
                 kind: "feed",
                 name: "f",
                 registry: "https://pkgs.example.com/feed/",
-                scopes: [],
             });
         });
     });

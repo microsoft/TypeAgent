@@ -32,7 +32,7 @@ export interface AppAgentInstaller {
         name: string,
         ref: string,
         sourceName?: string,
-    ): Promise<AppAgentProvider>;
+    ): Promise<InstallResult>;
     uninstall(name: string): Promise<void>;
     // Refresh an installed agent by re-resolving it against its recorded
     // source (feed bump / path refresh / catalog re-lookup), constrained by an
@@ -69,6 +69,16 @@ export interface InstalledAgentInfo {
     // The resolution handle that identifies the install (feed specifier /
     // package name / path), whichever the record carries. Omitted if none.
     handle?: string;
+}
+
+/**
+ * The outcome of a successful install: the freshly built provider for the
+ * just-installed agent (for live registration) plus the name of the source the
+ * ref resolved to, so the core can report which source won.
+ */
+export interface InstallResult {
+    provider: AppAgentProvider;
+    source: string;
 }
 
 export interface ConstructionProvider {

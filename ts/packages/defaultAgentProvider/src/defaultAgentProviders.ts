@@ -4,6 +4,7 @@
 import {
     AppAgentProvider,
     AppAgentInstaller,
+    InstallResult,
     InstalledAgentInfo,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
@@ -164,7 +165,7 @@ export function getDefaultAppAgentInstaller(
             name: string,
             ref: string,
             sourceName?: string,
-        ): Promise<AppAgentProvider> {
+        ): Promise<InstallResult> {
             // resolve + materialize is serialized by the registry's limiter
             // (design §4.1). After it returns, the installer re-takes the same
             // shared limiter to write the record (sequential, not nested).
@@ -188,7 +189,10 @@ export function getDefaultAppAgentInstaller(
                 current.agents[name] = record;
                 writeAgentsJson(instanceDir, current);
             });
-            return buildProviderFor({ [name]: record });
+            return {
+                provider: buildProviderFor({ [name]: record }),
+                source: record.source,
+            };
         },
         async uninstall(name: string): Promise<void> {
             await limiter(async () => {
