@@ -169,10 +169,12 @@ export interface AppAgentCommandInterface {
     // Get the command descriptors
     getCommands(context: SessionContext): Promise<CommandDescriptors>;
 
-    // Provide completion for a partial command
+    // Provide completion for a partial command. The command's parameters have
+    // already been parsed by the dispatcher, so `params` is always concrete
+    // here (unlike executeCommand, which may run parameter-less commands).
     getCommandCompletion?(
         commands: string[], // path to the command descriptors
-        params: ParsedCommandParams<ParameterDefinitions> | undefined,
+        params: ParsedCommandParams<ParameterDefinitions>,
         names: string[], // array of <argName> or --<flagName> or --<jsonFlagName> for completion
         context: SessionContext<unknown>,
         direction?: CompletionDirection,

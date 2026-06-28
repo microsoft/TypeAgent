@@ -6,11 +6,13 @@ import {
     ActionContext,
     AppAgentManifest,
     TypeAgentAction,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
-    getCommandInterface,
+    executeCommandFromHandlers,
+    getCommandCompletionFromHandlers,
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
@@ -18,6 +20,7 @@ import {
     type CommandHandlerContext,
     getRequestId,
 } from "../commandHandlerContext.js";
+import { AppAgentInstaller } from "../../agentProvider/agentProvider.js";
 import { setActivityContext } from "../../execute/activityContext.js";
 import { DispatcherActivityName } from "../dispatcher/dispatcherUtils.js";
 import { clearReasoningSession as clearClaudeReasoningSession } from "../../reasoning/claude.js";
@@ -255,15 +258,17 @@ export const systemManifest: AppAgentManifest = {
 };
 
 // The host (via `AppAgentInstaller.sourceCommands()`) owns the entire `@source`
-// command table (list/order/where/remove/add). It is injected here, per call,
-// so the dispatcher core never learns the source-kind taxonomy or any of the
-// source management grammar. `getCommands`/`executeCommand`/
-// `getCommandCompletion` all resolve against the merged table; `@help` uses it
-// too so the host commands show up in usage. Absent installer -> no `@source`.
+// command table (list/order/where/remove/add), so the dispatcher core never
+// learns the source-kind taxonomy or any of the source management grammar. The
+// merged table is built once per dispatcher at context construction and stored
+// as `CommandHandlerContext.systemCommands` (the installer is fixed for the
+// dispatcher's lifetime), so it is the same instance for every
+// `getCommands`/`executeCommand`/`getCommandCompletion`/`@help` call. Absent
+// installer -> no `@source`.
 export function getSystemHandlers(
-    systemContext: CommandHandlerContext | undefined,
+    installer: AppAgentInstaller | undefined,
 ): CommandHandlerTable {
-    const sourceCommands = systemContext?.agentInstaller?.sourceCommands?.();
+    const sourceCommands = installer?.sourceCommands?.();
     if (sourceCommands === undefined) {
         return systemHandlers;
     }
@@ -280,18 +285,34 @@ export const systemAgent: AppAgent = {
     getTemplateSchema: getSystemTemplateSchema,
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
-    getCommands: async (context) =>
-        getSystemHandlers(context.agentContext as CommandHandlerContext),
-    getCommandCompletion: async (commands, params, names, context, direction) =>
-        getCommandInterface(
-            getSystemHandlers(context.agentContext as CommandHandlerContext),
-        ).getCommandCompletion?.(commands, params, names, context, direction) ?? {
-            groups: [],
-        },
-    executeCommand: async (commands, params, context, attachments) =>
-        getCommandInterface(
-            getSystemHandlers(
-                context.sessionContext.agentContext as CommandHandlerContext,
-            ),
-        ).executeCommand(commands, params, context, attachments),
+    getCommands: async (context: SessionContext<CommandHandlerContext>) =>
+        context.agentContext.systemCommands,
+    getCommandCompletion: async (
+        commands,
+        params,
+        names,
+        context: SessionContext<CommandHandlerContext>,
+        direction,
+    ) =>
+        getCommandCompletionFromHandlers(
+            context.agentContext.systemCommands,
+            commands,
+            params,
+            names,
+            context,
+            direction,
+        ),
+    executeCommand: async (
+        commands,
+        params,
+        context: ActionContext<CommandHandlerContext>,
+        attachments,
+    ) =>
+        executeCommandFromHandlers(
+            context.sessionContext.agentContext.systemCommands,
+            commands,
+            params,
+            context,
+            attachments,
+        ),
 } as AppAgent;
