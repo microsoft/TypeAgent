@@ -167,22 +167,6 @@
   leaves the user with a half-installed or missing agent.
 - **Design updated?** no (consistent with §4.7/§12 Q13)
 
-### 2026-06-28 — Agent detection keys on the `./agent/manifest` export
-
-- **Milestone / item:** M4 / 4.1
-- **Type:** Unspecified
-- **Design ref:** §4.1, §12 Q12 (feed-enumeration marker)
-- **Decision:** The `agent-keyword` repo-policy rule classifies a package as an app agent
-  when its `package.json` `exports` object has a `"./agent/manifest"` key, and then
-  requires `"typeagent-agent"` in `keywords`. Detection does **not** use the
-  `@typeagent/agent-sdk` dependency.
-- **Rationale:** `./agent/manifest` is the exact subpath the npm agent provider resolves to
-  load an agent, so it is the authoritative, false-positive-free marker. Many infrastructure
-  packages depend on `@typeagent/agent-sdk` without being agents, so a dependency-based
-  heuristic would over-match. Verified: all 36 packages with the export carry the keyword,
-  and no non-agent package does.
-- **Design updated?** no (enforcement detail consistent with §4.1/§12 Q12)
-
 ### 2026-06-28 — Migration shim and `config.json` agents map retained for one release
 
 - **Milestone / item:** M4 / 4.2
