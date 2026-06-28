@@ -76,8 +76,16 @@ export interface PathSourceConfig {
 export interface FeedSourceConfig {
   kind: "feed";
   name: string; // e.g. "typeagent"
-  registry: string; // Azure Artifacts npm registry URL
-  scopes: string[]; // e.g. ["@typeagent"]
+  // Both optional. When omitted, the source reads its registry/scopes from
+  // the process environment at resolve time (TYPEAGENT_FEED_REGISTRY /
+  // TYPEAGENT_FEED_SCOPES). If neither config nor env supplies a registry,
+  // the source resolves nothing (find -> non-match, listAgents -> []) - so a
+  // shipped, env-backed feed entry stays in the configured order but is inert
+  // until the env value appears, and disappears again if it is removed. The
+  // HOST decides whether/how those env values are populated (e.g. from YAML /
+  // Key Vault via @typeagent/config); this package only reads process.env.
+  registry?: string; // Azure Artifacts npm registry URL
+  scopes?: string[]; // e.g. ["@typeagent"]
   // Auth: a short-lived bearer token minted by the Azure CLI
   // (`az account get-access-token`), injected into a transient npm auth
   // config - no persistent .npmrc creds / vsts-npm-auth / azureauth state.
@@ -249,6 +257,8 @@ How the marker is populated: `keywords` is author-controlled `package.json` meta
 The result is the cached package list: `listAgents()` returns it (for `@install` discovery and "no source matched" errors), and `feed.find` is a membership check against it. The list is refreshed on the ~1h TTL and served stale when offline.
 
 > Alternative considered: treat every scoped package as an agent (skip the keyword check). Rejected because it surfaces shared libraries as installable agents. The keyword marker also future-proofs adding non-agent packages to the same feed.
+
+**Env-backed registry.** A `feed` source's `registry`/`scopes` are optional. When unset in config, the source reads `TYPEAGENT_FEED_REGISTRY` / `TYPEAGENT_FEED_SCOPES` from `process.env` at resolve time. When **neither** config nor env supplies a registry, the source resolves nothing - `find` returns a non-match and `listAgents()` returns `[]`, so the ordered walk simply skips it. This gives a config-free "soft remove": a shipped, env-backed feed entry stays in the configured order but is inert until the env value is present, and goes inert again the moment it is removed - without rewriting the `sources` list. Populating those env values is a **host** responsibility (e.g. the host loads YAML / Key Vault via `@typeagent/config` before building the registry); `default-agent-provider` only reads the effective `process.env`. `materialize` errors clearly if it is ever reached with no resolvable registry.
 
 **Feed install execMode.** A feed-installed agent has no catalog entry to carry `execMode`, so `materialize` defaults it to `separate` (SeparateProcess) unless the package's own manifest specifies otherwise. `path`/`catalog` installs continue to take `execMode` from their catalog entry (§3, Q6).
 
@@ -519,13 +529,13 @@ The entire `@source` command is **contributed by the host** (`default-agent-prov
 @source list                 # shows the sources in resolution order
 @source order <name>...       # reprioritize: named sources move to the front
 @source where <ref>          # report which source WOULD resolve <ref>, without installing
-@source add feed <name> --registry <url> [--scope <scope>]...
+@source add feed <name> [--registry <url>] [--scope <scope>]...
 @source add catalog <name> --catalog <path>
 @source add path <name> [--baseDir <path>]
 @source remove <name> [--force]
 ```
 
-Validation on `add`: unique name, well-formed registry URL (`feed`), readable catalog JSON (`catalog`). `@source order` and `add`/`remove` persist to the instance `installSources` block. The configured `sources` list is itself the resolution order (first match wins); every source participates. `@source order <names>` moves the named sources to the front (de-duplicated; unknown names are **ignored with a warning**, not a hard error) and keeps the rest in their current relative order. `@source add` appends; `@source remove` splices.
+Validation on `add`: unique name, well-formed registry URL (`feed`, only when `--registry` is given - omitting it makes the source env-backed, §4.1), readable catalog JSON (`catalog`). `@source order` and `add`/`remove` persist to the instance `installSources` block. The configured `sources` list is itself the resolution order (first match wins); every source participates. `@source order <names>` moves the named sources to the front (de-duplicated; unknown names are **ignored with a warning**, not a hard error) and keeps the rest in their current relative order. `@source add` appends; `@source remove` splices.
 
 `@source remove` warns when installed records still reference that source. Without `--force`, removal aborts after the warning. With `--force`, removal proceeds: those already-installed agents remain loadable, but future `@update` for them fails until the source is added back.
 
@@ -551,18 +561,16 @@ The configured `sources` list - in resolution priority order (first match wins) 
         "catalog": "${TYPEAGENT_REPO_ROOT}/ts/packages/agents/agents.catalog.json",
       },
       { "kind": "catalog", "name": "builtin", "catalog": "<bundled>" },
-      {
-        "kind": "feed",
-        "name": "typeagent",
-        "registry": "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/",
-        "scopes": ["@typeagent"],
-      },
+      // The shipped `typeagent` feed is env-backed: it carries no `registry`,
+      // so it reads TYPEAGENT_FEED_REGISTRY / TYPEAGENT_FEED_SCOPES at resolve
+      // time and is inert when neither is set (§4.1 "Env-backed registry").
+      { "kind": "feed", "name": "typeagent" },
     ],
   },
 }
 ```
 
-A shipped build seeds `[path, builtin, typeagent]`; a dev checkout inserts `workspace` ahead of `builtin` so local agents shadow the bundled ones. Changing dev-vs-shipped behavior is one `@source order` command or one config line, with no code or env-var changes (`TYPEAGENT_FEED_REGISTRY` is just the seed value for the shipped `feed` source). A legacy `order` array from an older build is ignored on read.
+A shipped build seeds `[path, builtin, typeagent]`; a dev checkout inserts `workspace` ahead of `builtin` so local agents shadow the bundled ones. Changing dev-vs-shipped behavior is one `@source order` command or one config line, with no code change. The shipped `typeagent` feed is **env-backed** (§4.1): its registry/scopes come from `TYPEAGENT_FEED_REGISTRY` / `TYPEAGENT_FEED_SCOPES`, which the **host** populates (e.g. from YAML / Key Vault via `@typeagent/config`) before building the registry. The feed entry stays in the seeded order but resolves nothing until those values are present, so toggling the feed on/off is a host config change, not a `sources`-list edit. A persisted entry **may** still pin an explicit `registry`/`scopes` to override the env. A legacy `order` array from an older build is ignored on read.
 
 A host with no usable local filesystem for the user (the web API server, whose client lives in a different process/machine) builds its registry with `excludePathSources`, which drops every `path` source from **both** the seed and any persisted overrides - so a relative/absolute `ref` never resolves against the server's own disk.
 
