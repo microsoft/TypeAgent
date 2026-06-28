@@ -10,6 +10,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import chalk from "chalk";
 import { DefaultInstallSourceRegistry } from "./registry.js";
 import { getAddSourceCommandHandlers } from "./addSource.js";
 
@@ -38,16 +39,27 @@ class SourceListCommandHandler implements CommandHandler {
     public async run(context: ActionContext<unknown>) {
         const { registry } = this.deps;
         const infos = registry.list();
-        const lines: string[] = ["Sources (in resolution order):"];
+        if (infos.length === 0) {
+            displayResult("No install sources configured.", context);
+            return;
+        }
+
+        // Plain-text (CLI / console) table — chalk for color/alignment. The
+        // list order is the resolution order, so the row index is the position.
+        const text: string[][] = [["Order", "Source", "Kind", "Detail"]];
         infos.forEach((info, index) => {
-            // Every source participates in automatic resolution; the list order
-            // is the resolution order, so the index is the position.
-            const position = `#${index + 1}`;
-            lines.push(
-                `  ${info.name} [${info.kind}] ${position} ${info.detail}`,
-            );
+            text.push([
+                chalk.gray(`#${index + 1}`),
+                chalk.cyanBright(info.name),
+                chalk.yellow(info.kind),
+                info.detail ? chalk.gray(info.detail) : chalk.gray("—"),
+            ]);
         });
-        displayResult(lines.join("\n"), context);
+
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: text,
+        });
     }
 }
 

@@ -69,7 +69,11 @@ function capturingContext(): { context: any; output: () => string } {
                 captured.push(
                     typeof content === "string"
                         ? content
-                        : (content?.content ?? JSON.stringify(content)),
+                        : Array.isArray(content?.content)
+                          ? content.content
+                                .map((row: string[]) => row.join(" "))
+                                .join("\n")
+                          : (content?.content ?? JSON.stringify(content)),
                 );
             },
             setDisplay: () => {},
@@ -99,7 +103,7 @@ describe("getSourceCommands", () => {
                 .list as any;
             const { context, output } = capturingContext();
             await list.run(context);
-            expect(output()).toContain("path [path] #1");
+            expect(output()).toContain("#1 path path (default base)");
         });
 
         it("renders the order and each source with its position", async () => {
@@ -119,9 +123,9 @@ describe("getSourceCommands", () => {
             const { context, output } = capturingContext();
             await list.run(context);
             const text = output();
-            expect(text).toContain("path [path] #1");
+            expect(text).toContain("#1 path path (default base)");
             expect(text).toContain(
-                "typeagent [feed] #2 https://feed.example.com/",
+                "#2 typeagent feed https://feed.example.com/",
             );
         });
     });
