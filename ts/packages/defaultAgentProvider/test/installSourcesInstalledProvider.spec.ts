@@ -14,8 +14,7 @@ import {
     getDefaultAppAgentInstaller,
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
-import { InstalledAgentRecord } from "agent-dispatcher";
-import { DefaultInstallSourceRegistry } from "../src/installSources/registry.js";
+import { InstalledAgentRecord } from "../src/installSources/config.js";
 
 function tmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -230,15 +229,6 @@ describe("getDefaultAppAgentInstaller", () => {
         expect(Object.keys(onDisk.agents).sort()).toEqual(["a", "b", "c"]);
     });
 
-    it("exposes the source registry via sources()", () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
-        const registry = installer.sources?.();
-        expect(registry).toBeDefined();
-        expect(registry!.get("path")).toBeDefined();
-        expect(registry!.order().map((s) => s.name)).toEqual(["path"]);
-    });
-
     it("rejects an explicit unknown source", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
@@ -246,21 +236,6 @@ describe("getDefaultAppAgentInstaller", () => {
         await expect(
             installer.install("x", agentDir, "nosuch"),
         ).rejects.toThrow(/unknown source/);
-    });
-
-    it("persists registry changes to the instance config (powers @source)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
-        const registry = installer.sources?.() as DefaultInstallSourceRegistry;
-        registry.add({ kind: "path", name: "extra" });
-        registry.setOrder(["extra", "path"]);
-        const cfg = JSON.parse(
-            fs.readFileSync(path.join(instanceDir, "config.json"), "utf8"),
-        );
-        expect(cfg.installSources.order).toEqual(["extra", "path"]);
-        expect(
-            cfg.installSources.sources.map((s: { name: string }) => s.name),
-        ).toContain("extra");
     });
 
     it("named config never writes agents.json", () => {
@@ -345,22 +320,17 @@ describe("getDefaultAppAgentInstaller", () => {
         const agentDir = tmpDir("ta-agent-");
         const installer = getDefaultAppAgentInstaller(instanceDir);
         await installer.install("p", agentDir);
-        // Drop the only configured source out from under the record.
-        installer.sources!().remove("path");
-        await expect(installer.update!("p")).rejects.toThrow(
+        // Drop the only configured source out from under the record, then
+        // rebuild the installer so it reloads its sources from the edited
+        // config (the registry is now host-internal, reached only via config).
+        const cfgPath = path.join(instanceDir, "config.json");
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+        cfg.installSources.order = [];
+        cfg.installSources.sources = [];
+        fs.writeFileSync(cfgPath, JSON.stringify(cfg));
+        const reloaded = getDefaultAppAgentInstaller(instanceDir);
+        await expect(reloaded.update!("p")).rejects.toThrow(
             /no longer configured/,
         );
-    });
-
-    it("recordsUsingSource lists agents acquired from a source", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const a = tmpDir("ta-agent-a-");
-        const b = tmpDir("ta-agent-b-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
-        await installer.install("a", a);
-        await installer.install("b", b);
-        const using = installer.recordsUsingSource!("path").sort();
-        expect(using).toEqual(["a", "b"]);
-        expect(installer.recordsUsingSource!("nosuch")).toEqual([]);
     });
 });

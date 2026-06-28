@@ -4,12 +4,14 @@
 import {
     AppAgentProvider,
     AppAgentInstaller,
-    InstalledAgentRecord,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
     DispatcherOptions,
 } from "agent-dispatcher";
-import { InstallSourceConfig } from "./installSources/config.js";
+import {
+    InstallSourceConfig,
+    InstalledAgentRecord,
+} from "./installSources/config.js";
 
 import path from "node:path";
 import {
@@ -28,7 +30,7 @@ import {
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
 import { createInstallSourceRegistry } from "./installSources/registry.js";
-import { getAddSourceCommandHandlers } from "./installSources/addSource.js";
+import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { AsyncMutex } from "./installSources/mutex.js";
 
 /**
@@ -254,20 +256,20 @@ export function getDefaultAppAgentInstaller(
             });
             return buildProviderFor({ [name]: record });
         },
-        sources() {
-            return registry;
-        },
         sourceCommands() {
-            // The host owns the `@source add` grammar: feed/catalog/path
-            // subcommands with typed flags + validation, bound to this
-            // registry. The dispatcher core merges them into `@source`.
-            return getAddSourceCommandHandlers(registry);
-        },
-        recordsUsingSource(sourceName: string): string[] {
-            const agents = readAgentsJson(instanceDir)?.agents ?? {};
-            return Object.values(agents)
-                .filter((record) => record.source === sourceName)
-                .map((record) => record.name);
+            // The host owns the entire `@source` surface (list/order/where/
+            // remove/add): the kind taxonomy, typed flags, validation, and any
+            // auth UI. The dispatcher core merges this table in as `@source`.
+            return getSourceCommands({
+                registry,
+                recordsUsingSource: (sourceName: string) => {
+                    const agents =
+                        readAgentsJson(instanceDir)?.agents ?? {};
+                    return Object.values(agents)
+                        .filter((record) => record.source === sourceName)
+                        .map((record) => record.name);
+                },
+            });
         },
     };
 }

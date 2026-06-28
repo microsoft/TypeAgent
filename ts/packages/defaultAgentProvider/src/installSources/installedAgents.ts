@@ -5,7 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import registerDebug from "debug";
-import { AppAgentProvider, InstalledAgentRecord } from "agent-dispatcher";
+import { AppAgentProvider } from "agent-dispatcher";
+import { InstalledAgentRecord } from "./config.js";
 import {
     createNpmAppAgentProvider,
     NpmAppAgentInfo,

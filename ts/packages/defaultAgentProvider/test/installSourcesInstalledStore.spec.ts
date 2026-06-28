@@ -12,7 +12,7 @@ import {
     migrateLegacyExternalAgents,
     loadInstalledRecords,
 } from "../src/installSources/installedAgents.js";
-import { InstalledAgentRecord } from "agent-dispatcher";
+import { InstalledAgentRecord } from "../src/installSources/config.js";
 
 function tmpInstanceDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "ta-agents-"));

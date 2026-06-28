@@ -2,20 +2,12 @@
 // Licensed under the MIT License.
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
-import {
-    CommandHandler,
-    CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     CommandHandlerContext,
     installAppProvider,
 } from "../../commandHandlerContext.js";
-import {
-    displayResult,
-    displayWarn,
-} from "@typeagent/agent-sdk/helpers/display";
-import { InstallSourceRegistry } from "../../../agentProvider/installSource.js";
-import { AppAgentInstaller } from "../../../agentProvider/agentProvider.js";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -43,13 +35,6 @@ export class InstallCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
-            where: {
-                description:
-                    "Dry run: report which source would resolve the ref without installing.",
-                char: "w",
-                type: "boolean",
-                default: false,
-            },
         },
     } as const;
     public async run(
@@ -64,32 +49,6 @@ export class InstallCommandHandler implements CommandHandler {
         const { args, flags } = params;
         const { name, ref } = args;
         const sourceName = flags.source ?? undefined;
-
-        // --where: report which source would win without installing (§5).
-        if (flags.where) {
-            const registry = installer.sources?.();
-            if (registry === undefined) {
-                throw new Error("Install sources are not available");
-            }
-            const candidate = await registry.where(ref);
-            if (candidate === undefined) {
-                const order = registry
-                    .order()
-                    .map((s) => s.name)
-                    .join(", ");
-                displayResult(
-                    `No source would resolve '${ref}'. Order: [${order}]`,
-                    context,
-                );
-                return;
-            }
-            const handle = candidate.path ?? candidate.module ?? ref;
-            displayResult(
-                `'${ref}' would resolve via source '${candidate.source}' (${handle}).`,
-                context,
-            );
-            return;
-        }
 
         // Name validation runs BEFORE materialize so a bad or colliding name
         // fails fast without touching disk or the feed (design §5, §12 Q18).
@@ -184,145 +143,3 @@ export class UpdateCommandHandler implements CommandHandler {
     }
 }
 
-// Resolve the host install-source registry, erroring if the installer or its
-// registry is absent (a host without an installer exposes no `@source`).
-function getRegistry(installer: AppAgentInstaller | undefined): {
-    installer: AppAgentInstaller;
-    registry: InstallSourceRegistry;
-} {
-    if (installer === undefined) {
-        throw new Error("Agent installer not available");
-    }
-    const registry = installer.sources?.();
-    if (registry === undefined) {
-        throw new Error("Install sources are not available");
-    }
-    return { installer, registry };
-}
-
-class SourceListCommandHandler implements CommandHandler {
-    public readonly description =
-        "List install sources and the resolution order";
-    public readonly parameters = {} as const;
-    public async run(context: ActionContext<CommandHandlerContext>) {
-        const systemContext = context.sessionContext.agentContext;
-        const { registry } = getRegistry(systemContext.agentInstaller);
-        const infos = registry.list();
-        const order = registry.order().map((source) => source.name);
-        const lines: string[] = [];
-        lines.push(`Resolution order: [${order.join(", ")}]`);
-        lines.push("Sources:");
-        for (const info of infos) {
-            const inOrder = order.includes(info.name)
-                ? `#${order.indexOf(info.name) + 1}`
-                : "(not in order)";
-            // `kind` and `detail` are opaque, host-rendered strings; the core
-            // does not interpret them.
-            lines.push(
-                `  ${info.name} [${info.kind}] ${inOrder} ${info.detail}`,
-            );
-        }
-        displayResult(lines.join("\n"), context);
-    }
-}
-
-class SourceOrderCommandHandler implements CommandHandler {
-    public readonly description =
-        "Set the resolution order (a subset is allowed; remaining sources are appended)";
-    public readonly parameters = {
-        args: {
-            names: {
-                description: "Source names in priority order (first wins)",
-                type: "string",
-                multiple: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const { registry } = getRegistry(systemContext.agentInstaller);
-        const known = new Set(registry.list().map((config) => config.name));
-        const unknown = params.args.names.filter((name) => !known.has(name));
-        if (unknown.length > 0) {
-            await displayWarn(
-                `Ignoring unknown source(s): ${unknown.join(", ")}`,
-                context,
-            );
-        }
-        // Keep the requested subset first, then append the remaining configured
-        // sources so reordering never silently drops a source (design §5).
-        const givenKnown = [
-            ...new Set(params.args.names.filter((name) => known.has(name))),
-        ];
-        const seen = new Set(givenKnown);
-        const rest = registry
-            .list()
-            .map((config) => config.name)
-            .filter((name) => !seen.has(name));
-        const order = [...givenKnown, ...rest];
-        registry.setOrder(order);
-        displayResult(`Resolution order: [${order.join(", ")}]`, context);
-    }
-}
-
-class SourceRemoveCommandHandler implements CommandHandler {
-    public readonly description = "Remove an install source";
-    public readonly parameters = {
-        args: {
-            name: { description: "Source name to remove", type: "string" },
-        },
-        flags: {
-            force: {
-                description:
-                    "Remove even when installed agents still reference this source",
-                char: "f",
-                type: "boolean",
-                default: false,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const { installer, registry } = getRegistry(
-            systemContext.agentInstaller,
-        );
-        const { name } = params.args;
-        const referencing = installer.recordsUsingSource?.(name) ?? [];
-        if (referencing.length > 0 && !params.flags.force) {
-            // Warn and abort: removal without --force is a no-op when agents
-            // still reference the source (design §5).
-            await displayWarn(
-                `Source '${name}' is still referenced by: ${referencing.join(
-                    ", ",
-                )}. ` +
-                    `Those agents stay loadable but can no longer be '@update'd. ` +
-                    `Re-run with --force to remove anyway.`,
-                context,
-            );
-            return;
-        }
-        registry.remove(name);
-        displayResult(`Removed source '${name}'.`, context);
-    }
-}
-
-export function getSourceCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Manage install sources (design §5)",
-        defaultSubCommand: "list",
-        commands: {
-            list: new SourceListCommandHandler(),
-            order: new SourceOrderCommandHandler(),
-            // `add` is contributed by the host via
-            // `AppAgentInstaller.sourceCommands()` and merged in by the system
-            // agent: the host owns the per-kind grammar, flags, and validation.
-            remove: new SourceRemoveCommandHandler(),
-        },
-    };
-}

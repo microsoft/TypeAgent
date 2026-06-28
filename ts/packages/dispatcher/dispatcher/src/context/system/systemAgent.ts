@@ -59,7 +59,6 @@ import {
     InstallCommandHandler,
     UninstallCommandHandler,
     UpdateCommandHandler,
-    getSourceCommandHandlers,
 } from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
@@ -139,7 +138,6 @@ export const systemHandlers: CommandHandlerTable = {
         install: new InstallCommandHandler(),
         uninstall: new UninstallCommandHandler(),
         update: new UpdateCommandHandler(),
-        source: getSourceCommandHandlers(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),
@@ -256,11 +254,12 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-// The host (via `AppAgentInstaller.sourceCommands()`) contributes the typed
-// `@source add` subcommands. They are merged into the static `@source` table
-// here, per call, so the dispatcher core never learns the source-kind taxonomy.
-// `getCommands`/`executeCommand`/`getCommandCompletion` all resolve against the
-// merged table; `@help` uses it too so the host commands show up in usage.
+// The host (via `AppAgentInstaller.sourceCommands()`) owns the entire `@source`
+// command table (list/order/where/remove/add). It is injected here, per call,
+// so the dispatcher core never learns the source-kind taxonomy or any of the
+// source management grammar. `getCommands`/`executeCommand`/
+// `getCommandCompletion` all resolve against the merged table; `@help` uses it
+// too so the host commands show up in usage. Absent installer -> no `@source`.
 export function getSystemHandlers(
     systemContext: CommandHandlerContext | undefined,
 ): CommandHandlerTable {
@@ -268,18 +267,11 @@ export function getSystemHandlers(
     if (sourceCommands === undefined) {
         return systemHandlers;
     }
-    const source = systemHandlers.commands.source as CommandHandlerTable;
     return {
         ...systemHandlers,
         commands: {
             ...systemHandlers.commands,
-            source: {
-                ...source,
-                commands: {
-                    ...source.commands,
-                    add: sourceCommands,
-                },
-            },
+            source: sourceCommands,
         },
     };
 }

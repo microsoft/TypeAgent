@@ -4,12 +4,11 @@
 import registerDebug from "debug";
 import {
     InstallSource,
+    InstallSourceConfig,
     InstallSourceInfo,
-    InstallSourceRegistry,
     InstalledAgentRecord,
     ResolvedCandidate,
-} from "agent-dispatcher";
-import { InstallSourceConfig } from "./config.js";
+} from "./config.js";
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource, FeedSourceDeps } from "./feedSource.js";
@@ -18,12 +17,25 @@ import { AsyncMutex } from "./mutex.js";
 const debug = registerDebug("typeagent:dispatcher:installSource:registry");
 
 /**
- * The host's registry: the core `InstallSourceRegistry` plus the typed,
- * programmatic `add(config)` used by seeding, tests, and the host-contributed
- * `@source add` command handlers (see `getAddSourceCommandHandlers`).
+ * The host's install-source registry. Owns source listing, ordering,
+ * configuration, ordered resolution (design §4.1), and the typed `add(config)`
+ * used by seeding, tests, and the host's `@source` command handlers. This is
+ * entirely host-internal - the dispatcher core has no registry interface; it
+ * receives the `@source` command table via `AppAgentInstaller.sourceCommands()`.
  */
-export interface DefaultInstallSourceRegistry extends InstallSourceRegistry {
+export interface DefaultInstallSourceRegistry {
+    // Host-rendered summaries for `@source list`.
+    list(): InstallSourceInfo[];
+    get(name: string): InstallSource | undefined;
+    // user-configurable resolution ORDER (first match wins).
+    order(): InstallSource[];
+    setOrder(names: string[]): void;
     add(config: InstallSourceConfig): void;
+    remove(name: string): void;
+    // resolve a ref: explicit source, else walk the configured order.
+    resolve(ref: string, sourceName?: string): Promise<InstalledAgentRecord>;
+    // dry-run: report which source would win without materializing.
+    where(ref: string): Promise<ResolvedCandidate | undefined>;
 }
 
 export interface RegistryDeps {

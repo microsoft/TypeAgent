@@ -3,7 +3,6 @@
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
-import { InstallSourceRegistry } from "./installSource.js";
 
 export interface AppAgentProvider {
     getAppAgentNames(): string[];
@@ -44,18 +43,13 @@ export interface AppAgentInstaller {
     // and `@update` is unavailable. Lives on the installer (not a core handler)
     // because the dispatcher core never reads `agents.json` (layering).
     update?(name: string, range?: string): Promise<AppAgentProvider>;
-    // Host-owned registry powering @source (design §4.5); absent -> @source
-    // unavailable.
-    sources?(): InstallSourceRegistry;
-    // Host-contributed `@source add` subcommands, merged into the system
-    // `@source` table by the system agent. The host owns the per-kind grammar,
-    // typed flags, validation, and any auth UI; the dispatcher core never
-    // learns the source-kind taxonomy. Absent -> `@source add` unavailable.
+    // The host-owned `@source` command table (list/order/where/remove/add),
+    // merged into the system command tree as `@source` by the system agent.
+    // The host owns the entire surface - the kind taxonomy, listing/ordering,
+    // resolution preview, the add grammar + typed flags + validation, and any
+    // auth UI; the dispatcher core never learns any of it. Absent -> `@source`
+    // unavailable (like a host with no install sources).
     sourceCommands?(): CommandHandlerTable;
-    // Names of installed agents whose record was acquired from `sourceName`.
-    // Powers `@source remove`'s "still referenced" warning. Optional for the
-    // same layering reason as `update` (the core handler cannot read records).
-    recordsUsingSource?(sourceName: string): string[];
 }
 
 export interface ConstructionProvider {

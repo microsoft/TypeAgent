@@ -19,13 +19,6 @@ export type {
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {
-    InstallSourceInfo,
-    ResolvedCandidate,
-    InstalledAgentRecord,
-    InstallSource,
-    InstallSourceRegistry,
-} from "./agentProvider/installSource.js";
-export type {
     IndexingServiceRegistry,
     IndexingServiceInfo,
 } from "./context/indexingServiceRegistry.js";

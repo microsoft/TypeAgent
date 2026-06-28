@@ -5,10 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
     InstallSource,
+    PathSourceConfig,
     InstalledAgentRecord,
     ResolvedCandidate,
-} from "agent-dispatcher";
-import { PathSourceConfig } from "./config.js";
+} from "./config.js";
 import { expandPath } from "./paths.js";
 
 // `path` source (design §3, §4.1, §4.2, §12 Q17).

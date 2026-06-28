@@ -5,10 +5,10 @@ import path from "node:path";
 import registerDebug from "debug";
 import {
     InstallSource,
+    CatalogSourceConfig,
     InstalledAgentRecord,
     ResolvedCandidate,
-} from "agent-dispatcher";
-import { CatalogSourceConfig } from "./config.js";
+} from "./config.js";
 import {
     AgentCatalog,
     BUNDLED_CATALOG,

@@ -1,7 +1,7 @@
 # AppAgent Install Sources - Design Doc
 
 > Status: **Implemented**
-> Scope: `ts/packages/dispatcher` (provider + installer + registry interfaces), `ts/packages/defaultAgentProvider` (provider + installer impl, config), `@install` / `@source` command handlers.
+> Scope: `ts/packages/dispatcher` (provider + installer interfaces, the live-session `@install` / `@uninstall` / `@update` handlers), `ts/packages/defaultAgentProvider` (provider + installer impl, install-record types, source config taxonomy, registry, and the whole `@source` command).
 > Framing: **clean-slate**. This design assumes we are free to change the provider/installer interfaces and the on-disk config formats without preserving backward compatibility. A one-time migration is described in §8.
 
 ## 1. Problem
@@ -28,7 +28,7 @@ flowchart LR
     repo["catalog source<br/>(agent list JSON;<br/>the bundled one ships in app)"] --> rec
     feed["feed source<br/>(Azure Artifacts)"] --> rec
     rec --> prov["single AppAgentProvider"] --> disp[Dispatcher / AppAgentManager]
-    reg["InstallSourceRegistry<br/>(ordered resolution)"] -.configures + orders.-> path & repo & feed
+    reg["DefaultInstallSourceRegistry<br/>(host-internal; ordered resolution)"] -.configures + orders.-> path & repo & feed
 ```
 
 Consequences of this framing:
@@ -56,10 +56,13 @@ Three kinds. All three resolve an agent into the same `InstalledAgentRecord` (§
 `path` is now a **first-class ordered source**, not a special case. Because resolution is an ordered walk (§4.1) where each source is asked `find(ref)` before any work happens, a `path` source placed early simply claims `ref`s that exist on disk. There is no separate heuristic.
 
 ```ts
-// dispatcher/src/agentProvider/installSource.ts
+// defaultAgentProvider/src/installSources/config.ts  (HOST-owned, not core)
 // Two layers, deliberately distinct:
 //   *SourceConfig  - plain declarative data (what's in config.json)
 //   InstallSource  - the live runtime object the registry builds from a config
+// The dispatcher core knows none of this taxonomy: it only contributes the
+// live-session @install/@uninstall/@update commands and receives the whole
+// @source command table from the host (§4.5).
 export type InstallSourceKind = "path" | "catalog" | "feed";
 
 export interface PathSourceConfig {
@@ -117,7 +120,7 @@ A `catalog` source points at a JSON file that lists the available agents. It can
 
 ### 4.1 Registry, sources, and ordered resolution
 
-Source listing, **ordering**, and configuration live on the registry, not the installer. `@source` talks to the registry; the installer just _uses_ it.
+Source listing, **ordering**, and configuration live on a registry inside the **host** (`default-agent-provider`), not in the dispatcher core. The core carries **no** install-source types at all: the record shapes (`ResolvedCandidate`, `InstalledAgentRecord`, §4.2), the `InstallSource`/registry contract, and the source-kind taxonomy are all entirely host-internal (`installSources/config.ts`). The whole `@source` command (list/order/where/remove/add) is **contributed by the host** through `AppAgentInstaller.sourceCommands()` (§4.5), and the dispatcher core merges it in without knowing its shape. `@source` talks to the registry; the installer just _uses_ it.
 
 Each source implements a two-phase contract so the registry can probe cheaply before doing any real work:
 
@@ -130,9 +133,21 @@ export interface ResolvedCandidate {
   execMode?: ExecutionMode;
 }
 
+// `ResolvedCandidate` (above), `InstalledAgentRecord` (§4.2), and everything
+// below all live in the host (`default-agent-provider`,
+// installSources/config.ts). The dispatcher core carries NONE of these
+// install-source types and never imports them.
+
+// Host-rendered summary of one configured source, for `@source list`.
+export interface InstallSourceInfo {
+  readonly name: string;
+  readonly kind: string; // "path" | "catalog" | "feed" (display)
+  readonly detail: string; // one-line summary, e.g. the registry URL
+}
+
 export interface InstallSource {
   readonly name: string;
-  readonly kind: InstallSourceKind;
+  readonly kind: string;
   // CHEAP + side-effect free: can this source resolve `ref`? A match is a
   // commitment - if find() returns a candidate, materialize() must succeed.
   find(ref: string): Promise<ResolvedCandidate | undefined>;
@@ -142,8 +157,11 @@ export interface InstallSource {
   listAgents?(): Promise<string[]>;
 }
 
-export interface InstallSourceRegistry {
-  list(): InstallSourceConfig[];
+// Host-internal (named `DefaultInstallSourceRegistry`). The dispatcher core has
+// NO registry interface; it receives the whole `@source` command table via
+// `AppAgentInstaller.sourceCommands()` (§4.5).
+export interface DefaultInstallSourceRegistry {
+  list(): InstallSourceInfo[]; // host-rendered summaries for @source list
   get(name: string): InstallSource | undefined;
 
   // user-configurable resolution ORDER (replaces a single default).
@@ -156,7 +174,8 @@ export interface InstallSourceRegistry {
 
   // resolve a ref: explicit source, else walk the configured order.
   resolve(ref: string, sourceName?: string): Promise<InstalledAgentRecord>;
-  // dry-run: report which source would win without materializing.
+  // dry-run: report which source would win without materializing
+  // (powers `@source where`).
   where(ref: string): Promise<ResolvedCandidate | undefined>;
 }
 ```
@@ -237,6 +256,8 @@ _Configuration._ The shared feed install root is configurable via `installSource
 
 ### 4.2 Installed record (single shape the provider loads)
 
+Defined in the host (`default-agent-provider`, `installSources/config.ts`) alongside `ResolvedCandidate` and `InstallSource`; the dispatcher core does not know it.
+
 ```ts
 export interface InstalledAgentRecord {
   name: string; // dispatcher agent name
@@ -294,7 +315,7 @@ export interface AppAgentInstaller {
 }
 ```
 
-The installer is a thin wrapper over `registry.resolve(ref, sourceName)` plus writing the resulting `InstalledAgentRecord` to `agents.json`. No `installNpm` / `installPath` / `installFrom` variants: a path is just the `path` source, a feed install is just the `feed` source. `install` returns a freshly built provider for the just-installed agent so the dispatcher can register it into the live session without a restart (the registration + lazy-initialization path is detailed in §4.6). (The installer also carries an optional `sources()` accessor for the `@source` command - see §4.5.)
+The installer is a thin wrapper over `registry.resolve(ref, sourceName)` plus writing the resulting `InstalledAgentRecord` to `agents.json`. No `installNpm` / `installPath` / `installFrom` variants: a path is just the `path` source, a feed install is just the `feed` source. `install` returns a freshly built provider for the just-installed agent so the dispatcher can register it into the live session without a restart (the registration + lazy-initialization path is detailed in §4.6). (The installer also carries an optional `sourceCommands()` accessor that contributes the entire `@source` command table - see §4.5.)
 
 ### 4.4 Provider (unchanged contract)
 
@@ -318,9 +339,11 @@ The "single installed-agent provider" (§4.4) is just **one `AppAgentProvider` t
 | Default (shell, CLI, agentServer)          | `getDefaultAppAgentProviders()` + `getDefaultAppAgentInstaller()` | same call sites; sources + registry built internally.      |
 | Embedder wanting sources                   | a host-built installer that owns a registry                       | full install/source surface.                               |
 
-The only thing that must reach the dispatcher core is the new `@source` command, the same way `@install` reaches `agentInstaller` today. To avoid a second optional injection, **the registry hangs off the installer** rather than becoming a new `DispatcherOptions` field:
+The only thing that must reach the dispatcher core is the `@source` command, the same way `@install` reaches `agentInstaller` today. To avoid a second optional injection - and to keep the source taxonomy out of the core entirely - **the host contributes the whole `@source` command table off the installer** rather than exposing a registry the core would have to understand:
 
 ```ts
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+
 export interface AppAgentInstaller {
   install(
     name: string,
@@ -328,12 +351,17 @@ export interface AppAgentInstaller {
     sourceName?: string,
   ): Promise<AppAgentProvider>;
   uninstall(name: string): Promise<void>;
-  // host-owned registry powering @source; absent -> @source unavailable
-  sources?(): InstallSourceRegistry;
+  update?(name: string, range?: string): Promise<AppAgentProvider>;
+  // host-owned `@source` command table (list/order/where/remove/add);
+  // absent -> @source unavailable. The core merges it in verbatim and never
+  // learns its shape (there is no registry interface in core).
+  sourceCommands?(): CommandHandlerTable;
 }
 ```
 
-So the rule stays coherent: **inject an installer and you get both `@install` and `@source`; inject none and you get neither** - matching today's "no installer, no `@install`" behavior. A host that brings its own `appAgentProviders` and no installer never sees a source.
+The core's system agent merges this table in as the `@source` node per call (`getSystemHandlers(systemContext)` in `systemAgent.ts`, also used by `@help`), so parsing, completion, execution, and help all see the host commands. The rule stays coherent: **inject an installer and you get both `@install` and `@source`; inject none and you get neither** - matching today's "no installer, no `@install`" behavior. A host that brings its own `appAgentProviders` and no installer never sees a source.
+
+This splits cleanly on coupling: `@install` / `@uninstall` / `@update` mutate the **live dispatcher session** (they register/unregister providers, §4.6/§4.7), so they stay in the core; `@source` (list/order/where/remove/add) is pure source-config management with no live-session coupling, so it lives **entirely** in the host. `@update`'s record access (re-resolving against the recorded source) and `@source remove`'s "still referenced" check read `agents.json`, which the host owns - so the host passes a `recordsUsingSource` closure into its own `@source` handlers rather than exposing it on the core installer.
 
 #### Code / API organization (where each piece lives)
 
@@ -342,9 +370,9 @@ The packages and their dependency direction are **unchanged**; only the contents
 ```mermaid
 flowchart BT
     types["@typeagent/dispatcher-types<br/>(pure types)"]
-    disp["agent-dispatcher (core)<br/>createDispatcher, DispatcherOptions,<br/>AppAgentProvider, AppAgentInstaller,<br/>+ NEW installSource.ts INTERFACES:<br/>InstallSource*, InstallSourceRegistry,<br/>InstalledAgentRecord"]
+    disp["agent-dispatcher (core)<br/>createDispatcher, DispatcherOptions,<br/>AppAgentProvider, AppAgentInstaller<br/>(install/uninstall/update + sourceCommands seam).<br/>NO install-source record types"]
     node["dispatcher-node-providers<br/>createNpmAppAgentProvider, NpmAppAgentInfo"]
-    dflt["default-agent-provider<br/>getDefaultAppAgentProviders,<br/>getDefaultAppAgentInstaller<br/>+ NEW IMPL: registry, path/catalog/feed<br/>sources, feed auth (az), npm install"]
+    dflt["default-agent-provider<br/>getDefaultAppAgentProviders,<br/>getDefaultAppAgentInstaller<br/>+ IMPL: record types (ResolvedCandidate,<br/>InstalledAgentRecord), source config taxonomy, registry,<br/>path/catalog/feed sources, the whole @source<br/>command table, feed auth (az), npm install"]
     disp --> types
     node --> disp
     dflt --> disp
@@ -353,11 +381,11 @@ flowchart BT
 
 | Package                     | Owns                                                                                                                                                      | New in this design                                                                                                                                                                               |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agent-dispatcher` (core)   | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the `@install` / `@update` / `@source` command **handlers** | `installSource.ts` **interfaces** (`InstallSourceKind/Config`, `InstallSource`, `ResolvedCandidate`, `InstallSourceRegistry`, `InstalledAgentRecord`); `sources?()` added to `AppAgentInstaller` |
+| `agent-dispatcher` (core)   | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the live-session `@install` / `@uninstall` / `@update` command **handlers** | `sourceCommands?()` added to `AppAgentInstaller` (host supplies the whole `@source` table). The record types (`ResolvedCandidate`, `InstalledAgentRecord`), source taxonomy, registry, and `@source` handlers are **not** here. |
 | `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo`                                                                                                            | unchanged (still the npm loading mechanism §10)                                                                                                                                                  |
-| `default-agent-provider`    | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`                                                                                              | the **registry + source implementations**, feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog                                                                    |
+| `default-agent-provider`    | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`                                                                                              | the **install-record types (`ResolvedCandidate`, `InstalledAgentRecord`), source config taxonomy, registry + source implementations, and the whole `@source` command table** (list/order/where/remove/add), feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog |
 
-Why the split matters: the `@source` handler in the dispatcher core only references the `InstallSourceRegistry` **interface** (reached via `context.agentInstaller.sources()`), so the core compiles and runs with **no dependency** on Azure DevOps, npm, or `az`. A host that wants the source machinery pulls it in by depending on `default-agent-provider`; a host that doesn't, doesn't.
+Why the split matters: the dispatcher core has **no** `@source` handler and **no** registry interface at all - it just merges in whatever `CommandHandlerTable` the host's `sourceCommands()` returns. So the core compiles and runs with **no dependency** on Azure DevOps, npm, `az`, or even the source-kind taxonomy. A host that wants the source machinery pulls it in by depending on `default-agent-provider`; a host that doesn't, doesn't (and simply has no `@source`).
 
 The three host shapes as concrete wiring (imports are exactly today's; the default recipe is byte-for-byte unchanged):
 
@@ -388,22 +416,23 @@ await createDispatcher({
 
 ```ts
 // 3. Embedder wanting sources WITHOUT default-agent-provider - implement the
-//    interfaces from agent-dispatcher directly (no Azure/npm feed code pulled in).
+//    AppAgentInstaller from agent-dispatcher directly (no Azure/npm feed code
+//    pulled in). The @source command is whatever CommandHandlerTable you return.
 import {
   createDispatcher,
   type AppAgentInstaller,
-  type InstallSourceRegistry,
 } from "agent-dispatcher";
+import { type CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 
 const installer: AppAgentInstaller = {
   install: /* ... */,
   uninstall: /* ... */,
-  sources: () => myRegistry, // a host-built InstallSourceRegistry
+  sourceCommands: () => mySourceCommands, // a host-built @source CommandHandlerTable
 };
 await createDispatcher({ appAgentProviders, agentInstaller: installer });
 ```
 
-So a host developer's choice is a single axis: **which `AppAgentInstaller` (if any) do I inject?** Inject `getDefaultAppAgentInstaller` for the batteries-included feed/catalog/path registry; inject a hand-built one to bring your own sources; inject none to opt out entirely. No host ever imports a source kind or the registry from `agent-dispatcher` core to _run_ agents - only an embedder _building_ an installer touches those interface types.
+So a host developer's choice is a single axis: **which `AppAgentInstaller` (if any) do I inject?** Inject `getDefaultAppAgentInstaller` for the batteries-included feed/catalog/path registry and its `@source` command; inject a hand-built one to bring your own sources and `@source` table; inject none to opt out entirely. The core defines **no** source or registry type - a host that brings its own sources owns that vocabulary completely and only hands the core a `CommandHandlerTable` for `@source`.
 
 ### 4.6 Post-install: making the agent live (no restart)
 
@@ -440,15 +469,16 @@ The only change from today is that `install` is the single entry point (no `inst
 ### `@install`
 
 ```
-@install <name> <ref> [--source <sourceName>] [--where]
+@install <name> <ref> [--source <sourceName>]
 ```
 
 Resolution:
 
 1. `--source <s>` given -> `registry.resolve(ref, s)`; bypasses the order, `ref` interpreted by that source. Errors if `s` cannot resolve `ref`.
 2. Otherwise -> `registry.resolve(ref)` walks the configured order (§4.1); first matching source wins.
-3. `--where` -> runs `registry.where(ref)` and reports which source _would_ win (and the candidate) without installing.
-4. No source matches -> error listing the order and (for enumerable sources) their advertised agents.
+3. No source matches -> error listing the order and (for enumerable sources) their advertised agents.
+
+A dry-run preview ("which source _would_ win, without installing") is the separate `@source where <ref>` command below - it belongs with source management, not install.
 
 There is no path/specifier heuristic: the ordered walk plus each source's `find` replaces it. A `ref` that exists on disk is claimed by the `path` source; a short name is claimed by a `catalog`; a specifier by `feed` - purely by their position in the order.
 
@@ -474,9 +504,12 @@ It then rewrites the record and re-registers the refreshed provider (§4.6). Mec
 
 ### `@source`
 
+The entire `@source` command is **contributed by the host** (`default-agent-provider`) via `AppAgentInstaller.sourceCommands()` (§4.5); the dispatcher core merges it in without knowing its shape. Absent an installer, `@source` is unavailable.
+
 ```
 @source list                 # shows sources AND the current resolution order
 @source order <name>...       # set the resolution order (subset allowed; rest appended)
+@source where <ref>          # report which source WOULD resolve <ref>, without installing
 @source add feed <name> --registry <url> [--scope <scope>]...
 @source add catalog <name> --catalog <path>
 @source add path <name> [--baseDir <path>]
@@ -542,8 +575,8 @@ flowchart TD
 
 ### Components
 
-- **dispatcher**: `installSource.ts` (3 source kinds + `InstallSourceRegistry` with ordered `find`/`materialize` resolution), slimmed `AppAgentInstaller` (`install` / `uninstall`), single installed-agent provider, bundled-catalog pre-install step, `@install` rewrite (ordered walk + `--where`), new `@update` command, new `@source` command group (incl. `order`).
-- **defaultAgentProvider**: implement the registry + installer; `feed` source `find` checks a cached package list (~1h TTL, offline = serve cache + skip feed) and `materialize` wraps `npm install` (was `npmInstallAgent`); feed auth uses an Azure CLI access token (`az account get-access-token`) injected into a transient npm auth config, with an actionable `az login` hint on failure; `catalog` `find` does a catalog lookup (the bundled catalog is just one such source); `path` `find` stats the filesystem; serialize the **whole install op** (incl. `npm install` into the shared install dir) and the `agents.json` read/write behind one in-process async lock; persist `installSources` (sources + order).
+- **dispatcher**: slimmed `AppAgentInstaller` (`install` / `uninstall` / `update?` + the `sourceCommands?()` seam), single installed-agent provider, bundled-catalog pre-install step, `@install` rewrite (ordered walk), new `@update` command. The install-record types (`ResolvedCandidate` / `InstalledAgentRecord`), source kinds, ordered `find`/`materialize` registry, and the whole `@source` command group live in **defaultAgentProvider** (next bullet).
+- **defaultAgentProvider**: define the install-record types (`ResolvedCandidate` / `InstalledAgentRecord`, in `installSources/config.ts`); implement the source config taxonomy, the registry, and the entire `@source` command table (list/order/where/remove/add); `feed` source `find` checks a cached package list (~1h TTL, offline = serve cache + skip feed) and `materialize` wraps `npm install` (was `npmInstallAgent`); feed auth uses an Azure CLI access token (`az account get-access-token`) injected into a transient npm auth config, with an actionable `az login` hint on failure; `catalog` `find` does a catalog lookup (the bundled catalog is just one such source); `path` `find` stats the filesystem; serialize the **whole install op** (incl. `npm install` into the shared install dir) and the `agents.json` read/write behind one in-process async lock; persist `installSources` (sources + order).
 - **repo**: the bundled catalog JSON (was `data/config.json` `agents`); mark which entries are `preinstall`; add the `typeagent-agent`-keyword rule to `repo-policy-check.mjs` (§4.1) and add the keyword to existing agent packages' `package.json`.
 - **callers**: `getDefaultAppAgentProviders` returns `[ installedProvider, mcpProvider ]` instead of `[ defaultNpm, mcp, external ]`. Update `shell/instance.ts`, `agentServer`, collisions runners, onboarding tests.
 
@@ -605,7 +638,7 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 ## 12. Decision log
 
 1. **Pre-install set (Q1).** First run pre-installs today's full default agent set, so launch behavior is unchanged. Demotion to installable-on-demand is follow-up curation, done per agent by dropping the `preinstall` flag.
-2. **Shadowing (Q2).** Resolution stays first-match-wins and silent. `@install --where` and `@source list` (which show the order) are the inspection tools; no ambiguity warning or error.
+2. **Shadowing (Q2).** Resolution stays first-match-wins and silent. `@source where` and `@source list` (which show the order) are the inspection tools; no ambiguity warning or error.
 3. **Feed cache (Q3).** The cached feed package list has a ~1h TTL. Offline, the cache is served as-is and the feed is skipped in the walk rather than failing the install.
 4. **find / materialize commitment (Q4).** `find` returning `undefined` is a non-match and the ordered walk continues. The commitment applies only after a match: a source whose `find` matched must `materialize` or hard-error - no silent fall-through. With an explicit `--source`, a non-match is itself a hard error.
 5. **agents.json writes + install serialization (Q5).** We rely on the existing dispatcher/host instance-dir lock for cross-process exclusivity where persistence is enabled, and keep an in-process async mutex for install sequencing (`resolve` -> `materialize` -> record write). No second global lock layer is introduced in the installer. Atomic temp+rename remains a cheap safeguard.

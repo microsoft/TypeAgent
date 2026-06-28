@@ -7,10 +7,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
     InstallSource,
+    FeedSourceConfig,
     InstalledAgentRecord,
     ResolvedCandidate,
-} from "agent-dispatcher";
-import { FeedSourceConfig } from "./config.js";
+} from "./config.js";
 import {
     AzTokenRunner,
     getFeedAccessToken,
