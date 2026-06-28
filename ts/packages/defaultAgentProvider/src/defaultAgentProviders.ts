@@ -16,6 +16,7 @@ import {
 import path from "node:path";
 import {
     getInstanceConfigProvider,
+    getInstallDir,
     getProviderConfig,
     getResolvedInstallSources,
     InstallSourcesResolveOptions,
@@ -57,10 +58,10 @@ export function getDefaultAppAgentProviders(
             ? getInstanceConfigProvider(instanceDirOrConfigProvider)
             : instanceDirOrConfigProvider;
     const instanceDir = instanceConfigs?.getInstanceDir();
-    const { installDir } = getResolvedInstallSources(instanceConfigs);
+    const installDir = getInstallDir(instanceConfigs);
     const records = loadInstalledRecords(instanceDir, configName);
     const installedProvider = createInstalledAppAgentProvider(records, {
-        installDir,
+        ...(installDir !== undefined ? { installDir } : {}),
         appBundleRequirePath: getAppBundleRequirePath(),
     });
     const providers = [installedProvider];
@@ -106,10 +107,17 @@ export function getDefaultAppAgentInstaller(
     options?: DefaultAppAgentInstallerOptions,
 ): AppAgentInstaller {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
-    const { installDir, sources } = getResolvedInstallSources(
-        instanceConfigs,
-        options,
-    );
+    const installDir = getInstallDir(instanceConfigs);
+    // The installer always has a concrete instanceDir, so installDir is
+    // resolved; this invariant guards the registry/provider below (which
+    // require a real install root) and turns any future regression into a
+    // loud failure rather than a silent CWD-relative write.
+    if (installDir === undefined) {
+        throw new Error(
+            "Internal error: install directory could not be resolved (no instance directory).",
+        );
+    }
+    const sources = getResolvedInstallSources(instanceConfigs, options);
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall (design §12 Q5).
     const limiter = createLimiter(1);
@@ -118,14 +126,13 @@ export function getDefaultAppAgentInstaller(
     function persistSources(configs: InstallSourceConfig[]): void {
         const current = instanceConfigs.getInstanceConfig();
         // Reconstruct installSources from the known fields only, dropping any
-        // legacy `order` array (no longer used; the source list order is the
-        // resolution order).
-        const installDir = current.installSources?.installDir;
+        // legacy fields (e.g. a stored `order` array or `installDir` override,
+        // both no longer used; the source list order is the resolution order
+        // and installDir is always derived at runtime).
         const next: InstanceConfig = {
             ...current,
             installSources: {
                 sources: configs,
-                ...(installDir !== undefined ? { installDir } : {}),
             },
         };
         instanceConfigs.setInstanceConfig(next);
@@ -141,7 +148,7 @@ export function getDefaultAppAgentInstaller(
         records: Record<string, InstalledAgentRecord>,
     ): AppAgentProvider {
         return createInstalledAppAgentProvider(records, {
-            installDir,
+            ...(installDir !== undefined ? { installDir } : {}),
             appBundleRequirePath,
         });
     }

@@ -8,7 +8,6 @@ import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 import { McpAppAgentConfig, McpAppAgentInfo } from "../mcpAgentProvider.js";
 import path from "node:path";
-import { expandPath } from "../installSources/paths.js";
 
 export type ExplainerConfig = {
     constructions?: {
@@ -37,7 +36,6 @@ export type InstanceConfig = {
 // Persisted install-source configuration (design §6). All fields optional; the
 // resolver below merges them over the shipped seed defaults.
 export type InstallSourcesConfig = {
-    installDir?: string;
     // Install sources in resolution priority order (first match wins).
     sources?: InstallSourceConfig[];
 };
@@ -171,26 +169,39 @@ function getSeedInstallSources(
 }
 
 /**
- * Resolve the effective install-sources configuration (design §6): the shipped
- * seed defaults overlaid with any persisted instance overrides. `installDir`
- * is the shared npm root all feed sources install into, defaulting to
- * `<instanceDir>/installedAgents` and supporting `${ENV}` expansion.
+ * Resolve the effective install sources in resolution priority order (design
+ * §6): the persisted instance overrides when present, otherwise the shipped
+ * seed defaults. `excludePathSources` drops `path` sources for hosts without a
+ * usable local filesystem (whose refs would resolve against the server's own
+ * filesystem).
  */
 export function getResolvedInstallSources(
     instanceConfigs: InstanceConfigProvider | undefined,
     options?: InstallSourcesResolveOptions,
-): { installDir: string; sources: InstallSourceConfig[] } {
-    const instanceDir = instanceConfigs?.getInstanceDir();
+): InstallSourceConfig[] {
     const persisted = instanceConfigs?.getInstanceConfig().installSources;
     // Persisted overrides bypass the seed, so apply the same path-source
     // exclusion to them; getSeedInstallSources handles the default case.
-    const sources = persisted?.sources
+    return persisted?.sources
         ? options?.excludePathSources
             ? persisted.sources.filter((source) => source.kind !== "path")
             : persisted.sources
         : getSeedInstallSources(options);
-    const installDir = persisted?.installDir
-        ? expandPath(persisted.installDir)
-        : path.join(instanceDir ?? process.cwd(), "installedAgents");
-    return { installDir, sources };
+}
+
+/**
+ * The shared npm root all feed sources install into (design §6): always
+ * `<instanceDir>/installedAgents`, derived at runtime and never persisted. It
+ * is `undefined` for the in-memory case (no instance dir), where nothing is
+ * ever installed; deliberately not falling back to `process.cwd()`, which
+ * would silently anchor installs to wherever the process happened to launch
+ * (see the same anti-ambient-CWD stance in pathSource.ts).
+ */
+export function getInstallDir(
+    instanceConfigs: InstanceConfigProvider | undefined,
+): string | undefined {
+    const instanceDir = instanceConfigs?.getInstanceDir();
+    return instanceDir !== undefined
+        ? path.join(instanceDir, "installedAgents")
+        : undefined;
 }
