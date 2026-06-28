@@ -33,17 +33,18 @@ const goodToken = async () =>
 beforeEach(() => clearTokenCacheForTest());
 
 describe("InstallSourceRegistry resolution", () => {
-    function twoCatalogRegistry(order: string[]) {
+    function twoCatalogRegistry(orderNames: string[] = ["a", "b"]) {
         const a = writeCatalog("a", { dup: { name: "module-a" } });
         const b = writeCatalog("b", {
             dup: { name: "module-b" },
             onlyb: { name: "module-onlyb" },
         });
-        const configs: InstallSourceConfig[] = [
-            { kind: "catalog", name: "a", catalog: a },
-            { kind: "catalog", name: "b", catalog: b },
-        ];
-        return createInstallSourceRegistry(configs, order, {
+        const byName: Record<string, InstallSourceConfig> = {
+            a: { kind: "catalog", name: "a", catalog: a },
+            b: { kind: "catalog", name: "b", catalog: b },
+        };
+        const configs = orderNames.map((name) => byName[name]);
+        return createInstallSourceRegistry(configs, {
             installDir: tmpInstallDir(),
         });
     }
@@ -106,7 +107,7 @@ describe("InstallSourceRegistry resolution", () => {
     it("ignores unknown entries in the order (warn, not error)", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         registry.setOrder(["ghost", "b", "a"]);
-        expect(registry.order().map((s) => s.name)).toEqual(["b", "a"]);
+        expect(registry.list().map((s) => s.name)).toEqual(["b", "a"]);
         const record = await registry.resolve("dup");
         expect(record.module).toBe("module-b");
     });
@@ -114,11 +115,10 @@ describe("InstallSourceRegistry resolution", () => {
 
 describe("InstallSourceRegistry add/remove/persist", () => {
     it("add/remove updates list and persists", () => {
-        const persisted: { configs: InstallSourceConfig[]; order: string[] }[] =
-            [];
-        const registry = createInstallSourceRegistry([], ["a"], {
+        const persisted: { configs: InstallSourceConfig[] }[] = [];
+        const registry = createInstallSourceRegistry([], {
             installDir: tmpInstallDir(),
-            persist: (configs, order) => persisted.push({ configs, order }),
+            persist: (configs) => persisted.push({ configs }),
         });
         const cfg: InstallSourceConfig = {
             kind: "catalog",
@@ -132,14 +132,13 @@ describe("InstallSourceRegistry add/remove/persist", () => {
         registry.remove("a");
         expect(registry.list()).toEqual([]);
         // remove also drops the name from the resolution order.
-        expect(registry.order().map((s) => s.name)).toEqual([]);
+        expect(registry.list().map((s) => s.name)).toEqual([]);
         expect(persisted.length).toBe(2);
     });
 
     it("rejects duplicate source names on add", () => {
         const registry = createInstallSourceRegistry(
             [{ kind: "path", name: "path" }],
-            [],
             { installDir: tmpInstallDir() },
         );
         expect(() => registry.add({ kind: "path", name: "path" })).toThrow(
@@ -148,7 +147,7 @@ describe("InstallSourceRegistry add/remove/persist", () => {
     });
 
     it("remove of an unknown source is an error", () => {
-        const registry = createInstallSourceRegistry([], [], {
+        const registry = createInstallSourceRegistry([], {
             installDir: tmpInstallDir(),
         });
         expect(() => registry.remove("ghost")).toThrow(/unknown source/);
@@ -160,7 +159,7 @@ describe("InstallSourceRegistry add/remove/persist", () => {
             name: "a",
             catalog: writeCatalog("getlist", { x: { name: "mod-x" } }),
         };
-        const registry = createInstallSourceRegistry([], [], {
+        const registry = createInstallSourceRegistry([], {
             installDir: tmpInstallDir(),
         });
         expect(registry.get("a")).toBeUndefined();
@@ -180,29 +179,26 @@ describe("InstallSourceRegistry add/remove/persist", () => {
                 { kind: "catalog", name: "a", catalog: a },
                 { kind: "catalog", name: "b", catalog: b },
             ],
-            [],
             { installDir: tmpInstallDir() },
         );
         registry.setOrder(["a", "b", "a"]);
-        expect(registry.order().map((s) => s.name)).toEqual(["a", "b"]);
+        expect(registry.list().map((s) => s.name)).toEqual(["a", "b"]);
     });
 
     it("sources and order survive a reload from the persisted snapshot", () => {
         // Simulate a restart: capture what the first registry persists, then
         // build a fresh registry from that snapshot and confirm the configured
-        // sources and resolution order round-trip (design §6).
-        let snapshot: { configs: InstallSourceConfig[]; order: string[] } = {
+        // sources and their resolution order round-trip (design §6).
+        let snapshot: { configs: InstallSourceConfig[] } = {
             configs: [],
-            order: [],
         };
         const installDir = tmpInstallDir();
         const first = createInstallSourceRegistry(
             [{ kind: "path", name: "path" }],
-            ["path"],
             {
                 installDir,
-                persist: (configs, order) => {
-                    snapshot = { configs, order };
+                persist: (configs) => {
+                    snapshot = { configs };
                 },
             },
         );
@@ -213,21 +209,10 @@ describe("InstallSourceRegistry add/remove/persist", () => {
         });
         first.setOrder(["builtin", "path"]);
 
-        const reloaded = createInstallSourceRegistry(
-            snapshot.configs,
-            snapshot.order,
-            { installDir },
-        );
-        expect(
-            reloaded
-                .list()
-                .map((c) => c.name)
-                .sort(),
-        ).toEqual(["builtin", "path"]);
-        expect(reloaded.order().map((s) => s.name)).toEqual([
-            "builtin",
-            "path",
-        ]);
+        const reloaded = createInstallSourceRegistry(snapshot.configs, {
+            installDir,
+        });
+        expect(reloaded.list().map((s) => s.name)).toEqual(["builtin", "path"]);
     });
 });
 
@@ -254,7 +239,6 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                     scopes: ["@typeagent"],
                 },
             ],
-            ["typeagent"],
             {
                 installDir,
                 feedDeps: {

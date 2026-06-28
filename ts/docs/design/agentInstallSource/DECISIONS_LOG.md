@@ -55,6 +55,7 @@
   would create a cycle and violate the layering rule. The string union matches the enum's
   serialized values used in catalog/record JSON.
 - **Design updated?** no (interface-level detail consistent with the design)
+
 ### 2026-06-27 — `ExecutionMode` moved to the node provider; core carries `loaderConfig`
 
 - **Milestone / item:** follow-up to M1 / 1.1
@@ -72,6 +73,7 @@
   keeps the core provider-agnostic, stays JSON-serializable for `agents.json`, and leaves
   the `kind` seam (§10) free to add non-npm loaders without touching core types.
 - **Design updated?** no (interface-level refinement; record shape stays serialization-compatible)
+
 ### 2026-06-26 — Corrupt user catalog degrades; corrupt bundled catalog fails loud
 
 - **Milestone / item:** M1 / 1.3
@@ -240,6 +242,7 @@
 - **Design updated?** no (follow-up: file an issue to delete the shim next release)
 
 ### 2026-06-28 — Catalog entry with neither path nor name fails fast
+
 - **Milestone / item:** Final gate (catalogSource)
 - **Type:** Unspecified
 - **Design ref:** §4.2, §12 Q17 (exactly one resolution handle)
@@ -249,7 +252,6 @@
 - **Rationale:** Q17 requires every record to have exactly one handle. A handle-less entry is
   a catalog authoring mistake; failing at resolve time (when the user references that key)
   gives an actionable message and never persists a malformed record. An unknown key still
-  returns `undefined` (non-match) so the ordered walk continues — only a *present but
-  malformed* entry throws. (Found in final-gate review round 2.)
+  returns `undefined` (non-match) so the ordered walk continues — only a _present but
+  malformed_ entry throws. (Found in final-gate review round 2.)
 - **Design updated?** no (enforces the existing §4.2/Q17 invariant)
-

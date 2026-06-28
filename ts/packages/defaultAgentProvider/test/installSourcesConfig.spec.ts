@@ -19,36 +19,47 @@ describe("getResolvedInstallSources", () => {
         const resolved = getResolvedInstallSources(
             getInstanceConfigProvider(dir),
         );
-        // path + builtin + typeagent are always present; order ends with the feed
-        expect(resolved.order).toContain("path");
-        expect(resolved.order).toContain("builtin");
-        expect(resolved.order).toContain("typeagent");
-        expect(resolved.order[0]).toBe("path");
-        const names = resolved.sources.map((s) => s.name).sort();
-        expect(names).toEqual(
-            expect.arrayContaining(["builtin", "path", "typeagent"]),
-        );
+        // path + builtin + typeagent are always present, in resolution order:
+        // path first, the feed last.
+        const names = resolved.sources.map((s) => s.name);
+        expect(names).toContain("path");
+        expect(names).toContain("builtin");
+        expect(names).toContain("typeagent");
+        expect(names[0]).toBe("path");
+        expect(names[names.length - 1]).toBe("typeagent");
         // default installDir is <instanceDir>/installedAgents
         expect(resolved.installDir).toBe(path.join(dir, "installedAgents"));
     });
 
-    it("honors a persisted override for order, sources, and installDir", () => {
+    it("honors persisted sources and installDir, ignoring legacy order", () => {
         const dir = tmpInstanceDir();
         fs.writeFileSync(
             path.join(dir, "config.json"),
             JSON.stringify({
                 installSources: {
-                    order: ["path"],
+                    // Legacy field from an older build; ignored on read.
+                    order: ["typeagent", "path"],
                     installDir: "/custom/agents",
-                    sources: [{ kind: "path", name: "path" }],
+                    sources: [
+                        { kind: "path", name: "path" },
+                        {
+                            kind: "catalog",
+                            name: "builtin",
+                            catalog: "<bundled>",
+                        },
+                    ],
                 },
             }),
         );
         const resolved = getResolvedInstallSources(
             getInstanceConfigProvider(dir),
         );
-        expect(resolved.order).toEqual(["path"]);
-        expect(resolved.sources).toEqual([{ kind: "path", name: "path" }]);
+        // The persisted sources array order IS the resolution order; the legacy
+        // `order` field has no effect.
+        expect(resolved.sources.map((s) => s.name)).toEqual([
+            "path",
+            "builtin",
+        ]);
         expect(resolved.installDir).toBe("/custom/agents");
     });
 

@@ -62,7 +62,7 @@ export type InstallSourceKind = "path" | "catalog" | "feed";
 export interface PathSourceConfig {
     kind: "path";
     name: string; // conventionally "path"
-    baseDir?: string; // base for relative refs; default cwd / instance dir
+    baseDir?: string; // base for relative refs; no default (relative ref without it is a non-match)
 }
 
 /**
@@ -78,7 +78,7 @@ export interface FeedSourceConfig {
     kind: "feed";
     name: string; // e.g. "typeagent"
     registry: string; // Azure Artifacts npm registry URL
-    scopes: string[]; // e.g. ["@typeagent", "@secretagents"]
+    scopes: string[]; // e.g. ["@typeagent"]
 }
 
 /**

@@ -26,8 +26,7 @@ function makeRegistry(overrides: any = {}) {
     const registry = {
         calls,
         list: () => infos,
-        order: () =>
-            orderNames.map((name: string) => ({ name, kind: "path" })),
+        order: () => orderNames.map((name: string) => ({ name, kind: "path" })),
         setOrder: (names: string[]) => calls.setOrder.push(names),
         remove: (name: string) => calls.remove.push(name),
         get: () => undefined,
@@ -94,13 +93,13 @@ describe("getSourceCommands", () => {
     });
 
     describe("list", () => {
-        it("reports the order and configured sources", async () => {
+        it("reports the configured sources in resolution order", async () => {
             const registry = makeRegistry();
             const list = getSourceCommands(makeDeps(registry)).commands
                 .list as any;
             const { context, output } = capturingContext();
             await list.run(context);
-            expect(output()).toContain("Resolution order: [path]");
+            expect(output()).toContain("path [path] #1");
         });
 
         it("renders the order and each source with its position", async () => {
@@ -120,7 +119,6 @@ describe("getSourceCommands", () => {
             const { context, output } = capturingContext();
             await list.run(context);
             const text = output();
-            expect(text).toContain("Resolution order: [path, typeagent]");
             expect(text).toContain("path [path] #1");
             expect(text).toContain(
                 "typeagent [feed] #2 https://feed.example.com/",
@@ -129,47 +127,33 @@ describe("getSourceCommands", () => {
     });
 
     describe("order", () => {
-        it("keeps the requested subset first and appends the rest", async () => {
+        it("forwards the requested names to the registry", async () => {
             const registry = makeRegistry({
                 infos: [
                     { name: "path", kind: "path", detail: "(default base)" },
                     { name: "builtin", kind: "catalog", detail: "<bundled>" },
                 ],
-                order: ["path", "builtin"],
+                order: ["builtin", "path"],
             });
             const order = getSourceCommands(makeDeps(registry)).commands
                 .order as any;
             await order.run(fakeContext(), { args: { names: ["builtin"] } });
-            expect(registry.calls.setOrder).toEqual([["builtin", "path"]]);
+            expect(registry.calls.setOrder).toEqual([["builtin"]]);
         });
 
-        it("warns on and skips an unknown source name", async () => {
+        it("warns on an unknown source name but still forwards", async () => {
             const registry = makeRegistry();
             const order = getSourceCommands(makeDeps(registry)).commands
                 .order as any;
-            await order.run(fakeContext(), {
+            const { context, output } = capturingContext();
+            await order.run(context, {
                 args: { names: ["nope", "path"] },
             });
-            expect(registry.calls.setOrder).toEqual([["path"]]);
+            expect(output()).toContain("Ignoring unknown source(s): nope");
+            expect(registry.calls.setOrder).toEqual([["nope", "path"]]);
         });
 
-        it("deduplicates repeated source names", async () => {
-            const registry = makeRegistry({
-                infos: [
-                    { name: "path", kind: "path", detail: "(default base)" },
-                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
-                ],
-                order: ["path", "builtin"],
-            });
-            const order = getSourceCommands(makeDeps(registry)).commands
-                .order as any;
-            await order.run(fakeContext(), {
-                args: { names: ["builtin", "builtin", "path"] },
-            });
-            expect(registry.calls.setOrder).toEqual([["builtin", "path"]]);
-        });
-
-        it("with no names leaves the configured set intact", async () => {
+        it("forwards an empty list unchanged", async () => {
             const registry = makeRegistry({
                 infos: [
                     { name: "path", kind: "path", detail: "(default base)" },
@@ -180,7 +164,7 @@ describe("getSourceCommands", () => {
             const order = getSourceCommands(makeDeps(registry)).commands
                 .order as any;
             await order.run(fakeContext(), { args: { names: [] } });
-            expect(registry.calls.setOrder).toEqual([["path", "builtin"]]);
+            expect(registry.calls.setOrder).toEqual([[]]);
         });
     });
 

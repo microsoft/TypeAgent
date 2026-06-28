@@ -42,6 +42,15 @@ describe("pathSource", () => {
         expect(candidate!.path).toBe(path.resolve(child));
     });
 
+    it("find returns undefined for a relative ref when no baseDir is configured", async () => {
+        // Without a base, a relative ref cannot be anchored (the source may run
+        // in a different process/CWD than the host app), so it is a non-match
+        // and the ordered walk continues. Absolute paths still resolve.
+        const source = createPathSource({ kind: "path", name: "path" });
+        expect(await source.find("./agentpkg")).toBeUndefined();
+        expect(await source.find("agentpkg")).toBeUndefined();
+    });
+
     it("materialize records path + source and omits module", async () => {
         const dir = tmpDir("ta-pathmat-");
         const source = createPathSource({ kind: "path", name: "mypath" });

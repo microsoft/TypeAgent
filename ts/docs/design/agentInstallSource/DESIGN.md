@@ -55,6 +55,8 @@ Three kinds. All three resolve an agent into the same `InstalledAgentRecord` (§
 
 `path` is now a **first-class ordered source**, not a special case. Because resolution is an ordered walk (§4.1) where each source is asked `find(ref)` before any work happens, a `path` source placed early simply claims `ref`s that exist on disk. There is no separate heuristic.
 
+Resolution uses **no ambient working directory**: an absolute (or `~`) `ref` resolves directly, but a _relative_ `ref` only resolves when the source has an explicit `baseDir` - otherwise it is a **non-match** and the walk continues (it does not throw, so bare catalog/feed names still fall through to the next source). The host issuing `@install` may run in a different process/CWD than the registry (e.g. the agent server resolving on behalf of a remote client), so resolving against `process.cwd()` would be silently wrong. Hosts with no usable local filesystem at all (the web API server) omit the `path` source entirely via `excludePathSources` (§6).
+
 ```ts
 // defaultAgentProvider/src/installSources/config.ts  (HOST-owned, not core)
 // Two layers, deliberately distinct:
@@ -68,14 +70,14 @@ export type InstallSourceKind = "path" | "catalog" | "feed";
 export interface PathSourceConfig {
   kind: "path";
   name: string; // conventionally "path"
-  baseDir?: string; // base for relative refs; default cwd / instance dir
+  baseDir?: string; // base for relative refs; no default - a relative ref without it is a non-match
 }
 
 export interface FeedSourceConfig {
   kind: "feed";
   name: string; // e.g. "typeagent"
   registry: string; // Azure Artifacts npm registry URL
-  scopes: string[]; // e.g. ["@typeagent", "@secretagents"]
+  scopes: string[]; // e.g. ["@typeagent"]
   // Auth: a short-lived bearer token minted by the Azure CLI
   // (`az account get-access-token`), injected into a transient npm auth
   // config - no persistent .npmrc creds / vsts-npm-auth / azureauth state.
@@ -333,11 +335,12 @@ agentInstaller?: AppAgentInstaller;     // optional; enables @install / @source
 
 The "single installed-agent provider" (§4.4) is just **one `AppAgentProvider` that the default host assembles** via `getDefaultAppAgentProviders()`. It is a change to how `defaultAgentProvider` builds its providers, not to what the dispatcher accepts. Three host shapes coexist unchanged:
 
-| Host                                       | Injects                                                           | Gets                                                       |
-| ------------------------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------- |
-| Custom / test (e.g. `onboarding/runTests`) | its own `appAgentProviders`, no installer                         | runs those agents; no `@install` / `@source`. Zero impact. |
-| Default (shell, CLI, agentServer)          | `getDefaultAppAgentProviders()` + `getDefaultAppAgentInstaller()` | same call sites; sources + registry built internally.      |
-| Embedder wanting sources                   | a host-built installer that owns a registry                       | full install/source surface.                               |
+| Host                                       | Injects                                                                     | Gets                                                                     |
+| ------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Custom / test (e.g. `onboarding/runTests`) | its own `appAgentProviders`, no installer                                   | runs those agents; no `@install` / `@source`. Zero impact.               |
+| Default (shell, CLI, agentServer)          | `getDefaultAppAgentProviders()` + `getDefaultAppAgentInstaller()`           | same call sites; sources + registry built internally.                    |
+| Default, remote (web API server)           | same, with `getDefaultAppAgentInstaller(dir, { excludePathSources: true })` | same surface, minus `path` sources (no server-side disk resolution, §6). |
+| Embedder wanting sources                   | a host-built installer that owns a registry                                 | full install/source surface.                                             |
 
 The only thing that must reach the dispatcher core is the `@source` command, the same way `@install` reaches `agentInstaller` today. To avoid a second optional injection - and to keep the source taxonomy out of the core entirely - **the host contributes the whole `@source` command table off the installer** rather than exposing a registry the core would have to understand:
 
@@ -379,11 +382,11 @@ flowchart BT
     dflt --> node
 ```
 
-| Package                     | Owns                                                                                                                                                      | New in this design                                                                                                                                                                               |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agent-dispatcher` (core)   | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the live-session `@install` / `@uninstall` / `@update` command **handlers** | `sourceCommands?()` added to `AppAgentInstaller` (host supplies the whole `@source` table). The record types (`ResolvedCandidate`, `InstalledAgentRecord`), source taxonomy, registry, and `@source` handlers are **not** here. |
-| `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo`                                                                                                            | unchanged (still the npm loading mechanism §10)                                                                                                                                                  |
-| `default-agent-provider`    | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`                                                                                              | the **install-record types (`ResolvedCandidate`, `InstalledAgentRecord`), source config taxonomy, registry + source implementations, and the whole `@source` command table** (list/order/where/remove/add), feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog |
+| Package                     | Owns                                                                                                                                                                      | New in this design                                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-dispatcher` (core)   | `createDispatcher`, `DispatcherOptions`, `AppAgentProvider` / `AppAgentInstaller` interfaces, the live-session `@install` / `@uninstall` / `@update` command **handlers** | `sourceCommands?()` added to `AppAgentInstaller` (host supplies the whole `@source` table). The record types (`ResolvedCandidate`, `InstalledAgentRecord`), source taxonomy, registry, and `@source` handlers are **not** here.                                                                |
+| `dispatcher-node-providers` | `createNpmAppAgentProvider`, `NpmAppAgentInfo`                                                                                                                            | unchanged (still the npm loading mechanism §10)                                                                                                                                                                                                                                                |
+| `default-agent-provider`    | `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`                                                                                                              | the **install-record types (`ResolvedCandidate`, `InstalledAgentRecord`), source config taxonomy, registry + source implementations, and the whole `@source` command table** (list/order/where/remove/add), feed auth (`az`), `npm install`, REST enumeration, `agents.json` + bundled catalog |
 
 Why the split matters: the dispatcher core has **no** `@source` handler and **no** registry interface at all - it just merges in whatever `CommandHandlerTable` the host's `sourceCommands()` returns. So the core compiles and runs with **no dependency** on Azure DevOps, npm, `az`, or even the source-kind taxonomy. A host that wants the source machinery pulls it in by depending on `default-agent-provider`; a host that doesn't, doesn't (and simply has no `@source`).
 
@@ -507,8 +510,8 @@ It then rewrites the record and re-registers the refreshed provider (§4.6). Mec
 The entire `@source` command is **contributed by the host** (`default-agent-provider`) via `AppAgentInstaller.sourceCommands()` (§4.5); the dispatcher core merges it in without knowing its shape. Absent an installer, `@source` is unavailable.
 
 ```
-@source list                 # shows sources AND the current resolution order
-@source order <name>...       # set the resolution order (subset allowed; rest appended)
+@source list                 # shows the sources in resolution order
+@source order <name>...       # reprioritize: named sources move to the front
 @source where <ref>          # report which source WOULD resolve <ref>, without installing
 @source add feed <name> --registry <url> [--scope <scope>]...
 @source add catalog <name> --catalog <path>
@@ -516,45 +519,46 @@ The entire `@source` command is **contributed by the host** (`default-agent-prov
 @source remove <name> [--force]
 ```
 
-Validation on `add`: unique name, well-formed registry URL (`feed`), readable catalog JSON (`catalog`). `@source order` and `add`/`remove` persist to the instance `installSources` block. `order` entries that name an unknown or removed source are **ignored with a warning** (not a hard error), and configured sources missing from `order` are still usable via `--source` but are not auto-probed (§6).
+Validation on `add`: unique name, well-formed registry URL (`feed`), readable catalog JSON (`catalog`). `@source order` and `add`/`remove` persist to the instance `installSources` block. The configured `sources` list is itself the resolution order (first match wins); every source participates. `@source order <names>` moves the named sources to the front (de-duplicated; unknown names are **ignored with a warning**, not a hard error) and keeps the rest in their current relative order. `@source add` appends; `@source remove` splices.
 
 `@source remove` warns when installed records still reference that source. Without `--force`, removal aborts after the warning. With `--force`, removal proceeds: those already-installed agents remain loadable, but future `@update` for them fails until the source is added back.
 
 ## 6. Configuration
 
-Sources and their resolution **order** are seeded from app config and extended at runtime; both persist to instance config.
+The configured `sources` list - in resolution priority order (first match wins) - is seeded from app config and extended at runtime; it persists to instance config.
 
 ```jsonc
 // app seed (shipped) and/or instance config.json (runtime edits land here)
 {
   "installSources": {
-    // user-configurable resolution order (first match wins). Names not listed
-    // here are still usable via --source but are not auto-probed.
-    "order": ["path", "workspace", "builtin", "typeagent"],
     // shared npm root that ALL feed sources install into (§4.1 "Feed install
     // location"). Optional; defaults to "<instanceDir>/installedAgents".
     // Supports ${ENV} expansion.
     "installDir": "${TYPEAGENT_INSTANCE_DIR}/installedAgents",
+    // Sources in resolution priority order (first match wins). The array order
+    // IS the resolution order; `@source order` reprioritizes it.
     "sources": [
       { "kind": "path", "name": "path" },
-      { "kind": "catalog", "name": "builtin", "catalog": "<bundled>" },
       {
         "kind": "catalog",
         "name": "workspace",
         "catalog": "${TYPEAGENT_REPO_ROOT}/ts/packages/agents/agents.catalog.json",
       },
+      { "kind": "catalog", "name": "builtin", "catalog": "<bundled>" },
       {
         "kind": "feed",
         "name": "typeagent",
         "registry": "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/",
-        "scopes": ["@secretagents", "@typeagent"],
+        "scopes": ["@typeagent"],
       },
     ],
   },
 }
 ```
 
-A shipped build might ship `order: ["path", "builtin", "typeagent"]`; a dev checkout prepends `workspace`. Changing dev-vs-shipped behavior is one `@source order` command or one config line, with no code or env-var changes (`TYPEAGENT_FEED_REGISTRY` is just the seed value for the shipped `feed` source).
+A shipped build seeds `[path, builtin, typeagent]`; a dev checkout inserts `workspace` ahead of `builtin` so local agents shadow the bundled ones. Changing dev-vs-shipped behavior is one `@source order` command or one config line, with no code or env-var changes (`TYPEAGENT_FEED_REGISTRY` is just the seed value for the shipped `feed` source). A legacy `order` array from an older build is ignored on read.
+
+A host with no usable local filesystem for the user (the web API server, whose client lives in a different process/machine) builds its registry with `excludePathSources`, which drops every `path` source from **both** the seed and any persisted overrides - so a relative/absolute `ref` never resolves against the server's own disk.
 
 ## 7. Pre-installing builtins (first run)
 
@@ -564,7 +568,7 @@ On first run with an empty `agents.json`, the dispatcher pre-installs the bundle
 
 ```mermaid
 flowchart TD
-    start([first run / empty agents.json]) --> seed[load installSources + order]
+    start([first run / empty agents.json]) --> seed[load installSources list]
     seed --> pre["pre-install bundled-catalog flagged agents<br/>find -> materialize -> InstalledAgentRecord"]
     pre --> write[(agents.json)]
     write --> prov[single AppAgentProvider]

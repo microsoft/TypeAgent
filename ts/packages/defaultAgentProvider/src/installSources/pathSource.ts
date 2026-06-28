@@ -14,17 +14,26 @@ import { expandPath } from "./paths.js";
 // `path` source (design §3, §4.1, §4.2, §12 Q17).
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
 //   materialize = record { path, source }, omitting `module`
-// `ref` is a filesystem path (absolute, "~"-relative, or relative to baseDir).
+// `ref` is a filesystem path: absolute, "~"-relative, or (only when a baseDir
+// is configured) relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
-    const baseDir = config.baseDir;
+    // A relative ref needs a base directory to anchor it. There is deliberately
+    // no ambient default: this source may run in a different process (and CWD)
+    // than the host app that issued the command (e.g. the agent server), so
+    // resolving against the local process.cwd() would be silently wrong. An
+    // explicit baseDir (expanded) is the only anchor; without it, only absolute
+    // and "~" paths resolve and a bare relative ref is a non-match.
+    const baseDir = config.baseDir ? expandPath(config.baseDir) : undefined;
 
-    function resolveRef(ref: string): string {
+    function resolveRef(ref: string): string | undefined {
         const expanded = expandPath(ref);
         if (path.isAbsolute(expanded)) {
             return path.resolve(expanded);
         }
-        const base = baseDir ? expandPath(baseDir) : process.cwd();
-        return path.resolve(base, expanded);
+        if (baseDir === undefined) {
+            return undefined; // no base to anchor a relative ref
+        }
+        return path.resolve(baseDir, expanded);
     }
 
     return {
@@ -32,6 +41,11 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         kind: "path",
         async find(ref: string): Promise<ResolvedCandidate | undefined> {
             const full = resolveRef(ref);
+            if (full === undefined) {
+                // Relative ref with no configured baseDir: non-match, so the
+                // ordered walk continues to the next source.
+                return undefined;
+            }
             try {
                 await fs.promises.stat(full);
             } catch {

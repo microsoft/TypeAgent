@@ -38,25 +38,22 @@ class SourceListCommandHandler implements CommandHandler {
     public async run(context: ActionContext<unknown>) {
         const { registry } = this.deps;
         const infos = registry.list();
-        const order = registry.order().map((source) => source.name);
-        const lines: string[] = [];
-        lines.push(`Resolution order: [${order.join(", ")}]`);
-        lines.push("Sources:");
-        for (const info of infos) {
-            const inOrder = order.includes(info.name)
-                ? `#${order.indexOf(info.name) + 1}`
-                : "(not in order)";
+        const lines: string[] = ["Sources (in resolution order):"];
+        infos.forEach((info, index) => {
+            // Every source participates in automatic resolution; the list order
+            // is the resolution order, so the index is the position.
+            const position = `#${index + 1}`;
             lines.push(
-                `  ${info.name} [${info.kind}] ${inOrder} ${info.detail}`,
+                `  ${info.name} [${info.kind}] ${position} ${info.detail}`,
             );
-        }
+        });
         displayResult(lines.join("\n"), context);
     }
 }
 
 class SourceOrderCommandHandler implements CommandHandler {
     public readonly description =
-        "Set the resolution order (a subset is allowed; remaining sources are appended)";
+        "Set the resolution order (a subset is allowed; the named sources move to the front)";
     public readonly parameters = {
         args: {
             names: {
@@ -80,18 +77,11 @@ class SourceOrderCommandHandler implements CommandHandler {
                 context,
             );
         }
-        // Keep the requested subset first, then append the remaining configured
-        // sources so reordering never silently drops a source (design §5).
-        const givenKnown = [
-            ...new Set(params.args.names.filter((name) => known.has(name))),
-        ];
-        const seen = new Set(givenKnown);
-        const rest = registry
-            .list()
-            .map((config) => config.name)
-            .filter((name) => !seen.has(name));
-        const order = [...givenKnown, ...rest];
-        registry.setOrder(order);
+        // The registry moves the named sources to the front (de-duplicated,
+        // unknown names skipped) and keeps the rest in their current relative
+        // order, so reordering never silently drops a source (design §5).
+        registry.setOrder(params.args.names);
+        const order = registry.list().map((info) => info.name);
         displayResult(`Resolution order: [${order.join(", ")}]`, context);
     }
 }
@@ -118,7 +108,7 @@ class SourceWhereCommandHandler implements CommandHandler {
         const candidate = await registry.where(ref);
         if (candidate === undefined) {
             const order = registry
-                .order()
+                .list()
                 .map((s) => s.name)
                 .join(", ");
             displayResult(
@@ -182,7 +172,9 @@ class SourceRemoveCommandHandler implements CommandHandler {
  * / add). The dispatcher core merges this in as `@source` via
  * `AppAgentInstaller.sourceCommands()`.
  */
-export function getSourceCommands(deps: SourceCommandsDeps): CommandHandlerTable {
+export function getSourceCommands(
+    deps: SourceCommandsDeps,
+): CommandHandlerTable {
     return {
         description: "Manage install sources (design §5)",
         defaultSubCommand: "list",

@@ -18,6 +18,7 @@ import {
     getInstanceConfigProvider,
     getProviderConfig,
     getResolvedInstallSources,
+    InstallSourcesResolveOptions,
     InstanceConfig,
     InstanceConfigProvider,
 } from "./utils/config.js";
@@ -87,6 +88,13 @@ export function getDefaultDispatcherOptions(
 }
 
 /**
+ * Options for {@link getDefaultAppAgentInstaller}. Remote hosts (e.g. the web
+ * API server) set `excludePathSources` to drop `path` sources, whose refs
+ * would otherwise resolve against the server's own filesystem.
+ */
+export type DefaultAppAgentInstallerOptions = InstallSourcesResolveOptions;
+
+/**
  * Build the registry-backed installer for the default host (design §4.3, §4.5).
  * A thin wrapper over `registry.resolve(ref, sourceName)` plus writing the
  * resulting record to `agents.json`. The registry (path / catalog / feed
@@ -95,32 +103,35 @@ export function getDefaultDispatcherOptions(
  */
 export function getDefaultAppAgentInstaller(
     instanceDir: string,
+    options?: DefaultAppAgentInstallerOptions,
 ): AppAgentInstaller {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
-    const { order, installDir, sources } =
-        getResolvedInstallSources(instanceConfigs);
+    const { installDir, sources } = getResolvedInstallSources(
+        instanceConfigs,
+        options,
+    );
     // One shared mutex serializes the whole install op (resolve + materialize +
     // record write) and uninstall (design §12 Q5).
     const mutex = new AsyncMutex();
     const appBundleRequirePath = getAppBundleRequirePath();
 
-    function persistSources(
-        configs: InstallSourceConfig[],
-        orderNames: string[],
-    ): void {
+    function persistSources(configs: InstallSourceConfig[]): void {
         const current = instanceConfigs.getInstanceConfig();
+        // Reconstruct installSources from the known fields only, dropping any
+        // legacy `order` array (no longer used; the source list order is the
+        // resolution order).
+        const installDir = current.installSources?.installDir;
         const next: InstanceConfig = {
             ...current,
             installSources: {
-                ...current.installSources,
                 sources: configs,
-                order: orderNames,
+                ...(installDir !== undefined ? { installDir } : {}),
             },
         };
         instanceConfigs.setInstanceConfig(next);
     }
 
-    const registry = createInstallSourceRegistry(sources, order, {
+    const registry = createInstallSourceRegistry(sources, {
         installDir,
         mutex,
         persist: persistSources,
@@ -263,8 +274,7 @@ export function getDefaultAppAgentInstaller(
             return getSourceCommands({
                 registry,
                 recordsUsingSource: (sourceName: string) => {
-                    const agents =
-                        readAgentsJson(instanceDir)?.agents ?? {};
+                    const agents = readAgentsJson(instanceDir)?.agents ?? {};
                     return Object.values(agents)
                         .filter((record) => record.source === sourceName)
                         .map((record) => record.name);

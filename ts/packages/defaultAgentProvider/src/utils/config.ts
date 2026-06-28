@@ -37,8 +37,8 @@ export type InstanceConfig = {
 // Persisted install-source configuration (design §6). All fields optional; the
 // resolver below merges them over the shipped seed defaults.
 export type InstallSourcesConfig = {
-    order?: string[];
     installDir?: string;
+    // Install sources in resolution priority order (first match wins).
     sources?: InstallSourceConfig[];
 };
 
@@ -139,7 +139,7 @@ const TYPEAGENT_FEED_REGISTRY =
     process.env.TYPEAGENT_FEED_REGISTRY ??
     "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";
 
-const TYPEAGENT_FEED_SCOPES = ["@secretagents", "@typeagent"];
+const TYPEAGENT_FEED_SCOPES = ["@typeagent"];
 
 // Path to the optional dev-checkout workspace catalog (design §6). Present only
 // in a repo checkout; absent in a shipped build. A sibling of this package
@@ -148,14 +148,25 @@ function getWorkspaceCatalogPath(): string {
     return getPackageFilePath("../agents/agents.catalog.json");
 }
 
-// The shipped seed install sources (design §6). A dev checkout additionally
-// exposes a `workspace` catalog (only when its catalog JSON exists) so local
-// agents shadow the feed via the resolution order.
-function getSeedInstallSources(): InstallSourceConfig[] {
-    const sources: InstallSourceConfig[] = [
-        { kind: "path", name: "path" },
-        { kind: "catalog", name: "builtin", catalog: "<bundled>" },
-    ];
+// Host-driven knobs for resolving install sources (design §6). Remote hosts
+// (e.g. the web API server) set `excludePathSources` to drop `path` sources,
+// whose refs would otherwise resolve against the server's own filesystem.
+export type InstallSourcesResolveOptions = {
+    excludePathSources?: boolean;
+};
+
+// The shipped seed install sources in resolution priority order (design §6).
+// A dev checkout additionally exposes a `workspace` catalog (only when its
+// catalog JSON exists), placed ahead of `builtin` so local agents shadow the
+// bundled ones. `excludePathSources` omits the leading `path` source for hosts
+// without a usable local filesystem.
+function getSeedInstallSources(
+    options?: InstallSourcesResolveOptions,
+): InstallSourceConfig[] {
+    const sources: InstallSourceConfig[] = [];
+    if (!options?.excludePathSources) {
+        sources.push({ kind: "path", name: "path" });
+    }
     if (fs.existsSync(getWorkspaceCatalogPath())) {
         sources.push({
             kind: "catalog",
@@ -163,6 +174,7 @@ function getSeedInstallSources(): InstallSourceConfig[] {
             catalog: getWorkspaceCatalogPath(),
         });
     }
+    sources.push({ kind: "catalog", name: "builtin", catalog: "<bundled>" });
     sources.push({
         kind: "feed",
         name: "typeagent",
@@ -170,14 +182,6 @@ function getSeedInstallSources(): InstallSourceConfig[] {
         scopes: TYPEAGENT_FEED_SCOPES,
     });
     return sources;
-}
-
-// The shipped seed resolution order (design §6). A dev checkout prepends
-// `workspace` so a local agent shadows the feed automatically.
-function getSeedOrder(): string[] {
-    return fs.existsSync(getWorkspaceCatalogPath())
-        ? ["path", "workspace", "builtin", "typeagent"]
-        : ["path", "builtin", "typeagent"];
 }
 
 /**
@@ -188,13 +192,19 @@ function getSeedOrder(): string[] {
  */
 export function getResolvedInstallSources(
     instanceConfigs: InstanceConfigProvider | undefined,
-): { order: string[]; installDir: string; sources: InstallSourceConfig[] } {
+    options?: InstallSourcesResolveOptions,
+): { installDir: string; sources: InstallSourceConfig[] } {
     const instanceDir = instanceConfigs?.getInstanceDir();
     const persisted = instanceConfigs?.getInstanceConfig().installSources;
-    const sources = persisted?.sources ?? getSeedInstallSources();
-    const order = persisted?.order ?? getSeedOrder();
+    // Persisted overrides bypass the seed, so apply the same path-source
+    // exclusion to them; getSeedInstallSources handles the default case.
+    const sources = persisted?.sources
+        ? options?.excludePathSources
+            ? persisted.sources.filter((source) => source.kind !== "path")
+            : persisted.sources
+        : getSeedInstallSources(options);
     const installDir = persisted?.installDir
         ? expandPath(persisted.installDir)
         : path.join(instanceDir ?? process.cwd(), "installedAgents");
-    return { order, installDir, sources };
+    return { installDir, sources };
 }
