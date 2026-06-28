@@ -151,6 +151,14 @@ export type InstallSourcesResolveOptions = {
 // catalog JSON exists), placed ahead of `builtin` so local agents shadow the
 // bundled ones. This is the full seed list; runtime-only filtering (e.g.
 // `excludePathSources`) is applied later in the registry's resolution walk.
+//
+// CAVEAT (design §6): the `workspace` entry is seeded *conditionally* on the
+// ambient filesystem, and the seed is recomputed every launch until something
+// is persisted. So one instance dir launched from a dev checkout vs. a shipped
+// build (or two different checkouts) sees a different source list, and the
+// first `@source` edit then freezes the checkout-specific catalog path - which
+// goes stale in another context. Sharing an instance dir across dev/shipped
+// contexts is unsupported; pin sources explicitly for cross-context use.
 function getSeedInstallSources(): InstallSourceConfig[] {
     const sources: InstallSourceConfig[] = [];
     sources.push({ kind: "path", name: "path" });
