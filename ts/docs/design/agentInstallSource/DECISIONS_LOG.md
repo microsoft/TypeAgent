@@ -152,19 +152,6 @@
   back to its source entry and `@update` would fail or mis-resolve.
 - **Design updated?** no (record-field usage detail consistent with §5/§12 Q13)
 
-### 2026-06-28 — `@source order` appends the remaining configured sources
-
-- **Milestone / item:** M3 / 3.2
-- **Type:** Unspecified
-- **Design ref:** §5 (order is a subset), §6 (full configured set)
-- **Decision:** `@source order <names...>` treats the given names as a priority prefix:
-  unknown names are warned and skipped, the known subset is de-duplicated and kept first,
-  then every remaining configured source (in `registry.list()` order) is appended. An empty
-  name list therefore leaves the configured set intact in its current list order.
-- **Rationale:** Reordering must never silently drop a configured source (§6). Treating the
-  argument as a prefix lets users promote a source without re-typing the whole order.
-- **Design updated?** no (command-surface detail consistent with §5/§6)
-
 ### 2026-06-28 — `@update` overwrites the record only after a successful materialize
 
 - **Milestone / item:** M3 / 3.1
