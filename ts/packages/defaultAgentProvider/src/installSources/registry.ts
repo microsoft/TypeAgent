@@ -50,6 +50,12 @@ export interface RegistryDeps {
     // Persist the ordered source list to instance config (wired in M2.5 / M3).
     // Called after add/remove/setOrder.
     persist?: (configs: InstallSourceConfig[]) => void;
+    // Runtime-only resolution filter for hosts without a usable local
+    // filesystem (e.g. the web API server): when set, `path` sources are
+    // skipped during the implicit resolution walk so their refs never resolve
+    // against the server's own filesystem. This never touches the persisted or
+    // seeded source list - only which sources are probed at resolve time.
+    excludePathSources?: boolean;
 }
 
 function buildSource(
@@ -97,6 +103,19 @@ export function createInstallSourceRegistry(
         deps.persist?.(Array.from(entries.values(), (e) => e.config));
     }
 
+    // Sources eligible for the implicit resolution walk, in priority order.
+    // `excludePathSources` is a runtime-only filter (hosts without a usable
+    // local filesystem) that narrows what gets probed here; it deliberately
+    // does NOT touch `entries`, `list()`, or `persist()`, so the persisted and
+    // displayed source list keeps every source.
+    function resolutionSources(): InstallSource[] {
+        const all = Array.from(entries.values());
+        const eligible = deps.excludePathSources
+            ? all.filter((e) => e.config.kind !== "path")
+            : all;
+        return eligible.map((e) => e.source);
+    }
+
     // The host-rendered one-line summary the core shows for `@source list`. This
     // is where the kind taxonomy is interpreted (the core never sees it).
     function describe(config: InstallSourceConfig): string {
@@ -131,6 +150,14 @@ export function createInstallSourceRegistry(
             if (entry === undefined) {
                 throw new Error(`unknown source '${sourceName}'`);
             }
+            if (deps.excludePathSources && entry.config.kind === "path") {
+                // Path sources are unusable on this host (no local filesystem),
+                // so an explicit --source path would resolve against the
+                // server's own filesystem; reject it rather than honor it.
+                throw new Error(
+                    `source '${sourceName}' is not available on this host`,
+                );
+            }
             const candidate = await entry.source.find(ref);
             if (candidate === undefined) {
                 // Explicit --source non-match is a hard error (§4.1, §12 Q4).
@@ -140,7 +167,7 @@ export function createInstallSourceRegistry(
         }
         // Probe the sources in resolution (map iteration) order; first match
         // wins (§4.1).
-        const ordered = Array.from(entries.values(), (e) => e.source);
+        const ordered = resolutionSources();
         const candidates = await Promise.all(ordered.map((s) => s.find(ref)));
         const index = candidates.findIndex((c) => c !== undefined);
         if (index < 0) {
@@ -206,7 +233,7 @@ export function createInstallSourceRegistry(
         },
         async where(ref: string): Promise<ResolvedCandidate | undefined> {
             // Dry-run: report which source would win without materializing.
-            const ordered = Array.from(entries.values(), (e) => e.source);
+            const ordered = resolutionSources();
             const candidates = await Promise.all(
                 ordered.map((s) => s.find(ref)),
             );

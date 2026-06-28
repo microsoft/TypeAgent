@@ -90,8 +90,10 @@ export function getDefaultDispatcherOptions(
 
 /**
  * Options for {@link getDefaultAppAgentInstaller}. Remote hosts (e.g. the web
- * API server) set `excludePathSources` to drop `path` sources, whose refs
- * would otherwise resolve against the server's own filesystem.
+ * API server) set `excludePathSources` to skip `path` sources during
+ * resolution, whose refs would otherwise resolve against the server's own
+ * filesystem. This narrows only the runtime resolution walk; the persisted and
+ * seeded source lists keep every source.
  */
 export type DefaultAppAgentInstallerOptions = InstallSourcesResolveOptions;
 
@@ -117,7 +119,7 @@ export function getDefaultAppAgentInstaller(
             "Internal error: install directory could not be resolved (no instance directory).",
         );
     }
-    const sources = getResolvedInstallSources(instanceConfigs, options);
+    const sources = getResolvedInstallSources(instanceConfigs);
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall (design §12 Q5).
     const limiter = createLimiter(1);
@@ -142,6 +144,9 @@ export function getDefaultAppAgentInstaller(
         installDir,
         limiter,
         persist: persistSources,
+        ...(options?.excludePathSources !== undefined
+            ? { excludePathSources: options.excludePathSources }
+            : {}),
     });
 
     function buildProviderFor(

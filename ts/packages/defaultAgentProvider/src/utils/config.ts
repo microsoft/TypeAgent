@@ -138,8 +138,10 @@ function getWorkspaceCatalogPath(): string {
 }
 
 // Host-driven knobs for resolving install sources (design §6). Remote hosts
-// (e.g. the web API server) set `excludePathSources` to drop `path` sources,
-// whose refs would otherwise resolve against the server's own filesystem.
+// (e.g. the web API server) set `excludePathSources` to skip `path` sources
+// during resolution, whose refs would otherwise resolve against the server's
+// own filesystem. This only narrows the runtime resolution walk; it never
+// changes the persisted or seed source lists.
 export type InstallSourcesResolveOptions = {
     excludePathSources?: boolean;
 };
@@ -147,15 +149,11 @@ export type InstallSourcesResolveOptions = {
 // The shipped seed install sources in resolution priority order (design §6).
 // A dev checkout additionally exposes a `workspace` catalog (only when its
 // catalog JSON exists), placed ahead of `builtin` so local agents shadow the
-// bundled ones. `excludePathSources` omits the leading `path` source for hosts
-// without a usable local filesystem.
-function getSeedInstallSources(
-    options?: InstallSourcesResolveOptions,
-): InstallSourceConfig[] {
+// bundled ones. This is the full seed list; runtime-only filtering (e.g.
+// `excludePathSources`) is applied later in the registry's resolution walk.
+function getSeedInstallSources(): InstallSourceConfig[] {
     const sources: InstallSourceConfig[] = [];
-    if (!options?.excludePathSources) {
-        sources.push({ kind: "path", name: "path" });
-    }
+    sources.push({ kind: "path", name: "path" });
     if (fs.existsSync(getWorkspaceCatalogPath())) {
         sources.push({
             kind: "catalog",
@@ -171,22 +169,18 @@ function getSeedInstallSources(
 /**
  * Resolve the effective install sources in resolution priority order (design
  * §6): the persisted instance overrides when present, otherwise the shipped
- * seed defaults. `excludePathSources` drops `path` sources for hosts without a
- * usable local filesystem (whose refs would resolve against the server's own
- * filesystem).
+ * seed defaults. This returns the full configured list verbatim — it is what
+ * seeds the registry and gets persisted back when `@source` edits the list, so
+ * it must never be narrowed here. Runtime-only filtering (e.g.
+ * `excludePathSources` for hosts without a usable local filesystem) is applied
+ * during the registry's resolution walk, never to this list, so it cannot leak
+ * into the persisted config.
  */
 export function getResolvedInstallSources(
     instanceConfigs: InstanceConfigProvider | undefined,
-    options?: InstallSourcesResolveOptions,
 ): InstallSourceConfig[] {
     const persisted = instanceConfigs?.getInstanceConfig().installSources;
-    // Persisted overrides bypass the seed, so apply the same path-source
-    // exclusion to them; getSeedInstallSources handles the default case.
-    return persisted?.sources
-        ? options?.excludePathSources
-            ? persisted.sources.filter((source) => source.kind !== "path")
-            : persisted.sources
-        : getSeedInstallSources(options);
+    return persisted?.sources ?? getSeedInstallSources();
 }
 
 /**
