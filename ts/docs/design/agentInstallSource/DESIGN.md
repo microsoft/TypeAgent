@@ -132,7 +132,11 @@ export interface ResolvedCandidate {
   module?: string; // package name (npm-resolved; omitted when path-resolved)
   ref?: string; // feed specifier/version
   path?: string; // catalog / path result
-  execMode?: ExecutionMode;
+  // Opaque, kind-specific metadata for the loader named by the resulting
+  // record's `kind` (e.g. npm: `{ execMode }`). The dispatcher core does not
+  // interpret it; the owning provider does. `ExecutionMode` lives in the
+  // loader (`dispatcher-node-providers`), not in core.
+  loaderConfig?: Record<string, unknown>;
 }
 
 // `ResolvedCandidate` (above), `InstalledAgentRecord` (§4.2), and everything
@@ -268,7 +272,9 @@ export interface InstalledAgentRecord {
   path?: string; // present for catalog / path installs
   source: string; // provenance, required
   ref?: string; // feed specifier/version
-  execMode?: ExecutionMode;
+  // Opaque, kind-specific metadata interpreted by the loader named by `kind`
+  // (e.g. npm: `{ execMode }`); `ExecutionMode` lives in the loader, not core.
+  loaderConfig?: Record<string, unknown>;
 }
 ```
 

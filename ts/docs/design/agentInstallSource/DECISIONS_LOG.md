@@ -44,36 +44,6 @@
   `getIndexingServiceRegistry`); full removal is M2/M4 cleanup.
 - **Design updated?** no (temporary M1 scaffolding; replaced by the single provider in M2)
 
-### 2026-06-26 — `ExecutionMode` defined as a string union in dispatcher core
-
-- **Milestone / item:** M1 / 1.1
-- **Type:** Unspecified
-- **Design ref:** §4.1, §4.2 (sketches use `execMode?: ExecutionMode`)
-- **Decision:** `installSource.ts` defines `export type ExecutionMode = "separate" | "dispatcher"`
-  locally rather than importing the `const enum ExecutionMode` from `dispatcher-node-providers`.
-- **Rationale:** `dispatcher-node-providers` depends on `agent-dispatcher`; importing back
-  would create a cycle and violate the layering rule. The string union matches the enum's
-  serialized values used in catalog/record JSON.
-- **Design updated?** no (interface-level detail consistent with the design)
-
-### 2026-06-27 — `ExecutionMode` moved to the node provider; core carries `loaderConfig`
-
-- **Milestone / item:** follow-up to M1 / 1.1
-- **Type:** Layering correction
-- **Design ref:** §4.1, §4.2
-- **Decision:** Reverses the 2026-06-26 placement. `ExecutionMode` now lives in
-  `dispatcher-node-providers` (the loader that owns process-model semantics) and is
-  exported from there. The dispatcher-core `ResolvedCandidate` / `InstalledAgentRecord`
-  no longer carry a typed `execMode`; instead they carry an opaque, kind-specific
-  `loaderConfig?: Record<string, unknown>` bucket (npm uses `{ execMode }`). Sources
-  write `loaderConfig`; the record→`NpmAppAgentInfo` boundary in `installedAgents.ts`
-  reads `loaderConfig.execMode`.
-- **Rationale:** Execution mode is a provider/loader concern, not a core contract. Keeping
-  the type in core forced the core to know a loader-specific vocabulary. The opaque bucket
-  keeps the core provider-agnostic, stays JSON-serializable for `agents.json`, and leaves
-  the `kind` seam (§10) free to add non-npm loaders without touching core types.
-- **Design updated?** no (interface-level refinement; record shape stays serialization-compatible)
-
 ### 2026-06-26 — Corrupt user catalog degrades; corrupt bundled catalog fails loud
 
 - **Milestone / item:** M1 / 1.3
