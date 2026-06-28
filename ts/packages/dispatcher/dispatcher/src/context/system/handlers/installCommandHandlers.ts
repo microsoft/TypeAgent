@@ -8,10 +8,67 @@ import {
     installAppProvider,
 } from "../../commandHandlerContext.js";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import chalk from "chalk";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+export class ListInstalledCommandHandler implements CommandHandler {
+    public readonly description = "List installed agents";
+    public readonly parameters = {} as const;
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        const installer = systemContext.agentInstaller;
+        if (installer === undefined) {
+            throw new Error("Agent installer not available");
+        }
+        if (installer.listInstalled === undefined) {
+            throw new Error(
+                "Listing installed agents is not supported by this installer",
+            );
+        }
+        const records = installer.listInstalled();
+        if (records.length === 0) {
+            displayResult("No agents installed.", context);
+            return;
+        }
+
+        const agents = systemContext.agents;
+        // Best-effort emoji lookup: an installed record may be for an agent
+        // that isn't a live app-agent right now (disabled / failed to load),
+        // in which case getAppAgentEmoji throws. Fall back to no emoji.
+        const safeEmoji = (name: string): string => {
+            try {
+                return agents.getAppAgentEmoji(name) ?? "";
+            } catch {
+                return "";
+            }
+        };
+
+        const sorted = [...records].sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
+
+        // Plain-text (CLI / console) — fixed-width via chalk for alignment.
+        const text: string[][] = [["", "Agent", "Source", "Reference"]];
+        for (const record of sorted) {
+            text.push([
+                safeEmoji(record.name),
+                chalk.cyanBright(record.name),
+                chalk.yellow(record.source),
+                record.handle !== undefined
+                    ? chalk.gray(record.handle)
+                    : chalk.gray("—"),
+            ]);
+        }
+
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: text,
+        });
+    }
+}
 
 export class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
@@ -142,4 +199,3 @@ export class UpdateCommandHandler implements CommandHandler {
         displayResult(`Agent '${name}' updated.`, context);
     }
 }
-
