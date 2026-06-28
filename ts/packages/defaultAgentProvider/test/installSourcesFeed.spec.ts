@@ -18,7 +18,7 @@ import {
 import { FeedSourceConfig } from "../src/installSources/config.js";
 
 const REGISTRY =
-    "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";
+    "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent/npm/registry/";
 
 const CONFIG: FeedSourceConfig = {
     kind: "feed",
@@ -69,8 +69,8 @@ beforeEach(() => {
 describe("parseAzureFeed", () => {
     it("parses a project-scoped registry URL", () => {
         expect(parseAzureFeed(REGISTRY)).toEqual({
-            org: "msctoproj",
-            project: "AI_Systems",
+            org: "myorg",
+            project: "myproject",
             feed: "typeagent",
         });
     });

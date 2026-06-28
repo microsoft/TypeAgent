@@ -11,7 +11,7 @@ import {
 } from "../src/installSources/feedAuth.js";
 
 const REGISTRY =
-    "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";
+    "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent/npm/registry/";
 
 function azOutput(token: string, expiresInMs: number): string {
     return JSON.stringify({

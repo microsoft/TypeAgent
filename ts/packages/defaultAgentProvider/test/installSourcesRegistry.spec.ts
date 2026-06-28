@@ -235,7 +235,7 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                     kind: "feed",
                     name: "typeagent",
                     registry:
-                        "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/",
+                        "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent/npm/registry/",
                     scopes: ["@typeagent"],
                 },
             ],
