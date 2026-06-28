@@ -241,3 +241,16 @@ reasoning:
 
 vault:
   shared: aisystems
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  TypeAgent Feed Source                                           ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Optional override for the default @install feed source used by
+# default-agent-provider. Values flatten to TYPEAGENT_FEED_REGISTRY and
+# TYPEAGENT_FEED_SCOPES.
+
+typeagent:
+  feed:
+    registry: https://pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/npm/registry/
+    scopes: "@typeagent" # comma-separated for multiple scopes

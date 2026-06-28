@@ -25,6 +25,29 @@ export const AGENT_KEYWORD = "typeagent-agent";
 
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h (design §12 Q3)
 
+function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
+    const fromConfig = config.registry?.trim();
+    if (fromConfig) {
+        return fromConfig;
+    }
+    const fromEnv = process.env.TYPEAGENT_FEED_REGISTRY?.trim();
+    return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+}
+
+function resolveFeedScopes(config: FeedSourceConfig): string[] {
+    if (config.scopes !== undefined) {
+        return config.scopes;
+    }
+    const raw = process.env.TYPEAGENT_FEED_SCOPES;
+    if (!raw) {
+        return [];
+    }
+    return raw
+        .split(",")
+        .map((scope) => scope.trim())
+        .filter((scope) => scope.length > 0);
+}
+
 // Strip a trailing version/range from an npm specifier to get the module name.
 // "@scope/name@1.2.3" -> "@scope/name"; "name@^1" -> "name".
 export function moduleNameFromSpec(spec: string): string {
@@ -192,22 +215,20 @@ export async function enumerateFeedAgents(
     token: string,
     fetchFn: typeof fetch,
 ): Promise<string[]> {
-    const info = parseAzureFeed(config.registry);
+    const registry = resolveFeedRegistry(config);
+    if (registry === undefined) {
+        return [];
+    }
+    const info = parseAzureFeed(registry);
     if (info === undefined) {
         throw new Error(
-            `feed '${config.name}': unrecognized Azure Artifacts registry URL '${config.registry}'`,
+            `feed '${config.name}': unrecognized Azure Artifacts registry URL '${registry}'`,
         );
     }
-    const scoped = await listScopedPackages(
-        info,
-        config.scopes,
-        token,
-        fetchFn,
-    );
+    const scopes = resolveFeedScopes(config);
+    const scoped = await listScopedPackages(info, scopes, token, fetchFn);
     const flags = await Promise.all(
-        scoped.map((name) =>
-            isAgentPackage(config.registry, name, token, fetchFn),
-        ),
+        scoped.map((name) => isAgentPackage(registry, name, token, fetchFn)),
     );
     return scoped.filter((_, i) => flags[i]);
 }
@@ -255,6 +276,9 @@ export function createFeedSource(
     }
 
     async function getPackageList(): Promise<string[]> {
+        if (resolveFeedRegistry(config) === undefined) {
+            return [];
+        }
         const current = now();
         if (
             memoryCache === undefined ||
@@ -301,6 +325,12 @@ export function createFeedSource(
         async materialize(
             candidate: ResolvedCandidate,
         ): Promise<InstalledAgentRecord> {
+            const registry = resolveFeedRegistry(config);
+            if (registry === undefined) {
+                throw new Error(
+                    `feed source '${config.name}' has no registry configured (set source.registry or TYPEAGENT_FEED_REGISTRY)`,
+                );
+            }
             const moduleName = candidate.module;
             const spec = candidate.ref ?? moduleName;
             if (moduleName === undefined || spec === undefined) {
@@ -310,14 +340,14 @@ export function createFeedSource(
             }
             ensureInstallRoot(deps.installDir);
             const userconfig = await writeTransientNpmAuth(
-                config.registry,
+                registry,
                 tokenRunner,
             );
             try {
                 await npmInstall({
                     spec,
                     cwd: deps.installDir,
-                    registry: config.registry,
+                    registry,
                     userconfig,
                 });
             } finally {

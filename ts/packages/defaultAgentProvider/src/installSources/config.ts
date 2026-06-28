@@ -77,8 +77,10 @@ export interface PathSourceConfig {
 export interface FeedSourceConfig {
     kind: "feed";
     name: string; // e.g. "typeagent"
-    registry: string; // Azure Artifacts npm registry URL
-    scopes: string[]; // e.g. ["@typeagent"]
+    // Optional: when omitted, the source resolves registry/scopes from
+    // TYPEAGENT_FEED_REGISTRY / TYPEAGENT_FEED_SCOPES.
+    registry?: string; // Azure Artifacts npm registry URL
+    scopes?: string[]; // e.g. ["@typeagent"]
 }
 
 /**

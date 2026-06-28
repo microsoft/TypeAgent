@@ -102,7 +102,7 @@ export function createInstallSourceRegistry(
     function describe(config: InstallSourceConfig): string {
         switch (config.kind) {
             case "feed":
-                return config.registry;
+                return config.registry ?? "(env: TYPEAGENT_FEED_REGISTRY)";
             case "catalog":
                 return config.catalog;
             case "path":

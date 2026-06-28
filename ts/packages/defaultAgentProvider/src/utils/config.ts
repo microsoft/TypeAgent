@@ -132,15 +132,6 @@ export function getInstanceConfigProvider(
     };
 }
 
-// Azure Artifacts npm registry backing the shipped `typeagent` feed source
-// (design §6). Override with TYPEAGENT_FEED_REGISTRY to point at a different
-// feed or a local mirror; it is just the seed value for the shipped source.
-const TYPEAGENT_FEED_REGISTRY =
-    process.env.TYPEAGENT_FEED_REGISTRY ??
-    "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/";
-
-const TYPEAGENT_FEED_SCOPES = ["@typeagent"];
-
 // Path to the optional dev-checkout workspace catalog (design §6). Present only
 // in a repo checkout; absent in a shipped build. A sibling of this package
 // under ts/packages/agents.
@@ -175,12 +166,7 @@ function getSeedInstallSources(
         });
     }
     sources.push({ kind: "catalog", name: "builtin", catalog: "<bundled>" });
-    sources.push({
-        kind: "feed",
-        name: "typeagent",
-        registry: TYPEAGENT_FEED_REGISTRY,
-        scopes: TYPEAGENT_FEED_SCOPES,
-    });
+    sources.push({ kind: "feed", name: "typeagent" });
     return sources;
 }
 

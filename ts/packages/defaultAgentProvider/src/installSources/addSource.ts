@@ -61,7 +61,8 @@ class FeedAddCommandHandler implements CommandHandler {
         },
         flags: {
             registry: {
-                description: "Feed registry URL (https)",
+                description:
+                    "Feed registry URL (https). Optional: omit to use TYPEAGENT_FEED_REGISTRY at runtime",
                 char: "r",
                 type: "string",
             },
@@ -80,23 +81,32 @@ class FeedAddCommandHandler implements CommandHandler {
     ) {
         const { name } = params.args;
         const url = params.flags.registry;
-        if (url === undefined) {
-            throw new Error("--registry <url> is required for a feed source");
+        if (url !== undefined) {
+            validateFeedRegistry(url);
         }
-        validateFeedRegistry(url);
         const config: FeedSourceConfig = {
             kind: "feed",
             name,
-            registry: url,
-            scopes: params.flags.scope ?? [],
         };
+        if (url !== undefined) {
+            config.registry = url;
+        }
+        if (params.flags.scope !== undefined) {
+            config.scopes = params.flags.scope;
+        }
         this.registry.add(config);
-        displayResult(`Added feed source '${name}'.`, context);
+        displayResult(
+            url === undefined
+                ? `Added feed source '${name}' (env-backed registry).`
+                : `Added feed source '${name}'.`,
+            context,
+        );
     }
 }
 
 class CatalogAddCommandHandler implements CommandHandler {
-    public readonly description = "Add a catalog (JSON manifest) install source";
+    public readonly description =
+        "Add a catalog (JSON manifest) install source";
     public readonly parameters = {
         args: {
             name: { description: "Unique source name", type: "string" },
