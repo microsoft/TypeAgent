@@ -32,7 +32,7 @@ import {
 } from "./installSources/installedAgents.js";
 import { createInstallSourceRegistry } from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
-import { AsyncMutex } from "./installSources/mutex.js";
+import { createLimiter } from "@typeagent/common-utils";
 
 /**
  * Get the default app agent providers.
@@ -110,9 +110,9 @@ export function getDefaultAppAgentInstaller(
         instanceConfigs,
         options,
     );
-    // One shared mutex serializes the whole install op (resolve + materialize +
+    // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall (design §12 Q5).
-    const mutex = new AsyncMutex();
+    const limiter = createLimiter(1);
     const appBundleRequirePath = getAppBundleRequirePath();
 
     function persistSources(configs: InstallSourceConfig[]): void {
@@ -133,7 +133,7 @@ export function getDefaultAppAgentInstaller(
 
     const registry = createInstallSourceRegistry(sources, {
         installDir,
-        mutex,
+        limiter,
         persist: persistSources,
     });
 
@@ -152,9 +152,9 @@ export function getDefaultAppAgentInstaller(
             ref: string,
             sourceName?: string,
         ): Promise<AppAgentProvider> {
-            // resolve + materialize is serialized by the registry's mutex
+            // resolve + materialize is serialized by the registry's limiter
             // (design §4.1). After it returns, the installer re-takes the same
-            // shared mutex to write the record (sequential, not nested).
+            // shared limiter to write the record (sequential, not nested).
             const resolved = await registry.resolve(ref, sourceName);
             // The installer assigns the authoritative dispatcher name.
             const record: InstalledAgentRecord = { ...resolved, name };
@@ -167,7 +167,7 @@ export function getDefaultAppAgentInstaller(
                 record.ref = ref;
             }
             // Persist the record under the same serialization domain.
-            await mutex.runExclusive(async () => {
+            await limiter(async () => {
                 const current = readAgentsJson(instanceDir) ?? { agents: {} };
                 if (current.agents[name] !== undefined) {
                     throw new Error(`Agent '${name}' already exists`);
@@ -178,7 +178,7 @@ export function getDefaultAppAgentInstaller(
             return buildProviderFor({ [name]: record });
         },
         async uninstall(name: string): Promise<void> {
-            await mutex.runExclusive(async () => {
+            await limiter(async () => {
                 const current = readAgentsJson(instanceDir) ?? { agents: {} };
                 if (current.agents[name] === undefined) {
                     throw new Error(`Agent '${name}' not found`);
@@ -249,7 +249,7 @@ export function getDefaultAppAgentInstaller(
                     );
                 }
             }
-            // Materialize the new version (serialized by the registry mutex).
+            // Materialize the new version (serialized by the registry limiter).
             const resolved = await registry.resolve(ref, existing.source);
             const record: InstalledAgentRecord = { ...resolved, name };
             // Preserve the re-resolution key across updates, the same way
@@ -260,7 +260,7 @@ export function getDefaultAppAgentInstaller(
                 record.ref = ref;
             }
             // Overwrite only after a successful materialize (§12 Q13).
-            await mutex.runExclusive(async () => {
+            await limiter(async () => {
                 const current = readAgentsJson(instanceDir) ?? { agents: {} };
                 current.agents[name] = record;
                 writeAgentsJson(instanceDir, current);

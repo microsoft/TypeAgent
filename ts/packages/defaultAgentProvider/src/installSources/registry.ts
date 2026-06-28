@@ -11,7 +11,7 @@ import {
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource, FeedSourceDeps } from "./feedSource.js";
-import { AsyncMutex } from "./mutex.js";
+import { createLimiter, Limiter } from "@typeagent/common-utils";
 
 /**
  * The host's install-source registry. Owns source listing, ordering,
@@ -43,10 +43,10 @@ export interface RegistryDeps {
     // Feed-source dependency overrides (token runner, fetch, npm install) for
     // testing; installDir is supplied separately.
     feedDeps?: Omit<FeedSourceDeps, "installDir">;
-    // Shared async mutex; the installer (M2) reuses it so the record write
-    // joins the same serialization domain (design §12 Q5). Defaults to a fresh
-    // mutex when omitted.
-    mutex?: AsyncMutex;
+    // Shared serialize-to-one limiter; the installer (M2) reuses it so the
+    // record write joins the same serialization domain (design §12 Q5).
+    // Defaults to a fresh createLimiter(1) when omitted.
+    limiter?: Limiter;
     // Persist the ordered source list to instance config (wired in M2.5 / M3).
     // Called after add/remove/setOrder.
     persist?: (configs: InstallSourceConfig[]) => void;
@@ -79,7 +79,7 @@ export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     deps: RegistryDeps,
 ): DefaultInstallSourceRegistry {
-    const mutex = deps.mutex ?? new AsyncMutex();
+    const limiter = deps.limiter ?? createLimiter(1);
     type Entry = { config: InstallSourceConfig; source: InstallSource };
     // One map holds each source's config and built source together (always in
     // lockstep). The map iteration order IS the resolution priority order
@@ -200,9 +200,9 @@ export function createInstallSourceRegistry(
             sourceName?: string,
         ): Promise<InstalledAgentRecord> {
             // The whole install op (resolve -> materialize) runs under the
-            // shared mutex (design §12 Q5). The installer (M2) reuses the same
-            // mutex for the record write.
-            return mutex.runExclusive(() => resolveUnlocked(ref, sourceName));
+            // shared limiter (design §12 Q5). The installer (M2) reuses the
+            // same limiter for the record write.
+            return limiter(() => resolveUnlocked(ref, sourceName));
         },
         async where(ref: string): Promise<ResolvedCandidate | undefined> {
             // Dry-run: report which source would win without materializing.
