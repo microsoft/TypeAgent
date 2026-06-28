@@ -50,6 +50,25 @@ export interface AppAgentInstaller {
     // auth UI; the dispatcher core never learns any of it. Absent -> `@source`
     // unavailable (like a host with no install sources).
     sourceCommands?(): CommandHandlerTable;
+    // Host-rendered summaries of the installed agents, backing `@package list`.
+    // The dispatcher core never reads the install-record store, so the
+    // installer renders these; the core only formats them. Optional: a host
+    // whose installer cannot enumerate its records omits it and `@package list`
+    // is unavailable (layering, same rationale as `update`).
+    listInstalled?(): InstalledAgentInfo[];
+}
+
+/**
+ * A host-rendered one-line summary of a single installed agent, the only
+ * install-record shape the dispatcher core sees (it never reads the record
+ * store). The host maps its full record down to this for `@package list`.
+ */
+export interface InstalledAgentInfo {
+    name: string; // dispatcher agent name
+    source: string; // provenance (name of the source it was installed from)
+    // The resolution handle that identifies the install (feed specifier /
+    // package name / path), whichever the record carries. Omitted if none.
+    handle?: string;
 }
 
 export interface ConstructionProvider {

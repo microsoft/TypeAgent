@@ -216,16 +216,17 @@ pnpm run shell
 In the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli), install the echo agent and check the status by issuing the command:
 
 ```
-@install echo <path to echo package>
+@package install echo <path to echo package>
 @config agent
 ```
 
 The `Echo` agent should be in the list and enabled.
 
-> `@install` can resolve an agent from more than one place (a local path, a
+> `@package install` can resolve an agent from more than one place (a local path, a
 > bundled catalog, or a package feed). You can control which source is used,
-> preview where a `ref` would resolve, refresh an installed agent with
-> `@update`, and manage sources with the `@source` group. See
+> preview where a `ref` would resolve, list what you have installed with
+> `@package list`, refresh an installed agent with `@package update`, and manage
+> sources with the `@package source` group. See
 > [Agent Install Sources](../reference/install-sources.md) for the full command reference.
 
 ### Step 4: See the `Echo` agent in action
@@ -241,7 +242,7 @@ When to run the shell this is how interaction with the `Echo` agent will look li
 The `Echo` agent will be reloaded again after installation. It can be uninstalled using the command:
 
 ```
-@uninstall echo
+@package uninstall echo
 ```
 
 ## Next step

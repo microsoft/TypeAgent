@@ -4,6 +4,7 @@
 import {
     AppAgentProvider,
     AppAgentInstaller,
+    InstalledAgentInfo,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
     DispatcherOptions,
@@ -291,6 +292,20 @@ export function getDefaultAppAgentInstaller(
                         .filter((record) => record.source === sourceName)
                         .map((record) => record.name);
                 },
+            });
+        },
+        listInstalled(): InstalledAgentInfo[] {
+            // The installer owns `agents.json`; map each record down to the
+            // core-safe summary the `@package list` handler renders. A record
+            // carries exactly one resolution handle (ref / module / path).
+            const agents = readAgentsJson(instanceDir)?.agents ?? {};
+            return Object.values(agents).map((record) => {
+                const handle = record.ref ?? record.module ?? record.path;
+                return {
+                    name: record.name,
+                    source: record.source,
+                    ...(handle !== undefined ? { handle } : {}),
+                };
             });
         },
     };

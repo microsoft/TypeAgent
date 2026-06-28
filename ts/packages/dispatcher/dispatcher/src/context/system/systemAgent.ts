@@ -62,6 +62,7 @@ import {
     InstallCommandHandler,
     UninstallCommandHandler,
     UpdateCommandHandler,
+    ListInstalledCommandHandler,
 } from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
@@ -138,9 +139,6 @@ export const systemHandlers: CommandHandlerTable = {
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
         env: getEnvCommandHandlers(),
-        install: new InstallCommandHandler(),
-        uninstall: new UninstallCommandHandler(),
-        update: new UpdateCommandHandler(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),
@@ -257,26 +255,43 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-// The host (via `AppAgentInstaller.sourceCommands()`) owns the entire `@source`
-// command table (list/order/where/remove/add), so the dispatcher core never
-// learns the source-kind taxonomy or any of the source management grammar. The
-// merged table is built once per dispatcher at context construction and stored
-// as `CommandHandlerContext.systemCommands` (the installer is fixed for the
+// The host (via `AppAgentInstaller`) owns agent installation: the
+// `sourceCommands()` table (list/order/where/remove/add) and the
+// `agents.json` record store behind `listInstalled()`, so the dispatcher core
+// never learns the source-kind taxonomy or the source management grammar. When
+// an installer is present, the core exposes a single `@package` umbrella
+// command grouping the live-session install operations (`install`/`uninstall`/
+// `update`/`list`) with the host's `@source` table nested under it. The merged
+// table is built once per dispatcher at context construction and stored as
+// `CommandHandlerContext.systemCommands` (the installer is fixed for the
 // dispatcher's lifetime), so it is the same instance for every
 // `getCommands`/`executeCommand`/`getCommandCompletion`/`@help` call. Absent
-// installer -> no `@source`.
+// installer -> no `@package`.
 export function getSystemHandlers(
     installer: AppAgentInstaller | undefined,
 ): CommandHandlerTable {
-    const sourceCommands = installer?.sourceCommands?.();
-    if (sourceCommands === undefined) {
+    if (installer === undefined) {
         return systemHandlers;
     }
+    const sourceCommands = installer.sourceCommands?.();
+    const packageCommands: CommandHandlerTable = {
+        description: "Manage installed agents and their install sources",
+        defaultSubCommand: "list",
+        commands: {
+            list: new ListInstalledCommandHandler(),
+            install: new InstallCommandHandler(),
+            update: new UpdateCommandHandler(),
+            uninstall: new UninstallCommandHandler(),
+            ...(sourceCommands !== undefined
+                ? { source: sourceCommands }
+                : {}),
+        },
+    };
     return {
         ...systemHandlers,
         commands: {
             ...systemHandlers.commands,
-            source: sourceCommands,
+            package: packageCommands,
         },
     };
 }
