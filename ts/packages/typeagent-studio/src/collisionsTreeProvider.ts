@@ -11,6 +11,7 @@ import {
     type CollisionEntry,
     type CollisionRow,
 } from "./collisionsPresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 import type { CollisionsSource } from "./collisionsSource.js";
 
 /** View id contributed in package.json. */
@@ -30,12 +31,9 @@ export const COLLISIONS_CAPACITY = 200;
  * in-flight reload or late collision event can't repopulate the tree.
  */
 export class CollisionsTreeProvider
-    implements vscode.TreeDataProvider<CollisionRow>, vscode.Disposable
+    extends BaseStudioTreeProvider<CollisionRow>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        CollisionRow | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private source: CollisionsSource;
     private subscription: { dispose(): void } | undefined;
     private entries: CollisionEntry[] = [];
@@ -43,20 +41,11 @@ export class CollisionsTreeProvider
     private skipped: GrammarScanSkip[] = [];
     private seq = 0;
     private generation = 0;
-    private connected = false;
 
     constructor(source: CollisionsSource) {
+        super();
         this.source = source;
         this.install(++this.generation);
-    }
-
-    /** Reflect the studio service connection state (drives the empty view). */
-    setConnected(connected: boolean): void {
-        if (connected === this.connected) {
-            return;
-        }
-        this.connected = connected;
-        this.refresh();
     }
 
     /**
@@ -73,10 +62,6 @@ export class CollisionsTreeProvider
         this.refresh();
         this.source = source;
         this.install(++this.generation);
-    }
-
-    refresh(): void {
-        this.emitter.fire(undefined);
     }
 
     /** Re-read collisions from the active source (e.g. after a scan). */
@@ -102,17 +87,15 @@ export class CollisionsTreeProvider
         this.refresh();
     }
 
-    getTreeItem(row: CollisionRow): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            row.label,
-            row.hasChildren
-                ? vscode.TreeItemCollapsibleState.Collapsed
-                : vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = row.id;
-        item.description = row.description;
-        item.tooltip = row.tooltip;
-        item.contextValue = row.contextValue;
+    protected collapsibleState(
+        row: CollisionRow,
+    ): vscode.TreeItemCollapsibleState {
+        return row.hasChildren
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None;
+    }
+
+    protected decorate(item: vscode.TreeItem, row: CollisionRow): void {
         item.iconPath = new vscode.ThemeIcon(row.icon);
         if (row.openPath !== undefined) {
             item.command = {
@@ -121,15 +104,13 @@ export class CollisionsTreeProvider
                 arguments: [vscode.Uri.file(row.openPath)],
             };
         }
-        return item;
     }
 
-    getChildren(row?: CollisionRow): CollisionRow[] {
+    async getChildren(row?: CollisionRow): Promise<CollisionRow[]> {
         if (!row) {
-            // Disconnected with nothing to show: render nothing so the view's
-            // welcome content ("connect to the Studio service") shows instead
-            // of a misleading "No collisions detected" check — nothing was
-            // actually scanned.
+            // Show the native loading bar while connecting; once connected,
+            // render scanned collisions (or the "no collisions" placeholder).
+            await this.whenConnected();
             if (
                 !this.connected &&
                 this.entries.length === 0 &&
@@ -191,7 +172,7 @@ export class CollisionsTreeProvider
         this.generation++; // invalidate any in-flight reload
         this.subscription?.dispose();
         this.subscription = undefined;
-        this.emitter.dispose();
+        super.dispose();
     }
 }
 

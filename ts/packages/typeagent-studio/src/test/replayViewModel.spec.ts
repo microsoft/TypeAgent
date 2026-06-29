@@ -3,17 +3,28 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ActionDelta, ReplaySummary } from "@typeagent/core/replay";
+import type { ActionDelta } from "@typeagent/core/replay";
 import {
     toImpactRows,
-    toImpactSummaryLine,
     toImpactMethodNote,
     toImpactErrorLine,
     parseVersionInput,
-    describeVersion,
-    toImpactComparisonLine,
-    toImpactHeaderFields,
+    narrowVersionSpec,
+    coerceVersionSpec,
+    formatVersionProvenance,
+    formatProvenanceLine,
+    stableStringify,
+    toActionDiff,
     toSideMethodLabel,
+    buildImpactFilterChips,
+    filterImpactRows,
+    defaultImpactFilters,
+    allStatusesActive,
+    impactFilterNote,
+    impactEmptyState,
+    allRowsEqual,
+    IMPACT_FILTER_ORDER,
+    type ReplayRowStatus,
 } from "../webviewKit/replayViewModel.js";
 
 function row(overrides: Partial<ActionDelta>): ActionDelta {
@@ -47,7 +58,9 @@ test("toImpactRows classifies and shapes rows for the webview", () => {
     );
     // Browser-neutral: no Quick Pick `$(...)` icon syntax leaks through.
     assert.ok(rows.every((r) => !r.statusLabel.includes("$(")));
-    assert.equal(rows[0].detail, "A:hit B:hit \u00b7 10/12ms");
+    assert.equal(rows[0].resolutionA, "hit");
+    assert.equal(rows[0].resolutionB, "hit");
+    assert.equal(rows[0].latency, "10/12ms");
 });
 
 test("toImpactRows collapses long utterances", () => {
@@ -77,12 +90,12 @@ test("toImpactRows tags cache-served and grammar fall-through on the constructio
         "construction-cache",
     );
     // The cache side spells out the source; the grammar side stays raw.
-    assert.equal(rows[0].detail, "A:hit B:hit\u00b7cache \u00b7 10/12ms");
-    assert.equal(rows[1].detail, "A:hit B:miss\u00b7grammar \u00b7 10/12ms");
-    assert.equal(
-        rows[2].detail,
-        "A:needs-explanation B:hit\u00b7cache \u00b7 10/12ms",
-    );
+    assert.equal(rows[0].resolutionA, "hit");
+    assert.equal(rows[0].resolutionB, "hit\u00b7cache");
+    assert.equal(rows[1].resolutionB, "miss\u00b7grammar");
+    assert.equal(rows[2].resolutionA, "needs-explanation");
+    assert.equal(rows[2].resolutionB, "hit\u00b7cache");
+    assert.equal(rows[0].latency, "10/12ms");
 });
 
 test("toImpactRows leaves tokens raw when neither side ran the construction cache", () => {
@@ -91,7 +104,9 @@ test("toImpactRows leaves tokens raw when neither side ran the construction cach
         "schema-grammar",
         "schema-grammar",
     );
-    assert.equal(r.detail, "A:hit B:hit \u00b7 10/12ms");
+    assert.equal(r.resolutionA, "hit");
+    assert.equal(r.resolutionB, "hit");
+    assert.equal(r.latency, "10/12ms");
 });
 
 test("toSideMethodLabel gives a short per-side label", () => {
@@ -102,27 +117,6 @@ test("toSideMethodLabel gives a short per-side label", () => {
     );
     assert.equal(toSideMethodLabel("static-grammar"), "static grammar");
     assert.equal(toSideMethodLabel("identity"), "identity");
-});
-
-test("toImpactSummaryLine renders a headline", () => {
-    const summary = {
-        runId: "r1",
-        agent: "player",
-        versionA: { kind: "workingTree" },
-        versionB: { kind: "workingTree" },
-        corpusSize: 3,
-        rowCount: 3,
-        equalCount: 3,
-        changedCount: 0,
-        newMatchCount: 0,
-        lostMatchCount: 0,
-        collisionDelta: 0,
-        duration: 42,
-    } as ReplaySummary;
-    const line = toImpactSummaryLine(summary);
-    assert.ok(line.includes("player"));
-    assert.ok(line.includes("3 rows"));
-    assert.ok(line.includes("42ms"));
 });
 
 test("toImpactMethodNote labels static-grammar but stays silent for identity", () => {
@@ -172,69 +166,259 @@ test("parseVersionInput treats blanks/keywords as working tree, else a git ref",
     });
 });
 
-test("describeVersion and toImpactComparisonLine read the resolved versions", () => {
-    assert.equal(describeVersion({ kind: "workingTree" }), "working tree");
-    assert.equal(describeVersion({ kind: "git", ref: "HEAD" }), "HEAD");
-    const line = toImpactComparisonLine({
-        versionA: { kind: "git", ref: "HEAD" },
-        versionB: { kind: "workingTree" },
-    } as ReplaySummary);
-    assert.ok(line.includes("HEAD"));
-    assert.ok(line.includes("working tree"));
-    assert.ok(line.includes("\u2192"));
+test("narrowVersionSpec validates an untrusted spec object", () => {
+    assert.deepEqual(narrowVersionSpec({ kind: "workingTree" }), {
+        kind: "workingTree",
+    });
+    assert.deepEqual(narrowVersionSpec({ kind: "git", ref: "HEAD" }), {
+        kind: "git",
+        ref: "HEAD",
+    });
+    // Whitespace-only / empty / wrong-typed refs are rejected.
+    assert.equal(narrowVersionSpec({ kind: "git", ref: "" }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "git", ref: "   " }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "git", ref: 5 }), undefined);
+    assert.equal(narrowVersionSpec({ kind: "bogus" }), undefined);
+    assert.equal(narrowVersionSpec(undefined), undefined);
+    assert.equal(narrowVersionSpec("HEAD"), undefined);
+    // A valid ref is trimmed.
+    assert.deepEqual(narrowVersionSpec({ kind: "git", ref: " v1 " }), {
+        kind: "git",
+        ref: "v1",
+    });
 });
 
-function headerValue(
-    fields: ReturnType<typeof toImpactHeaderFields>,
-    label: string,
-): string | undefined {
-    return fields.find((f) => f.label === label)?.value;
+test("coerceVersionSpec accepts typed specs, strings, else working tree", () => {
+    // Typed spec from a picker selection.
+    assert.deepEqual(coerceVersionSpec({ kind: "git", ref: "HEAD" }), {
+        kind: "git",
+        ref: "HEAD",
+    });
+    // Raw string falls back to parseVersionInput.
+    assert.deepEqual(coerceVersionSpec("my-branch"), {
+        kind: "git",
+        ref: "my-branch",
+    });
+    assert.deepEqual(coerceVersionSpec("working tree"), {
+        kind: "workingTree",
+    });
+    // A malformed object defaults to the working tree rather than throwing.
+    assert.deepEqual(coerceVersionSpec({ kind: "git", ref: "" }), {
+        kind: "workingTree",
+    });
+    assert.deepEqual(coerceVersionSpec(null), { kind: "workingTree" });
+    assert.deepEqual(coerceVersionSpec(42), { kind: "workingTree" });
+});
+
+test("formatVersionProvenance / formatProvenanceLine summarise a run", () => {
+    assert.equal(
+        formatVersionProvenance({
+            label: "HEAD (main)",
+            workingTree: false,
+            sha: "a1b2c3d",
+        }),
+        "HEAD (main) @ a1b2c3d",
+    );
+    assert.equal(
+        formatVersionProvenance({ label: "HEAD", workingTree: false }),
+        "HEAD",
+    );
+    assert.equal(
+        formatVersionProvenance({
+            label: "working tree",
+            workingTree: true,
+            sha: "a1b2c3d",
+        }),
+        "working tree (on a1b2c3d)",
+    );
+    assert.equal(
+        formatProvenanceLine({
+            a: { label: "HEAD (main)", workingTree: false, sha: "a1b2c3d" },
+            b: { label: "working tree", workingTree: true, sha: "a1b2c3d" },
+            runAt: 0,
+        }),
+        "Ran HEAD (main) @ a1b2c3d \u2192 working tree (on a1b2c3d)",
+    );
+});
+
+test("stableStringify sorts object keys so reorders aren't diffed", () => {
+    assert.equal(
+        stableStringify({ b: 1, a: { d: 2, c: 3 } }),
+        stableStringify({ a: { c: 3, d: 2 }, b: 1 }),
+    );
+});
+
+test("toActionDiff marks identical actions regardless of key order", () => {
+    const diff = toActionDiff(
+        row({
+            equal: true,
+            actionA: { name: "play", value: 1 },
+            actionB: { value: 1, name: "play" },
+        }),
+    );
+    assert.equal(diff.identical, true);
+    assert.equal(diff.onlyA, false);
+    assert.equal(diff.onlyB, false);
+    assert.equal(diff.addedCount, 0);
+    assert.equal(diff.removedCount, 0);
+    assert.ok(diff.lines.every((l) => l.kind === "context"));
+});
+
+test("toActionDiff produces added/removed lines for a changed action", () => {
+    const diff = toActionDiff(
+        row({
+            equal: false,
+            actionA: { name: "play", track: "despacito" },
+            actionB: { name: "play", track: "bohemian" },
+        }),
+    );
+    assert.equal(diff.identical, false);
+    assert.ok(diff.addedCount >= 1);
+    assert.ok(diff.removedCount >= 1);
+    // The unchanged "name" line stays as context.
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "context" && l.text.includes('"name"'),
+        ),
+    );
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "removed" && l.text.includes("despacito"),
+        ),
+    );
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "added" && l.text.includes("bohemian"),
+        ),
+    );
+});
+
+test("toActionDiff flags a new match (no action on A)", () => {
+    const diff = toActionDiff(row({ equal: false, actionB: { name: "play" } }));
+    assert.equal(diff.onlyB, true);
+    assert.equal(diff.onlyA, false);
+    assert.equal(diff.identical, false);
+    // A side renders the "(no action)" placeholder as a removed line.
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "removed" && l.text.includes("(no action)"),
+        ),
+    );
+});
+
+test("toActionDiff flags a lost match (no action on B)", () => {
+    const diff = toActionDiff(row({ equal: false, actionA: { name: "play" } }));
+    assert.equal(diff.onlyA, true);
+    assert.equal(diff.onlyB, false);
+    assert.ok(
+        diff.lines.some(
+            (l) => l.kind === "added" && l.text.includes("(no action)"),
+        ),
+    );
+});
+
+// A spread of every status for the filter helpers: 2 equal, 1 each of the
+// three difference kinds.
+function mixedRows() {
+    return toImpactRows([
+        row({ equal: true, utteranceId: "e1" }),
+        row({ equal: true, utteranceId: "e2" }),
+        row({ equal: false, actionA: {}, actionB: {}, utteranceId: "c1" }),
+        row({ equal: false, actionB: {}, utteranceId: "n1" }),
+        row({ equal: false, actionA: {}, utteranceId: "l1" }),
+    ]);
 }
 
-test("toImpactHeaderFields fills placeholders before a run", () => {
-    const fields = toImpactHeaderFields({});
-    // Every field present with a tooltip.
+test("buildImpactFilterChips counts each status in fixed order", () => {
+    const chips = buildImpactFilterChips(mixedRows());
     assert.deepEqual(
-        fields.map((f) => f.label),
-        ["repo", "agent", "method", "fidelity", "sandbox", "policy"],
+        chips.map((c) => c.status),
+        IMPACT_FILTER_ORDER,
     );
-    assert.ok(fields.every((f) => f.tooltip.length > 0));
-    assert.equal(headerValue(fields, "repo"), "\u2014");
-    assert.equal(headerValue(fields, "agent"), "\u2014");
-    assert.equal(headerValue(fields, "method"), "\u2014");
-    assert.equal(headerValue(fields, "policy"), "\u2014");
-    // Sandbox is honestly "not used" — the static-grammar path is not sandbox-bound.
-    assert.equal(headerValue(fields, "sandbox"), "not used");
+    const byStatus = new Map(chips.map((c) => [c.status, c.count]));
+    assert.equal(byStatus.get("equal"), 2);
+    assert.equal(byStatus.get("changed"), 1);
+    assert.equal(byStatus.get("new-match"), 1);
+    assert.equal(byStatus.get("lost-match"), 1);
+    // Every chip carries a non-empty human label.
+    assert.ok(chips.every((c) => c.label.length > 0));
 });
 
-test("toImpactHeaderFields reflects a static-grammar run as indicative", () => {
-    const fields = toImpactHeaderFields({
-        repo: "TypeAgent",
-        agent: "player",
-        method: "static-grammar",
-        missPolicy: "needs-explanation",
-    });
-    assert.equal(headerValue(fields, "repo"), "TypeAgent");
-    assert.equal(headerValue(fields, "agent"), "player");
-    assert.equal(headerValue(fields, "method"), "static grammar");
-    assert.equal(headerValue(fields, "fidelity"), "indicative");
-    assert.equal(headerValue(fields, "policy"), "needs-explanation");
-    assert.equal(headerValue(fields, "sandbox"), "not used");
+test("defaultImpactFilters shows every status so the report opens on All", () => {
+    const active = defaultImpactFilters();
+    for (const status of IMPACT_FILTER_ORDER) {
+        assert.ok(active.has(status));
+    }
+    const shown = filterImpactRows(mixedRows(), active);
+    assert.equal(shown.length, mixedRows().length);
 });
 
-test("toImpactHeaderFields labels the identity baseline distinctly", () => {
-    const fields = toImpactHeaderFields({ method: "identity" });
-    assert.equal(headerValue(fields, "method"), "identity");
-    assert.ok(/baseline/i.test(headerValue(fields, "fidelity")!));
+test("allStatusesActive is true only when nothing with rows is hidden", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    assert.ok(allStatusesActive(chips, defaultImpactFilters()));
+    const noEqual = new Set<ReplayRowStatus>(
+        IMPACT_FILTER_ORDER.filter((s) => s !== "equal"),
+    );
+    // equal has rows in the fixture, so hiding it drops out of the All view.
+    assert.ok(!allStatusesActive(chips, noEqual));
 });
 
-test("toImpactHeaderFields labels a construction-cache run", () => {
-    const fields = toImpactHeaderFields({
-        repo: "TypeAgent",
-        agent: "player",
-        method: "construction-cache",
-        missPolicy: "needs-explanation",
-    });
-    assert.equal(headerValue(fields, "method"), "construction cache");
-    assert.ok(/cache/i.test(headerValue(fields, "fidelity")!));
+test("allStatusesActive ignores statuses with no rows", () => {
+    // Only equal rows: the empty difference buckets must not block the All view.
+    const chips = buildImpactFilterChips(
+        toImpactRows([
+            row({ equal: true, utteranceId: "e1" }),
+            row({ equal: true, utteranceId: "e2" }),
+        ]),
+    );
+    assert.ok(allStatusesActive(chips, new Set<ReplayRowStatus>(["equal"])));
+});
+
+test("filterImpactRows keeps only rows whose status is active", () => {
+    const active = new Set<ReplayRowStatus>(["lost-match"]);
+    const shown = filterImpactRows(mixedRows(), active);
+    assert.equal(shown.length, 1);
+    assert.equal(shown[0].status, "lost-match");
+});
+
+test("impactFilterNote describes the non-empty hidden statuses", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    // Hide equal explicitly (the All default shows everything).
+    const differences = new Set<ReplayRowStatus>([
+        "changed",
+        "new-match",
+        "lost-match",
+    ]);
+    const note = impactFilterNote(chips, differences);
+    // The 2 equal rows are hidden.
+    assert.ok(note);
+    assert.ok(/2 rows hidden/.test(note!));
+    assert.ok(/equal/.test(note!));
+});
+
+test("impactFilterNote is silent when nothing with rows is hidden", () => {
+    const chips = buildImpactFilterChips(mixedRows());
+    const all = new Set<ReplayRowStatus>(IMPACT_FILTER_ORDER);
+    assert.equal(impactFilterNote(chips, all), undefined);
+});
+
+test("allRowsEqual is true only when every row is equal", () => {
+    assert.ok(
+        allRowsEqual(
+            toImpactRows([
+                row({ equal: true, utteranceId: "e1" }),
+                row({ equal: true, utteranceId: "e2" }),
+            ]),
+        ),
+    );
+    assert.ok(!allRowsEqual(mixedRows()));
+    // An empty set is not "all equal" — there's simply nothing to compare.
+    assert.ok(!allRowsEqual([]));
+});
+
+test("impactEmptyState gives first-run guidance", () => {
+    const state = impactEmptyState();
+    assert.ok(state.title.length > 0);
+    assert.ok(/base/i.test(state.hint));
+    assert.ok(/compare/i.test(state.hint));
 });

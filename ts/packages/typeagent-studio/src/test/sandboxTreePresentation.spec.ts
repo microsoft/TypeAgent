@@ -119,9 +119,12 @@ test("buildSandboxAgentNodes maps agents sorted by name", () => {
     );
     assert.equal(nodes[0].kind, "agent");
     assert.equal(nodes[0].agentName, "calendar");
-    assert.equal(nodes[0].description, "healthy \u00b7 s1");
+    // Health is shown via the row icon now; the description carries just the
+    // schema fingerprint.
+    assert.equal(nodes[0].description, "s1");
+    assert.equal(nodes[0].health, "healthy");
     assert.equal(nodes[0].contextValue, "sandboxAgent");
-    assert.equal(nodes[1].description, "warning \u00b7 s2");
+    assert.equal(nodes[1].description, "s2");
 });
 
 test("formatSandboxState covers every state literal", () => {
@@ -165,5 +168,7 @@ test("agent node omits the fingerprint when the schema hash is a sentinel", () =
             ],
         }),
     );
-    assert.equal(nodes[0].description, "unknown");
+    // No real schema hash -> no fingerprint -> no description (icon carries
+    // the unknown-health state).
+    assert.equal(nodes[0].description, undefined);
 });

@@ -29,9 +29,9 @@
  * is `absent` and the resolver degrades cleanly to the grammar match.
  */
 
-import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
+    computeActionSchemaFileHash,
     loadConstructionCacheFile,
     type ConstructionCache,
     type MatchResult,
@@ -57,19 +57,17 @@ export interface SchemaHashInput {
 }
 
 /**
- * Recompute the dispatcher's schema-file `sourceHash`. Must match
- * `hashStrings(schemaTypeString, source[, config])` in
- * `dispatcher/.../actionSchemaFileCache.ts` byte-for-byte so the resulting
- * namespace key equals the one the dispatcher stamped into the cache.
+ * Recompute the dispatcher's schema-file `sourceHash` so the resulting namespace
+ * key equals the one the dispatcher stamped into the cache. Delegates to the
+ * shared {@link computeActionSchemaFileHash}, the single source of truth the
+ * dispatcher's schema cache also uses, so the two cannot drift.
  */
 export function reproduceSchemaSourceHash(input: SchemaHashInput): string {
-    const hash = crypto.createHash("sha256");
-    hash.update(JSON.stringify(input.schemaType));
-    hash.update(input.source);
-    if (input.config !== undefined) {
-        hash.update(input.config);
-    }
-    return hash.digest("base64");
+    return computeActionSchemaFileHash(
+        input.schemaType,
+        input.source,
+        input.config,
+    );
 }
 
 export type ConstructionCacheStatus =

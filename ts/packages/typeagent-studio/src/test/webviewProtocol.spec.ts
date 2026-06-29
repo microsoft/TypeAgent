@@ -9,20 +9,26 @@ test("parseWebviewMessage accepts well-formed messages", () => {
     assert.deepEqual(parseWebviewMessage({ type: "ready" }), {
         type: "ready",
     });
-    assert.deepEqual(parseWebviewMessage({ type: "reconnect" }), {
-        type: "reconnect",
+    assert.deepEqual(parseWebviewMessage({ type: "pickVersion", side: "a" }), {
+        type: "pickVersion",
+        side: "a",
     });
+    assert.deepEqual(parseWebviewMessage({ type: "pickVersion", side: "b" }), {
+        type: "pickVersion",
+        side: "b",
+    });
+    // Missing/invalid version fields coerce to the working tree.
     assert.deepEqual(
         parseWebviewMessage({ type: "run", requestId: 3, agent: "player" }),
         {
             type: "run",
             requestId: 3,
             agent: "player",
-            versionA: "",
-            versionB: "",
+            versionA: { kind: "workingTree" },
+            versionB: { kind: "workingTree" },
         },
     );
-    // Version fields are carried through when supplied as strings.
+    // String version fields are coerced (legacy text-field / test seam).
     assert.deepEqual(
         parseWebviewMessage({
             type: "run",
@@ -35,25 +41,42 @@ test("parseWebviewMessage accepts well-formed messages", () => {
             type: "run",
             requestId: 4,
             agent: "player",
-            versionA: "HEAD",
-            versionB: "working tree",
+            versionA: { kind: "git", ref: "HEAD" },
+            versionB: { kind: "workingTree" },
         },
     );
-    // Non-string version fields fall back to empty (→ working tree downstream).
+    // Typed specs from a picker selection are validated and taken as-is.
+    assert.deepEqual(
+        parseWebviewMessage({
+            type: "run",
+            requestId: 6,
+            agent: "player",
+            versionA: { kind: "git", ref: "v1.0" },
+            versionB: { kind: "workingTree" },
+        }),
+        {
+            type: "run",
+            requestId: 6,
+            agent: "player",
+            versionA: { kind: "git", ref: "v1.0" },
+            versionB: { kind: "workingTree" },
+        },
+    );
+    // Non-string / malformed version fields fall back to the working tree.
     assert.deepEqual(
         parseWebviewMessage({
             type: "run",
             requestId: 5,
             agent: "player",
             versionA: 42,
-            versionB: null,
+            versionB: { kind: "git", ref: "" },
         }),
         {
             type: "run",
             requestId: 5,
             agent: "player",
-            versionA: "",
-            versionB: "",
+            versionA: { kind: "workingTree" },
+            versionB: { kind: "workingTree" },
         },
     );
 });
@@ -63,6 +86,16 @@ test("parseWebviewMessage rejects malformed / hostile input", () => {
     assert.equal(parseWebviewMessage(null), undefined);
     assert.equal(parseWebviewMessage("ready"), undefined);
     assert.equal(parseWebviewMessage({ type: "bogus" }), undefined);
+    // The agent is now fixed per panel — there is no agent picker message.
+    assert.equal(parseWebviewMessage({ type: "pickAgent" }), undefined);
+    // Reconnect is automatic — the webview no longer sends a reconnect message.
+    assert.equal(parseWebviewMessage({ type: "reconnect" }), undefined);
+    // pickVersion requires a valid side.
+    assert.equal(parseWebviewMessage({ type: "pickVersion" }), undefined);
+    assert.equal(
+        parseWebviewMessage({ type: "pickVersion", side: "c" }),
+        undefined,
+    );
     // run requires both a numeric requestId and a string agent.
     assert.equal(
         parseWebviewMessage({ type: "run", agent: "player" }),

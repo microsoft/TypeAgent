@@ -10,6 +10,7 @@
  */
 
 import type { ActionDelta, ReplaySummary } from "@typeagent/core/replay";
+import { collapseAndTruncate } from "./textFormatting.js";
 
 export type ReplayRowStatus = "equal" | "changed" | "new-match" | "lost-match";
 
@@ -52,10 +53,7 @@ export function classifyReplayRow(row: ActionDelta): ReplayRowStatus {
 }
 
 function truncate(text: string, max = 80): string {
-    const collapsed = text.replace(/\s+/g, " ").trim();
-    return collapsed.length > max
-        ? `${collapsed.slice(0, max - 1)}\u2026`
-        : collapsed;
+    return collapseAndTruncate(text, max);
 }
 
 export function formatReplayRow(row: ActionDelta): ReplayRowView {

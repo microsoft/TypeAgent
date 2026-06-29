@@ -13,6 +13,11 @@ import type {
     CollisionKind,
 } from "@typeagent/core/events";
 import type { GrammarScanSkip } from "@typeagent/core/collisionScanner";
+import {
+    noteTooltip,
+    type TooltipField,
+    type TooltipModel,
+} from "./tooltipModel.js";
 
 export type CollisionRowKind =
     | "collision"
@@ -34,7 +39,7 @@ export interface CollisionRow {
     id: string;
     label: string;
     description?: string;
-    tooltip?: string;
+    tooltip?: TooltipModel;
     contextValue?: string;
     /** Codicon id (no `$()` wrapper) for the tree item. */
     icon: string;
@@ -69,22 +74,29 @@ export function formatCollisionSummary(event: CollisionDetectedEvent): string {
     return `${event.kind}: ${formatParticipants(event)}`;
 }
 
-function formatCollisionTooltip(event: CollisionDetectedEvent): string {
-    const lines = [
-        `Kind: ${event.kind}`,
-        `Detected at: ${event.detectionPoint}`,
-        `Sandbox: ${event.sandboxId}`,
+function formatCollisionTooltip(event: CollisionDetectedEvent): TooltipModel {
+    const fields: TooltipField[] = [
+        { label: "Kind", value: event.kind },
+        { label: "Detected at", value: event.detectionPoint },
+        { label: "Sandbox", value: event.sandboxId, mono: true },
     ];
     if (event.experimentId !== undefined) {
-        lines.push(`Experiment: ${event.experimentId}`);
+        fields.push({
+            label: "Experiment",
+            value: event.experimentId,
+            mono: true,
+        });
     }
     if (event.requestId !== undefined) {
-        lines.push(`Request: ${event.requestId}`);
+        fields.push({ label: "Request", value: event.requestId, mono: true });
     }
     if (event.exemplarUtterances && event.exemplarUtterances.length > 0) {
-        lines.push(`Exemplars: ${event.exemplarUtterances.length}`);
+        fields.push({
+            label: "Exemplars",
+            value: String(event.exemplarUtterances.length),
+        });
     }
-    return lines.join("\n");
+    return { fields };
 }
 
 /** Map provider entries (expected newest-first) into top-level rows. */
@@ -100,8 +112,9 @@ export function buildCollisionRows(
             id: "collision:skipped",
             label: `Skipped (${skipped.length})`,
             description: "Agents excluded from the most recent scan",
-            tooltip:
+            tooltip: noteTooltip(
                 "Agents whose grammars couldn't be scanned (no compiled grammar, parse error, or compile error). Click to expand.",
+            ),
             contextValue: "studioCollisionSkippedGroup",
             icon: "circle-slash",
             hasChildren: true,
@@ -173,13 +186,15 @@ export function buildSkippedRows(
             skip.reason === "grammar-not-built" && skip.compilable === false
                 ? "grammar source not compiled (no build step)"
                 : reasonLabel;
-        const tooltipLines = [`Schema: ${skip.schemaName}`];
-        if (ownerSuffix !== "") {
-            tooltipLines.push(`Agent: ${skip.agentName}`);
+        const tooltipFields: TooltipField[] = [
+            { label: "Schema", value: skip.schemaName },
+        ];
+        if (ownerSuffix !== "" && skip.agentName !== undefined) {
+            tooltipFields.push({ label: "Agent", value: skip.agentName });
         }
-        tooltipLines.push(`Reason: ${reasonText}`);
+        tooltipFields.push({ label: "Reason", value: reasonText });
         if (skip.error !== undefined) {
-            tooltipLines.push(`Detail: ${skip.error}`);
+            tooltipFields.push({ label: "Detail", value: skip.error });
         }
         return {
             kind: "skipped",
@@ -189,7 +204,7 @@ export function buildSkippedRows(
                 skip.error !== undefined
                     ? `${reasonText} — ${skip.error}`
                     : reasonText,
-            tooltip: tooltipLines.join("\n"),
+            tooltip: { fields: tooltipFields },
             contextValue: buildable
                 ? "studioCollisionSkippedBuildable"
                 : "studioCollisionSkipped",
@@ -205,17 +220,32 @@ export function buildSkippedRows(
 /** Child rows (participants then exemplar utterances) for one collision. */
 export function buildCollisionChildRows(entry: CollisionEntry): CollisionRow[] {
     const { seq, event } = entry;
-    const rows: CollisionRow[] = event.participants.map((p, index) => ({
-        kind: "participant" as const,
-        id: `collision:${seq}:participant:${index}`,
-        label: p.actionType || p.agent,
-        description: `${p.file}:${p.range[0]}`,
-        tooltip: `${p.agent}\n${p.file} [${p.range[0]}-${p.range[1]}]`,
-        contextValue: "studioCollisionParticipant",
-        icon: "symbol-class",
-        hasChildren: false,
-        ...(isNavigablePath(p.file) ? { openPath: p.file } : {}),
-    }));
+    const rows: CollisionRow[] = event.participants.map((p, index) => {
+        const navigable = isNavigablePath(p.file);
+        return {
+            kind: "participant" as const,
+            id: `collision:${seq}:participant:${index}`,
+            label: p.actionType || p.agent,
+            description: `${p.file}:${p.range[0]}`,
+            tooltip: {
+                fields: [
+                    { label: "Agent", value: p.agent },
+                    {
+                        label: "Location",
+                        value: `${p.file} [${p.range[0]}-${p.range[1]}]`,
+                        mono: true,
+                    },
+                ],
+                ...(navigable
+                    ? { hint: "Click to open the grammar source." }
+                    : {}),
+            },
+            contextValue: "studioCollisionParticipant",
+            icon: "symbol-class",
+            hasChildren: false,
+            ...(navigable ? { openPath: p.file } : {}),
+        };
+    });
 
     for (const [index, utterance] of (
         event.exemplarUtterances ?? []
@@ -224,7 +254,6 @@ export function buildCollisionChildRows(entry: CollisionEntry): CollisionRow[] {
             kind: "exemplar",
             id: `collision:${seq}:exemplar:${index}`,
             label: utterance,
-            description: "exemplar",
             contextValue: "studioCollisionExemplar",
             icon: "quote",
             hasChildren: false,

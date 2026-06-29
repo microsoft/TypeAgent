@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import { createWebviewNonce } from "@typeagent/core/webview";
 import { AgentServerBridge } from "./agentServerBridge.js";
 
 /**
@@ -121,7 +122,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${stamp(scriptPath)}`;
         const styleUri = `${webview.asWebviewUri(stylePath)}?v=${stamp(stylePath)}`;
         const codiconUri = `${webview.asWebviewUri(codiconPath)}?v=${stamp(codiconPath)}`;
-        const nonce = getNonce();
+        const nonce = createWebviewNonce();
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -147,14 +148,4 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
     }
-}
-
-function getNonce(): string {
-    let text = "";
-    const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (let i = 0; i < 32; i++) {
-        text += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return text;
 }

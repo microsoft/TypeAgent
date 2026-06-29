@@ -12,3 +12,4 @@ export * as health from "./health/index.js";
 export * as collisions from "./collisions/index.js";
 export * as replay from "./replay/index.js";
 export * as onboardingBridge from "./onboardingBridge/index.js";
+export * as webview from "./webview/index.js";

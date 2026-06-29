@@ -7,6 +7,13 @@ import { buildWebviewHtml, createWebviewNonce } from "./webviewHtml.js";
 export interface WebviewKitPanelOptions {
     /** Stable view type; one live panel per type (reveal-existing behavior). */
     viewType: string;
+    /**
+     * Optional sub-key that lets several panels of the same `viewType` coexist
+     * (e.g. one Impact Report per agent). Reveal-existing keys on
+     * `viewType` + `instanceKey`, so distinct keys open distinct tabs the user
+     * can place side-by-side; omit it for the singleton behavior.
+     */
+    instanceKey?: string;
     title: string;
     /** Path segments (from the extension root) to the client script bundle. */
     scriptPath: string[];
@@ -20,11 +27,12 @@ export interface WebviewKitPanelOptions {
 
 /**
  * Thin, reusable wrapper over a `vscode.WebviewPanel`: enforces one live panel
- * per `viewType` (reveal the existing one instead of opening a second), builds a
- * locked-down CSP'd HTML shell with a per-load nonce, restricts
- * `localResourceRoots` to the bundle + media dirs, and exposes typed
- * `post`/`dispose`. State restore is left to the webview via `setState` — the
- * panel intentionally does not `retainContextWhenHidden`.
+ * per `viewType` (or per `viewType`+`instanceKey` when set) — revealing the
+ * existing one instead of opening a second — builds a locked-down CSP'd HTML
+ * shell with a per-load nonce, restricts `localResourceRoots` to the bundle +
+ * media dirs, and exposes typed `post`/`dispose`. State restore is left to the
+ * webview via `setState` — the panel intentionally does not
+ * `retainContextWhenHidden`.
  */
 export class WebviewKitPanel {
     private static readonly live = new Map<string, WebviewKitPanel>();
@@ -53,7 +61,8 @@ export class WebviewKitPanel {
         context: vscode.ExtensionContext,
         options: WebviewKitPanelOptions,
     ): WebviewKitPanel {
-        const existing = WebviewKitPanel.live.get(options.viewType);
+        const key = WebviewKitPanel.registryKey(options);
+        const existing = WebviewKitPanel.live.get(key);
         if (existing) {
             existing.panel.reveal();
             return existing;
@@ -77,9 +86,17 @@ export class WebviewKitPanel {
             },
         );
         const wrapper = new WebviewKitPanel(panel, options);
-        WebviewKitPanel.live.set(options.viewType, wrapper);
+        WebviewKitPanel.live.set(key, wrapper);
         wrapper.render(context);
         return wrapper;
+    }
+
+    /** Registry key: distinct per (viewType, instanceKey) so per-instance panels
+     *  (e.g. one Impact Report per agent) don't collapse onto one another. */
+    private static registryKey(options: WebviewKitPanelOptions): string {
+        return options.instanceKey !== undefined
+            ? `${options.viewType}::${options.instanceKey}`
+            : options.viewType;
     }
 
     private render(context: vscode.ExtensionContext): void {
@@ -126,7 +143,7 @@ export class WebviewKitPanel {
             return;
         }
         this.disposed = true;
-        WebviewKitPanel.live.delete(this.options.viewType);
+        WebviewKitPanel.live.delete(WebviewKitPanel.registryKey(this.options));
         for (const d of this.disposables.splice(0)) {
             d.dispose();
         }

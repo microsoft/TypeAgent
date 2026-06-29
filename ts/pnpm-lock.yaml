@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -919,7 +919,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5870,6 +5870,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
+      '@vscode/codicons':
+        specifier: ^0.0.42
+        version: 0.0.42
       '@vscode/vsce':
         specifier: ^3.2.1
         version: 3.4.0
@@ -6039,6 +6042,9 @@ importers:
 
   packages/utils/webSocketUtils:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
@@ -6149,6 +6155,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

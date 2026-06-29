@@ -192,7 +192,12 @@ test("buildSkippedRows formats reason and surfaces error detail in description",
     assert.equal(rows[0].icon, "circle-outline");
     assert.equal(rows[1].description, "compile error — unknown variable t");
     assert.equal(rows[1].icon, "error");
-    assert.equal(rows[1].tooltip?.includes("Detail: unknown variable t"), true);
+    assert.equal(
+        rows[1].tooltip?.fields.some(
+            (f) => f.label === "Detail" && f.value === "unknown variable t",
+        ),
+        true,
+    );
     assert.equal(rows[2].icon, "warning");
 });
 
@@ -272,8 +277,16 @@ test("buildSkippedRows annotates sub-schemas with their owning agent", () => {
     ]);
     // Sub-schema name differs from agent -> show "(browser)" suffix.
     assert.equal(rows[0].label, "crossword (browser)");
-    assert.equal(rows[0].tooltip?.includes("Agent: browser"), true);
+    assert.equal(
+        rows[0].tooltip?.fields.some(
+            (f) => f.label === "Agent" && f.value === "browser",
+        ),
+        true,
+    );
     // Agent name equals schema name -> no redundant suffix.
     assert.equal(rows[1].label, "code");
-    assert.equal(rows[1].tooltip?.includes("Agent:"), false);
+    assert.equal(
+        rows[1].tooltip?.fields.some((f) => f.label === "Agent"),
+        false,
+    );
 });

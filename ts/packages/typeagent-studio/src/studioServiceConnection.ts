@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import type { StudioEvent } from "@typeagent/core/events";
+import {
+    createBackoff,
+    type Backoff,
+} from "@typeagent/websocket-utils/backoff";
 import { StudioServiceClient } from "./studioServiceClient.js";
 
 export type StudioConnectionState = "disconnected" | "connecting" | "connected";
@@ -28,7 +32,9 @@ export class StudioServiceConnection {
     private generation = 0;
     private connecting: Promise<boolean> | undefined;
     private retryTimer: ReturnType<typeof setTimeout> | undefined;
-    private retryAttempt = 0;
+    /** Epoch ms of the next scheduled reconnect attempt (while disconnected). */
+    private nextRetryAtMs: number | undefined;
+    private readonly backoff: Backoff;
     private autoRetry = false;
     private disposed = false;
     private readonly eventListeners = new Set<(event: StudioEvent) => void>();
@@ -36,27 +42,23 @@ export class StudioServiceConnection {
         (state: StudioConnectionState) => void
     >();
 
-    private readonly backoffMs: number[];
-
     constructor(
         private readonly repoRoot: string | undefined,
         private readonly options: {
-            /** Retry backoff in ms, capped at the last value. */
-            backoffMs?: number[];
+            /** First retry delay / exponential base in ms. Default 2000. */
+            baseBackoffMs?: number;
+            /** Upper bound applied to every retry delay in ms. Default 15000. */
+            maxBackoffMs?: number;
             /** Explicit `ws://host:port` (tests); bypasses discovery. */
             endpoint?: string;
             /** Capability token presented on connect (with `endpoint`). */
             token?: string;
         } = {},
     ) {
-        const DEFAULT_BACKOFF = [2000, 4000, 8000, 15000];
-        // Guard against an empty array: a 0-length backoff would index to -1 →
-        // `undefined` delay → `setTimeout(_, undefined)` fires immediately,
-        // spinning reconnect in a tight CPU loop.
-        this.backoffMs =
-            options.backoffMs && options.backoffMs.length > 0
-                ? options.backoffMs
-                : DEFAULT_BACKOFF;
+        this.backoff = createBackoff({
+            baseMs: options.baseBackoffMs ?? 2000,
+            maxMs: options.maxBackoffMs ?? 15000,
+        });
         this.endpoint = options.endpoint;
         this.token = options.token;
     }
@@ -87,6 +89,12 @@ export class StudioServiceConnection {
 
     get currentState(): StudioConnectionState {
         return this.state;
+    }
+
+    /** When disconnected and auto-retrying, the epoch ms of the next attempt;
+     *  otherwise undefined. Lets a status indicator show a live countdown. */
+    get nextRetryAt(): number | undefined {
+        return this.state === "disconnected" ? this.nextRetryAtMs : undefined;
     }
 
     /** The live client, or `undefined` when not connected. */
@@ -198,7 +206,7 @@ export class StudioServiceConnection {
                 this.scheduleRetry();
                 return false;
             }
-            this.retryAttempt = 0;
+            this.backoff.reset();
             this.setState("connected");
             return true;
         })().finally(() => {
@@ -224,18 +232,17 @@ export class StudioServiceConnection {
         if (this.disposed || this.retryTimer !== undefined || !this.autoRetry) {
             return;
         }
-        const delay =
-            this.backoffMs[
-                Math.min(this.retryAttempt, this.backoffMs.length - 1)
-            ];
-        this.retryAttempt += 1;
+        const delay = this.backoff.next();
+        this.nextRetryAtMs = Date.now() + delay;
         this.retryTimer = setTimeout(() => {
             this.retryTimer = undefined;
+            this.nextRetryAtMs = undefined;
             void this.connect();
         }, delay);
     }
 
     private cancelRetry(): void {
+        this.nextRetryAtMs = undefined;
         if (this.retryTimer !== undefined) {
             clearTimeout(this.retryTimer);
             this.retryTimer = undefined;
