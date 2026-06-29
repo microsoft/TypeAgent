@@ -327,26 +327,13 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
-    // In-repo corpus files (`<repoRoot>/corpus/<agent>.utterances.jsonl`) are
-    // edited outside the extension (e.g. after "Seed in-repo corpus..." opens the
-    // new file for the user to paste utterances). Watch only that directory so the
-    // Corpora tree refreshes on save/create/delete without churning on unrelated
-    // `*.utterances.jsonl` files elsewhere in a large workspace.
-    const corpusWatcherPattern = repoRootInfo.repoRoot
-        ? new vscode.RelativePattern(
-              path.join(repoRootInfo.repoRoot, "corpus"),
-              "*.utterances.jsonl",
-          )
-        : "**/corpus/*.utterances.jsonl";
-    const corpusWatcher =
-        vscode.workspace.createFileSystemWatcher(corpusWatcherPattern);
-    const refreshOnCorpusChange = () => corpusTree.refresh();
-    corpusWatcher.onDidCreate(refreshOnCorpusChange);
-    corpusWatcher.onDidChange(refreshOnCorpusChange);
-    corpusWatcher.onDidDelete(refreshOnCorpusChange);
+    // The Corpora tree refreshes only on explicit in-extension actions (seeding
+    // an in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command -- each of those calls corpusTree.refresh()
+    // directly. We intentionally do not watch the filesystem for out-of-band
+    // edits to *.utterances.jsonl.
     context.subscriptions.push(
         corpusTree,
-        corpusWatcher,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),
