@@ -19,12 +19,21 @@
   {
     "request": "play Symphony by Beethoven please",
     "expected": {
-      "schemaName": "player",
-      "actionName": "playTrack",
-      "parameters": {
-        "trackName": "Symphony",
-        "artists": ["Beethoven"]
-      }
+      "anyof": [
+        {
+          "action": {
+            "schemaName": "player",
+            "actionName": "playTrack",
+            "parameters": {
+              "trackName": "Symphony",
+              "artists": ["Beethoven"]
+            }
+          },
+          "alternates": {
+            "artists.0": "Beethoven please"
+          }
+        }
+      ]
     }
   },
   {

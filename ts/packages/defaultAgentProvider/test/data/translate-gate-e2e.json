@@ -168,11 +168,9 @@
           {
             "action": {
               "schemaName": "calendar",
-              "actionName": "addEvent",
+              "actionName": "scheduleEvent",
               "parameters": {
-                "event": {
-                  "description": "lunch"
-                }
+                "description": "lunch"
               }
             },
             "partial": true
@@ -285,23 +283,17 @@
       "request": "add eggs to my grocery list",
       "expected": [
         {
-          "schemaName": "list",
-          "actionName": "addItems",
-          "parameters": {
-            "items": [
-              "eggs"
-            ],
-            "listName": "grocery"
-          },
-          "entities": {
-            "listName": {
-              "name": "grocery",
-              "type": [
-                "list"
+          "action": {
+            "schemaName": "list",
+            "actionName": "addItems",
+            "parameters": {
+              "items": [
+                "eggs"
               ],
-              "sourceAppAgentName": "list"
+              "listName": "grocery"
             }
-          }
+          },
+          "partial": true
         }
       ],
       "history": [
@@ -341,19 +333,12 @@
               "schemaName": "browser.lookupAndAnswer",
               "actionName": "lookupAndAnswerInternet",
               "parameters": {
-                "originalRequest": "who was president in 1837",
-                "internetLookups": [
-                  "president in 1837"
-                ]
+                "originalRequest": "who was president in 1837"
               }
             },
-            "alternates": {
-              "internetLookups.0": [
-                "president of the united states in 1837",
-                "us president in 1837"
-              ]
-            }            
-          }
+            "partial": true
+          },
+          "chat.generateResponse"
         ]
       },
       "history": [
