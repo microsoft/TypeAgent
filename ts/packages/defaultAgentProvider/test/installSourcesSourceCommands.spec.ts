@@ -29,7 +29,10 @@ function makeRegistry(overrides: any = {}) {
         order: () => orderNames.map((name: string) => ({ name, kind: "path" })),
         setOrder: (names: string[]) => calls.setOrder.push(names),
         remove: (name: string) => calls.remove.push(name),
-        get: () => undefined,
+        get: (name: string) =>
+            overrides.agents
+                ? { listAgents: async () => overrides.agents[name] ?? [] }
+                : undefined,
         add: () => {},
         resolve: async () => undefined,
         where: async (ref: string) => {
@@ -170,6 +173,40 @@ describe("getSourceCommands", () => {
             await order.run(fakeContext(), { args: { names: [] } });
             expect(registry.calls.setOrder).toEqual([[]]);
         });
+
+        it("completes names with configured source names", async () => {
+            const registry = makeRegistry({
+                infos: [
+                    { name: "path", kind: "path", detail: "(default base)" },
+                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
+                ],
+            });
+            const order = getSourceCommands(makeDeps(registry)).commands
+                .order as any;
+            const result = await order.getCompletion({}, {}, ["names"]);
+            expect(result.groups).toEqual([
+                { name: "names", completions: ["path", "builtin"] },
+            ]);
+        });
+
+        it("excludes names already entered", async () => {
+            const registry = makeRegistry({
+                infos: [
+                    { name: "path", kind: "path", detail: "(default base)" },
+                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
+                ],
+            });
+            const order = getSourceCommands(makeDeps(registry)).commands
+                .order as any;
+            const result = await order.getCompletion(
+                {},
+                { args: { names: ["path"] } },
+                ["names"],
+            );
+            expect(result.groups).toEqual([
+                { name: "names", completions: ["builtin"] },
+            ]);
+        });
     });
 
     describe("where", () => {
@@ -192,6 +229,22 @@ describe("getSourceCommands", () => {
             const { context, output } = capturingContext();
             await where.run(context, { args: { ref: "nope" } });
             expect(output()).toContain("No source would resolve 'nope'");
+        });
+
+        it("completes ref with de-duplicated enumerable agent names", async () => {
+            const registry = makeRegistry({
+                infos: [
+                    { name: "feed", kind: "feed", detail: "<feed>" },
+                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
+                ],
+                agents: { feed: ["foo", "bar"], builtin: ["bar", "baz"] },
+            });
+            const where = getSourceCommands(makeDeps(registry)).commands
+                .where as any;
+            const result = await where.getCompletion({}, {}, ["ref"]);
+            expect(result.groups).toEqual([
+                { name: "ref", completions: ["foo", "bar", "baz"] },
+            ]);
         });
     });
 
@@ -228,6 +281,21 @@ describe("getSourceCommands", () => {
                 flags: { force: false },
             });
             expect(registry.calls.remove).toEqual(["path"]);
+        });
+
+        it("completes name with configured source names", async () => {
+            const registry = makeRegistry({
+                infos: [
+                    { name: "path", kind: "path", detail: "(default base)" },
+                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
+                ],
+            });
+            const remove = getSourceCommands(makeDeps(registry)).commands
+                .remove as any;
+            const result = await remove.getCompletion({}, {}, ["name"]);
+            expect(result.groups).toEqual([
+                { name: "name", completions: ["path", "builtin"] },
+            ]);
         });
     });
 });

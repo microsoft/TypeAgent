@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ParsedCommandParams,
+    PartialParsedCommandParams,
+    SessionContext,
+    CompletionGroup,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     CommandHandlerContext,
@@ -16,6 +22,18 @@ import chalk from "chalk";
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+// Names of agents that can be uninstalled/updated: installed records minus the
+// built-ins (which the installer protects). Returns [] when the installer can't
+// enumerate its records.
+function managedAgentNames(
+    context: SessionContext<CommandHandlerContext>,
+): string[] {
+    const installer = context.agentContext.agentInstaller;
+    return (installer?.listInstalled?.() ?? [])
+        .filter((info) => info.source !== "builtin")
+        .map((info) => info.name);
+}
 
 export class ListInstalledCommandHandler implements CommandHandler {
     public readonly description = "List installed agents";
@@ -137,6 +155,31 @@ export class InstallCommandHandler implements CommandHandler {
             context,
         );
     }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const installer = context.agentContext.agentInstaller;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            // `name` is freeform; complete the ref from enumerable sources and
+            // the source flag from the configured sources.
+            if (name === "ref") {
+                completions.push({
+                    name,
+                    completions: (await installer?.listAvailable?.()) ?? [],
+                });
+            } else if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: installer?.listSources?.() ?? [],
+                });
+            }
+        }
+        return { groups: completions };
+    }
 }
 
 export class UninstallCommandHandler implements CommandHandler {
@@ -168,6 +211,23 @@ export class UninstallCommandHandler implements CommandHandler {
         );
 
         displayResult(`Agent '${name}' uninstalled.`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "name") {
+                completions.push({
+                    name,
+                    completions: managedAgentNames(context),
+                });
+            }
+        }
+        return { groups: completions };
     }
 }
 
@@ -212,5 +272,22 @@ export class UpdateCommandHandler implements CommandHandler {
         );
         await installAppProvider(systemContext, provider);
         displayResult(`Agent '${name}' updated.`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "name") {
+                completions.push({
+                    name,
+                    completions: managedAgentNames(context),
+                });
+            }
+        }
+        return { groups: completions };
     }
 }

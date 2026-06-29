@@ -339,6 +339,23 @@ export function getDefaultAppAgentInstaller(
                 };
             });
         },
+        listSources(): string[] {
+            // Source names in resolution order, for `@package install --source`
+            // completion.
+            return registry.list().map((info) => info.name);
+        },
+        async listAvailable(): Promise<string[]> {
+            // Enumerable agent refs across the sources (catalog/feed advertise
+            // theirs; path sources don't), de-duplicated, for `@package install`
+            // ref completion.
+            const lists = await Promise.all(
+                registry
+                    .list()
+                    .map((info) => registry.get(info.name))
+                    .map((source) => source?.listAgents?.() ?? []),
+            );
+            return [...new Set(lists.flat())];
+        },
     };
 }
 

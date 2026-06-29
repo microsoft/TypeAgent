@@ -7,6 +7,12 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
+    CompletionGroup,
+    ParameterDefinitions,
+    PartialParsedCommandParams,
+    SessionContext,
+} from "@typeagent/agent-sdk";
+import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
@@ -96,6 +102,29 @@ class SourceOrderCommandHandler implements CommandHandler {
         const order = registry.list().map((info) => info.name);
         displayResult(`Resolution order: [${order.join(", ")}]`, context);
     }
+
+    public async getCompletion(
+        _context: SessionContext<unknown>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "names") {
+                const used = new Set(
+                    (params.args?.names as string[] | undefined) ?? [],
+                );
+                completions.push({
+                    name,
+                    completions: this.deps.registry
+                        .list()
+                        .map((info) => info.name)
+                        .filter((n) => !used.has(n)),
+                });
+            }
+        }
+        return { groups: completions };
+    }
 }
 
 class SourceWhereCommandHandler implements CommandHandler {
@@ -134,6 +163,31 @@ class SourceWhereCommandHandler implements CommandHandler {
             `'${ref}' would resolve via source '${candidate.source}' (${handle}).`,
             context,
         );
+    }
+
+    public async getCompletion(
+        _context: SessionContext<unknown>,
+        _params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "ref") {
+                // Enumerable sources (catalog/feed) advertise their agents;
+                // path sources don't, so refs there stay freeform.
+                const lists = await Promise.all(
+                    this.deps.registry
+                        .list()
+                        .map((info) => this.deps.registry.get(info.name))
+                        .map((source) => source?.listAgents?.() ?? []),
+                );
+                completions.push({
+                    name,
+                    completions: [...new Set(lists.flat())],
+                });
+            }
+        }
+        return { groups: completions };
     }
 }
 
@@ -176,6 +230,25 @@ class SourceRemoveCommandHandler implements CommandHandler {
         }
         registry.remove(name);
         displayResult(`Removed source '${name}'.`, context);
+    }
+
+    public async getCompletion(
+        _context: SessionContext<unknown>,
+        _params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "name") {
+                completions.push({
+                    name,
+                    completions: this.deps.registry
+                        .list()
+                        .map((info) => info.name),
+                });
+            }
+        }
+        return { groups: completions };
     }
 }
 

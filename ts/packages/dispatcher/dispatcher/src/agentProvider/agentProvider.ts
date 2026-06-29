@@ -56,6 +56,16 @@ export interface AppAgentInstaller {
     // whose installer cannot enumerate its records omits it and `@package list`
     // is unavailable (layering, same rationale as `update`).
     listInstalled?(): InstalledAgentInfo[];
+    // Names of the configured install sources, in resolution order. Used by the
+    // core only to complete the `@package install --source` flag; the core
+    // never interprets them. Optional: omitted when the installer has no source
+    // registry (same layering rationale as `sourceCommands`).
+    listSources?(): string[];
+    // Enumerable agent refs across the configured sources (catalog/feed
+    // advertise their agents; path sources don't). Used by the core only to
+    // complete the `@package install` ref; the core never interprets them.
+    // Optional: omitted when the installer has no enumerable sources.
+    listAvailable?(): Promise<string[]>;
 }
 
 /**
