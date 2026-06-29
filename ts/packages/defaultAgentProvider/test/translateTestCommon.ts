@@ -92,6 +92,14 @@ export type TranslateTestFile = TranslateTestEntry[];
 const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
+
+// Agents that exist for compiled task flows (invoked explicitly by a flow),
+// not for direct request routing. Disable their schemas in the translate tests
+// so their generic actions (e.g. utility.webSearch / readFile) don't
+// out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem,
+// etc.). The product manifests are intentionally left untouched.
+const flowOnlySchemas = ["utility"];
+
 export async function defineTranslateTest(
     name: string,
     dataFiles: string[],
@@ -166,8 +174,9 @@ export async function defineTranslateTest(
         }
         beforeAll(async () => {
             for (let i = 0; i < Math.min(concurrency, repeat); i++) {
-                dispatchers.push(
-                    await createDispatcher("cli test translate", {
+                const dispatcher = await createDispatcher(
+                    "cli test translate",
+                    {
                         appAgentProviders: defaultAppAgentProviders,
                         agents: {
                             actions: false,
@@ -178,8 +187,20 @@ export async function defineTranslateTest(
                         cache: { enabled: false },
                         embeddingCacheDir, // Cache the embedding to avoid recomputation.
                         collectCommandResult: true,
-                    }),
+                    },
                 );
+                // Take flow-only agents out of the translation candidate set
+                // so they don't out-compete the agents under test.
+                for (const schema of flowOnlySchemas) {
+                    checkResultError(
+                        await awaitCommand(
+                            dispatcher,
+                            `@config schema --off ${schema}`,
+                        ),
+                        `Failed to disable schema '${schema}'`,
+                    );
+                }
+                dispatchers.push(dispatcher);
             }
         });
         describe.each(inputsWithName)(`${name} %p`, (_, test) => {
@@ -347,24 +368,34 @@ function checkPossibleMatch(
 // equivalently, so normalize a scheme-less host by prepending "http://" before
 // comparison. Applied symmetrically to expected and received values, so it can
 // only widen matches — never introduce a false failure.
-function hasUrlScheme(value: string): boolean {
-    return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+// Treat a bare host and its http:// / https:// forms as equivalent (e.g.
+// "jsbach.net" == "http://jsbach.net", "wikipedia.com" == "https://wikipedia.com")
+// by stripping a leading http(s):// scheme before comparison. Recurses into
+// nested objects and string arrays (e.g. lookup.site: string[]). Applied
+// symmetrically to expected and received values, so it can only widen matches —
+// never introduce a false failure.
+function stripUrlScheme(value: string): string {
+    return value.replace(/^https?:\/\//i, "");
 }
-function isBareHost(value: string): boolean {
-    return (
-        !hasUrlScheme(value) &&
-        /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(value)
-    );
+function normalizeUrlValues(value: unknown): unknown {
+    if (typeof value === "string") {
+        return stripUrlScheme(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map(normalizeUrlValues);
+    }
+    if (value !== null && typeof value === "object") {
+        const obj = value as Record<string, unknown>;
+        for (const [k, v] of Object.entries(obj)) {
+            obj[k] = normalizeUrlValues(v);
+        }
+        return obj;
+    }
+    return value;
 }
 function normalizeUrlParams(action: TypeAgentAction) {
-    const params = action.parameters as Record<string, unknown> | undefined;
-    if (params === undefined) {
-        return;
-    }
-    for (const [name, value] of Object.entries(params)) {
-        if (typeof value === "string" && isBareHost(value)) {
-            params[name] = `http://${value}`;
-        }
+    if (action.parameters !== undefined) {
+        normalizeUrlValues(action.parameters);
     }
 }
 
