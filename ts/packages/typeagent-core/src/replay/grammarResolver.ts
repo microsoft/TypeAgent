@@ -413,17 +413,6 @@ function topMatchAction(results: MatchResult[]): unknown {
  * accepted without consulting the validator (exactly as the dispatcher
  * short-circuits); a wildcard match is dropped only on an explicit `false`
  * verdict, and the walk continues to the next candidate (the dispatcher's
- * fall-back-to-a-lower-match behavior). Returns `undefined` when every candidate
- * was rejected — the row then becomes `needs-explanation`, the deterministic
- * stand-in for the dispatcher falling back to the LLM.
- */
-/**
- * Mirror the dispatcher's `getValidatedMatches` for the wildcard step: walk the
- * heuristically-ranked matches and return the action of the first one the agent
- * accepts. A match with no wildcard capture (`wildcardCharCount === 0`) is
- * accepted without consulting the validator (exactly as the dispatcher
- * short-circuits); a wildcard match is dropped only on an explicit `false`
- * verdict, and the walk continues to the next candidate (the dispatcher's
  * fall-back-to-a-lower-match behavior). Returns `action: undefined` when every
  * candidate was rejected — the row then becomes `needs-explanation`, the
  * deterministic stand-in for the dispatcher falling back to the LLM.
