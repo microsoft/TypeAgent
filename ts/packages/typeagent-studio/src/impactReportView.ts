@@ -59,9 +59,11 @@ export function openImpactReport(
     // Subscription to the shared connection's state, disposed with the panel.
     let stateSub: { dispose(): void } | undefined;
     // The last completed result + its request id. Re-posted whenever the webview
-    // signals `ready` so a run that finished while the iframe was torn down (the
-    // panel is `retainContextWhenHidden: false`, so hidden panels drop posts) is
-    // recovered on reveal — the webview dedupes by request id.
+    // signals `ready` so a run whose result arrived before the webview was
+    // listening (e.g. the first load, or a full extension reload) is recovered
+    // on the next `ready` — the webview dedupes by request id. With the panel
+    // retaining context while hidden, navigate-away/back no longer reloads it,
+    // so this mainly guards the initial-load and extension-reload cases.
     let lastResult:
         | {
               requestId: number;
@@ -82,6 +84,11 @@ export function openImpactReport(
         title: `Impact Report — ${agent}`,
         scriptPath: ["dist", "webview", "impactReport.js"],
         stylePath: ["media", "impactReport.css"],
+        // The panel holds a live service connection and a rendered result, and
+        // the agent/connection context is re-pushed only via a single reveal
+        // `ready` handshake. Retain the context so navigating away and back
+        // keeps that state instead of tearing the webview down and reloading.
+        retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
             stateSub?.dispose();
