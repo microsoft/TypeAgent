@@ -30,6 +30,7 @@ import {
     createInstalledAppAgentProvider,
     getAppBundleRequirePath,
     loadInstalledRecords,
+    seedRecordsFromBundledCatalog,
     readAgentsJson,
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
@@ -160,12 +161,23 @@ export function getDefaultAppAgentInstaller(
         });
     }
 
+    // Builtins are derived from the bundled catalog (never persisted), so they
+    // can never be installed-over, uninstalled, or updated.
+    function isBuiltin(name: string): boolean {
+        return seedRecordsFromBundledCatalog()[name] !== undefined;
+    }
+
     return {
         async install(
             name: string,
             ref: string,
             sourceName?: string,
         ): Promise<InstallResult> {
+            if (isBuiltin(name)) {
+                throw new Error(
+                    `Agent '${name}' is built-in and cannot be shadowed by an install`,
+                );
+            }
             // resolve + materialize is serialized by the registry's limiter
             // (design §4.1). After it returns, the installer re-takes the same
             // shared limiter to write the record (sequential, not nested).
@@ -195,6 +207,11 @@ export function getDefaultAppAgentInstaller(
             };
         },
         async uninstall(name: string): Promise<void> {
+            if (isBuiltin(name)) {
+                throw new Error(
+                    `Agent '${name}' is built-in and cannot be uninstalled`,
+                );
+            }
             await limiter(async () => {
                 const current = readAgentsJson(instanceDir) ?? { agents: {} };
                 if (current.agents[name] === undefined) {
@@ -205,6 +222,11 @@ export function getDefaultAppAgentInstaller(
             });
         },
         async update(name: string, range?: string): Promise<AppAgentProvider> {
+            if (isBuiltin(name)) {
+                throw new Error(
+                    `Agent '${name}' is built-in and cannot be updated`,
+                );
+            }
             // Look up the recorded provenance and re-resolve against its
             // recorded source (design §5). The whole materialize runs first;
             // the old record is overwritten only after it succeeds, so a failed
@@ -300,9 +322,14 @@ export function getDefaultAppAgentInstaller(
         },
         listInstalled(): InstalledAgentInfo[] {
             // The installer owns `agents.json`; map each record down to the
-            // core-safe summary the `@package list` handler renders. A record
-            // carries exactly one resolution handle (ref / module / path).
-            const agents = readAgentsJson(instanceDir)?.agents ?? {};
+            // core-safe summary the `@package list` handler renders. Builtins
+            // are derived from the bundled catalog (not persisted), so merge
+            // them with the persisted installs. A record carries exactly one
+            // resolution handle (ref / module / path).
+            const agents = {
+                ...seedRecordsFromBundledCatalog(),
+                ...(readAgentsJson(instanceDir)?.agents ?? {}),
+            };
             return Object.values(agents).map((record) => {
                 const handle = record.ref ?? record.module ?? record.path;
                 return {

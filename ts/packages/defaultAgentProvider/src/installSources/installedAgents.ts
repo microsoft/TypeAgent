@@ -345,17 +345,26 @@ export function loadInstalledRecords(
     if (instanceDir === undefined) {
         return seedRecordsFromBundledCatalog();
     }
+    // Builtins are always derived from the bundled catalog, never persisted, so
+    // the builtin set tracks the running bundle and can never drift from a
+    // stale agents.json. agents.json holds only user-installed agents.
+    const builtins = seedRecordsFromBundledCatalog();
     const existing = readAgentsJson(instanceDir);
+    const installs: Record<string, InstalledAgentRecord> = {};
     if (existing !== undefined) {
-        // Already initialized; only clean up a lingering legacy file (the
-        // records are already persisted, so the migrated dict is discarded).
-        migrateLegacyExternalAgents(instanceDir, {});
-        return existing.agents;
+        for (const [name, record] of Object.entries(existing.agents)) {
+            // Drop any persisted builtins (legacy: builtins used to be written
+            // into agents.json); they are re-seeded above. Never let an install
+            // shadow a builtin.
+            if (record.source !== "builtin" && builtins[name] === undefined) {
+                installs[name] = record;
+            }
+        }
     }
-    // First run: pre-install builtins + migrate legacy path entries.
-    const records = seedRecordsFromBundledCatalog();
-    migrateLegacyExternalAgents(instanceDir, records);
+    // Migrate legacy path entries straight into installs (never builtins).
+    migrateLegacyExternalAgents(instanceDir, installs);
     fs.mkdirSync(instanceDir, { recursive: true });
-    writeAgentsJson(instanceDir, { agents: records });
-    return records;
+    // Persist only installs; builtins are derived, not stored.
+    writeAgentsJson(instanceDir, { agents: installs });
+    return { ...builtins, ...installs };
 }

@@ -156,16 +156,17 @@ describe("loadInstalledRecords", () => {
         expect(records.player.module).toBe("music");
     });
 
-    it("first run writes agents.json from the bundled seed", () => {
+    it("first run derives builtins and persists no builtins", () => {
         const dir = tmpInstanceDir();
         const records = loadInstalledRecords(dir, undefined);
         expect(records.player).toBeDefined();
         const onDisk = readAgentsJson(dir);
         expect(onDisk).toBeDefined();
-        expect(onDisk!.agents.player.module).toBe("music");
+        // builtins are derived, never persisted
+        expect(onDisk!.agents.player).toBeUndefined();
     });
 
-    it("steady state reads an existing agents.json verbatim", () => {
+    it("steady state merges builtins with persisted installs", () => {
         const dir = tmpInstanceDir();
         const record: InstalledAgentRecord = {
             name: "only",
@@ -176,8 +177,11 @@ describe("loadInstalledRecords", () => {
         };
         writeAgentsJson(dir, { agents: { only: record } });
         const records = loadInstalledRecords(dir, undefined);
-        expect(Object.keys(records)).toEqual(["only"]);
         expect(records.only).toEqual(record);
+        // builtins are merged in, install stays verbatim
+        expect(records.player).toBeDefined();
+        // agents.json still holds only the install
+        expect(readAgentsJson(dir)!.agents.player).toBeUndefined();
     });
 
     it("first run merges migrated legacy path entries with the seed", () => {

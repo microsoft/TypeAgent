@@ -203,6 +203,27 @@ describe("getDefaultAppAgentInstaller", () => {
         );
     });
 
+    it("rejects installing over a builtin (cannot shadow)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await expect(installer.install("player", agentDir)).rejects.toThrow(
+            /built-in/,
+        );
+    });
+
+    it("rejects uninstalling a builtin", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await expect(installer.uninstall("player")).rejects.toThrow(/built-in/);
+    });
+
+    it("rejects updating a builtin", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        await expect(installer.update!("player")).rejects.toThrow(/built-in/);
+    });
+
     it("uninstall drops the record; unknown name rejects", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
