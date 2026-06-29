@@ -129,11 +129,11 @@ let versionB: ResolvedVersion = DEFAULT_VERSION_B;
 // version selection so a reload keeps the chosen mode.
 let mode: StudioReplayMode = "nfa-grammar";
 
-// Opt-in wildcard validation (replay fidelity rung L4a). When lit, the run asks
-// the host to additionally run the agent's real `validateWildcardMatch` over the
-// working-tree side's wildcard matches. Off by default; persisted with the rest
-// of the selection so a reload keeps the choice. The host/runtime no-op it when
-// no validator is wired (e.g. the packaged build) and report that back via
+// Opt-in wildcard validation. When lit, the run asks the host to additionally
+// run the agent's real `validateWildcardMatch` over the working-tree side's
+// wildcard matches. Off by default; persisted with the rest of the selection so
+// a reload keeps the choice. The host/runtime no-op it when no validator is
+// wired (e.g. the packaged build) and report that back via
 // `wildcardValidation.diagnostics`, which `renderValidationNote` surfaces.
 let validateWildcards = false;
 
@@ -144,7 +144,7 @@ const CACHE_TOOLTIP: Record<"on" | "off", string> = {
 };
 /** Concise hover copy for the Wildcard validation on/off toggle. */
 const VALIDATE_TOOLTIP: Record<"on" | "off", string> = {
-    on: "Wildcard validation on: the working-tree side runs the agent's real validator over wildcard matches (allowlisted agents only). Click to turn off.",
+    on: "Wildcard validation on: the working-tree side runs the agent's real validator over wildcard matches (agents that opt in only). Click to turn off.",
     off: "Wildcard validation off: matches come from the grammar alone. Click to turn on.",
 };
 
@@ -479,7 +479,7 @@ function renderResult(
         renderProvenance(provenance);
     }
 
-    // Surface the opt-in wildcard-validation outcome (L4a), including an honest
+    // Surface the opt-in wildcard-validation outcome, including an honest
     // "unavailable" state when the validator couldn't load (e.g. packaged build).
     renderValidationNote(result.wildcardValidation);
 
@@ -502,7 +502,7 @@ function renderResult(
     );
 }
 
-/** Paint the wildcard-validation outcome (L4a) into the sub-bar, or clear it.
+/** Paint the wildcard-validation outcome into the sub-bar, or clear it.
  *  Shown only when validation actually ran on a wildcard match; a clean pass is
  *  neutral, a degraded/unavailable pass warns so the report stays honest. */
 function renderValidationNote(
@@ -548,16 +548,6 @@ function describeValidation(diagnostics: WildcardValidationDiagnostic[]): {
                 "Wildcard validation was requested but the agent module couldn't be " +
                 "loaded (e.g. the packaged build ships no agent code), so matches " +
                 "fell back to the grammar alone.",
-            degraded: true,
-        };
-    }
-    if (diagnostics.includes("agent-not-in-allowlist")) {
-        return {
-            icon: "info",
-            label: "validation skipped",
-            detail:
-                "This agent isn't in the validation allowlist, so its validator " +
-                "wasn't run and matches came from the grammar alone.",
             degraded: true,
         };
     }

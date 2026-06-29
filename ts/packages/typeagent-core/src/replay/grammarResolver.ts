@@ -544,7 +544,7 @@ export function createGrammarReplayResolver(
 
             const results = g.store.match(entry.utterance);
 
-            // Wildcard validation (L4a): on the working-tree side, run the
+            // Wildcard validation: on the working-tree side, run the
             // agent's real `validateWildcardMatch` over the ranked candidates and
             // resolve the first accepted match — mirroring the dispatcher's
             // post-match `getValidatedMatches`. Never on a git ref (we can't load

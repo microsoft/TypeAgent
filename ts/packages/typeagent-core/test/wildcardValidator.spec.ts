@@ -5,7 +5,6 @@ import {
     createWildcardMatchValidator,
     createReplaySessionContextStub,
     matchActionPayloads,
-    DEFAULT_WILDCARD_VALIDATION_ALLOWLIST,
     type ReplayAppAgentLoader,
     type ReplayValidatableAgent,
 } from "../src/replay/wildcardValidator.js";
@@ -42,23 +41,6 @@ function action(actionName: string, parameters?: Record<string, unknown>) {
 }
 
 describe("createWildcardMatchValidator", () => {
-    it("accepts (no-op) and diagnoses when the agent is not in the allowlist", async () => {
-        const log = { loaded: [] as string[], unloaded: [] as string[] };
-        const validator = createWildcardMatchValidator("notallowed", {
-            loader: fakeLoader({ notallowed: {} }, log),
-            allowlist: ["timer"],
-        });
-        const outcome = await validator.validateMatch([action("doThing")]);
-        expect(outcome.rejected).toBe(false);
-        expect(outcome.diagnostic).toBe("agent-not-in-allowlist");
-        // Never even loaded the module.
-        expect(log.loaded).toEqual([]);
-        expect(validator.loaded).toBe(false);
-        expect([...validator.diagnostics]).toContain("agent-not-in-allowlist");
-        await validator.dispose();
-        expect(log.unloaded).toEqual([]);
-    });
-
     it("rejects when the agent validator returns false", async () => {
         const agent: ReplayValidatableAgent = {
             async validateWildcardMatch(a) {
@@ -67,7 +49,6 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({ timer: agent }),
-            allowlist: ["timer"],
         });
         expect((await validator.validateMatch([action("good")])).rejected).toBe(
             false,
@@ -85,7 +66,6 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({ timer: agent }),
-            allowlist: ["timer"],
         });
         const outcome = await validator.validateMatch([
             action("good"),
@@ -102,7 +82,6 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({ timer: agent }),
-            allowlist: ["timer"],
         });
         const outcome = await validator.validateMatch([action("x")]);
         expect(outcome.rejected).toBe(false);
@@ -113,7 +92,6 @@ describe("createWildcardMatchValidator", () => {
         const validator = createWildcardMatchValidator("timer", {
             // Loader has no "timer" → loadAppAgent throws.
             loader: fakeLoader({}),
-            allowlist: ["timer"],
         });
         const outcome = await validator.validateMatch([action("x")]);
         expect(outcome.rejected).toBe(false);
@@ -126,7 +104,6 @@ describe("createWildcardMatchValidator", () => {
     it("accepts (no-op) when the agent has no validateWildcardMatch", async () => {
         const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({ timer: {} }),
-            allowlist: ["timer"],
         });
         const outcome = await validator.validateMatch([action("x")]);
         expect(outcome.rejected).toBe(false);
@@ -136,10 +113,7 @@ describe("createWildcardMatchValidator", () => {
     it("does not throw for an in-process validator reading agentContext (empty stub)", async () => {
         // A hypothetical in-process validator that reads context.agentContext
         // and returns true when its client is absent. Our stub uses
-        // `agentContext: {}` (NOT undefined), so this must not throw. (The real
-        // player validator has this shape but runs out-of-process, so it's
-        // excluded from the default allowlist; here we override the allowlist to
-        // exercise the stub's defensive behaviour directly.)
+        // `agentContext: {}` (NOT undefined), so this must not throw.
         const playerLike: ReplayValidatableAgent = {
             async validateWildcardMatch(_a, context) {
                 const spotify = (
@@ -153,7 +127,6 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("player", {
             loader: fakeLoader({ player: playerLike }),
-            allowlist: ["player"],
         });
         const outcome = await validator.validateMatch([action("playTrack")]);
         expect(outcome.rejected).toBe(false);
@@ -169,7 +142,6 @@ describe("createWildcardMatchValidator", () => {
         };
         const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({ timer: agent }, log),
-            allowlist: ["timer"],
         });
         // Not loaded until first validateMatch.
         expect(log.loaded).toEqual([]);
@@ -183,19 +155,11 @@ describe("createWildcardMatchValidator", () => {
 
     it("dispose is a no-op when nothing was loaded", async () => {
         const log = { loaded: [] as string[], unloaded: [] as string[] };
-        const validator = createWildcardMatchValidator("notallowed", {
+        const validator = createWildcardMatchValidator("timer", {
             loader: fakeLoader({}, log),
-            allowlist: ["timer"],
         });
         await validator.dispose();
         expect(log.unloaded).toEqual([]);
-    });
-
-    it("ships timer/list as the default allowlist", () => {
-        expect([...DEFAULT_WILDCARD_VALIDATION_ALLOWLIST].sort()).toEqual([
-            "list",
-            "timer",
-        ]);
     });
 });
 

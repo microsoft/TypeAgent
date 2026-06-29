@@ -500,7 +500,7 @@ describe("resolveGrammarReplayTarget + schema enrichment (L1)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// L4a — working-tree wildcard validation
+// Working-tree wildcard validation
 // ---------------------------------------------------------------------------
 
 // A grammar whose <PlayTrack> rule captures a greedy wildcard (so a match has
@@ -521,7 +521,7 @@ function wildcardLoader(agent: ReplayValidatableAgent): ReplayAppAgentLoader {
     };
 }
 
-/** A validator (allowlisted for "demo") that rejects a given track name. */
+/** A validator (for "demo") that rejects a given track name. */
 function rejectTrackValidator(reject: string): WildcardMatchValidator {
     const agent: ReplayValidatableAgent = {
         async validateWildcardMatch(a) {
@@ -532,11 +532,10 @@ function rejectTrackValidator(reject: string): WildcardMatchValidator {
     };
     return createWildcardMatchValidator("demo", {
         loader: wildcardLoader(agent),
-        allowlist: ["demo"],
     });
 }
 
-describe("grammar resolver wildcard validation (L4a)", () => {
+describe("grammar resolver wildcard validation", () => {
     let dir: string;
 
     beforeEach(() => {
@@ -670,7 +669,6 @@ describe("selectValidatedMatchAction (ranked-list contract)", () => {
         };
         return createWildcardMatchValidator("demo", {
             loader: wildcardLoader(agent),
-            allowlist: ["demo"],
         });
     }
 

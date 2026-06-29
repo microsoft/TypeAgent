@@ -267,8 +267,8 @@ export interface StudioReplayRequest {
      * Opt-in: additionally run the agent's real `validateWildcardMatch` over the
      * working-tree side's wildcard grammar matches (the dispatcher's post-match
      * validation step). Default off. Only takes effect when the runtime was given
-     * a `resolveWildcardValidator` and the agent is in the validation allowlist;
-     * otherwise it is a no-op. Working-tree side only; fail-open. See
+     * a `resolveWildcardValidator` and the agent's manifest declares it
+     * replay-safe; otherwise it is a no-op. Working-tree side only; fail-open. See
      * {@link StudioReplayResult.wildcardValidation}.
      */
     validateWildcards?: boolean;
@@ -364,8 +364,8 @@ export interface StudioReplayResult {
     /**
      * Per-side fidelity descriptor: how each version was realized and which
      * deterministic layers actually ran. Derived purely from signals the replay
-     * already computed (per-side method, mode, version kind, the L4a validation
-     * pass) so the Impact Report can show an honest "what ran" matrix.
+     * already computed (per-side method, mode, version kind, the wildcard
+     * validation pass) so the Impact Report can show an honest "what ran" matrix.
      */
     sideFidelity: SideFidelity;
     /**
@@ -375,9 +375,8 @@ export interface StudioReplayResult {
 }
 
 /**
- * Reports the opt-in wildcard-validation pass (replay fidelity rung L4a). Only
- * present when validation was enabled AND consulted on at least one wildcard
- * match. `diagnostics` lists fail-open reasons (e.g. the agent's module
+ * Reports the opt-in wildcard-validation pass. Only present when validation was
+ * enabled AND consulted on at least one wildcard match. `diagnostics` lists fail-open reasons (e.g. the agent's module
  * couldn't load, or its validator threw), so the UI can show that validation
  * degraded rather than silently claiming full fidelity.
  */
@@ -543,12 +542,6 @@ function fidelityWildcardValidationLayer(
             return {
                 status: "unavailable",
                 reason: "Agent module couldn't be loaded (e.g. a packaged build ships no agent code) — matches fell back to the grammar.",
-            };
-        }
-        if (diagnostics.includes("agent-not-in-allowlist")) {
-            return {
-                status: "skipped",
-                reason: "Agent isn't in the validation allowlist — its validator wasn't run.",
             };
         }
         if (diagnostics.includes("no-validator")) {
@@ -840,15 +833,19 @@ export interface CreateStudioRuntimeOptions {
     /**
      * Builds the agent's wildcard-match validator for an opt-in
      * (`validateWildcards`) replay run. Returns `undefined` when the host can't
-     * validate this agent (e.g. not in the allowlist, or no agent loader
-     * available), in which case replay stays grammar-only. Injected because the
-     * production loader pulls the dispatcher's agent providers, which live
-     * outside this dependency-light package; tests inject a fake-loader-backed
-     * validator. The runtime disposes the returned validator at run end.
+     * validate this agent (e.g. the agent's manifest doesn't declare it
+     * replay-safe, or no agent loader is available), in which case replay stays
+     * grammar-only. Injected because the production loader pulls the
+     * dispatcher's agent providers, which live outside this dependency-light
+     * package; tests inject a fake-loader-backed validator. The runtime disposes
+     * the returned validator at run end.
      */
     resolveWildcardValidator?: (
         agentName: string,
-    ) => WildcardMatchValidator | undefined;
+    ) =>
+        | WildcardMatchValidator
+        | undefined
+        | Promise<WildcardMatchValidator | undefined>;
     collisions?: CollisionService;
     /**
      * Scans agents' compiled grammars for collisions. Injected so tests can
@@ -1326,7 +1323,7 @@ export function createStudioRuntimeCore(
             let method: StudioReplayMethod = "identity";
             let methodA: StudioReplayMethod = "identity";
             let methodB: StudioReplayMethod = "identity";
-            // Opt-in wildcard validator (L4a); kept in scope so its diagnostics
+            // Opt-in wildcard validator; kept in scope so its diagnostics
             // can be read after the run and it can be disposed (unload the agent).
             let wildcardValidator: WildcardMatchValidator | undefined;
             let activeGrammarResolver: GrammarReplayResolver | undefined;
@@ -1361,11 +1358,11 @@ export function createStudioRuntimeCore(
                     // Opt-in: build the agent's wildcard validator so the
                     // working-tree side runs the dispatcher's real post-match
                     // `validateWildcardMatch`. `undefined` when the host has no
-                    // loader or the agent isn't validatable — replay then stays
+                    // loader or the agent doesn't opt in — replay then stays
                     // grammar-only (a silent no-op, not an error).
                     wildcardValidator =
                         request.validateWildcards === true
-                            ? options.resolveWildcardValidator?.(
+                            ? await options.resolveWildcardValidator?.(
                                   replayOptions.agent,
                               )
                             : undefined;

@@ -2,36 +2,34 @@
 // Licensed under the MIT License.
 
 /**
- * Wildcard-match validation for the replay path (fidelity rung "L4a").
+ * Wildcard-match validation for the replay path.
  *
  * The dispatcher's only beyond-grammar determinism is a post-match step: for
  * each candidate match that captured a wildcard, it calls the agent's
  * `validateWildcardMatch(action, sessionContext)` and DROPS the match if the
  * agent returns `false` (then falls back to a lower-ranked match or the LLM).
- * See `dispatcher/.../translation/matchRequest.ts` `getValidatedMatches`.
  *
  * Grammar matching alone cannot reproduce this, so a `.agr` that still matches
  * an utterance can look unchanged in replay even though the real dispatcher
  * would reject the wildcard value. This module runs the agent's REAL validator
- * so that fidelity axis shows up in the Impact Report.
+ * so that axis shows up in the Impact Report.
  *
- * ## Scope & honesty (deliberate, see `files/replay-l4a-design.md`)
- * - **Working-tree side only.** Loading arbitrary git-ref agent code is L4b
- *   build machinery; the caller never runs this for a git ref.
+ * Scope and guarantees:
+ * - **Working-tree side only.** The caller never runs this for a git ref.
  * - **Built module.** {@link ReplayAppAgentLoader.loadAppAgent} returns the
  *   agent's BUILT module, so uncommitted validator `.ts` edits are reflected
- *   only after a rebuild (grammar edits — the usual regression experiment — are
- *   already read from source by the grammar resolver).
+ *   only after a rebuild (grammar edits are read from source by the grammar
+ *   resolver).
  * - **Fail-OPEN.** Only an explicit `=== false` from the agent rejects a match.
- *   A missing method / load failure / thrown validator / non-allowlisted agent
- *   all ACCEPT the match and record a diagnostic — replay must never fabricate a
- *   lost match from infrastructure noise.
- * - **Allowlist.** Only validators known to be deterministic + side-effect-free
- *   run by default ({@link DEFAULT_WILDCARD_VALIDATION_ALLOWLIST}); e.g.
- *   `weather`'s validator does live network geocoding and is intentionally
- *   excluded.
+ *   A missing method, load failure, or thrown validator all ACCEPT the match and
+ *   record a diagnostic — replay must never fabricate a lost match from
+ *   infrastructure noise.
  * - **Entity-wildcard validation is out of scope** (it needs conversation
  *   memory replay does not have).
+ *
+ * Which agents run here is decided by the host, not this module: the host only
+ * builds a validator for agents that declare they are replay-safe. This module
+ * always loads and runs the validator it is asked to build.
  */
 
 /**
@@ -64,7 +62,6 @@ export interface ReplayAppAgentLoader {
  * verdict — recorded so the run can honestly report that validation degraded.
  */
 export type WildcardValidationDiagnostic =
-    | "agent-not-in-allowlist"
     | "no-validator"
     | "load-failed"
     | "errored";
@@ -94,48 +91,17 @@ export interface WildcardMatchValidator {
     dispose(): Promise<void>;
 }
 
-/**
- * Agents whose `validateWildcardMatch` validates cleanly during replay — a
- * deterministic function of the action that does NOT depend on live session
- * state (verified end-to-end against the real built modules):
- * - `timer` — `tryParseWhen` on the action params; context ignored. Rejects a
- *   wildcard that isn't a real duration/timestamp.
- * - `list` — `simpleNoun` heuristic over the action; context ignored.
- *
- * `player` is deliberately EXCLUDED even though its source returns `true` when
- * `context.agentContext.spotify` is absent. It runs `execMode: "separate"`, so
- * the loader returns an RPC proxy to a child process that reconstructs its OWN
- * `SessionContext` — where `agentContext` is `undefined`, not our stub's `{}`.
- * The child then throws `Cannot read properties of undefined (reading 'spotify')`
- * before reaching its self-degrade guard. And even if it didn't throw, it can
- * only ever return `true` without a live Spotify client, so it adds no fidelity.
- * It would just fail-open with an `errored` diagnostic and a misleading
- * "degraded" indicator — so we keep it grammar-only.
- *
- * `weather`/`markdown`/`photo`/`androidMobile`/`taskflow`/`powershell` are NOT
- * here: weather geocodes over the network, and the others are unverified.
- */
-export const DEFAULT_WILDCARD_VALIDATION_ALLOWLIST: readonly string[] = [
-    "timer",
-    "list",
-];
-
 export interface CreateWildcardMatchValidatorOptions {
     loader: ReplayAppAgentLoader;
-    /** Defaults to {@link DEFAULT_WILDCARD_VALIDATION_ALLOWLIST}. */
-    allowlist?: readonly string[];
 }
 
 /**
- * A no-op `SessionContext`-shaped stub for replay validation. The validators we
- * allowlist (timer/list) ignore the context entirely; the stub still exposes
+ * A no-op `SessionContext`-shaped stub for replay validation. Deterministic
+ * validators ignore the context entirely; the stub still exposes
  * `agentContext: {}` — NOT `undefined` — so that any in-process validator that
  * defensively reads `context.agentContext.<x>` degrades gracefully instead of
- * throwing. (Out-of-process agents like `player` reconstruct their own context
- * in the child and never see this stub, which is why `player` is excluded from
- * the default allowlist — see {@link DEFAULT_WILDCARD_VALIDATION_ALLOWLIST}.)
- * The interactive methods throw, since a validator that calls them is out of the
- * supported set and should fail-open via the wrapper's try/catch.
+ * throwing. The interactive methods throw, since a validator that calls them is
+ * out of the supported set and should fail-open via the wrapper's try/catch.
  */
 export function createReplaySessionContextStub(): Record<string, unknown> {
     const unsupported = (name: string) => () => {
@@ -179,9 +145,6 @@ export function createWildcardMatchValidator(
     options: CreateWildcardMatchValidatorOptions,
 ): WildcardMatchValidator {
     const { loader } = options;
-    const allowlist =
-        options.allowlist ?? DEFAULT_WILDCARD_VALIDATION_ALLOWLIST;
-    const allowed = allowlist.includes(agentName);
     const diagnostics = new Set<WildcardValidationDiagnostic>();
     const stubContext = createReplaySessionContextStub();
 
@@ -220,9 +183,6 @@ export function createWildcardMatchValidator(
         },
 
         async validateMatch(actions): Promise<WildcardValidationOutcome> {
-            if (!allowed) {
-                return note("agent-not-in-allowlist");
-            }
             const agent = await ensureAgent();
             if (agent === undefined) {
                 return { rejected: false, diagnostic: "load-failed" };

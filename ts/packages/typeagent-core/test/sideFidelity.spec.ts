@@ -137,11 +137,8 @@ describe("deriveSideFidelity", () => {
         );
     });
 
-    it("wildcard validation maps allowlist/no-validator to skipped", () => {
-        for (const diagnostic of [
-            "agent-not-in-allowlist",
-            "no-validator",
-        ] as const) {
+    it("wildcard validation maps no-validator to skipped", () => {
+        for (const diagnostic of ["no-validator"] as const) {
             const skipped = baseInput({
                 validateWildcards: true,
                 wildcardValidation: {

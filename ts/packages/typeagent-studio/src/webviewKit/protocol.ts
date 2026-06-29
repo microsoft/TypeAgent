@@ -78,8 +78,8 @@ export type WebviewToHostMessage =
           mode: StudioReplayMode;
           /**
            * Opt-in: additionally run the agent's real `validateWildcardMatch`
-           * over the working-tree side's wildcard matches (replay fidelity rung
-           * L4a). Off unless the user lit the validation toggle.
+           * over the working-tree side's wildcard matches. Off unless the user
+           * lit the validation toggle.
            */
           validateWildcards: boolean;
       }

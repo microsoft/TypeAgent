@@ -371,9 +371,9 @@ export function openImpactReport(
                 // path to model (grammar-only vs construction-cache-first); the
                 // runtime defaults unknown/missing to the cache-free baseline.
                 mode: msg.mode,
-                // Opt-in wildcard validation (L4a): the runtime only acts on it
-                // when a `resolveWildcardValidator` is wired and the agent is in
-                // the validation allowlist; otherwise it is a no-op.
+                // Opt-in wildcard validation: the runtime only acts on it when a
+                // `resolveWildcardValidator` is wired and the agent's manifest
+                // declares it replay-safe; otherwise it is a no-op.
                 validateWildcards: msg.validateWildcards,
                 missPolicy: "needs-explanation",
             });

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Production wiring for the replay wildcard validator (fidelity rung L4a).
+ * Production wiring for the replay wildcard validator.
  *
  * The core `@typeagent/core` runtime exposes the validation algorithm but is
  * dependency-light and does NOT know how to load a real agent module. The real
@@ -27,15 +27,20 @@
 
 import {
     createWildcardMatchValidator,
-    DEFAULT_WILDCARD_VALIDATION_ALLOWLIST,
     type ReplayAppAgentLoader,
     type ReplayValidatableAgent,
     type WildcardMatchValidator,
 } from "@typeagent/core/runtime";
 
+/** The single manifest field that gates replay wildcard validation. */
+interface ReplaySafeManifestLike {
+    replaySafeWildcardValidator?: boolean;
+}
+
 /** Minimal structural view of an `AppAgentProvider` (avoids a type-only dep). */
 interface AppAgentProviderLike {
     getAppAgentNames(): string[];
+    getAppAgentManifest(agentName: string): Promise<ReplaySafeManifestLike>;
     loadAppAgent(agentName: string): Promise<ReplayValidatableAgent>;
     unloadAppAgent(agentName: string): Promise<void>;
 }
@@ -119,19 +124,41 @@ function createDefaultLoader(): ReplayAppAgentLoader {
 }
 
 /**
+ * Whether the agent's manifest opts its `validateWildcardMatch` into replay. Any
+ * lookup failure (provider unavailable, agent unknown, manifest read error) is
+ * treated as not safe, so replay stays grammar-only.
+ */
+async function isReplaySafe(agentName: string): Promise<boolean> {
+    try {
+        const providers = await loadProviders();
+        if (providers === undefined) {
+            return false;
+        }
+        const provider = findProvider(providers, agentName);
+        if (provider === undefined) {
+            return false;
+        }
+        const manifest = await provider.getAppAgentManifest(agentName);
+        return manifest.replaySafeWildcardValidator === true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Build the runtime's `resolveWildcardValidator` option: returns a validator
- * only for allowlisted agents (so a non-allowlisted agent stays grammar-only
- * and the run doesn't claim a validation it can't perform), backed by the
- * lazy default loader. The dynamic import is deferred until a wildcard match
- * actually triggers `loadAppAgent`, so a run that never hits a wildcard never
- * pays for the provider.
+ * only for agents whose manifest declares `replaySafeWildcardValidator` (so any
+ * other agent stays grammar-only and the run doesn't claim a validation it can't
+ * perform), backed by the lazy default loader. The dynamic import is deferred
+ * until a wildcard match actually triggers a lookup, so a run that never hits a
+ * wildcard never pays for the provider.
  */
 export function createDefaultWildcardValidatorResolver(): (
     agentName: string,
-) => WildcardMatchValidator | undefined {
+) => Promise<WildcardMatchValidator | undefined> {
     const loader = createDefaultLoader();
-    return (agentName) => {
-        if (!DEFAULT_WILDCARD_VALIDATION_ALLOWLIST.includes(agentName)) {
+    return async (agentName) => {
+        if (!(await isReplaySafe(agentName))) {
             return undefined;
         }
         return createWildcardMatchValidator(agentName, { loader });
