@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=511e76ee9a3fd34ed86dd6e5d9d0c8797f9659c63a8e4e2f74957e33a5b1e3f2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6b14b3096803129aaee48929ae13158a87982cc20d48871314d780008e0dd4b5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowpro-test — AI-generated documentation
@@ -66,7 +66,7 @@ By following these steps, you can extend the `knowpro-test` package to support a
 
 Workspace:
 
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [conversation-memory](../../packages/memory/conversation/README.md)
 - [interactive-app](../../packages/interactiveApp/README.md)
 - [knowledge-processor](../../packages/knowledgeProcessor/README.md)
@@ -85,6 +85,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro-test docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro-test docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

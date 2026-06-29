@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ee0724066bf7764fc9f636978cca59be8557ffc25e9c28a15ded77e6d6f848c1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3c16bcaafe589f15f6e2ae702bdbcd797eac555ffe3b585d522da128ebfe4400 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # discord-agent — AI-generated documentation
@@ -19,6 +19,7 @@ The `discord-agent` package is a TypeAgent application agent designed to interac
 The `discord-agent` package supports a range of actions that facilitate interaction with Discord servers. These actions include:
 
 - `createMessage`: Sends a message to a specified channel.
+- `craftMessage`: Drafts a message via LLM from a high-level intent and posts it.
 - `getChannelMessages`: Retrieves messages from a specified channel.
 - `getCurrentUser`: Fetches the user object of the requester's account.
 - `createChannelInvite`: Creates a new invite for a channel.
@@ -100,9 +101,10 @@ By following these steps, you can add new functionalities to the `discord-agent`
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 
 External: _None at runtime._
 
@@ -129,11 +131,12 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ### Actions
 
-_7 actions implemented by this agent, parsed deterministically from `./src/discordSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 43 additional actions are declared in the schema but not yet implemented; not shown._
+_8 actions implemented by this agent, parsed deterministically from `./src/discordSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 43 additional actions are declared in the schema but not yet implemented; not shown._
 
 | User says                                                             | Action                                                    |
 | --------------------------------------------------------------------- | --------------------------------------------------------- |
 | "Send a message to the general channel saying 'Hello everyone!'"      | `createMessage` → `{ "channel_id": "…", "content": "…" }` |
+| "Send a message to #general that welcomes everyone to the discord"    | `craftMessage` → `{ "channel_id": "…", "intent": "…" }`   |
 | "Can you show me the latest messages from the channel with ID 12345?" | `getChannelMessages` → `{ "channel_id": "…" }`            |
 | "Can you show me my account details?"                                 | `getCurrentUser`                                          |
 | _Create a new invite for a channel._                                  | `createChannelInvite` → `{ "channel_id": "…" }`           |
@@ -143,6 +146,6 @@ _7 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6c11ded1503108a817c017d2bc829cb576d4a789fd4928d298b794650681b015 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2242735255275df8a8cf85b32506a8d460e680f60a57618c851702af8d2dc201 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-sdk-wrapper — AI-generated documentation
@@ -80,11 +80,11 @@ By following these steps, you can extend the package to include additional featu
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/config](../../packages/config/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [coder-wrapper](../../packages/coderWrapper/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `dotenv`, `form-data`, `mic`, `microsoft-cognitiveservices-speech-sdk`, `openai`, `zod`
@@ -110,6 +110,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

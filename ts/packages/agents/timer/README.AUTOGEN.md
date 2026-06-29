@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=21cbfec6da1f18f42b18ef9ddeb0e021537181efe39653ae74ec930078a8fbcf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=03ec8bb82f1f59d4612fc9cee4a3700112e72f344091a68120ce184f7ff53795 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # timer-agent — AI-generated documentation
@@ -58,7 +58,7 @@ These tasks were intentionally deferred while standing up the agent-initiated me
 ### Shell
 
 - **Real toast overlay surface**: `kind: "toast"` currently routes through `chatView.addNotificationMessage` (`appendMode: "temporary"` — gets overwritten by the next message). A fixed-position overlay outside `messageDiv` with auto-dismiss, click-to-dismiss, and stacking would give toast its own visual lane separate from the chat scroll. Wire-up in [main.ts setDisplay/appendDisplay](../../shell/src/renderer/src/main.ts).
-- **Distinct inline rendering**: `kind: "inline"` currently shares the same temporary-status path as `kind: "toast"`. A compact non-overwriting one-liner row (similar to the `notification-system-*` join/leave rows auto-created in [chatView.ts](../../shell/src/renderer/src/chat/chatView.ts)) would let inline persist in the scroll without bubble chrome.
+- **Distinct inline rendering**: `kind: "inline"` currently shares the same temporary-status path as `kind: "toast"`. A compact non-overwriting one-liner row (similar to the `notification-system-*` join/leave rows auto-created in chatView.ts) would let inline persist in the scroll without bubble chrome.
 - **Auto-scroll / focus / TTS policy**: Agent-initiated messages currently use the same scroll + TTS behavior as response bubbles. Conservative default per the plan: don't auto-speak, don't steal scroll if the user has scrolled up, flash a "new message below" affordance.
 
 ### CLI
@@ -89,9 +89,9 @@ These tasks were intentionally deferred while standing up the agent-initiated me
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: _None at runtime._
 
@@ -123,6 +123,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/timer
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

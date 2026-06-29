@@ -53,15 +53,15 @@ getClientIOChannelName(conversationId: string): string // "clientio:<conversatio
 
 **`AgentServerInvokeFunctions`** — methods exposed on the `agent-server` channel:
 
-| Method                                        | Description                                                                      |
-| --------------------------------------------- | -------------------------------------------------------------------------------- |
-| `joinConversation(options?)`                  | Join or auto-create a conversation; returns `JoinConversationResult`             |
-| `leaveConversation(conversationId)`           | Leave a conversation and clean up its channels                                   |
-| `createConversation(name)`                    | Create a new named conversation; returns `ConversationInfo`                      |
-| `listConversations(name?)`                    | List all conversations, optionally filtered by name substring (case-insensitive) |
-| `renameConversation(conversationId, newName)` | Rename a conversation                                                            |
-| `deleteConversation(conversationId)`          | Delete a conversation and all its persisted data                                 |
-| `shutdown()`                                  | Request graceful server shutdown                                                 |
+| Method                                                  | Description                                                                                                                                                       |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `joinConversation(options?)`                            | Join or auto-create a conversation; returns `JoinConversationResult`                                                                                              |
+| `leaveConversation(conversationId)`                     | Leave a conversation and clean up its channels                                                                                                                    |
+| `createConversation(name, options?)`                    | Create a new named conversation; returns `ConversationInfo`. `options.nameCollisionBehavior` defaults to `error`; `appendNumber` creates `Name (n)` on collision. |
+| `listConversations(name?)`                              | List all conversations, optionally filtered by name substring (case-insensitive)                                                                                  |
+| `renameConversation(conversationId, newName, options?)` | Rename a conversation. `options.nameCollisionBehavior` defaults to `error`; `appendNumber` creates `Name (n)` on collision.                                       |
+| `deleteConversation(conversationId)`                    | Delete a conversation and all its persisted data                                                                                                                  |
+| `shutdown()`                                            | Request graceful server shutdown                                                                                                                                  |
 
 ## Client-type registry
 

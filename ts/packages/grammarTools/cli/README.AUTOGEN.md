@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4cf459231ac51b819a72178d78c56fd55c771852887c6937dd2d9cc9e61089d1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=487e6a3d108733abca5fdda37c0b5101548447407d32f9855954dae60bed65a6 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-cli — AI-generated documentation
@@ -83,7 +83,7 @@ _No public exports declared in `package.json`._
 
 Workspace:
 
-- [action-grammar](../../../packages/actionGrammar/README.md)
+- [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 - grammar-tools-core
 
 External: _None at runtime._
@@ -94,6 +94,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

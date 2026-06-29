@@ -385,6 +385,9 @@ runCommand(lightExe, [
     `WixUIExtension`,
     `-ext`,
     `WixUtilExtension`,
+    // Per-user install under LocalAppData intentionally triggers ICE38 on
+    // file-keypath components harvested by heat; suppress that specific ICE.
+    `-sice:ICE38`,
     `-cultures:en-us`,
     `-o`,
     msiOutputPath,

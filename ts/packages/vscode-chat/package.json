@@ -50,6 +50,16 @@
         "when": "true"
       }
     ],
+    "commands": [
+      {
+        "command": "typeagentChat.renameSessionCustom",
+        "title": "Rename TypeAgent Session"
+      },
+      {
+        "command": "typeagentChat.deleteSessionCustom",
+        "title": "Delete TypeAgent Session"
+      }
+    ],
     "configuration": {
       "title": "TypeAgent Chat",
       "properties": {
@@ -68,6 +78,32 @@
           "fontCharacter": "\\F101"
         }
       }
+    },
+    "menus": {
+      "chat/chatSessions": [
+        {
+          "command": "typeagentChat.renameSessionCustom",
+          "when": "chatSessionType == 'typeagent' && !agentSessionIsArchived",
+          "group": "1_edit@2"
+        },
+        {
+          "command": "typeagentChat.deleteSessionCustom",
+          "when": "chatSessionType == 'typeagent'",
+          "group": "1_edit@9"
+        }
+      ],
+      "chatSessions/item/context": [
+        {
+          "command": "typeagentChat.renameSessionCustom",
+          "when": "chatSessionType == 'typeagent' && !agentSessionIsArchived",
+          "group": "1_edit@2"
+        },
+        {
+          "command": "typeagentChat.deleteSessionCustom",
+          "when": "chatSessionType == 'typeagent'",
+          "group": "1_edit@9"
+        }
+      ]
     }
   },
   "activationEvents": [

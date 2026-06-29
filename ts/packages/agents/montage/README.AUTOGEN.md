@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3af30c74b3ab9c3ab05d27900ce2b96743f3aa573072a44b7d952082955fadb4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=edf5fbcb34ddadb0858ebb63ddaebbce5a777d3cc184e77cb81e5fbb3e925539 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # montage-agent — AI-generated documentation
@@ -65,13 +65,13 @@ By following these steps, you can extend the capabilities of the montage-agent p
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 - [image-memory](../../../packages/memory/image/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
-- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
 External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-limit`, `koffi`, `sharp`, `typechat`, `winreg`
 
@@ -95,6 +95,6 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

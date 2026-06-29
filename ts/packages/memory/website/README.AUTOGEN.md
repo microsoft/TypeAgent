@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c9ac644fc0054b56bb6421dc4c95407f81c05414bc570890985a3373cd571952 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=73b591a64f88c1ca1e17ec553cd8fff3527100688de4f7b607072fd8edd00ac2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # website-memory — AI-generated documentation
@@ -66,8 +66,8 @@ After making your changes, run the tests to ensure everything works correctly. T
 
 Workspace:
 
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
 - [conversation-memory](../../../packages/memory/conversation/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
@@ -89,6 +89,6 @@ External: `better-sqlite3`, `cheerio`, `debug`, `dompurify`, `get-folder-size`, 
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter website-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter website-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

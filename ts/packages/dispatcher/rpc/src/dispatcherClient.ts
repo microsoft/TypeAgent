@@ -32,7 +32,7 @@ import type {
  *   Without them, callers awaiting `r.entry.completion` will block forever.
  *   Use `wrapClientIOForCompletion` to do the wiring automatically.
  *
- * See `docs/architecture/messageQueueing.md` for the broader design.
+ * See `docs/architecture/core/messageQueueing.md` for the broader design.
  */
 export interface DispatcherRpcClient {
     dispatcher: Dispatcher;

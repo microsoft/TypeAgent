@@ -517,65 +517,27 @@ if (-not (Test-Path $pluginMcpServer)) {
 Write-Host "  Plugin source ready at $pluginSourceDir"
 Write-Host "  MCP server entrypoint found: $pluginMcpServer"
 
-$marketplaceManifestPath = Ensure-LocalPluginMarketplace `
-    -MarketplaceRoot $PluginMarketplaceDir `
-    -MarketplaceName $PluginMarketplaceName `
-    -PluginName $pluginName `
-    -PluginSourceDir $pluginSourceDir `
-    -PluginDescription $pluginDescription `
-    -PluginVersion $pluginResolvedVersion
-Write-Host "  Local marketplace manifest ready at $marketplaceManifestPath"
+$registerPluginScript = Join-Path (Split-Path -Parent $PSScriptRoot) "installers\common\register-plugin.mjs"
+if (-not (Test-Path $registerPluginScript)) {
+    Fail "Shared plugin registration script not found: $registerPluginScript"
+}
 
-$marketplaceAddOutput = & copilot plugin marketplace add $PluginMarketplaceDir 2>&1
+$pluginRegisterLogPath = Join-Path (Join-Path $env:USERPROFILE ".typeagent") "logs\register-plugin.log"
+Write-Host "  Registering plugin with shared script"
+$registerArgs = @(
+    $registerPluginScript,
+    "--install-dir", $InstallDir,
+    "--plugin-source-dir", $pluginSourceDir,
+    "--marketplace-name", $PluginMarketplaceName,
+    "--marketplace-root", $PluginMarketplaceDir,
+    "--plugin-name", $pluginName,
+    "--plugin-description", $pluginDescription,
+    "--plugin-version", $pluginResolvedVersion,
+    "--log-path", $pluginRegisterLogPath
+)
+& node @registerArgs
 if ($LASTEXITCODE -ne 0) {
-    $marketplaceAddText = ($marketplaceAddOutput | Out-String)
-    if ($marketplaceAddText -match "already" -and $marketplaceAddText -match "marketplace") {
-        Write-Host "  Marketplace '$PluginMarketplaceName' is already registered"
-    } else {
-        if ($marketplaceAddText) { Write-Host $marketplaceAddText }
-        Fail "Failed to register local marketplace from '$PluginMarketplaceDir'."
-    }
-}
-
-$marketplaceUpdateOutput = & copilot plugin marketplace update $PluginMarketplaceName 2>&1
-if ($LASTEXITCODE -ne 0) {
-    if ($marketplaceUpdateOutput) { $marketplaceUpdateOutput | ForEach-Object { Write-Host $_ } }
-    Fail "Failed to refresh marketplace '$PluginMarketplaceName'."
-}
-
-$pluginRegistered = Test-CopilotPluginRegistered -PluginName $pluginName
-if ($Upgrade -and $pluginRegistered) {
-    Write-Host "  Removing existing registered plugin '$pluginName' before reinstall"
-    & copilot plugin uninstall $pluginName
-    if ($LASTEXITCODE -ne 0) {
-        Fail "Failed to uninstall existing Copilot plugin '$pluginName'."
-    }
-    $pluginRegistered = $false
-}
-
-Write-Host "  Registering plugin with Copilot CLI from local marketplace '$PluginMarketplaceName'"
-$pluginInstallSpec = "$pluginName@$PluginMarketplaceName"
-$pluginInstallOutput = & copilot plugin install $pluginInstallSpec 2>&1
-if ($LASTEXITCODE -ne 0) {
-    $installText = ($pluginInstallOutput | Out-String)
-    if ($pluginRegistered -and ($installText -match "already" -and $installText -match "installed")) {
-        Write-Host "  Plugin '$pluginName' is already installed; reinstalling from marketplace"
-        & copilot plugin uninstall $pluginName
-        if ($LASTEXITCODE -ne 0) {
-            Fail "Failed to uninstall existing Copilot plugin '$pluginName' before marketplace reinstall."
-        }
-        & copilot plugin install $pluginInstallSpec
-        if ($LASTEXITCODE -ne 0) {
-            Fail "Copilot plugin registration failed for '$pluginInstallSpec'."
-        }
-    } else {
-        if ($installText) { Write-Host $installText }
-        Fail "Copilot plugin registration failed for '$pluginInstallSpec'."
-    }
-}
-
-if (-not (Test-CopilotPluginRegistered -PluginName $pluginName)) {
-    Fail "Plugin files were staged but Copilot did not register plugin '$pluginName'."
+    Fail "Copilot plugin registration failed. See log: $pluginRegisterLogPath"
 }
 Write-Host "  Copilot plugin '$pluginName' registered successfully"
 

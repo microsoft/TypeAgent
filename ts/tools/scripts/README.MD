@@ -98,3 +98,8 @@ Only if you have set up your own pipeline and azure blob storage for prebuilt Ty
 
 - **[install-shell.cmd](./install-shell.cmd)**: Shell installation script for prebuilt TypeAgent Shell binaries for Windows hosted in azure blob storage.
 - **[install-shell.sh](./install-shell.sh)**: Shell installation script for prebuilt TypeAgent Shell binaries for Linux/MacOS hosted in azure blob storage.
+
+### TypeAgent agent-server
+
+- **[install-typeagent.ps1](./install-typeagent.ps1)**: Windows bootstrap for a standalone TypeAgent agent-server install. Downloads the payload, registers the Copilot plugin, provisions config, and starts the daemon.
+- **[install-typeagent.sh](./install-typeagent.sh)**: Linux/macOS bootstrap for the same standalone TypeAgent agent-server install flow.

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1dd82ff699ffde87ad14a8b7889ea6941bc0cb4fba18a0f45d168c471d71c74c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2ee08938accccc389ca2e7d56635521bb40b471af01e64aef09cc0bcf280c87a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-rpc — AI-generated documentation
@@ -98,7 +98,7 @@ External: `debug`
 - [cache-rest-endpoint](../../examples/cacheRESTEndpoint/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
-- _…and 3 more workspace consumers._
+- _…and 6 more workspace consumers._
 
 ### Files of interest
 
@@ -111,6 +111,6 @@ External: `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-rpc docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-rpc docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

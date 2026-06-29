@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=925ce39db0469dafa9ca721d57a54cc7cc30a6c1b58e05d61dd96febf38c3049 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=36de64a778f1117df6313f03ac85c5a54e5eec74fd84ce5e9d5f8842192b6725 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -81,8 +81,8 @@ By following these steps, you can effectively extend the `typeagent` package and
 
 Workspace:
 
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/config](../../packages/config/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 
 External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
@@ -106,6 +106,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

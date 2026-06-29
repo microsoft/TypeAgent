@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=af1ae06bd3741d5bb9baf4f72e0abcc00e0865bd4c0e35752dfbde90289e85d2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7e2ea49302d3bb6afeaa619d0a7f3c3df30b1bd638c9c53c57228499505928da -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # schema-author — AI-generated documentation
@@ -72,7 +72,7 @@ By following these steps, you can effectively extend the capabilities of the `sc
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 
 External: `typechat`
@@ -87,6 +87,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter schema-author docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter schema-author docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

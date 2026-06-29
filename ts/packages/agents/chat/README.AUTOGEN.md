@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=315de89c9a91866e5c7a732397e2d8805d68b4402fe93a4b8847f990b23b5081 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4932555ce3399d57b2c4ff58c71ad1e57183fd622bb06e40d5a0127f95f7062d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-agent — AI-generated documentation
@@ -69,13 +69,13 @@ By following these steps, you can extend the functionality of the `chat-agent` p
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 - [typeagent](../../../packages/typeagent/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
-External: `@azure/ai-agents`, `@azure/ai-projects`, `@azure/identity`, `typechat`
+External: `typechat`
 
 ### Used by
 
@@ -95,6 +95,6 @@ External: `@azure/ai-agents`, `@azure/ai-projects`, `@azure/identity`, `typechat
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.407Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f1db8817a86e72dd1d2a8df7e79d3951f2e1898fbb5b117963e605d9fd973c36 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0a2ed922bb16e2fbed6d9d3ddd3e28e91e0fe8f97c07f450a3f200c305fad4d6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # graph-utils — AI-generated documentation
@@ -24,13 +24,8 @@ To use the `graph-utils` package, several environment variables need to be set u
 
 - `GOOGLE_CALENDAR_CLIENT_ID`
 - `GOOGLE_CALENDAR_CLIENT_SECRET`
-- `MSGRAPH_APP_AUTH_MODE`
 - `MSGRAPH_APP_CLIENTID`
-- `MSGRAPH_APP_CLIENTSECRET`
-- `MSGRAPH_APP_PASSWD`
-- `MSGRAPH_APP_REDIRECT_PORT`
 - `MSGRAPH_APP_TENANTID`
-- `MSGRAPH_APP_USERNAME`
 
 Ensure these variables are correctly configured in your environment. For detailed steps on how to obtain and set these values, refer to the hand-written README.
 
@@ -72,8 +67,8 @@ By following these steps, you can effectively extend the `graph-utils` package t
 Workspace:
 
 - [@typeagent/agent-sdk](../../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../../packages/utils/commonUtils/README.md)
-- [aiclient](../../../../packages/aiclient/README.md)
 - [typeagent](../../../../packages/typeagent/README.md)
 
 External: `@azure/identity`, `@azure/identity-broker`, `@azure/identity-cache-persistence`, `@azure/logger`, `@microsoft/microsoft-graph-client`, `chalk`, `date-fns`, `debug`, `dotenv`, `find-config`, `googleapis`, `open`, `proper-lockfile`, `string-compare`
@@ -89,20 +84,15 @@ External: `@azure/identity`, `@azure/identity-broker`, `@azure/identity-cache-pe
 
 ### Environment variables
 
-_9 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_4 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `GOOGLE_CALENDAR_CLIENT_ID`
 - `GOOGLE_CALENDAR_CLIENT_SECRET`
-- `MSGRAPH_APP_AUTH_MODE`
 - `MSGRAPH_APP_CLIENTID`
-- `MSGRAPH_APP_CLIENTSECRET`
-- `MSGRAPH_APP_PASSWD`
-- `MSGRAPH_APP_REDIRECT_PORT`
 - `MSGRAPH_APP_TENANTID`
-- `MSGRAPH_APP_USERNAME`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter graph-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter graph-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

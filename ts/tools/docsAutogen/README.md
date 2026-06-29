@@ -4,7 +4,7 @@ On-demand regeneration of `README.AUTOGEN.md` companion files for every
 package under `ts/packages/**` in the TypeAgent monorepo.
 
 This package implements the workflow described in
-[`ts/docs/architecture/doc-autogen.md`](../../docs/architecture/doc-autogen.md).
+[`ts/docs/architecture/doc-pipeline/doc-autogen.md`](../../docs/architecture/doc-pipeline/doc-autogen.md).
 It is intended to be invoked manually from CI via `workflow_dispatch`
 (no schedule) and exposes a CLI (`docs-autogen`) for local invocation.
 
@@ -145,7 +145,7 @@ Entra App registration succeeds and `getKeys.mjs` can read
 > **First-time pipeline setup** — installing the GitHub App,
 > provisioning secrets and variables, and validating the first run
 > — is covered in
-> [`ts/docs/architecture/doc-autogen-setup.md`](../../docs/architecture/doc-autogen-setup.md).
+> [`ts/docs/architecture/doc-pipeline/doc-autogen-setup.md`](../../docs/architecture/doc-pipeline/doc-autogen-setup.md).
 > The summary below is reference-only; do not use it as a substitute
 > for the setup guide on a fresh repo.
 

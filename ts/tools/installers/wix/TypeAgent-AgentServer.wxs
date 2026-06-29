@@ -63,7 +63,8 @@
       <ComponentGroupRef Id="CopilotPluginComponents" />
       <!-- Static files and registry -->
       <ComponentRef Id="MarketplaceJsonComponent" />
-      <ComponentRef Id="RegisterScriptComponent" />
+      <ComponentRef Id="RegisterPluginPs1Component" />
+      <ComponentRef Id="RegisterPluginMjsComponent" />
       <ComponentRef Id="RegistryComponent" />
     </Feature>
 
@@ -83,10 +84,14 @@
 
     <!-- register-plugin.ps1 — helper for post-install Copilot CLI registration -->
     <DirectoryRef Id="TYPEAGENTROOT">
-      <Component Id="RegisterScriptComponent" Guid="*">
+      <Component Id="RegisterPluginPs1Component" Guid="*">
         <File Id="RegisterPluginPs1" Name="register-plugin.ps1"
               Source="$(var.InstallerSourceDir)\register-plugin.ps1" />
         <RemoveFolder Id="RemoveTypeAgentFolder" Directory="TYPEAGENTROOT" On="uninstall" />
+      </Component>
+      <Component Id="RegisterPluginMjsComponent" Guid="*">
+        <File Id="RegisterPluginMjs" Name="register-plugin.mjs"
+              Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
       </Component>
     </DirectoryRef>
 

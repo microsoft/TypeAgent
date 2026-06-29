@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cfefbd5f7fa0ae98858289ce1af89ecce976be85d8f3543304c7dd5c8b0febec -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3e29c686ee854d937cbe61d9c7bdb6690e06b84b891aa56f924d5b52077036b4 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # visualstudio-extension-webview — AI-generated documentation
@@ -83,6 +83,7 @@ Workspace:
 - [@typeagent/agent-sdk](../../../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-protocol](../../../../../packages/agentServer/protocol/README.md)
 - [@typeagent/dispatcher-rpc](../../../../../packages/dispatcher/rpc/README.md)
+- [@typeagent/dispatcher-types](../../../../../packages/dispatcher/types/README.md)
 - [chat-ui](../../../../../packages/chat-ui/README.md)
 
 External: _None at runtime._
@@ -93,6 +94,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-extension-webview docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-extension-webview docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

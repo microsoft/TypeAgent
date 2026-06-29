@@ -135,7 +135,7 @@ Once connected, your AI client can drive onboarding phases end-to-end using natu
 
 ## Agent Patterns
 
-The scaffolder supports nine architectural patterns. Use `list agent patterns` at runtime for the full table, or see [docs/architecture/agent-patterns.md](../../../../docs/architecture/agent-patterns.md) for the complete reference including when-to-use guidance, file layouts, and manifest flags.
+The scaffolder supports nine architectural patterns. Use `list agent patterns` at runtime for the full table, or see [docs/architecture/agents/agent-patterns.md](../../../../docs/architecture/agents/agent-patterns.md) for the complete reference including when-to-use guidance, file layouts, and manifest flags.
 
 | Pattern                  | When to use                              | Examples                        |
 | ------------------------ | ---------------------------------------- | ------------------------------- |

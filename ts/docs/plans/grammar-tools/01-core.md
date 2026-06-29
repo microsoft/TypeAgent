@@ -16,7 +16,7 @@ Maps to PLAN tracks: [0c scaffold](./PLAN.md#critical-path-track-0),
 ## TL;DR
 
 Framework-agnostic TypeScript package that wraps
-[`packages/actionGrammar`](../../../packages/actionGrammar) and exposes
+[`packages/actionGrammar`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar) and exposes
 the **complete** service surface every surface needs: load, diagnostics,
 symbols, format, completion preview, rule-level match trace, coverage,
 diff. Goal is to freeze the API in Phase 1 so later hosts inherit it
@@ -461,7 +461,7 @@ packages/grammarTools/core/
 - Should the package be browser-safe (Web Worker hosting an LSP server)?
   See [ADR 0004](./decisions/0004-monaco-lsp-transport.md).
 - Agent-grammar loader: does
-  [`agentGrammarRegistry`](../../../packages/actionGrammar/src/agentGrammarRegistry.ts)
+  [`agentGrammarRegistry`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/agentGrammarRegistry.ts)
   cover all merge cases, or do we need to rerun the merger?
 - Diff granularity (rule-only vs part-level) - see chunk 08.
 - Coverage output shape - simple counts vs. range-addressed hits suitable

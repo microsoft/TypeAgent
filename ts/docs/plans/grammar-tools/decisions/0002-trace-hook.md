@@ -9,13 +9,13 @@ The rule-level stepper in `grammar-tools-core` needs to observe the
 matcher's progress through a grammar: which rule is entered, which part
 is attempted, success / fail, slot environment after each step. The
 existing matcher in
-[`grammarMatcher.ts`](../../../../packages/actionGrammar/src/grammarMatcher.ts)
+[`grammarMatcher.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarMatcher.ts)
 does not currently emit such events.
 
 Background on the matcher (forward / backward direction, range
 candidates, the four completion categories, and the direction
 asymmetry around Category 3b) lives in
-[`docs/architecture/actionGrammar.md`](../../../architecture/actionGrammar.md)
+[`docs/architecture/actionGrammar.md`](../../../architecture/core/actionGrammar.md)
 under "Matching backend". That doc is the canonical reference for any
 complexity an instrumentation strategy has to respect.
 
@@ -35,7 +35,7 @@ complexity an instrumentation strategy has to respect.
 - Cons: duplicates matcher logic, drifts over time, easy to be subtly
   wrong - especially around backtracking, wildcard self-loops, and the
   forward / backward asymmetries documented in
-  [`actionGrammar.md`](../../../architecture/actionGrammar.md)
+  [`actionGrammar.md`](../../../architecture/core/actionGrammar.md)
   ("Forward/backward equivalence analysis" and "Direction asymmetry:
   why only Category 3b needs shadow candidates").
 
@@ -51,7 +51,7 @@ option to the matcher.
    indirection, no branch when the option is absent.
 2. **Performance validation required before merge.** Re-run the
    existing benchmarks under
-   [`packages/actionGrammar/src/bench/`](../../../../packages/actionGrammar/src/bench/)
+   [`packages/actionGrammar/src/bench/`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar/src/bench)
    (`pnpm run bench:synthetic` and `pnpm run bench:real` from the
    package directory) with and without the change applied. Document
    the delta in the chunk 02 PR description. Reject the PR if the

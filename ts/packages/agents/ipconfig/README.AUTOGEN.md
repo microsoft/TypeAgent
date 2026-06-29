@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2d27b4e044455cdbe142974924f7eca534c1e3806e44b852f67b8c27a41f9ea9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ddccfbed4237537057208c308a6c7941c23d6170652afe9cf8711e8bdc49c111 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # ipconfig-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `ipconfig-agent` package is a TypeAgent application agent designed to interact with the Windows IP configuration command-line tool, `ipconfig`. This agent enables users to perform various network configuration tasks through natural language commands, such as displaying network settings, releasing and renewing IP addresses, and managing DNS cache.
+The `ipconfig-agent` package is a TypeAgent application agent designed to interact with the Windows IP configuration command-line tool, `ipconfig`. This agent allows users to perform various network configuration tasks through natural language commands, such as displaying network settings, releasing and renewing IP addresses, and managing DNS cache.
 
 ## What it does
 
@@ -26,7 +26,7 @@ The `ipconfig-agent` package supports a range of actions related to network conf
 - Displaying the contents of the DNS resolver cache (`displayDNSResolverCacheContents`)
 - Displaying and modifying DHCP class IDs for both IPv4 and IPv6 (`displayDHCPClassIDs`, `modifyDHCPClassID`, `displayIPv6DHCPClassIDs`, `modifyIPv6DHCPClassID`)
 
-These actions allow users to manage their network settings efficiently using simple, conversational commands.
+These actions enable users to manage their network settings efficiently using simple, conversational commands.
 
 ## Setup
 
@@ -71,9 +71,9 @@ By following these steps, you can add new capabilities to the `ipconfig-agent` p
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: _None at runtime._
 
@@ -114,6 +114,6 @@ _13 actions implemented by this agent, parsed deterministically from `./src/ipco
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
