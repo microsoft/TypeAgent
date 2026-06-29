@@ -123,34 +123,37 @@ describeIf(
 
             expect(knowledge).toBeDefined();
             if (knowledge) {
-                // Should extract domain as entity
-                expect(
-                    knowledge.entities.some((e) => e.name === "github.com"),
-                ).toBe(true);
+                // Rule-based metadata extraction (websiteToKnowledge in
+                // packages/memory/website/src/websiteMeta.ts) deterministically
+                // maps website metadata to a domain entity with facets and the
+                // title as a topic; it emits no actions. The folder and bookmark
+                // source are captured as facets on the domain entity rather than
+                // a separate topic / "bookmarked" action.
 
-                // Should extract title as topic
+                // Domain is extracted as an entity.
+                const domainEntity = knowledge.entities.find(
+                    (e) => e.name === "github.com",
+                );
+                expect(domainEntity).toBeDefined();
+
+                // Title is extracted as a topic.
                 expect(knowledge.topics).toContain(
                     "TypeScript Programming Language",
                 );
 
-                // Should extract folder as topic. The model may surface this
-                // as the folder name ("Programming Languages") or fold it into
-                // the title-derived topic ("TypeScript Programming Language") —
-                // accept either.
+                // Bookmark source is captured as a facet on the domain entity.
                 expect(
-                    knowledge.topics.some(
-                        (t) =>
-                            t === "Programming Languages" ||
-                            t === "TypeScript Programming Language",
+                    domainEntity?.facets?.some(
+                        (f) => f.name === "source" && f.value === "bookmark",
                     ),
                 ).toBe(true);
 
-                // Should extract action
+                // Bookmark folder is captured as a facet on the domain entity.
                 expect(
-                    knowledge.actions.some(
-                        (a) =>
-                            a.verbs.includes("bookmarked") &&
-                            a.objectEntityName === "github.com",
+                    domainEntity?.facets?.some(
+                        (f) =>
+                            f.name === "folder" &&
+                            f.value === "Programming Languages",
                     ),
                 ).toBe(true);
             }
