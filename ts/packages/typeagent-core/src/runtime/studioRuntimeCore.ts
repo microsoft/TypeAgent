@@ -24,10 +24,12 @@ import {
 } from "../sandbox/index.js";
 import {
     FileCorpusService,
+    importDisplayLogs,
     type CorpusEntry,
     type CorpusFilter,
     type CorpusService,
     type ExternalSourceSpec,
+    type ImportDisplayLogsResult,
 } from "../corpus/index.js";
 import {
     CoreFeedbackService,
@@ -591,6 +593,19 @@ export interface StudioCollisionScanResult {
     collisionCount: number;
 }
 
+/** Request to import one or more displayLog.json files into the corpus. */
+export interface StudioCorpusImportRequest {
+    /** Absolute paths to displayLog.json files to read. */
+    paths: string[];
+    /** Restrict capture to these agents; omit to accept any non-empty agent. */
+    agents?: string[];
+    /** Session identifier recorded in provenance. */
+    sessionId?: string;
+}
+
+/** Outcome of a corpus import: counts written/skipped per agent and files read. */
+export type StudioCorpusImportResult = ImportDisplayLogsResult;
+
 /** An agent discoverable in the Load agent UI. */
 export interface AvailableAgent {
     name: string;
@@ -742,6 +757,15 @@ export interface StudioRuntime {
     seedInRepoCorpus(
         agent: string,
     ): Promise<{ path: string; created: boolean }>;
+    /**
+     * Import one or more `displayLog.json` files into the captures corpus.
+     * Buckets per agent, dedupes by logical id (in-batch and against existing
+     * entries), and appends once per agent. Returns counts written/skipped per
+     * agent and the files that were read.
+     */
+    importCorpusFromLogs(
+        request: StudioCorpusImportRequest,
+    ): Promise<StudioCorpusImportResult>;
     /** Most recent events from the structured event stream, oldest-first. */
     queryRecentEvents(limit?: number): Promise<StudioEvent[]>;
     /** Subscribe to every event as it is emitted. Returns a disposable. */
@@ -1460,6 +1484,16 @@ export function createStudioRuntimeCore(
         },
         async seedInRepoCorpus(agent) {
             return corpus.seedInRepoCorpus(agent);
+        },
+        async importCorpusFromLogs(request) {
+            return importDisplayLogs(corpus, request.paths, {
+                ...(request.agents !== undefined
+                    ? { agents: request.agents }
+                    : {}),
+                ...(request.sessionId !== undefined
+                    ? { sessionId: request.sessionId }
+                    : {}),
+            });
         },
         async queryRecentEvents(limit = 200) {
             const all: StudioEvent[] = [];

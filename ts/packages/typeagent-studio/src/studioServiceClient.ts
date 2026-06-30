@@ -13,6 +13,8 @@ import type {
     StudioReplayResult,
     StudioCollisionScanRequest,
     StudioCollisionScanResult,
+    StudioCorpusImportRequest,
+    StudioCorpusImportResult,
     AvailableAgent,
 } from "@typeagent/core/runtime";
 import type {
@@ -250,6 +252,13 @@ export class StudioServiceClient {
     /** Register an external JSONL corpus source for an agent. */
     addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void> {
         return this.rpc.invoke("addExternalCorpusSource", this.repoRoot, spec);
+    }
+
+    /** Import one or more `displayLog.json` files into the captures corpus. */
+    importCorpusFromLogs(
+        request: StudioCorpusImportRequest,
+    ): Promise<StudioCorpusImportResult> {
+        return this.rpc.invoke("importCorpusFromLogs", this.repoRoot, request);
     }
 
     /** Record a thumbs-up/down feedback row. */
