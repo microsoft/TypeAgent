@@ -28,7 +28,7 @@ than an in-memory stand-in.
 | Repo-root detection (find `packages/agents`)                   | ✅                                                                                                                                    | ✅ warn toast + status bar                                                       | n/a                                                                                                                           | ✅     |
 | Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                                                                                                    | ✅ singleton-panel host                                                          | —                                                                                                                             | ✅     |
 | Impact Report webview                                          | ✅ `replayCorpus` over channel                                                                                                        | ✅ context header, A/B controls, Grammar/Cache + Validate toggles, durable state | 🟡 grammar + construction-cache + working-tree wildcard validation (L1–L2, L4a)                                               | ✅     |
-| Player corpus capture                                          | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
+| Corpus capture (real utterances → actions, any agent)          | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
 | Schema Studio                                                  | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
 | Live Trace                                                     | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
 | `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                                                                                                               | —                                                                                | ❌ no behavioral integration                                                                                                  | ❌     |
@@ -53,7 +53,8 @@ is clear why it waits. There is no second roadmap — depth (L4b) and breadth
 | **D** | J5 Debug a trace     | Trace Viewer                                            | P-3   | ❌ not started                                                                   |
 | **E** | J6 Observe live      | Live Trace + status bar                                 | P-5   | ❌ not started                                                                   |
 
-**Critical path now: close Gate C** — player corpus capture → predicate tuning →
+**Critical path now: close Gate C** — corpus capture (the agent-agnostic capture
+path; `player` is just the anchor set the gate is scored on) → predicate tuning →
 run the ≥ 80% validation. It is the only _tunable_ gate and §7's top risk.
 
 ### Backlog (off the critical path — tagged, not a separate plan)
@@ -63,14 +64,15 @@ tags: **depth** = how faithfully one replay side is realized (improves Gate C
 accuracy); **breadth** = how many things are compared at once (multiplies cells);
 **infra** = enabling plumbing.
 
-| Item                                                                      | Parent      | Track              | Precondition                        | Status                    |
-| ------------------------------------------------------------------------- | ----------- | ------------------ | ----------------------------------- | ------------------------- |
-| Fidelity transparency (per-side readout + "Sandbox A/B" relabel)          | Gate C / J4 | depth              | —                                   | next (low-risk, no build) |
-| **L4b** build-from-ref sandboxes (real compiled ref side)                 | Gate C / J4 | depth (P-7)        | Gate C banked                       | deferred flagged epic     |
-| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4          | breadth — versions | Gate C banked; must preserve Gate C | post-MVP                  |
-| Multi-agent / multi-corpus replay (`code`, 684 utterances)                | J4          | breadth — agents   | Gate C banked                       | post-MVP (§2 exclude)     |
-| Active-sandbox selector + per-sandbox scoping                             | —           | infra              | single-sandbox E2E                  | P-7a                      |
-| Sandbox copy-on-write overlay (true sandbox-local A/B)                    | —           | infra              | P-7a                                | P-7b                      |
+| Item                                                                      | Parent      | Track              | Precondition                        | Status                         |
+| ------------------------------------------------------------------------- | ----------- | ------------------ | ----------------------------------- | ------------------------------ |
+| Per-side fidelity matrix (which layers ran on each side + skip reasons)   | Gate C / J4 | depth              | —                                   | ✅ shipped (L4b Step 1)        |
+| "Sandbox A / Sandbox B" relabel of the A/B columns                        | Gate C / J4 | depth              | —                                   | optional cosmetic (L4b Step 2) |
+| **L4b** build-from-ref sandboxes (real compiled ref side)                 | Gate C / J4 | depth (P-7)        | Gate C banked                       | deferred flagged epic (Step 3) |
+| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4          | breadth — versions | Gate C banked; must preserve Gate C | post-MVP                       |
+| Multi-agent / multi-corpus replay (`code`, 684 utterances)                | J4          | breadth — agents   | Gate C banked                       | post-MVP (§2 exclude)          |
+| Active-sandbox selector + per-sandbox scoping                             | —           | infra              | single-sandbox E2E                  | P-7a                           |
+| Sandbox copy-on-write overlay (true sandbox-local A/B)                    | —           | infra              | P-7a                                | P-7b                           |
 
 Why depth and breadth are distinct dials on the same `replayCorpus` (F4.1)
 primitive: **depth** raises the fidelity of each compared _cell_ (and thus Gate C
@@ -218,8 +220,9 @@ Ready to start (smallest → larger):
    Impact Report webview that drives `replayCorpus` over the service channel and
    renders the `ActionDelta[]` contract. The webview never opens a socket
    (webview → extension host → channel → agent runtime).
-3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
-   core corpus.
+3. **Corpus capture** — wire `vscode-shell` request/feedback IDs into the
+   core corpus. Agent-agnostic capture path (works for any agent); `player` is
+   simply the first corpus captured because Gate C is scored on it.
 4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
    agent's `ValidateChange` and the webview both consume). **Largely done:** the
@@ -227,7 +230,7 @@ Ready to start (smallest → larger):
    modes, L4a opt-in wildcard validation) is live and validated against the
    contract. The remaining fidelity rung **L4b** (build-from-ref two-version
    sandboxes) is **deferred to P-7** (post-Gate-C). **Live priority is now #3
-   (player corpus capture) → Gate C measurement** — the headline acceptance bar.
+   (corpus capture) → Gate C measurement** — the headline acceptance bar.
 5. **Active-sandbox selector + per-sandbox scoping** (plan phase **P-7a**;
    sequenced **after** the single-sandbox E2E closes) — collisions and corpora are
    intrinsically per-sandbox (a collision is a function of the co-loaded agent
