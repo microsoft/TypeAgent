@@ -951,9 +951,6 @@ class StubCorpusService implements CorpusService {
             created: true,
         };
     }
-    async listAgents(): Promise<string[]> {
-        return [];
-    }
 }
 
 function corpusEntry(id: string, expectedAction?: unknown): CorpusEntry {
