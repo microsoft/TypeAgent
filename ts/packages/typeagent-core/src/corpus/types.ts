@@ -111,12 +111,6 @@ export interface CorpusService {
     seedInRepoCorpus(
         agent: string,
     ): Promise<{ path: string; created: boolean }>;
-    /**
-     * Agents that have any corpus content — an in-repo file, captured entries,
-     * or a registered external source — independent of whether the agent is
-     * currently loaded in a sandbox.
-     */
-    listAgents(): Promise<string[]>;
 }
 
 /** Thrown when promotion references ids not found in captures. */
