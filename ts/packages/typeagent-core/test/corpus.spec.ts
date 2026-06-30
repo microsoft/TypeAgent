@@ -21,6 +21,27 @@ async function makeTempRoot(): Promise<string> {
     return await fs.mkdtemp(path.join(os.tmpdir(), "typeagent-core-corpus-"));
 }
 
+/**
+ * Read the entries staged under the private captures area for an agent. The
+ * captures area is not part of the federated `list` view, so promote/append
+ * tests inspect it directly.
+ */
+async function readCaptures(
+    profileDir: string,
+    agent: string,
+): Promise<CorpusEntry[]> {
+    const dir = path.join(profileDir, "captures", agent);
+    const files = await fs.readdir(dir).catch(() => [] as string[]);
+    const out: CorpusEntry[] = [];
+    for (const f of files.filter((n) => n.endsWith(".jsonl")).sort()) {
+        const text = await fs.readFile(path.join(dir, f), "utf8");
+        for (const line of text.split("\n").filter((l) => l.trim())) {
+            out.push(JSON.parse(line) as CorpusEntry);
+        }
+    }
+    return out;
+}
+
 function entry(
     utterance: string,
     agent: string,
@@ -120,7 +141,7 @@ describe("FileCorpusService — list", () => {
         expect(await svc.list("player")).toEqual([]);
     });
 
-    it("federates in-repo + captures + external + feedback, deduped by id", async () => {
+    it("federates in-repo + external + feedback, deduped by id", async () => {
         // in-repo
         const inRepo = entry("play jazz", "player", { source: "in-repo" });
         await fs.mkdir(path.join(repoRoot, "corpus"), { recursive: true });
@@ -129,13 +150,6 @@ describe("FileCorpusService — list", () => {
             JSON.stringify(inRepo) + "\n",
             "utf8",
         );
-
-        // captures
-        const capture = entry("pause", "player", {
-            source: "captures",
-            provenance: { sourceUri: "<c>", capturedAt: 10 },
-        });
-        await svc.append("player", [capture]);
 
         // external
         const extPath = path.join(profileDir, "ext.jsonl");
@@ -164,7 +178,7 @@ describe("FileCorpusService — list", () => {
 
         const all = await svc.list("player");
         const utterances = all.map((e) => e.utterance).sort();
-        expect(utterances).toEqual(["pause", "play jazz", "resume", "skip"]);
+        expect(utterances).toEqual(["play jazz", "resume", "skip"]);
     });
 
     it("dedupes by id across sources", async () => {
@@ -298,10 +312,10 @@ describe("FileCorpusService — append / promote / export", () => {
         ).toBe(true);
         expect(file.endsWith(".jsonl")).toBe(true);
 
-        const all = await svc.list("player");
-        expect(all).toHaveLength(1);
-        expect(all[0].source).toBe("captures");
-        expect(all[0].provenance.capturedAt).toBe(clock);
+        const staged = await readCaptures(profileDir, "player");
+        expect(staged).toHaveLength(1);
+        expect(staged[0].source).toBe("captures");
+        expect(staged[0].provenance.capturedAt).toBe(clock);
     });
 
     it("promote moves entries from captures into the in-repo file and removes them from captures", async () => {
@@ -319,7 +333,7 @@ describe("FileCorpusService — append / promote / export", () => {
         expect(inRepoText).toContain('"play"');
         expect(inRepoText).not.toContain('"pause"');
 
-        const remaining = await svc.list("player", { sources: ["captures"] });
+        const remaining = await readCaptures(profileDir, "player");
         expect(remaining.map((e) => e.utterance)).toEqual(["pause"]);
         const promoted = await svc.list("player", { sources: ["in-repo"] });
         expect(promoted.map((e) => e.utterance)).toEqual(["play"]);
@@ -328,15 +342,11 @@ describe("FileCorpusService — append / promote / export", () => {
 
     it("promote throws CorpusEntryNotFoundError for unknown ids and leaves files unchanged", async () => {
         await svc.append("player", [entry("play", "player")]);
-        const beforeCaptures = await svc.list("player", {
-            sources: ["captures"],
-        });
+        const beforeCaptures = await readCaptures(profileDir, "player");
         await expect(
             svc.promote("player", ["nope"], "in-repo"),
         ).rejects.toBeInstanceOf(CorpusEntryNotFoundError);
-        const afterCaptures = await svc.list("player", {
-            sources: ["captures"],
-        });
+        const afterCaptures = await readCaptures(profileDir, "player");
         expect(afterCaptures).toEqual(beforeCaptures);
         const inRepo = await svc.list("player", { sources: ["in-repo"] });
         expect(inRepo).toEqual([]);
@@ -366,10 +376,10 @@ describe("FileCorpusService — append / promote / export", () => {
     });
 
     it("exportJsonl writes filtered entries to a Writable", async () => {
-        await svc.append("player", [
-            entry("play", "player"),
-            entry("pause", "player"),
-        ]);
+        const e1 = entry("play", "player");
+        const e2 = entry("pause", "player");
+        await svc.append("player", [e1, e2]);
+        await svc.promote("player", [e1.id, e2.id], "in-repo");
         const chunks: string[] = [];
         let ended = false;
         const out: CorpusWritable = {

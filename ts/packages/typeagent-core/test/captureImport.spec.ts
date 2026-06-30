@@ -50,8 +50,39 @@ async function writeLog(
     return file;
 }
 
+/** Read the entries staged under the private captures area for an agent. */
+async function readStaged(root: string, agent: string): Promise<CorpusEntry[]> {
+    const dir = path.join(root, "profile", "captures", agent);
+    const files = await fs.readdir(dir).catch(() => [] as string[]);
+    const out: CorpusEntry[] = [];
+    for (const f of files.filter((n) => n.endsWith(".jsonl"))) {
+        const text = await fs.readFile(path.join(dir, f), "utf8");
+        for (const line of text.split("\n").filter((l) => l.trim())) {
+            out.push(JSON.parse(line) as CorpusEntry);
+        }
+    }
+    return out;
+}
+
+/** Pre-seed an agent's in-repo corpus file with the given entries. */
+async function seedInRepo(
+    root: string,
+    agent: string,
+    entries: CorpusEntry[],
+): Promise<void> {
+    const file = path.join(root, "repo", "corpus", `${agent}.utterances.jsonl`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(
+        file,
+        entries
+            .map((e) => JSON.stringify({ ...e, source: "in-repo" }))
+            .join("\n") + "\n",
+        "utf8",
+    );
+}
+
 describe("importCaptureEntries", () => {
-    test("appends entries bucketed per agent", async () => {
+    test("stages entries bucketed per agent", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);
         const res = await importCaptureEntries(corpus, [
@@ -60,9 +91,9 @@ describe("importCaptureEntries", () => {
         ]);
         expect(res.total).toBe(2);
         expect(res.perAgent).toEqual({ player: 1, list: 1 });
-        expect((await corpus.list("player")).map((e) => e.utterance)).toEqual([
-            "play jazz",
-        ]);
+        expect(
+            (await readStaged(root, "player")).map((e) => e.utterance),
+        ).toEqual(["play jazz"]);
     });
 
     test("writes a single capture file per agent (no name collision)", async () => {
@@ -77,7 +108,7 @@ describe("importCaptureEntries", () => {
             f.endsWith(".jsonl"),
         );
         expect(files).toHaveLength(1);
-        expect(await corpus.list("player")).toHaveLength(2);
+        expect(await readStaged(root, "player")).toHaveLength(2);
     });
 
     test("dedupes within the batch by logical id", async () => {
@@ -89,15 +120,15 @@ describe("importCaptureEntries", () => {
         ]);
         expect(res.total).toBe(1);
         expect(res.skipped).toEqual({ player: 1 });
-        const stored = await corpus.list("player");
+        const stored = await readStaged(root, "player");
         expect(stored).toHaveLength(1);
         expect(stored[0].expectedAction).toEqual({ actionName: "new" });
     });
 
-    test("skips entries already present in the corpus", async () => {
+    test("skips entries already present in the in-repo corpus", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);
-        await importCaptureEntries(corpus, [
+        await seedInRepo(root, "player", [
             capture("first", "player", { actionName: "a" }),
         ]);
         const res = await importCaptureEntries(corpus, [
@@ -107,7 +138,9 @@ describe("importCaptureEntries", () => {
         expect(res.total).toBe(1);
         expect(res.perAgent).toEqual({ player: 1 });
         expect(res.skipped).toEqual({ player: 1 });
-        expect(await corpus.list("player")).toHaveLength(2);
+        expect(
+            (await readStaged(root, "player")).map((e) => e.utterance),
+        ).toEqual(["second"]);
     });
 });
 
@@ -142,7 +175,7 @@ describe("importDisplayLogs", () => {
         expect(res.perAgent).toEqual({ player: 1, list: 1 });
     });
 
-    test("preserves the raw displayLog path in provenance after append", async () => {
+    test("lands entries in the in-repo corpus and keeps the raw displayLog path", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);
         const file = await writeLog(path.join(root, "displayLog.json"), [
@@ -150,11 +183,12 @@ describe("importDisplayLogs", () => {
         ]);
         await importDisplayLogs(corpus, [file]);
         const [entry] = await corpus.list("player");
-        // append overwrites sourceUri with the captures file, but the raw path
-        // survives.
+        expect(entry.source).toBe("in-repo");
+        // Promotion points sourceUri at the in-repo file, but the raw log path
+        // survives in provenance.
         expect(entry.provenance.rawSourceUri).toBe(file);
         expect(entry.provenance.sourceUri).not.toBe(file);
-        expect(entry.provenance.sourceUri).toContain("captures");
+        expect(entry.provenance.sourceUri).toContain("corpus");
     });
 
     test("applies an agent allowlist", async () => {
@@ -198,15 +232,13 @@ describe("importDisplayLogs", () => {
         expect(await corpus.list("player")).toHaveLength(1);
     });
 
-    test("target in-repo promotes straight into the shared corpus with no staging", async () => {
+    test("leaves no private staging behind after import", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);
         const file = await writeLog(path.join(root, "displayLog.json"), [
             ...log("r1", "play jazz", "player", { actionName: "play" }),
         ]);
-        const res = await importDisplayLogs(corpus, [file], {
-            target: "in-repo",
-        });
+        const res = await importDisplayLogs(corpus, [file]);
         expect(res.total).toBe(1);
 
         const [entry] = await corpus.list("player");

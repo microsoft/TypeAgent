@@ -742,7 +742,7 @@ export interface StudioRuntime {
      * disable its validation toggle when there is nothing to run.
      */
     canValidateWildcards(agent: string): Promise<boolean>;
-    /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
+    /** Federated corpus entries for an agent (in-repo, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
     /**
      * Register an external JSONL corpus source for an agent (writes
@@ -1487,7 +1487,6 @@ export function createStudioRuntimeCore(
         },
         async importCorpusFromLogs(request) {
             return importDisplayLogs(corpus, request.paths, {
-                target: "in-repo",
                 ...(request.agents !== undefined
                     ? { agents: request.agents }
                     : {}),
