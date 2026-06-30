@@ -1314,6 +1314,12 @@ export function createStudioRuntimeCore(
                     agents.add(agent.name);
                 }
             }
+            // Also surface agents that have corpus content on disk (captured,
+            // in-repo, or external) even when not currently loaded, so imported
+            // corpora are visible without first loading the agent.
+            for (const agent of await corpus.listAgents()) {
+                agents.add(agent);
+            }
             return [...agents].sort((a, b) => a.localeCompare(b));
         },
         async canValidateWildcards(agent) {

@@ -304,6 +304,22 @@ describe("FileCorpusService — append / promote / export", () => {
         expect(all[0].provenance.capturedAt).toBe(clock);
     });
 
+    it("listAgents unions agents from captures, in-repo files, and external sources", async () => {
+        await svc.append("player", [entry("play", "player")]);
+        await svc.seedInRepoCorpus("list");
+        const extPath = path.join(profileDir, "regression.jsonl");
+        await fs.writeFile(extPath, "", "utf8");
+        await svc.addExternalSource({
+            name: "regression",
+            agent: "browser",
+            kind: "jsonl-file",
+            filePath: extPath,
+        });
+
+        const agents = await svc.listAgents();
+        expect(agents).toEqual(["browser", "list", "player"]);
+    });
+
     it("promote moves entries from captures into the in-repo file and removes them from captures", async () => {
         const e1 = entry("play", "player");
         const e2 = entry("pause", "player");

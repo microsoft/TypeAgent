@@ -225,6 +225,28 @@ export class FileCorpusService implements CorpusService {
         }
     }
 
+    async listAgents(): Promise<string[]> {
+        const agents = new Set<string>();
+        const suffix = ".utterances.jsonl";
+        for (const file of await listJsonlFiles(
+            path.join(this.repoRoot, "corpus"),
+        )) {
+            const name = path.basename(file);
+            if (name.endsWith(suffix)) {
+                agents.add(name.slice(0, -suffix.length));
+            }
+        }
+        for (const dir of await listSubdirNames(
+            path.join(this.profileDir, "captures"),
+        )) {
+            agents.add(dir);
+        }
+        for (const spec of await this.listExternalSources()) {
+            agents.add(spec.agent);
+        }
+        return [...agents].sort((a, b) => a.localeCompare(b));
+    }
+
     /* ---------------------------------------------------------------- */
     /* internal                                                          */
     /* ---------------------------------------------------------------- */
@@ -332,6 +354,19 @@ async function listJsonlFiles(dir: string): Promise<string[]> {
         .filter((d) => d.isFile() && d.name.endsWith(".jsonl"))
         .map((d) => path.join(dir, d.name))
         .sort();
+}
+
+async function listSubdirNames(dir: string): Promise<string[]> {
+    let entries: import("node:fs").Dirent[];
+    try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+            return [];
+        }
+        throw err;
+    }
+    return entries.filter((d) => d.isDirectory()).map((d) => d.name);
 }
 
 function attachFeedback(entry: CorpusEntry, label: FeedbackLabel): CorpusEntry {

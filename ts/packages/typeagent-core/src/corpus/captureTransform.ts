@@ -15,7 +15,9 @@ import { computeEntryId } from "./id.js";
  *  - `user-request` carries the utterance in `command`.
  *  - `set-display-info` carries the dispatching agent in `source` and the
  *    resolved action in `action`; a single request may emit several of these
- *    (one per `actionIndex`).
+ *    (one per `actionIndex`). Only a structured `TypeAgentAction` object counts
+ *    as a real action — framework sources (`dispatcher`, `system`) emit
+ *    `string[]` display actions that are ignored.
  *  - `user-feedback` carries the rating; later entries for the same request
  *    shadow earlier ones, and `rating: null` means the rating was cleared.
  */
@@ -82,7 +84,7 @@ interface RequestAccumulator {
  * `CorpusEntry { utterance, agent, expectedAction, feedback }`:
  *  - the utterance comes from the request's `user-request` entry;
  *  - the agent comes from the `source` of its action-bearing `set-display-info`
- *    entries;
+ *    entries (those carrying a structured `TypeAgentAction`);
  *  - `expectedAction` is the ordered action sequence (a single action when there
  *    is exactly one, an array when there are several), ordered by `actionIndex`,
  *    then `seq`, then log order;
@@ -125,14 +127,18 @@ export function displayLogToCorpusEntries(
                 }
                 break;
             case "set-display-info":
-                if (
-                    acc.agent === undefined &&
-                    typeof entry.source === "string" &&
-                    entry.source.length > 0
-                ) {
-                    acc.agent = entry.source;
-                }
-                if (entry.action !== undefined) {
+                // Only a structured action (a `TypeAgentAction` object) counts.
+                // Framework sources like `dispatcher`/`system` emit `string[]`
+                // display actions (e.g. `["request"]`); those carry no expected
+                // action and must not define the request's agent.
+                if (isStructuredAction(entry.action)) {
+                    if (
+                        acc.agent === undefined &&
+                        typeof entry.source === "string" &&
+                        entry.source.length > 0
+                    ) {
+                        acc.agent = entry.source;
+                    }
                     acc.actions.push({
                         index: entry.actionIndex,
                         seq: entry.seq,
@@ -234,6 +240,12 @@ export function displayLogToCorpusEntries(
     }
 
     return [...result.values()];
+}
+
+function isStructuredAction(action: unknown): boolean {
+    return (
+        typeof action === "object" && action !== null && !Array.isArray(action)
+    );
 }
 
 function laterThan(
