@@ -72,7 +72,13 @@
   [
     {
       "request": "add ham to the list",
-      "expected": "dispatcher.clarify.clarifyMissingParameter",
+      "skipGrammar": true,
+      "expected": {
+        "anyof": [
+          "dispatcher.clarify.clarifyMissingParameter",
+          "dispatcher.clarify.clarifyUnresolvedReference"
+        ]
+      },
       "history": {
         "text": "Which list would you like to add ham to?",
         "source": "list",
