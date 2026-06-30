@@ -23,11 +23,13 @@ agent, source, provenance, expectedAction?, feedback?, tags? }`,
   `CorpusSource = "in-repo" | "captures" | "external" | "feedback"`.
 - **Storage** — `corpus/fileCorpusService.ts`: `FileCorpusService` with
   `list` / `load` / `append` / `promote` / `exportJsonl`, federating in-repo
-  (`<repoRoot>/corpus/<agent>.utterances.jsonl`), captures
-  (`<profileDir>/captures/<agent>/<timestamp>.jsonl`), external, and feedback
-  sources. `append()` already writes a timestamped JSONL capture file and stamps
-  `source="captures"` + `capturedAt`. `promote()` already moves captured entries
-  into the in-repo file.
+  (`<repoRoot>/corpus/<agent>.utterances.jsonl`), external, and feedback
+  sources. `append()` writes a timestamped JSONL file under
+  `<profileDir>/captures/<agent>/` stamped `source="captures"` + `capturedAt`;
+  this captures area is a private, transient staging spot used only while an
+  import promotes entries, and is **not** part of the federated `list` view.
+  `promote()` moves staged entries into the in-repo file and is the only write
+  that touches it.
 - **JSONL I/O** — `corpus/jsonl.ts`, **id** — `corpus/id.ts`
   (`computeEntryId(utterance, agent, requestId)`).
 - **Replay input** — `replay/engine.ts` `replayCorpus(options, deps)` consumes
@@ -214,13 +216,15 @@ testable with plain objects.
 
 ### 4. Promotion
 
-`promote()` moves a set of captured entries (by logical id) into the shared
+`promote()` moves a set of staged entries (by logical id) into the shared
 in-repo `corpus/<agent>.utterances.jsonl`, and is the only write that touches
-that file. Bulk import promotes its freshly written entries in one step so the
-import command lands straight in the shared corpus. The lower-level `append()`
-path still stages under `captures/<agent>/` for callers that want private
-entries until an explicit promote, so a personal session is never silently
-leaked into the shared repo corpus.
+that file. Import is append-then-promote: it stages fresh entries under
+`captures/<agent>/` and promotes them in the same step, so the import command
+lands straight in the shared corpus and leaves nothing behind. The captures area
+is a private transient scratch space — it is never part of the federated view
+and is not shown in the Corpora tree. The new/changed in-repo files surface as
+ordinary working-tree changes the curator reviews and commits, so a personal
+session is never silently leaked into the shared repo corpus.
 
 ### 5. Feedback as a label, not a funnel
 

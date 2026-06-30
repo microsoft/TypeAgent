@@ -110,5 +110,5 @@ test("formatCorpusSource covers every source and CORPUS_SOURCE_ORDER is complete
     for (const source of CORPUS_SOURCE_ORDER) {
         assert.equal(formatCorpusSource(source), expected[source]);
     }
-    assert.equal(CORPUS_SOURCE_ORDER.length, 4);
+    assert.equal(CORPUS_SOURCE_ORDER.length, 3);
 });

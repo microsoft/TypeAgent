@@ -42,7 +42,6 @@ export interface CorpusTreeNode {
 /** Fixed display order for federated corpus sources. */
 export const CORPUS_SOURCE_ORDER: CorpusSource[] = [
     "in-repo",
-    "captures",
     "external",
     "feedback",
 ];

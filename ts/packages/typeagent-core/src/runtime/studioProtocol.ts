@@ -85,8 +85,8 @@ export type StudioServiceInvokeFunctions = {
         agent: string,
     ): Promise<boolean>;
     /**
-     * Federated corpus entries for an agent (in-repo, captures, external,
-     * feedback) — what the Corpus tree expands.
+     * Federated corpus entries for an agent (in-repo, external, feedback) —
+     * what the Corpus tree expands.
      */
     listCorpusEntries(
         repoRoot: string | undefined,
@@ -109,8 +109,8 @@ export type StudioServiceInvokeFunctions = {
         spec: ExternalSourceSpec,
     ): Promise<void>;
     /**
-     * Import one or more `displayLog.json` files into the captures corpus for
-     * this workspace. Returns counts written/skipped per agent and the files
+     * Import one or more `displayLog.json` files into the shared in-repo corpus
+     * for this workspace. Returns counts written/skipped per agent and the files
      * read.
      */
     importCorpusFromLogs(

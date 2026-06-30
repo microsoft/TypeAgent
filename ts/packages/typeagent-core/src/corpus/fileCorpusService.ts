@@ -43,14 +43,15 @@ interface StudioConfigFile {
 /**
  * Filesystem-backed corpus service.
  *
- * Federates four sources into a single view per agent:
+ * Federates three sources into a single view per agent:
  *  - in-repo  : `<repoRoot>/corpus/<agent>.utterances.jsonl`
- *  - captures : `<profileDir>/captures/<agent>/*.jsonl`
  *  - external : files declared in `<repoRoot>/.typeagent/studio.json`
  *  - feedback : supplied by an injected provider
  *
- * Promotion is the only write that touches the in-repo file; everything
- * else writes inside the profile directory or the studio config.
+ * `captures/<agent>/` is a private, transient staging area used only while an
+ * import promotes entries into the in-repo file; it is never part of the
+ * federated view. Promotion is the only write that touches the in-repo file;
+ * everything else writes inside the profile directory or the studio config.
  */
 export class FileCorpusService implements CorpusService {
     private readonly repoRoot: string;
@@ -277,11 +278,6 @@ export class FileCorpusService implements CorpusService {
         };
 
         push(await readJsonlFile(this.inRepoFile(agent)));
-
-        const captureFiles = await listJsonlFiles(this.capturesDir(agent));
-        for (const file of captureFiles) {
-            push(await readJsonlFile(file));
-        }
 
         const externals = await this.listExternalSources(agent);
         for (const spec of externals) {

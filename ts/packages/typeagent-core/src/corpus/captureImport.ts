@@ -84,12 +84,6 @@ export interface ImportDisplayLogsOptions {
     sessionId?: string;
     /** Clock for `capturedAt`; defaults to `Date.now`. */
     now?: () => number;
-    /**
-     * Where imported entries land. `"captures"` (default) stages them in the
-     * private profile directory; `"in-repo"` promotes them straight into the
-     * shared `corpus/<agent>.utterances.jsonl` with no staging step.
-     */
-    target?: "captures" | "in-repo";
 }
 
 export interface ImportDisplayLogsResult extends CaptureImportResult {
@@ -99,12 +93,12 @@ export interface ImportDisplayLogsResult extends CaptureImportResult {
 
 /**
  * Read one or more `displayLog.json` files, turn their entries into corpus
- * entries, and write them to the corpus.
+ * entries, and write them into the shared in-repo corpus.
  *
  * Files that are missing, unreadable, or not a JSON array are skipped. When
  * `agents` is supplied it acts as an allowlist; otherwise any non-empty agent is
- * captured. With `target: "in-repo"` the freshly written entries are promoted
- * into the shared in-repo corpus, leaving no capture staging behind.
+ * captured. Fresh entries are staged and then promoted into the in-repo file in
+ * one step, leaving no private capture staging behind.
  */
 export async function importDisplayLogs(
     corpus: CaptureSink,
@@ -136,11 +130,9 @@ export async function importDisplayLogs(
     }
 
     const result = await importCaptureEntries(corpus, all);
-    if (opts.target === "in-repo") {
-        for (const [agent, ids] of Object.entries(result.idsByAgent)) {
-            if (ids.length > 0) {
-                await corpus.promote(agent, ids, "in-repo");
-            }
+    for (const [agent, ids] of Object.entries(result.idsByAgent)) {
+        if (ids.length > 0) {
+            await corpus.promote(agent, ids, "in-repo");
         }
     }
     return { ...result, files };

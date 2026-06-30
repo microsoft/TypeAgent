@@ -254,7 +254,7 @@ export class StudioServiceClient {
         return this.rpc.invoke("addExternalCorpusSource", this.repoRoot, spec);
     }
 
-    /** Import one or more `displayLog.json` files into the captures corpus. */
+    /** Import one or more `displayLog.json` files into the shared in-repo corpus. */
     importCorpusFromLogs(
         request: StudioCorpusImportRequest,
     ): Promise<StudioCorpusImportResult> {
