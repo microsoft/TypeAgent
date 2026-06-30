@@ -198,6 +198,39 @@ describe("importDisplayLogs", () => {
         expect(await corpus.list("player")).toHaveLength(1);
     });
 
+    test("target in-repo promotes straight into the shared corpus with no staging", async () => {
+        const root = await makeTempRoot();
+        const corpus = makeCorpus(root);
+        const file = await writeLog(path.join(root, "displayLog.json"), [
+            ...log("r1", "play jazz", "player", { actionName: "play" }),
+        ]);
+        const res = await importDisplayLogs(corpus, [file], {
+            target: "in-repo",
+        });
+        expect(res.total).toBe(1);
+
+        const [entry] = await corpus.list("player");
+        expect(entry.source).toBe("in-repo");
+
+        // Nothing left behind in the private captures staging area.
+        const capturesDir = path.join(root, "profile", "captures", "player");
+        const staged = await fs
+            .readdir(capturesDir)
+            .catch(() => [] as string[]);
+        expect(staged.filter((f) => f.endsWith(".jsonl"))).toHaveLength(0);
+
+        // Landed in the committed in-repo file.
+        const inRepo = path.join(
+            root,
+            "repo",
+            "corpus",
+            "player.utterances.jsonl",
+        );
+        expect((await fs.readFile(inRepo, "utf8")).includes("play jazz")).toBe(
+            true,
+        );
+    });
+
     test("skips missing and malformed files", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);

@@ -758,10 +758,10 @@ export interface StudioRuntime {
         agent: string,
     ): Promise<{ path: string; created: boolean }>;
     /**
-     * Import one or more `displayLog.json` files into the captures corpus.
-     * Buckets per agent, dedupes by logical id (in-batch and against existing
-     * entries), and appends once per agent. Returns counts written/skipped per
-     * agent and the files that were read.
+     * Import one or more `displayLog.json` files into the shared in-repo
+     * corpus. Buckets per agent, dedupes by logical id (in-batch and against
+     * existing entries), and writes once per agent. Returns counts
+     * written/skipped per agent and the files that were read.
      */
     importCorpusFromLogs(
         request: StudioCorpusImportRequest,
@@ -1332,6 +1332,7 @@ export function createStudioRuntimeCore(
         },
         async importCorpusFromLogs(request) {
             return importDisplayLogs(corpus, request.paths, {
+                target: "in-repo",
                 ...(request.agents !== undefined
                     ? { agents: request.agents }
                     : {}),
