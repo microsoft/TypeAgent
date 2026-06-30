@@ -504,6 +504,79 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.importCorpusFromLogs",
+            async () => {
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Import corpus from interaction logs",
+                    canSelectMany: true,
+                    canSelectFiles: true,
+                    canSelectFolders: true,
+                    openLabel: "Import",
+                    filters: { "Display log": ["json"], "All files": ["*"] },
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                // A folder selection resolves to its displayLog.json.
+                const paths: string[] = [];
+                for (const uri of picked) {
+                    try {
+                        const stat = await vscode.workspace.fs.stat(uri);
+                        if (stat.type === vscode.FileType.Directory) {
+                            paths.push(
+                                vscode.Uri.joinPath(uri, "displayLog.json")
+                                    .fsPath,
+                            );
+                        } else {
+                            paths.push(uri.fsPath);
+                        }
+                    } catch {
+                        paths.push(uri.fsPath);
+                    }
+                }
+                const filter = await vscode.window.showInputBox({
+                    title: "Restrict to agents (optional)",
+                    prompt: "Comma-separated agent names to capture; leave blank for all.",
+                    placeHolder: "e.g. player, list",
+                    ignoreFocusOut: true,
+                });
+                if (filter === undefined) {
+                    return;
+                }
+                const agents = filter
+                    .split(",")
+                    .map((a) => a.trim())
+                    .filter((a) => a.length > 0);
+                try {
+                    const result = await serviceRuntime.importCorpusFromLogs({
+                        paths,
+                        ...(agents.length > 0 ? { agents } : {}),
+                    });
+                    corpusTree.refresh();
+                    const skippedTotal = Object.values(result.skipped).reduce(
+                        (sum, n) => sum + n,
+                        0,
+                    );
+                    const agentNames = Object.keys(result.perAgent);
+                    const where =
+                        agentNames.length > 0
+                            ? ` across ${agentNames.join(", ")}`
+                            : "";
+                    vscode.window.showInformationMessage(
+                        `Captured ${result.total} corpus ${
+                            result.total === 1 ? "entry" : "entries"
+                        }${where} from ${result.files.length} ${
+                            result.files.length === 1 ? "file" : "files"
+                        }; skipped ${skippedTotal} duplicate.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to import corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
     );
 
     const statusBar = new StudioStatusBar(serviceRuntime);

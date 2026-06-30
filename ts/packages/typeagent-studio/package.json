@@ -203,6 +203,12 @@
         "icon": "$(new-file)"
       },
       {
+        "command": "typeagent-studio.importCorpusFromLogs",
+        "title": "Import corpus from interaction logs",
+        "category": "TypeAgent Studio",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "typeagent-studio.focusSandboxes",
         "title": "Focus Sandboxes view",
         "category": "TypeAgent Studio"
@@ -349,6 +355,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "typeagent-studio.importCorpusFromLogs",
+          "when": "view == typeagentStudioCorpora",
+          "group": "navigation@5"
+        },
+        {
           "command": "typeagent-studio.refreshEvents",
           "when": "view == typeagentStudioEvents",
           "group": "navigation@1"
@@ -490,6 +501,7 @@
     "onCommand:typeagent-studio.replayCorpus",
     "onCommand:typeagent-studio.addExternalCorpus",
     "onCommand:typeagent-studio.seedInRepoCorpus",
+    "onCommand:typeagent-studio.importCorpusFromLogs",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents",
     "onCommand:typeagent-studio.refreshCollisions",

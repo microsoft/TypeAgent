@@ -5,6 +5,8 @@ import type {
     RepoRootResolution,
     StudioReplayRequest,
     StudioReplayResult,
+    StudioCorpusImportRequest,
+    StudioCorpusImportResult,
 } from "@typeagent/core/runtime";
 import type { CorpusEntry, ExternalSourceSpec } from "@typeagent/core/corpus";
 import type { FeedbackRecordInput } from "@typeagent/core/feedback";
@@ -84,6 +86,12 @@ export class StudioServiceRuntimeFacade implements CorpusSource, HealthSource {
 
     async addExternalCorpusSource(spec: ExternalSourceSpec): Promise<void> {
         return this.require().addExternalCorpusSource(spec);
+    }
+
+    async importCorpusFromLogs(
+        request: StudioCorpusImportRequest,
+    ): Promise<StudioCorpusImportResult> {
+        return this.require().importCorpusFromLogs(request);
     }
 
     async recordFeedback(input: FeedbackRecordInput): Promise<void> {
