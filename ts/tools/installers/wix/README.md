@@ -72,10 +72,71 @@ The pipeline handles this automatically via:
 
 ## Local Build & Test
 
-### 1. Pull the Certificate from Key Vault
+Use the local source build to validate WiX changes before pushing to CI. This is the recommended path for catching `LGHT`/`CANDLE` errors early — it runs the same WiX heat → candle → light pipeline that CI does, but stages the artifacts from your local repo build instead of downloading from the ADO feed. No Azure CLI login required.
+
+### Option A: Build from local repo (recommended for WiX development)
+
+#### 1. Build the workspace
 
 ```powershell
-cd ts/tools/scripts
+cd D:\repos\TypeAgent\ts
+pnpm run build
+```
+
+#### 2. Stage agent-server
+
+```powershell
+# From D:\repos\TypeAgent\ts
+node tools/scripts/deployAgentServer.mjs `
+  --out "$env:TEMP\typeagent-msi-stage\agent-server" `
+  --platform win32 --arch x64 `
+  --profile service
+```
+
+#### 3. Stage copilot-plugin
+
+```powershell
+$plugin = "packages/copilot-plugin"
+$out    = "$env:TEMP\typeagent-msi-stage\copilot-plugin"
+New-Item -ItemType Directory -Force $out | Out-Null
+Copy-Item -Recurse "$plugin/dist"       "$out/dist"
+Copy-Item          "$plugin/hooks.json" "$out/hooks.json"
+Copy-Item          "$plugin/.mcp.json"  "$out/.mcp.json"
+Copy-Item          "$plugin/plugin.json" "$out/plugin.json"
+Copy-Item -Recurse "$plugin/agents"     "$out/agents"
+Copy-Item -Recurse "$plugin/skills"     "$out/skills"
+```
+
+#### 4. Run the WiX build with local staged artifacts
+
+```powershell
+node tools/scripts/build-msi.mjs `
+  --skip-download `
+  --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
+  --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
+  --version 0.0.1-local `
+  --plugin-version 0.0.1-local `
+  --output "$env:TEMP\typeagent-msi-stage\out"
+```
+
+**Output:**
+
+```
+$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi
+```
+
+This is the same code path CI uses. If WiX fails here it will fail in CI.
+
+---
+
+### Option B: Build from ADO feed artifact (requires az login)
+
+Pull pre-published artifacts from the `typeagent` feed instead of staging locally.
+
+#### 1. Pull the Certificate from Key Vault
+
+```powershell
+cd D:\repos\TypeAgent\ts\tools\scripts
 node getCert.mjs pull
 ```
 
@@ -87,16 +148,13 @@ Status check:
 node getCert.mjs status
 ```
 
-### 2. Build the MSI
+#### 2. Build the MSI
 
 ```powershell
-cd ts/tools/scripts
+cd D:\repos\TypeAgent\ts\tools\scripts
 
-# Build for win32-x64 (default)
-node build-msi.mjs --rid win32-x64 --version 0.0.1-test --output ./msi-out
-
-# Or specify latest published version
-node build-msi.mjs --rid win32-x64 --version latest --output ./msi-out
+# Build for win32-x64
+node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 ```
 
 **What it does:**
@@ -104,53 +162,36 @@ node build-msi.mjs --rid win32-x64 --version latest --output ./msi-out
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
 2. Extracts to `./msi-out/artifact`
 3. Compiles WiX definition (`.wxs` → `.wixobj`)
-4. Links to create `TypeAgent-AgentServer-<version>-win32-x64.msi`
+4. Links to create `TypeAgent-<version>-win32-x64.msi`
 
 **Output:**
 
 ```
 msi-out/
 ├── artifact/              # Downloaded and extracted agent-server
-├── TypeAgent-AgentServer.wixobj   # Compiled WiX
-└── TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+└── TypeAgent-0.0.1-<buildId>-win32-x64.msi
 ```
 
-### 3. Sign the MSI
+#### 3. Sign the MSI (optional for local testing)
 
 ```powershell
-cd ts/tools/scripts
-
-# Sign with the dev certificate
-node sign-msi.mjs ../installers/wix/msi-out/TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+cd D:\repos\TypeAgent\ts\tools\scripts
+node sign-msi.mjs "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi"
 ```
 
-**What it does:**
+Signing requires Key Vault access. For local WiX validation you can skip signing and test install directly.
 
-1. Invokes `getCert.mjs pull` (if not already done)
-2. Signs the MSI with `signtool.exe` using the dev cert
-3. Optionally timestamps the signature (via DigiCert timestamp server)
-4. Verifies the signature
-
-**Output:**
-
-```
-✅ MSI signed successfully
-✔️  Signature verified successfully
-```
-
-### 4. Test Installation
-
-On a clean Windows machine (or VM):
+#### 4. Test installation
 
 ```powershell
-# Interactive install (shows progress dialog)
-msiexec /i TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+# Interactive install
+msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi"
 
-# Unattended install (for scripted/Intune deployment)
-msiexec /i TypeAgent-AgentServer-0.0.1-test-win32-x64.msi /quiet /norestart
+# Unattended
+msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi" /quiet /norestart
 
-# Verify installation
-Get-Item 'C:\Program Files\TypeAgent\agent-server\' -ErrorAction SilentlyContinue
+# Verify
+Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
 
 ## Pipeline Usage
