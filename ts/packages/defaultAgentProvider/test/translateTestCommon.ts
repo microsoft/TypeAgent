@@ -91,6 +91,14 @@ export type TranslateTestStep = {
     // <AddItems>): "add ham to the list" otherwise grammar-matches to
     // listName="the" instead of clarifying. Remove once the grammar is fixed.
     skipGrammar?: boolean;
+
+    // Optional trailing actions the model may append run-to-run. `expected` is
+    // required and validated as the leading prefix; the result may then contain
+    // 0..extraActions.length additional actions, each validated in order against
+    // the corresponding entry here. Use for multi-action requests with variable
+    // tails (e.g. an extra pendingRequestAction that defers "add the filtered
+    // tracks to the playlist").
+    extraActions?: ActionMatch | ActionMatch[];
 };
 
 export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
@@ -303,12 +311,22 @@ function validateCommandResult(
                 `Request '${request}' did not return any actions, expected ${JSON.stringify(expected)}`,
             );
         }
-        expect(actions).toHaveLength(actionMatches.length);
+        // `expected` is required and validated as the leading prefix.
+        // `extraActions` are optional trailing actions: the result may contain
+        // 0..extraActions.length of them, each validated in order against the
+        // corresponding entry.
+        const extraMatches =
+            step.extraActions !== undefined
+                ? normalizeActionMatches(step.extraActions)
+                : [];
+        expect(actions.length).toBeGreaterThanOrEqual(actionMatches.length);
+        expect(actions.length).toBeLessThanOrEqual(
+            actionMatches.length + extraMatches.length,
+        );
 
-        for (let i = 0; i < actionMatches.length; i++) {
-            const actionMatch = actionMatches[i];
-            const action = actions[i];
-            validateExpectedAction(actionMatch, action);
+        const allMatches = [...actionMatches, ...extraMatches];
+        for (let i = 0; i < actions.length; i++) {
+            validateExpectedAction(allMatches[i], actions[i]);
         }
     }
 }
