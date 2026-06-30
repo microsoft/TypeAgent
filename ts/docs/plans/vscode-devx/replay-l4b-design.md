@@ -4,12 +4,14 @@
 L4a (live working-tree wildcard validation). This is the deepest rung of the replay fidelity ladder.
 
 ## The honest scope problem
+
 The fidelity ladder classifies L4 as the largest, fully greenfield rung — multi-week and behind a
 flag — needing a product steer before it is attempted. A faithful full L4b is genuinely multi-week
 and should NOT be attempted in one pass. So this doc scopes a **tractable first slice** plus the
 decision that gates which slice to build.
 
 ## What actually changes between two versions (verified)
+
 - **Grammar (`.agr`)** — committed, versionable. Already compared at a ref via `git show`.
 - **Action schema (`.ts` source)** — committed, versionable. Parsed from SOURCE (no build needed:
   `parseActionSchemaSource` reads TS text), already read at a ref via `git show` (L1 enrichment).
@@ -23,6 +25,7 @@ decision that gates which slice to build.
 compiled validator/handler JS** (and a freshly-warmed cache, which isn't a frozen artifact anyway).
 
 ## Current materialization limits (what a worktree would fix)
+
 - `git show <ref>:<path>` reads ONE file at a time. Imported `.agr` grammars (a grammar that
   `import`s another `.agr`) aren't resolvable at a ref — each import needs its own `git show` with a
   versioned FileLoader (deferred since the real-replay slice). The doc notes 57/65 `.agr` have
@@ -34,9 +37,11 @@ compiled validator/handler JS** (and a freshly-warmed cache, which isn't a froze
 ## Three candidate first slices
 
 ### Option A — Worktree materializer + resolver `dispose()` lifecycle (infra-first, NO build)
+
 Replace per-file `git show` with a single `git worktree add --detach <ref> <tmp>` per git-ref side;
 read all grammar/schema/paramSpec files from the checkout; `git worktree remove` in a new
 `dispose()`/`finally` path threaded through resolver → runtime.
+
 - **Unlocks:** imported-`.agr` + whole-tree schema at a ref; establishes the disposer lifecycle that
   the full build rung mandates. De-risks Option C's hardest plumbing.
 - **Honest gain:** modest today (imported-`.agr` is rare), but it is the **required foundation** for
@@ -46,10 +51,12 @@ read all grammar/schema/paramSpec files from the checkout; `git worktree remove`
   temp root + best-effort `git worktree prune` on dispose.
 
 ### Option B — Ref-side wildcard validation via "unchanged-validator" shortcut (NO build)
+
 Run L4a on the git-ref side too, but ONLY when `git diff <ref>..worktree -- <validator file>` is
 empty (the agent's validator JS is unchanged between the ref and the built working tree), so the
 already-built working-tree module faithfully represents the ref's validator. If the validator
 changed, skip ref-side validation (honest, labelled "ref validation: skipped (validator changed)").
+
 - **Unlocks:** symmetric wildcard validation for the common case (validator untouched, only grammar/
   schema edited — exactly the regression journey) with ZERO build machinery.
 - **Honest gain:** real for the headline journey; limited to validators (timer/list).
@@ -58,25 +65,30 @@ changed, skip ref-side validation (honest, labelled "ref validation: skipped (va
   the allowlisted agents whose validator lives in one known file).
 
 ### Option C — Full build-from-ref (the real L4b, multi-week, behind a flag)
+
 `git worktree add` → `pnpm install --filter <agent>...` → scoped `tsc -b`/`asc`/`agc` → load the
 built dist via a provider pointed at the worktree → full deterministic dispatch at the ref.
+
 - **Unlocks:** true arbitrary-ref full-dispatch compare.
 - **Cost:** multi-week, fully greenfield. Minutes per run (install + build). Many failure modes
   (install flakiness, native deps, disk). Clearly a flagged epic, not a one-session slice.
 
 ## Recommendation
+
 Ship **Option A** now (the lifecycle + worktree foundation — the mandatory step 1 of the L4 epic),
 and optionally **Option B** as the first user-visible fidelity win on top of it. Defer **Option C**'s
 install/build orchestration to a tracked, flagged epic, started only if a concrete journey needs
 ref-vs-ref full dispatch.
 
 ## Open decision
+
 Which first slice? **A (infra foundation)**, **A+B (foundation + ref-side validation win)**, or
 **commit to C (the multi-week build epic) now**?
 
 ---
 
 ## Design review — verdict & resolution
+
 - **Option A — CUT as standalone / defer.** Worktree + disposer is infra ahead of need; `git show`
   is strictly better while we only READ committed source (no checkout cleanup, no repo-lock
   contention vs the user's live checkout, no Windows file-lock/crash-recovery burden). Build the
@@ -97,7 +109,7 @@ Which first slice? **A (infra foundation)**, **A+B (foundation + ref-side valida
   payoff visible/measurable.
 
 **Resolution:** sandboxes are the design's intended EXECUTION CONTAINERS (today they
-are metadata-only shells); a VersionSpec is a *recipe* and L4b is the *build* that realizes a recipe
+are metadata-only shells); a VersionSpec is a _recipe_ and L4b is the _build_ that realizes a recipe
 into a populated sandbox. The UI evolves "pick 2 commits" → "pick 2 sandboxes" along a single
 **realization axis**, in three incremental steps. Near-term = Steps 1–2 (transparency, no build);
 Step 3 (build-from-ref) stays the deferred flagged epic.
@@ -111,33 +123,45 @@ VersionSpec (recipe)        L4b build (Step 3)            Sandbox (instance)
 ```
 
 ### Step 1 — per-side fidelity readout (SHIP NOW, no build, no new replay behavior)
+
 Surface signals the resolver ALREADY computes. Add to `StudioReplayResult`:
+
 ```ts
 interface FidelityReport {
-  realization: "source" | "built-live";          // git ref ⇒ source; working tree ⇒ built-live
+  realization: "source" | "built-live"; // git ref ⇒ source; working tree ⇒ built-live
   layers: Record<
-    "grammar" | "schemaEnrichment" | "constructionCache" | "wildcardValidation" | "dispatch",
+    | "grammar"
+    | "schemaEnrichment"
+    | "constructionCache"
+    | "wildcardValidation"
+    | "dispatch",
     { status: "ran" | "skipped" | "unavailable"; reason?: string }
   >;
 }
-interface StudioReplayResult { /* …existing… */ sideFidelity: { A: FidelityReport; B: FidelityReport }; }
+interface StudioReplayResult {
+  /* …existing… */ sideFidelity: { A: FidelityReport; B: FidelityReport };
+}
 ```
+
 Derive from existing `methodA`/`methodB` (`static-grammar`/`schema-grammar`/`construction-cache`),
 `grammarResolver.enriched`, `wildcardValidation`, and `versionA/B.kind`. Pure mapping + unit test.
 Webview: collapsible Fidelity matrix (5 rows × A/B) + a preflight line when a side is `source`-only
 and a richer realization is theoretically available. Reuse `renderValidationNote` styling.
 
 ### Step 2 — relabel A/B as "Sandbox A / Sandbox B" (light)
+
 A/B group header becomes Sandbox A / Sandbox B with a `recipe · realization` sub-label. Cements the
 "2 sandboxes" model. Mostly labels on top of Step 1's descriptor.
 
 ### Step 3 — L4b build-from-ref (DEFERRED, flagged epic = old Option C)
+
 Picker gains a "build from ref" opt-in → host realizes a real sandbox (worktree → build → load) →
 ref side climbs the Step-1 matrix to `built`. Needs the resolver `dispose()`/`finally` lifecycle,
 per-agent build recipes, SHA-keyed build cache, timeouts. Subprocess-mode + the L4a RPC-context
 boundary remain the hardest sub-problem (context-dependent agents).
 
 ## Implementation plan — near-term (Steps 1–2)
+
 1. **core/studioRuntimeCore.ts** — add `SideFidelity`/`FidelityReport` types + a pure
    `deriveSideFidelity(methodA, methodB, enriched, wildcardValidation, versionA, versionB)` mapper;
    populate `result.sideFidelity` (and in the error-result path). Unit test the mapper.
@@ -146,4 +170,4 @@ boundary remain the hardest sub-problem (context-dependent agents).
    preflight line + Sandbox A/B relabel. Render test.
 4. **Verify**: core `tsc -b` + jest, studio `tsx --test`, studio-service `npm test`, prettier,
    esbuild. No commit/push without explicit user consent.
-Deferred (Step 3): worktree materializer, scoped build, resolver `dispose()`, ref-side execution.
+   Deferred (Step 3): worktree materializer, scoped build, resolver `dispose()`, ref-side execution.

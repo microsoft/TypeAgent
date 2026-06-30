@@ -45,16 +45,16 @@ is clear why it waits. There is no second roadmap — depth (L4b) and breadth
 
 ### Gate spine (MVP critical path)
 
-| Gate | Journey | Capability | Phase | Status |
-| ---- | ------- | ---------- | ----- | ------ |
-| **A** | J1 Stand up an agent | New-Agent Wizard | P-2 | ❌ not started (onboarding bridge ✅) |
-| **B** | J2 Tune schema | Schema Studio | P-4 | ❌ not started |
-| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3 | 🟡 **long pole** — engine L1–L4a ✅; corpus capture + predicate + measurement ❌ |
-| **D** | J5 Debug a trace | Trace Viewer | P-3 | ❌ not started |
-| **E** | J6 Observe live | Live Trace + status bar | P-5 | ❌ not started |
+| Gate  | Journey              | Capability                                              | Phase | Status                                                                           |
+| ----- | -------------------- | ------------------------------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| **A** | J1 Stand up an agent | New-Agent Wizard                                        | P-2   | ❌ not started (onboarding bridge ✅)                                            |
+| **B** | J2 Tune schema       | Schema Studio                                           | P-4   | ❌ not started                                                                   |
+| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3   | 🟡 **long pole** — engine L1–L4a ✅; corpus capture + predicate + measurement ❌ |
+| **D** | J5 Debug a trace     | Trace Viewer                                            | P-3   | ❌ not started                                                                   |
+| **E** | J6 Observe live      | Live Trace + status bar                                 | P-5   | ❌ not started                                                                   |
 
 **Critical path now: close Gate C** — player corpus capture → predicate tuning →
-run the ≥ 80% validation. It is the only *tunable* gate and §7's top risk.
+run the ≥ 80% validation. It is the only _tunable_ gate and §7's top risk.
 
 ### Backlog (off the critical path — tagged, not a separate plan)
 
@@ -63,18 +63,18 @@ tags: **depth** = how faithfully one replay side is realized (improves Gate C
 accuracy); **breadth** = how many things are compared at once (multiplies cells);
 **infra** = enabling plumbing.
 
-| Item | Parent | Track | Precondition | Status |
-| ---- | ------ | ----- | ------------ | ------ |
-| Fidelity transparency (per-side readout + "Sandbox A/B" relabel) | Gate C / J4 | depth | — | next (low-risk, no build) |
-| **L4b** build-from-ref sandboxes (real compiled ref side) | Gate C / J4 | depth (P-7) | Gate C banked | deferred flagged epic |
-| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4 | breadth — versions | Gate C banked; must preserve Gate C | post-MVP |
-| Multi-agent / multi-corpus replay (`code`, 684 utterances) | J4 | breadth — agents | Gate C banked | post-MVP (§2 exclude) |
-| Active-sandbox selector + per-sandbox scoping | — | infra | single-sandbox E2E | P-7a |
-| Sandbox copy-on-write overlay (true sandbox-local A/B) | — | infra | P-7a | P-7b |
+| Item                                                                      | Parent      | Track              | Precondition                        | Status                    |
+| ------------------------------------------------------------------------- | ----------- | ------------------ | ----------------------------------- | ------------------------- |
+| Fidelity transparency (per-side readout + "Sandbox A/B" relabel)          | Gate C / J4 | depth              | —                                   | next (low-risk, no build) |
+| **L4b** build-from-ref sandboxes (real compiled ref side)                 | Gate C / J4 | depth (P-7)        | Gate C banked                       | deferred flagged epic     |
+| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4          | breadth — versions | Gate C banked; must preserve Gate C | post-MVP                  |
+| Multi-agent / multi-corpus replay (`code`, 684 utterances)                | J4          | breadth — agents   | Gate C banked                       | post-MVP (§2 exclude)     |
+| Active-sandbox selector + per-sandbox scoping                             | —           | infra              | single-sandbox E2E                  | P-7a                      |
+| Sandbox copy-on-write overlay (true sandbox-local A/B)                    | —           | infra              | P-7a                                | P-7b                      |
 
 Why depth and breadth are distinct dials on the same `replayCorpus` (F4.1)
-primitive: **depth** raises the fidelity of each compared *cell* (and thus Gate C
-accuracy); the two **breadth** axes raise the *number* of cells (versions ×
+primitive: **depth** raises the fidelity of each compared _cell_ (and thus Gate C
+accuracy); the two **breadth** axes raise the _number_ of cells (versions ×
 agents). They compose and are independent. Detailed slice breakdowns live in the
 design docs ([the L4b sandbox-convergence plan](./replay-l4b-design.md) and
 [the multi-variant compare design](./impact-report-multi-variant-design.md)).
