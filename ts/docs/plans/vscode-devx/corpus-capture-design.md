@@ -17,7 +17,7 @@ The corpus **storage, model, federation, replay-input, and UI tree are already
 built and tested.** Concretely:
 
 - **Model** — `typeagent-core/src/corpus/types.ts`: `CorpusEntry { id, utterance,
-  agent, source, provenance, expectedAction?, feedback?, tags? }`,
+agent, source, provenance, expectedAction?, feedback?, tags? }`,
   `CorpusProvenance { sourceUri, capturedAt?, sessionId?, requestId? }`,
   `FeedbackLabel { rating, category?, comment?, recordedAt }`,
   `CorpusSource = "in-repo" | "captures" | "external" | "feedback"`.
@@ -95,36 +95,64 @@ UI to invoke it. **No new storage or model is needed.**
 A pure function that turns display-log entries into corpus entries:
 
 ```ts
-interface CaptureLogEntry {            // narrow structural shape core reads
-    type: string;
-    requestId?: { requestId: string };
-    command?: string;                  // user-request
-    source?: string;                   // set-display-info: the agent
-    action?: unknown;                  // set-display-info: resolved action
-    rating?: "up" | "down" | null;     // user-feedback
-    category?: string;
-    comment?: string;
-    timestamp?: number;
+interface CaptureLogEntry {
+  // narrow structural shape core reads
+  type: string;
+  requestId?: { requestId: string };
+  seq?: number; // log order, for tie-breaking
+  command?: string; // user-request
+  source?: string; // set-display-info: the agent
+  actionIndex?: number; // set-display-info: position in a multi-action request
+  action?: unknown; // set-display-info: resolved action
+  rating?: "up" | "down" | null; // user-feedback ("null" = cleared)
+  category?: string;
+  comment?: string;
+  timestamp?: number;
 }
 
 function displayLogToCorpusEntries(
-    entries: CaptureLogEntry[],
-    opts: { sourceUri: string; sessionId?: string; agentFilter?: (agent: string) => boolean; now?: () => number },
+  entries: CaptureLogEntry[],
+  opts: {
+    sourceUri: string;
+    sessionId?: string;
+    agentFilter?: (agent: string) => boolean;
+    now?: () => number;
+  },
 ): CorpusEntry[];
 ```
 
 Behaviour:
 
 - Group by `requestId.requestId`. For each request, take the utterance from the
-  `user-request` entry, the action + agent from the latest `set-display-info`
-  entry (with an `action`), and the feedback from the latest `user-feedback`
-  entry.
+  `user-request` entry, and the dispatching **agent** from the `source` field.
+- **Action is a sequence, not a single value.** A single request can emit
+  multiple `set-display-info` entries (`actionIndex` 0..N). Collect **all** of
+  them that carry an `action`, ordered by `actionIndex` (falling back to `seq` /
+  log order), into an ordered list. Represent `expectedAction` as that list when
+  there is more than one action, and as the single action when there is exactly
+  one — never silently keep only the last. (Replay caveat below.)
+- **Feedback latest-wins, with clear semantics.** Take the latest
+  `user-feedback` entry for the request. If its `rating` is `null` (the user
+  cleared their rating), **omit `feedback` entirely** — `FeedbackLabel.rating`
+  is `"up" | "down"` only and cannot represent a cleared rating.
 - **Bucket by agent** (`source`). Drop requests with no resolvable agent or whose
-  agent is a system/dispatcher pseudo-source (configurable `agentFilter`).
-- Emit `CorpusEntry { id: computeEntryId(utterance, agent, requestId), utterance,
-  agent, source: "captures", provenance: { sourceUri, capturedAt: now,
-  sessionId, requestId }, expectedAction: action, feedback }`.
-- Dedupe within the batch by `id`.
+  agent is rejected by `agentFilter`.
+- Emit `CorpusEntry { id, utterance, agent, source: "captures", provenance:
+{ sourceUri, capturedAt: now, sessionId, requestId }, expectedAction, feedback }`.
+- **Id is logical, not request-scoped.** Use `computeEntryId(utterance, agent)`
+  (requestId stays in `provenance` only). `RequestId.requestId` is not stable or
+  globally unique across sessions, so keying the id on it would make re-capturing
+  the same logical utterance produce duplicate, double-counted corpus rows.
+- Dedupe within the batch by `id` (the service also dedupes against existing
+  entries on append/import — see below).
+
+**Replay-fidelity caveat (multi-action).** The grammar replay resolver currently
+returns a single top action per side (`topMatchAction` → `results[0]`), so a
+multi-action `expectedAction` list will not compare equal against a
+single-action replay result. `actionsEqual` _can_ compare arrays structurally,
+so the corpus model is ready; the gap is on the resolver side. Capture stores the
+true sequence regardless; faithful multi-action replay is tracked as a separate
+replay-engine improvement, not a reason to lose data at capture time.
 
 **Dependency-direction note.** The real `DisplayLogEntry` union lives in
 `dispatcher/types`. `typeagent-core` must not depend on the dispatcher. So core
@@ -136,12 +164,32 @@ testable with plain objects.
 
 ### 2. Service orchestration (studio-service)
 
-- `captureSessionToCorpus({ displayLogPath?, agents? }) → { perAgent: Record<string, number>, total }`
+- `captureSessionToCorpus({ displayLogPath?, agents? }) → { perAgent: Record<string, number>, skipped: Record<string, number>, total }`
   — load `displayLog.json` (default `<instanceDir>/displayLog.json`, the live
   session; or an explicit path), map to `CaptureLogEntry[]`, run the transform,
-  then `append(agent, entries)` per agent bucket via `FileCorpusService`.
-- `importDisplayLogs({ paths | dir, agents? }) → { perAgent, total, files }` — the
-  bulk form: capture each `displayLog.json` the user points at.
+  then write per agent bucket via `FileCorpusService`.
+- `importDisplayLogs({ paths | dir, agents? }) → { perAgent, skipped, total, files }`
+  — the bulk form: capture each `displayLog.json` the user points at. This is the
+  **Gate C critical-path entry point** (see slices).
+- **Agent selection is an explicit allowlist, not a core heuristic.** The core
+  transform's default `agentFilter` simply accepts any non-empty `source`; it
+  does **not** hard-code a pseudo-source blacklist. The service passes an explicit
+  `agents` allowlist (e.g. `["player"]` for Gate C) so a `dispatcher`/system
+  source is excluded by selection, transparently, rather than by a hidden rule.
+- **Append once per agent.** `FileCorpusService.append()` names its capture file
+  by an ISO-millisecond timestamp, so two `append(agent, …)` calls in the same
+  millisecond (common in bulk import or with an injected clock) collide. The
+  service must **aggregate all entries for an agent and call `append` once per
+  agent per run**.
+- **Dedupe against existing.** `append()` does not dedupe; only `loadAll()`
+  dedupes by `id`. Before appending, the service loads the agent's existing
+  federated entries and drops captures whose logical `id` already exists, counting
+  them in `skipped`, so re-importing the same log is idempotent.
+- **Provenance of the raw log.** `append()` overwrites `provenance.sourceUri` with
+  the captures-JSONL path, so the original `displayLog.json` path would be lost.
+  Preserve it via a dedicated field (e.g. provenance `rawSourceUri` or a `tags`
+  entry) set by the transform, so captured entries remain traceable to their
+  source log.
 - The studio-service already runs per-workspace and can resolve the active
   `instanceDir` via the dispatcher helpers (`getInstanceDir()` /
   `getInstanceSessionsDirPath()`), so locating the live displayLog needs no new
@@ -149,13 +197,18 @@ testable with plain objects.
 
 ### 3. Extension UI
 
-- Command **`typeagent-studio.captureSessionToCorpus`** — choose a session /
-  displayLog (or "current"), capture, then a toast: "Captured N entries across
-  {player, list}." Refresh the Corpora tree (the refresh command already exists).
-- Command **`typeagent-studio.importCorpusFromLogs`** — pick a folder of session
-  logs for the bulk path.
-- Optional: a context action on a session/sandbox tree node ("Capture this
-  session to corpus") and on a captured entry ("Promote to in-repo corpus",
+- Command **`typeagent-studio.importCorpusFromLogs`** — the **primary** capture
+  affordance: pick one or more `displayLog.json` files (or a folder), capture with
+  an explicit agent allowlist, then a toast: "Captured N entries across
+  {player, list}; skipped M duplicates." Refresh the Corpora tree (the refresh
+  command already exists).
+- Command **`typeagent-studio.captureSessionToCorpus`** — capture the **current**
+  live session's displayLog. Secondary: the live log is a single mutable
+  current-session file and `DisplayLog.load` swallows malformed JSON and returns
+  an empty log, so this path must surface "captured 0 entries" clearly rather than
+  silently succeeding. Prefer this only once the Studio↔live-dispatcher
+  relationship is proven.
+- Optional: a context action on a captured entry ("Promote to in-repo corpus",
   reusing the existing `promote()`).
 
 ### 4. Promotion (already exists)
@@ -164,6 +217,37 @@ Vetting and promotion to the shared in-repo corpus is already implemented
 (`promote()` + `seedInRepoCorpus`). Captured entries stay private under
 `captures/<agent>/` until an explicit promote, so a personal session is never
 silently leaked into the shared repo corpus.
+
+### 5. Feedback as a label, not a funnel
+
+Manual UI feedback (thumbs up/down + optional category/comment, via
+`recordFeedback`) does **not** write into the capture or in-repo utterance files,
+and it **should not** start doing so automatically. Feedback is a **label that
+attaches to a corpus entry**, not a row that owns the utterance file. The rules:
+
+- **No auto-funnel into the shared set.** The in-repo
+  `corpus/<agent>.utterances.jsonl` is the curated, git-shared, stable test set.
+  Auto-writing mutable per-developer ratings into it would bypass the
+  capture→promote vetting gate, churn a committed file every time a rating flips,
+  and commit unreconciled cross-developer conflicts. Feedback therefore stays a
+  **read-time federated source** (`FileCorpusService.feedbackProvider` →
+  `toCorpusEntries`), exactly as built.
+- **Feedback reaches the shared file only via promotion**, riding along as the
+  `feedback` field on the entry (`CorpusEntry.feedback` already exists). So a
+  label enters the curated set only when its entry is explicitly promoted — one
+  funnel (promotion), not two.
+- **Feedback must be durable.** The default backend is in-memory
+  (`InMemoryFeedbackBackend`), so labels are lost on restart — but a thumbs-up/down
+  is precisely the hand-label Gate C needs. Feedback should be persisted in its own
+  store (separate follow-up), still surfaced via the read-time projection.
+- **Align the feedback projector to the logical id.** `toCorpusEntries` currently
+  mints `computeEntryId(utterance, agent, requestId)`, while capture uses the
+  logical `computeEntryId(utterance, agent)`. Aligning feedback to the logical id
+  lets a feedback label **merge onto** the matching captured entry (enriching one
+  row) instead of appearing as a parallel request-scoped duplicate.
+
+Net flow: **capture seeds the entry → feedback enriches it as a label → promotion
+carries both into the shared set.**
 
 ## Gate C tie-in
 
@@ -175,28 +259,62 @@ the gate.
 
 ## Delivery slices
 
+Ordered to reach **Gate C** as directly as possible — explicit displayLog import
+is the critical path; live-session capture and tree polish come after.
+
 1. **Core pure transform + tests** — `displayLogToCorpusEntries` over the narrow
-   `CaptureLogEntry` shape; unit tests for multi-agent bucketing, feedback
-   latest-wins, missing-action skip, dedupe. (No I/O, no dispatcher dependency.)
-2. **Service capture/import** — `captureSessionToCorpus` + `importDisplayLogs`
-   over `FileCorpusService.append`, including the displayLog→`CaptureLogEntry`
-   adapter and session-log discovery.
-3. **Extension commands** — capture + bulk-import commands, summary toast, tree
-   refresh.
-4. **(Optional) tree context actions** — capture-from-session-node, promote a
-   captured entry.
-5. **End-to-end validation** — run a real/sample player session through capture →
-   promote → replay, then feed Gate C labelling.
+   `CaptureLogEntry` shape. Tests for: multi-agent bucketing; **multi-action
+   ordered sequence** (actionIndex 0..N, missing action at one index, out-of-order
+   log); feedback latest-wins **including `rating: null` → omit**; missing-action
+   skip; **logical-id stability** (same utterance/different requestIds dedupe);
+   in-batch dedupe. (No I/O, no dispatcher dependency.)
+2. **Service import (critical path)** — `importDisplayLogs` over
+   `FileCorpusService`, including the displayLog→`CaptureLogEntry` adapter,
+   per-agent single `append`, dedupe-against-existing, and raw-source provenance.
+   This alone unblocks Gate C (import an existing `player` displayLog).
+3. **Extension import command** — `importCorpusFromLogs` (explicit files/folder,
+   agent allowlist), summary toast with skipped count, tree refresh.
+4. **Live-session capture** — `captureSessionToCorpus` + its command, once the
+   live-log relationship is proven; clear "0 entries" handling.
+5. **(Optional) tree context actions** — promote a captured entry.
+6. **End-to-end validation** — run a real/sample player session log through import
+   → promote → replay, then feed Gate C labelling.
 
 ## Open questions
 
-- **Agent filter:** which `source` values on `SetDisplayInfoEntry` are real agents
-  vs system pseudo-sources to exclude (e.g. the dispatcher/system source)?
-- **`expectedAction` shape:** store the full `TypeAgentAction` or a normalized
-  subset (translator + action name + params)?
+- **`expectedAction` shape:** store the full `TypeAgentAction` (sequence) or a
+  normalized subset (translator + action name + params)? Capture stores the full
+  ordered sequence; normalization for comparison is a replay-side concern.
+- **Multi-action replay fidelity:** the resolver returns one top action per side
+  today. Do we extend it to produce the full action sequence so multi-action
+  corpus rows compare faithfully, or scope Gate C to single-action utterances
+  first? (Replay-engine work, separate from capture.)
 - **Historical capture:** since displayLog is live-only, is bulk import of
   user-supplied `displayLog.json` files plus the feedback federated source enough,
   or do we eventually want the dispatcher to archive a per-session displayLog?
+- **Durable feedback store (follow-up):** the default feedback backend is
+  in-memory, so labels are lost on restart. Where should feedback persist so
+  Gate C labels survive — a dispatcher-backed backend, or a Studio-owned store?
+  (Separate from capture; tracked here because feedback labels feed Gate C.)
 
-_Resolved:_ whole-session capture (every turn, not feedback-only); session-log
-location confirmed (`<instanceDir>/displayLog.json`, live session).
+_Resolved (design review, verified against code):_
+
+- Whole-session capture (every turn, not feedback-only).
+- Session-log location confirmed (`<instanceDir>/displayLog.json`, live session).
+- Capture the **ordered multi-action sequence**, never just the last action.
+- Latest feedback `rating: null` → **omit** feedback (no `FeedbackLabel`).
+- **Logical id** `computeEntryId(utterance, agent)`; requestId in provenance only.
+  The **feedback projector** (`toCorpusEntries`) should adopt the same logical id
+  so feedback merges onto the matching captured entry instead of duplicating it.
+- Feedback is a **label, not a funnel**: no auto-write into the utterance files;
+  it stays a read-time federated source and reaches the shared set only via
+  promotion, carried as the entry's `feedback` field.
+- Agent selection is an explicit **allowlist** from the service; core's default
+  filter accepts any non-empty `source` (no hard-coded blacklist).
+- Service **aggregates per agent and appends once** (avoids the
+  ISO-millisecond capture-file collision) and **dedupes against existing**
+  entries (`append` itself does not dedupe).
+- Preserve the raw `displayLog.json` path in provenance (`append` overwrites
+  `sourceUri` with the captures-file path).
+- Explicit displayLog **import** is the Gate C critical path; live-session
+  capture is secondary.
