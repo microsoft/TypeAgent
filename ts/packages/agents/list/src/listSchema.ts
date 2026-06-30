@@ -17,7 +17,7 @@ export type AddItemsAction = {
         items: string[];
         // name of the list such as "grocery", "to do", "shopping", "packing", "gift","book","idea","movie","garden task","place to visit"
         // names should be lower case and should be stemmed to the singular form (e.g., "movies" should be "movie")
-        // IMPORTANT: Do not invent a list name. 
+        // IMPORTANT: Do not invent a list name.
         // If the user uses a reference phrase ("the list", "that list",etc.) we should clarify
         // with the user which list they meant unless it is obvious from the conversation history.
         listName: string;
