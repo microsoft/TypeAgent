@@ -11,7 +11,7 @@ import {
     createNpmAppAgentProvider,
     NpmAppAgentInfo,
 } from "dispatcher-node-providers";
-import { loadBundledCatalog, CatalogAgentInfo } from "./catalog.js";
+
 import { getProviderConfig } from "../utils/config.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
@@ -54,13 +54,13 @@ export function getAppBundleRequirePath(): string {
 // Seeding (design §7): build InstalledAgentRecords from a catalog / agent map.
 // ---------------------------------------------------------------------------
 
-// Map one catalog / config `agents` entry to an InstalledAgentRecord. A `path`
-// entry becomes a path-resolved record (omits `module`); an entry with only a
+// Map one config `agents` entry to an InstalledAgentRecord. A `path` entry
+// becomes a path-resolved record (omits `module`); an entry with only a
 // package `name` becomes a module-resolved record. `baseDir` is the directory
-// relative `path` entries resolve against (the catalog / config dir).
-function recordFromCatalogEntry(
+// relative `path` entries resolve against (the config dir).
+function recordFromConfigEntry(
     name: string,
-    entry: CatalogAgentInfo,
+    entry: NpmAppAgentInfo,
     source: string,
     baseDir: string,
 ): InstalledAgentRecord {
@@ -80,44 +80,43 @@ function recordFromCatalogEntry(
     return record;
 }
 
-// Seed records from the bundled catalog's `preinstall`-flagged entries
-// (design §7). Pure + synchronous: bundled entries are all local module/path
-// refs (no feed / network), so materializing them is just record-shaping and
-// cannot partially fail. `source` is "builtin".
-export function seedRecordsFromBundledCatalog(): Record<
-    string,
-    InstalledAgentRecord
-> {
-    const catalog = loadBundledCatalog();
-    const baseDir = path.dirname(getPackageFilePath("./data/agents.json"));
-    const records: Record<string, InstalledAgentRecord> = {};
-    for (const [name, entry] of Object.entries(catalog.agents)) {
-        if (entry.preinstall === true) {
-            records[name] = recordFromCatalogEntry(
-                name,
-                entry,
-                "builtin",
-                baseDir,
-            );
-        }
-    }
-    return records;
-}
-
-// Seed records from a named config's `agents` map (config.<name>.json). Used
-// for the named-config code path (e.g. "test", "all"), which selects a fixed
-// agent set rather than going through install/agents.json. `source` is
-// "builtin"; `path` entries resolve against the config (data) dir.
+// Seed records from a config's `agents` map (config.json or config.<name>.json).
+// This is the bundled agent set: the agents that ship in the app and are always
+// present. `source` is "builtin"; `path` entries resolve against the config
+// (data) dir. Pure + synchronous: bundled entries are all local module/path
+// refs (no feed / network), so building them is just record-shaping.
 export function seedRecordsFromConfig(
-    configName: string,
+    configName?: string,
 ): Record<string, InstalledAgentRecord> {
     const agents = getProviderConfig(configName).agents;
     const baseDir = path.dirname(getPackageFilePath("./data/config.json"));
     const records: Record<string, InstalledAgentRecord> = {};
     for (const [name, entry] of Object.entries(agents)) {
-        records[name] = recordFromCatalogEntry(name, entry, "builtin", baseDir);
+        records[name] = recordFromConfigEntry(name, entry, "builtin", baseDir);
     }
     return records;
+}
+
+// The names of the bundled agents for `configName` (default config when
+// omitted). The bundled agents are their own static provider, so these names
+// are reserved: an install can never shadow one, and a persisted install whose
+// name collides is dropped at load (else the dispatcher throws when both the
+// bundled and installed providers register the same name).
+export function getBundledAgentNames(configName?: string): Set<string> {
+    return new Set(Object.keys(getProviderConfig(configName).agents));
+}
+
+// Build the static bundled-agent AppAgentProvider (always present, immutable).
+// These agents resolve against the app bundle and are never installed,
+// uninstalled, or updated - they are simply the app's shipped agent set. This
+// replaces the former "builtin" install source (design revert): bundled agents
+// are no longer modeled as an install source.
+export function createBundledAppAgentProvider(
+    configName?: string,
+): AppAgentProvider {
+    return createInstalledAppAgentProvider(seedRecordsFromConfig(configName), {
+        appBundleRequirePath: getAppBundleRequirePath(),
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -324,47 +323,44 @@ export function createInstalledAppAgentProvider(
 }
 
 /**
- * Load the installed-agent records for a host (design §4.2, §7, §8).
+ * Load the user-installed agent records from `agents.json` (design §4.2, §8).
  *
- * - Named config (e.g. "test") -> seed from config.<name>.json `agents`,
- *   in-memory only (those configs select a fixed agent set; no agents.json).
- * - Default config, no instance dir -> seed from the bundled catalog in-memory
- *   (the in-process / test case; equivalent to today's defaultNpm provider).
- * - Default config, instance dir with agents.json -> load it (steady state).
- * - Default config, instance dir, no agents.json -> first run: migrate any
- *   legacy externalAgentsConfig.json, pre-install the bundled builtins, and
- *   persist the result to agents.json.
+ * The bundled agents are a separate static provider (see
+ * {@link createBundledAppAgentProvider}), so this returns ONLY the
+ * user-installed agents - never the bundled set. agents.json holds only
+ * installs. On first run it migrates any legacy externalAgentsConfig.json and
+ * writes the (possibly empty) agents.json.
+ *
+ * Records whose name collides with a bundled agent are dropped: the bundled
+ * provider owns that name, and registering it from two providers makes the
+ * dispatcher throw "Conflicting app agents name". This also strips any legacy
+ * persisted builtins (`source: "builtin"`) that older builds wrote here.
  */
 export function loadInstalledRecords(
-    instanceDir: string | undefined,
-    configName: string | undefined,
+    instanceDir: string,
 ): Record<string, InstalledAgentRecord> {
-    if (configName !== undefined) {
-        return seedRecordsFromConfig(configName);
-    }
-    if (instanceDir === undefined) {
-        return seedRecordsFromBundledCatalog();
-    }
-    // Builtins are always derived from the bundled catalog, never persisted, so
-    // the builtin set tracks the running bundle and can never drift from a
-    // stale agents.json. agents.json holds only user-installed agents.
-    const builtins = seedRecordsFromBundledCatalog();
+    const bundledNames = getBundledAgentNames();
     const existing = readAgentsJson(instanceDir);
     const installs: Record<string, InstalledAgentRecord> = {};
     if (existing !== undefined) {
         for (const [name, record] of Object.entries(existing.agents)) {
-            // Drop any persisted builtins (legacy: builtins used to be written
-            // into agents.json); they are re-seeded above. Never let an install
-            // shadow a builtin.
-            if (record.source !== "builtin" && builtins[name] === undefined) {
+            // Drop legacy persisted builtins and any install whose name
+            // collides with a bundled agent (the bundled provider owns it).
+            if (record.source !== "builtin" && !bundledNames.has(name)) {
                 installs[name] = record;
             }
         }
     }
-    // Migrate legacy path entries straight into installs (never builtins).
+    // Migrate legacy path entries straight into installs.
     migrateLegacyExternalAgents(instanceDir, installs);
+    // A migrated legacy entry could collide with a bundled name; drop it so the
+    // bundled provider stays the sole owner.
+    for (const name of Object.keys(installs)) {
+        if (bundledNames.has(name)) {
+            delete installs[name];
+        }
+    }
     fs.mkdirSync(instanceDir, { recursive: true });
-    // Persist only installs; builtins are derived, not stored.
     writeAgentsJson(instanceDir, { agents: installs });
-    return { ...builtins, ...installs };
+    return installs;
 }

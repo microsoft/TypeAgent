@@ -37,8 +37,21 @@ function managedAgentNames(
 
 export class ListInstalledCommandHandler implements CommandHandler {
     public readonly description = "List installed agents";
-    public readonly parameters = {} as const;
-    public async run(context: ActionContext<CommandHandlerContext>) {
+    public readonly parameters = {
+        flags: {
+            all: {
+                description:
+                    "Include built-in agents (by default only installed agents are listed)",
+                char: "a",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const systemContext = context.sessionContext.agentContext;
         const installer = systemContext.agentInstaller;
         if (installer === undefined) {
@@ -49,9 +62,19 @@ export class ListInstalledCommandHandler implements CommandHandler {
                 "Listing installed agents is not supported by this installer",
             );
         }
-        const records = installer.listInstalled();
+        const includeBuiltin = params.flags.all;
+        // Built-in agents ship with the app and are always present; by default
+        // `@package list` shows only what the user installed. `--all` adds them.
+        const records = installer
+            .listInstalled()
+            .filter((info) => includeBuiltin || info.source !== "builtin");
         if (records.length === 0) {
-            displayResult("No agents installed.", context);
+            displayResult(
+                includeBuiltin
+                    ? "No agents installed."
+                    : "No agents installed. Use '@package list --all' to include built-in agents.",
+                context,
+            );
             return;
         }
 
@@ -67,27 +90,51 @@ export class ListInstalledCommandHandler implements CommandHandler {
             }
         };
 
-        const sorted = [...records].sort((a, b) =>
-            a.name.localeCompare(b.name),
-        );
-
-        // Plain-text (CLI / console) — fixed-width via chalk for alignment.
-        const text: string[][] = [["", "Agent", "Source", "Reference"]];
-        for (const record of sorted) {
-            text.push([
-                safeEmoji(record.name),
-                chalk.cyanBright(record.name),
-                chalk.yellow(record.source),
-                record.handle !== undefined
-                    ? chalk.gray(record.handle)
-                    : chalk.gray("—"),
-            ]);
+        // Group records by source so each source renders as its own table.
+        const groups = new Map<string, typeof records>();
+        for (const record of records) {
+            const group = groups.get(record.source);
+            if (group === undefined) {
+                groups.set(record.source, [record]);
+            } else {
+                group.push(record);
+            }
         }
 
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: text,
-        });
+        // Sources listed alphabetically; one table per source, with a heading.
+        for (const source of [...groups.keys()].sort()) {
+            const groupRecords = groups
+                .get(source)!
+                .sort((a, b) => a.name.localeCompare(b.name));
+            context.actionIO.appendDisplay({
+                type: "text",
+                content: chalk.yellow(source),
+            });
+            // Plain-text (CLI / console) — fixed-width via chalk for alignment.
+            const text: string[][] = [["", "Agent", "Reference"]];
+            for (const record of groupRecords) {
+                text.push([
+                    safeEmoji(record.name),
+                    chalk.cyanBright(record.name),
+                    record.handle !== undefined
+                        ? chalk.gray(record.handle)
+                        : chalk.gray("—"),
+                ]);
+            }
+            context.actionIO.appendDisplay({
+                type: "text",
+                content: text,
+            });
+        }
+
+        if (!includeBuiltin) {
+            context.actionIO.appendDisplay({
+                type: "text",
+                content: chalk.gray(
+                    "Built-in agents are not shown. Use '@package list --all' to include them.",
+                ),
+            });
+        }
     }
 }
 

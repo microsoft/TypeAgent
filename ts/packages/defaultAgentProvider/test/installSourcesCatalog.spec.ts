@@ -5,11 +5,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createCatalogSource } from "../src/installSources/catalogSource.js";
-import {
-    BUNDLED_CATALOG,
-    loadBundledCatalog,
-} from "../src/installSources/catalog.js";
-import { getProviderConfig } from "../src/utils/config.js";
 
 function writeCatalog(agents: object): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-catalog-"));
@@ -109,35 +104,6 @@ describe("catalogSource", () => {
         });
         const agents = await source.listAgents!();
         expect(agents.sort()).toEqual(["calendar", "player"]);
-    });
-
-    it("resolves the bundled catalog ('<bundled>')", async () => {
-        const source = createCatalogSource({
-            kind: "catalog",
-            name: "builtin",
-            catalog: BUNDLED_CATALOG,
-        });
-        const candidate = await source.find("player");
-        expect(candidate).toBeDefined();
-        expect(candidate!.module).toBe("music");
-        const record = await source.materialize(candidate!);
-        expect(record.name).toBe("player");
-        expect(record.source).toBe("builtin");
-    });
-
-    it("bundled catalog mirrors the default config.json agents (1.2 data move)", () => {
-        const catalog = loadBundledCatalog();
-        const configAgents = getProviderConfig().agents;
-        // Same agent set.
-        expect(Object.keys(catalog.agents).sort()).toEqual(
-            Object.keys(configAgents).sort(),
-        );
-        // Same package name + execMode per agent; all flagged preinstall.
-        for (const [name, info] of Object.entries(catalog.agents)) {
-            expect(info.name).toBe(configAgents[name].name);
-            expect(info.execMode).toBe(configAgents[name].execMode);
-            expect(info.preinstall).toBe(true);
-        }
     });
 
     it("degrades a corrupt user catalog to no agents (non-match, logged)", async () => {

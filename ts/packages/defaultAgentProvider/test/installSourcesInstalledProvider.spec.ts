@@ -5,10 +5,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+    createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
     getAppBundleRequirePath,
     readAgentsJson,
-    loadInstalledRecords,
 } from "../src/installSources/installedAgents.js";
 import {
     getDefaultAppAgentInstaller,
@@ -166,7 +166,7 @@ describe("createInstalledAppAgentProvider", () => {
 });
 
 describe("getDefaultAppAgentProviders", () => {
-    it("returns the installed provider exposing the bundled builtins", () => {
+    it("returns the bundled provider exposing the bundled agents", () => {
         const providers = getDefaultAppAgentProviders(undefined);
         expect(providers.length).toBeGreaterThanOrEqual(1);
         expect(providers[0].getAppAgentNames()).toContain("player");
@@ -260,10 +260,10 @@ describe("getDefaultAppAgentInstaller", () => {
         ).rejects.toThrow(/unknown source/);
     });
 
-    it("named config never writes agents.json", () => {
+    it("named config exposes its fixed set via the bundled provider and writes no agents.json", () => {
         const instanceDir = tmpDir("ta-named-");
-        const records = loadInstalledRecords(instanceDir, "test");
-        expect(records.calendar).toBeDefined();
+        const provider = createBundledAppAgentProvider("test");
+        expect(provider.getAppAgentNames()).toContain("calendar");
         expect(fs.existsSync(path.join(instanceDir, "agents.json"))).toBe(
             false,
         );

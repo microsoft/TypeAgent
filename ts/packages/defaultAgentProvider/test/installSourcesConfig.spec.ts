@@ -19,11 +19,11 @@ describe("getResolvedInstallSources", () => {
         const dir = tmpInstanceDir();
         const instanceConfigs = getInstanceConfigProvider(dir);
         const sources = getResolvedInstallSources(instanceConfigs);
-        // path + builtin + typeagent are always present, in resolution order:
-        // path first, the feed last.
+        // path + typeagent are always present, in resolution order: path first,
+        // the feed last. Bundled agents are NOT a source anymore.
         const names = sources.map((s) => s.name);
         expect(names).toContain("path");
-        expect(names).toContain("builtin");
+        expect(names).not.toContain("builtin");
         expect(names).toContain("typeagent");
         expect(names[0]).toBe("path");
         expect(names[names.length - 1]).toBe("typeagent");
@@ -45,8 +45,8 @@ describe("getResolvedInstallSources", () => {
                         { kind: "path", name: "path" },
                         {
                             kind: "catalog",
-                            name: "builtin",
-                            catalog: "<bundled>",
+                            name: "extra",
+                            catalog: "/some/agents.catalog.json",
                         },
                     ],
                 },
@@ -56,7 +56,7 @@ describe("getResolvedInstallSources", () => {
         const sources = getResolvedInstallSources(instanceConfigs);
         // The persisted sources array order IS the resolution order; the legacy
         // `order` field has no effect.
-        expect(sources.map((s) => s.name)).toEqual(["path", "builtin"]);
+        expect(sources.map((s) => s.name)).toEqual(["path", "extra"]);
         // installDir is always derived from the instance dir, never persisted.
         expect(getInstallDir(instanceConfigs)).toBe(
             path.join(dir, "installedAgents"),

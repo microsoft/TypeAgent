@@ -27,10 +27,12 @@ import {
 } from "./utils/config.js";
 import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 import {
+    createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
     getAppBundleRequirePath,
+    getBundledAgentNames,
     loadInstalledRecords,
-    seedRecordsFromBundledCatalog,
+    seedRecordsFromConfig,
     readAgentsJson,
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
@@ -41,16 +43,18 @@ import { createLimiter } from "@typeagent/common-utils";
 /**
  * Get the default app agent providers.
  *
- * Returns the single installed-agent provider (built from `agents.json` /
- * pre-installed builtins, design §4.4) plus the MCP provider when configured.
- * The legacy `defaultNpm` + `external` providers are collapsed into the one
- * installed-agent provider (design §8).
+ * Returns the static bundled-agent provider (the app's shipped agents, always
+ * present) plus, for the default config with a real instance dir, the installed-
+ * agent provider built from `agents.json`, plus the MCP provider when
+ * configured. The bundled agents are NOT an install source - they are their own
+ * provider and are never installed/uninstalled/updated (design revert).
  *
  * @param instanceDirOrConfigProvider - Either the instance directory string or
- *   an InstanceConfigProvider. Undefined builds an in-memory provider over the
- *   bundled builtins (no agents.json).
+ *   an InstanceConfigProvider. Undefined builds only the bundled provider (no
+ *   agents.json).
  * @param configName - Optional config name (e.g. "test" -> config.test.json).
- *   Named configs select a fixed agent set in-memory (no agents.json).
+ *   Named configs select a fixed bundled agent set in-memory (no agents.json,
+ *   no installed provider).
  */
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
@@ -60,14 +64,26 @@ export function getDefaultAppAgentProviders(
         typeof instanceDirOrConfigProvider === "string"
             ? getInstanceConfigProvider(instanceDirOrConfigProvider)
             : instanceDirOrConfigProvider;
-    const instanceDir = instanceConfigs?.getInstanceDir();
-    const installDir = getInstallDir(instanceConfigs);
-    const records = loadInstalledRecords(instanceDir, configName);
-    const installedProvider = createInstalledAppAgentProvider(records, {
-        ...(installDir !== undefined ? { installDir } : {}),
-        appBundleRequirePath: getAppBundleRequirePath(),
-    });
-    const providers = [installedProvider];
+    // The bundled agents are always present as their own static provider.
+    const providers: AppAgentProvider[] = [
+        createBundledAppAgentProvider(configName),
+    ];
+    // The installed-agent provider (agents.json) exists only for the default
+    // config with a real instance dir. Named configs select a fixed set and the
+    // in-memory case has no agents.json.
+    if (configName === undefined) {
+        const instanceDir = instanceConfigs?.getInstanceDir();
+        if (instanceDir !== undefined) {
+            const installDir = getInstallDir(instanceConfigs);
+            const records = loadInstalledRecords(instanceDir);
+            providers.push(
+                createInstalledAppAgentProvider(records, {
+                    ...(installDir !== undefined ? { installDir } : {}),
+                    appBundleRequirePath: getAppBundleRequirePath(),
+                }),
+            );
+        }
+    }
     const mcpProvider = getDefaultMcpAppAgentProvider(instanceConfigs);
     if (mcpProvider !== undefined) {
         providers.push(mcpProvider);
@@ -161,10 +177,10 @@ export function getDefaultAppAgentInstaller(
         });
     }
 
-    // Builtins are derived from the bundled catalog (never persisted), so they
-    // can never be installed-over, uninstalled, or updated.
+    // Builtins are the app's shipped bundled agents (their own static
+    // provider), so they can never be installed-over, uninstalled, or updated.
     function isBuiltin(name: string): boolean {
-        return seedRecordsFromBundledCatalog()[name] !== undefined;
+        return getBundledAgentNames().has(name);
     }
 
     return {
@@ -322,12 +338,12 @@ export function getDefaultAppAgentInstaller(
         },
         listInstalled(): InstalledAgentInfo[] {
             // The installer owns `agents.json`; map each record down to the
-            // core-safe summary the `@package list` handler renders. Builtins
-            // are derived from the bundled catalog (not persisted), so merge
-            // them with the persisted installs. A record carries exactly one
+            // core-safe summary the `@package list` handler renders. The
+            // bundled agents are a separate static provider (not persisted), so
+            // merge them in for a complete picture. A record carries exactly one
             // resolution handle (ref / module / path).
             const agents = {
-                ...seedRecordsFromBundledCatalog(),
+                ...seedRecordsFromConfig(),
                 ...(readAgentsJson(instanceDir)?.agents ?? {}),
             };
             return Object.values(agents).map((record) => {

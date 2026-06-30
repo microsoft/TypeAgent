@@ -9,17 +9,12 @@ import {
     InstalledAgentRecord,
     ResolvedCandidate,
 } from "./config.js";
-import {
-    AgentCatalog,
-    BUNDLED_CATALOG,
-    getBundledCatalogPath,
-    loadCatalog,
-} from "./catalog.js";
+import { AgentCatalog, loadCatalog } from "./catalog.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 
 // `catalog` source (design §3, §4.1, §4.2, §12 Q6, Q17, Q19).
-//   find        = map lookup in the catalog JSON (incl. "<bundled>")
+//   find        = map lookup in the catalog JSON
 //   materialize = record `path` (relative paths resolve against the catalog
 //                 dir) or `module`; carries execMode
 // `ref` is an agent short name (the catalog key).
@@ -31,21 +26,13 @@ export function createCatalogSource(
     config: CatalogSourceConfig,
 ): InstallSource {
     // The directory relative catalog `path` entries resolve against.
-    const catalogDir =
-        config.catalog === BUNDLED_CATALOG
-            ? path.dirname(getBundledCatalogPath())
-            : path.dirname(path.resolve(config.catalog));
+    const catalogDir = path.dirname(path.resolve(config.catalog));
 
-    // Re-read on each access so an edited workspace catalog is picked up; the
-    // bundled catalog is memoized inside loadCatalog. A corrupt/unreadable
-    // *user* catalog degrades to "no agents" (logged) so the ordered resolve
-    // walk in the registry continues to the next source instead of hard-
-    // failing. The bundled catalog is a build artifact, so a failure there is a
-    // packaging bug and is surfaced loudly rather than masked.
+    // Re-read on each access so an edited catalog is picked up. A
+    // corrupt/unreadable catalog degrades to "no agents" (logged) so the
+    // ordered resolve walk in the registry continues to the next source instead
+    // of hard-failing.
     function read(): AgentCatalog {
-        if (config.catalog === BUNDLED_CATALOG) {
-            return loadCatalog(config.catalog);
-        }
         try {
             return loadCatalog(config.catalog);
         } catch (e) {

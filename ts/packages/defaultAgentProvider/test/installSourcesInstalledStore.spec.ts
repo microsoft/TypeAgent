@@ -7,8 +7,8 @@ import path from "node:path";
 import {
     readAgentsJson,
     writeAgentsJson,
-    seedRecordsFromBundledCatalog,
     seedRecordsFromConfig,
+    getBundledAgentNames,
     migrateLegacyExternalAgents,
     loadInstalledRecords,
 } from "../src/installSources/installedAgents.js";
@@ -39,10 +39,10 @@ describe("agents.json store", () => {
     });
 });
 
-describe("seedRecordsFromBundledCatalog", () => {
-    it("materializes the bundled preinstall entries as builtin module records", () => {
-        const records = seedRecordsFromBundledCatalog();
-        // player -> module "music", source "builtin" (design §4.2 example)
+describe("seedRecordsFromConfig", () => {
+    it("materializes the default config agents as builtin module records", () => {
+        const records = seedRecordsFromConfig();
+        // player -> module "music", source "builtin"
         expect(records.player).toBeDefined();
         expect(records.player.module).toBe("music");
         expect(records.player.path).toBeUndefined();
@@ -58,21 +58,16 @@ describe("seedRecordsFromBundledCatalog", () => {
         }
     });
 
-    it("carries execMode from catalog entries", () => {
-        const records = seedRecordsFromBundledCatalog();
-        // chat -> execMode "dispatcher" in the bundled catalog
+    it("carries execMode from config entries", () => {
+        const records = seedRecordsFromConfig();
+        // chat -> execMode "dispatcher" in the default config
         expect(records.chat.loaderConfig?.execMode).toBe("dispatcher");
     });
-});
 
-describe("seedRecordsFromConfig", () => {
-    it("seeds a named config's agent set", () => {
-        const records = seedRecordsFromConfig("test");
-        // config.test.json contains calendar/list/chat/greeting
-        expect(records.calendar).toBeDefined();
-        expect(records.calendar.module).toBe("calendar");
-        expect(records.calendar.source).toBe("builtin");
-        expect(records.chat.loaderConfig?.execMode).toBe("dispatcher");
+    it("getBundledAgentNames lists the bundled agent set", () => {
+        const names = getBundledAgentNames();
+        expect(names.has("player")).toBe(true);
+        expect(names.has("chat")).toBe(true);
     });
 });
 
@@ -150,23 +145,18 @@ describe("migrateLegacyExternalAgents", () => {
 });
 
 describe("loadInstalledRecords", () => {
-    it("in-memory (no instance dir, default config) seeds the bundled builtins", () => {
-        const records = loadInstalledRecords(undefined, undefined);
-        expect(records.player).toBeDefined();
-        expect(records.player.module).toBe("music");
-    });
-
-    it("first run derives builtins and persists no builtins", () => {
+    it("returns no installs (and writes an empty agents.json) on first run", () => {
         const dir = tmpInstanceDir();
-        const records = loadInstalledRecords(dir, undefined);
-        expect(records.player).toBeDefined();
+        const records = loadInstalledRecords(dir);
+        // bundled agents are NOT installs - they are a separate provider
+        expect(records.player).toBeUndefined();
+        expect(Object.keys(records)).toHaveLength(0);
         const onDisk = readAgentsJson(dir);
         expect(onDisk).toBeDefined();
-        // builtins are derived, never persisted
-        expect(onDisk!.agents.player).toBeUndefined();
+        expect(onDisk!.agents).toEqual({});
     });
 
-    it("steady state merges builtins with persisted installs", () => {
+    it("returns only the persisted installs (no bundled agents)", () => {
         const dir = tmpInstanceDir();
         const record: InstalledAgentRecord = {
             name: "only",
@@ -176,15 +166,56 @@ describe("loadInstalledRecords", () => {
             ref: "only-pkg@1.0.0",
         };
         writeAgentsJson(dir, { agents: { only: record } });
-        const records = loadInstalledRecords(dir, undefined);
+        const records = loadInstalledRecords(dir);
         expect(records.only).toEqual(record);
-        // builtins are merged in, install stays verbatim
-        expect(records.player).toBeDefined();
-        // agents.json still holds only the install
+        // bundled agents are not merged in here
+        expect(records.player).toBeUndefined();
+    });
+
+    it("drops a persisted install whose name collides with a bundled agent", () => {
+        const dir = tmpInstanceDir();
+        writeAgentsJson(dir, {
+            agents: {
+                // collides with the bundled "player" - the bundled provider owns it
+                player: {
+                    name: "player",
+                    kind: "npm",
+                    path: "/old/player",
+                    source: "path",
+                },
+                mine: {
+                    name: "mine",
+                    kind: "npm",
+                    path: "/abs/mine",
+                    source: "path",
+                },
+            },
+        });
+        const records = loadInstalledRecords(dir);
+        expect(records.player).toBeUndefined();
+        expect(records.mine).toBeDefined();
+        // the collision is stripped from the persisted file too
         expect(readAgentsJson(dir)!.agents.player).toBeUndefined();
     });
 
-    it("first run merges migrated legacy path entries with the seed", () => {
+    it("drops legacy persisted builtins (source: 'builtin')", () => {
+        const dir = tmpInstanceDir();
+        writeAgentsJson(dir, {
+            agents: {
+                legacyBuiltin: {
+                    name: "legacyBuiltin",
+                    kind: "npm",
+                    module: "some-pkg",
+                    source: "builtin",
+                },
+            },
+        });
+        const records = loadInstalledRecords(dir);
+        expect(records.legacyBuiltin).toBeUndefined();
+        expect(readAgentsJson(dir)!.agents.legacyBuiltin).toBeUndefined();
+    });
+
+    it("first run merges migrated legacy path entries", () => {
         const dir = tmpInstanceDir();
         fs.writeFileSync(
             path.join(dir, "externalAgentsConfig.json"),
@@ -192,14 +223,13 @@ describe("loadInstalledRecords", () => {
                 agents: { mine: { name: "mine-pkg", path: "/abs/mine" } },
             }),
         );
-        const records = loadInstalledRecords(dir, undefined);
-        // bundled builtins present
-        expect(records.player).toBeDefined();
-        // migrated path agent present
+        const records = loadInstalledRecords(dir);
+        // migrated path agent present (bundled agents are not installs)
+        expect(records.player).toBeUndefined();
         expect(records.mine).toBeDefined();
         expect(records.mine.source).toBe("path");
         expect(records.mine.path).toBe("/abs/mine");
-        // persisted together
+        // persisted
         const onDisk = readAgentsJson(dir);
         expect(onDisk!.agents.mine.path).toBe("/abs/mine");
         // legacy file renamed

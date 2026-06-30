@@ -148,9 +148,13 @@ export type InstallSourcesResolveOptions = {
 
 // The shipped seed install sources in resolution priority order (design §6).
 // A dev checkout additionally exposes a `workspace` catalog (only when its
-// catalog JSON exists), placed ahead of `builtin` so local agents shadow the
-// bundled ones. This is the full seed list; runtime-only filtering (e.g.
-// `excludePathSources`) is applied later in the registry's resolution walk.
+// catalog JSON exists), so local agents can be installed by short name. This is
+// the full seed list; runtime-only filtering (e.g. `excludePathSources`) is
+// applied later in the registry's resolution walk.
+//
+// The bundled agents that ship in the app are NOT a source here: they are a
+// separate static provider (see createBundledAppAgentProvider) and are always
+// present without being installed.
 //
 // CAVEAT (design §6): the `workspace` entry is seeded *conditionally* on the
 // ambient filesystem, and the seed is recomputed every launch until something
@@ -169,7 +173,6 @@ function getSeedInstallSources(): InstallSourceConfig[] {
             catalog: getWorkspaceCatalogPath(),
         });
     }
-    sources.push({ kind: "catalog", name: "builtin", catalog: "<bundled>" });
     sources.push({ kind: "feed", name: "typeagent" });
     return sources;
 }
