@@ -1,5 +1,36 @@
 # Automated Documentation Generation — Architecture & Design
 
+> [!IMPORTANT] > **Current implementation (supersedes the Azure DevOps design below).**
+> The shipped pipeline is a single, self-contained **GitHub Actions**
+> workflow,
+> [`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml),
+> that runs **once per day** (`cron`, plus manual `workflow_dispatch`).
+> It needs **no federated credentials and stores no secrets**:
+>
+> - **LLM authoring → GitHub Models.** `@typeagent/aiclient`'s generic
+>   OpenAI path (`OPENAI_ENDPOINT` = `https://models.github.ai/inference/chat/completions`,
+>   `OPENAI_API_KEY` = the job's `GITHUB_TOKEN`, `OPENAI_MODEL` =
+>   `openai/gpt-4o`) reaches GitHub Models under `permissions: models: read`.
+>   No Azure OpenAI, no Key Vault, no Workload Identity Federation.
+> - **PR identity → TypeAgent-Bot.** The branch is pushed with the native
+>   `GITHUB_TOKEN` (pushing is not blocked by the org "Actions can't create
+>   PRs" policy) and the PR is opened with the **existing TypeAgent-Bot
+>   GitHub App** (`vars.DEPENDABOT_APP_ID` / `secrets.DEPENDABOT_APP_PRIVATE_KEY`,
+>   reused from `fix-dependabot-alerts.yml` — no new App/secret). An
+>   App-authored PR is exempt from the policy and triggers downstream CI.
+> - **Change gating / baseline.** Selection diffs against the last
+>   `README.AUTOGEN.md` commit on the branch (not the `docs-bot/last-run`
+>   tag), so only drifted packages incur a GitHub Models call and every run
+>   reproduces the full current drift — a superseding PR can never drop an
+>   unmerged package. A PR opens only when a `README.AUTOGEN.md` changed.
+> - **Lifecycle.** A human reviewer merges; the next run closes the prior
+>   open bot PR (`--delete-branch`) so only one is ever live.
+>
+> The Azure DevOps + WIF + watermark topology described in the rest of this
+> document was an earlier iteration, retained for design context; it was
+> not adopted because federated credentials are unavailable in this
+> environment. Treat the GitHub Models design above as authoritative.
+
 > **Scope:** This document describes the optional, on-demand pipeline
 > that regenerates package-level `README.AUTOGEN.md` files across the
 > TypeAgent monorepo. The pipeline is **split across two platforms** for
