@@ -432,4 +432,55 @@ describe("displayLogToCorpusEntries", () => {
             "first agent",
         ]);
     });
+
+    test("ignores string[] pseudo-actions and attributes the agent to the structured action's source", () => {
+        const entries: CaptureLogEntry[] = [
+            {
+                type: "user-request",
+                seq: 0,
+                requestId: req("r1"),
+                command: "play jazz",
+            },
+            {
+                type: "set-display-info",
+                seq: 1,
+                requestId: req("r1"),
+                source: "dispatcher",
+                action: ["request"],
+            },
+            {
+                type: "set-display-info",
+                seq: 2,
+                requestId: req("r1"),
+                source: "player",
+                action: { schemaName: "player", actionName: "play" },
+            },
+        ];
+        const out = transform(entries);
+        expect(out).toHaveLength(1);
+        expect(out[0].agent).toBe("player");
+        expect(out[0].expectedAction).toEqual({
+            schemaName: "player",
+            actionName: "play",
+        });
+    });
+
+    test("drops a request whose only action is a string[] pseudo-action", () => {
+        const entries: CaptureLogEntry[] = [
+            {
+                type: "user-request",
+                seq: 0,
+                requestId: req("r1"),
+                command: "@config agent",
+            },
+            {
+                type: "set-display-info",
+                seq: 1,
+                requestId: req("r1"),
+                source: "system",
+                action: ["config", "agent"],
+            },
+        ];
+        expect(transform(entries)).toHaveLength(0);
+    });
 });
