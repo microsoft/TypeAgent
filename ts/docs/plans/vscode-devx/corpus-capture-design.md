@@ -199,24 +199,28 @@ testable with plain objects.
 
 - Command **`typeagent-studio.importCorpusFromLogs`** — the **primary** capture
   affordance: pick one or more `displayLog.json` files (or a folder), capture with
-  an explicit agent allowlist, then a toast: "Captured N entries across
-  {player, list}; skipped M duplicates." Refresh the Corpora tree (the refresh
-  command already exists).
+  an explicit agent allowlist, then a toast: "Imported N entries across
+  {player, list} into the shared in-repo corpus; skipped M duplicates." Refresh
+  the Corpora tree (the refresh command already exists). Imported entries land
+  directly in the shared `corpus/<agent>.utterances.jsonl` (append-then-promote),
+  so there is no per-utterance staging step; the new/changed corpus files appear
+  as ordinary working-tree changes the curator reviews and commits.
 - Command **`typeagent-studio.captureSessionToCorpus`** — capture the **current**
   live session's displayLog. Secondary: the live log is a single mutable
   current-session file and `DisplayLog.load` swallows malformed JSON and returns
   an empty log, so this path must surface "captured 0 entries" clearly rather than
   silently succeeding. Prefer this only once the Studio↔live-dispatcher
   relationship is proven.
-- Optional: a context action on a captured entry ("Promote to in-repo corpus",
-  reusing the existing `promote()`).
 
-### 4. Promotion (already exists)
+### 4. Promotion
 
-Vetting and promotion to the shared in-repo corpus is already implemented
-(`promote()` + `seedInRepoCorpus`). Captured entries stay private under
-`captures/<agent>/` until an explicit promote, so a personal session is never
-silently leaked into the shared repo corpus.
+`promote()` moves a set of captured entries (by logical id) into the shared
+in-repo `corpus/<agent>.utterances.jsonl`, and is the only write that touches
+that file. Bulk import promotes its freshly written entries in one step so the
+import command lands straight in the shared corpus. The lower-level `append()`
+path still stages under `captures/<agent>/` for callers that want private
+entries until an explicit promote, so a personal session is never silently
+leaked into the shared repo corpus.
 
 ### 5. Feedback as a label, not a funnel
 

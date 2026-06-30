@@ -564,9 +564,11 @@ export function activate(context: vscode.ExtensionContext): void {
                             ? ` across ${agentNames.join(", ")}`
                             : "";
                     vscode.window.showInformationMessage(
-                        `Captured ${result.total} corpus ${
+                        `Imported ${result.total} corpus ${
                             result.total === 1 ? "entry" : "entries"
-                        }${where} from ${result.files.length} ${
+                        }${where} into the shared in-repo corpus from ${
+                            result.files.length
+                        } ${
                             result.files.length === 1 ? "file" : "files"
                         }; skipped ${skippedTotal} duplicate.`,
                     );

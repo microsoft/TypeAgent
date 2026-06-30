@@ -10,7 +10,7 @@ import {
 } from "./captureTransform.js";
 
 /** The subset of the corpus service the importer needs. */
-export type CaptureSink = Pick<CorpusService, "list" | "append">;
+export type CaptureSink = Pick<CorpusService, "list" | "append" | "promote">;
 
 export interface CaptureImportResult {
     /** Entries written, per agent. */
@@ -19,6 +19,8 @@ export interface CaptureImportResult {
     skipped: Record<string, number>;
     /** Total entries written across all agents. */
     total: number;
+    /** Logical ids written, per agent (write order). */
+    idsByAgent: Record<string, string[]>;
 }
 
 /**
@@ -36,6 +38,7 @@ export async function importCaptureEntries(
 ): Promise<CaptureImportResult> {
     const perAgent: Record<string, number> = {};
     const skipped: Record<string, number> = {};
+    const idsByAgent: Record<string, string[]> = {};
 
     const byAgent = new Map<string, Map<string, CorpusEntry>>();
     for (const entry of entries) {
@@ -66,11 +69,12 @@ export async function importCaptureEntries(
         if (fresh.length > 0) {
             await corpus.append(agent, fresh);
             perAgent[agent] = fresh.length;
+            idsByAgent[agent] = fresh.map((e) => e.id);
             total += fresh.length;
         }
     }
 
-    return { perAgent, skipped, total };
+    return { perAgent, skipped, total, idsByAgent };
 }
 
 export interface ImportDisplayLogsOptions {
@@ -80,6 +84,12 @@ export interface ImportDisplayLogsOptions {
     sessionId?: string;
     /** Clock for `capturedAt`; defaults to `Date.now`. */
     now?: () => number;
+    /**
+     * Where imported entries land. `"captures"` (default) stages them in the
+     * private profile directory; `"in-repo"` promotes them straight into the
+     * shared `corpus/<agent>.utterances.jsonl` with no staging step.
+     */
+    target?: "captures" | "in-repo";
 }
 
 export interface ImportDisplayLogsResult extends CaptureImportResult {
@@ -93,7 +103,8 @@ export interface ImportDisplayLogsResult extends CaptureImportResult {
  *
  * Files that are missing, unreadable, or not a JSON array are skipped. When
  * `agents` is supplied it acts as an allowlist; otherwise any non-empty agent is
- * captured.
+ * captured. With `target: "in-repo"` the freshly written entries are promoted
+ * into the shared in-repo corpus, leaving no capture staging behind.
  */
 export async function importDisplayLogs(
     corpus: CaptureSink,
@@ -125,6 +136,13 @@ export async function importDisplayLogs(
     }
 
     const result = await importCaptureEntries(corpus, all);
+    if (opts.target === "in-repo") {
+        for (const [agent, ids] of Object.entries(result.idsByAgent)) {
+            if (ids.length > 0) {
+                await corpus.promote(agent, ids, "in-repo");
+            }
+        }
+    }
     return { ...result, files };
 }
 
