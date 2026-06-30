@@ -4,7 +4,7 @@ On-demand regeneration of `README.AUTOGEN.md` companion files for every
 package under `ts/packages/**` in the TypeAgent monorepo.
 
 This package implements the regeneration described in
-[`ts/docs/architecture/doc-autogen.md`](../../docs/architecture/doc-autogen.md).
+[`ts/docs/architecture/doc-pipeline/doc-autogen.md`](../../docs/architecture/doc-pipeline/doc-autogen.md).
 It is intended to be invoked manually from CI via the
 `azure-docs-generate` Azure DevOps pipeline (no schedule) and exposes a
 CLI (`docs-autogen`) for local invocation.
@@ -155,7 +155,7 @@ own managed identity.
 > **First-time setup** — the WIF service connection, the GitHub App
 > connection's read/write code permission, and the `build-pipeline-kv`
 > RBAC roles — is covered in
-> [`ts/docs/architecture/doc-autogen-setup.md`](../../docs/architecture/doc-autogen-setup.md).
+> [`ts/docs/architecture/doc-pipeline/doc-autogen-setup.md`](../../docs/architecture/doc-pipeline/doc-autogen-setup.md).
 
 Prerequisites (provision once):
 

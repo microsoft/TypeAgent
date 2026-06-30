@@ -103,7 +103,7 @@ test("StudioServiceCollisionsSource delegates scan/clear and routes events", asy
 test("StudioServiceCollisionsSource lists empty / throws on scan when disconnected", async () => {
     const connection = new StudioServiceConnection(undefined, {
         endpoint: "ws://127.0.0.1:1",
-        backoffMs: [10_000],
+        baseBackoffMs: 10_000,
     });
     const source = new StudioServiceCollisionsSource(connection);
     try {

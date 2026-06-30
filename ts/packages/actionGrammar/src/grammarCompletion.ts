@@ -299,7 +299,7 @@ export type GrammarCompletionProperty = {
 // Describes how the grammar rules that produced completions at this
 // position relate to wildcards.  See afterWildcard on
 // GrammarCompletionResult for the full semantics, and
-// docs/architecture/completion.md § Invariants for correctness
+// docs/architecture/core/completion.md § Invariants for correctness
 // invariants on these fields.
 //
 // Intentionally duplicated from @typeagent/agent-sdk (command.ts),
@@ -564,7 +564,7 @@ function tryPartialStringMatch(
  * {@link CompiledSpacingMode}) between the last character of the matched
  * prefix and the first character of the completion.
  *
- * Architecture: docs/architecture/completion.md — §1 Grammar Matcher
+ * Architecture: docs/architecture/core/completion.md — §1 Grammar Matcher
  */
 
 type FixedCandidate =

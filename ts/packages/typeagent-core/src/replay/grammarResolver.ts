@@ -242,7 +242,15 @@ async function readFileAtVersion(
         .join("/");
     const { stdout } = await execFileAsync(
         "git",
-        ["-C", gitRoot, "show", `${version.ref}:${relPath}`],
+        // `--end-of-options` stops a ref that begins with `-` from being parsed
+        // as a `git show` option (e.g. `--output=…` would write a file).
+        [
+            "-C",
+            gitRoot,
+            "show",
+            "--end-of-options",
+            `${version.ref}:${relPath}`,
+        ],
         { maxBuffer: 16 * 1024 * 1024 },
     );
     return stdout;

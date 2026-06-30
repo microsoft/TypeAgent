@@ -82,7 +82,7 @@ jobs:
             each run only regenerates packages whose source changed since
             the previous run.
 
-          See [`ts/docs/architecture/doc-autogen.md`](../blob/main/ts/docs/architecture/doc-autogen.md)
+          See [`ts/docs/architecture/doc-pipeline/doc-autogen.md`](../blob/main/ts/docs/architecture/doc-pipeline/doc-autogen.md)
           for design details.
           PREOF
           )

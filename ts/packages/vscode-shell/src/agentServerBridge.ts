@@ -17,6 +17,10 @@ import {
 } from "@typeagent/agent-server-client/conversation";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
+import {
+    createBackoff,
+    type Backoff,
+} from "@typeagent/websocket-utils/backoff";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
 import {
@@ -133,7 +137,13 @@ export class AgentServerBridge {
     // wait between reconnect attempts. Replaces the old behavior of
     // broadcasting a fresh error/disconnect message every retry cycle.
     private reconnectCountdown: NodeJS.Timeout | undefined;
-    private reconnectAttempt = 0;
+    // Exponential backoff (2s, 4s, 8s, … capped at 30s) shared with the Studio
+    // service connection. Quick first retries recover fast when the server
+    // restarts; the cap keeps the long-tail polite for genuinely-down servers.
+    private readonly reconnectBackoff: Backoff = createBackoff({
+        baseMs: 2000,
+        maxMs: 30000,
+    });
     private reconnectRemainingSec: number | undefined;
     private lastConnectError: string | undefined;
     // Suppress disconnect handler during intentional reconnects
@@ -1991,7 +2001,7 @@ export class AgentServerBridge {
     }
 
     // manage-conversation handler — routed from NL and `@conversation` slash
-    // commands. See ts/docs/architecture/agentServerConversations.md.
+    // commands. See ts/docs/architecture/agents/agentServerConversations.md.
     private async handleManageConversation(
         requestId: any,
         payload: any,
@@ -2660,11 +2670,10 @@ export class AgentServerBridge {
         if (this.reconnectTimer) {
             return;
         }
-        this.reconnectAttempt++;
-        // Backoff: 4s, 6s, 8s, ... capped at 30s. Quick first retries
-        // recover fast when the server restarts; the cap keeps the
-        // long-tail polite for genuinely-down servers.
-        const backoff = Math.min(30, 2 + this.reconnectAttempt * 2);
+        // Seconds the shared exponential backoff says to wait before the next
+        // attempt. The countdown ribbon and reconnect timer below run in
+        // seconds, so round the millisecond delay to whole seconds.
+        const backoff = Math.round(this.reconnectBackoff.next() / 1000);
         this.reconnectRemainingSec = backoff;
         this.broadcastReconnect("waiting");
         if (this.reconnectCountdown) {
@@ -2695,7 +2704,7 @@ export class AgentServerBridge {
         this.broadcastToWebviews({
             type: "reconnectStatus",
             phase,
-            attempt: this.reconnectAttempt,
+            attempt: this.reconnectBackoff.attempt,
             secondsRemaining:
                 phase === "waiting" ? this.reconnectRemainingSec : undefined,
             error: this.lastConnectError,
@@ -2712,7 +2721,7 @@ export class AgentServerBridge {
             this.reconnectCountdown = undefined;
         }
         this.reconnectRemainingSec = undefined;
-        this.reconnectAttempt = 0;
+        this.reconnectBackoff.reset();
         this.lastConnectError = undefined;
         this.broadcastReconnect("cleared");
     }

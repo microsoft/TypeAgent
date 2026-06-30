@@ -1,7 +1,7 @@
 # Browser Agent — Developer Onboarding Guide
 
 This guide covers browser-specific development tasks. For architecture context,
-read [browserAgent.md](../../../../docs/architecture/browserAgent.md) first.
+read [browserAgent.md](../../../../docs/architecture/browser/browserAgent.md) first.
 
 ## Prerequisites & Setup
 

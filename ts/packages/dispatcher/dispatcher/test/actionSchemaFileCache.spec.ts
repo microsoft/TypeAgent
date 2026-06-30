@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import crypto from "node:crypto";
 import { ActionSchemaFileCache } from "../src/translation/actionSchemaFileCache.js";
 import { ActionConfig } from "../src/translation/actionConfig.js";
 import { SchemaContent } from "@typeagent/agent-sdk";
+import { computeActionSchemaFileHash } from "agent-cache";
 
 function makePasActionConfig(content: string): ActionConfig {
     const schemaFile: SchemaContent = {
@@ -181,29 +181,23 @@ describe("ActionSchemaFileCache", () => {
         });
 
         it("should produce different hashes when config differs", () => {
-            // This test verifies the consequence of the bug fix:
-            // when config is correctly included, the hash changes
-            // when config content changes, ensuring proper cache invalidation.
-
-            function hashStrings(...str: string[]) {
-                const hash = crypto.createHash("sha256");
-                for (const s of str) {
-                    hash.update(s);
-                }
-                return hash.digest("base64");
-            }
-
+            // The schema-file hash must include the sidecar paramSpec config so
+            // a config change invalidates the cache; folding config into the
+            // hash is what makes a stale config produce a different key.
             const schemaType = JSON.stringify("TestAction");
             const source = 'export type TestAction = { actionName: "test"; }';
             const config = '{"configKey": "configValue"}';
 
-            // With the fix: config is included in the hash
-            const hashWithConfig = hashStrings(schemaType, source, config);
-            const hashWithoutConfig = hashStrings(schemaType, source);
+            const hashWithConfig = computeActionSchemaFileHash(
+                schemaType,
+                source,
+                config,
+            );
+            const hashWithoutConfig = computeActionSchemaFileHash(
+                schemaType,
+                source,
+            );
 
-            // The hashes must differ - if config was dropped (the bug),
-            // both would be identical and config changes wouldn't
-            // invalidate the cache
             expect(hashWithConfig).not.toBe(hashWithoutConfig);
         });
     });

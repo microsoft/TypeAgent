@@ -17,9 +17,8 @@ import {
 import { AppAction, SchemaFormat, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "@typeagent/common-utils";
 import fs from "node:fs";
-import crypto from "node:crypto";
 import registerDebug from "debug";
-import { SchemaInfoProvider } from "agent-cache";
+import { SchemaInfoProvider, computeActionSchemaFileHash } from "agent-cache";
 import {
     getActionSchemaTypeName,
     getActivitySchemaTypeName,
@@ -29,13 +28,6 @@ import { getActionSchema } from "./actionSchemaUtils.js";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
-function hashStrings(...str: string[]) {
-    const hash = crypto.createHash("sha256");
-    for (const s of str) {
-        hash.update(s);
-    }
-    return hash.digest("base64");
-}
 
 const ActionSchemaFileCacheVersion = 3;
 
@@ -187,9 +179,11 @@ export class ActionSchemaFileCache {
             this.getSchemaSource(actionConfig);
 
         const schemaTypeString = JSON.stringify(actionConfig.schemaType);
-        const hash = config
-            ? hashStrings(schemaTypeString, source, config)
-            : hashStrings(schemaTypeString, source);
+        const hash = computeActionSchemaFileHash(
+            actionConfig.schemaType,
+            source,
+            config,
+        );
         const cacheKey = `${format}|${actionConfig.schemaName}|${schemaTypeString}|${fullPath ?? ""}`;
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {

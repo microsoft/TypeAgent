@@ -6,7 +6,7 @@
  * enforced as part of structural validation.
  *
  * These mirror the values documented in
- * `ts/docs/architecture/doc-autogen.md` ("Length caps" section).
+ * `ts/docs/architecture/doc-pipeline/doc-autogen.md` ("Length caps" section).
  */
 export const FILES_OF_INTEREST_MAX = 10;
 export const USED_BY_MAX = 10;

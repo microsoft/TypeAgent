@@ -4,7 +4,7 @@
 import WebSocket from "ws";
 import { attachClientHeartbeat } from "@typeagent/websocket-utils/heartbeat";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import type { RpcChannel } from "@typeagent/agent-rpc/channel";
+import { createWebSocketRpcChannel } from "@typeagent/websocket-utils/rpcChannel";
 import type {
     StudioInfo,
     StudioServiceInvokeFunctions,
@@ -319,49 +319,4 @@ export class StudioServiceClient {
 }
 
 /** Adapt a `ws` WebSocket to the `agent-rpc` {@link RpcChannel} interface. */
-export function createWebSocketRpcChannel(socket: WebSocket): RpcChannel {
-    const messageHandlers = new Set<(message: any) => void>();
-    const disconnectHandlers = new Set<() => void>();
-    const onceMessage = new Set<(message: any) => void>();
-    const onceDisconnect = new Set<() => void>();
-
-    socket.on("message", (data: WebSocket.RawData) => {
-        let message: unknown;
-        try {
-            message = JSON.parse(data.toString());
-        } catch {
-            return;
-        }
-        for (const h of messageHandlers) h(message);
-        for (const h of onceMessage.values()) {
-            onceMessage.delete(h);
-            h(message);
-        }
-    });
-    socket.on("close", () => {
-        for (const h of disconnectHandlers) h();
-        for (const h of onceDisconnect.values()) {
-            onceDisconnect.delete(h);
-            h();
-        }
-    });
-
-    return {
-        on(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? messageHandlers : disconnectHandlers).add(
-                cb,
-            );
-        },
-        once(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? onceMessage : onceDisconnect).add(cb);
-        },
-        off(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? messageHandlers : disconnectHandlers).delete(
-                cb,
-            );
-        },
-        send(message: unknown, cb?: (err: Error | null) => void) {
-            socket.send(JSON.stringify(message), (err) => cb?.(err ?? null));
-        },
-    };
-}
+export { createWebSocketRpcChannel };

@@ -3,7 +3,7 @@
 This guide walks through creating, testing, and managing WebFlows — the
 browser agent's system for recorded, parameterized browser automation. For
 architecture details, see the WebFlow section in
-[browserScenarios.md](../../../../docs/architecture/browserScenarios.md).
+[browserScenarios.md](../../../../docs/architecture/browser/browserScenarios.md).
 
 ---
 
