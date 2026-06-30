@@ -9,6 +9,7 @@ import type {
     CommandResult,
 } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
+import type { ConnectionStatus } from "chat-ui";
 
 export type { ShellUserSettings };
 
@@ -105,6 +106,11 @@ export interface ClientAPI {
         kind: "info" | "warning" | "error";
         switched?: boolean;
     }>;
+
+    // Manual connection recovery, triggered from the "stopped" reconnect
+    // banner (only meaningful in --connect mode).
+    reconnectRetry(): Promise<void>;
+    reconnectStartServer(): Promise<void>;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -147,8 +153,12 @@ export interface Client {
         clientRequestId: string,
         result: CommandResult | undefined,
     ): void;
-    /** Show/clear the reconnect banner. Pass undefined to clear. */
-    reconnectStatusChanged?(message: string | undefined): void;
+    /**
+     * Show/clear the reconnect banner. Pass `undefined` to clear. The
+     * structured status drives the shared connection-status rendering
+     * (countdown, or a "stopped" state with Retry / Start links).
+     */
+    reconnectStatusChanged?(status: ConnectionStatus | undefined): void;
 }
 
 export interface ElectronWindowFields {

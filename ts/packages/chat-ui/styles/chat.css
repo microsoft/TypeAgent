@@ -192,6 +192,54 @@
   color: var(--chat-conversation-status-foreground, #fff);
 }
 
+/* When auto-reconnect has given up, the pill carries clickable recovery
+   links (Retry / Start). Let it grow and wrap so the buttons stay visible
+   instead of being clipped by the compact ellipsis layout. */
+.conversation-status-summary.has-actions {
+  max-width: 100%;
+  white-space: normal;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Shared connection-status recovery links (used by the conversation-bar pill
+   and the chat reconnect banner). Rendered by renderConnectionStatus(). */
+.connection-status-action {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.connection-status-action:first-of-type {
+  margin-left: 0;
+}
+
+.connection-status-action:hover {
+  background: var(
+    --chat-connection-action-hover-background,
+    rgba(127, 127, 127, 0.25)
+  );
+}
+
+.connection-status-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.has-actions .connection-status-text {
+  white-space: normal;
+}
+
 .conversation-popover {
   position: absolute;
   z-index: 10;
@@ -449,6 +497,15 @@
   font-size: 12px;
   text-align: center;
   flex: 0 0 auto;
+}
+
+/* Center the status text + recovery links when auto-reconnect has stopped. */
+.chat-reconnect-banner.stopped {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .chat-input-text-wrapper {

@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    renderConnectionStatus,
+    type ConnectionActionId,
+    type ConnectionStatus,
+} from "./connectionStatus.js";
+
 export type ConversationBarConversation = {
     conversationId: string;
     name: string;
@@ -16,6 +22,13 @@ export type ConversationBarStatus = {
     errorText?: string;
     reconnectText?: string;
     demoSuffix?: string;
+    /**
+     * Structured connection state. When present (and disconnected) the status
+     * pill renders the reconnect countdown / stopped + manual-recovery links
+     * via the shared {@link renderConnectionStatus} helper, superseding the
+     * plain {@link reconnectText} string.
+     */
+    connection?: ConnectionStatus;
 };
 
 export type ConversationBarController = {
@@ -27,6 +40,12 @@ export type ConversationBarController = {
         name: string,
     ): void | Promise<void>;
     deleteConversation(conversationId: string): void | Promise<void>;
+    /**
+     * Manual connection recovery (retry / start server) triggered from the
+     * status pill once auto-reconnect has stopped. Optional — hosts that don't
+     * surface a {@link ConversationBarStatus.connection} omit it.
+     */
+    connectionAction?(action: ConnectionActionId): void | Promise<void>;
 };
 
 export type ConversationBarIconName =
@@ -439,6 +458,20 @@ export class ConversationBar {
             if (clientCount) parts.push(clientCount);
             if (this.status.demoSuffix) parts.push(this.status.demoSuffix);
             this.statusEl.textContent = parts.join(" · ");
+        } else if (this.status.connection) {
+            // Structured reconnect state — render countdown / stopped + the
+            // manual-recovery links via the shared helper so the UX matches
+            // across hosts. `stopped` is styled distinctly and may carry
+            // clickable Retry / Start actions.
+            const connection = this.status.connection;
+            const stopped = connection.phase === "stopped";
+            const hasActions = stopped && (connection.actions?.length ?? 0) > 0;
+            this.statusEl.className = `conversation-status-summary disconnected${
+                stopped ? " stopped" : ""
+            }${hasActions ? " has-actions" : ""}`;
+            renderConnectionStatus(this.statusEl, connection, (action) => {
+                void this.controller.connectionAction?.(action);
+            });
         } else {
             this.statusEl.className =
                 "conversation-status-summary disconnected";

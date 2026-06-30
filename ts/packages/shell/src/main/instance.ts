@@ -59,6 +59,7 @@ import {
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { joinNamedOrFallback } from "@typeagent/agent-server-client/conversation";
+import type { ConnectionStatus } from "chat-ui";
 import {
     loadUserSettings,
     saveUserSettings,
@@ -289,23 +290,21 @@ async function initializeDispatcher(
             const MAX_RECONNECT_ATTEMPTS = 12; // ~5 minutes total at the 30s cap
             let reconnectAttempt = 0;
             let reconnecting = false;
+            // Set once auto-reconnect has exhausted MAX_RECONNECT_ATTEMPTS. The
+            // banner then shows a "stopped" state with manual Retry / Start
+            // links instead of the app quitting; a manual retry clears it.
+            let reconnectStopped = false;
+            let lastReconnectError: string | undefined;
             let onConnectionLost: (() => void) | undefined;
 
-            const giveUpAndQuit = (msg: string): void => {
-                broadcastReconnect(undefined);
-                dialog.showErrorBox(
-                    "Disconnected",
-                    `The connection to the dispatcher was lost and could not be re-established.\n\n${msg}`,
-                );
-                app.quit();
-            };
-
-            const broadcastReconnect = (message: string | undefined): void => {
+            const broadcastReconnect = (
+                status: ConnectionStatus | undefined,
+            ): void => {
                 try {
                     if (!shellWindow.chatView.webContents.isDestroyed()) {
                         shellWindow.chatView.webContents.send(
                             "reconnect-status",
-                            message,
+                            status,
                         );
                     }
                 } catch (e: any) {
@@ -316,8 +315,21 @@ async function initializeDispatcher(
                 }
             };
 
+            // Auto-reconnect gave up. Surface a "stopped" banner with manual
+            // Retry / Start links rather than quitting the app, so the user can
+            // resume once the server is back (or launch it from here).
+            const giveUpAndStop = (): void => {
+                reconnectStopped = true;
+                broadcastReconnect({
+                    phase: "stopped",
+                    attempt: reconnectAttempt,
+                    error: lastReconnectError,
+                    actions: ["retry", "start"],
+                });
+            };
+
             const attemptReconnect = async (): Promise<void> => {
-                if (quitting || reconnecting) return;
+                if (quitting || reconnecting || reconnectStopped) return;
                 reconnecting = true;
                 try {
                     while (
@@ -335,15 +347,19 @@ async function initializeDispatcher(
                         // Countdown banner (updated every second so the user
                         // sees the time tick down instead of a static label).
                         for (let s = backoffSec; s > 0 && !quitting; s--) {
-                            broadcastReconnect(
-                                `Disconnected — retrying in ${s}s (attempt ${reconnectAttempt})`,
-                            );
+                            broadcastReconnect({
+                                phase: "waiting",
+                                attempt: reconnectAttempt,
+                                secondsRemaining: s,
+                                error: lastReconnectError,
+                            });
                             await new Promise((r) => setTimeout(r, 1000));
                         }
                         if (quitting) return;
-                        broadcastReconnect(
-                            `Disconnected — connecting (attempt ${reconnectAttempt})…`,
-                        );
+                        broadcastReconnect({
+                            phase: "connecting",
+                            attempt: reconnectAttempt,
+                        });
                         try {
                             // NOTE: deliberately do NOT call ensureAgentServer
                             // here — auto-spawning a replacement server in a
@@ -413,16 +429,15 @@ async function initializeDispatcher(
                             debugShellInit("Reconnected to dispatcher");
                             return;
                         } catch (e: any) {
+                            lastReconnectError = e?.message ?? String(e);
                             debugShellInit(
                                 `Reconnect attempt ${reconnectAttempt} failed: ${e.message}`,
                             );
                             // continue loop
                         }
                     }
-                    if (!quitting) {
-                        giveUpAndQuit(
-                            `Tried ${reconnectAttempt} times without success.`,
-                        );
+                    if (!quitting && !reconnectStopped) {
+                        giveUpAndStop();
                     }
                 } finally {
                     reconnecting = false;
@@ -434,9 +449,52 @@ async function initializeDispatcher(
                 debugShellInit(
                     "Dispatcher connection lost; will attempt to reconnect.",
                 );
-                broadcastReconnect("Disconnected — preparing to reconnect…");
+                broadcastReconnect({ phase: "connecting", attempt: 0 });
                 void attemptReconnect();
             };
+
+            // Manual recovery from the "stopped" banner. Retry clears the
+            // give-up state and resumes the backoff loop; Start launches the
+            // agent server (auto-spawn) before reconnecting. Both are exposed
+            // to the renderer over IPC.
+            const manualRetry = (): void => {
+                if (reconnecting) return;
+                reconnectStopped = false;
+                reconnectAttempt = 0;
+                void attemptReconnect();
+            };
+
+            const manualStartServer = async (): Promise<void> => {
+                if (reconnecting) return;
+                broadcastReconnect({ phase: "connecting", attempt: 0 });
+                try {
+                    await ensureAgentServer(
+                        connect,
+                        effectiveHidden,
+                        effectiveIdleTimeout,
+                    );
+                } catch (e: any) {
+                    lastReconnectError = e?.message ?? String(e);
+                    reconnectStopped = true;
+                    broadcastReconnect({
+                        phase: "stopped",
+                        attempt: reconnectAttempt,
+                        error: lastReconnectError,
+                        actions: ["retry", "start"],
+                    });
+                    return;
+                }
+                reconnectStopped = false;
+                reconnectAttempt = 0;
+                void attemptReconnect();
+            };
+
+            ipcMain.removeHandler("reconnect-retry");
+            ipcMain.handle("reconnect-retry", () => {
+                manualRetry();
+            });
+            ipcMain.removeHandler("reconnect-start-server");
+            ipcMain.handle("reconnect-start-server", () => manualStartServer());
 
             connection = await connectAgentServer(url, () =>
                 onConnectionLost?.(),
@@ -1031,6 +1089,8 @@ export function initializeInstance(
         ensureCleanupInstance();
         cleanupConversationIpc();
         ipcMain.removeHandler("conversation-bar-enabled");
+        ipcMain.removeHandler("reconnect-retry");
+        ipcMain.removeHandler("reconnect-start-server");
         userSettingsWatcher?.close();
         userSettingsDirWatcher.close();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);

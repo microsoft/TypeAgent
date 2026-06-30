@@ -114,6 +114,11 @@
           "type": "number",
           "default": 8999,
           "description": "Port for the agent server when auto-starting"
+        },
+        "typeagent.serverStartCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Shell command used by the \"Start server\" recovery action (shown when auto-reconnect stops) to launch the TypeAgent agent server. Runs in an integrated terminal at the workspace root. Example: cd ts/packages/agentServer/server && pnpm run start"
         }
       }
     },
