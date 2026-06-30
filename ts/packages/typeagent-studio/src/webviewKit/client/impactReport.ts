@@ -131,11 +131,16 @@ let mode: StudioReplayMode = "nfa-grammar";
 
 // Opt-in wildcard validation. When lit, the run asks the host to additionally
 // run the agent's real `validateWildcardMatch` over the working-tree side's
-// wildcard matches. Off by default; persisted with the rest of the selection so
-// a reload keeps the choice. The host/runtime no-op it when no validator is
-// wired (e.g. the packaged build) and report that back via
-// `wildcardValidation.diagnostics`, which `renderValidationNote` surfaces.
+// wildcard matches. Off by default and only available when the agent actually
+// has a validator to run (`agentCanValidate`); persisted with the rest of the
+// selection so a reload keeps the choice. The host/runtime fail-open it when no
+// validator runs and report that back via `wildcardValidation.diagnostics`,
+// which `renderValidationNote` surfaces.
 let validateWildcards = false;
+// Whether wildcard validation can run for the scoped agent (it has a validator),
+// from the host `init`. Enables the toggle; when false the toggle is disabled
+// because there is nothing to run.
+let agentCanValidate = false;
 
 /** Concise hover copy for the Cache on/off toggle. */
 const CACHE_TOOLTIP: Record<"on" | "off", string> = {
@@ -144,9 +149,13 @@ const CACHE_TOOLTIP: Record<"on" | "off", string> = {
 };
 /** Concise hover copy for the Wildcard validation on/off toggle. */
 const VALIDATE_TOOLTIP: Record<"on" | "off", string> = {
-    on: "Wildcard validation on: the working-tree side runs the agent's real validator over wildcard matches (agents that opt in only). Click to turn off.",
+    on: "Wildcard validation on: the working-tree side runs the agent's real validator over wildcard matches. Click to turn off.",
     off: "Wildcard validation off: matches come from the grammar alone. Click to turn on.",
 };
+/** Hover copy when the toggle is disabled because the agent has no wildcard
+ *  validator to run in replay. */
+const VALIDATE_DISABLED_TOOLTIP =
+    "Wildcard validation unavailable: this agent has no validateWildcardMatch to run in replay.";
 
 const root = document.getElementById("root")!;
 
@@ -192,13 +201,22 @@ const validateSwitch = settingsSwitch(
     "Wildcard validation",
     () => validateWildcards,
     () => toggleValidateWildcards(),
-    (on) => VALIDATE_TOOLTIP[on ? "on" : "off"],
+    (on) =>
+        agentCanValidate
+            ? VALIDATE_TOOLTIP[on ? "on" : "off"]
+            : VALIDATE_DISABLED_TOOLTIP,
 );
 const settingsPopover = el("div", "settings-popover");
 settingsPopover.setAttribute("role", "group");
 settingsPopover.setAttribute("aria-label", "Replay options");
 settingsPopover.hidden = true;
-settingsPopover.append(cacheSwitch.row, validateSwitch.row);
+// The validation switch carries a caption: a note when there's no validator to
+// run, and a caution when validation is turned on (the real validator may have
+// side effects or be non-deterministic, so replay results may not reproduce).
+const validateNote = el("div", "switch-note");
+const validateGroup = el("div", "switch-group");
+validateGroup.append(validateSwitch.row, validateNote);
+settingsPopover.append(cacheSwitch.row, validateGroup);
 const settingsButton = toolButton("settings-gear", "Replay options", () =>
     toggleSettingsPopover(),
 );
@@ -266,6 +284,7 @@ restoreSelection();
 renderVersionButtons();
 cacheSwitch.render();
 validateSwitch.render();
+renderValidateNote();
 
 // Dismiss the replay-options popover on an outside click or Escape, the way a
 // native menu behaves. The gear's own click is inside `settingsGroup`, so it
@@ -292,6 +311,15 @@ window.addEventListener("message", (event: MessageEvent) => {
         case "init":
             currentAgent = msg.agent;
             renderAgentName();
+            // Wildcard validation can only run when the agent has a validator;
+            // otherwise force the request off and disable the toggle. When a
+            // validator exists, keep the persisted choice (default off).
+            agentCanValidate = msg.canValidateWildcards;
+            if (!agentCanValidate) {
+                validateWildcards = false;
+            }
+            validateSwitch.render();
+            renderValidateNote();
             controlsAvailable = msg.connected && msg.available;
             setControlsEnabled(controlsAvailable);
             renderEmptyState();
@@ -396,7 +424,39 @@ function toggleCache(): void {
 function toggleValidateWildcards(): void {
     validateWildcards = !validateWildcards;
     validateSwitch.render();
+    renderValidateNote();
     persistState({ validateWildcards });
+}
+
+/** Caption the validation switch for the scoped agent. When there's no validator
+ *  to run, show a neutral note explaining why the toggle is disabled. When
+ *  validation is turned on, caution that the real validator may have side effects
+ *  or be non-deterministic, so replay results may not reproduce. Otherwise hide
+ *  the caption. */
+function renderValidateNote(): void {
+    validateNote.textContent = "";
+    if (!agentCanValidate) {
+        validateNote.hidden = false;
+        validateNote.classList.remove("is-caution");
+        validateNote.append(
+            codicon("info"),
+            text("No wildcard validator to run for this agent."),
+        );
+        return;
+    }
+    if (!validateWildcards) {
+        validateNote.hidden = true;
+        validateNote.classList.remove("is-caution");
+        return;
+    }
+    validateNote.hidden = false;
+    validateNote.classList.add("is-caution");
+    validateNote.append(
+        codicon("warning"),
+        text(
+            "May be unsafe: the validator can have side effects or be non-deterministic, so replay results may not reproduce.",
+        ),
+    );
 }
 
 /** Open/close the replay-options popover. Pass `force` to set a specific
@@ -1044,7 +1104,9 @@ function setControlsEnabled(enabled: boolean): void {
     versionBButton.button.disabled = !enabled;
     settingsButton.disabled = !enabled;
     cacheSwitch.button.disabled = !enabled;
-    validateSwitch.button.disabled = !enabled;
+    // The validation toggle additionally requires the agent to have a validator
+    // to run; otherwise it stays disabled so the operator isn't offered a no-op.
+    validateSwitch.button.disabled = !enabled || !agentCanValidate;
     // A run shouldn't leave the options popover hanging open.
     if (!enabled) {
         toggleSettingsPopover(false);

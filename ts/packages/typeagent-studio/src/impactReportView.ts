@@ -133,7 +133,13 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agent, connected: false, available: false });
+            post({
+                type: "init",
+                agent,
+                connected: false,
+                available: false,
+                canValidateWildcards: false,
+            });
             return;
         }
         // Confirm this agent still has a corpus to replay so the webview can
@@ -145,7 +151,22 @@ export function openImpactReport(
         } catch {
             // Connected but listing failed; treat as unavailable for now.
         }
-        post({ type: "init", agent, connected: true, available });
+        // Check whether wildcard validation can actually run for this agent (it
+        // has a validator), so the webview can disable the toggle when there is
+        // nothing to run. A lookup failure stays conservative (toggle disabled).
+        let canValidateWildcards = false;
+        try {
+            canValidateWildcards = await c.canValidateWildcards(agent);
+        } catch {
+            // Leave the toggle disabled rather than offering a no-op.
+        }
+        post({
+            type: "init",
+            agent,
+            connected: true,
+            available,
+            canValidateWildcards,
+        });
         // Recover a result computed while the panel was hidden/reloaded.
         if (lastResult) {
             post({

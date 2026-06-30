@@ -42,6 +42,11 @@ export type HostToWebviewMessage =
           /** Whether `agent` has a corpus available to replay (channel
            *  `listCorpusAgents`). */
           available: boolean;
+          /** Whether wildcard validation can run for `agent` — it exposes a
+           *  `validateWildcardMatch` and its module loads. Drives the validation
+           *  toggle: enabled when there is a validator to run, disabled (a no-op)
+           *  otherwise. */
+          canValidateWildcards: boolean;
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }

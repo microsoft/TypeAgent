@@ -1,7 +1,6 @@
 {
   "emojiChar": "📝",
   "description": "Agent to create and manage lists",
-  "replaySafeWildcardValidator": true,
   "schema": {
     "description": "List agent with actions to create lists, show list items, add and remove list items",
     "originalSchemaFile": "./listSchema.ts",

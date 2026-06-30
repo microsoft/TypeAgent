@@ -73,6 +73,16 @@ export type StudioServiceInvokeFunctions = {
     /** Corpus agents available for replay in this workspace. */
     listCorpusAgents(repoRoot?: string): Promise<string[]>;
     /**
+     * Whether wildcard validation can run for `agent` in replay — the agent
+     * loads and exposes a `validateWildcardMatch`. The Impact Report reads this
+     * before a run to disable its validation toggle when there is nothing to
+     * run.
+     */
+    canValidateWildcards(
+        repoRoot: string | undefined,
+        agent: string,
+    ): Promise<boolean>;
+    /**
      * Federated corpus entries for an agent (in-repo, captures, external,
      * feedback) — what the Corpus tree expands.
      */

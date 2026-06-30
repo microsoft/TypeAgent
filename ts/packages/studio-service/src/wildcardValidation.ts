@@ -32,15 +32,9 @@ import {
     type WildcardMatchValidator,
 } from "@typeagent/core/runtime";
 
-/** The single manifest field that gates replay wildcard validation. */
-interface ReplaySafeManifestLike {
-    replaySafeWildcardValidator?: boolean;
-}
-
 /** Minimal structural view of an `AppAgentProvider` (avoids a type-only dep). */
 interface AppAgentProviderLike {
     getAppAgentNames(): string[];
-    getAppAgentManifest(agentName: string): Promise<ReplaySafeManifestLike>;
     loadAppAgent(agentName: string): Promise<ReplayValidatableAgent>;
     unloadAppAgent(agentName: string): Promise<void>;
 }
@@ -124,43 +118,55 @@ function createDefaultLoader(): ReplayAppAgentLoader {
 }
 
 /**
- * Whether the agent's manifest opts its `validateWildcardMatch` into replay. Any
- * lookup failure (provider unavailable, agent unknown, manifest read error) is
- * treated as not safe, so replay stays grammar-only.
+ * Whether wildcard validation can actually run for an agent: the agent loads and
+ * exposes a `validateWildcardMatch`. Drives the Impact Report's validation
+ * toggle — when false (no validator, or the provider is unavailable in the
+ * packaged build) there is nothing to run, so the toggle is disabled. The agent
+ * is loaded only to inspect for the method, then unloaded; any failure reports
+ * not-validatable so the toggle stays off.
  */
-async function isReplaySafe(agentName: string): Promise<boolean> {
+export async function canValidateWildcards(
+    agentName: string,
+): Promise<boolean> {
+    const providers = await loadProviders();
+    if (providers === undefined) {
+        return false;
+    }
+    const provider = findProvider(providers, agentName);
+    if (provider === undefined) {
+        return false;
+    }
+    let loaded = false;
     try {
-        const providers = await loadProviders();
-        if (providers === undefined) {
-            return false;
-        }
-        const provider = findProvider(providers, agentName);
-        if (provider === undefined) {
-            return false;
-        }
-        const manifest = await provider.getAppAgentManifest(agentName);
-        return manifest.replaySafeWildcardValidator === true;
+        const agent = await provider.loadAppAgent(agentName);
+        loaded = true;
+        return typeof agent.validateWildcardMatch === "function";
     } catch {
         return false;
+    } finally {
+        if (loaded) {
+            try {
+                await provider.unloadAppAgent(agentName);
+            } catch {
+                // Best-effort cleanup; the run-time validator reloads as needed.
+            }
+        }
     }
 }
 
 /**
- * Build the runtime's `resolveWildcardValidator` option: returns a validator
- * only for agents whose manifest declares `replaySafeWildcardValidator` (so any
- * other agent stays grammar-only and the run doesn't claim a validation it can't
- * perform), backed by the lazy default loader. The dynamic import is deferred
- * until a wildcard match actually triggers a lookup, so a run that never hits a
- * wildcard never pays for the provider.
+ * Build the runtime's `resolveWildcardValidator` option: returns a validator for
+ * any agent, backed by the lazy default loader. The validator fail-opens
+ * (load-failed / no-validator / errored diagnostics) so a run never fabricates a
+ * lost match; whether validation is attempted at all is the operator's per-run
+ * toggle, which the UI disables for agents that have no validator to run. The
+ * dynamic import is deferred until a wildcard match actually triggers a lookup,
+ * so a run that never hits a wildcard never pays for the provider.
  */
 export function createDefaultWildcardValidatorResolver(): (
     agentName: string,
 ) => Promise<WildcardMatchValidator | undefined> {
     const loader = createDefaultLoader();
-    return async (agentName) => {
-        if (!(await isReplaySafe(agentName))) {
-            return undefined;
-        }
-        return createWildcardMatchValidator(agentName, { loader });
-    };
+    return async (agentName) =>
+        createWildcardMatchValidator(agentName, { loader });
 }

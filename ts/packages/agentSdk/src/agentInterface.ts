@@ -43,11 +43,6 @@ export type AppAgentManifest = {
     // Registered flow programs: actionName → path to .flow.json (relative to manifest file)
     flows?: Record<string, string>;
     allowDynamicAgents?: boolean; // whether this agent can add/remove dynamic sub-agents at runtime, default is false
-    // Whether this agent's validateWildcardMatch is safe to run during offline
-    // replay: deterministic, free of side effects, and tolerant of a stub
-    // SessionContext (no live agentContext, storage, or network). Default false.
-    // Studio replay only runs the real validator for agents that opt in here.
-    replaySafeWildcardValidator?: boolean;
 } & ActionManifest;
 
 export type SchemaTypeNames = {

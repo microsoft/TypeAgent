@@ -721,6 +721,12 @@ export interface StudioRuntime {
      * union of agents loaded across running sandboxes.
      */
     listCorpusAgents(): Promise<string[]>;
+    /**
+     * Whether wildcard validation can actually run for `agent` in replay — the
+     * agent loads and exposes a `validateWildcardMatch`. Lets the Impact Report
+     * disable its validation toggle when there is nothing to run.
+     */
+    canValidateWildcards(agent: string): Promise<boolean>;
     /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
     /**
@@ -846,6 +852,14 @@ export interface CreateStudioRuntimeOptions {
         | WildcardMatchValidator
         | undefined
         | Promise<WildcardMatchValidator | undefined>;
+    /**
+     * Reports whether wildcard validation can run for an agent — it loads and
+     * exposes a `validateWildcardMatch` — so `canValidateWildcards` can answer
+     * the Impact Report before a run. Injected for the same reason as
+     * `resolveWildcardValidator`: loading agent modules lives outside this
+     * dependency-light package. Absent ⇒ no agent is treated as validatable.
+     */
+    resolveCanValidateWildcards?: (agentName: string) => Promise<boolean>;
     collisions?: CollisionService;
     /**
      * Scans agents' compiled grammars for collisions. Injected so tests can
@@ -1277,6 +1291,11 @@ export function createStudioRuntimeCore(
                 }
             }
             return [...agents].sort((a, b) => a.localeCompare(b));
+        },
+        async canValidateWildcards(agent) {
+            return (
+                (await options.resolveCanValidateWildcards?.(agent)) === true
+            );
         },
         async listCorpusEntries(agent) {
             return corpus.list(agent);

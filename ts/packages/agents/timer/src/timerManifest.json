@@ -1,7 +1,6 @@
 {
   "emojiChar": "⏰",
   "description": "Agent for setting reminders that fire as agent-initiated messages",
-  "replaySafeWildcardValidator": true,
   "schema": {
     "description": "Timer agent: set, list, and cancel reminders. When a reminder fires, the agent pushes a message to the chat via SessionContext.beginAgentThread (no preceding user request).",
     "originalSchemaFile": "./timerSchema.ts",

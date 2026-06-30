@@ -14,7 +14,10 @@ import {
     FileWorkspaceState,
     studioWorkspaceStateFile,
 } from "./fileWorkspaceState.js";
-import { createDefaultWildcardValidatorResolver } from "./wildcardValidation.js";
+import {
+    createDefaultWildcardValidatorResolver,
+    canValidateWildcards,
+} from "./wildcardValidation.js";
 
 /**
  * Candidate repository roots for Studio to inspect, most-specific first. The
@@ -140,6 +143,7 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
             {
                 resolveWildcardValidator:
                     createDefaultWildcardValidatorResolver(),
+                resolveCanValidateWildcards: canValidateWildcards,
             },
         );
         runtimeCache.set(key, runtime);

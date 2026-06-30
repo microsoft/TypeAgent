@@ -437,6 +437,37 @@ body {
   opacity: 0;
 }
 
+/* A switch and its explanatory caption grouped as one popover item. */
+.switch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Caption under the wildcard-validation switch: states whether the scoped agent
+   is replay-safe so the toggle's effect is clear before a run. */
+.switch-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 240px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--vscode-descriptionForeground);
+}
+
+.switch-note.is-caution {
+  color: var(
+    --vscode-notificationsWarningIcon-foreground,
+    var(--vscode-editorWarning-foreground)
+  );
+}
+
+.switch-note .codicon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 /* --- Sub-bar: provenance + run status ------------------------------------ */
 .sub-bar {
   display: flex;
