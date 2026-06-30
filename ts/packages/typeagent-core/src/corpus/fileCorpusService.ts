@@ -82,7 +82,7 @@ export class FileCorpusService implements CorpusService {
     async append(agent: string, entries: CorpusEntry[]): Promise<string> {
         const dir = this.capturesDir(agent);
         await fs.mkdir(dir, { recursive: true });
-        const file = path.join(dir, `${captureFileStamp(this.now())}.jsonl`);
+        const file = await this.uniqueCaptureFile(dir);
         const stamped = entries.map((e) => ({
             ...e,
             source: "captures" as const,
@@ -94,6 +94,26 @@ export class FileCorpusService implements CorpusService {
         }));
         await writeJsonlFile(file, stamped);
         return file;
+    }
+
+    /**
+     * Pick a capture file path that does not already exist. The base name is a
+     * timestamp, so two appends within the same millisecond would otherwise
+     * collide and overwrite each other; a numeric suffix disambiguates.
+     */
+    private async uniqueCaptureFile(dir: string): Promise<string> {
+        const stamp = captureFileStamp(this.now());
+        let file = path.join(dir, `${stamp}.jsonl`);
+        let n = 1;
+        for (;;) {
+            try {
+                await fs.access(file);
+            } catch {
+                return file;
+            }
+            file = path.join(dir, `${stamp}-${n}.jsonl`);
+            n++;
+        }
     }
 
     async promote(

@@ -194,6 +194,7 @@ export function displayLogToCorpusEntries(
             source: "captures",
             provenance: {
                 sourceUri: opts.sourceUri,
+                rawSourceUri: opts.sourceUri,
                 capturedAt: now(),
                 requestId,
                 ...(opts.sessionId !== undefined

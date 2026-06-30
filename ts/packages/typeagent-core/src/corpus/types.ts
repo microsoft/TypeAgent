@@ -25,6 +25,12 @@ export interface FeedbackLabel {
 export interface CorpusProvenance {
     /** File path or remote URI the entry was loaded from. */
     sourceUri: string;
+    /**
+     * Original source the entry was captured from (e.g. a displayLog path),
+     * preserved across `append`, which overwrites `sourceUri` with the captures
+     * file path.
+     */
+    rawSourceUri?: string;
     /** When the entry was originally captured (epoch ms). */
     capturedAt?: number;
     sessionId?: string;
