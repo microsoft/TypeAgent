@@ -26,6 +26,8 @@
 | [USER-STORY.md](./USER-STORY.md)     | The authoring loop and the three interaction modes (human / AI-agent / hybrid).                              |
 | [STUDIO-AGENT.md](./STUDIO-AGENT.md) | The `studio` agent **action-surface reference** (groups A–F, tiers, approval boundary). Phasing lives in 05. |
 | [STATUS.md](./STATUS.md)             | What's built, known issues, and the ready-to-start next slices (pointing into the 05 §11 phasing).           |
+| [replay-l4b-design.md](./replay-l4b-design.md) | The replay **fidelity depth ladder** — sandbox-convergence framing and the build-from-git-ref (L4b) first-slice plan (Steps 1–3). |
+| [impact-report-multi-variant-design.md](./impact-report-multi-variant-design.md) | The Impact Report **breadth axis** — Baseline + N Variants compare matrix and regression bisect. |
 | [QUICKSTART.md](./QUICKSTART.md)     | Build/test/run commands and where each piece lives.                                                          |
 
 ---

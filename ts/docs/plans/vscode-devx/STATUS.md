@@ -4,8 +4,9 @@
 > the **intended** end state), this file tracks what is **actually built today**
 > and what remains. Update it whenever a capability changes state.
 
-Branch: feature work has merged to `main` via PR #2468; ongoing work continues
-on `dev/talzacc/typeagent_studio_part3` (the real replay path).
+Branch: earlier feature work merged to `main` via PR #2468; ongoing work
+continues on the `dev/talzacc/typeagent_studio_part*` stack (currently part5 —
+replay fidelity + Impact Report UX).
 
 ## Capability matrix
 
@@ -31,6 +32,52 @@ than an in-memory stand-in.
 | Schema Studio                                                  | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
 | Live Trace                                                     | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
 | `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                                                                                                               | —                                                                                | ❌ no behavioral integration                                                                                                  | ❌     |
+
+## Roadmap at a glance — gate spine + backlog
+
+This is the single at-a-glance tracker. The MVP is fenced by five acceptance
+gates ([`04-mvp-slice.md` §3](./04-mvp-slice.md)); phase sequencing lives in
+[`05-implementation-plan.md` §11](./05-implementation-plan.md#11-phasing--concrete-sequencing).
+The **gate spine** is the critical path; the **backlog** holds everything
+deliberately off it, each row tagged with its parent gate and precondition so it
+is clear why it waits. There is no second roadmap — depth (L4b) and breadth
+(multi-variant / multi-agent) are backlog rows here, not a parallel plan.
+
+### Gate spine (MVP critical path)
+
+| Gate | Journey | Capability | Phase | Status |
+| ---- | ------- | ---------- | ----- | ------ |
+| **A** | J1 Stand up an agent | New-Agent Wizard | P-2 | ❌ not started (onboarding bridge ✅) |
+| **B** | J2 Tune schema | Schema Studio | P-4 | ❌ not started |
+| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3 | 🟡 **long pole** — engine L1–L4a ✅; corpus capture + predicate + measurement ❌ |
+| **D** | J5 Debug a trace | Trace Viewer | P-3 | ❌ not started |
+| **E** | J6 Observe live | Live Trace + status bar | P-5 | ❌ not started |
+
+**Critical path now: close Gate C** — player corpus capture → predicate tuning →
+run the ≥ 80% validation. It is the only *tunable* gate and §7's top risk.
+
+### Backlog (off the critical path — tagged, not a separate plan)
+
+Each item is a child of a gate/journey; **none is required to pass A–E**. Track
+tags: **depth** = how faithfully one replay side is realized (improves Gate C
+accuracy); **breadth** = how many things are compared at once (multiplies cells);
+**infra** = enabling plumbing.
+
+| Item | Parent | Track | Precondition | Status |
+| ---- | ------ | ----- | ------------ | ------ |
+| Fidelity transparency (per-side readout + "Sandbox A/B" relabel) | Gate C / J4 | depth | — | next (low-risk, no build) |
+| **L4b** build-from-ref sandboxes (real compiled ref side) | Gate C / J4 | depth (P-7) | Gate C banked | deferred flagged epic |
+| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4 | breadth — versions | Gate C banked; must preserve Gate C | post-MVP |
+| Multi-agent / multi-corpus replay (`code`, 684 utterances) | J4 | breadth — agents | Gate C banked | post-MVP (§2 exclude) |
+| Active-sandbox selector + per-sandbox scoping | — | infra | single-sandbox E2E | P-7a |
+| Sandbox copy-on-write overlay (true sandbox-local A/B) | — | infra | P-7a | P-7b |
+
+Why depth and breadth are distinct dials on the same `replayCorpus` (F4.1)
+primitive: **depth** raises the fidelity of each compared *cell* (and thus Gate C
+accuracy); the two **breadth** axes raise the *number* of cells (versions ×
+agents). They compose and are independent. Detailed slice breakdowns live in the
+design docs ([the L4b sandbox-convergence plan](./replay-l4b-design.md) and
+[the multi-variant compare design](./impact-report-multi-variant-design.md)).
 
 ## The long pole
 
