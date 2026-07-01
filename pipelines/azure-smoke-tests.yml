@@ -31,9 +31,15 @@
 #     principal must hold the 'Key Vault Secrets User' RBAC role on the
 #     'build-pipeline-kv' vault (the vault uses RBAC authorization, not access
 #     policies). Authorize the pipeline to use the connection on first run.
-#   * Pipeline variables (define in the pipeline UI or a linked variable group):
-#       - REGISTRY         npm registry URL used by include-prepare-repo.yml to
-#                          restore dependencies (internal Azure Artifacts feed).
+#
+# Dependency restore uses the PUBLIC npm registry (registry.npmjs.org), the same
+# as the GitHub Actions build lanes (build_ts / build_package_shell) and local
+# dev. This keeps the package source consistent across all CI and avoids failures
+# where a freshly-published transitive version (e.g. from a Dependabot lockfile
+# bump) is not yet present in an internal Azure Artifacts feed. The smoke tests
+# only need the WIF service connection for Azure OpenAI secrets, which is
+# independent of the npm registry — so no internal feed (or REGISTRY variable) is
+# required here.
 
 trigger:
   branches:
@@ -86,13 +92,13 @@ jobs:
     pool:
       vmImage: $(image)
     steps:
-      # Checkout + internal npm registry auth + Node + pnpm install
-      # (--frozen-lockfile --strict-peer-dependencies).
+      # Checkout + Node + pnpm install (--frozen-lockfile --strict-peer-dependencies).
+      # No 'registry' is passed, so install uses the default public npm registry —
+      # matching the GitHub Actions lanes and local dev.
       - template: include-prepare-repo.yml
         parameters:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
-          registry: $(REGISTRY)
 
       # keytar links against libsecret at runtime on Linux; install before any
       # TypeAgent process (CLI / shell) loads the native module.

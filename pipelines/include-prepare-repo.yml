@@ -6,8 +6,13 @@ parameters:
     type: string
   - name: nodeVersion
     type: string
+  # Optional npm registry. When set (e.g. an internal Azure Artifacts feed URL),
+  # an .npmrc is written and authenticated so pnpm restores from that feed. When
+  # omitted (empty), the build uses the default public npm registry
+  # (registry.npmjs.org) with no auth — matching the GitHub Actions lanes.
   - name: registry
     type: string
+    default: ""
   # Set false to skip pnpm-store caching. Useful for manual/scheduled pipelines
   # where the Windows post-job cache save can exceed its timeout and fail the job.
   - name: enableCache
@@ -19,16 +24,20 @@ steps:
     displayName: "Checkout TypeAgent Repository"
     path: typeagent
 
-  - bash: |
-      echo "registry=${{ parameters.registry }}" > .npmrc
-      cat .npmrc
-    displayName: Set npm registry
-    workingDirectory: ${{ parameters.buildDirectory }}
+  # Only configure and authenticate a custom registry when one is supplied.
+  # When 'registry' is empty, these steps are skipped and pnpm uses the default
+  # public npm registry (no .npmrc, no auth) — same as the GitHub Actions lanes.
+  - ${{ if ne(parameters.registry, '') }}:
+      - bash: |
+          echo "registry=${{ parameters.registry }}" > .npmrc
+          cat .npmrc
+        displayName: Set npm registry
+        workingDirectory: ${{ parameters.buildDirectory }}
 
-  - task: npmAuthenticate@0
-    displayName: Authenticate to npm registry
-    inputs:
-      workingFile: ${{ parameters.buildDirectory }}/.npmrc
+      - task: npmAuthenticate@0
+        displayName: Authenticate to npm registry
+        inputs:
+          workingFile: ${{ parameters.buildDirectory }}/.npmrc
 
   - task: UseNode@1
     displayName: Setup Node.js v${{ parameters.nodeVersion }}
