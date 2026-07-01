@@ -171,6 +171,18 @@ describe("getDefaultAppAgentProviders", () => {
         expect(providers.length).toBeGreaterThanOrEqual(1);
         expect(providers[0].getAppAgentNames()).toContain("player");
     });
+
+    it("loads installed agents for named configs by default", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const agentDir = tmpDir("ta-agent-");
+        await installer.install("namedOnly", agentDir);
+
+        const providers = getDefaultAppAgentProviders(instanceDir, "agent");
+        const allNames = new Set(providers.flatMap((p) => p.getAppAgentNames()));
+        expect(allNames.has("namedOnly")).toBe(true);
+    });
+
 });
 
 describe("getDefaultAppAgentInstaller", () => {

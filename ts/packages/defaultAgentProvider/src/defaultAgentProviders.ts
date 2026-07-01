@@ -52,8 +52,8 @@ import { createLimiter } from "@typeagent/common-utils";
  *   an InstanceConfigProvider. Undefined builds only the bundled provider (no
  *   agents.json).
  * @param configName - Optional config name (e.g. "test" -> config.test.json).
- *   Named configs select a fixed bundled agent set in-memory (no agents.json,
- *   no installed provider).
+ *   Named configs select a fixed bundled agent set in-memory. If an instance
+ *   dir is available, installed agents from `agents.json` are also loaded.
  */
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
@@ -67,21 +67,18 @@ export function getDefaultAppAgentProviders(
     const providers: AppAgentProvider[] = [
         createBundledAppAgentProvider(configName),
     ];
-    // The installed-agent provider (agents.json) exists only for the default
-    // config with a real instance dir. Named configs select a fixed set and the
-    // in-memory case has no agents.json.
-    if (configName === undefined) {
-        const instanceDir = instanceConfigs?.getInstanceDir();
-        if (instanceDir !== undefined) {
-            const installDir = getInstallDir(instanceConfigs);
-            const records = loadInstalledRecords(instanceDir);
-            providers.push(
-                createInstalledAppAgentProvider(records, {
-                    ...(installDir !== undefined ? { installDir } : {}),
-                    appBundleRequirePath: getAppBundleRequirePath(),
-                }),
-            );
-        }
+    // Installed agents (agents.json) are loaded whenever an instance dir is
+    // available.
+    const instanceDir = instanceConfigs?.getInstanceDir();
+    if (instanceDir !== undefined) {
+        const installDir = getInstallDir(instanceConfigs);
+        const records = loadInstalledRecords(instanceDir);
+        providers.push(
+            createInstalledAppAgentProvider(records, {
+                ...(installDir !== undefined ? { installDir } : {}),
+                appBundleRequirePath: getAppBundleRequirePath(),
+            }),
+        );
     }
     const mcpProvider = getDefaultMcpAppAgentProvider(instanceConfigs);
     if (mcpProvider !== undefined) {
