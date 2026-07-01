@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
 import { registerStudioCommands } from "./commands.js";
@@ -19,11 +18,6 @@ import { StudioServiceSandboxSource } from "./sandboxSource.js";
 import type { SandboxSource } from "./sandboxSource.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
 import type { CorpusTreeNode } from "./corpusTreePresentation.js";
-import {
-    FEEDBACK_CATEGORY_CHOICES,
-    FEEDBACK_RATING_CHOICES,
-    buildFeedbackRecordInput,
-} from "./feedbackInputPresentation.js";
 import {
     buildReplayRowViews,
     formatReplaySummaryLine,
@@ -358,86 +352,6 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),
-        ),
-        vscode.commands.registerCommand(
-            "typeagent-studio.recordFeedback",
-            async () => {
-                const rating = await vscode.window.showQuickPick(
-                    FEEDBACK_RATING_CHOICES.map((choice) => ({
-                        label: choice.label,
-                        value: choice.value,
-                    })),
-                    {
-                        title: "Record feedback",
-                        placeHolder: "How was the response?",
-                    },
-                );
-                if (!rating) {
-                    return;
-                }
-                const utterance = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Utterance this feedback is about",
-                    placeHolder: "e.g. play some jazz",
-                    ignoreFocusOut: true,
-                });
-                if (utterance === undefined) {
-                    return;
-                }
-                const agent = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Agent (optional)",
-                    placeHolder: "e.g. player",
-                    ignoreFocusOut: true,
-                });
-                if (agent === undefined) {
-                    return;
-                }
-                let category;
-                if (rating.value === "down") {
-                    const categoryPick = await vscode.window.showQuickPick(
-                        FEEDBACK_CATEGORY_CHOICES.map((choice) => ({
-                            label: choice.label,
-                            value: choice.value,
-                        })),
-                        {
-                            title: "Record feedback",
-                            placeHolder: "What went wrong? (optional)",
-                        },
-                    );
-                    category = categoryPick?.value;
-                }
-                const comment = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Comment (optional)",
-                    ignoreFocusOut: true,
-                });
-                if (comment === undefined) {
-                    return;
-                }
-                try {
-                    await serviceRuntime.recordFeedback(
-                        buildFeedbackRecordInput({
-                            requestId: randomUUID(),
-                            rating: rating.value,
-                            agent,
-                            utterance,
-                            comment,
-                            category,
-                        }),
-                    );
-                    corpusTree.refresh();
-                    vscode.window.showInformationMessage(
-                        rating.value === "up"
-                            ? "Recorded positive feedback."
-                            : "Recorded negative feedback.",
-                    );
-                } catch (error) {
-                    vscode.window.showErrorMessage(
-                        `Failed to record feedback: ${describeError(error)}`,
-                    );
-                }
-            },
         ),
         vscode.commands.registerCommand(
             "typeagent-studio.seedInRepoCorpus",
@@ -910,23 +824,26 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.replayCorpus",
-            async () => {
-                const agents = await serviceRuntime.listCorpusAgents();
-                if (agents.length === 0) {
-                    vscode.window.showInformationMessage(
-                        "No agents have a corpus to replay. Load an agent into a sandbox first.",
-                    );
-                    return;
-                }
-                const agent =
-                    agents.length === 1
-                        ? agents[0]
-                        : await vscode.window.showQuickPick(agents, {
-                              title: "Replay corpus",
-                              placeHolder: "Select an agent to replay",
-                          });
+            async (node?: { agent?: string }) => {
+                let agent = node?.agent;
                 if (!agent) {
-                    return;
+                    const agents = await serviceRuntime.listCorpusAgents();
+                    if (agents.length === 0) {
+                        vscode.window.showInformationMessage(
+                            "No agents have a corpus to replay. Load an agent into a sandbox first.",
+                        );
+                        return;
+                    }
+                    agent =
+                        agents.length === 1
+                            ? agents[0]
+                            : await vscode.window.showQuickPick(agents, {
+                                  title: "Replay corpus",
+                                  placeHolder: "Select an agent to replay",
+                              });
+                    if (!agent) {
+                        return;
+                    }
                 }
                 try {
                     const result = await serviceRuntime.replayCorpus({ agent });

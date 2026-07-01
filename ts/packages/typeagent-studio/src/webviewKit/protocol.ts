@@ -60,6 +60,11 @@ export type HostToWebviewMessage =
           payload: StudioReplayResult;
           /** Resolved identity of both sides, captured at run time. */
           provenance?: RunProvenance;
+          /** True when this is a cached run restored on (re)open rather than a
+           *  fresh live run, so the webview can label it as such. */
+          restored?: boolean;
+          /** Epoch ms the restored run originally completed, for the label. */
+          runAt?: number;
       }
     /** A failure for a prior `run` request (or general error). */
     | { type: "error"; requestId?: number; message: string }

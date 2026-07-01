@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import type { CorpusEntry, CorpusSource } from "@typeagent/core/corpus";
-import type { FeedbackRating } from "@typeagent/core/events";
 import { collapseAndTruncate } from "./textFormatting.js";
 import {
     noteTooltip,
@@ -35,18 +34,12 @@ export interface CorpusTreeNode {
     filePath?: string;
     /** Present on `entry` nodes. */
     entryId?: string;
-    /** Present on `entry` nodes that carry feedback; drives the row icon. */
-    feedbackRating?: FeedbackRating;
     /** Whether the node should render as expandable. */
     hasChildren: boolean;
 }
 
 /** Order in which source groups appear beneath an agent. */
-export const CORPUS_SOURCE_ORDER: CorpusSource[] = [
-    "in-repo",
-    "external",
-    "feedback",
-];
+export const CORPUS_SOURCE_ORDER: CorpusSource[] = ["in-repo", "external"];
 
 const MAX_UTTERANCE_LENGTH = 80;
 
@@ -86,8 +79,7 @@ export function buildCorpusAgentNodes(
  *
  * File-backed sources (in-repo, external) render as one row per backing file,
  * titled by the file name and carrying its path so the row can show the real
- * file icon and an open-file action. Feedback is a live, non-file source and
- * renders as a single "Feedback" group. In-repo always maps to the one
+ * file icon and an open-file action. In-repo always maps to the one
  * `corpus/<agent>.utterances.jsonl` file; external can span several files.
  *
  * `inRepoFilePath`, when set, is the path of an existing in-repo corpus file.
@@ -121,10 +113,6 @@ export function buildCorpusSourceNodes(
             continue;
         }
         if (inSource.length === 0) {
-            continue;
-        }
-        if (source === "feedback") {
-            nodes.push(feedbackGroupNode(agent, inSource.length));
             continue;
         }
         // external: one row per distinct backing file.
@@ -195,23 +183,7 @@ function fileGroupNode(
     };
 }
 
-function feedbackGroupNode(agent: string, count: number): CorpusTreeNode {
-    return {
-        kind: "source",
-        id: `corpus:agent:${agent}:feedback`,
-        label: "Feedback",
-        description: entryCountLabel(count),
-        tooltip: noteTooltip(
-            "Thumbs up/down labels recorded in this session. These are live labels, not a file on disk.",
-        ),
-        contextValue: "corpusFeedback",
-        agent,
-        source: "feedback",
-        hasChildren: count > 0,
-    };
-}
-
-/** Build the entry rows for a single source group (a file or the feedback set). */
+/** Build the entry rows for a single source group (a backing file). */
 export function buildCorpusEntryNodes(
     group: CorpusTreeNode,
     entries: readonly CorpusEntry[],
@@ -223,16 +195,11 @@ export function buildCorpusEntryNodes(
             kind: "entry" as const,
             id: `corpus:entry:${entry.id}`,
             label: truncateUtterance(entry.utterance),
-            // Feedback is conveyed by the row icon (thumbs up/down), so no
-            // description badge is needed.
             tooltip: buildEntryTooltip(entry),
             contextValue: "corpusEntry",
             agent,
             ...(group.source !== undefined ? { source: group.source } : {}),
             entryId: entry.id,
-            ...(entry.feedback
-                ? { feedbackRating: entry.feedback.rating }
-                : {}),
             hasChildren: false,
         }));
 }
@@ -293,12 +260,6 @@ function buildEntryTooltip(entry: CorpusEntry): TooltipModel {
             value: entry.provenance.requestId,
             mono: true,
         });
-    }
-    if (entry.feedback) {
-        fields.push({ label: "Feedback", value: entry.feedback.rating });
-        if (entry.feedback.comment) {
-            fields.push({ label: "Comment", value: entry.feedback.comment });
-        }
     }
     if (entry.tags && entry.tags.length > 0) {
         fields.push({ label: "Tags", value: entry.tags.join(", ") });

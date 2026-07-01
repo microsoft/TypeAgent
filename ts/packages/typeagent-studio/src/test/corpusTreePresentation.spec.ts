@@ -44,24 +44,18 @@ test("buildCorpusAgentNodes maps each agent sorted and expandable", () => {
 
 test("buildCorpusSourceNodes renders file-backed sources as named file rows", () => {
     const nodes = buildCorpusSourceNodes("player", [
-        entry({ id: "a", source: "feedback" }),
         entry({ id: "b", source: "in-repo" }),
         entry({ id: "c", source: "in-repo" }),
     ]);
     assert.deepEqual(
         nodes.map((n) => n.source),
-        ["in-repo", "feedback"],
+        ["in-repo"],
     );
     // In-repo row is titled by the backing file name and carries its path.
     assert.equal(nodes[0].label, "player.utterances.jsonl");
     assert.equal(nodes[0].contextValue, "corpusFile");
     assert.equal(nodes[0].filePath, "corpus/player.utterances.jsonl");
     assert.equal(nodes[0].description, "2 entries");
-    // Feedback is a live, non-file source.
-    assert.equal(nodes[1].label, "Feedback");
-    assert.equal(nodes[1].contextValue, "corpusFeedback");
-    assert.equal(nodes[1].filePath, undefined);
-    assert.equal(nodes[1].description, "1 entry");
 });
 
 test("buildCorpusSourceNodes emits one row per distinct external file", () => {
@@ -153,19 +147,6 @@ test("buildCorpusEntryNodes splits external entries by backing file", () => {
     );
 });
 
-test("buildCorpusEntryNodes surfaces feedback via the row rating when present", () => {
-    const feedback = entry({
-        id: "a",
-        source: "feedback",
-        feedback: { rating: "down", recordedAt: 1 },
-    });
-    const [group] = buildCorpusSourceNodes("player", [feedback]);
-    const nodes = buildCorpusEntryNodes(group, [feedback]);
-    // Feedback is conveyed by the row icon, not a description badge.
-    assert.equal(nodes[0].description, undefined);
-    assert.equal(nodes[0].feedbackRating, "down");
-});
-
 test("truncateUtterance collapses whitespace and caps length", () => {
     assert.equal(truncateUtterance("  play   jazz  "), "play jazz");
     const long = "a".repeat(120);
@@ -184,5 +165,5 @@ test("formatCorpusSource covers every source and CORPUS_SOURCE_ORDER is complete
     for (const source of CORPUS_SOURCE_ORDER) {
         assert.equal(formatCorpusSource(source), expected[source]);
     }
-    assert.equal(CORPUS_SOURCE_ORDER.length, 3);
+    assert.equal(CORPUS_SOURCE_ORDER.length, 2);
 });

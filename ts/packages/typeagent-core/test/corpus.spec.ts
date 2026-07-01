@@ -360,6 +360,26 @@ describe("FileCorpusService — append / promote / export", () => {
         expect(promoted[0].source).toBe("in-repo");
     });
 
+    it("strips feedback when promoting into the committed in-repo file", async () => {
+        const e = entry("play jazz", "player", {
+            feedback: { rating: "down", recordedAt: 250 },
+        });
+        await svc.append("player", [e]);
+        await svc.promote("player", [e.id], "in-repo");
+
+        // Feedback is a mutable, request-scoped observation and must not be
+        // baked into the shared, committed utterance file.
+        const inRepoText = await fs.readFile(
+            path.join(repoRoot, "corpus", "player.utterances.jsonl"),
+            "utf8",
+        );
+        expect(inRepoText).toContain('"play jazz"');
+        expect(inRepoText).not.toContain('"feedback"');
+
+        const promoted = await svc.list("player", { sources: ["in-repo"] });
+        expect(promoted[0].feedback).toBeUndefined();
+    });
+
     it("promote throws CorpusEntryNotFoundError for unknown ids and leaves files unchanged", async () => {
         await svc.append("player", [entry("play", "player")]);
         const beforeCaptures = await readCaptures(profileDir, "player");
