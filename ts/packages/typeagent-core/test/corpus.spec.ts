@@ -141,6 +141,26 @@ describe("FileCorpusService — list", () => {
         expect(await svc.list("player")).toEqual([]);
     });
 
+    it("re-stamps in-repo sourceUri with the absolute backing file path", async () => {
+        // A stored entry may carry a relative or stale sourceUri; on read it
+        // must resolve to the actual absolute file so callers can open it.
+        const stored = entry("play jazz", "player", {
+            source: "in-repo",
+            provenance: { sourceUri: "corpus/player.utterances.jsonl" },
+        });
+        const inRepoFile = path.join(
+            repoRoot,
+            "corpus",
+            "player.utterances.jsonl",
+        );
+        await fs.mkdir(path.dirname(inRepoFile), { recursive: true });
+        await fs.writeFile(inRepoFile, JSON.stringify(stored) + "\n", "utf8");
+
+        const [entryOut] = await svc.list("player");
+        expect(entryOut.provenance.sourceUri).toBe(inRepoFile);
+        expect(path.isAbsolute(entryOut.provenance.sourceUri)).toBe(true);
+    });
+
     it("federates in-repo + external + feedback, deduped by id", async () => {
         // in-repo
         const inRepo = entry("play jazz", "player", { source: "in-repo" });

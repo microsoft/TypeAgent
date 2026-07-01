@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import * as path from "node:path";
 import type { CorpusSource } from "./serviceRuntimeFacade.js";
 import {
     buildCorpusAgentNodes,
@@ -44,7 +45,16 @@ export class CorpusTreeProvider
     }
 
     protected decorate(item: vscode.TreeItem, node: CorpusTreeNode): void {
-        item.iconPath = iconForNode(node);
+        if (node.kind === "source" && node.contextValue === "corpusFile") {
+            // Render the row as the file it represents: setting resourceUri
+            // gives the themed file icon and git decorations, while the
+            // explicit label keeps the file name as the title.
+            if (node.filePath) {
+                item.resourceUri = vscode.Uri.file(node.filePath);
+            }
+        } else {
+            item.iconPath = iconForNode(node);
+        }
         // The seed empty-state row is clickable: selecting it runs the same
         // seed command as its inline button. The command shows a modal
         // confirmation before writing, so a corpus file is never created just
@@ -70,14 +80,42 @@ export class CorpusTreeProvider
             return buildCorpusAgentNodes(await this.source.listCorpusAgents());
         }
         if (node.kind === "agent" && node.agent) {
-            const entries = await this.source.listCorpusEntries(node.agent);
-            return buildCorpusSourceNodes(node.agent, entries);
+            const [entries, inRepoFilePath] = await Promise.all([
+                this.source.listCorpusEntries(node.agent),
+                this.resolveExistingInRepoFile(node.agent),
+            ]);
+            return buildCorpusSourceNodes(node.agent, entries, inRepoFilePath);
         }
-        if (node.kind === "source" && node.agent && node.source) {
+        if (node.kind === "source" && node.agent) {
             const entries = await this.source.listCorpusEntries(node.agent);
-            return buildCorpusEntryNodes(node.agent, node.source, entries);
+            return buildCorpusEntryNodes(node, entries);
         }
         return [];
+    }
+
+    /**
+     * Absolute path of the agent's in-repo corpus file if it exists on disk.
+     * Lets an existing but empty file still render as a row (rather than the
+     * seed action). The path mirrors the service's canonical location.
+     */
+    private async resolveExistingInRepoFile(
+        agent: string,
+    ): Promise<string | undefined> {
+        const repoRoot = this.source.getRepoRootInfo().repoRoot;
+        if (!repoRoot) {
+            return undefined;
+        }
+        const filePath = path.join(
+            repoRoot,
+            "corpus",
+            `${agent}.utterances.jsonl`,
+        );
+        try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+            return filePath;
+        } catch {
+            return undefined;
+        }
     }
 
     dispose(): void {
@@ -91,7 +129,11 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "agent":
             return new vscode.ThemeIcon("library");
         case "source":
-            return new vscode.ThemeIcon("folder");
+            // Feedback is a live, non-file source; file-backed groups get
+            // their icon from resourceUri in `decorate`.
+            return new vscode.ThemeIcon(
+                node.contextValue === "corpusFeedback" ? "feedback" : "folder",
+            );
         case "entry":
             if (node.feedbackRating === "up") {
                 return new vscode.ThemeIcon(

@@ -16,6 +16,7 @@ import type { StudioServiceConnection } from "./studioServiceConnection.js";
 /** The Corpus tree's read+subscribe surface (channel-backed). */
 export interface CorpusSource {
     onSandboxChanged(listener: () => void): { dispose(): void };
+    getRepoRootInfo(): RepoRootResolution;
     listCorpusAgents(): Promise<string[]>;
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
 }

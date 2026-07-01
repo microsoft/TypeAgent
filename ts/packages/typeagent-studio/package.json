@@ -203,6 +203,12 @@
         "icon": "$(new-file)"
       },
       {
+        "command": "typeagent-studio.openCorpusFile",
+        "title": "Open corpus file",
+        "category": "TypeAgent Studio",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "typeagent-studio.importCorpusFromLogs",
         "title": "Import corpus from interaction logs",
         "category": "TypeAgent Studio",
@@ -430,6 +436,11 @@
           "command": "typeagent-studio.seedInRepoCorpus",
           "when": "view == typeagentStudioCorpora && viewItem == corpusAgentSeed",
           "group": "inline@0"
+        },
+        {
+          "command": "typeagent-studio.openCorpusFile",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusFile",
+          "group": "inline@0"
         }
       ]
     },
@@ -501,6 +512,7 @@
     "onCommand:typeagent-studio.replayCorpus",
     "onCommand:typeagent-studio.addExternalCorpus",
     "onCommand:typeagent-studio.seedInRepoCorpus",
+    "onCommand:typeagent-studio.openCorpusFile",
     "onCommand:typeagent-studio.importCorpusFromLogs",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents",
