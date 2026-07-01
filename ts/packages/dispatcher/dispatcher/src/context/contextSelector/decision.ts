@@ -19,6 +19,9 @@ export type DecisionConfig = {
     margin: number;
 };
 
+// The count-based (TF-IDF) strategy's abstain reasons. A non-lexical strategy
+// (embedding) supplies its own reason string — hence `ContextSelectorDecision`
+// types `reason` as the wider `string`.
 export type AbstainReason =
     | "coverage"
     | "no-candidates"
@@ -36,7 +39,9 @@ export type ContextSelectorDecision =
       }
     | {
           kind: "abstain";
-          reason: AbstainReason;
+          // See AbstainReason for the count-based strategy's values; any strategy
+          // may supply its own. Surfaced in telemetry as `abstain:<reason>`.
+          reason: string;
           ranked: CandidateScore[];
       };
 

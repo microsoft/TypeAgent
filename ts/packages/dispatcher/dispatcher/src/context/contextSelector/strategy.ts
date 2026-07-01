@@ -14,14 +14,19 @@ import { ContextVector } from "./conversationSignal.js";
 import { ScorerCandidate, CollisionScorer, TfIdfScorer } from "./scorer.js";
 import { decide, ContextSelectorDecision, DecisionConfig } from "./decision.js";
 
-export interface ContextResolutionStrategy {
+// A resolution strategy is generic over its *config* type — the count-based
+// TF-IDF strategy takes `DecisionConfig` (minUniqueTokens/minMass/margin), while
+// a future embedding strategy would define its own (e.g. a cosine floor). The
+// orchestrator maps the session config to whichever the active strategy expects,
+// so the interface itself carries no TF-IDF assumptions.
+export interface ContextResolutionStrategy<C = DecisionConfig> {
     // Score the candidates against the conversation and decide resolve/abstain.
     // Deterministic and synchronous — the collision hot path is LLM-free (§12);
     // a scorer needing a model call would precompute vectors, not call here.
     evaluate(
         contextVector: ContextVector,
         candidates: ScorerCandidate[],
-        config: DecisionConfig,
+        config: C,
     ): ContextSelectorEvaluation;
 }
 
@@ -39,7 +44,9 @@ export type ContextSelectorEvaluation = {
 // coverage / evidence-gate / margin decision (§10). Coverage is a strategy
 // concern (a non-lexical strategy defines its own notion), computed here from
 // the candidates' keyword sets.
-export class TfIdfStrategy implements ContextResolutionStrategy {
+export class TfIdfStrategy
+    implements ContextResolutionStrategy<DecisionConfig>
+{
     private readonly scorer: CollisionScorer;
 
     constructor(scorer: CollisionScorer = new TfIdfScorer()) {
