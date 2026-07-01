@@ -13,6 +13,7 @@ import { spawnSync, execFile, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
@@ -53,6 +54,7 @@ const KNOWN_FLAG_PREFIXES = [
     "--skip-install",
     "--json",
     "--verbose",
+    "--min-release-age-days",
     "--help",
 ];
 const unknownFlags = args.filter(
@@ -128,6 +130,55 @@ const SKIP_INSTALL = args.includes("--skip-install");
 const JSON_OUTPUT = args.includes("--json");
 const VERBOSE = args.includes("--verbose");
 
+// Minimum age (in days) a published version must have before it is eligible
+// to be adopted as a fix. When a security fix would require a version younger
+// than this, the fix is deferred (reported, not applied) rather than pinned,
+// so the generated lockfile never references a version that pnpm's
+// `minimumReleaseAge` resolution guard — or a device/registry release-age
+// policy — would reject at install time. A value of 0 disables deferral.
+//
+// Resolution order (first match wins):
+//   1. --min-release-age-days=N flag
+//   2. DEPENDABOT_MIN_RELEASE_AGE_DAYS env var
+//   3. `minimumReleaseAge` (minutes) in pnpm-workspace.yaml, converted to days
+//   4. 0 (disabled)
+function readMinReleaseAgeDays() {
+    const flag = args.find((a) => a.startsWith("--min-release-age-days="));
+    if (flag) {
+        const n = Number(flag.slice("--min-release-age-days=".length));
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    const env = process.env.DEPENDABOT_MIN_RELEASE_AGE_DAYS;
+    if (env !== undefined && env !== "") {
+        const n = Number(env);
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    try {
+        const ws = readFileSync(resolve(ROOT, "pnpm-workspace.yaml"), "utf-8");
+        // Top-level `minimumReleaseAge: <minutes>` scalar (optionally quoted,
+        // trailing comment allowed).
+        const m = ws.match(
+            /^minimumReleaseAge:\s*["']?(\d+)["']?\s*(?:#.*)?$/m,
+        );
+        if (m) return Number(m[1]) / (60 * 24);
+        // Present but unparseable: warn rather than silently disabling the
+        // release-age gate, which would let too-new fixes through unnoticed.
+        // console.warn goes to stderr, so it never corrupts --json stdout.
+        if (/^\s*minimumReleaseAge:/m.test(ws)) {
+            console.warn(
+                "[fix-dependabot-alerts] Could not parse minimumReleaseAge in " +
+                    "pnpm-workspace.yaml; release-age deferral is disabled.",
+            );
+        }
+    } catch {
+        /* no workspace file or unreadable — deferral stays disabled */
+    }
+    return 0;
+}
+const MIN_RELEASE_AGE_DAYS = readMinReleaseAgeDays();
+const MIN_RELEASE_AGE_MS = MIN_RELEASE_AGE_DAYS * 24 * 60 * 60 * 1000;
+export { readMinReleaseAgeDays, MIN_RELEASE_AGE_DAYS };
+
 if (args.includes("--help")) {
     console.log(`Usage: node tools/scripts/fix-dependabot-alerts.mjs [options]
 
@@ -159,6 +210,12 @@ Options:
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
+  --min-release-age-days=N
+                      Defer fixes that would require a package version
+                      published fewer than N days ago, instead of pinning a
+                      too-new version. Defaults to the DEPENDABOT_MIN_RELEASE_AGE_DAYS
+                      env var, else pnpm-workspace.yaml's minimumReleaseAge
+                      (minutes) converted to days, else 0 (disabled).
   --help              Show this help message and exit
 
 Exit codes:
@@ -1071,14 +1128,16 @@ function getWorkspaceDepInfo(workspaceName, depPkg) {
 }
 
 /**
- * Fetch `versions` and `dist-tags.latest` for a package from npm.
- * @returns {{ versions: string[], latest: string|null } | null}
+ * Fetch `versions`, `dist-tags.latest`, and per-version publish `time`
+ * for a package from npm.
+ * @returns {{ versions: string[], latest: string|null,
+ *             time: Record<string, string>|null } | null}
  */
 const getNpmInfo = cachedAsync("getNpmInfo", {
     fetchFn: async (pkgName) => {
         const output = await runCmdAsync(
             "npm",
-            ["view", pkgName, "versions", "dist-tags.latest", "--json"],
+            ["view", pkgName, "versions", "dist-tags.latest", "time", "--json"],
             { nothrow: true },
         );
         if (!output) return null;
@@ -1086,10 +1145,92 @@ const getNpmInfo = cachedAsync("getNpmInfo", {
         return {
             versions: raw.versions || [],
             latest: raw["dist-tags.latest"] || raw["dist-tags"]?.latest || null,
+            time: raw.time || null,
         };
     },
     semaphore: _npmSem,
 });
+
+/**
+ * Assess whether a published version of `pkg` satisfying `>=patched` is old
+ * enough to adopt, per the configured minimum release age (MIN_RELEASE_AGE_MS).
+ *
+ * pnpm resolves an override/range to the highest satisfying version that also
+ * meets `minimumReleaseAge`; if none qualifies, resolution fails outright.
+ * This mirrors that policy at planning time: the fix is "eligible" when at
+ * least one satisfying version is already old enough, otherwise it reports the
+ * earliest time the fix becomes adoptable so the caller can defer it.
+ *
+ * @param {string} pkg
+ * @param {string} patched - minimum safe version from the advisory
+ * @returns {Promise<{ eligible: boolean, matureVersion: string|null,
+ *                     eligibleAtMs: number|null }>}
+ */
+async function assessFixMaturity(pkg, patched) {
+    const notDeferred = {
+        eligible: true,
+        matureVersion: null,
+        eligibleAtMs: null,
+    };
+    if (MIN_RELEASE_AGE_MS <= 0) return notDeferred;
+    if (!patched || !semver.valid(patched)) return notDeferred;
+
+    const info = await getNpmInfo(pkg);
+    // Without publish-time metadata we cannot judge age; don't block the fix
+    // (matches pnpm's lenient handling of registries that omit `time`).
+    if (!info?.time) return notDeferred;
+
+    const now = Date.now();
+    const publishedMs = (v) => {
+        const t = info.time[v];
+        const ms = t ? Date.parse(t) : NaN;
+        return Number.isFinite(ms) ? ms : null;
+    };
+    // Use range semantics (not a bare version comparison) so the assessment
+    // matches what pnpm will actually resolve for the `>=${patched}` override —
+    // e.g. prereleases are excluded unless the range opts into them, so a fresh
+    // `2.1.0-beta.1` never masquerades as a mature fix for `>=2.0.0`.
+    const range = `>=${patched}`;
+    const satisfying = (info.versions || []).filter(
+        (v) => semver.valid(v) && semver.satisfies(v, range),
+    );
+    // No published version satisfies the fix range — nothing to defer; let the
+    // normal fix path handle it.
+    if (satisfying.length === 0) return notDeferred;
+
+    const mature = satisfying
+        .filter((v) => {
+            const ms = publishedMs(v);
+            return ms !== null && now - ms >= MIN_RELEASE_AGE_MS;
+        })
+        .sort(semver.rcompare);
+    if (mature.length > 0) {
+        return { eligible: true, matureVersion: mature[0], eligibleAtMs: null };
+    }
+
+    // If any satisfying version lacks usable publish-time metadata we cannot
+    // prove it is too new, so stay lenient and let pnpm make the final call at
+    // resolution time. This prevents deferring a fix indefinitely just because
+    // the registry omitted a `time` entry for a version.
+    const times = satisfying.map(publishedMs);
+    if (times.some((ms) => ms === null)) return notDeferred;
+
+    // Every satisfying version is known and too new. The earliest a fix can be
+    // adopted is when the oldest satisfying version crosses the age floor.
+    const eligibleAtMs = Math.min(...times) + MIN_RELEASE_AGE_MS;
+    return { eligible: false, matureVersion: null, eligibleAtMs };
+}
+
+/** Human-readable eligibility note for a deferred fix. */
+function formatDeferralEta(eligibleAtMs) {
+    if (!eligibleAtMs) return `not yet ${MIN_RELEASE_AGE_DAYS}d old`;
+    const date = new Date(eligibleAtMs).toISOString().slice(0, 10);
+    const daysLeft = Math.max(
+        0,
+        Math.ceil((eligibleAtMs - Date.now()) / (24 * 60 * 60 * 1000)),
+    );
+    return `eligible ${date} (~${daysLeft}d)`;
+}
 
 /**
  * Find the smallest published version of `pkgName` newer than
@@ -2258,6 +2399,16 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
         `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} (${colorSeverity(severity)}) ${clr.meta("—")} ${versionGap} ${clr.meta("\u2192")} need ${clr.versionOk(`\u2265${patched}`)}`,
     );
 
+    // Deferred: a fix exists but no published version is old enough to adopt
+    // yet. Show the note and skip the action lines (applying now would be
+    // rejected at install time by the minimum-release-age guard).
+    if (entry.deferred) {
+        log(
+            `     ${clr.warn("\u23f8 deferred")} ${clr.meta("\u2014")} no published ${clr.pkg(pkg)} ${clr.versionOk(`\u2265${patched}`)} is ${MIN_RELEASE_AGE_DAYS}d old yet; ${clr.meta(formatDeferralEta(entry.deferred.eligibleAtMs))}`,
+        );
+        return;
+    }
+
     // ── Advisory IDs (verbose only) ──────────────────────────────────────
     if (VERBOSE) {
         const uniqueGhsaIds = [...new Set(ghsaIds)];
@@ -2326,6 +2477,23 @@ async function classifyWithFixPlan(entry, whyData) {
             verbose(
                 `${pkg}: blocked override — package is in ${SHELL_WORKSPACE} production deps`,
             );
+        }
+    }
+
+    // Defer fixes whose required version is not yet old enough to adopt.
+    // Only entries that would otherwise be applied are eligible for deferral
+    // (a fix plan exists and nothing else blocks it), so deferral never hides a
+    // real blocker or reclassifies an already-fixed package. Resolving to a
+    // too-new version would be rejected by pnpm's minimumReleaseAge guard (and
+    // any device/registry release-age policy) at install time, so surface it as
+    // "come back later" instead of applying it.
+    if (patched && entry.fixPlan && entry.blockingReasons.length === 0) {
+        const maturity = await assessFixMaturity(pkg, patched);
+        if (!maturity.eligible) {
+            entry.deferred = {
+                patched,
+                eligibleAtMs: maturity.eligibleAtMs,
+            };
         }
     }
 }
@@ -2616,7 +2784,7 @@ async function analyzeVulnerabilities(byPackage) {
 /** Stage 5: Execute resolutions. */
 async function executeResolutions(analyses) {
     const actionable = analyses.filter(
-        (a) => a.fixPlan && a.blockingReasons.length === 0,
+        (a) => a.fixPlan && a.blockingReasons.length === 0 && !a.deferred,
     );
 
     if (actionable.length > 0) {
@@ -2626,7 +2794,10 @@ async function executeResolutions(analyses) {
     const results = {
         alreadyFixed: analyses.filter((a) => a.patched && !a.fixPlan),
         resolved: [],
-        blocked: analyses.filter((a) => a.blockingReasons.length > 0),
+        deferred: analyses.filter((a) => a.deferred),
+        blocked: analyses.filter(
+            (a) => !a.deferred && a.blockingReasons.length > 0,
+        ),
         noPatch: analyses.filter((a) => !a.patched),
         failed: [],
     };
@@ -3140,6 +3311,8 @@ function printSummary(results) {
             ),
         results.blocked.length > 0 &&
             clr.warn(results.blocked.length + " blocked"),
+        results.deferred.length > 0 &&
+            clr.warn(results.deferred.length + " deferred"),
         results.noPatch.length > 0 &&
             clr.fail(results.noPatch.length + " no fix available"),
         results.failed.length > 0 &&
@@ -3147,6 +3320,24 @@ function printSummary(results) {
     ].filter(Boolean);
     if (summaryParts.length > 0) {
         log(`\n  ${summaryParts.join(" | ")}`);
+    }
+
+    if (results.deferred.length > 0) {
+        log(
+            clr.meta(
+                `\n  Deferred (waiting for ${MIN_RELEASE_AGE_DAYS}-day minimum release age):`,
+            ),
+        );
+        for (const a of results.deferred) {
+            log(
+                `     ${clr.warn("\u23f8")}  ${clr.pkg(a.pkg)} ${clr.versionOk(`>=${a.patched}`)} ${clr.meta("\u2014")} ${clr.meta(formatDeferralEta(a.deferred.eligibleAtMs))}`,
+            );
+        }
+        log(
+            clr.meta(
+                "     These fixes will apply automatically on a later run once the version is old enough.",
+            ),
+        );
     }
 
     if (results.blocked.length > 0) {
@@ -3416,6 +3607,9 @@ function emitJson(results) {
         latestVersion: a.latestVersion,
         inShellBundle: isInShellBundle(a.pkg),
         blockingReasons: a.blockingReasons,
+        deferredUntil: a.deferred?.eligibleAtMs
+            ? new Date(a.deferred.eligibleAtMs).toISOString()
+            : null,
         risk: a.risk ?? null,
         fixPlan: a.fixPlan
             ? {
@@ -3431,13 +3625,16 @@ function emitJson(results) {
             alreadyFixed: results.alreadyFixed.length,
             resolved: results.resolved.length,
             blocked: results.blocked.length,
+            deferred: results.deferred.length,
             noPatch: results.noPatch.length,
             failed: results.failed.length,
         },
         dryRun: DRY_RUN,
+        minReleaseAgeDays: MIN_RELEASE_AGE_DAYS,
         alreadyFixed: results.alreadyFixed.map(toJson),
         resolved: results.resolved.map(toJson),
         blocked: results.blocked.map(toJson),
+        deferred: results.deferred.map(toJson),
         noPatch: results.noPatch.map(toJson),
         failed: results.failed.map(toJson),
     };
@@ -3473,7 +3670,23 @@ async function main() {
     }
 }
 
-main().catch((e) => {
-    console.error(e.message);
-    process.exit(1);
-});
+export { assessFixMaturity, getNpmInfo };
+
+// Only run when invoked directly (node fix-dependabot-alerts.mjs …), so the
+// module can be imported for unit testing without kicking off a full run.
+// Compare resolved filesystem paths (case-insensitively on Windows) rather than
+// file URLs so casing/separator differences don't cause a false negative.
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    const self = resolve(fileURLToPath(import.meta.url));
+    const argv = resolve(process.argv[1]);
+    return process.platform === "win32"
+        ? self.toLowerCase() === argv.toLowerCase()
+        : self === argv;
+}
+if (invokedDirectly()) {
+    main().catch((e) => {
+        console.error(e.message);
+        process.exit(1);
+    });
+}
