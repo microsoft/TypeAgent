@@ -106,7 +106,9 @@ a webview (F4.1):
   match**; the run emits `replay.row`/`replay.summary` events that appear live
   in the Event Log, and a summary headline is shown when it finishes.
 - When the run finds differences, the result offers a quick pick of the rows
-  (icon, utterance, per-version cache state, and latency).
+  (icon, utterance, per-version cache state, and latency). The run is saved as
+  the agent's **last run**, so the Impact Report re-renders it (with a **Last
+  run** timestamp) when reopened.
 
 The engine is deterministic and dependency-injected: corpus access and the
 per-version action resolver are supplied by the caller. The default resolver

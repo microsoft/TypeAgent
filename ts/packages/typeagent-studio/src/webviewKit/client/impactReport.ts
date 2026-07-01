@@ -64,7 +64,7 @@ interface PersistedResult {
     payload: StudioReplayResult;
     /** Resolved identity of both sides, captured at run time. */
     provenance?: RunProvenance;
-    /** Epoch ms the run completed, for the "restored" hint. */
+    /** Epoch ms the run completed, shown as the "Last run" timestamp. */
     runAt: number;
 }
 interface PanelState {
@@ -353,16 +353,11 @@ window.addEventListener("message", (event: MessageEvent) => {
             // Accept the matching run, or — when no run has been issued since
             // this load (id still 0) — a host recovery re-push of the last
             // result (the panel reloaded after the run finished, or a cached
-            // prior run restored on open). Adopt its id so a genuinely stale
-            // earlier result can't then overwrite it.
+            // prior run seeded from the durable store on open). Adopt its id so a
+            // genuinely stale earlier result can't then overwrite it.
             if (latestRequestId === 0 || msg.requestId === latestRequestId) {
                 latestRequestId = msg.requestId;
-                renderResult(
-                    msg.payload,
-                    msg.restored ?? false,
-                    msg.provenance,
-                    msg.runAt,
-                );
+                renderResult(msg.payload, msg.provenance, msg.runAt);
                 persistResult(msg.payload, msg.provenance, msg.runAt);
                 setControlsEnabled(controlsAvailable);
             }
@@ -496,7 +491,6 @@ function swapVersions(): void {
 
 function renderResult(
     result: StudioReplayResult,
-    restored = false,
     provenance?: RunProvenance,
     runAt?: number,
 ): void {
@@ -525,7 +519,7 @@ function renderResult(
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
         showNotification(toImpactErrorLine(result.error));
-        setStatus(restored ? "Restored — replay aborted." : "Replay aborted.");
+        setStatus("Replay aborted.");
         return;
     }
 
@@ -562,16 +556,14 @@ function renderResult(
 
     const shown = currentRows.length;
     const ms = result.summary.duration;
-    setStatus(
-        restored
-            ? `Restored from last run${
-                  runAt ? ` (${formatRunTimestamp(runAt)})` : ""
-              } — Run for live results (${shown} row(s)).`
-            : `Done — ${shown} row(s) \u00b7 ${ms}ms.`,
-    );
+    const lastRun =
+        runAt !== undefined
+            ? ` \u00b7 Last run: ${formatRunTimestamp(runAt)}`
+            : "";
+    setStatus(`Done — ${shown} row(s) \u00b7 ${ms}ms.${lastRun}`);
 }
 
-/** Format a run timestamp for the "restored" hint (local date + time). */
+/** Format a run timestamp for the "Last run" status hint (local date + time). */
 function formatRunTimestamp(runAt: number): string {
     try {
         return new Date(runAt).toLocaleString();
@@ -1075,7 +1067,6 @@ function restoreSelection(): void {
     if (state?.lastResult) {
         renderResult(
             state.lastResult.payload,
-            true,
             state.lastResult.provenance,
             state.lastResult.runAt,
         );
