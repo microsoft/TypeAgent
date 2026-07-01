@@ -18,6 +18,22 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
 
+// True only when this file is run directly (node fix-dependabot-alerts.mjs …),
+// false when imported for unit testing. Computed once up front so import-time
+// argument validation and any process.exit() can be skipped under a test
+// runner, which may inject its own --* argv flags. Paths are compared
+// case-insensitively on Windows so casing/separator differences don't produce
+// a false negative.
+function invokedDirectly() {
+    if (!process.argv[1]) return false;
+    const self = resolve(fileURLToPath(import.meta.url));
+    const argv = resolve(process.argv[1]);
+    return process.platform === "win32"
+        ? self.toLowerCase() === argv.toLowerCase()
+        : self === argv;
+}
+const IS_MAIN = invokedDirectly();
+
 // Derive ROOT from the git root + workspace prefix so running from a
 // subdirectory (e.g. ts/tools) still targets the correct workspace root.
 function detectWorkspaceRoot() {
@@ -64,7 +80,7 @@ const unknownFlags = args.filter(
             (prefix) => a === prefix || a.startsWith(prefix + "="),
         ),
 );
-if (unknownFlags.length > 0) {
+if (IS_MAIN && unknownFlags.length > 0) {
     console.error(
         `Error: unrecognized flag(s): ${unknownFlags.join(", ")}\nRun with --help to see available options.`,
     );
@@ -142,19 +158,23 @@ const VERBOSE = args.includes("--verbose");
 //   2. DEPENDABOT_MIN_RELEASE_AGE_DAYS env var
 //   3. `minimumReleaseAge` (minutes) in pnpm-workspace.yaml, converted to days
 //   4. 0 (disabled)
-function readMinReleaseAgeDays() {
-    const flag = args.find((a) => a.startsWith("--min-release-age-days="));
+function readMinReleaseAgeDays({
+    argv = args,
+    env = process.env,
+    root = ROOT,
+} = {}) {
+    const flag = argv.find((a) => a.startsWith("--min-release-age-days="));
     if (flag) {
         const n = Number(flag.slice("--min-release-age-days=".length));
         if (Number.isFinite(n) && n >= 0) return n;
     }
-    const env = process.env.DEPENDABOT_MIN_RELEASE_AGE_DAYS;
-    if (env !== undefined && env !== "") {
-        const n = Number(env);
+    const envVal = env.DEPENDABOT_MIN_RELEASE_AGE_DAYS;
+    if (envVal !== undefined && envVal !== "") {
+        const n = Number(envVal);
         if (Number.isFinite(n) && n >= 0) return n;
     }
     try {
-        const ws = readFileSync(resolve(ROOT, "pnpm-workspace.yaml"), "utf-8");
+        const ws = readFileSync(resolve(root, "pnpm-workspace.yaml"), "utf-8");
         // Top-level `minimumReleaseAge: <minutes>` scalar (optionally quoted,
         // trailing comment allowed).
         const m = ws.match(
@@ -179,7 +199,7 @@ const MIN_RELEASE_AGE_DAYS = readMinReleaseAgeDays();
 const MIN_RELEASE_AGE_MS = MIN_RELEASE_AGE_DAYS * 24 * 60 * 60 * 1000;
 export { readMinReleaseAgeDays, MIN_RELEASE_AGE_DAYS };
 
-if (args.includes("--help")) {
+if (IS_MAIN && args.includes("--help")) {
     console.log(`Usage: node tools/scripts/fix-dependabot-alerts.mjs [options]
 
 Options:
@@ -225,7 +245,7 @@ Exit codes:
     process.exit(0);
 }
 
-if (PRUNE_OVERRIDES && (APPLY_OVERRIDES || UPDATE_PARENTS)) {
+if (IS_MAIN && PRUNE_OVERRIDES && (APPLY_OVERRIDES || UPDATE_PARENTS)) {
     console.error(
         "Error: --prune-overrides cannot be combined with --apply-overrides or --update-parents.\n" +
             "Run fixes first, then re-run with --prune-overrides to clean up stale entries.",
@@ -3672,19 +3692,9 @@ async function main() {
 
 export { assessFixMaturity, getNpmInfo };
 
-// Only run when invoked directly (node fix-dependabot-alerts.mjs …), so the
-// module can be imported for unit testing without kicking off a full run.
-// Compare resolved filesystem paths (case-insensitively on Windows) rather than
-// file URLs so casing/separator differences don't cause a false negative.
-function invokedDirectly() {
-    if (!process.argv[1]) return false;
-    const self = resolve(fileURLToPath(import.meta.url));
-    const argv = resolve(process.argv[1]);
-    return process.platform === "win32"
-        ? self.toLowerCase() === argv.toLowerCase()
-        : self === argv;
-}
-if (invokedDirectly()) {
+// Kick off a full run only when invoked directly (see IS_MAIN near the top),
+// so importing this module for unit tests never triggers a run.
+if (IS_MAIN) {
     main().catch((e) => {
         console.error(e.message);
         process.exit(1);

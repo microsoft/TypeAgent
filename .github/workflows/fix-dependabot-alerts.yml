@@ -122,6 +122,11 @@ jobs:
         id: fix
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Enforce the org's 7-day release-age policy in every workspace the
+          # script processes. Without this, workspaces that lack a
+          # pnpm-workspace.yaml (e.g. docs/) would fall back to 0 (disabled)
+          # and could still pin versions published fewer than 7 days ago.
+          DEPENDABOT_MIN_RELEASE_AGE_DAYS: "7"
         run: |
           SCRIPT="$GITHUB_WORKSPACE/ts/tools/scripts/fix-dependabot-alerts.mjs"
           FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
