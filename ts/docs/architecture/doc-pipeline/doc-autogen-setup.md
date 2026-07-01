@@ -1,6 +1,6 @@
 # docs-autogen — Pipeline Setup Guide
 
-> [!IMPORTANT] > **Current implementation (supersedes this guide's Azure/GitHub-App steps).**
+> **Important — current implementation (supersedes this guide's Azure/GitHub-App steps).**
 > The shipped pipeline is a single **GitHub Actions** workflow,
 > [`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml),
 > running **daily** (`cron`) plus manual `workflow_dispatch`. It requires
@@ -17,10 +17,13 @@
 > | Branch push     | Native `GITHUB_TOKEN` (`contents: write`). Pushing is not gated by the org "Actions can't create PRs" policy.                                                                                                                                           |
 > | Change baseline | The last `README.AUTOGEN.md` commit on the branch (computed in-workflow). No watermark tag to seed or advance.                                                                                                                                          |
 >
-> **The only thing to confirm before relying on it:** that the `microsoft`
-> org has **GitHub Models enabled** so the Actions `GITHUB_TOKEN` (with
-> `models: read`) can reach `models.github.ai`. If a run fails the LLM step
-> with `401/403 Unauthorized`, that org setting is the cause.
+> **Validated (no action needed):** the `microsoft` tenant grants the
+> Actions `GITHUB_TOKEN` (with `models: read`) enterprise-grade GitHub
+> Models limits — tens of thousands of requests per 10s and 10M tokens/min —
+> so even a full ~100-package regeneration runs comfortably within quota.
+> There is **no per-run package cap**; selection stays change-scoped via the
+> `--since` baseline, and a hard CI gate refuses to open a PR if anything
+> other than `README.AUTOGEN.md` files changed.
 >
 > The step-by-step provisioning below documents the earlier Azure-DevOps /
 > GitHub-App design and is kept for historical context only.

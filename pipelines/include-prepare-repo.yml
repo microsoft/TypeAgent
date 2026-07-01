@@ -13,18 +13,11 @@ parameters:
   - name: enableCache
     type: boolean
     default: true
-  # Persist the source service connection's credentials in git config so
-  # later steps can `git push` back to the origin (e.g. a bot branch /
-  # tag). Default false to preserve existing read-only checkouts.
-  - name: persistCredentials
-    type: boolean
-    default: false
 
 steps:
   - checkout: self
     displayName: "Checkout TypeAgent Repository"
     path: typeagent
-    persistCredentials: ${{ parameters.persistCredentials }}
 
   - bash: |
       echo "registry=${{ parameters.registry }}" > .npmrc

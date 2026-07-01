@@ -1,68 +1,29 @@
 # Automated Documentation Generation — Architecture & Design
 
-> [!IMPORTANT] > **Current implementation (supersedes the Azure DevOps design below).**
-> The shipped pipeline is a single, self-contained **GitHub Actions**
-> workflow,
-> [`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml),
-> that runs **once per day** (`cron`, plus manual `workflow_dispatch`).
-> It needs **no federated credentials and stores no secrets**:
->
-> - **LLM authoring → GitHub Models.** `@typeagent/aiclient`'s generic
->   OpenAI path (`OPENAI_ENDPOINT` = `https://models.github.ai/inference/chat/completions`,
->   `OPENAI_API_KEY` = the job's `GITHUB_TOKEN`, `OPENAI_MODEL` =
->   `openai/gpt-4o`) reaches GitHub Models under `permissions: models: read`.
->   No Azure OpenAI, no Key Vault, no Workload Identity Federation.
-> - **PR identity → TypeAgent-Bot.** The branch is pushed with the native
->   `GITHUB_TOKEN` (pushing is not blocked by the org "Actions can't create
->   PRs" policy) and the PR is opened with the **existing TypeAgent-Bot
->   GitHub App** (`vars.DEPENDABOT_APP_ID` / `secrets.DEPENDABOT_APP_PRIVATE_KEY`,
->   reused from `fix-dependabot-alerts.yml` — no new App/secret). An
->   App-authored PR is exempt from the policy and triggers downstream CI.
-> - **Change gating / baseline.** Selection diffs against the last
->   `README.AUTOGEN.md` commit on the branch (not the `docs-bot/last-run`
->   tag), so only drifted packages incur a GitHub Models call and every run
->   reproduces the full current drift — a superseding PR can never drop an
->   unmerged package. A PR opens only when a `README.AUTOGEN.md` changed.
-> - **Lifecycle.** A human reviewer merges; the next run closes the prior
->   open bot PR (`--delete-branch`) so only one is ever live.
->
-> The Azure DevOps + WIF + watermark topology described in the rest of this
-> document was an earlier iteration, retained for design context; it was
-> not adopted because federated credentials are unavailable in this
-> environment. Treat the GitHub Models design above as authoritative.
-
-> **Scope:** This document describes the optional, on-demand pipeline
-> that regenerates package-level `README.AUTOGEN.md` files across the
-> TypeAgent monorepo. The pipeline is **split across two platforms** for
-> secretless compliance: an Azure DevOps pipeline does the Azure-OpenAI
-> regeneration and pushes a branch, and a GitHub Actions workflow opens
-> the PR. This document covers that topology, the deterministic-skeleton
->
-> - LLM-prose output format, the idempotency / staleness / cost guards,
->   and the manual-trigger entry points (local CLI and the ADO pipeline).
->   For the package conventions enforced by the existing policy check, see
->   `ts/tools/scripts/policyChecks/npmPackage.mjs`. **For a step-by-step
->   guide to provisioning the pipeline** (service connections, RBAC,
->   first-run validation), see
->   [`doc-autogen-setup.md`](./doc-autogen-setup.md).
+> **Scope.** This document describes the automated pipeline that
+> regenerates package-level `README.AUTOGEN.md` companion files across
+> `ts/packages/**`. It covers the shipped topology (a single daily GitHub
+> Actions workflow that authors via GitHub Models and opens a PR as the
+> TypeAgent-Bot GitHub App), the deterministic-skeleton + LLM-prose output
+> format, the idempotency / staleness / cost guards, and the local +
+> manual entry points. For a step-by-step operator guide see
+> [`doc-autogen-setup.md`](./doc-autogen-setup.md).
 
 ## Overview
 
-An on-demand pipeline that regenerates package-level `README.AUTOGEN.md`
-files across the TypeAgent monorepo, optimized for both human reviewers
-and LLM agents that consume the docs as a navigation index. The pipeline
-is **optional** — it runs only when an operator manually triggers the
-Azure DevOps pipeline (no schedule). Each run regenerates only the
-packages whose source changed since the operator-supplied `since` ref
-(or the watermark tag, if present), and batches all changes into a
-single pull request.
+A daily pipeline that regenerates package-level `README.AUTOGEN.md` files
+across the TypeAgent monorepo, optimized for both human reviewers and LLM
+agents that consume the docs as a navigation index. It runs as a single
+self-contained GitHub Actions workflow
+([`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml))
+on a daily `cron` (plus manual `workflow_dispatch`). Each run regenerates only
+the packages whose source changed since their docs were last generated and
+batches the changes into a single pull request.
 
-The work is split across two platforms because no single one can both
-reach Azure OpenAI **and** write to GitHub without storing a secret:
-the Azure-authenticated regeneration runs in **Azure DevOps** (secretless
-Workload Identity Federation), which pushes the `automated/docs-readmes`
-branch via its GitHub App connection; a **GitHub Actions** workflow then
-opens the PR with the native, ephemeral `GITHUB_TOKEN`. See
+The design deliberately needs **no federated credentials and no stored
+secrets**: the documentation bodies are authored via **GitHub Models** (using
+the job's built-in `GITHUB_TOKEN` under `permissions: models: read`), and the
+PR is opened by the existing **TypeAgent-Bot** GitHub App. See
 [Authentication](#authentication) for the full rationale.
 
 ## Goals
@@ -96,56 +57,43 @@ opens the PR with the native, ephemeral `GITHUB_TOKEN`. See
 ## High-level architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│ Azure DevOps:  pipelines/azure-docs-generate.yml  (manual; trigger:none)│
-│                                                                        │
-│   ├── checkout (persistCredentials: GitHub App connection)             │
-│   ├── fetch full history + tags; set local branch = main              │
-│   ├── pnpm install + build @typeagent/docs-autogen (+ aiclient)       │
-│   ├── AzureCLI@2 (WIF): publish AZURE_* + getKeys → config.local.yaml  │
-│   ├── docs-autogen --render --write --llm                             │
-│   │     ├── resolve watermark SHA from tag docs-bot/last-run          │
-│   │     │   (first run / no watermark on main → full sweep)           │
-│   │     ├── git diff <since>..HEAD -- packages → changed packages     │
-│   │     ├── for each (capped per run): read README, prompt,           │
-│   │     │     call Azure OpenAI, validate, link-check, write          │
-│   │     └── emit per-run report                                       │
-│   ├── prettier --write packages/**/README.AUTOGEN.md                  │
-│   ├── if changed: commit README.AUTOGEN.md, force-push branch         │
-│   │     automated/docs-readmes (via GitHub App connection)            │
-│   └── advance/seed watermark tag docs-bot/last-run → run's commit      │
-└───────────────────────────────┬────────────────────────────────────────┘
-                                │ push to automated/docs-readmes
-                                ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│ GitHub Actions:  .github/workflows/docs-generate.yml                   │
-│   on: push → automated/docs-readmes                                    │
-│   └── gh pr create (if none open) with GITHUB_TOKEN  ─ else PR updates │
-└──────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ GitHub Actions:  .github/workflows/docs-generate.yml                     │
+│   on: schedule (daily cron) | workflow_dispatch                          │
+│                                                                          │
+│   1. checkout (full history) -> pnpm install -> build docs-autogen       │
+│   2. baseline = last commit touching *README.AUTOGEN.md   (--since)      │
+│   3. docs-autogen --render --write --llm --since <baseline>  (no cap)    │
+│        └─ aiclient -> GitHub Models  (OPENAI_ENDPOINT=models.github.ai,   │
+│           OPENAI_API_KEY=$GITHUB_TOKEN, permissions: models: read)       │
+│   4. prettier --write packages/**/README.AUTOGEN.md                      │
+│   5. detect changes (scoped to README.AUTOGEN.md)                        │
+│   6. GATE: fail unless only ts/packages/**/README.AUTOGEN.md changed     │
+│   7. push branch with GITHUB_TOKEN   (contents: write)                   │
+│   8. open PR as the TypeAgent-Bot App  (supersede prior bot PR)          │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+The push and the PR use two different identities on purpose: pushing a branch
+with the native `GITHUB_TOKEN` is allowed, but _opening_ a PR with it is
+blocked by the org "Actions can't create PRs" policy — so the PR is authored
+by the TypeAgent-Bot App instead (which also makes downstream CI run on it).
 
 ## Components
 
-### Pipeline files
+### The workflow
 
-`pipelines/azure-docs-generate.yml` (Azure DevOps — regeneration)
+[`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml)
+is the whole pipeline — regeneration, authoring, and PR creation in one job:
 
-- Trigger: manual only (`trigger: none`, `pr: none`). Parameters cover
-  `dryRun`, `packages`, `since`, `llm`, and `maxPackages`.
-- Azure auth: WIF via the `MSOCTO-ADO-Service-Connection` ARM service
-  connection (`AzureCLI@2` + `addSpnToEnvironment`); `getKeys.mjs`
-  writes `ts/config.local.yaml`.
-- GitHub push: persisted credentials of the GitHub App connection that
-  backs `checkout` (`persistCredentials: true`) — pushes the branch and
-  the watermark tag, no stored PAT.
-
-`.github/workflows/docs-generate.yml` (GitHub Actions — PR)
-
-- Trigger: `on: push` to `automated/docs-readmes`.
-- `permissions: { contents: read, pull-requests: write }`.
-- `concurrency: { group: ${{ github.workflow }}, cancel-in-progress: false }`.
-- Opens the PR with the native `GITHUB_TOKEN` only when one is not
-  already open; otherwise the force-push has already updated it.
+- Triggers: `schedule` (daily `cron`) and `workflow_dispatch` (inputs:
+  `dry-run`, `since`, `model`).
+- `permissions: { contents: write, models: read }`. `contents: write` pushes
+  the branch; `models: read` lets the job's `GITHUB_TOKEN` reach GitHub
+  Models. PR creation uses the TypeAgent-Bot App token, so `GITHUB_TOKEN`
+  never needs `pull-requests: write`.
+- `concurrency: { group: ${{ github.workflow }}, cancel-in-progress: false }`
+  — never interrupts an in-flight run mid-PR.
 
 ### Generator package
 
@@ -172,41 +120,39 @@ stays familiar.
 
 Key responsibilities:
 
-1. Resolve watermark (`docs-bot/last-run` git tag).
-2. Enumerate changed packages since the watermark (or the merge-base
-   with `origin/main`, when invoked manually on a feature branch — see
-   "Manual triggers" below).
+1. Resolve the `--since` baseline (see [Change selection](#change-selection)).
+2. Enumerate changed packages since that baseline.
 3. Build the workspace reverse-dependency graph once per run.
-4. For each package: assemble prompt → call LLM → validate → write.
+4. For each package: assemble prompt -> call the LLM -> validate -> write.
 5. Emit a structured per-run report consumed by the PR-body builder.
 
-Calls Azure OpenAI through the workspace
-[`aiclient`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/aiclient/README.md) package rather
-than via direct `fetch`, so retries, rate limits, and authentication
-are handled consistently with the rest of the codebase.
+Calls the configured LLM (GitHub Models in CI, or any provider set up in
+`ts/.env` locally) through the workspace
+[`aiclient`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/aiclient/README.md)
+package rather than via direct `fetch`, so retries, rate limits, and
+authentication are handled consistently with the rest of the codebase.
 
-### Watermark
+### Change selection
 
-A lightweight git tag, `docs-bot/last-run`, points at the SHA of the
-commit the previous run was generated against. The `azure-docs-generate`
-pipeline **advances** it to the current run's commit at the end of every
-non-dry-run run (the "Advance docs watermark" step), so the tag tracks
-the last scanned default-branch commit and each run only regenerates
-packages whose source changed since the prior run. Operators can still
-move it by hand (see the docs-autogen README, "Watermark lifecycle") to
-repoint the default diff baseline.
+Each run regenerates only packages whose source changed since their docs were
+last generated. The workflow computes the `--since` baseline as the most
+recent commit that touched any `README.AUTOGEN.md` on the checked-out branch:
 
-First-run behaviour when the tag is absent: on the default branch with
-no watermark the CLI does a **cold-start full sweep**, regenerating
-every eligible package (bounded by `maxPackages`), and the pipeline
-seeds the tag at that run's commit. This is gated to the default branch
-plus missing-watermark case via the `onDefaultBranch` flag on the
-resolver's `source: "none"` result; other no-baseline cases (e.g. a
-detached HEAD) stay a no-op. Run #1 therefore documents everything and
-runs #2+ are incremental. `README.AUTOGEN.md` / `README.md` are not
-watched inputs (only `src/` and `package.json` are), so neither
-advancing the tag nor merging the generated docs PR retriggers
-regeneration.
+```bash
+git log -1 --format=%H -- '*README.AUTOGEN.md'
+```
+
+Because the bot's commits only land on the default branch when a docs PR is
+**merged**, an unmerged PR leaves this baseline in place — so the next run
+re-selects the same drifted packages (plus any new ones) and each PR always
+carries the full current drift. `README.AUTOGEN.md` and `README.md` are not
+watched inputs (only `src/` and `package.json` are), so neither the generated
+docs nor their merge retriggers regeneration.
+
+The CLI also supports an optional `docs-bot/last-run` git tag as a `--since`
+fallback for local / standalone runs; the shipped workflow does not use or
+advance it. On the default branch with no baseline at all (a true first run),
+the CLI does a cold-start full sweep of every eligible package.
 
 ### README AUTOGEN region
 
@@ -405,8 +351,10 @@ without active guards. The pipeline applies several layers:
   whitespace or the content-hash comment changed, the package is
   dropped from the batch. If the entire batch is empty after this
   filter, the run exits without opening a PR.
-- **Per-run package cap** (default 25). Excess packages are deferred
-  to the next run and listed in the PR body.
+- **No per-run package cap in CI.** The CLI defaults to a 25-package cost
+  guard, but the workflow raises it beyond the workspace size so a large
+  drift regenerates in one run — the microsoft-tenant GitHub Models limits
+  are ample. Selection is change-scoped, so most runs touch only a few.
 
 ## Staleness disclosure
 
@@ -459,12 +407,13 @@ Both are first-class entry points to the same generator script.
 
 The generator is the `@typeagent/docs-autogen` workspace package
 (at `ts/tools/docsAutogen/`), built with `pnpm --filter @typeagent/docs-autogen build`
-once at the workspace root. Authentication uses the same
-`AZURE_OPENAI_*` variables already documented in `ts/.env` for local
-development; no GitHub credentials are needed when running locally
-because the script never opens a PR in this mode — it just edits
-the working tree and lets the contributor commit through normal
-git workflow.
+once at the workspace root. Authentication uses whatever provider aiclient
+is configured for in `ts/.env` — Azure OpenAI (`AZURE_OPENAI_*`) or an
+OpenAI-compatible endpoint such as GitHub Models (`OPENAI_ENDPOINT` /
+`OPENAI_API_KEY` / `OPENAI_MODEL`). No GitHub credentials are needed when
+running locally because the script never opens a PR in this mode — it just
+edits the working tree and lets the contributor commit through normal git
+workflow.
 
 **Default scope (smart `--since`).** When invoked with no explicit
 `--packages`, `--since`, or `--all`, the script picks a sensible
@@ -497,8 +446,10 @@ Supported invocations (all relative to `ts/`):
 
 Required local environment:
 
-- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` (or local OIDC
-  config), and the deployment name. Same as `ts/.env`.
+- An aiclient-supported LLM provider in `ts/.env`: Azure OpenAI
+  (`AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY`) or an OpenAI-compatible
+  endpoint (`OPENAI_ENDPOINT` / `OPENAI_API_KEY` / `OPENAI_MODEL`), e.g.
+  GitHub Models.
 - A clean working tree is recommended so generated changes are easy
   to review separately.
 
@@ -507,44 +458,29 @@ the diff guard — those are workflow-level guards that exist because
 the bot runs unattended. A human running `--all` is opting into the
 cost themselves.
 
-### Pipeline run (Azure DevOps)
+### CI (GitHub Actions)
 
-Regeneration runs as the **Azure DevOps** pipeline
-`pipelines/azure-docs-generate.yml` (manual / on-demand;
-`trigger: none`). Authoring the docs calls Azure OpenAI, which now
-requires secretless Workload Identity Federation; GitHub federated
-credentials are being deprecated and stored secrets / PATs are not
-permitted, so this half cannot run on GitHub Actions. The run
-parameters mirror the CLI flags:
+The daily run is the GitHub Actions workflow
+[`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml)
+(`schedule` + `workflow_dispatch`). It authors via GitHub Models, so no Azure
+or federated credentials are involved. Dispatch inputs:
 
-| Parameter     | Default | Effect                                                                                                                               |
-| ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `dryRun`      | `false` | Generate and report only; do not push or open a PR.                                                                                  |
-| `packages`    | `""`    | Comma-separated package names. When set, overrides any change-detection.                                                             |
-| `since`       | `""`    | Override the change-detection ref. Empty = smart default (watermark if present, or a first-run full sweep when no watermark exists). |
-| `llm`         | `true`  | Author the documentation bodies via Azure OpenAI; off emits placeholder bodies alongside the deterministic Reference.                |
-| `maxPackages` | `100`   | Per-run package cap.                                                                                                                 |
+| Input     | Default         | Effect                                                                |
+| --------- | --------------- | --------------------------------------------------------------------- |
+| `dry-run` | `false`         | Generate and report only; do not write, push, or open a PR.           |
+| `since`   | `""`            | Override the diff baseline (blank = last `README.AUTOGEN.md` commit). |
+| `model`   | `openai/gpt-4o` | GitHub Models model id used for authoring.                            |
 
-Because Azure DevOps cannot write to GitHub without a stored token, the
-pipeline only **pushes the `automated/docs-readmes` branch** (via the
-GitHub App connection that backs `checkout`, using persisted
-credentials). The force-push triggers the companion GitHub Actions
-workflow `.github/workflows/docs-generate.yml`, which opens or updates
-the single PR with the native, ephemeral `GITHUB_TOKEN`. Each platform
-writes only with its own managed identity; no cross-system secret is
-stored.
+The job pushes the regenerated `README.AUTOGEN.md` files to a per-run branch
+with the native `GITHUB_TOKEN`, then opens the PR with the TypeAgent-Bot App
+token (superseding any prior open bot PR). A hard gate refuses to open a PR
+unless only `ts/packages/**/README.AUTOGEN.md` files changed.
 
 Common uses:
 
-- **One-off regeneration for a specific package**: run with
-  `packages: list-agent`.
-- **Catch up after a large merge**: run with `since: <merge-sha>`.
-
-A run still respects all safety guards (Trademarks block check,
-`SecretAgents/` exclusion, link validation, structural validation). It
-**advances** the watermark at the end of a successful non-dry-run run,
-so the next default-baseline run diffs only source changed since this
-run.
+- **One-off regeneration for a specific package**: run locally (see
+  [Local](#local)) or dispatch with an older `since`.
+- **Catch up after a large merge**: dispatch with `since: <merge-sha>`.
 
 ### Per-PR override (deferred to v2)
 
@@ -556,64 +492,61 @@ v2 extension.
 
 ## Cost and safety guards
 
-| Guard                      | Mechanism                                                                                                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cost cap                   | Per-run package cap (default 25); per-package byte cap on source slice; per-call token budget.                                                                                                |
-| Section length caps        | Files of interest=10, Used by=10, External deps=20, Key concepts=8, Overview=500 words hard.                                                                                                  |
-| Total document cap         | ~2000 words rendered; safety net for pathological packages.                                                                                                                                   |
-| Trademarks block integrity | Re-validated against `policyChecks/npmPackage.mjs` after every regeneration.                                                                                                                  |
-| `SecretAgents/` exclusion  | Hard-coded path filter in change detection. Never globbed.                                                                                                                                    |
-| Fork-PR safety             | Regeneration runs only as a manual Azure DevOps pipeline; no PR-triggered path that leaks Azure access. The GitHub workflow only reacts to the bot branch and uses the scoped `GITHUB_TOKEN`. |
-| Loop prevention            | ADO pipeline is manual (`trigger: none`). The GitHub workflow triggers only on `automated/docs-readmes`; it opens the PR with `GITHUB_TOKEN`, which does not trigger further runs.            |
-| Concurrency                | Stable branch is force-pushed each run; the GitHub workflow uses `concurrency` so pushes don't race. At most one docs PR is open and it updates in place.                                     |
-| Watermark advance          | ADO pipeline advances/seeds `docs-bot/last-run` to each run's commit (non-dry-run); operators can still move it by hand.                                                                      |
-| Secretless auth            | Azure via WIF service connection; GitHub branch push via the GitHub App connection (no PAT); PR via ephemeral `GITHUB_TOKEN`. No stored secret on either platform.                            |
+| Guard                      | Mechanism                                                                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cost cap                   | No per-run package cap in CI (ample tenant limits); per-package source-slice byte cap and per-call token budget still apply.                                       |
+| Section length caps        | Files of interest=10, Used by=10, External deps=20, Key concepts=8, Overview=500 words hard.                                                                       |
+| Total document cap         | ~2000 words rendered; safety net for pathological packages.                                                                                                        |
+| Trademarks block integrity | Re-validated against `policyChecks/npmPackage.mjs` after every regeneration.                                                                                       |
+| `SecretAgents/` exclusion  | Hard-coded path filter in change detection. Never globbed.                                                                                                         |
+| Only-markdown gate         | Before opening a PR the workflow fails unless the entire working-tree delta is `ts/packages/**/README.AUTOGEN.md` — no source, config, or other files can slip in. |
+| Change scope               | Selection diffs against the last `README.AUTOGEN.md` commit, so unchanged packages are never regenerated (and non-deterministic prose can't churn the PR).         |
+| Loop prevention            | The bot's commits only touch `README.AUTOGEN.md`, which is not a watched input, so merging a docs PR does not retrigger a run.                                     |
+| Concurrency                | `concurrency: cancel-in-progress: false` — at most one run in flight; a superseding run closes the prior open bot PR.                                              |
+| Secretless auth            | GitHub Models via the job `GITHUB_TOKEN` (`models: read`); branch push via `GITHUB_TOKEN` (`contents: write`); PR via the TypeAgent-Bot App. No stored secret.     |
 
 ## Authentication
 
-Two independent, secretless identities — one per platform — because
-the work is split across Azure DevOps and GitHub Actions:
+Two secretless mechanisms, both using the job's built-in `GITHUB_TOKEN` plus
+one pre-existing GitHub App — no federated credentials, no stored secrets:
 
-- **Azure OpenAI (regeneration, Azure DevOps)**: Workload Identity
-  Federation via the `MSOCTO-ADO-Service-Connection` ARM service
-  connection. An `AzureCLI@2` task with `addSpnToEnvironment: true`
-  publishes `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
-  `AZURE_FEDERATED_TOKEN_FILE` for `@azure/identity`'s
-  `WorkloadIdentityCredential`, and `getKeys.mjs` pulls the Azure
-  OpenAI config from `build-pipeline-kv` into `ts/config.local.yaml`.
-  No stored key.
-- **GitHub branch push (Azure DevOps)**: the persisted credentials of
-  the GitHub App connection that backs `checkout` (`persistCredentials:
-true`). The app must have read/write access to code. No stored PAT.
-- **GitHub PR (GitHub Actions)**: the native, ephemeral `GITHUB_TOKEN`,
-  scoped by the workflow `permissions` block (`pull-requests: write`).
+- **LLM authoring -> GitHub Models.** aiclient's generic OpenAI-compatible path
+  is pointed at GitHub Models: `OPENAI_ENDPOINT` =
+  `https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY` =
+  the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-4o`, under
+  `permissions: models: read`. No Azure OpenAI, Key Vault, or Workload
+  Identity Federation.
+- **Branch push -> `GITHUB_TOKEN`.** `permissions: contents: write`. Pushing a
+  branch is not gated by the org "Actions can't create PRs" policy.
+- **PR creation -> TypeAgent-Bot App.** The PR is opened with an installation
+  token minted from the existing `DEPENDABOT_APP_ID` /
+  `DEPENDABOT_APP_PRIVATE_KEY` (the same App `fix-dependabot-alerts.yml` uses).
+  A PR authored by the App is exempt from the "Actions can't create PRs"
+  policy and, unlike a `GITHUB_TOKEN`-opened PR, triggers downstream CI.
 
 ## PR mechanics
 
-- Branch name: the stable `automated/docs-readmes`, force-pushed by the
-  Azure DevOps pipeline each run. A stable branch means the single PR
-  updates in place rather than a new PR per run.
-- Commit author: `typeagent-docs-bot`. Commit message includes the
-  standard
+- Branch name: `automated/docs-readmes-<date>-<run_number>` — unique per run.
+- Push identity: the native `GITHUB_TOKEN` (`contents: write`).
+- PR identity: the TypeAgent-Bot App token (`gh pr create`). The commit
+  message carries the standard
   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
-  trailer used elsewhere in this repo.
-- The companion GitHub Actions workflow opens the PR only if one is not
-  already open for the branch; otherwise the force-push has already
-  updated the existing PR. This keeps the invariant that at most one
-  docs PR is open at a time without any explicit supersede step.
+  trailer.
+- Supersede: before opening the new PR the workflow closes any previously open
+  bot PR (`gh pr close --delete-branch`), so at most one docs PR is live at a
+  time. A human reviewer merges it.
 
 ## Failure modes and recovery
 
-| Failure                           | Behaviour                                                                                                                                                             |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM call fails for one package    | Package is skipped, error logged in run report; other packages proceed.                                                                                               |
-| Generated output fails validation | One corrective retry with a stricter system message. Second failure: package is skipped and reported.                                                                 |
-| Generated output has dead links   | Package is skipped (never committed). Reported with the offending link.                                                                                               |
-| Trademarks block damaged          | Package is skipped; surfaced in run report; nothing committed for that package.                                                                                       |
-| Watermark tag missing             | First run on the default branch with no watermark does a full sweep (CLI cold-start); the pipeline then seeds the tag. No manual pre-seed required.                   |
-| Prior bot PR still open           | Left in place — the force-push updates it; the GitHub workflow only opens a PR when none is open.                                                                     |
-| Run cancelled mid-flight          | Watermark is advanced only on success, so the next run picks up from the same baseline. No partial PR because the branch is pushed only after regeneration completes. |
-| Cost cap hit                      | Excess packages deferred to next run; listed in the PR body so reviewers know what was skipped and why.                                                               |
+| Failure                           | Behaviour                                                                                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM call fails for one package    | The package keeps its existing AI body (the writer preserves it rather than writing a placeholder); other packages proceed. Retried next run. |
+| Generated output fails validation | One corrective retry with a stricter system message. Second failure: the package is skipped and reported.                                     |
+| Generated output has dead links   | Broken links are stripped to plain text before write; the original set is surfaced in the run report.                                         |
+| Trademarks block damaged          | The package is skipped; surfaced in the run report; nothing committed for that package.                                                       |
+| Non-doc file touched              | The only-markdown gate fails the run before any PR is opened, so a stray change can never reach a PR.                                         |
+| Prior bot PR still open           | Closed (`--delete-branch`) when the new run opens its PR, so at most one is live.                                                             |
+| Run cancelled mid-flight          | No partial PR — the branch is pushed only after regeneration completes and the gate passes.                                                   |
 
 ## Future extensions
 
