@@ -62,6 +62,16 @@ export type HostToWebviewMessage =
           provenance?: RunProvenance;
           /** Epoch ms the run completed, shown as the "Last run" timestamp. */
           runAt?: number;
+          /** The base (A) selection the run used, so a reopened report can
+           *  restore its launch controls to the last run. */
+          versionA?: ResolvedVersion;
+          /** The compare (B) selection the run used, for the same reason. */
+          versionB?: ResolvedVersion;
+          /** True when the result was pushed from outside the panel (e.g. a
+           *  Replay run launched from the Corpora view) rather than from this
+           *  panel's own run. The webview accepts it regardless of its own
+           *  in-panel request-id sequence so an open report refreshes live. */
+          external?: boolean;
       }
     /** A failure for a prior `run` request (or general error). */
     | { type: "error"; requestId?: number; message: string }
@@ -81,6 +91,11 @@ export type WebviewToHostMessage =
           versionA: VersionSpec;
           /** Validated compare (B) version spec. */
           versionB: VersionSpec;
+          /** The resolved base (A) selection (label/tooltip) to echo back so the
+           *  report can restore the launch controls after a close/reopen. */
+          resolvedA: ResolvedVersion;
+          /** The resolved compare (B) selection, echoed back for the same reason. */
+          resolvedB: ResolvedVersion;
           /** Which deterministic dispatch path to model. */
           mode: StudioReplayMode;
           /**
@@ -106,6 +121,32 @@ function narrowMode(value: unknown): StudioReplayMode {
     return value === "completionBased-cache" ? value : "nfa-grammar";
 }
 
+/** A conservative display label for a spec, used when the webview didn't supply
+ *  one (the label is display-only; the spec is what actually runs). */
+function defaultLabelForSpec(spec: VersionSpec): string {
+    return spec.kind === "workingTree" ? "working tree" : spec.ref;
+}
+
+/** Rebuild a {@link ResolvedVersion} for echo-back from the webview's untrusted
+ *  resolved object, pinned to the already-coerced spec. Only the display
+ *  label/tooltip come from the webview (sanitized to strings); the spec is the
+ *  host-validated one, so the echoed selection can never diverge from what ran. */
+function narrowResolvedVersion(
+    value: unknown,
+    spec: VersionSpec,
+): ResolvedVersion {
+    const r = (typeof value === "object" && value !== null ? value : {}) as {
+        label?: unknown;
+        tooltip?: unknown;
+    };
+    return {
+        spec,
+        label:
+            typeof r.label === "string" ? r.label : defaultLabelForSpec(spec),
+        tooltip: typeof r.tooltip === "string" ? r.tooltip : "",
+    };
+}
+
 /** Narrow an untrusted value into a {@link WebviewToHostMessage}. */
 export function parseWebviewMessage(
     value: unknown,
@@ -127,6 +168,8 @@ export function parseWebviewMessage(
                 agent?: unknown;
                 versionA?: unknown;
                 versionB?: unknown;
+                resolvedA?: unknown;
+                resolvedB?: unknown;
                 mode?: unknown;
                 validateWildcards?: unknown;
             };
@@ -139,12 +182,16 @@ export function parseWebviewMessage(
                 // Accept either a typed spec (picker selection) or a raw string
                 // (legacy text field / test seam); always re-validate host-side
                 // rather than trusting the webview's object.
+                const versionA = coerceVersionSpec(m.versionA);
+                const versionB = coerceVersionSpec(m.versionB);
                 return {
                     type: "run",
                     requestId: m.requestId,
                     agent: m.agent,
-                    versionA: coerceVersionSpec(m.versionA),
-                    versionB: coerceVersionSpec(m.versionB),
+                    versionA,
+                    versionB,
+                    resolvedA: narrowResolvedVersion(m.resolvedA, versionA),
+                    resolvedB: narrowResolvedVersion(m.resolvedB, versionB),
                     mode: narrowMode(m.mode),
                     // Opt-in and conservative: only an explicit `true` enables it.
                     validateWildcards: m.validateWildcards === true,

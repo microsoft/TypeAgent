@@ -45,10 +45,16 @@ import {
     StudioServiceConnection,
     type StudioConnectionState,
 } from "./studioServiceConnection.js";
-import { openImpactReport } from "./impactReportView.js";
+import {
+    openImpactReport,
+    refreshOpenImpactReport,
+} from "./impactReportView.js";
 import { savePersistedRun } from "./impactReportStore.js";
 import { defaultGitExec, resolveVersionProvenance } from "./gitRefProvider.js";
-import type { RunProvenance } from "./webviewKit/replayViewModel.js";
+import type {
+    ResolvedVersion,
+    RunProvenance,
+} from "./webviewKit/replayViewModel.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     // In-process runtime — retained ONLY for the onboarding command surface
@@ -874,6 +880,19 @@ export function activate(context: vscode.ExtensionContext): void {
                         versionA,
                         versionB,
                     });
+                    // The report's launch controls this run maps to: HEAD (A) vs
+                    // the working tree (B) — matching the report's own defaults so
+                    // a report opened after this run restores the same dropdowns.
+                    const resolvedA: ResolvedVersion = {
+                        spec: { kind: "git", ref: "HEAD" },
+                        label: "HEAD",
+                        tooltip: "Last commit (HEAD).",
+                    };
+                    const resolvedB: ResolvedVersion = {
+                        spec: { kind: "workingTree" },
+                        label: "working tree",
+                        tooltip: "Your uncommitted edits in the working tree.",
+                    };
                     // Persist as the agent's last run so opening the Impact Report
                     // re-renders this run instead of a blank report.
                     savePersistedRun(
@@ -882,7 +901,18 @@ export function activate(context: vscode.ExtensionContext): void {
                         result,
                         runAt,
                         provenance,
+                        resolvedA,
+                        resolvedB,
                     );
+                    // If a report for this agent is already open, refresh it in
+                    // place so the user sees this run without reopening.
+                    refreshOpenImpactReport(agent, {
+                        payload: result,
+                        runAt,
+                        versionA: resolvedA,
+                        versionB: resolvedB,
+                        ...(provenance ? { provenance } : {}),
+                    });
                     const line = formatReplaySummaryLine(result.summary);
                     if (result.rows.length === 0) {
                         vscode.window.showInformationMessage(

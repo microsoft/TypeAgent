@@ -354,9 +354,29 @@ window.addEventListener("message", (event: MessageEvent) => {
             // this load (id still 0) — a host recovery re-push of the last
             // result (the panel reloaded after the run finished, or a cached
             // prior run seeded from the durable store on open). Adopt its id so a
-            // genuinely stale earlier result can't then overwrite it.
-            if (latestRequestId === 0 || msg.requestId === latestRequestId) {
-                latestRequestId = msg.requestId;
+            // genuinely stale earlier result can't then overwrite it. An external
+            // push (a Replay launched from the Corpora view) is accepted
+            // regardless of this panel's own request-id sequence, without
+            // adopting its id, so a later in-panel run still dedupes normally.
+            if (
+                msg.external ||
+                latestRequestId === 0 ||
+                msg.requestId === latestRequestId
+            ) {
+                if (!msg.external) {
+                    latestRequestId = msg.requestId;
+                }
+                // Recover the launch controls to the run's versions. On a fresh
+                // panel (reopened after close) the webview's own getState is empty,
+                // so the host-carried selection is the only way to show which
+                // versions the restored run compared. Harmless on a live run (the
+                // echoed selection matches what's already shown).
+                if (msg.versionA && msg.versionB) {
+                    versionA = msg.versionA;
+                    versionB = msg.versionB;
+                    renderVersionButtons();
+                    persistState({ versionA, versionB });
+                }
                 renderResult(msg.payload, msg.provenance, msg.runAt);
                 persistResult(msg.payload, msg.provenance, msg.runAt);
                 setControlsEnabled(controlsAvailable);
@@ -409,6 +429,8 @@ function runReplay(): void {
         agent,
         versionA: versionA.spec,
         versionB: versionB.spec,
+        resolvedA: versionA,
+        resolvedB: versionB,
         mode,
         validateWildcards,
     });

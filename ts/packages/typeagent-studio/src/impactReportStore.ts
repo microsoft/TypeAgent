@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import type * as vscode from "vscode";
-import type { RunProvenance } from "./webviewKit/replayViewModel.js";
+import type {
+    ResolvedVersion,
+    RunProvenance,
+} from "./webviewKit/replayViewModel.js";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 // The Impact Report and the lightweight "Replay corpus" action both write the
@@ -21,6 +24,10 @@ export interface PersistedRun {
     payload: StudioReplayResult;
     provenance?: RunProvenance;
     runAt: number;
+    /** The base (A) selection the run used, to restore the launch controls. */
+    versionA?: ResolvedVersion;
+    /** The compare (B) selection the run used, to restore the launch controls. */
+    versionB?: ResolvedVersion;
 }
 
 /** Read the last persisted run for an agent, or `undefined` if none is stored. */
@@ -38,6 +45,8 @@ export function savePersistedRun(
     payload: StudioReplayResult,
     runAt: number,
     provenance?: RunProvenance,
+    versionA?: ResolvedVersion,
+    versionB?: ResolvedVersion,
 ): void {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
@@ -47,5 +56,7 @@ export function savePersistedRun(
         payload: bounded,
         runAt,
         ...(provenance ? { provenance } : {}),
+        ...(versionA ? { versionA } : {}),
+        ...(versionB ? { versionB } : {}),
     } satisfies PersistedRun);
 }

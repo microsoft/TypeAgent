@@ -38,6 +38,45 @@ export interface ImpactReportConnection {
 }
 
 /**
+ * A completed replay pushed into an already-open Impact Report from outside the
+ * panel (a Replay launched from the Corpora view), so the open report refreshes
+ * in place instead of only updating on the next reopen.
+ */
+export interface ImpactReportLiveUpdate {
+    payload: StudioReplayResult;
+    runAt: number;
+    provenance?: RunProvenance;
+    versionA: ResolvedVersion;
+    versionB: ResolvedVersion;
+}
+
+/** Live refreshers for open report panels, keyed by agent. Registered while a
+ *  panel is open and removed on dispose, so an external Replay can find and
+ *  update the matching open report. */
+const openReportRefreshers = new Map<
+    string,
+    (update: ImpactReportLiveUpdate) => void
+>();
+
+/**
+ * Push a freshly computed replay into the open Impact Report for `agent`, if one
+ * is open, so it re-renders in place. Returns true when a panel was updated.
+ * A no-op (returns false) when no report is open — the caller still persists the
+ * run to the durable store so the next reopen shows it.
+ */
+export function refreshOpenImpactReport(
+    agent: string,
+    update: ImpactReportLiveUpdate,
+): boolean {
+    const refresh = openReportRefreshers.get(agent);
+    if (!refresh) {
+        return false;
+    }
+    refresh(update);
+    return true;
+}
+
+/**
  * Open (or reveal) the Impact Report webview for a single `agent` — the first
  * greenfield client of the `studio` service channel. One panel exists per agent
  * (keyed by `instanceKey`), so reports for different agents open as separate
@@ -72,6 +111,8 @@ export function openImpactReport(
               payload: StudioReplayResult;
               provenance?: RunProvenance;
               runAt?: number;
+              versionA?: ResolvedVersion;
+              versionB?: ResolvedVersion;
           }
         | undefined;
     // Per-panel ref caches so re-opening a version picker is instant. The local
@@ -94,6 +135,7 @@ export function openImpactReport(
         retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
+            openReportRefreshers.delete(agent);
             stateSub?.dispose();
             stateSub = undefined;
             client?.close();
@@ -103,6 +145,34 @@ export function openImpactReport(
     });
 
     const post = (message: HostToWebviewMessage) => panel.post(message);
+
+    // Let an external Replay (launched from the Corpora view) refresh this open
+    // report in place: adopt its result as this panel's last result (so a later
+    // reload/ready re-push shows it) and, when the webview is listening, post it
+    // as an external result the client accepts regardless of its own request-id
+    // sequence.
+    openReportRefreshers.set(agent, (update) => {
+        lastResult = {
+            requestId: 0,
+            payload: update.payload,
+            runAt: update.runAt,
+            versionA: update.versionA,
+            versionB: update.versionB,
+            ...(update.provenance ? { provenance: update.provenance } : {}),
+        };
+        if (webviewReady) {
+            post({
+                type: "result",
+                requestId: 0,
+                external: true,
+                payload: update.payload,
+                runAt: update.runAt,
+                versionA: update.versionA,
+                versionB: update.versionB,
+                ...(update.provenance ? { provenance: update.provenance } : {}),
+            });
+        }
+    });
 
     // Single-flight connect so concurrent ready/run don't open multiple sockets;
     // failures aren't cached (a later reconnect/run retries).
@@ -183,6 +253,12 @@ export function openImpactReport(
                     ...(persisted.provenance
                         ? { provenance: persisted.provenance }
                         : {}),
+                    ...(persisted.versionA
+                        ? { versionA: persisted.versionA }
+                        : {}),
+                    ...(persisted.versionB
+                        ? { versionB: persisted.versionB }
+                        : {}),
                 };
             }
         }
@@ -196,6 +272,12 @@ export function openImpactReport(
                     : {}),
                 ...(lastResult.provenance
                     ? { provenance: lastResult.provenance }
+                    : {}),
+                ...(lastResult.versionA
+                    ? { versionA: lastResult.versionA }
+                    : {}),
+                ...(lastResult.versionB
+                    ? { versionB: lastResult.versionB }
                     : {}),
             });
         }
@@ -450,12 +532,16 @@ export function openImpactReport(
                 requestId: msg.requestId,
                 payload,
                 runAt: completedAt,
+                versionA: msg.resolvedA,
+                versionB: msg.resolvedB,
                 ...(provenance ? { provenance } : {}),
             });
             lastResult = {
                 requestId: msg.requestId,
                 payload,
                 runAt: completedAt,
+                versionA: msg.resolvedA,
+                versionB: msg.resolvedB,
                 ...(provenance ? { provenance } : {}),
             };
             savePersistedRun(
@@ -464,6 +550,8 @@ export function openImpactReport(
                 payload,
                 completedAt,
                 provenance,
+                msg.resolvedA,
+                msg.resolvedB,
             );
         } catch (e) {
             post({
