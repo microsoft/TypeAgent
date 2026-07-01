@@ -1,5 +1,33 @@
 # docs-autogen — Pipeline Setup Guide
 
+> **Important — current implementation (supersedes this guide's Azure/GitHub-App steps).**
+> The shipped pipeline is a single **GitHub Actions** workflow,
+> [`.github/workflows/docs-generate.yml`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml),
+> running **daily** (`cron`) plus manual `workflow_dispatch`. It requires
+> **no federated credentials and no stored secrets**, so most of the
+> provisioning below (creating a new GitHub App, Azure OpenAI / Key Vault /
+> WIF wiring, the `docs-bot/last-run` watermark) **does not apply**.
+>
+> What it actually needs — all already present on `microsoft/TypeAgent`:
+>
+> | Need            | How it's satisfied                                                                                                                                                                                                                                      |
+> | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | LLM authoring   | **GitHub Models** via `permissions: models: read` + the job's `GITHUB_TOKEN`. aiclient is pointed at it with `OPENAI_ENDPOINT=https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY=${{ github.token }}`, `OPENAI_MODEL=openai/gpt-4o`. |
+> | PR identity     | The **existing TypeAgent-Bot** GitHub App — reuses `vars.DEPENDABOT_APP_ID` and `secrets.DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. No new App or secret.                                                          |
+> | Branch push     | Native `GITHUB_TOKEN` (`contents: write`). Pushing is not gated by the org "Actions can't create PRs" policy.                                                                                                                                           |
+> | Change baseline | The last `README.AUTOGEN.md` commit on the branch (computed in-workflow). No watermark tag to seed or advance.                                                                                                                                          |
+>
+> **Validated (no action needed):** the `microsoft` tenant grants the
+> Actions `GITHUB_TOKEN` (with `models: read`) enterprise-grade GitHub
+> Models limits — tens of thousands of requests per 10s and 10M tokens/min —
+> so even a full ~100-package regeneration runs comfortably within quota.
+> There is **no per-run package cap**; selection stays change-scoped via the
+> `--since` baseline, and a hard CI gate refuses to open a PR if anything
+> other than `README.AUTOGEN.md` files changed.
+>
+> The step-by-step provisioning below documents the earlier Azure-DevOps /
+> GitHub-App design and is kept for historical context only.
+
 This guide walks an operator through provisioning the
 [`docs-generate`](https://github.com/microsoft/TypeAgent/blob/main/.github/workflows/docs-generate.yml) GitHub
 Action that regenerates `README.AUTOGEN.md` companion files on

@@ -4,11 +4,13 @@
 import { Git } from "./git.js";
 
 /**
- * Conventional name of the lightweight tag that records the SHA of
- * the most recent successful scheduled docs-autogen run.
+ * Conventional name of the lightweight tag that can record the SHA a
+ * docs-autogen run was generated against.
  *
- * Manual (`workflow_dispatch`) runs intentionally do not advance this
- * tag, so they remain idempotent against the daily cron.
+ * This is an optional `--since` fallback for local / standalone CLI runs.
+ * The shipped GitHub Actions workflow (.github/workflows/docs-generate.yml)
+ * does NOT use or advance it — it diffs against the last README.AUTOGEN.md
+ * commit instead.
  */
 export const WATERMARK_TAG = "docs-bot/last-run";
 
@@ -25,8 +27,8 @@ export async function readWatermark(git: Git): Promise<string | null> {
 
 /**
  * Move (or create) the watermark tag to point at `sha` locally.
- * The caller is responsible for pushing the tag (CI does this only on
- * a successful scheduled run, never on manual dispatch).
+ * The caller is responsible for pushing the tag. Provided for local /
+ * tooling use; the shipped CI workflow does not advance the watermark.
  */
 export async function writeWatermark(git: Git, sha: string): Promise<void> {
     const ok = await git.setTag(WATERMARK_TAG, sha);

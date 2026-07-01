@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=768b6415a578940a07560017cb6554fda1229fbe6e5eb0ede7a94f910af31370 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7334029a4baec56180eef51ce7b9c6e3867886225fcbfa22bd9b541063f066cf -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,51 +12,68 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the UI entry point for the TypeAgent sample code. It explores architectures for building interactive agents with natural language interfaces using structured prompting and large language models (LLMs). The shell acts as a personal agent that processes user requests, performs actions, answers questions, and engages in conversations using an extensible set of agents.
+The `agent-shell` package is a TypeScript library that serves as the UI entry point for the TypeAgent sample code. It demonstrates architectures for building interactive agents with natural language interfaces using structured prompting and large language models (LLMs). The shell functions as a personal agent, capable of processing user requests, performing actions, answering questions, and engaging in conversations through an extensible set of agents.
 
 ## What it does
 
-The `agent-shell` package provides a graphical interface for interacting with TypeAgent. It supports various actions such as managing conversations, processing speech input, and handling commands. Key functionalities include:
+The `agent-shell` package provides a graphical interface for interacting with TypeAgent. Its key features include:
 
-- **Conversation Management**: Create, switch, rename, and delete conversations using commands like `conversation list`, `conversation new [name]`, `conversation switch <id|name>`, `conversation rename <id> <name>`, and `conversation delete <id|name>`.
-- **Speech Processing**: Utilize Azure Speech Services or Local Whisper Service for voice input.
-- **Command Handling**: Execute various commands through the shell interface.
-- **Multi-client Notifications**: Display status messages when multiple clients are connected to the same conversation.
+- **Conversation Management**: Users can create, switch, rename, and delete conversations. Commands such as `conversation list`, `conversation new [name]`, `conversation switch <id|name>`, `conversation rename <id> <name>`, and `conversation delete <id|name>` allow for flexible conversation handling. Conversations persist across sessions, and the shell supports multi-conversation management when connected to an agent server.
+- **Speech Input**: The shell supports voice input through Azure Speech Services or a Local Whisper Service, enabling users to interact with the system using speech in addition to text input.
+- **Command Execution**: The shell processes various commands, including natural language inputs, to perform tasks or retrieve information.
+- **Multi-client Notifications**: When multiple clients are connected to the same conversation, the shell displays status messages to inform users of client activity.
+- **Local Mode**: In the absence of an agent server, the shell operates in local mode, hosting a WebSocket for in-process port discovery and enabling external clients to connect to in-process agents.
+
+The shell integrates with other components of the TypeAgent ecosystem, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
 
 ## Setup
 
-To set up the `agent-shell` package, you need to configure several environment variables and follow specific instructions for building and running the shell. The required environment variables are:
+To set up the `agent-shell` package, follow these steps:
 
-- `ELECTRON_RENDERER_URL`: URL for the Electron renderer.
-- `SPEECH_SDK_ENDPOINT`: Service URL or speech API resource ID for Azure Speech Services.
-- `SPEECH_SDK_KEY`: API key for Azure Speech Services.
-- `SPEECH_SDK_REGION`: Region of the Azure Speech Services (e.g., `westus2`).
-- `WEBSOCKET_HOST`: Host for WebSocket connections.
+1. **Install Dependencies**: Ensure you have all required dependencies installed. The shell is built using Electron, so you may need to install additional libraries for your operating system. For Linux/WSL users, refer to the build instructions provided in the Electron documentation (`https://www.electronjs.org/docs/latest/development/build-instructions-linux`).
 
-Additionally, you need to install the necessary libraries for building and using Electron in a Linux/WSL environment. Follow the instructions provided in the Electron documentation (`https://www.electronjs.org/docs/latest/development/build-instructions-linux`) to complete this setup.
+2. **Configure Environment Variables**: Set the following environment variables in your `.env` file or system environment:
 
-For detailed setup steps, including keyless API access for Azure Speech Services, refer to the hand-written README.
+   - `ELECTRON_RENDERER_URL`: The URL for the Electron renderer.
+   - `SPEECH_SDK_ENDPOINT`: The service URL or speech API resource ID for Azure Speech Services.
+   - `SPEECH_SDK_KEY`: The API key for Azure Speech Services.
+   - `SPEECH_SDK_REGION`: The region of the Azure Speech Services (e.g., `westus2`).
+   - `WEBSOCKET_HOST`: The host for WebSocket connections.
+
+3. **Run the Shell**: Use the following command to start the shell:
+
+   ```shell
+   pnpm run shell
+   ```
+
+4. **Optional Configuration for Azure Speech Services**: To enable voice input via Azure Speech Services, additional setup is required:
+   - Set `SPEECH_SDK_KEY` to `identity` in your `.env` file or `config.local.yaml` for keyless API access.
+   - Replace the `SPEECH_SDK_ENDPOINT` value with the Azure resource ID of your cognitive service instance (e.g., `/subscriptions/<your-subscription-guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
+   - Configure your Azure Speech API to support identity-based authentication.
+
+For more details on setup, including troubleshooting tips for Windows users, refer to the hand-written README.
 
 ## Key Files
 
 The `agent-shell` package is organized into several key components:
 
-- **Main Entry Point**: The main entry point is located at [./src/main/index.ts](./src/main/index.ts), which initializes the shell and sets up the necessary configurations.
-- **Command Handlers**: Command handlers are defined in files like [localWhisperCommandHandler.ts](./src/main/localWhisperCommandHandler.ts) and [commands/pen.ts](./src/main/commands/pen.ts). These handlers process specific commands and actions.
-- **Speech Processing**: Speech processing functionalities are implemented in [azureSpeech.ts](./src/main/azureSpeech.ts), which handles interactions with Azure Speech Services.
-- **Browser IPC**: The browser IPC component, defined in [browserIpc.ts](./src/main/browserIpc.ts), manages inter-process communication between the shell and the browser.
-- **Chat Server**: The chat server, implemented in [chatServer.ts](./src/main/chatServer.ts), handles WebSocket connections and serves the HTML page for the shell interface.
+- **Main Entry Point**: The primary entry point is [index.ts](./src/main/index.ts), which initializes the shell and sets up configurations.
+- **Command Handlers**: Command processing is implemented in files such as [localWhisperCommandHandler.ts](./src/main/localWhisperCommandHandler.ts) and [commands/pen.ts](./src/main/commands/pen.ts). These files define the logic for handling specific commands.
+- **Speech Processing**: The [azureSpeech.ts](./src/main/azureSpeech.ts) file manages interactions with Azure Speech Services, including token handling and speech-to-text processing.
+- **Browser IPC**: The [browserIpc.ts](./src/main/browserIpc.ts) file handles inter-process communication between the shell and the browser.
+- **Chat Server**: The [chatServer.ts](./src/main/chatServer.ts) file implements the WebSocket server for managing chat interactions and serving the shell's HTML interface.
 
 ## How to extend
 
 To extend the `agent-shell` package, follow these steps:
 
-1. **Open the main entry point**: Start by examining [index.ts](./src/main/index.ts) to understand the initialization process and overall structure.
-2. **Add new command handlers**: Implement new command handlers in appropriate files, such as [commands/pen.ts](./src/main/commands/pen.ts). Follow the existing patterns for defining and registering command handlers.
-3. **Integrate new services**: If you need to integrate new services (e.g., speech processing), modify or add files like [azureSpeech.ts](./src/main/azureSpeech.ts) to handle interactions with the new service.
-4. **Test your changes**: Ensure that your changes are thoroughly tested. Run the shell using `pnpm run shell` and verify that the new functionalities work as expected.
+1. **Understand the Initialization Process**: Start by reviewing [index.ts](./src/main/index.ts) to understand how the shell is initialized and configured.
+2. **Add New Command Handlers**: Implement new command handlers in files like [commands/pen.ts](./src/main/commands/pen.ts). Use the existing patterns for defining and registering handlers.
+3. **Integrate Additional Services**: If you need to add new services (e.g., for speech processing or external APIs), modify or create files such as [azureSpeech.ts](./src/main/azureSpeech.ts) to handle the integration.
+4. **Test Your Changes**: Run the shell using `pnpm run shell` and verify that your changes work as intended. Ensure that all new functionality is thoroughly tested.
+5. **Follow Existing Patterns**: Adhere to the established coding conventions and patterns in the project to maintain consistency and readability.
 
-By following these steps, you can effectively extend the capabilities of the `agent-shell` package and contribute to its development.
+By following these guidelines, you can effectively contribute to the development and enhancement of the `agent-shell` package.
 
 ## Reference
 
@@ -64,7 +81,7 @@ By following these steps, you can effectively extend the capabilities of the `ag
 
 ### Entry points
 
-- default → [./out/main/index.js](./out/main/index.js)
+- default → `./out/main/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -95,7 +112,7 @@ External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/p
 
 ### Files of interest
 
-`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 66 more under `./src/`.
+`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 65 more under `./src/`.
 
 ### Environment variables
 
@@ -109,6 +126,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
