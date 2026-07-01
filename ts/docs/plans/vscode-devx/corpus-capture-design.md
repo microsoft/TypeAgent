@@ -189,9 +189,11 @@ testable with plain objects.
   them in `skipped`, so re-importing the same log is idempotent.
 - **Provenance of the raw log.** `append()` overwrites `provenance.sourceUri` with
   the captures-JSONL path, so the original `displayLog.json` path would be lost.
-  Preserve it via a dedicated field (e.g. provenance `rawSourceUri` or a `tags`
-  entry) set by the transform, so captured entries remain traceable to their
-  source log.
+  The transform preserves it in `provenance.rawSourceUri` so entries staged in the
+  private captures area remain traceable to their source log. This field is
+  machine-local, so promotion into the shared in-repo file strips `rawSourceUri`
+  and rewrites `sourceUri` to a repo-relative path, keeping the committed file
+  portable and free of local paths. The absolute path is re-derived on read.
 - The studio-service already runs per-workspace and can resolve the active
   `instanceDir` via the dispatcher helpers (`getInstanceDir()` /
   `getInstanceSessionsDirPath()`), so locating the live displayLog needs no new

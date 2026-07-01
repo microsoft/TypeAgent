@@ -327,11 +327,32 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
-    // The Corpora tree refreshes only on explicit in-extension actions (seeding
-    // an in-repo file, adding an external source, recording feedback) and the
-    // manual Refresh command -- each of those calls corpusTree.refresh()
-    // directly. We intentionally do not watch the filesystem for out-of-band
-    // edits to *.utterances.jsonl.
+    // The Corpora tree refreshes on explicit in-extension actions (seeding an
+    // in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command. It also refreshes when a `*.utterances.jsonl`
+    // file under the in-repo corpus folder is saved in the editor, so newly
+    // typed entries show up without a manual refresh. A single save listener is
+    // used rather than a filesystem watcher to keep activation light.
+    const corpusDir = repoRootInfo.repoRoot
+        ? path.join(repoRootInfo.repoRoot, "corpus")
+        : undefined;
+    // VS Code can report paths with an inconsistent drive-letter case on
+    // Windows, so compare the saved file's folder case-insensitively there.
+    const samePath = (a: string, b: string): boolean =>
+        process.platform === "win32"
+            ? a.toLowerCase() === b.toLowerCase()
+            : a === b;
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (
+                corpusDir &&
+                doc.fileName.endsWith(".utterances.jsonl") &&
+                samePath(path.dirname(doc.fileName), corpusDir)
+            ) {
+                corpusTree.refresh();
+            }
+        }),
+    );
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
@@ -456,6 +477,25 @@ export function activate(context: vscode.ExtensionContext): void {
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Failed to seed corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.openCorpusFile",
+            async (node?: CorpusTreeNode) => {
+                const filePath = node?.filePath;
+                if (!filePath) {
+                    return;
+                }
+                try {
+                    const doc = await vscode.workspace.openTextDocument(
+                        vscode.Uri.file(filePath),
+                    );
+                    await vscode.window.showTextDocument(doc);
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to open corpus file: ${describeError(error)}`,
                     );
                 }
             },

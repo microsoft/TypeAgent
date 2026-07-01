@@ -175,7 +175,7 @@ describe("importDisplayLogs", () => {
         expect(res.perAgent).toEqual({ player: 1, list: 1 });
     });
 
-    test("lands entries in the in-repo corpus and keeps the raw displayLog path", async () => {
+    test("lands entries in the in-repo corpus and keeps the file portable", async () => {
         const root = await makeTempRoot();
         const corpus = makeCorpus(root);
         const file = await writeLog(path.join(root, "displayLog.json"), [
@@ -184,11 +184,27 @@ describe("importDisplayLogs", () => {
         await importDisplayLogs(corpus, [file]);
         const [entry] = await corpus.list("player");
         expect(entry.source).toBe("in-repo");
-        // Promotion points sourceUri at the in-repo file, but the raw log path
-        // survives in provenance.
-        expect(entry.provenance.rawSourceUri).toBe(file);
+        // At runtime the sourceUri resolves to the absolute in-repo file so it
+        // can be opened; the machine-local raw log path is not surfaced.
         expect(entry.provenance.sourceUri).not.toBe(file);
         expect(entry.provenance.sourceUri).toContain("corpus");
+        expect(entry.provenance.rawSourceUri).toBeUndefined();
+
+        // On disk the committed file must stay portable: a repo-relative
+        // sourceUri and no machine-local rawSourceUri.
+        const inRepoFile = path.join(
+            root,
+            "repo",
+            "corpus",
+            "player.utterances.jsonl",
+        );
+        const raw = await fs.readFile(inRepoFile, "utf8");
+        const stored = JSON.parse(raw.trim().split("\n")[0]);
+        expect(stored.provenance.sourceUri).toBe(
+            "corpus/player.utterances.jsonl",
+        );
+        expect(stored.provenance.rawSourceUri).toBeUndefined();
+        expect(path.isAbsolute(stored.provenance.sourceUri)).toBe(false);
     });
 
     test("applies an agent allowlist", async () => {

@@ -148,18 +148,21 @@ export class FileCorpusService implements CorpusService {
         }
 
         const inRepoFile = this.inRepoFile(agent);
+        const relSourceUri = this.inRepoRelativePath(agent);
         await fs.mkdir(path.dirname(inRepoFile), { recursive: true });
         const existing = await readJsonlFile(inRepoFile);
         const existingIds = new Set(existing.map((e) => e.id));
         const promoted = [...found.values()].map((e) => ({
             ...e,
             source: "in-repo" as const,
-            provenance: { ...e.provenance, sourceUri: inRepoFile },
         }));
+        // Sanitize every entry before writing: the in-repo file is shared and
+        // committed, so it must stay portable and must not leak machine-local
+        // paths. Existing rows are re-sanitized too, so the file self-heals.
         const merged = [
             ...existing,
             ...promoted.filter((e) => !existingIds.has(e.id)),
-        ];
+        ].map((e) => toInRepoStorage(e, relSourceUri));
         await writeJsonlFile(inRepoFile, merged);
 
         // Rewrite each captures file with the surviving entries.
@@ -235,6 +238,16 @@ export class FileCorpusService implements CorpusService {
         return path.join(this.repoRoot, "corpus", `${agent}.utterances.jsonl`);
     }
 
+    /**
+     * Repo-relative, POSIX-style path of the agent's in-repo corpus file. Used
+     * as the stored `sourceUri` so the committed file is portable across
+     * machines (the absolute path is re-derived on read).
+     */
+    private inRepoRelativePath(agent: string): string {
+        assertSafeAgentSegment(agent);
+        return path.posix.join("corpus", `${agent}.utterances.jsonl`);
+    }
+
     private capturesDir(agent: string): string {
         assertSafeAgentSegment(agent);
         return path.join(this.profileDir, "captures", agent);
@@ -277,12 +290,31 @@ export class FileCorpusService implements CorpusService {
             }
         };
 
-        push(await readJsonlFile(this.inRepoFile(agent)));
+        // Stamp each file-backed entry's sourceUri with the absolute path of
+        // the file it was actually read from. The value stored in the JSONL
+        // can be relative or stale, so the file we read is the authoritative
+        // location — callers rely on this to open the backing file.
+        const stampSource = (
+            entries: CorpusEntry[],
+            filePath: string,
+        ): CorpusEntry[] =>
+            entries.map((e) => ({
+                ...e,
+                provenance: { ...e.provenance, sourceUri: filePath },
+            }));
+
+        const inRepoFile = this.inRepoFile(agent);
+        push(stampSource(await readJsonlFile(inRepoFile), inRepoFile));
 
         const externals = await this.listExternalSources(agent);
         for (const spec of externals) {
             if (spec.kind === "jsonl-file") {
-                push(await readJsonlFile(spec.filePath));
+                push(
+                    stampSource(
+                        await readJsonlFile(spec.filePath),
+                        spec.filePath,
+                    ),
+                );
             }
         }
 
@@ -294,6 +326,20 @@ export class FileCorpusService implements CorpusService {
 
 function captureFileStamp(ts: number): string {
     return new Date(ts).toISOString().replace(/[:.]/g, "-");
+}
+
+/**
+ * Normalize an entry for storage in the shared, committed in-repo file:
+ * a portable repo-relative `sourceUri`, and no `rawSourceUri` (a machine-local
+ * capture path that must never be checked in).
+ */
+function toInRepoStorage(
+    entry: CorpusEntry,
+    relSourceUri: string,
+): CorpusEntry {
+    const provenance = { ...entry.provenance, sourceUri: relSourceUri };
+    delete provenance.rawSourceUri;
+    return { ...entry, provenance };
 }
 
 /**
