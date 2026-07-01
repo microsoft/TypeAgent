@@ -182,7 +182,14 @@ export class Git {
         validateGitRefArg(from, "ref");
         if (to !== null) validateGitRefArg(to, "ref");
         const refspec = to === null ? from : `${from}..${to}`;
-        const args = ["diff", "--name-only", refspec, "--"];
+        // `--relative` prints paths relative to the process cwd (the monorepo
+        // root, e.g. `ts/`) rather than the git repo root. The repo root can
+        // be an ancestor of the monorepo root (TypeAgent lives under `ts/`),
+        // so without this the paths carry a `ts/` prefix that never matches
+        // package relDirs — which changeDetection computes relative to the
+        // monorepo root — and change detection would attribute zero files to
+        // any package. See detectChangedPackages in changeDetection.ts.
+        const args = ["diff", "--name-only", "--relative", refspec, "--"];
         const out = await this.runOk(args);
         return parseLines(out);
     }
