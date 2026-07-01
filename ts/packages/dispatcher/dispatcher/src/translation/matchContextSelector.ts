@@ -18,13 +18,16 @@ import { getAppAgentName } from "./agentTranslators.js";
 import {
     CandidateScore,
     ScorerCandidate,
-    TfIdfScorer,
 } from "../context/contextSelector/scorer.js";
-import { decide } from "../context/contextSelector/decision.js";
+import {
+    ContextResolutionStrategy,
+    TfIdfStrategy,
+} from "../context/contextSelector/strategy.js";
 
-// v1 scorer selection (§9). Stateless — a single instance is reused. This is the
-// swap point for a future knowPro-entity / embedding scorer.
-const scorer = new TfIdfScorer();
+// v1 strategy selection (§9): TF-IDF scoring + count-based decision, bundled so
+// a future knowPro-entity / embedding strategy swaps as one unit. Stateless —
+// a single instance is reused.
+const strategy: ContextResolutionStrategy = new TfIdfStrategy();
 
 export type ContextSelectorResolution = {
     // The winning validated match to resolve to (avoids the downstream LLM).
@@ -95,10 +98,8 @@ export function resolveContextSelector(
         return undefined;
     }
 
-    const covered = candidates.every((c) => c.keywords.size > 0);
     const contextVector = ctx.conversationSignal.getContextVector();
-    const scores = scorer.score(contextVector, candidates);
-    const decision = decide(scores, covered, {
+    const decision = strategy.evaluate(contextVector, candidates, {
         minUniqueTokens: cfg.contextSelector.minUniqueTokens,
         minMass: cfg.contextSelector.minMass,
         margin: cfg.contextSelector.margin,

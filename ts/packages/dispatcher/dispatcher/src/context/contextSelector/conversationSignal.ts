@@ -11,7 +11,11 @@ import { tokenize } from "./tokenize.js";
 
 // { canonical token -> decay-weighted conversational frequency }. The single
 // shape both the v1 raw-token source and the v2 knowPro source project into, and
-// the only conversation input the scorer sees (§9).
+// the only conversation input the scorer sees (§9). The v2 knowPro source
+// projects its topics / entity names+types into these same canonical string keys
+// (design §9 step 2 — "project into the same { key -> weight } map"); a richer
+// entity-structure-aware or embedding scorer is the one flagged future that would
+// extend this shape, not v1.
 export type ContextVector = ReadonlyMap<string, number>;
 
 // The seam. A source owns whatever conversational state it needs and exposes it

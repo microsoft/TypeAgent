@@ -127,7 +127,9 @@ const STOPWORDS: ReadonlySet<string> = new Set([
 
 // Generic CRUD / imperative verbs — present in most action names, so they carry
 // no discriminative signal (§6). Dropped from both keyword vectors and the
-// context vector so they never dominate a match.
+// context vector so they never dominate a match. Deliberately excludes domain
+// nouns that double as verbs (e.g. "list", "search") so an app's own topic word
+// survives — this set is a calibration lever (§9), not a fixed truth.
 const GENERIC_VERBS: ReadonlySet<string> = new Set([
     "add",
     "create",
@@ -139,9 +141,7 @@ const GENERIC_VERBS: ReadonlySet<string> = new Set([
     "fetch",
     "show",
     "display",
-    "list",
     "find",
-    "search",
     "lookup",
     "query",
     "read",

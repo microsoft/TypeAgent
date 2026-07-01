@@ -274,9 +274,9 @@ export type CollisionConfig = {
         // Evidence gate: min distinct distinguishing tokens the winner must
         // match (default 2).
         minUniqueTokens: number;
-        // Evidence gate: min winner score / matched mass (default 1.0).
+        // Evidence gate: min winner score / matched mass (default 0.75).
         minMass: number;
-        // Clear-winner margin the winner must beat the runner-up by (default 1.0).
+        // Clear-winner margin the winner must beat the runner-up by (default 0.5).
         margin: number;
         // On abstain: hand to the configured grammar strategy (default) or
         // escalate the request to the LLM translation path.
@@ -467,8 +467,8 @@ const defaultSessionConfig: SessionConfig = {
             windowTurns: 20,
             decay: 0.9,
             minUniqueTokens: 2,
-            minMass: 1.0,
-            margin: 1.0,
+            minMass: 0.75,
+            margin: 0.5,
             abstainFallback: "defer-to-strategy",
         },
         priorityOrder: "",

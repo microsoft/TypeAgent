@@ -28,6 +28,13 @@ describe("contextSelector/tokenize", () => {
         expect(isGenericVerb("spreadsheet")).toBe(false);
     });
 
+    it("keeps domain nouns that double as verbs (list, search)", () => {
+        // "list" / "search" are app/topic words, not dropped as generic verbs.
+        expect(isGenericVerb("list")).toBe(false);
+        expect(isGenericVerb("search")).toBe(false);
+        expect(tokenize("show my grocery list")).toEqual(["grocery", "list"]);
+    });
+
     it("drops sub-minimum-length tokens", () => {
         expect(tokenize("a i x")).toEqual([]);
     });

@@ -22,8 +22,8 @@ function makeCtx(o: Overrides): {
         windowTurns: 20,
         decay: 0.9,
         minUniqueTokens: 2,
-        minMass: 1.0,
-        margin: 1.0,
+        minMass: 0.75,
+        margin: 0.5,
         abstainFallback: "defer-to-strategy",
         ...o.contextSelector,
     };

@@ -6,6 +6,12 @@
 // (live-tunable). The one place the scorer reads candidate keywords from. The
 // schema-reading side is behind `ActionSchemaSource` so the index is unit-
 // testable with a stub source.
+//
+// v1 baseline = the deterministic lexical floor (keywordExtractor). LLM
+// distillation (the design's preferred baseline) and auto-derived sidecar layers
+// (misroute mining, learned-preference deltas) are follow-ups: they slot in as
+// an alternate baseline and additional sidecar deltas without changing this
+// index's shape.
 
 import { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { KeywordVector, applyKeywordDelta } from "./keywordVector.js";
@@ -77,7 +83,9 @@ export class KeywordIndex {
         private readonly getSidecar: () => KeywordSidecar,
     ) {}
 
-    // Lexical-floor keywords for one action (memoized).
+    // Lexical-floor keywords for one action (memoized). A missing definition
+    // (schema not loaded yet / freshly-learned action) is NOT memoized, so it is
+    // re-read once the schema is available rather than cached empty forever.
     public derived(schemaName: string, actionName: string): KeywordVector {
         const id = keywordId(schemaName, actionName);
         const cached = this.derivedMemo.get(id);
@@ -88,16 +96,16 @@ export class KeywordIndex {
             schemaName,
             actionName,
         );
-        const vector: KeywordVector =
-            definition === undefined
-                ? new Set<string>()
-                : extractKeywords(
-                      buildExtractionInput(
-                          actionName,
-                          definition,
-                          this.source.getSchemaDescription(schemaName),
-                      ),
-                  );
+        if (definition === undefined) {
+            return new Set<string>();
+        }
+        const vector = extractKeywords(
+            buildExtractionInput(
+                actionName,
+                definition,
+                this.source.getSchemaDescription(schemaName),
+            ),
+        );
         this.derivedMemo.set(id, vector);
         return vector;
     }

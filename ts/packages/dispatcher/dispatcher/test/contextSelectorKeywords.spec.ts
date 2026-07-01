@@ -55,10 +55,10 @@ describe("contextSelector/keywordExtractor", () => {
         expect(kw.has("todo")).toBe(true);
         expect(kw.has("items")).toBe(true);
         expect(kw.has("item")).toBe(true);
-        // generic verbs / stopwords / "list" (generic) are dropped
+        // generic verbs / stopwords are dropped; "list" is a kept domain noun.
         expect(kw.has("add")).toBe(false);
         expect(kw.has("the")).toBe(false);
-        expect(kw.has("list")).toBe(false);
+        expect(kw.has("list")).toBe(true);
     });
 
     it("caps at topN, keeping the most frequent (deterministic tiebreak)", () => {

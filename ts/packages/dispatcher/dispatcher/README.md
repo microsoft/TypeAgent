@@ -312,8 +312,8 @@ collision: {
         windowTurns: number;                // ring-buffer look-back N (default 20)
         decay: number;                      // per-turn recency decay λ (default 0.9)
         minUniqueTokens: number;            // evidence gate (default 2)
-        minMass: number;                    // evidence gate — min winner score (default 1.0)
-        margin: number;                     // clear-winner margin over runner-up (default 1.0)
+        minMass: number;                    // evidence gate — min winner score (default 0.75)
+        margin: number;                     // clear-winner margin over runner-up (default 0.5)
         abstainFallback: "defer-to-strategy" | "escalate-to-llm";  // default defer-to-strategy
     };
     priorityOrder: string;                  // comma-separated agent names; "" = registration order
@@ -463,6 +463,8 @@ How it works, per collision (all steps deterministic):
 4. **Decide** — resolve only when a coverage guard, an evidence gate (`minUniqueTokens` + `minMass`), and a clear-winner `margin` all pass; otherwise abstain. Biased toward abstaining.
 
 On a resolve it emits a `context-weight` telemetry event and a non-blocking affordance (`↪ routed to <agent> — recent topic …`). On abstain it emits a `context-weight` event noting the reason and, per `abstainFallback`, either defers to the configured grammar strategy (default) or escalates the request to LLM translation. Detection is independent of `grammarMatch.detect` — with `detect: false` everywhere, behavior is byte-identical to legacy first-match.
+
+**v1 scope (keyword source).** This ships the design's **deterministic lexical floor** (keywords mined from the live schema text) plus the **manual sidecar** override layer. The design's other keyword layers — a preferred **LLM-distilled** baseline and the **auto-derived** sidecar layers (misroute mining, learned-preference deltas) — are follow-ups; the index/sidecar layering already accommodates them without a shape change. The thresholds (`minMass` / `margin` / `minUniqueTokens`) ship as conservative defaults to be calibrated on fixtures.
 
 Tune the discriminative keywords for the handful of actions that actually collide:
 

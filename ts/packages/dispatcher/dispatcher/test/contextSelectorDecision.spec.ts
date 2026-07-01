@@ -112,6 +112,45 @@ describe("contextSelector/decision", () => {
     });
 });
 
+// Boundary fixtures at the shipped defaults (minMass 0.75, margin 0.5) over the
+// λ=0.9 decay scale — guards against pathological abstain/resolve tuning (§10).
+describe("contextSelector/decision — default-threshold boundaries", () => {
+    const DEFAULTS: DecisionConfig = {
+        minUniqueTokens: 2,
+        minMass: 0.75,
+        margin: 0.5,
+    };
+
+    it("resolves two fresh winner tokens over one fresh runner-up token", () => {
+        // winner 0.9+0.9=1.8 (2 tokens) vs runner 0.9 (1 token) → margin 0.9 ≥ 0.5
+        const d = decide(
+            [scored("a", "x", 1.8, 2), scored("b", "y", 0.9, 1)],
+            true,
+            DEFAULTS,
+        );
+        expect(d.kind).toBe("resolve");
+    });
+
+    it("resolves two fresh winner tokens over one older runner-up token", () => {
+        const d = decide(
+            [scored("a", "x", 1.8, 2), scored("b", "y", 0.81, 1)],
+            true,
+            DEFAULTS,
+        );
+        expect(d.kind).toBe("resolve");
+    });
+
+    it("still abstains when two strong candidates are close", () => {
+        const d = decide(
+            [scored("a", "x", 1.8, 2), scored("b", "y", 1.5, 2)],
+            true,
+            DEFAULTS,
+        );
+        expect(d.kind).toBe("abstain");
+        if (d.kind === "abstain") expect(d.reason).toBe("margin");
+    });
+});
+
 // End-to-end §14 worked examples: signal-free — scores are supplied directly to
 // the scorer via a synthetic context vector, then decided.
 describe("contextSelector §14 worked examples (scorer + decision)", () => {
