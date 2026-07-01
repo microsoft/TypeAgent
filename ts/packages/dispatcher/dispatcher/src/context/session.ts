@@ -261,6 +261,27 @@ export type CollisionConfig = {
         scorer: "placeholder" | "actionEmbedding";
         strategy: CollisionStrategy;
     };
+    // Context-weighted resolution (the `contextSelector` tier, §11.3). A
+    // deterministic, LLM-free tiebreaker that runs on the grammarMatch path
+    // before the configured strategy: confident -> resolve (no LLM); abstain ->
+    // fall through. Off by default; only `detect` is exposed via `@config`.
+    contextSelector: {
+        detect: boolean;
+        // Ring-buffer look-back N over recent user turns (default 20).
+        windowTurns: number;
+        // Per-turn recency decay lambda (default 0.9).
+        decay: number;
+        // Evidence gate: min distinct distinguishing tokens the winner must
+        // match (default 2).
+        minUniqueTokens: number;
+        // Evidence gate: min winner score / matched mass (default 1.0).
+        minMass: number;
+        // Clear-winner margin the winner must beat the runner-up by (default 1.0).
+        margin: number;
+        // On abstain: hand to the configured grammar strategy (default) or
+        // escalate the request to the LLM translation path.
+        abstainFallback: "defer-to-strategy" | "escalate-to-llm";
+    };
     // Optional explicit ranking — comma-separated agent names (e.g. "list,music,player").
     // Stored as a string because the dispatcher config system rejects arrays.
     // Empty / unset falls back to agent registration order.
@@ -440,6 +461,15 @@ const defaultSessionConfig: SessionConfig = {
             similarityThreshold: 0.85,
             scorer: "placeholder",
             strategy: "first-match",
+        },
+        contextSelector: {
+            detect: false,
+            windowTurns: 20,
+            decay: 0.9,
+            minUniqueTokens: 2,
+            minMass: 1.0,
+            margin: 1.0,
+            abstainFallback: "defer-to-strategy",
         },
         priorityOrder: "",
         multipleActionBehavior: "downgrade-to-priority",

@@ -25,6 +25,8 @@ import {
     resolveGrammarCollision,
     resolveGrammarRegistryFirst,
 } from "./matchCollision.js";
+import { resolveContextSelector } from "./matchContextSelector.js";
+import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -282,6 +284,7 @@ export async function matchRequest(
     // Collision detection — opt-in via session config. With detect=false this
     // is a no-op and we use validated[0], identical to legacy behavior.
     const collisionCfg = config.collision.grammarMatch;
+    const contextSelectorCfg = config.collision.contextSelector;
     let chosen = validated[0];
 
     // Registry-first detection runs independently of grammarMatch.detect: a
@@ -293,10 +296,34 @@ export async function matchRequest(
     );
     if (
         decision === undefined &&
-        collisionCfg.detect &&
+        (contextSelectorCfg.detect || collisionCfg.detect) &&
         isCollision(validated, collisionCfg.classifier)
     ) {
-        decision = resolveGrammarCollision(validated, systemContext, request);
+        // contextSelector tier (§11): a confident topical pick resolves here on
+        // the cache path (no LLM). On abstain it either falls through to the
+        // configured grammar strategy (default) or escalates to LLM translation.
+        if (contextSelectorCfg.detect) {
+            const resolution = resolveContextSelector(
+                validated,
+                systemContext,
+                request,
+            );
+            if (resolution !== undefined) {
+                decision = { kind: "match", match: resolution.match };
+                await displayInfo(resolution.note, context);
+            } else if (
+                contextSelectorCfg.abstainFallback === "escalate-to-llm"
+            ) {
+                return undefined;
+            }
+        }
+        if (decision === undefined && collisionCfg.detect) {
+            decision = resolveGrammarCollision(
+                validated,
+                systemContext,
+                request,
+            );
+        }
     }
     if (decision !== undefined) {
         if (decision.kind === "fallthrough") {

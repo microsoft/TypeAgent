@@ -46,6 +46,7 @@ class HistoryClearCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
         history.clear();
+        systemContext.conversationSignal.reset();
         clearClaudeReasoningSession(systemContext);
         clearCopilotReasoningSession(systemContext);
         if (param.flags.activity) {
