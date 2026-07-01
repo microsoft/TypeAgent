@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b972288ccbca8682354b11886772d9ccdec2f0136f9d76551ac286070f263971 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8343eb2fa0db61fd41b39a6bf2fa3a2a9cb8b2197cf23fd5fa99ee635b43ed46 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -12,63 +12,67 @@
 
 ## Overview
 
-The `@typeagent/agent-sdk` package provides the essential interfaces and utilities for implementing a Dispatcher Agent within the TypeAgent ecosystem. It serves as the foundation for creating agents that can interact with the TypeAgent Dispatcher, handle commands, execute actions, and manage agent contexts.
+The `@typeagent/agent-sdk` package provides interfaces and utilities for building Dispatcher Agents within the TypeAgent ecosystem. It serves as the core library for creating agents that can interact with the TypeAgent Dispatcher, handle commands and actions, and manage agent-specific contexts.
 
 ## What it does
 
-The `@typeagent/agent-sdk` package offers a comprehensive set of tools for building dispatcher agents. These tools include:
+The `@typeagent/agent-sdk` package enables developers to create and manage Dispatcher Agents by providing the following capabilities:
 
-- **Manifest and Instantiation Entry Points**: Defines the agent's manifest and the entry point for instantiation.
-- **Lifecycle APIs**: Methods for initializing, updating, and closing the agent context.
-- **Command APIs**: Functions for defining and executing commands.
-- **Action APIs**: Methods for executing actions and handling partial action streams.
-- **Readiness and Setup APIs**: Functions for checking the agent's readiness and performing setup tasks.
-- **Display Utilities**: Tools for managing how information is displayed to the user.
+- **Manifest and Instantiation**: Define the agent's manifest (`AppAgentManifest`) and specify an instantiation entry point for the agent. The manifest includes metadata such as the agent's emoji, description, and translator configuration.
+- **Lifecycle Management**: Implement lifecycle methods like `initializeAgentContext`, `updateAgentContext`, and `closeAgentContext` to manage the agent's runtime state and resources.
+- **Command Handling**: Define commands using `CommandDescriptors` and implement methods like `getCommands` and `executeCommand` to handle user commands routed by the Dispatcher.
+- **Action Execution**: Implement `executeAction` and `streamPartialAction` to handle actions triggered by the Dispatcher. These methods allow agents to process user requests and provide results or stream partial responses.
+- **Readiness and Setup**: Use `checkReadiness` to determine if the agent is ready to operate and `setup` to guide users through any required configuration steps.
+- **Display Management**: Leverage utilities for managing how information is displayed to users, including support for dynamic and periodic updates.
 
-Agents built using this SDK can be registered with the TypeAgent Dispatcher and can be integrated into various TypeAgent components such as the Shell and CLI.
+This package is used by a wide range of TypeAgent components, including the Shell, CLI, and other agents, making it a critical part of the ecosystem.
 
 ## Setup
 
-To set up a dispatcher agent using the `@typeagent/agent-sdk`, you need to provide a manifest and an instantiation entry point for your agent. These are declared in the `package.json` as export paths:
+To set up a Dispatcher Agent using the `@typeagent/agent-sdk`, you need to define two key components in your `package.json`:
 
-- `./agent/manifest`: The location of the JSON file for the manifest.
-- `./agent/handlers`: An ESM module with an instantiation entry point.
+1. **Manifest**: Specify the path to the agent's manifest file under the `./agent/manifest` export path. The manifest is a JSON file that includes metadata about the agent, such as its emoji, description, and translator configuration. Refer to the `AppAgentManifest` type for details on the required structure.
 
-For detailed setup instructions, including how to register a dispatcher agent with the TypeAgent Dispatcher, refer to the hand-written README.
+2. **Instantiation Entry Point**: Define the path to the agent's instantiation entry point under the `./agent/handlers` export path. This entry point should export an `instantiate` function that returns an instance of the `AppAgent` interface.
+
+For additional guidance on registering a Dispatcher Agent with the TypeAgent Dispatcher, consult the hand-written README.
 
 ## Key Files
 
-The internal structure of the `@typeagent/agent-sdk` package is organized into several key files:
+The `@typeagent/agent-sdk` package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: Exports the main interfaces and types used throughout the SDK.
-- **[action.ts](./src/action.ts)**: Defines the structure and types for actions, including `AppAction`, `ActionResult`, and `PendingChoice`.
-- **[agentInterface.ts](./src/agentInterface.ts)**: Contains the core interfaces for agents, such as `AppAgent`, `SessionContext`, and `ActionContext`.
-- **[command.ts](./src/command.ts)**: Provides the types and interfaces for command handling, including `CommandDescriptor`, `CommandDescriptors`, and `AppAgentCommandInterface`.
-- **[display.ts](./src/display.ts)**: Defines the types for managing display content, such as `DisplayType`, `DynamicDisplay`, and `TypedDisplayContent`.
-- **Helpers**: Utility functions for handling actions, commands, and display content are located in the `helpers` directory:
-  - **[actionHelpers.ts](./src/helpers/actionHelpers.ts)**
-  - **[commandHelpers.ts](./src/helpers/commandHelpers.ts)**
-  - **[displayHelpers.ts](./src/helpers/displayHelpers.ts)**
+- **[index.ts](./src/index.ts)**: The main entry point for the package, exporting core interfaces and types.
+- **[action.ts](./src/action.ts)**: Defines the structure and types for actions, including `AppAction`, `ActionResult`, and `PendingChoice`. These are essential for implementing the `executeAction` and `streamPartialAction` methods.
+- **[agentInterface.ts](./src/agentInterface.ts)**: Contains the primary interfaces for agents, such as `AppAgent`, `SessionContext`, and `ActionContext`. These interfaces define the contract between the agent and the Dispatcher.
+- **[command.ts](./src/command.ts)**: Provides types and interfaces for command handling, including `CommandDescriptor`, `CommandDescriptors`, and `AppAgentCommandInterface`. These are used to define and execute commands.
+- **[display.ts](./src/display.ts)**: Defines types for managing display content, such as `DisplayType`, `DynamicDisplay`, and `TypedDisplayContent`. These are used to control how information is presented to users.
+- **Helpers**: A set of utility functions for common tasks:
+  - **[actionHelpers.ts](./src/helpers/actionHelpers.ts)**: Utilities for creating and managing action results.
+  - **[commandHelpers.ts](./src/helpers/commandHelpers.ts)**: Functions for handling commands and their parameters.
+  - **[displayHelpers.ts](./src/helpers/displayHelpers.ts)**: Tools for managing display content and formatting.
+  - **[choiceManager.ts](./src/helpers/choiceManager.ts)**: Manages user choices and callbacks, enabling interactive workflows.
 
 ## How to extend
 
-To extend the functionality of a dispatcher agent using the `@typeagent/agent-sdk`, follow these steps:
+To extend the functionality of a Dispatcher Agent using the `@typeagent/agent-sdk`, follow these steps:
 
-1. **Implement the `AppAgent` Interface**: Start by creating a class that implements the `AppAgent` interface. This class will define the agent's behavior and lifecycle methods.
+1. **Implement the `AppAgent` Interface**: Create a class that implements the `AppAgent` interface. This class will define the agent's behavior, including lifecycle, command, and action handling methods.
 
-2. **Define Commands and Actions**: Implement the `getCommands` and `executeCommand` methods to define and handle commands. Similarly, implement the `executeAction` and `streamPartialAction` methods to handle actions.
+2. **Define the Manifest**: Create a JSON file that adheres to the `AppAgentManifest` type. This file should include metadata about the agent, such as its emoji, description, and translator configuration.
 
-3. **Manage Agent Context**: Use the `initializeAgentContext`, `updateAgentContext`, and `closeAgentContext` methods to manage the agent's context throughout its lifecycle.
+3. **Handle Commands**: Use the `getCommands` method to define the commands your agent supports. Implement the `executeCommand` method to handle these commands when invoked by the Dispatcher.
 
-4. **Handle Readiness and Setup**: Implement the `checkReadiness` and `setup` methods to manage the agent's readiness state and perform any necessary setup tasks.
+4. **Handle Actions**: Implement the `executeAction` and `streamPartialAction` methods to process actions routed by the Dispatcher. Use the `actionHelpers.ts` utilities to simplify the creation of action results.
 
-5. **Utilize Display Utilities**: Use the display utilities provided in the `displayHelpers.ts` file to manage how information is displayed to the user.
+5. **Manage Context**: Use the `initializeAgentContext`, `updateAgentContext`, and `closeAgentContext` methods to manage the agent's runtime context. This context can store state information that persists across multiple calls.
 
-6. **Test Your Agent**: Ensure your agent is functioning correctly by writing tests and running them to validate the agent's behavior.
+6. **Implement Readiness and Setup**: Define the `checkReadiness` method to report the agent's readiness state. If setup is required, implement the `setup` method to guide users through the configuration process.
 
-For a practical example and initial template for building a dispatcher agent, refer to the [List agent](../agents/list/). For detailed instructions on creating agents as NPM packages, see the [tutorial](../../../docs/content/tutorial/agent.md).
+7. **Leverage Display Utilities**: Use the utilities in `displayHelpers.ts` to manage how information is displayed to users. This includes support for dynamic and periodic updates.
 
-By following these steps and utilizing the provided interfaces and utilities, you can extend and customize your dispatcher agent to meet specific requirements within the TypeAgent ecosystem.
+8. **Test Your Agent**: Write and run tests to ensure your agent behaves as expected. Use the provided interfaces and utilities to simplify testing.
+
+For a practical example, refer to the [List agent](../agents/list/), which serves as a template for building Dispatcher Agents. Additional resources and tutorials are available in the TypeAgent documentation.
 
 ## Reference
 
@@ -76,11 +80,11 @@ By following these steps and utilizing the provided interfaces and utilities, yo
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- `./helpers/action` → [./dist/helpers/actionHelpers.js](./dist/helpers/actionHelpers.js)
-- `./helpers/command` → [./dist/helpers/commandHelpers.js](./dist/helpers/commandHelpers.js)
-- `./helpers/display` → [./dist/helpers/displayHelpers.js](./dist/helpers/displayHelpers.js)
-- `./node` → [./dist/node/cliPath.js](./dist/node/cliPath.js)
+- default → `./dist/index.js` _(not found on disk)_
+- `./helpers/action` → `./dist/helpers/actionHelpers.js` _(not found on disk)_
+- `./helpers/command` → `./dist/helpers/commandHelpers.js` _(not found on disk)_
+- `./helpers/display` → `./dist/helpers/displayHelpers.js` _(not found on disk)_
+- `./node` → `./dist/node/cliPath.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -120,6 +124,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
