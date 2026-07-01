@@ -141,14 +141,36 @@ describe("getAddSourceCommandHandlers", () => {
             });
         });
 
-        it("builds a path config with an optional baseDir", async () => {
+        it("builds a path config with an optional normalized absolute baseDir", async () => {
             expect(
                 await run("path", { name: "local" }, { baseDir: "/agents" }),
             ).toEqual({
                 kind: "path",
                 name: "local",
-                baseDir: "/agents",
+                baseDir: path.resolve("/agents"),
             });
+        });
+
+        it("normalizes env/home in baseDir before persisting", async () => {
+            const envVar = "TA_ADD_PATH_BASEDIR";
+            const prev = process.env[envVar];
+            const base = fs.mkdtempSync(path.join(os.tmpdir(), "ta-path-add-"));
+            process.env[envVar] = base;
+            try {
+                expect(
+                    await run("path", { name: "local" }, { baseDir: `\${${envVar}}/agents` }),
+                ).toEqual({
+                    kind: "path",
+                    name: "local",
+                    baseDir: path.resolve(base, "agents"),
+                });
+            } finally {
+                if (prev === undefined) {
+                    delete process.env[envVar];
+                } else {
+                    process.env[envVar] = prev;
+                }
+            }
         });
     });
 
@@ -174,8 +196,32 @@ describe("getAddSourceCommandHandlers", () => {
             ).toEqual({
                 kind: "catalog",
                 name: "c",
-                catalog: file,
+                catalog: path.resolve(file),
             });
+        });
+
+        it("normalizes env/home in catalog path before persisting", async () => {
+            const envVar = "TA_ADD_CATALOG_DIR";
+            const prev = process.env[envVar];
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-env-"));
+            const file = path.join(dir, "catalog.json");
+            fs.writeFileSync(file, JSON.stringify({ agents: {} }));
+            process.env[envVar] = dir;
+            try {
+                expect(
+                    await run("catalog", { name: "c" }, { catalog: `\${${envVar}}/catalog.json` }),
+                ).toEqual({
+                    kind: "catalog",
+                    name: "c",
+                    catalog: path.resolve(file),
+                });
+            } finally {
+                if (prev === undefined) {
+                    delete process.env[envVar];
+                } else {
+                    process.env[envVar] = prev;
+                }
+            }
         });
 
         it("reports an inaccessible file distinctly from bad JSON", async () => {
@@ -208,7 +254,7 @@ describe("getAddSourceCommandHandlers", () => {
             ).toEqual({
                 kind: "catalog",
                 name: "c",
-                catalog: file,
+                catalog: path.resolve(file),
             });
         });
     });

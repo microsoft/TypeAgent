@@ -9,31 +9,30 @@ import {
     MaterializedInstallRecord,
     ResolvedCandidate,
 } from "./config.js";
-import { expandPath } from "./paths.js";
 
 // `path` source (design §3, §4.1, §4.2, §12 Q17).
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
 //   materialize = record data { path, source }, omitting `module` and `name`
-// `ref` is a filesystem path: absolute, "~"-relative, or (only when a baseDir
-// is configured) relative to that baseDir.
+// `ref` is a filesystem path: absolute or (only when a baseDir is configured)
+// relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
     // A relative ref needs a base directory to anchor it. There is deliberately
     // no ambient default: this source may run in a different process (and CWD)
     // than the host app that issued the command (e.g. the agent server), so
     // resolving against the local process.cwd() would be silently wrong. An
-    // explicit baseDir (expanded) is the only anchor; without it, only absolute
-    // and "~" paths resolve and a bare relative ref is a non-match.
-    const baseDir = config.baseDir ? expandPath(config.baseDir) : undefined;
+    // explicit baseDir is the only anchor; without it, only absolute paths
+    // resolve and a bare relative ref is a non-match. Source-add persists
+    // baseDir as an absolute path.
+    const baseDir = config.baseDir;
 
     function resolveRef(ref: string): string | undefined {
-        const expanded = expandPath(ref);
-        if (path.isAbsolute(expanded)) {
-            return path.resolve(expanded);
+        if (path.isAbsolute(ref)) {
+            return path.resolve(ref);
         }
         if (baseDir === undefined) {
             return undefined; // no base to anchor a relative ref
         }
-        return path.resolve(baseDir, expanded);
+        return path.resolve(baseDir, ref);
     }
 
     return {

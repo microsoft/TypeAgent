@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
+import path from "node:path";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -14,6 +15,7 @@ import {
     PathSourceConfig,
 } from "./config.js";
 import { DefaultInstallSourceRegistry } from "./registry.js";
+import { expandPath } from "./paths.js";
 
 // Host-owned `@source add <kind>` command handlers. The dispatcher core merges
 // these into the system `@source` table (via `AppAgentInstaller.sourceCommands`)
@@ -50,6 +52,10 @@ function validateCatalogFile(catalog: string): void {
             `catalog '${catalog}' is not valid JSON: ${err.message}`,
         );
     }
+}
+
+function normalizeAbsolutePath(value: string): string {
+    return path.resolve(expandPath(value));
 }
 
 class FeedAddCommandHandler implements CommandHandler {
@@ -131,8 +137,13 @@ class CatalogAddCommandHandler implements CommandHandler {
                 "--catalog <path> is required for a catalog source",
             );
         }
-        validateCatalogFile(catalog);
-        const config: CatalogSourceConfig = { kind: "catalog", name, catalog };
+        const normalizedCatalog = normalizeAbsolutePath(catalog);
+        validateCatalogFile(normalizedCatalog);
+        const config: CatalogSourceConfig = {
+            kind: "catalog",
+            name,
+            catalog: normalizedCatalog,
+        };
         this.registry.add(config);
         displayResult(`Added catalog source '${name}'.`, context);
     }
@@ -161,7 +172,7 @@ class PathAddCommandHandler implements CommandHandler {
         const config: PathSourceConfig = { kind: "path", name };
         const baseDir = params.flags.baseDir;
         if (baseDir !== undefined) {
-            config.baseDir = baseDir;
+            config.baseDir = normalizeAbsolutePath(baseDir);
         }
         this.registry.add(config);
         displayResult(`Added path source '${name}'.`, context);
