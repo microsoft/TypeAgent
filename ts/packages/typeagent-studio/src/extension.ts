@@ -46,6 +46,9 @@ import {
     type StudioConnectionState,
 } from "./studioServiceConnection.js";
 import { openImpactReport } from "./impactReportView.js";
+import { savePersistedRun } from "./impactReportStore.js";
+import { defaultGitExec, resolveVersionProvenance } from "./gitRefProvider.js";
+import type { RunProvenance } from "./webviewKit/replayViewModel.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     // In-process runtime — retained ONLY for the onboarding command surface
@@ -846,7 +849,40 @@ export function activate(context: vscode.ExtensionContext): void {
                     }
                 }
                 try {
-                    const result = await serviceRuntime.replayCorpus({ agent });
+                    // Compare the last commit against the working tree — the same
+                    // "did my edits change anything" check the Impact Report runs
+                    // by default (a working-tree self-compare would always be
+                    // all-equal). Pin each side to its concrete commit so the
+                    // report's provenance line stays truthful after a branch move.
+                    const versionA = { kind: "git", ref: "HEAD" } as const;
+                    const versionB = { kind: "workingTree" } as const;
+                    const runAt = Date.now();
+                    let provenance: RunProvenance | undefined;
+                    const exec =
+                        repoRootInfo.repoRoot !== undefined
+                            ? defaultGitExec(repoRootInfo.repoRoot)
+                            : undefined;
+                    if (exec) {
+                        const [a, b] = await Promise.all([
+                            resolveVersionProvenance(versionA, exec),
+                            resolveVersionProvenance(versionB, exec),
+                        ]);
+                        provenance = { a, b, runAt };
+                    }
+                    const result = await serviceRuntime.replayCorpus({
+                        agent,
+                        versionA,
+                        versionB,
+                    });
+                    // Persist as the agent's last run so opening the Impact Report
+                    // re-renders this run instead of a blank report.
+                    savePersistedRun(
+                        context.workspaceState,
+                        agent,
+                        result,
+                        runAt,
+                        provenance,
+                    );
                     const line = formatReplaySummaryLine(result.summary);
                     if (result.rows.length === 0) {
                         vscode.window.showInformationMessage(

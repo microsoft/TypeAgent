@@ -135,28 +135,21 @@ compiled grammar.
 - **Click a participant** to jump to its grammar source — the authored
   `.agr` file when present, otherwise the compiled `.ag.json`.
 
-### 4.6 Replay corpus (the headline-but-incomplete experience)
+### 4.6 Replay corpus (quick check from the Corpora view)
 
 On an agent row in the Corpora view, click the **Replay corpus** (rerun)
 icon.
 
 - The runtime replays that agent's federated corpus through the replay
-  engine, evaluating each utterance against versions A and B and
-  classifying each row as **equal**, **changed**, **new match**, or
-  **lost match**.
-- A summary headline shows when the run finishes.
-- When differences exist, a quick-pick of rows opens — icon, utterance,
-  per-version cache state, and latency.
-
-> **What's missing today:** the result is a quick-pick, not a webview.
-> The Impact Report (the four-pane diff visualization that is the
-> headline UI described in [`DESIGN.md`](./DESIGN.md)) is not yet built.
-> See §6.
->
-> The default version-A vs version-B resolver is also currently an
-> _identity_ resolver — every utterance routes the same way on both
-> sides, so the all-equal baseline is what you'll see. Real per-version
-> build/dispatch is a future piece.
+  engine, comparing **HEAD** against your **working tree** (the same "did my
+  edits change anything" check the Impact Report runs) and classifying each
+  row as **equal**, **changed**, **new match**, or **lost match**.
+- A summary headline shows when the run finishes; when differences exist, a
+  quick-pick of rows opens — icon, utterance, per-version cache state, and
+  latency.
+- The run is saved as the agent's **last run**, so opening the **Impact
+  Report** (the graph icon on the same row) re-renders it with a **Last run**
+  timestamp instead of a blank report.
 
 ### 4.7 Onboarding — the wizard backend
 
