@@ -130,10 +130,13 @@ jobs:
           ALL_SKIPPED_RECENT_ROLLBACK=""
           ALL_BLOCKED_PACKAGES=""
           ALL_NO_PATCH_PACKAGES=""
+          ALL_DEFERRED_PACKAGES=""
           ALL_FAILED_WORKSPACES=""
           TOTAL_RESOLVED=0
           TOTAL_BLOCKED=0
           TOTAL_NO_PATCH=0
+          TOTAL_DEFERRED=0
+          MIN_AGE_DAYS=""
           TOTAL_FAILED=0
           TOTAL_SKIPPED=0
 
@@ -218,8 +221,17 @@ jobs:
 
             WS_BLOCKED=$(jq '.summary.blocked' /tmp/dep-analysis.json)
             WS_NO_PATCH=$(jq '.summary.noPatch' /tmp/dep-analysis.json)
+            WS_DEFERRED=$(jq '.summary.deferred // 0' /tmp/dep-analysis.json)
             BLOCKED_PKGS=$(jq -r '[.blocked[].package] | unique | join(", ")' /tmp/dep-analysis.json)
             NO_PATCH_PKGS=$(jq -r '[.noPatch[].package] | unique | join(", ")' /tmp/dep-analysis.json)
+            # Deferred packages carry an eligibility date; show it inline so
+            # reviewers know when each fix becomes adoptable.
+            DEFERRED_PKGS=$(jq -r '[.deferred[]? | .package + (if .deferredUntil then " (eligible " + .deferredUntil[0:10] + ")" else "" end)] | unique | join(", ")' /tmp/dep-analysis.json)
+            # Minimum release age (days) the script deferred against — the same
+            # across workspaces; capture the first non-empty value for display.
+            if [ -z "$MIN_AGE_DAYS" ]; then
+              MIN_AGE_DAYS=$(jq -r '.minReleaseAgeDays // empty' /tmp/dep-analysis.json)
+            fi
 
             # If there are blocked packages, capture --show-chains output
             # for the PR body so reviewers can see why each was blocked
@@ -243,11 +255,13 @@ jobs:
             echo "Fixable $WS_DIR packages ($FIXABLE_COUNT): $FIXABLE"
             echo "::endgroup::"
 
-            # Accumulate blocked/no-patch
+            # Accumulate blocked/no-patch/deferred
             TOTAL_BLOCKED=$((TOTAL_BLOCKED + WS_BLOCKED))
             TOTAL_NO_PATCH=$((TOTAL_NO_PATCH + WS_NO_PATCH))
+            TOTAL_DEFERRED=$((TOTAL_DEFERRED + WS_DEFERRED))
             [ -n "$BLOCKED_PKGS" ] && ALL_BLOCKED_PACKAGES="${ALL_BLOCKED_PACKAGES:+$ALL_BLOCKED_PACKAGES, }$BLOCKED_PKGS"
             [ -n "$NO_PATCH_PKGS" ] && ALL_NO_PATCH_PACKAGES="${ALL_NO_PATCH_PACKAGES:+$ALL_NO_PATCH_PACKAGES, }$NO_PATCH_PKGS"
+            [ -n "$DEFERRED_PKGS" ] && ALL_DEFERRED_PACKAGES="${ALL_DEFERRED_PACKAGES:+$ALL_DEFERRED_PACKAGES, }$DEFERRED_PKGS"
 
             if [ "$FIXABLE_COUNT" -eq 0 ]; then
               echo "No fixable alerts in $WS_DIR"
@@ -392,6 +406,8 @@ jobs:
           echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
           echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
           echo "no_patch=$TOTAL_NO_PATCH" >> "$GITHUB_OUTPUT"
+          echo "deferred=$TOTAL_DEFERRED" >> "$GITHUB_OUTPUT"
+          echo "min_release_age_days=$MIN_AGE_DAYS" >> "$GITHUB_OUTPUT"
           echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
           echo "skipped=$TOTAL_SKIPPED" >> "$GITHUB_OUTPUT"
           echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
@@ -399,6 +415,7 @@ jobs:
           echo "skipped_packages=$ALL_SKIPPED_RECENT_ROLLBACK" >> "$GITHUB_OUTPUT"
           echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
           echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "deferred_packages=$ALL_DEFERRED_PACKAGES" >> "$GITHUB_OUTPUT"
           echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
 
           cd "$GITHUB_WORKSPACE"
@@ -473,6 +490,7 @@ jobs:
           Applied:${{ steps.fix.outputs.applied_packages }}
           Rolled back:${{ steps.fix.outputs.rolled_back_packages || ' (none)' }}
           Blocked: ${{ steps.fix.outputs.blocked }} package(s)
+          Deferred (min release age): ${{ steps.fix.outputs.deferred || '0' }} package(s)
           Shell packaging: ${{ steps.shell.outputs.shell_ok == 'true' && 'passed' || 'skipped' }}
 
           Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
@@ -507,6 +525,8 @@ jobs:
           FAILED="${{ steps.fix.outputs.failed }}"
           BLOCKED_PKGS="${{ steps.fix.outputs.blocked_packages }}"
           NO_PATCH_PKGS="${{ steps.fix.outputs.no_patch_packages }}"
+          DEFERRED_PKGS="${{ steps.fix.outputs.deferred_packages }}"
+          DEFER_AGE="${{ steps.fix.outputs.min_release_age_days }}"
 
           BODY=$(cat <<'PREOF'
           ## Automated Dependabot Alert Remediation
@@ -522,6 +542,7 @@ jobs:
           - **Applied ($RESOLVED):**$APPLIED
           - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
           - **No patch available (${{ steps.fix.outputs.no_patch }}):**${NO_PATCH_PKGS:- (none)}
+          - **Deferred — fix not yet ${DEFER_AGE:-7} days old (${{ steps.fix.outputs.deferred || '0' }}):**${DEFERRED_PKGS:- (none)}
           - **Rolled back ($FAILED):**${ROLLED:- (none)}
           - **Skipped (recent rollback, ${{ steps.fix.outputs.skipped }}):**${{ steps.fix.outputs.skipped_packages || ' (none)' }}
           - **Workspaces with analysis failures:**${{ steps.fix.outputs.failed_workspaces && format(' {0}', steps.fix.outputs.failed_workspaces) || ' (none)' }}
@@ -530,6 +551,14 @@ jobs:
 
           > _Note: the analysis source (\`fix-dependabot-alerts.mjs\`) is broader than the GitHub Dependabot REST API — it also audits the lockfile directly. Some packages listed above may not have a corresponding open Dependabot alert, and vice versa._
           "
+
+          # Explain deferred fixes when present so a waiting security fix isn't
+          # mistaken for a missing one.
+          if [ "${{ steps.fix.outputs.deferred || '0' }}" -gt 0 ]; then
+            BODY="$BODY
+          > _⏸ Deferred fixes require a package version that has been published for at least ${DEFER_AGE:-7} days (enforced by pnpm's \`minimumReleaseAge\` and the org release-age policy). They are intentionally **not** applied yet and will be picked up automatically on a later run once a qualifying version matures._
+          "
+          fi
 
           # Embed dependency chain output for blocked packages so reviewers
           # can see why each package couldn't be auto-fixed.
@@ -577,6 +606,7 @@ jobs:
           echo "| Applied | ${{ steps.fix.outputs.resolved || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Blocked | ${{ steps.fix.outputs.blocked || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| No patch available | ${{ steps.fix.outputs.no_patch || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deferred (min release age) | ${{ steps.fix.outputs.deferred || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Rolled back | ${{ steps.fix.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${{ steps.fix.outputs.applied_packages }}" ]; then
@@ -584,6 +614,9 @@ jobs:
           fi
           if [ -n "${{ steps.fix.outputs.rolled_back_packages }}" ]; then
             echo "**Rolled back:**${{ steps.fix.outputs.rolled_back_packages }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "${{ steps.fix.outputs.deferred_packages }}" ]; then
+            echo "**⏸ Deferred (waiting for minimum release age):** ${{ steps.fix.outputs.deferred_packages }}" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -n "${{ steps.fix.outputs.failed_workspaces }}" ]; then
             echo "**⚠️ Analysis failed for workspaces:** ${{ steps.fix.outputs.failed_workspaces }}" >> "$GITHUB_STEP_SUMMARY"
