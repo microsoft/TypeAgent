@@ -129,24 +129,9 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "agent":
             return new vscode.ThemeIcon("library");
         case "source":
-            // Feedback is a live, non-file source; file-backed groups get
-            // their icon from resourceUri in `decorate`.
-            return new vscode.ThemeIcon(
-                node.contextValue === "corpusFeedback" ? "feedback" : "folder",
-            );
+            // File-backed groups get their icon from resourceUri in `decorate`.
+            return new vscode.ThemeIcon("folder");
         case "entry":
-            if (node.feedbackRating === "up") {
-                return new vscode.ThemeIcon(
-                    "thumbsup",
-                    new vscode.ThemeColor("testing.iconPassed"),
-                );
-            }
-            if (node.feedbackRating === "down") {
-                return new vscode.ThemeIcon(
-                    "thumbsdown",
-                    new vscode.ThemeColor("testing.iconFailed"),
-                );
-            }
             return new vscode.ThemeIcon("comment");
         case "empty":
             return new vscode.ThemeIcon(

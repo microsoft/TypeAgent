@@ -330,8 +330,9 @@ function captureFileStamp(ts: number): string {
 
 /**
  * Normalize an entry for storage in the shared, committed in-repo file:
- * a portable repo-relative `sourceUri`, and no `rawSourceUri` (a machine-local
- * capture path that must never be checked in).
+ * a portable repo-relative `sourceUri`, no `rawSourceUri` (a machine-local
+ * capture path that must never be checked in), and no `feedback` (a mutable,
+ * request-scoped rating that is not a property of the curated utterance).
  */
 function toInRepoStorage(
     entry: CorpusEntry,
@@ -339,7 +340,9 @@ function toInRepoStorage(
 ): CorpusEntry {
     const provenance = { ...entry.provenance, sourceUri: relSourceUri };
     delete provenance.rawSourceUri;
-    return { ...entry, provenance };
+    const stored = { ...entry, provenance };
+    delete stored.feedback;
+    return stored;
 }
 
 /**

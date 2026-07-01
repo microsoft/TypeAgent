@@ -36,9 +36,9 @@ agent, source, provenance, expectedAction?, feedback?, tags? }`,
   `CorpusEntry[]` via a `ReplayCorpusProvider { list(agent, filter) }`. So
   anything we capture is immediately replayable.
 - **Extension UI** — `corpusTreeProvider.ts` / `corpusTreePresentation.ts` render
-  a "Corpora" tree (roots: in-repo / captures / external / feedback). Commands
-  exist for `refreshCorpora`, `recordFeedback`, `replayCorpus`,
-  `addExternalCorpus`, `seedInRepoCorpus`.
+  a "Corpora" tree (roots: in-repo / external, one row per backing file). Commands
+  exist for `refreshCorpora`, `replayCorpus`, `addExternalCorpus`,
+  `seedInRepoCorpus`.
 - **Tests** — `typeagent-core/test/corpus.spec.ts` covers append / promote /
   export / federation / filtering / path-traversal.
 
@@ -228,36 +228,60 @@ and is not shown in the Corpora tree. The new/changed in-repo files surface as
 ordinary working-tree changes the curator reviews and commits, so a personal
 session is never silently leaked into the shared repo corpus.
 
-### 5. Feedback as a label, not a funnel
+### 5. Feedback is a request-scoped observation, not utterance ground truth
 
-Manual UI feedback (thumbs up/down + optional category/comment, via
-`recordFeedback`) does **not** write into the capture or in-repo utterance files,
-and it **should not** start doing so automatically. Feedback is a **label that
-attaches to a corpus entry**, not a row that owns the utterance file. The rules:
+Feedback (thumbs up/down + optional category/comment) is a label about **one
+observed run** — a specific `(utterance → resolved action)` result — not a durable
+property of the utterance. This matches the shipped feedback mechanism and the
+headline design:
 
-- **No auto-funnel into the shared set.** The in-repo
-  `corpus/<agent>.utterances.jsonl` is the curated, git-shared, stable test set.
-  Auto-writing mutable per-developer ratings into it would bypass the
-  capture→promote vetting gate, churn a committed file every time a rating flips,
-  and commit unreconciled cross-developer conflicts. Feedback therefore stays a
-  **read-time federated source** (`FileCorpusService.feedbackProvider` →
-  `toCorpusEntries`), exactly as built.
-- **Feedback reaches the shared file only via promotion**, riding along as the
-  `feedback` field on the entry (`CorpusEntry.feedback` already exists). So a
-  label enters the curated set only when its entry is explicitly promoted — one
-  funnel (promotion), not two.
-- **Feedback must be durable.** The default backend is in-memory
-  (`InMemoryFeedbackBackend`), so labels are lost on restart — but a thumbs-up/down
-  is precisely the hand-label Gate C needs. Feedback should be persisted in its own
-  store (separate follow-up), still surfaced via the read-time projection.
-- **Align the feedback projector to the logical id.** `toCorpusEntries` currently
-  mints `computeEntryId(utterance, agent, requestId)`, while capture uses the
-  logical `computeEntryId(utterance, agent)`. Aligning feedback to the logical id
-  lets a feedback label **merge onto** the matching captured entry (enriching one
-  row) instead of appearing as a parallel request-scoped duplicate.
+- The rating is keyed **per `requestId`** and is **append-only, latest-wins per
+  `requestId`** — a mutable observation that changes over time, not a fixed fact.
+  Per-action detail is only reachable via the opt-in context bundle
+  (`context.actions[]`); without it, the grain is the request.
+- The compare-and-replay design consumes feedback **at replay time**: each
+  action-level delta row is annotated with the latest feedback for that request,
+  coloring a change as "you fixed a known-bad response" or "you broke a known-good
+  one." The replay engine already carries this as `feedbackA` / `feedbackB` on the
+  delta. Feedback annotates the **action a run produced**, correlated when the
+  report is built.
 
-Net flow: **capture seeds the entry → feedback enriches it as a label → promotion
-carries both into the shared set.**
+**Why there is no per-utterance "expected action" ground truth.** Resolution is
+non-deterministic: the same utterance can resolve to different actions across
+runs (LLM translation, ranked candidates, cache state). So a rating is a judgment
+of the action seen in that run, not of the utterance in the abstract. A 👍 on
+action X and a later 👎 on action Y for the same utterance are two facts about two
+actions, not a contradiction to be reconciled by recency. Collapsing them to a
+single utterance-level label would be lossy and can be actively wrong. The design
+never posits a fixed correct action per utterance; feedback stays mutable and
+observation-scoped. (The replay compare basis is a live re-resolution on each
+side, `actionsEqual(a.action, b.action)` — not a stored expected action.)
+
+**Consequences (decisions):**
+
+- **Feedback is not persisted into the committed in-repo corpus file.** The in-repo
+  `corpus/<agent>.utterances.jsonl` is the curated, git-shared, stable set of test
+  _inputs_; it holds the durable utterance definition only. Baking mutable,
+  per-developer, request-scoped ratings into it would churn a committed file every
+  time a rating flips and commit unreconciled cross-developer conflicts. Promotion
+  therefore strips any `feedback` field before writing.
+- **Utterance rows do not display a feedback rating.** A rating is not a property of
+  the curated utterance, so the corpus tree does not stamp a thumbs icon onto
+  file-backed entries or merge a live label onto them.
+- **Feedback stays a live, session/observation-scoped signal**, surfaced for triage
+  and consumed by the Impact Report at replay time. The default backend is
+  in-memory (`InMemoryFeedbackBackend`); a durable store is a separate follow-up
+  only if a use case needs labels to survive restart.
+
+**Decision:** the standalone "Record feedback" command and the read-time
+"Feedback" group in the Corpora tree are **retired**. They were a scaffold that
+collected an utterance + rating with no `(request, response, action)` context,
+so they could not carry the linkage that gives feedback its meaning. Feedback's
+real home is the Impact Report at replay time, sourced from ratings on actual
+response bubbles (each tied to a `requestId` → action). The core feedback
+service, `feedback.recorded` events, and the capture-time feedback transform
+stay in place so that per-bubble rating can be wired up later without rebuilding
+the plumbing.
 
 ## Gate C tie-in
 

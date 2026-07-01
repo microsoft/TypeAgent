@@ -63,12 +63,17 @@ export function openImpactReport(
     // listening (e.g. the first load, or a full extension reload) is recovered
     // on the next `ready` — the webview dedupes by request id. With the panel
     // retaining context while hidden, navigate-away/back no longer reloads it,
-    // so this mainly guards the initial-load and extension-reload cases.
+    // so this mainly guards the initial-load and extension-reload cases. When
+    // seeded from the durable per-agent store on open, `restored`/`runAt` mark it
+    // as a cached prior run so the webview labels it (with its timestamp) instead
+    // of showing it as a fresh "Done" run.
     let lastResult:
         | {
               requestId: number;
               payload: StudioReplayResult;
               provenance?: RunProvenance;
+              restored?: boolean;
+              runAt?: number;
           }
         | undefined;
     // Per-panel ref caches so re-opening a version picker is instant. The local
@@ -100,6 +105,37 @@ export function openImpactReport(
     });
 
     const post = (message: HostToWebviewMessage) => panel.post(message);
+
+    // Durable per-agent last-run store so the report shows the previous run when
+    // it is closed and reopened (the webview's own `getState` only survives while
+    // the panel exists). Rows are capped to bound the stored payload; the summary
+    // still reflects the full run.
+    const RUN_STORE_KEY = `impactReport.lastRun.${agent}`;
+    const MAX_PERSISTED_ROWS = 500;
+    interface PersistedRun {
+        payload: StudioReplayResult;
+        provenance?: RunProvenance;
+        runAt: number;
+    }
+    const loadPersistedRun = (): PersistedRun | undefined =>
+        context.workspaceState.get<PersistedRun>(RUN_STORE_KEY);
+    const savePersistedRun = (
+        payload: StudioReplayResult,
+        provenance?: RunProvenance,
+    ): void => {
+        const bounded =
+            payload.rows.length > MAX_PERSISTED_ROWS
+                ? {
+                      ...payload,
+                      rows: payload.rows.slice(0, MAX_PERSISTED_ROWS),
+                  }
+                : payload;
+        void context.workspaceState.update(RUN_STORE_KEY, {
+            payload: bounded,
+            runAt: Date.now(),
+            ...(provenance ? { provenance } : {}),
+        });
+    };
 
     // Single-flight connect so concurrent ready/run don't open multiple sockets;
     // failures aren't cached (a later reconnect/run retries).
@@ -167,7 +203,23 @@ export function openImpactReport(
             available,
             canValidateWildcards,
         });
-        // Recover a result computed while the panel was hidden/reloaded.
+        // Recover a result computed while the panel was hidden/reloaded (this
+        // session), or restore the last persisted run from a previous session so
+        // reopening the report shows it (clearly labelled with its timestamp).
+        if (!lastResult) {
+            const persisted = loadPersistedRun();
+            if (persisted) {
+                lastResult = {
+                    requestId: 0,
+                    payload: persisted.payload,
+                    restored: true,
+                    runAt: persisted.runAt,
+                    ...(persisted.provenance
+                        ? { provenance: persisted.provenance }
+                        : {}),
+                };
+            }
+        }
         if (lastResult) {
             post({
                 type: "result",
@@ -175,6 +227,9 @@ export function openImpactReport(
                 payload: lastResult.payload,
                 ...(lastResult.provenance
                     ? { provenance: lastResult.provenance }
+                    : {}),
+                ...(lastResult.restored
+                    ? { restored: true, runAt: lastResult.runAt }
                     : {}),
             });
         }
@@ -409,6 +464,7 @@ export function openImpactReport(
                 payload,
                 ...(provenance ? { provenance } : {}),
             };
+            savePersistedRun(payload, provenance);
         } catch (e) {
             post({
                 type: "error",

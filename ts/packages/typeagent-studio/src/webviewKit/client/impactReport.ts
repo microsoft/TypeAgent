@@ -352,12 +352,18 @@ window.addEventListener("message", (event: MessageEvent) => {
         case "result":
             // Accept the matching run, or — when no run has been issued since
             // this load (id still 0) — a host recovery re-push of the last
-            // result (the panel reloaded after the run finished). Adopt its id
-            // so a genuinely stale earlier result can't then overwrite it.
+            // result (the panel reloaded after the run finished, or a cached
+            // prior run restored on open). Adopt its id so a genuinely stale
+            // earlier result can't then overwrite it.
             if (latestRequestId === 0 || msg.requestId === latestRequestId) {
                 latestRequestId = msg.requestId;
-                renderResult(msg.payload, false, msg.provenance);
-                persistResult(msg.payload, msg.provenance);
+                renderResult(
+                    msg.payload,
+                    msg.restored ?? false,
+                    msg.provenance,
+                    msg.runAt,
+                );
+                persistResult(msg.payload, msg.provenance, msg.runAt);
                 setControlsEnabled(controlsAvailable);
             }
             break;
@@ -492,6 +498,7 @@ function renderResult(
     result: StudioReplayResult,
     restored = false,
     provenance?: RunProvenance,
+    runAt?: number,
 ): void {
     lastRenderedResult = result;
     // Reset every output region first so a render fully *replaces* the previous
@@ -557,9 +564,20 @@ function renderResult(
     const ms = result.summary.duration;
     setStatus(
         restored
-            ? `Restored from last run — Run for live results (${shown} row(s)).`
+            ? `Restored from last run${
+                  runAt ? ` (${formatRunTimestamp(runAt)})` : ""
+              } — Run for live results (${shown} row(s)).`
             : `Done — ${shown} row(s) \u00b7 ${ms}ms.`,
     );
+}
+
+/** Format a run timestamp for the "restored" hint (local date + time). */
+function formatRunTimestamp(runAt: number): string {
+    try {
+        return new Date(runAt).toLocaleString();
+    } catch {
+        return "";
+    }
 }
 
 /** Paint the wildcard-validation outcome into the sub-bar, or clear it.
@@ -1059,6 +1077,7 @@ function restoreSelection(): void {
             state.lastResult.payload,
             true,
             state.lastResult.provenance,
+            state.lastResult.runAt,
         );
     }
 }
@@ -1079,10 +1098,13 @@ function persistState(extra: Partial<PanelState>): void {
     }
 }
 
-/** Persist a completed result (row-capped) so a reload re-renders it. */
+/** Persist a completed result (row-capped) so a reload re-renders it. When
+ *  re-persisting a restored run, keep its original `runAt` rather than stamping
+ *  "now" so the timestamp shown stays truthful. */
 function persistResult(
     payload: StudioReplayResult,
     provenance?: RunProvenance,
+    runAt?: number,
 ): void {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
@@ -1091,7 +1113,7 @@ function persistResult(
     persistState({
         lastResult: {
             payload: bounded,
-            runAt: Date.now(),
+            runAt: runAt ?? Date.now(),
             ...(provenance ? { provenance } : {}),
         },
     });
