@@ -60,7 +60,6 @@ describe("pathSource", () => {
         expect(record.source).toBe("mypath");
         expect(record.path).toBe(path.resolve(dir));
         expect(record.module).toBeUndefined();
-        expect(record.name).toBe(path.basename(dir));
     });
 
     it("is not enumerable", () => {

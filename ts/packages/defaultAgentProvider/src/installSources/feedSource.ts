@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import {
     InstallSource,
     FeedSourceConfig,
-    InstalledAgentRecord,
+    MaterializedInstallRecord,
     ResolvedCandidate,
 } from "./config.js";
 import {
@@ -324,7 +324,7 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
-        ): Promise<InstalledAgentRecord> {
+        ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
                 throw new Error(
@@ -365,7 +365,6 @@ export function createFeedSource(
                 );
             }
             return {
-                name: moduleName.split("/").pop() ?? moduleName,
                 kind: "npm",
                 module: moduleName,
                 source: config.name,

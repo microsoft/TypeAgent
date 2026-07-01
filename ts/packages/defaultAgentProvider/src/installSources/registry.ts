@@ -5,7 +5,7 @@ import {
     InstallSource,
     InstallSourceConfig,
     InstallSourceInfo,
-    InstalledAgentRecord,
+    MaterializedInstallRecord,
     ResolvedCandidate,
 } from "./config.js";
 import { createPathSource } from "./pathSource.js";
@@ -32,7 +32,7 @@ export interface DefaultInstallSourceRegistry {
     add(config: InstallSourceConfig): void;
     remove(name: string): void;
     // resolve a ref: explicit source, else walk the configured order.
-    resolve(ref: string, sourceName?: string): Promise<InstalledAgentRecord>;
+    resolve(ref: string, sourceName?: string): Promise<MaterializedInstallRecord>;
     // dry-run: report which source would win without materializing.
     where(ref: string): Promise<ResolvedCandidate | undefined>;
 }
@@ -144,7 +144,7 @@ export function createInstallSourceRegistry(
     async function resolveUnlocked(
         ref: string,
         sourceName?: string,
-    ): Promise<InstalledAgentRecord> {
+    ): Promise<MaterializedInstallRecord> {
         if (sourceName !== undefined) {
             const entry = entries.get(sourceName);
             if (entry === undefined) {
@@ -225,7 +225,7 @@ export function createInstallSourceRegistry(
         async resolve(
             ref: string,
             sourceName?: string,
-        ): Promise<InstalledAgentRecord> {
+        ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter (design §12 Q5). The installer (M2) reuses the
             // same limiter for the record write.

@@ -324,7 +324,6 @@ describe("feedSource.materialize", () => {
         expect(record.module).toBe("@typeagent/a-agent");
         expect(record.ref).toBe("@typeagent/a-agent@1.0.0");
         expect(record.loaderConfig?.execMode).toBe("separate");
-        expect(record.name).toBe("a-agent");
     });
 });
 

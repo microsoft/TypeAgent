@@ -6,7 +6,7 @@ import registerDebug from "debug";
 import {
     InstallSource,
     CatalogSourceConfig,
-    InstalledAgentRecord,
+    MaterializedInstallRecord,
     ResolvedCandidate,
 } from "./config.js";
 import { AgentCatalog, loadCatalog } from "./catalog.js";
@@ -15,8 +15,8 @@ const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 
 // `catalog` source (design §3, §4.1, §4.2, §12 Q6, Q17, Q19).
 //   find        = map lookup in the catalog JSON
-//   materialize = record `path` (relative paths resolve against the catalog
-//                 dir) or `module`; carries execMode
+//   materialize = record data `path` (relative paths resolve against the
+//                 catalog dir) or `module`; carries execMode
 // `ref` is an agent short name (the catalog key).
 //
 // A catalog entry with a `path` becomes a path-resolved record (omits
@@ -62,9 +62,8 @@ export function createCatalogSource(
                     `catalog source '${config.name}': entry '${ref}' has neither 'path' nor 'name'`,
                 );
             }
-            // `ref` carries the matched catalog key so materialize can use it
-            // as the default dispatcher name (not propagated to the record;
-            // catalog records have no `ref`).
+            // `ref` carries the matched catalog key for installer-level
+            // naming/re-resolution decisions (catalog records have no `ref`).
             const candidate: ResolvedCandidate = { source: config.name, ref };
             if (resolvedPath !== undefined) {
                 candidate.path = resolvedPath;
@@ -78,10 +77,8 @@ export function createCatalogSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
-        ): Promise<InstalledAgentRecord> {
-            const name = candidate.ref ?? candidate.module ?? config.name;
-            const record: InstalledAgentRecord = {
-                name,
+        ): Promise<MaterializedInstallRecord> {
+            const record: MaterializedInstallRecord = {
                 kind: "npm",
                 source: config.name,
             };

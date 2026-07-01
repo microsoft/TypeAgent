@@ -30,7 +30,6 @@ describe("catalogSource", () => {
         expect(candidate!.path).toBeUndefined();
 
         const record = await source.materialize(candidate!);
-        expect(record.name).toBe("player");
         expect(record.module).toBe("music");
         expect(record.path).toBeUndefined();
         expect(record.source).toBe("workspace");

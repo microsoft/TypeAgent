@@ -6,14 +6,14 @@ import path from "node:path";
 import {
     InstallSource,
     PathSourceConfig,
-    InstalledAgentRecord,
+    MaterializedInstallRecord,
     ResolvedCandidate,
 } from "./config.js";
 import { expandPath } from "./paths.js";
 
 // `path` source (design §3, §4.1, §4.2, §12 Q17).
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
-//   materialize = record { path, source }, omitting `module`
+//   materialize = record data { path, source }, omitting `module` and `name`
 // `ref` is a filesystem path: absolute, "~"-relative, or (only when a baseDir
 // is configured) relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
@@ -55,16 +55,13 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         },
         async materialize(
             candidate: ResolvedCandidate,
-        ): Promise<InstalledAgentRecord> {
+        ): Promise<MaterializedInstallRecord> {
             if (candidate.path === undefined) {
                 throw new Error(
                     `path source '${config.name}' got a candidate without a path`,
                 );
             }
-            // The installer assigns the authoritative dispatcher name; default
-            // to the directory basename so the record is self-consistent.
-            const record: InstalledAgentRecord = {
-                name: path.basename(candidate.path),
+            const record: MaterializedInstallRecord = {
                 kind: "npm",
                 path: candidate.path,
                 source: config.name,

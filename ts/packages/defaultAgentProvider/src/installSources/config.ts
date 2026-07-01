@@ -49,6 +49,12 @@ export interface InstalledAgentRecord {
 }
 
 /**
+ * Source-produced record data before the installer assigns the authoritative
+ * dispatcher name.
+ */
+export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
+
+/**
  * The three install-source kinds (design §3). There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/
@@ -119,7 +125,7 @@ export interface InstallSourceInfo {
  * A live install source built from a host config. Implements a two-phase
  * contract so the registry can probe cheaply (`find`) before doing any real
  * work (`materialize`) (design §4.1). `ResolvedCandidate` /
- * `InstalledAgentRecord` (defined above) are host-owned record shapes;
+ * `MaterializedInstallRecord` (defined above) are host-owned record shapes;
  * everything here is host-internal.
  */
 export interface InstallSource {
@@ -132,8 +138,10 @@ export interface InstallSource {
      * continues to the next source (§4.1, Q4).
      */
     find(ref: string): Promise<ResolvedCandidate | undefined>;
-    /** Does the actual work (npm install / copy / record). */
-    materialize(candidate: ResolvedCandidate): Promise<InstalledAgentRecord>;
+    /** Does the actual work (npm install / copy / record data). */
+    materialize(
+        candidate: ResolvedCandidate,
+    ): Promise<MaterializedInstallRecord>;
     /** Enumerable sources (`path` is not) advertise their agents. */
     listAgents?(): Promise<string[]>;
 }
