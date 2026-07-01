@@ -307,6 +307,15 @@ collision: {
         scorer: "placeholder" | "actionEmbedding";
         strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
     };
+    contextSelector: {                      // context-weighted resolution tier (grammar path only)
+        detect: boolean;                    // off by default
+        windowTurns: number;                // ring-buffer look-back N (default 20)
+        decay: number;                      // per-turn recency decay λ (default 0.9)
+        minUniqueTokens: number;            // evidence gate (default 2)
+        minMass: number;                    // evidence gate — min winner score (default 1.0)
+        margin: number;                     // clear-winner margin over runner-up (default 1.0)
+        abstainFallback: "defer-to-strategy" | "escalate-to-llm";  // default defer-to-strategy
+    };
     priorityOrder: string;                  // comma-separated agent names; "" = registration order
     multipleActionBehavior:
         | "downgrade-to-priority"           // safest default
@@ -335,17 +344,19 @@ Each event carries `kind` (detection point), `strategy`, `candidates[]` (with pe
 
 Runtime opt-in via `@config collision …` and ring-buffer inspection via `@collision events`:
 
-| Command                                           | Effect                                                                                                                                                        |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@config collision`                               | Render the current collision config as an HTML status table.                                                                                                  |
-| `@config collision <point> detect [on\|off]`      | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                       |
-| `@config collision <point> strategy <name>`       | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                       |
-| `@config collision priority [<list>]`             | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                               |
-| `@config collision telemetry emit [on\|off]`      | Toggle the ring-buffer + JSONL capture.                                                                                                                       |
-| `@config collision telemetry debugLog [on\|off]`  | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                        |
-| `@config collision telemetry experimentId [<id>]` | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                          |
-| `@collision events [-n <N>] [-k <kind>]`          | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`. |
-| `@config log db [on\|off]`                        | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                  |
+| Command                                                            | Effect                                                                                                                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@config collision`                                                | Render the current collision config as an HTML status table.                                                                                                             |
+| `@config collision <point> detect [on\|off]`                       | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                                  |
+| `@config collision contextSelector detect [on\|off]`               | Toggle the context-weighted resolution tier. Other `contextSelector` knobs (windowTurns / decay / evidence gates / margin / abstainFallback) are `data.json` hand-edits. |
+| `@collision keywords <schema.action> [add\|remove\|list\|clear] …` | Inspect / tune per-action keyword vectors used by `contextSelector` (edits the `collision-keywords.json` sidecar).                                                       |
+| `@config collision <point> strategy <name>`                        | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                                  |
+| `@config collision priority [<list>]`                              | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                                          |
+| `@config collision telemetry emit [on\|off]`                       | Toggle the ring-buffer + JSONL capture.                                                                                                                                  |
+| `@config collision telemetry debugLog [on\|off]`                   | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                                   |
+| `@config collision telemetry experimentId [<id>]`                  | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                                     |
+| `@collision events [-n <N>] [-k <kind>]`                           | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`.            |
+| `@config log db [on\|off]`                                         | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                             |
 
 Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `similarityThreshold`) are intentionally not exposed via `@config collision` — they're long-tail tuning, not opt-in toggles, and the same `data.json` accepts hand edits when needed.
 
@@ -439,6 +450,28 @@ Related `@config collision preference` knobs:
 > apply live without a rebuild, but if you rebuild the dispatcher
 > (`pnpm --filter agent-dispatcher build`) you must restart the shell
 > (`pnpm run shell`) for code changes to take effect.
+
+### Context-weighted resolution (`contextSelector`)
+
+A deterministic, LLM-free resolution tier on the **grammarMatch** path that ranks colliding candidates by how closely they match the recent conversation topic, then **resolves** the collision on the cache path (avoiding the downstream LLM translation) or **abstains** and falls through to the configured strategy. Off by default; opt in with `@config collision contextSelector detect on`. See the full design in [`context-weighted-collision-resolution-design.md`](../../../docs/architecture/collision/context-weighted-collision-resolution-design.md).
+
+How it works, per collision (all steps deterministic):
+
+1. **Context vector** — a decayed keyword-frequency map of the recent conversation, built from a `contextSelector`-owned ring buffer of the last `windowTurns` user requests, each weighted by `decay^age` (history-only: the current request is excluded). Sourced behind the `ConversationSignalSource` seam so it can later read knowPro topics/entities instead of raw tokens.
+2. **Candidate keywords** — each `(schema, action)`'s effective keyword vector = a derived lexical floor (mined from the live schema text) layered with `collision-keywords.json` sidecar overrides.
+3. **Score** — `TfIdfScorer` sums, per candidate, `contextWeight × candidate-local-IDF` over the overlapping tokens (shared tokens cancel, unique tokens distinguish). Behind the `CollisionScorer` seam so a knowPro-entity or embedding scorer can replace it.
+4. **Decide** — resolve only when a coverage guard, an evidence gate (`minUniqueTokens` + `minMass`), and a clear-winner `margin` all pass; otherwise abstain. Biased toward abstaining.
+
+On a resolve it emits a `context-weight` telemetry event and a non-blocking affordance (`↪ routed to <agent> — recent topic …`). On abstain it emits a `context-weight` event noting the reason and, per `abstainFallback`, either defers to the configured grammar strategy (default) or escalates the request to LLM translation. Detection is independent of `grammarMatch.detect` — with `detect: false` everywhere, behavior is byte-identical to legacy first-match.
+
+Tune the discriminative keywords for the handful of actions that actually collide:
+
+```
+@collision keywords excel.addRow add spreadsheet formula   # add discriminative keywords
+@collision keywords excel.addRow remove office             # mask a derived keyword
+@collision keywords excel.addRow list                       # show derived + overrides, merged
+@collision keywords excel.addRow clear                      # revert to derived-only
+```
 
 ### MultipleAction interaction
 
