@@ -87,10 +87,11 @@ export function decide(
     const runnerUp = ranked.length > 1 ? ranked[1] : undefined;
 
     const winnerScore = quantize(winner.score);
-    if (winner.uniqueTokenCount === 0 || winnerScore <= 0) {
+    const winnerUnique = winner.uniqueTokenCount ?? 0;
+    if (winnerUnique === 0 || winnerScore <= 0) {
         return { kind: "abstain", reason: "no-signal", ranked };
     }
-    if (winner.uniqueTokenCount < config.minUniqueTokens) {
+    if (winnerUnique < config.minUniqueTokens) {
         return { kind: "abstain", reason: "min-unique-tokens", ranked };
     }
     if (winnerScore < quantize(config.minMass)) {

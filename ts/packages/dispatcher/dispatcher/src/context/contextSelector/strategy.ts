@@ -22,8 +22,18 @@ export interface ContextResolutionStrategy {
         contextVector: ContextVector,
         candidates: ScorerCandidate[],
         config: DecisionConfig,
-    ): ContextSelectorDecision;
+    ): ContextSelectorEvaluation;
 }
+
+// A strategy's output: the generic decision plus a one-line, strategy-specific
+// evidence phrase for the resolved winner (e.g. TF-IDF "matched 3 token(s), mass
+// 5.54"; a future embedding strategy "cosine 0.82"). Empty when abstaining.
+// Keeping the phrasing here — not in the orchestrator — is what stops TF-IDF
+// vocabulary leaking into the caller (so a non-lexical strategy is a clean swap).
+export type ContextSelectorEvaluation = {
+    decision: ContextSelectorDecision;
+    winnerNote: string;
+};
 
 // v1 strategy: candidate-local IDF TF-IDF scoring (§9) + the count-based
 // coverage / evidence-gate / margin decision (§10). Coverage is a strategy
@@ -40,9 +50,14 @@ export class TfIdfStrategy implements ContextResolutionStrategy {
         contextVector: ContextVector,
         candidates: ScorerCandidate[],
         config: DecisionConfig,
-    ): ContextSelectorDecision {
+    ): ContextSelectorEvaluation {
         const covered = candidates.every((c) => c.keywords.size > 0);
         const scores = this.scorer.score(contextVector, candidates);
-        return decide(scores, covered, config);
+        const decision = decide(scores, covered, config);
+        const winnerNote =
+            decision.kind === "resolve"
+                ? `matched ${decision.winner.uniqueTokenCount ?? 0} token(s), mass ${decision.winner.score.toFixed(3)}`
+                : "";
+        return { decision, winnerNote };
     }
 }

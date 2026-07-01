@@ -300,24 +300,33 @@ export async function matchRequest(
         isCollision(validated, collisionCfg.classifier)
     ) {
         // contextSelector tier (§11): a confident topical pick resolves here on
-        // the cache path (no LLM). On abstain it either falls through to the
-        // configured grammar strategy (default) or escalates to LLM translation.
+        // the cache path (no LLM). On abstain it either defers to the configured
+        // grammar strategy or escalates the request to LLM translation.
+        let deferToStrategy = false;
         if (contextSelectorCfg.detect) {
-            const resolution = resolveContextSelector(
+            const outcome = resolveContextSelector(
                 validated,
                 systemContext,
                 request,
             );
-            if (resolution !== undefined) {
-                decision = { kind: "match", match: resolution.match };
-                await displayInfo(resolution.note, context);
-            } else if (
-                contextSelectorCfg.abstainFallback === "escalate-to-llm"
-            ) {
-                return undefined;
+            if (outcome.kind === "resolve") {
+                decision = { kind: "match", match: outcome.match };
+                await displayInfo(outcome.note, context);
+            } else if (outcome.kind === "abstain") {
+                if (contextSelectorCfg.abstainFallback === "escalate-to-llm") {
+                    return undefined;
+                }
+                // defer-to-strategy: hand the collision to the configured grammar
+                // strategy below, even if grammarMatch.detect is off (§11.1).
+                deferToStrategy = true;
             }
+            // outcome.kind === "skip" (not a topical collision): fall through to
+            // today's behavior — never escalate.
         }
-        if (decision === undefined && collisionCfg.detect) {
+        if (
+            decision === undefined &&
+            (collisionCfg.detect || deferToStrategy)
+        ) {
             decision = resolveGrammarCollision(
                 validated,
                 systemContext,

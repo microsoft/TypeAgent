@@ -117,7 +117,7 @@ describe("contextSelector/decision", () => {
 describe("contextSelector/decision — default-threshold boundaries", () => {
     const DEFAULTS: DecisionConfig = {
         minUniqueTokens: 2,
-        minMass: 0.75,
+        minMass: 1.0,
         margin: 0.5,
     };
 
@@ -148,6 +148,17 @@ describe("contextSelector/decision — default-threshold boundaries", () => {
         );
         expect(d.kind).toBe("abstain");
         if (d.kind === "abstain") expect(d.reason).toBe("margin");
+    });
+
+    it("abstains on a single stale two-token turn (min-mass bounds staleness)", () => {
+        // Two matched tokens at age ~8 (2 * 0.9^8 ≈ 0.861) fall below minMass 1.0.
+        const d = decide(
+            [scored("a", "x", 0.861, 2), scored("b", "y", 0, 0)],
+            true,
+            DEFAULTS,
+        );
+        expect(d.kind).toBe("abstain");
+        if (d.kind === "abstain") expect(d.reason).toBe("min-mass");
     });
 });
 

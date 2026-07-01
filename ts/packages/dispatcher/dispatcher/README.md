@@ -312,7 +312,7 @@ collision: {
         windowTurns: number;                // ring-buffer look-back N (default 20)
         decay: number;                      // per-turn recency decay λ (default 0.9)
         minUniqueTokens: number;            // evidence gate (default 2)
-        minMass: number;                    // evidence gate — min winner score (default 0.75)
+        minMass: number;                    // evidence gate — min winner score (default 1.0)
         margin: number;                     // clear-winner margin over runner-up (default 0.5)
         abstainFallback: "defer-to-strategy" | "escalate-to-llm";  // default defer-to-strategy
     };

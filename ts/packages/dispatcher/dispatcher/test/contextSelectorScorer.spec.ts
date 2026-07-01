@@ -46,7 +46,7 @@ describe("contextSelector/scorer (TF-IDF, candidate-local IDF)", () => {
         expect(excel.score).toBeCloseTo(2, 5);
         expect(excel.uniqueTokenCount).toBe(1);
         // Shared token still appears in the matched detail with disc 0.
-        const sharedMatch = excel.matched.find((m) => m.token === "shared")!;
+        const sharedMatch = excel.matched!.find((m) => m.token === "shared")!;
         expect(sharedMatch.disc).toBeCloseTo(0, 5);
         expect(sharedMatch.contribution).toBeCloseTo(0, 5);
     });
@@ -80,7 +80,7 @@ describe("contextSelector/scorer (TF-IDF, candidate-local IDF)", () => {
             cand("a", "x", ["zebra", "apple", "mango"]),
             cand("b", "y", ["other"]),
         ]);
-        expect(only.matched.map((m) => m.token)).toEqual([
+        expect(only.matched!.map((m) => m.token)).toEqual([
             "apple",
             "mango",
             "zebra",

@@ -274,7 +274,9 @@ export type CollisionConfig = {
         // Evidence gate: min distinct distinguishing tokens the winner must
         // match (default 2).
         minUniqueTokens: number;
-        // Evidence gate: min winner score / matched mass (default 0.75).
+        // Evidence gate: min winner score / matched mass (default 1.0). Also
+        // bounds staleness — at λ=0.9 two matched tokens fall below 1.0 past
+        // roughly age 7, so a single old topic turn stops resolving.
         minMass: number;
         // Clear-winner margin the winner must beat the runner-up by (default 0.5).
         margin: number;
@@ -467,7 +469,7 @@ const defaultSessionConfig: SessionConfig = {
             windowTurns: 20,
             decay: 0.9,
             minUniqueTokens: 2,
-            minMass: 0.75,
+            minMass: 1.0,
             margin: 0.5,
             abstainFallback: "defer-to-strategy",
         },

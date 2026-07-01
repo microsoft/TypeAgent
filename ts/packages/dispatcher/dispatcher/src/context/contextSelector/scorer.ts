@@ -34,13 +34,15 @@ export type MatchedToken = {
 export type CandidateScore = {
     schemaName: string;
     actionName: string;
-    // Σ contribution over matched tokens.
+    // Generic magnitude the decision rule ranks on — always populated.
     score: number;
-    // Distinct matched tokens that actually distinguish this candidate
-    // (disc > 0). The evidence gate's `minUniqueTokens` counts these (§10).
-    uniqueTokenCount: number;
-    // All firing tokens, sorted by token for stable output.
-    matched: MatchedToken[];
+    // Lexical evidence (TF-IDF): distinct distinguishing tokens matched. A
+    // non-lexical scorer (embedding) may omit it — the count-based gate treats
+    // absent as 0. Optional so the seam isn't TF-IDF-shaped.
+    uniqueTokenCount?: number;
+    // Lexical evidence: the tokens that fired, for explainable telemetry.
+    // Empty/omitted for non-lexical scorers.
+    matched?: MatchedToken[];
 };
 
 export interface CollisionScorer {

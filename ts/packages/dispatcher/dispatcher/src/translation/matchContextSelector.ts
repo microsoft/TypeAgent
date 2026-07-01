@@ -3,10 +3,11 @@
 
 // The contextSelector orchestrator (§11): adapts the grammar path's validated
 // MatchResults into scorer candidates, runs the deterministic pipeline
-// (signal -> keywords -> scorer -> decision), emits telemetry, and returns the
-// winning match plus a UX affordance note — or undefined to abstain. Pure
-// engine logic lives under ../context/contextSelector/; this file is the thin
-// MatchResult-aware seam plus telemetry.
+// (signal -> strategy: score + decide), emits telemetry, and returns a 3-way
+// outcome — resolve (with the winning match + a UX affordance note), abstain, or
+// skip (not a topical collision). Pure engine logic lives under
+// ../context/contextSelector/; this file is the thin MatchResult-aware seam plus
+// telemetry.
 
 import { MatchResult } from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
@@ -15,6 +16,7 @@ import {
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
+import { toCandidate } from "./matchCollision.js";
 import {
     CandidateScore,
     ScorerCandidate,
@@ -29,12 +31,17 @@ import {
 // a single instance is reused.
 const strategy: ContextResolutionStrategy = new TfIdfStrategy();
 
-export type ContextSelectorResolution = {
-    // The winning validated match to resolve to (avoids the downstream LLM).
-    match: MatchResult;
-    // Non-blocking UX affordance shown on a reroute (U-2, §11.2).
-    note: string;
-};
+export type ContextSelectorOutcome =
+    // Confident topical pick — resolve to `match` (avoids the LLM); `note` is the
+    // U-2 affordance (§11.2).
+    | { kind: "resolve"; match: MatchResult; note: string }
+    // Scored >= 2 distinct candidates but the signal was weak/ambiguous. The
+    // caller applies the configured abstain fallback.
+    | { kind: "abstain" }
+    // Fewer than 2 distinct (schema, action) candidates — not a topical collision
+    // (e.g. a tiedHeuristics tie between two constructions of the SAME action).
+    // The caller must fall through to today's behavior, never escalate.
+    | { kind: "skip" };
 
 function primaryOf(match: MatchResult): {
     schemaName: string;
@@ -49,31 +56,44 @@ function primaryOf(match: MatchResult): {
 
 type Candidate = ScorerCandidate & { match: MatchResult };
 
+// Prefer the heuristically-stronger MatchResult when the same (schema, action)
+// appears twice (matchedCount desc, nonOptionalCount desc, wildcardCharCount
+// asc) so a resolve returns the best representative, not just the first seen.
+function isBetterMatch(next: MatchResult, current: MatchResult): boolean {
+    if (next.matchedCount !== current.matchedCount) {
+        return next.matchedCount > current.matchedCount;
+    }
+    if (next.nonOptionalCount !== current.nonOptionalCount) {
+        return next.nonOptionalCount > current.nonOptionalCount;
+    }
+    return next.wildcardCharCount < current.wildcardCharCount;
+}
+
 function toTelemetryCandidates(scores: CandidateScore[]): CollisionCandidate[] {
     return scores.map((s) => ({
         schemaName: s.schemaName,
         actionName: s.actionName,
         score: s.score,
-        matchedTokens: s.matched.map((m) => ({
+        matchedTokens: (s.matched ?? []).map((m) => ({
             token: m.token,
             weight: m.contribution,
         })),
     }));
 }
 
-// Resolve a grammar-path collision by topical proximity, or abstain. Assumes the
-// caller has already confirmed this is a collision and that
-// `contextSelector.detect` is on.
+// Resolve a grammar-path collision by topical proximity, abstain, or skip.
+// Assumes the caller confirmed `isCollision` and that `contextSelector.detect`
+// is on.
 export function resolveContextSelector(
     validated: MatchResult[],
     ctx: CommandHandlerContext,
     request: string,
-): ContextSelectorResolution | undefined {
+): ContextSelectorOutcome {
     const cfg = ctx.session.getConfig().collision;
     const startedAt = performance.now();
 
-    // Distinct (schema, action) candidates, each keeping the first MatchResult
-    // to resolve to. Effective keywords = derived floor + sidecar overrides.
+    // Distinct (schema, action) candidates, keeping the best MatchResult per
+    // action. Effective keywords = derived floor + sidecar overrides.
     const byId = new Map<string, Candidate>();
     for (const match of validated) {
         const { schemaName, actionName } = primaryOf(match);
@@ -81,7 +101,8 @@ export function resolveContextSelector(
             continue;
         }
         const id = `${schemaName}.${actionName}`;
-        if (!byId.has(id)) {
+        const existing = byId.get(id);
+        if (existing === undefined) {
             byId.set(id, {
                 schemaName,
                 actionName,
@@ -91,21 +112,32 @@ export function resolveContextSelector(
                 ),
                 match,
             });
+        } else if (isBetterMatch(match, existing.match)) {
+            existing.match = match;
         }
     }
     const candidates = [...byId.values()];
     if (candidates.length < 2) {
-        return undefined;
+        // Not a topical collision — nothing for contextSelector to weigh in on.
+        return { kind: "skip" };
     }
 
     const contextVector = ctx.conversationSignal.getContextVector();
-    const decision = strategy.evaluate(contextVector, candidates, {
-        minUniqueTokens: cfg.contextSelector.minUniqueTokens,
-        minMass: cfg.contextSelector.minMass,
-        margin: cfg.contextSelector.margin,
-    });
+    const { decision, winnerNote } = strategy.evaluate(
+        contextVector,
+        candidates,
+        {
+            minUniqueTokens: cfg.contextSelector.minUniqueTokens,
+            minMass: cfg.contextSelector.minMass,
+            margin: cfg.contextSelector.margin,
+        },
+    );
 
     const telemetryCandidates = toTelemetryCandidates(decision.ranked);
+    // What first-match would have picked — preserved so the rollout can compare
+    // treatment vs control even when contextSelector short-circuits the strategy
+    // (§13). validated[0] is the cache's heuristic-best.
+    const firstMatchCandidate = toCandidate(validated[0], ctx);
     const elapsedMs = performance.now() - startedAt;
 
     if (decision.kind === "abstain") {
@@ -114,6 +146,7 @@ export function resolveContextSelector(
                 kind: "grammarMatch",
                 request,
                 candidates: telemetryCandidates,
+                firstMatchCandidate,
                 classifier: cfg.grammarMatch.classifier,
                 strategy: "context-weight",
                 elapsedMs,
@@ -121,7 +154,7 @@ export function resolveContextSelector(
             },
             ctx,
         );
-        return undefined;
+        return { kind: "abstain" };
     }
 
     const winner = decision.winner;
@@ -129,41 +162,31 @@ export function resolveContextSelector(
     if (winning === undefined) {
         // Defensive: winner id must be present. Treat as abstain rather than
         // resolving to the wrong match.
-        return undefined;
+        return { kind: "abstain" };
     }
-    const chosen: CollisionCandidate = {
-        schemaName: winner.schemaName,
-        actionName: winner.actionName,
-        score: winner.score,
-        matchedTokens: winner.matched.map((m) => ({
-            token: m.token,
-            weight: m.contribution,
-        })),
-    };
     emitCollisionEvent(
         {
             kind: "grammarMatch",
             request,
             candidates: telemetryCandidates,
-            chosen,
+            chosen: telemetryCandidates.find(
+                (c) =>
+                    c.schemaName === winner.schemaName &&
+                    c.actionName === winner.actionName,
+            ),
+            firstMatchCandidate,
             classifier: cfg.grammarMatch.classifier,
             strategy: "context-weight",
             elapsedMs,
-            note: `resolve; matched ${winner.uniqueTokenCount} token(s), mass ${winner.score.toFixed(3)}`,
+            note: `resolve; ${winnerNote}`,
         },
         ctx,
     );
 
     const agentName = getAppAgentName(winner.schemaName);
-    const topTokens = winner.matched
-        .slice()
-        .sort((a, b) => b.contribution - a.contribution)
-        .slice(0, 3)
-        .map((m) => m.token);
-    const topicSuffix =
-        topTokens.length > 0 ? ` (${topTokens.join(", ")})` : "";
     return {
+        kind: "resolve",
         match: winning.match,
-        note: `↪ routed to ${agentName} — recent topic${topicSuffix}`,
+        note: `↪ routed to ${agentName} — recent topic`,
     };
 }
