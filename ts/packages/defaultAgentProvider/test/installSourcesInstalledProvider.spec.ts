@@ -90,7 +90,7 @@ describe("createInstalledAppAgentProvider", () => {
                 name: "player",
                 kind: "npm",
                 module: "music",
-                source: "builtin",
+                source: "bundled",
             },
         };
         const provider = createInstalledAppAgentProvider(records, {
@@ -107,7 +107,7 @@ describe("createInstalledAppAgentProvider", () => {
                 name: "player",
                 kind: "npm",
                 module: "music",
-                source: "builtin",
+                source: "bundled",
             },
             mine: {
                 name: "mine",
@@ -148,7 +148,7 @@ describe("createInstalledAppAgentProvider", () => {
                 name: "player",
                 kind: "npm",
                 module: "music",
-                source: "builtin",
+                source: "bundled",
             },
         };
         const provider = createInstalledAppAgentProvider(records, {

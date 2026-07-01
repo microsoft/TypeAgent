@@ -162,13 +162,13 @@ describe("UninstallCommandHandler", () => {
         ).rejects.toThrow(/installer not available/i);
     });
 
-    it("completes name with installed non-builtin agents", async () => {
+    it("completes name with installed agents", async () => {
         const systemContext = makeSystemContext({
             agentInstaller: {
                 install: jest.fn(),
                 uninstall: jest.fn(),
                 listInstalled: () => [
-                    { name: "player", source: "builtin" },
+                    { name: "player", source: "bundled" },
                     { name: "myagent", source: "path" },
                 ],
             },
@@ -179,7 +179,7 @@ describe("UninstallCommandHandler", () => {
             ["name"],
         );
         expect(result.groups).toEqual([
-            { name: "name", completions: ["myagent"] },
+            { name: "name", completions: ["player", "myagent"] },
         ]);
     });
 });
@@ -207,14 +207,14 @@ describe("UpdateCommandHandler", () => {
         ).rejects.toThrow(/not supported/i);
     });
 
-    it("completes name with installed non-builtin agents", async () => {
+    it("completes name with installed agents", async () => {
         const systemContext = makeSystemContext({
             agentInstaller: {
                 install: jest.fn(),
                 uninstall: jest.fn(),
                 update: jest.fn(),
                 listInstalled: () => [
-                    { name: "player", source: "builtin" },
+                    { name: "player", source: "bundled" },
                     { name: "feedy", source: "typeagent" },
                 ],
             },
@@ -225,7 +225,7 @@ describe("UpdateCommandHandler", () => {
             ["name"],
         );
         expect(result.groups).toEqual([
-            { name: "name", completions: ["feedy"] },
+            { name: "name", completions: ["player", "feedy"] },
         ]);
     });
 });

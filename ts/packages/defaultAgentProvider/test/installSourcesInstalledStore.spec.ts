@@ -106,7 +106,7 @@ describe("migrateLegacyExternalAgents", () => {
         expect(Object.keys(records)).toHaveLength(0);
     });
 
-    it("never lets a legacy path entry shadow an existing (builtin) record", () => {
+    it("never lets a legacy path entry shadow an existing bundled record", () => {
         const dir = tmpInstanceDir();
         fs.writeFileSync(
             path.join(dir, "externalAgentsConfig.json"),
@@ -118,13 +118,13 @@ describe("migrateLegacyExternalAgents", () => {
             name: "player",
             kind: "npm",
             module: "music",
-            source: "builtin",
+            source: "bundled",
         };
         const records: Record<string, InstalledAgentRecord> = {
             player: builtin,
         };
         migrateLegacyExternalAgents(dir, records);
-        // builtin preserved, not overwritten by the legacy path entry
+        // existing bundled record preserved, not overwritten by the legacy path entry
         expect(records.player).toEqual(builtin);
     });
 
@@ -196,23 +196,6 @@ describe("loadInstalledRecords", () => {
         expect(records.mine).toBeDefined();
         // the collision is stripped from the persisted file too
         expect(readAgentsJson(dir)!.agents.player).toBeUndefined();
-    });
-
-    it("drops legacy persisted builtins (source: 'builtin')", () => {
-        const dir = tmpInstanceDir();
-        writeAgentsJson(dir, {
-            agents: {
-                legacyBuiltin: {
-                    name: "legacyBuiltin",
-                    kind: "npm",
-                    module: "some-pkg",
-                    source: "builtin",
-                },
-            },
-        });
-        const records = loadInstalledRecords(dir);
-        expect(records.legacyBuiltin).toBeUndefined();
-        expect(readAgentsJson(dir)!.agents.legacyBuiltin).toBeUndefined();
     });
 
     it("first run merges migrated legacy path entries", () => {

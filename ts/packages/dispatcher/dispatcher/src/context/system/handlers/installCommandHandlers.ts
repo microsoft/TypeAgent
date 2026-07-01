@@ -23,34 +23,22 @@ import chalk from "chalk";
 // "github-cli", "osNotifications").
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
-// Names of agents that can be uninstalled/updated: installed records minus the
-// built-ins (which the installer protects). Returns [] when the installer can't
-// enumerate its records.
+// Names of agents that can be uninstalled/updated. Returns [] when the
+// installer can't enumerate its records.
 function managedAgentNames(
     context: SessionContext<CommandHandlerContext>,
 ): string[] {
     const installer = context.agentContext.agentInstaller;
     return (installer?.listInstalled?.() ?? [])
-        .filter((info) => info.source !== "builtin")
         .map((info) => info.name);
 }
 
 export class ListInstalledCommandHandler implements CommandHandler {
     public readonly description = "List installed agents";
-    public readonly parameters = {
-        flags: {
-            all: {
-                description:
-                    "Include built-in agents (by default only installed agents are listed)",
-                char: "a",
-                type: "boolean",
-                default: false,
-            },
-        },
-    } as const;
+    public readonly parameters = {} as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
+        _params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const installer = systemContext.agentInstaller;
@@ -62,19 +50,10 @@ export class ListInstalledCommandHandler implements CommandHandler {
                 "Listing installed agents is not supported by this installer",
             );
         }
-        const includeBuiltin = params.flags.all;
-        // Built-in agents ship with the app and are always present; by default
-        // `@package list` shows only what the user installed. `--all` adds them.
-        const records = installer
-            .listInstalled()
-            .filter((info) => includeBuiltin || info.source !== "builtin");
+        // `@package list` shows mutable installed records only.
+        const records = installer.listInstalled();
         if (records.length === 0) {
-            displayResult(
-                includeBuiltin
-                    ? "No agents installed."
-                    : "No agents installed. Use '@package list --all' to include built-in agents.",
-                context,
-            );
+            displayResult("No installed agents found.", context);
             return;
         }
 
@@ -127,14 +106,12 @@ export class ListInstalledCommandHandler implements CommandHandler {
             });
         }
 
-        if (!includeBuiltin) {
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: chalk.gray(
-                    "Built-in agents are not shown. Use '@package list --all' to include them.",
-                ),
-            });
-        }
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: chalk.gray(
+                "Showing installable installed agents only. Use '@config agent' to see all available agents and their status.",
+            ),
+        });
     }
 }
 

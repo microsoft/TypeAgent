@@ -333,8 +333,7 @@ export function createInstalledAppAgentProvider(
  *
  * Records whose name collides with a bundled agent are dropped: the bundled
  * provider owns that name, and registering it from two providers makes the
- * dispatcher throw "Conflicting app agents name". This also strips any legacy
- * persisted builtins (`source: "builtin"`) that older builds wrote here.
+ * dispatcher throw "Conflicting app agents name".
  */
 export function loadInstalledRecords(
     instanceDir: string,
@@ -344,9 +343,9 @@ export function loadInstalledRecords(
     const installs: Record<string, InstalledAgentRecord> = {};
     if (existing !== undefined) {
         for (const [name, record] of Object.entries(existing.agents)) {
-            // Drop legacy persisted builtins and any install whose name
-            // collides with a bundled agent (the bundled provider owns it).
-            if (record.source !== "builtin" && !bundledNames.has(name)) {
+            // Drop any install whose name collides with a bundled agent (the
+            // bundled provider owns it).
+            if (!bundledNames.has(name)) {
                 installs[name] = record;
             }
         }

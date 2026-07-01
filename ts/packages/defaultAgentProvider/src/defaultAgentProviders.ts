@@ -32,7 +32,6 @@ import {
     getAppBundleRequirePath,
     getBundledAgentNames,
     loadInstalledRecords,
-    seedRecordsFromConfig,
     readAgentsJson,
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
@@ -337,15 +336,12 @@ export function getDefaultAppAgentInstaller(
             });
         },
         listInstalled(): InstalledAgentInfo[] {
-            // The installer owns `agents.json`; map each record down to the
-            // core-safe summary the `@package list` handler renders. The
-            // bundled agents are a separate static provider (not persisted), so
-            // merge them in for a complete picture. A record carries exactly one
-            // resolution handle (ref / module / path).
-            const agents = {
-                ...seedRecordsFromConfig(),
-                ...(readAgentsJson(instanceDir)?.agents ?? {}),
-            };
+            // The installer owns only mutable install records (`agents.json`).
+            // Bundled agents are provided separately by the bundled provider and
+            // are intentionally excluded from installer-owned install summaries.
+            // A record carries exactly one resolution handle (ref / module /
+            // path).
+            const agents = readAgentsJson(instanceDir)?.agents ?? {};
             return Object.values(agents).map((record) => {
                 const handle = record.ref ?? record.module ?? record.path;
                 return {
