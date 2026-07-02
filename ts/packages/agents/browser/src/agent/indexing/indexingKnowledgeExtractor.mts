@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import {
     ContentExtractor,
     ExtractionMode,

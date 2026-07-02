@@ -7,7 +7,7 @@
  * ===============================================
  */
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     CodeBlockName,
     codeBlockNameFromFilePath,

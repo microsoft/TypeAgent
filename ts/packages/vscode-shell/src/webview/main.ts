@@ -5,10 +5,9 @@
 // Communicates with the extension host via postMessage.
 // The extension host manages the actual RPC connection to the agent server.
 //
-// Renders the shared `chat-ui` ChatPanel; the only host-managed UI element
-// is the connection status ribbon at the top (#status-bar).
+// Renders the shared `chat-ui` ChatPanel plus the host-managed session bar.
 
-import { ChatPanel, HistoryEntry } from "chat-ui";
+import { ChatPanel, ConversationBar, HistoryEntry } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
@@ -35,7 +34,7 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 
-const statusEl = document.getElementById("status-bar")!;
+const conversationBarRootEl = document.getElementById("conversation-bar-root")!;
 const rootEl = document.getElementById("chat-root")!;
 
 // Track the higher-level disabled reasons so we can reconcile them when
@@ -43,6 +42,44 @@ const rootEl = document.getElementById("chat-root")!;
 // loading internally, but we additionally require the websocket to be
 // connected before the input is enabled.
 let isConnected = false;
+let isSwitching = false;
+let currentSessionId: string | undefined;
+
+const conversationBar = new ConversationBar(conversationBarRootEl, {
+    controller: {
+        requestConversations: () => requestSessionList(),
+        createConversation: (name: string) => {
+            vscode.postMessage({ type: "createSession", name });
+        },
+        switchConversation: (conversationId: string) => {
+            vscode.postMessage({
+                type: "switchSession",
+                sessionId: conversationId,
+            });
+        },
+        renameConversation: (conversationId: string, name: string) => {
+            vscode.postMessage({
+                type: "renameSession",
+                sessionId: conversationId,
+                name,
+            });
+        },
+        deleteConversation: (conversationId: string) => {
+            vscode.postMessage({
+                type: "deleteSession",
+                sessionId: conversationId,
+            });
+        },
+    },
+    icons: {
+        rename: { className: "codicon codicon-edit" },
+        delete: { className: "codicon codicon-trash" },
+        save: { className: "codicon codicon-check" },
+        cancel: { className: "codicon codicon-close" },
+    },
+});
+
+window.addEventListener("beforeunload", () => conversationBar.dispose());
 
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
@@ -105,7 +142,11 @@ function chipTargetRid(
     entry: QueuedRequest,
     msgClientRequestId: string | undefined,
 ): string {
-    return entry.clientRequestId ?? msgClientRequestId ?? entry.requestId;
+    return (
+        (entry.clientRequestId as string | undefined) ??
+        msgClientRequestId ??
+        entry.requestId
+    );
 }
 
 /**
@@ -386,28 +427,27 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
     return out;
 }
 
-// Last-known connection label parts so demoPaused can re-render the
-// status ribbon with a "[Demo paused]" suffix without re-issuing a
-// status broadcast from the host.
+// Last-known connection state so demoPaused can re-render the status
+// ribbon with a "[Demo paused]" suffix without re-issuing a status
+// broadcast from the host.
 let lastConnected = false;
-let lastSessionLabel = "";
 let demoSuffix: string | undefined;
 // Reconnect ribbon overlay shown while disconnected. Replaces the old
 // per-attempt error spam in the chat area with a single in-place
 // updating string (countdown + last error).
 let reconnectText: string | undefined;
 
-function renderStatus(): void {
-    if (lastConnected) {
-        statusEl.className = "status connected";
-        const base = lastSessionLabel
-            ? `Connected · ${lastSessionLabel}`
-            : "Connected to TypeAgent";
-        statusEl.textContent = demoSuffix ? `${base} · ${demoSuffix}` : base;
-    } else {
-        statusEl.className = "status disconnected";
-        statusEl.textContent = reconnectText ?? "Disconnected";
-    }
+function requestSessionList(): void {
+    vscode.postMessage({ type: "requestSessions" });
+}
+
+function updateConversationBarStatus(): void {
+    conversationBar.setStatus({
+        connected: isConnected,
+        switching: isSwitching,
+        reconnectText,
+        demoSuffix,
+    });
 }
 
 function setStatus(
@@ -417,8 +457,11 @@ function setStatus(
 ): void {
     isConnected = connected;
     lastConnected = connected;
-    lastSessionLabel = sessionName || sessionId?.substring(0, 8) || "";
-    renderStatus();
+    currentSessionId = sessionId ?? currentSessionId;
+    if (sessionId || sessionName) {
+        conversationBar.setCurrentConversation(sessionId, sessionName);
+    }
+    updateConversationBarStatus();
     chatPanel.setEnabled(connected);
 }
 
@@ -428,11 +471,16 @@ window.addEventListener("message", (event) => {
         case "status":
             setStatus(msg.connected, msg.sessionId, msg.sessionName);
             if (msg.connected && msg.sessionId) {
+                currentSessionId = msg.sessionId;
                 vscode.setState({
                     sessionId: msg.sessionId,
                     sessionName: msg.sessionName,
                 });
+                requestSessionList();
             }
+            break;
+        case "activateNewSessionInput":
+            conversationBar.activateCreateInput();
             break;
         case "reconnectStatus": {
             // Single in-place reconnect indicator. Phases:
@@ -448,18 +496,51 @@ window.addEventListener("message", (event) => {
                 const errSuffix = msg.error ? ` · ${msg.error}` : "";
                 reconnectText = `Disconnected — retrying in ${sec}s (attempt ${msg.attempt ?? 1})${errSuffix}`;
             }
-            renderStatus();
+            updateConversationBarStatus();
             break;
         }
         case "userInfo":
             chatPanel.setUserInfo(msg.name);
             break;
         case "sessionChanged":
+            currentSessionId = msg.sessionId;
+            isSwitching = false;
+            conversationBar.setCurrentConversation(
+                msg.sessionId,
+                msg.sessionName || msg.sessionId.substring(0, 8),
+            );
+            conversationBar.setStatus({
+                switching: false,
+                targetName: undefined,
+            });
+            conversationBar.setError(undefined);
             chatPanel.clear();
             cancelledRequests.clear();
             cancelledRendered.clear();
             pendingQueueStatus.clear();
             queueMirror.reset(undefined);
+            requestSessionList();
+            break;
+        case "sessionList":
+            conversationBar.setConversations(
+                msg.sessions.map(
+                    (session: {
+                        sessionId: string;
+                        name: string;
+                        clientCount: number;
+                        createdAt?: string;
+                    }) => ({
+                        conversationId: session.sessionId,
+                        name: session.name,
+                        clientCount: session.clientCount,
+                        createdAt: session.createdAt,
+                    }),
+                ),
+                msg.currentSessionId,
+            );
+            break;
+        case "sessionError":
+            conversationBar.setError(msg.message);
             break;
         case "setDisplay":
             // Drop display updates that arrive AFTER cancellation —
@@ -534,6 +615,10 @@ window.addEventListener("message", (event) => {
                 // Defensive chip clear (see direct `commandComplete` case).
                 clearQueueChip(rid);
                 if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
+            } else if (msg.event === "inline") {
+                chatPanel.showInline(msg.data, msg.source);
+            } else if (msg.event === "toast") {
+                chatPanel.showToast(msg.data, msg.source);
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
@@ -582,13 +667,32 @@ window.addEventListener("message", (event) => {
             break;
         }
         case "switching":
+            isSwitching = msg.switching;
+            conversationBar.setStatus({
+                switching: msg.switching,
+                statusLabel: msg.switching
+                    ? (msg.statusLabel ?? "Connecting")
+                    : undefined,
+                targetName: msg.switching ? msg.targetName : undefined,
+                errorText: undefined,
+            });
             chatPanel.setSwitching(msg.switching, msg.targetName);
             // Re-apply connection-derived enable state when the switch ends.
             if (!msg.switching) chatPanel.setEnabled(isConnected);
             break;
-        case "historyReplay":
-            chatPanel.replayHistory(toChatPanelHistory(msg.entries));
+        case "historyReplay": {
+            // Stream the replay in chunks so the browser can paint between
+            // batches. setHistoryLoading(false) comes from the extension
+            // host after the entries are sent; also clear it here so replay
+            // completion always re-enables input even if the host message
+            // races or is lost.
+            const replayEntries = toChatPanelHistory(msg.entries);
+            void chatPanel.replayHistoryStreaming(replayEntries).then(() => {
+                chatPanel.setHistoryLoading(false);
+                chatPanel.setEnabled(isConnected);
+            });
             break;
+        }
         case "setActive":
             document.body.classList.toggle("chat-inactive", !msg.active);
             break;
@@ -622,7 +726,7 @@ window.addEventListener("message", (event) => {
             } else {
                 demoSuffix = `[Demo Mode (Running)]`;
             }
-            renderStatus();
+            updateConversationBarStatus();
             chatPanel.setDemoPaused(msg.paused, msg.message);
             chatPanel.setDemoRunning(msg.running);
             chatPanel.setInputHint(
@@ -747,6 +851,7 @@ window.addEventListener("message", (event) => {
 });
 
 // Ask the extension host to connect
+updateConversationBarStatus();
 vscode.postMessage({ type: "connect" });
 
 // Document-level Escape gesture — mirrors the Electron shell

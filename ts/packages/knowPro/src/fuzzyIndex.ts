@@ -10,7 +10,7 @@ import {
     createTopNListAll,
     dotProduct,
 } from "typeagent";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
 import {

@@ -58,6 +58,7 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import { joinNamedOrFallback } from "@typeagent/agent-server-client/conversation";
 import {
     loadUserSettings,
     saveUserSettings,
@@ -222,81 +223,32 @@ async function initializeDispatcher(
             conn: AgentServerConnection,
         ): Promise<void> {
             const SHELL_CONVERSATION_NAME = "Shell";
-            let conversation:
-                | Awaited<ReturnType<typeof conn.joinConversation>>
-                | undefined;
-
-            // First, try to restore the conversation we last had open. This
-            // keeps the shell on the user's working conversation across
-            // restarts instead of always snapping back to the default
-            // "Shell" conversation. Best-effort: if the saved id no longer
-            // exists (deleted, data wiped, etc.) we fall through to the
-            // find-or-create flow below.
             const savedConversationId = loadUserSettings().conversation
                 .lastConversationId as string | undefined;
-            if (savedConversationId) {
-                try {
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: savedConversationId,
-                    });
-                    debugShellInit(
-                        "Restored last conversation",
-                        savedConversationId,
-                    );
-                } catch (e: any) {
+
+            const result = await joinNamedOrFallback(conn, clientIO, {
+                ...(savedConversationId ? { savedConversationId } : {}),
+                defaultName: SHELL_CONVERSATION_NAME,
+                onSavedConversationUnavailable: (e) => {
                     debugShellInit(
                         "Failed to restore last conversation, falling back:",
                         savedConversationId,
-                        e.message,
+                        (e as { message?: string })?.message ?? String(e),
                     );
-                    conversation = undefined;
-                }
-            }
+                },
+            });
 
-            if (conversation === undefined) {
-                const existing = await conn.listConversations(
-                    SHELL_CONVERSATION_NAME,
-                );
-                const match = existing.find(
-                    (s) =>
-                        s.name.toLowerCase() ===
-                        SHELL_CONVERSATION_NAME.toLowerCase(),
-                );
-                const shellConversationId =
-                    match !== undefined
-                        ? match.conversationId
-                        : (
-                              await conn.createConversation(
-                                  SHELL_CONVERSATION_NAME,
-                              )
-                          ).conversationId;
-                try {
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: shellConversationId,
-                    });
-                } catch (e: any) {
-                    // The conversation may have been deleted between
-                    // listConversations and joinConversation (race
-                    // condition). Fall back to creating a fresh one.
-                    debugShellInit(
-                        "joinConversation failed for Shell conversation, creating new one:",
-                        e.message,
-                    );
-                    const fresh = await conn.createConversation(
-                        SHELL_CONVERSATION_NAME,
-                    );
-                    conversation = await conn.joinConversation(clientIO, {
-                        conversationId: fresh.conversationId,
-                    });
-                }
-            }
+            const conversation = result.conversation;
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
             initialQueueSnapshot = conversation.queueSnapshot;
-            // Persist the conversation we ended up on so the next launch
-            // restores it. Wrapped in try/catch because user-settings I/O
-            // shouldn't block startup if the disk write fails.
+            if (result.usedSavedId) {
+                debugShellInit(
+                    "Restored last conversation",
+                    conversation.conversationId,
+                );
+            }
             try {
                 saveUserSettings({
                     conversation: {
@@ -398,9 +350,18 @@ async function initializeDispatcher(
                             // new window is surprising when the user killed it
                             // intentionally. Just try to reconnect to the
                             // existing one; if it's gone we keep retrying.
-                            const fresh = await connectAgentServer(url, () =>
-                                onConnectionLost?.(),
-                            );
+                            //
+                            // Reconnect in place: reopen the socket and rebind
+                            // the connection's control rpc, reusing the same
+                            // connection object rather than building a new one.
+                            // We still re-join below (the dispatcher is fresh).
+                            if (!connection) {
+                                throw new Error("No connection to reconnect");
+                            }
+                            const conn = connection;
+                            if (!(await conn.reconnect())) {
+                                throw new Error("Reconnect attempt failed");
+                            }
                             // Re-join the conversation we were on. Read the
                             // latest saved conversation id from userSettings
                             // — switchConversation writes it on every switch
@@ -411,13 +372,13 @@ async function initializeDispatcher(
                                 initialConversationId) as string | undefined;
                             let freshConversation:
                                 | Awaited<
-                                      ReturnType<typeof fresh.joinConversation>
+                                      ReturnType<typeof conn.joinConversation>
                                   >
                                 | undefined;
                             if (targetConversationId) {
                                 try {
                                     freshConversation =
-                                        await fresh.joinConversation(clientIO, {
+                                        await conn.joinConversation(clientIO, {
                                             conversationId:
                                                 targetConversationId,
                                         });
@@ -431,20 +392,21 @@ async function initializeDispatcher(
                             if (freshConversation === undefined) {
                                 // Fall back to the default Shell conversation.
                                 const list =
-                                    await fresh.listConversations("Shell");
+                                    await conn.listConversations("Shell");
                                 const m = list.find(
                                     (s) => s.name.toLowerCase() === "shell",
                                 );
                                 const id =
                                     m?.conversationId ??
-                                    (await fresh.createConversation("Shell"))
+                                    (await conn.createConversation("Shell"))
                                         .conversationId;
-                                freshConversation =
-                                    await fresh.joinConversation(clientIO, {
+                                freshConversation = await conn.joinConversation(
+                                    clientIO,
+                                    {
                                         conversationId: id,
-                                    });
+                                    },
+                                );
                             }
-                            connection = fresh;
                             rebindDispatcher(freshConversation.dispatcher);
                             reconnectAttempt = 0;
                             broadcastReconnect(undefined);
@@ -801,11 +763,20 @@ export function initializeInstance(
 
     const shellWindow = new ShellWindow(shellSettings, inputOnly);
 
-    // Register conversation management IPC handlers (local-only backend for now;
-    // remote backend would be wired in when connect mode gains multi-conversation).
+    // Register conversation management IPC handlers. Starts with a local
+    // placeholder backend; the real backend (the embedded in-process agent
+    // server, or the remote one when launched with --connect) is swapped in
+    // once the dispatcher is ready.
     const conversationBackend = createLocalConversationBackend();
     let cleanupConversationIpc =
         registerConversationIpcHandlers(conversationBackend);
+
+    // The conversation bar (multi-conversation switcher) is only surfaced when
+    // the shell is connected to a separate agent server (--connect). When the
+    // shell hosts the agent server in-process (standalone), there is a single
+    // embedded conversation, so the switcher stays hidden in the renderer.
+    const conversationBarEnabled = connect !== undefined;
+    ipcMain.handle("conversation-bar-enabled", () => conversationBarEnabled);
 
     // Watch user-settings.json so that changes made via @settings (e.g. from the
     // CLI or NL) hot-reload shell settings immediately without a restart.
@@ -1059,6 +1030,7 @@ export function initializeInstance(
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
         cleanupConversationIpc();
+        ipcMain.removeHandler("conversation-bar-enabled");
         userSettingsWatcher?.close();
         userSettingsDirWatcher.close();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);

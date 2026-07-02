@@ -520,10 +520,25 @@ export class RequestCommandHandler implements CommandHandler {
             // fall back to reasoning which can handle ambiguity directly.
             // If reasoning is unavailable (no API key, model error, etc.),
             // fall through to executeActions which shows the original error.
+            //
+            // Exception: a cross-agent collision clarify
+            // (`clarifyMultipleAgentMatches`) under the two-tier
+            // `preference-clarify` feature is meant to render its own
+            // interactive pick + "remember" card via executeActions, so it
+            // must NOT be diverted to reasoning.
+            const interactiveCollisionClarify =
+                systemContext.session.getConfig().collision.preference
+                    .enabled &&
+                systemContext.session.getConfig().collision.preference
+                    .remember !== "never";
             const needsReasoning = requestAction.actions.some(
                 ({ action }) =>
                     isUnknownAction(action) ||
-                    action.schemaName === DispatcherClarifyName,
+                    (action.schemaName === DispatcherClarifyName &&
+                        !(
+                            interactiveCollisionClarify &&
+                            action.actionName === "clarifyMultipleAgentMatches"
+                        )),
             );
             let reasoningHandled = false;
             if (needsReasoning && !systemContext.noReasoning) {

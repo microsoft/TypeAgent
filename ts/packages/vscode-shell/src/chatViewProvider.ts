@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { AgentServerBridge } from "./agentServerBridge";
+import { createWebviewNonce } from "@typeagent/core/webview";
+import { AgentServerBridge } from "./agentServerBridge.js";
 
 /**
  * Provides the chat webview for the sidebar (uses primary bridge) and
@@ -13,6 +14,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private _sidebarView?: vscode.WebviewView;
     private _onSidebarResolved?: (view: vscode.WebviewView) => void;
+    private _activateNewSessionInputWhenReady = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -22,6 +24,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     public onSidebarResolved(cb: (view: vscode.WebviewView) => void): void {
         this._onSidebarResolved = cb;
         if (this._sidebarView) cb(this._sidebarView);
+    }
+
+    public activateNewSessionInput(): void {
+        if (!this._sidebarView) {
+            this._activateNewSessionInputWhenReady = true;
+            return;
+        }
+        this._activateNewSessionInputWhenReady = false;
+        this._primaryBridge.activateNewSessionInput(this._sidebarView.webview);
     }
 
     public resolveWebviewView(
@@ -48,6 +59,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
 
         this._onSidebarResolved?.(webviewView);
+        if (this._activateNewSessionInputWhenReady) {
+            this.activateNewSessionInput();
+        }
     }
 
     /**
@@ -85,6 +99,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             "media",
             "chat.css",
         );
+        const codiconPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "media",
+            "codicon.css",
+        );
         // Append each bundle's mtime as a query string so VS Code's
         // webview cache doesn't serve a stale resource after a deploy.
         // The base URI is the same after a rebuild, so without this the
@@ -102,7 +121,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
         const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${stamp(scriptPath)}`;
         const styleUri = `${webview.asWebviewUri(stylePath)}?v=${stamp(stylePath)}`;
-        const nonce = getNonce();
+        const codiconUri = `${webview.asWebviewUri(codiconPath)}?v=${stamp(codiconPath)}`;
+        const nonce = createWebviewNonce();
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -115,26 +135,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                    script-src 'nonce-${nonce}';
                    img-src ${webview.cspSource} data:;
                    font-src ${webview.cspSource};">
+    <link href="${codiconUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
     <title>TypeAgent Chat</title>
 </head>
 <body>
     <div id="chat-container">
-        <div id="status-bar" class="status disconnected">Disconnected</div>
+        <div id="conversation-bar-root"></div>
         <div id="chat-root"></div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
     }
-}
-
-function getNonce(): string {
-    let text = "";
-    const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (let i = 0; i < 32; i++) {
-        text += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return text;
 }

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=730af29a28ae010da4200cf447956b80647f8bfd747cf0b13f8443bdb4354c9f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c9abe18ec4032a91f4e6a7245a9ba551495cf34130a9832935b13c3574cc1462 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vampire-agent — AI-generated documentation
@@ -18,9 +18,9 @@ The Vampire Agent is a test agent designed to deliberately collide with other ag
 
 The Vampire Agent's primary purpose is to create collisions with other agents' actions and grammar patterns. This allows developers to evaluate the dispatcher's resolution strategies (`first-match`, `score-rank`, `priority`, `user-clarify`) in a controlled environment. The agent's actions are divided into three categories:
 
-1. **Exact action-name collisions**: These actions have the same names as actions from other agents, causing static and grammar-match collisions.
-2. **Grammar-pattern collisions**: The agent's grammar rules overlap with those of other agents, causing runtime grammar/cache match collisions.
-3. **Synonym/semantic actions**: These actions are semantically similar to actions from other agents, causing fuzzy collisions.
+1. **Exact action-name collisions**: These actions have the same names as actions from other agents, causing static and grammar-match collisions. Examples include `play`, `addItems`, `removeItems`, `getList`, and `createCalendarEvent`.
+2. **Grammar-pattern collisions**: The agent's grammar rules overlap with those of other agents, causing runtime grammar/cache match collisions. Examples include `play <target>`, `add <items> to my <list> list`, `remove <items> from my <list> list`, and `what is on my <list> list`.
+3. **Synonym/semantic actions**: These actions are semantically similar to actions from other agents, causing fuzzy collisions. Examples include `siphon`, `summon`, `consume`, and `revive`.
 
 The Vampire Agent's handler is intentionally trivial, logging the action that fired and returning a benign result. This ensures that the only signal of interest is which agent won the resolution.
 
@@ -73,9 +73,9 @@ By following these steps, contributors can extend the Vampire Agent to cover add
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: _None at runtime._
 
@@ -100,6 +100,6 @@ _9 actions declared in the schema, none yet implemented in [`./src/vampireAction
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vampire-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vampire-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -7,6 +7,7 @@ jest.mock("ws", () => {
     const listeningHandlers: Function[] = [];
     let lastVerifyClient: any;
     const mockWss: any = {
+        clients: new Set(),
         on: jest.fn((event: string, handler: Function) => {
             if (event === "connection") connectionHandlers.push(handler);
             if (event === "error") errorHandlers.push(handler);
@@ -63,7 +64,7 @@ jest.mock("debug", () => {
 
 import { AgentWebSocketServer } from "../../src/agent/agentWebSocketServer.mjs";
 import { isAllowedAgentOrigin } from "../../src/agent/originAllowlist.mjs";
-import { createAgentOriginAllowlist } from "websocket-utils/originAllowlist";
+import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAllowlist";
 
 function makeMockSocket() {
     const handlers: Record<string, Function> = {};

@@ -7,7 +7,7 @@ import {
     symbolAtPosition,
     type FileLoader,
 } from "../src/index.js";
-import { defaultFileLoader } from "action-grammar";
+import { defaultFileLoader } from "@typeagent/action-grammar";
 
 describe("symbols", () => {
     const source = [

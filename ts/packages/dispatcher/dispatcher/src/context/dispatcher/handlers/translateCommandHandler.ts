@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import {
     ActionContext,
     CompletionDirection,
@@ -58,6 +58,7 @@ export class TranslateCommandHandler implements CommandHandler {
             undefined,
             undefined,
             usageCallback,
+            context.sessionContext.agentContext.currentOptions?.userContext,
         );
 
         const elapsedStr = getColorElapsedString(translationResult.elapsedMs);

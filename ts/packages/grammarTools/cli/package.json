@@ -24,7 +24,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "action-grammar": "workspace:*",
+    "@typeagent/action-grammar": "workspace:*",
     "grammar-tools-core": "workspace:*"
   },
   "devDependencies": {

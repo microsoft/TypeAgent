@@ -7,7 +7,7 @@ import { BatchCallback } from "./types.js";
 import { getCommandArgs, queryError } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { error, Result, success } from "typechat";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import {
     dotProduct,
     generateTextEmbeddingsWithRetry,

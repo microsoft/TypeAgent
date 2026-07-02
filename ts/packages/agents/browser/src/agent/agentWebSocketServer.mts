@@ -10,6 +10,7 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { attachHeartbeat } from "websocket-channel-server";
 import type {
     BrowserAgentInvokeFunctions,
     BrowserAgentCallFunctions,
@@ -57,6 +58,7 @@ interface SessionHandlers {
 export class AgentWebSocketServer {
     private clients = new Map<string, Map<string, BrowserClient>>();
     private sessionHandlers = new Map<string, SessionHandlers>();
+    private readonly stopHeartbeat: () => void;
 
     /**
      * @param server The underlying ws server, already bound and listening.
@@ -72,6 +74,7 @@ export class AgentWebSocketServer {
         public readonly port: number,
     ) {
         this.setupHandlers();
+        this.stopHeartbeat = attachHeartbeat(server);
         debug(`Agent WebSocket server listening on port ${port}`);
     }
 
@@ -596,6 +599,7 @@ export class AgentWebSocketServer {
      */
     public close(): Promise<void> {
         debug("Closing AgentWebSocketServer");
+        this.stopHeartbeat();
         for (const sessionMap of this.clients.values()) {
             for (const client of sessionMap.values()) {
                 if (client.channelProvider) {

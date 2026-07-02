@@ -8,6 +8,7 @@ import {
 import WebSocket, { WebSocketServer } from "ws";
 import registerDebug from "debug";
 import { createPromiseWithResolvers } from "@typeagent/common-utils";
+import { attachHeartbeat } from "./heartbeat.js";
 
 const debugWss = registerDebug("typeagent:transport:wss");
 const debugWssError = registerDebug("typeagent:transport:wss:error");
@@ -23,28 +24,16 @@ type WebSocketChannelServer = {
  */
 export type WebSocketChannelServerOptions = WebSocket.ServerOptions & {
     /**
-     * Optional allowlist of acceptable Origin header values. If set, any
-     * upgrade with an Origin header NOT in this list (case-insensitive,
-     * exact match unless the entry ends in `*` for prefix match) is
-     * rejected with HTTP 403. Connections without an Origin header
-     * (native apps, CLI clients) are always allowed — Origin is a
-     * browser-set header, so its absence is not itself a signal of
-     * privilege. When omitted, the upgrade is accepted regardless of
-     * Origin (current default behavior).
+     * Optional Origin gate. When provided, an upgrade whose `Origin` header
+     * is rejected by the predicate is refused with HTTP 403 during the
+     * handshake, so denied clients never allocate a channel or send frames.
+     * Build one with `createAgentOriginAllowlist` from
+     * `@typeagent/websocket-utils` (it allows missing-Origin native clients
+     * and loopback web origins by default). When omitted, the upgrade is
+     * accepted regardless of Origin (current default behavior).
      */
-    originAllowlist?: string[];
+    isOriginAllowed?: (origin: string | string[] | undefined) => boolean;
 };
-
-function isOriginAllowed(origin: string, allowlist: string[]): boolean {
-    const lower = origin.toLowerCase();
-    return allowlist.some((entry) => {
-        const e = entry.toLowerCase();
-        if (e.endsWith("*")) {
-            return lower.startsWith(e.slice(0, -1));
-        }
-        return lower === e;
-    });
-}
 
 export async function createWebSocketChannelServer(
     options: WebSocketChannelServerOptions,
@@ -53,33 +42,28 @@ export async function createWebSocketChannelServer(
         closeFn: () => void,
     ) => void,
 ): Promise<WebSocketChannelServer> {
-    const { originAllowlist, ...wsOptions } = options;
+    const { isOriginAllowed, ...wsOptions } = options;
     // verifyClient runs synchronously during the HTTP upgrade; using it
     // (rather than rejecting after `connection`) means denied clients
     // never get to allocate a channelProvider or send any frames.
     const wssOptions: WebSocket.ServerOptions =
-        originAllowlist !== undefined
+        isOriginAllowed !== undefined
             ? {
                   ...wsOptions,
                   verifyClient: (info, cb) => {
-                      const origin = info.origin;
-                      if (!origin) {
-                          // No Origin = native client (CLI, shell). Allow.
-                          cb(true);
-                          return;
-                      }
-                      if (isOriginAllowed(origin, originAllowlist)) {
+                      if (isOriginAllowed(info.origin)) {
                           cb(true);
                           return;
                       }
                       debugWssError(
-                          `rejecting upgrade: origin '${origin}' not in allowlist`,
+                          `rejecting upgrade: origin '${info.origin}' not allowed`,
                       );
                       cb(false, 403, "Origin not allowed");
                   },
               }
             : wsOptions;
     const wss = new WebSocketServer(wssOptions);
+    attachHeartbeat(wss);
     wss.on("connection", (ws) => {
         const id = nextId++;
         const debugId = `typeagent:transport:wss:ws-${id}`;

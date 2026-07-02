@@ -24,7 +24,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { ChatModel } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
 import type { GuidelineHook, Mechanism } from "./types.js";
 import { parsePatternsJsonl, type PatternRow } from "./patternMiner.js";
 import { extractJSON } from "./util.js";

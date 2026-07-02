@@ -3,7 +3,7 @@
 
 import { createJsonTranslator, TypeChatLanguageModel } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";

@@ -20,7 +20,7 @@ import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { runBrowserAction } from "./browserActions";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
-//import { openai } from "aiclient";
+//import { openai } from "@typeagent/aiclient";
 
 async function ensureActiveTab() {
     const targetTab = await getActiveTab();

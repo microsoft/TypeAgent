@@ -758,7 +758,10 @@ export async function createAgentRpcClient(
         },
         handleChoice(
             choiceId: string,
-            response: boolean | number[],
+            response:
+                | boolean
+                | number[]
+                | { selected: number; remember: boolean },
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>

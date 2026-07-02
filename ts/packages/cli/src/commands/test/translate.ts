@@ -18,7 +18,7 @@ import {
 import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "@typeagent/common-utils";
-import { getChatModelNames, openai as ai } from "aiclient";
+import { getChatModelNames, openai as ai } from "@typeagent/aiclient";
 import { TypeAgentAction } from "@typeagent/agent-sdk";
 
 type TestResult = {

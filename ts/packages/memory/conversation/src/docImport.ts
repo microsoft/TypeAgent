@@ -13,7 +13,7 @@ import * as tp from "textpro";
 import { parseVttTranscript } from "./transcript.js";
 import { filePathToUrlString } from "memory-storage";
 import path from "path";
-import { getHtml } from "aiclient";
+import { getHtml } from "@typeagent/aiclient";
 import { Result, success } from "typechat";
 import * as kp from "knowpro";
 

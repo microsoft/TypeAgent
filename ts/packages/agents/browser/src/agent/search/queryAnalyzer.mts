@@ -3,7 +3,7 @@
 
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { openai as ai } from "aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { QueryAnalysis, TemporalExpression } from "./schema/queryAnalysis.mjs";
 import registerDebug from "debug";
 import { fileURLToPath } from "url";

@@ -78,6 +78,9 @@
     "onboarding": {
       "name": "onboarding-agent"
     },
+    "studio": {
+      "name": "studio-agent"
+    },
     "osNotifications": {
       "name": "os-notifications-agent"
     },

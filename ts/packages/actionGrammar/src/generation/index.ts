@@ -8,6 +8,8 @@
 import { ParsedActionSchema } from "@typeagent/action-schema";
 import { Cardinal } from "../builtInEntities.js";
 
+export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
+
 export {
     ClaudeGrammarGenerator,
     GrammarAnalysis,

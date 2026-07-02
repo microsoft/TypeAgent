@@ -89,7 +89,7 @@ export type CommandResult = {
     actionTokenUsage?: CompletionUsageStats;
 };
 
-// Architecture: docs/architecture/completion.md — Data flow / Key types
+// Architecture: docs/architecture/core/completion.md — Data flow / Key types
 export type CommandCompletionResult = {
     // Index into the input where the resolved prefix ends and the
     // filter/completion region begins.  input[0..startIndex) is fully
@@ -155,6 +155,17 @@ export type AgentSchemaInfo = {
     subSchemas: AgentSubSchemaInfo[];
 };
 
+/**
+ * User-environment context for translation prompts.
+ * Provides information about the host application context to improve translation accuracy.
+ */
+export type UserContext = {
+    /** Top-level appAgent name the user is currently working in (e.g., "code", "spotify"). */
+    activeApp: string;
+    /** Free-text description of the app, typically copied from the agent manifest. Optional. */
+    activeAppDescription?: string;
+};
+
 export type ProcessCommandOptions = {
     /**
      * When true, skip reasoning, clarification, and chat fallback.
@@ -162,6 +173,13 @@ export type ProcessCommandOptions = {
      * and TypeAgent should act as a pure action executor.
      */
     noReasoning?: boolean;
+    /**
+     * User-environment context for translation prompts.
+     * Provides information about which app/host the user is currently in
+     * to improve translation accuracy (e.g., to disambiguate "change volume"
+     * between desktop audio and a media player app).
+     */
+    userContext?: UserContext;
 };
 
 /**
@@ -190,7 +208,7 @@ export interface Dispatcher {
      *   `entry.completion`.
      *
      * The drain loop, fan-out, and cancellation semantics are described in
-     * `docs/architecture/messageQueueing.md`.
+     * `docs/architecture/core/messageQueueing.md`.
      *
      * @param command user request to process. Requests that start with '@' are direct commands, otherwise treated as natural language.
      * @param attachments encoded image attachments forwarded to the inner dispatcher.
@@ -279,11 +297,12 @@ export interface Dispatcher {
     /**
      * Respond to a pending choice from an agent.
      * @param choiceId the choice ID returned from ChoiceManager.registerChoice
-     * @param response boolean for yesNo, number[] of selected indices for multiChoice
+     * @param response boolean for yesNo, number[] of selected indices for
+     *   multiChoice, or `{ selected, remember }` for pickRemember
      */
     respondToChoice(
         choiceId: string,
-        response: boolean | number[],
+        response: boolean | number[] | { selected: number; remember: boolean },
     ): Promise<CommandResult | undefined>;
 
     /**

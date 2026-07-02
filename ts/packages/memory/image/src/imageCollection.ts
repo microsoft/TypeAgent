@@ -23,7 +23,7 @@ import {
     SemanticRefCollection,
 } from "knowpro";
 import { createEmbeddingCache } from "knowledge-processor";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 //import registerDebug from "debug";
 import sqlite from "better-sqlite3";
 import * as ms from "memory-storage";

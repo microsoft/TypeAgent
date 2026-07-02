@@ -3,7 +3,7 @@
 Status: Draft. This document is the single source of truth for the grammar
 viewer / editor / debugger effort. Per-chunk design docs live alongside it
 and are linked from the [Chunks](#chunks) section. Architectural decisions
-live under [`decisions/`](./decisions/).
+live under [`decisions/`](./decisions).
 
 ## Motivation
 
@@ -96,7 +96,7 @@ deferred.
 
 - **`grammar-tools-core`** - framework-agnostic, no DOM. All language
   services and debug services. Wraps existing APIs in
-  [`packages/actionGrammar/src/index.ts`](../../../packages/actionGrammar/src/index.ts).
+  [`packages/actionGrammar/src/index.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/index.ts).
 - **`grammar-tools-ui`** - shared widgets (debug panel, completion preview,
   rule-trace table). UI tech TBD - see
   [decision 0001](./decisions/0001-shared-ui-tech.md).
@@ -115,7 +115,7 @@ for the concurrency model.
    trace, **coverage, diff**), and the CLI exercises every service.
    Shared UI scaffolded against a fixture backend.
 2. **VS Code extension** (first host) - extend
-   [`extensions/agr-language`](../../../extensions/agr-language) with LSP
+   [`extensions/agr-language`](https://github.com/microsoft/TypeAgent/tree/main/ts/extensions/agr-language) with LSP
    - debug webview consuming the shared UI. Coverage + diff exposed via
      commands / panel as they're ready. **Decision gate** before adding
      more hosts.
@@ -245,9 +245,9 @@ build, do the manual E2E. **Gate** before starting Tracks G and H.
    preview + rule trace) all merged. C.7 (coverage decorations) and
    C.8 (diff command) are nice-to-have, not blocking.
 3. **Manual E2E pass on three representative grammars.** Open
-   [`extensions/agr-language/sample.agr`](../../../extensions/agr-language/sample.agr),
+   [`extensions/agr-language/sample.agr`](https://github.com/microsoft/TypeAgent/blob/main/ts/extensions/agr-language/sample.agr),
    one fixture grammar from
-   [`packages/actionGrammar/test-data`](../../../packages/actionGrammar/test-data),
+   [`packages/actionGrammar/test-data`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar/test-data),
    and one real agent grammar (e.g. `player`); for each, verify:
    parse-error squiggles, F12 / Shift+F12 navigation, hover, format,
    and the debug-panel completion trace matches Jest expectations.
@@ -367,7 +367,7 @@ order. To follow the design dependency-first, read in this order:
 ## Decisions
 
 Architectural decisions are tracked as ADRs under
-[`decisions/`](./decisions/). Open decisions block the chunks that depend
+[`decisions/`](./decisions). Open decisions block the chunks that depend
 on them.
 
 | ADR  | Topic                                    | Status                                                                    |
@@ -380,14 +380,14 @@ on them.
 
 ## Relevant existing files
 
-- [`packages/actionGrammar/src/index.ts`](../../../packages/actionGrammar/src/index.ts) - public APIs to wrap.
-- [`packages/actionGrammar/src/grammarMatcher.ts`](../../../packages/actionGrammar/src/grammarMatcher.ts) - target for the trace hook.
-- [`packages/actionGrammar/src/grammarRuleParser.ts`](../../../packages/actionGrammar/src/grammarRuleParser.ts) - source spans for diagnostics / go-to-def.
-- [`packages/actionGrammar/src/agentGrammarRegistry.ts`](../../../packages/actionGrammar/src/agentGrammarRegistry.ts) - agent-grammar discovery.
-- [`extensions/agr-language/`](../../../extensions/agr-language) - extend into LSP client + webview host.
-- [`packages/cacheExplorer/webpack.config.js`](../../../packages/cacheExplorer/webpack.config.js), [`packages/knowledgeVisualizer/src/route/route.ts`](../../../packages/knowledgeVisualizer/src/route/route.ts) - templates for Express + SPA pattern.
-- [`examples/schemaStudio/src/main.ts`](../../../examples/schemaStudio/src/main.ts) - template for `interactive-app` CLI.
-- [`docs/architecture/actionGrammar.md`](../../architecture/actionGrammar.md), [`packages/actionGrammar/README.md`](../../../packages/actionGrammar/README.md), [`packages/actionGrammar/GRAMMAR_GENERATION.md`](../../../packages/actionGrammar/GRAMMAR_GENERATION.md) - background docs.
+- [`packages/actionGrammar/src/index.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/index.ts) - public APIs to wrap.
+- [`packages/actionGrammar/src/grammarMatcher.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarMatcher.ts) - target for the trace hook.
+- [`packages/actionGrammar/src/grammarRuleParser.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/grammarRuleParser.ts) - source spans for diagnostics / go-to-def.
+- [`packages/actionGrammar/src/agentGrammarRegistry.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/src/agentGrammarRegistry.ts) - agent-grammar discovery.
+- [`extensions/agr-language/`](https://github.com/microsoft/TypeAgent/tree/main/ts/extensions/agr-language) - extend into LSP client + webview host.
+- [`packages/cacheExplorer/webpack.config.js`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/cacheExplorer/webpack.config.js), [`packages/knowledgeVisualizer/src/route/route.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/knowledgeVisualizer/src/route/route.ts) - templates for Express + SPA pattern.
+- [`examples/schemaStudio/src/main.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/examples/schemaStudio/src/main.ts) - template for `interactive-app` CLI.
+- [`docs/architecture/actionGrammar.md`](../../architecture/core/actionGrammar.md), [`packages/actionGrammar/README.md`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/README.md), [`packages/actionGrammar/GRAMMAR_GENERATION.md`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/actionGrammar/GRAMMAR_GENERATION.md) - background docs.
 
 ## Verification
 
@@ -397,7 +397,7 @@ on them.
    `packages/actionGrammar/test/grammarMatcherBasic.spec.ts`, trace event
    ordering for known inputs.
 2. **VS Code**: open a sample `.agr` (e.g.
-   [`extensions/agr-language/sample.agr`](../../../extensions/agr-language/sample.agr)
+   [`extensions/agr-language/sample.agr`](https://github.com/microsoft/TypeAgent/blob/main/ts/extensions/agr-language/sample.agr)
    or fixtures under `packages/actionGrammar/test-data`); verify squiggle
    on intentional parse error, F12 / Shift+F12 on rule references, hover,
    format, then open the Debugger panel and confirm completions match

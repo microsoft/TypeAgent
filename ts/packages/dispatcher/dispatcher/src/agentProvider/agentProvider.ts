@@ -27,6 +27,10 @@ export interface AppAgentInstaller {
         moduleName: string,
         packagePath: string,
     ): AppAgentProvider;
+    // Install from an npm specifier (e.g. "@scope/agent@1.2.3"), resolving the
+    // package from the configured feed. Optional: providers that only support
+    // path-based install omit it.
+    installNpm?(name: string, spec: string): Promise<AppAgentProvider>;
     uninstall(name: string): void;
 }
 

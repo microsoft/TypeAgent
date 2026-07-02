@@ -50,7 +50,7 @@ import {
     similarity,
     SimilarityType,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "aiclient";
+import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { ActionSchemaFile } from "./actionConfigProvider.js";
 import { ActionConfig } from "./actionConfig.js";

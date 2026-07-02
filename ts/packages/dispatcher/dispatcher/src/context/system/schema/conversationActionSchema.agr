@@ -1,0 +1,144 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural-language patterns for the built-in system.conversation
+// sub-schema (TypeAgent shell conversation management).
+//
+// These patterns give conversation commands a strong static-grammar
+// match so they resolve from cache instead of requiring an LLM
+// translation, AND so they reliably beat wildcard-heavy patterns from
+// other agents (e.g. browser webflow `setPreferredStore`'s
+// `switch (to)? $(storeName:wildcard) (store)?`) on the cache's match
+// heuristics:
+//   1. Non-wildcard matches win over any wildcard match.
+//   2. Higher nonOptionalCount wins.
+//   3. Higher matchedCount wins.
+//   4. Lower wildcardCharCount wins.
+// Patterns here anchor the literal word "conversation"/"chat"/etc., so
+// they score far higher than open-ended wildcard rules.
+//
+// NOTE: In .agr rule bodies, literal tokens are bare words — single/
+// double quotes around a literal would be matched as literal quote
+// characters in the input. Escapes (`\'`) are used only where a
+// genuine apostrophe must appear in the input (e.g. "let\'s").
+
+<Polite> = (can you | could you | please | would you | i need | let\'s)?;
+
+<ConvNoun> = (conversation | chat | session | tab);
+<ConvNounPlural> = (conversations | chats | sessions | tabs);
+
+// "create/start/make/open/begin a new conversation called/named X"
+<NewConversationNamed> = <Polite> (create | start | make | open | begin) (a | an)? new <ConvNoun> (called | named | titled) $(name:wildcard) -> {
+    actionName: "newConversation",
+    parameters: { name }
+};
+
+// "create/start/make/open/begin a new conversation"  (no name)
+<NewConversation> = <Polite> (create | start | make | open | begin) (a | an)? new <ConvNoun> -> {
+    actionName: "newConversation",
+    parameters: {}
+}
+  | <Polite> new <ConvNoun> -> {
+    actionName: "newConversation",
+    parameters: {}
+};
+
+// "list/show (me) (all/my/our/the) conversations"
+<ListConversation> = <Polite> (list | show | display) (me | us)? (all | my | our | the)? <ConvNounPlural> -> {
+    actionName: "listConversation"
+}
+  | <Polite> (what | which) <ConvNounPlural> (do | are)? (i | we)? have -> {
+    actionName: "listConversation"
+};
+
+// "show (current|this|the) conversation info"
+// "what conversation am i in"
+<ShowConversationInfo> = <Polite> (show | display) (me)? (current | this | the)? <ConvNoun> info -> {
+    actionName: "showConversationInfo"
+}
+  | <Polite> (what | which) <ConvNoun> am i in -> {
+    actionName: "showConversationInfo"
+}
+  | <Polite> current <ConvNoun> info -> {
+    actionName: "showConversationInfo"
+};
+
+// Switch to an existing conversation by name. Multiple phrasings are
+// supported because the user complaint was specifically that
+// "switch conversation to X" was being matched as a browser webflow.
+<SwitchConversationNamed> =
+  // "switch/go/change/open/load/resume to (the) conversation (called|named) X"
+  <Polite> (switch | go | change | open | load | resume) to (the)? <ConvNoun> (called | named)? $(name:wildcard) -> {
+    actionName: "switchConversation",
+    parameters: { name }
+  }
+  // "switch/change (the) conversation to X"
+  | <Polite> (switch | change) (the)? <ConvNoun> to $(name:wildcard) -> {
+    actionName: "switchConversation",
+    parameters: { name }
+  }
+  // "switch/go/change to (the|my) X conversation"
+  | <Polite> (switch | go | change) to (the | my)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "switchConversation",
+    parameters: { name }
+  }
+  // "open/load/resume (the) conversation (called|named) X"
+  | <Polite> (open | load | resume) (the)? <ConvNoun> (called | named)? $(name:wildcard) -> {
+    actionName: "switchConversation",
+    parameters: { name }
+  };
+
+// "(switch to|go to|cycle to)? (the)? next conversation"
+<NextConversation> = <Polite> (switch to | go to | cycle to)? (the)? next <ConvNoun> -> {
+    actionName: "nextConversation"
+}
+  | <Polite> advance to (the)? next <ConvNoun> -> {
+    actionName: "nextConversation"
+};
+
+// "(switch to|go to|cycle to)? (the)? previous/prev conversation"
+<PrevConversation> = <Polite> (switch to | go to | cycle to)? (the)? (previous | prev | last) <ConvNoun> -> {
+    actionName: "prevConversation"
+}
+  | <Polite> back to (the)? (previous | prev) <ConvNoun> -> {
+    actionName: "prevConversation"
+};
+
+// "rename (this|the|current) conversation to X"
+<RenameConversationCurrent> = <Polite> rename (this | the | current) <ConvNoun> to $(newName:wildcard) -> {
+    actionName: "renameConversation",
+    parameters: { newName }
+}
+  | <Polite> call (this | the | current) <ConvNoun> $(newName:wildcard) -> {
+    actionName: "renameConversation",
+    parameters: { newName }
+};
+
+// "rename conversation X to Y"  — the literal noun anchors both wildcards.
+<RenameConversationNamed> = <Polite> rename <ConvNoun> $(name:wildcard) to $(newName:wildcard) -> {
+    actionName: "renameConversation",
+    parameters: { name, newName }
+};
+
+// "delete/remove (the) conversation (called|named) X"
+// "delete/remove (the) X conversation"
+<DeleteConversation> =
+  <Polite> (delete | remove | destroy) (the)? <ConvNoun> (called | named)? $(name:wildcard) -> {
+    actionName: "deleteConversation",
+    parameters: { name }
+  }
+  | <Polite> (delete | remove) (the)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "deleteConversation",
+    parameters: { name }
+  };
+
+<Start> = <NewConversationNamed>
+  | <NewConversation>
+  | <ListConversation>
+  | <ShowConversationInfo>
+  | <SwitchConversationNamed>
+  | <NextConversation>
+  | <PrevConversation>
+  | <RenameConversationCurrent>
+  | <RenameConversationNamed>
+  | <DeleteConversation>;

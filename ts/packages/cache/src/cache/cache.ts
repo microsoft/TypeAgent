@@ -402,7 +402,7 @@ export class AgentCache {
                             // Import populateCache dynamically to avoid circular dependencies
                             debug(`Importing populateCache...`);
                             const { populateCache } = await import(
-                                "action-grammar/generation"
+                                "@typeagent/action-grammar/generation"
                             );
                             debug(`populateCache imported successfully`);
 
@@ -612,7 +612,7 @@ export class AgentCache {
         return grammarStore.match(request, options);
     }
 
-    // Architecture: docs/architecture/completion.md — §2 Cache Layer
+    // Architecture: docs/architecture/core/completion.md — §2 Cache Layer
     public completion(
         input: string,
         options?: MatchOptions,

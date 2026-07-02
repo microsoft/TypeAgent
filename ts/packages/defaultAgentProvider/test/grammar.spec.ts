@@ -13,7 +13,7 @@ import {
 import { fromJsonActions, RequestAction, toJsonActions } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
-import { loadGrammarRules, matchGrammar } from "action-grammar";
+import { loadGrammarRules, matchGrammar } from "@typeagent/action-grammar";
 import { convertConstructionsToGrammar } from "agent-cache/grammar";
 
 const dataFiles = ["test/data/explanations/**/v5/*.json"];

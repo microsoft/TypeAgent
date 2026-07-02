@@ -4,7 +4,7 @@
 import { load } from "cheerio";
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
-import { fetchWithRetry } from "aiclient";
+import { fetchWithRetry } from "@typeagent/aiclient";
 import path from "path";
 import * as fs from "fs";
 import * as fsp from "fs/promises";

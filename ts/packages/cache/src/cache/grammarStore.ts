@@ -16,7 +16,7 @@ import {
     matchDFAWithSplitting,
     getDFACompletions,
     tokenizeRequest,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
 const debugCompletion = registerDebug(
@@ -275,7 +275,7 @@ export class GrammarStoreImpl implements GrammarStore {
         return sortMatches(matches);
     }
 
-    // Architecture: docs/architecture/completion.md — §2 Cache Layer
+    // Architecture: docs/architecture/core/completion.md — §2 Cache Layer
     public completion(
         input: string,
         options?: MatchOptions,

@@ -9,7 +9,7 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "aiclient";
+import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 
 export interface TabTitleIndex {
     addOrUpdate(title: string, tabId: number): Promise<void>;

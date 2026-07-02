@@ -12,7 +12,7 @@ import {
     writeJsonFile,
 } from "typeagent";
 import { ConversationManager } from "./conversationManager.js";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 
 export type QueryAnswer = {
     query: string;

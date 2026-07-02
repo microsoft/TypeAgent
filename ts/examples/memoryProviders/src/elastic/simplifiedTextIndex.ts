@@ -13,7 +13,7 @@ import {
 } from "knowledge-processor";
 import { generateTextId, toValidIndexName } from "./common.js";
 import { ScoredItem, generateEmbedding } from "typeagent";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 
 const { ModelType, createEmbeddingModel } = openai;
 

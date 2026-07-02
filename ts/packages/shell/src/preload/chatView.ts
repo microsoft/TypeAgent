@@ -9,6 +9,7 @@ import {
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { QueueSnapshot } from "agent-dispatcher";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     createDispatcherRpcClient,
@@ -220,6 +221,9 @@ const api: ClientAPI = {
     },
 
     // Conversation management
+    conversationBarEnabled: () => {
+        return ipcRenderer.invoke("conversation-bar-enabled");
+    },
     conversationList: () => {
         return ipcRenderer.invoke("conversation-list");
     },
@@ -241,6 +245,9 @@ const api: ClientAPI = {
     },
     conversationGetCurrent: () => {
         return ipcRenderer.invoke("conversation-get-current");
+    },
+    conversationManageAction: (payload: ManageConversationPayload) => {
+        return ipcRenderer.invoke("conversation-manage-action", payload);
     },
 };
 

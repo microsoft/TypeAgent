@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=723c7326dc4ac226af0036912412b48254f91e425af0db5d4b5a3b18c9ef598a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e3feacf84009172def0b01656e295d38626096f0d40b07ca651b2853d53f44de -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -88,9 +88,9 @@ By following these steps, you can extend the functionality of the `list-agent` p
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: _None at runtime._
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

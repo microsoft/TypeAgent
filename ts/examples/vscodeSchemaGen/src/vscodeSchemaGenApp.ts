@@ -3,7 +3,7 @@
 
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { normalizeCommandsandKBJson } from "./normalizeVscodeJson.js";
 import {
     processVscodeCommandsJsonFile,

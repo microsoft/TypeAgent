@@ -10,7 +10,7 @@ import {
     NormalizedEmbedding,
     Embedding,
 } from "./embeddings.js";
-import { EmbeddingModel, TextEmbeddingModel } from "aiclient";
+import { EmbeddingModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import { getData } from "typechat";
 import registerDebug from "debug";
 

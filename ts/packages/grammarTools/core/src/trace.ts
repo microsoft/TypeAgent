@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { matchGrammar } from "action-grammar";
-import type { TraceCallback, TraceEvent } from "action-grammar";
+import { matchGrammar } from "@typeagent/action-grammar";
+import type { TraceCallback, TraceEvent } from "@typeagent/action-grammar";
 import type { LoadedGrammar, MatchTrace } from "./types.js";
 
 /**

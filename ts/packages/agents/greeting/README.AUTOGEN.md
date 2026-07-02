@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d8fa9b11931a2fe49924d54a28c219bd8c2ad87b111b5114c0bc73fa3c8b4b51 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7e00af690c8f5107fc06e04e412a6f80ba38c119b127b72cebe50c21c6064c3b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # greeting-agent — AI-generated documentation
@@ -71,9 +71,9 @@ By following these steps, you can extend the Greeting Agent to handle additional
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
 - [chat-agent](../../../packages/agents/chat/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
@@ -97,6 +97,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

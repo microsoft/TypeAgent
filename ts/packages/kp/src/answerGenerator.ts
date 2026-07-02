@@ -12,9 +12,10 @@
  * Falls back to Claude Agent SDK query() if aiclient is not available.
  */
 
-import { openai, ChatModel } from "aiclient";
+import { openai, ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "./cliPath.js";
 import { ScoredChunkResult, SearchResult } from "./types.js";
 
 import registerDebug from "debug";
@@ -211,7 +212,7 @@ async function callLLMAgentSdk(
 ): Promise<string> {
     const queryInstance = query({
         prompt,
-        options: { model: modelName },
+        options: { model: modelName, ...claudeExecutableOption() },
     });
 
     let responseText = "";

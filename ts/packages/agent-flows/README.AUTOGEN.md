@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=341b9205df81281a88faf12ea1b66f5f8e92e53e52a61657e9f8825752d743e3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=57d558f00299b875abc0f3e437994c089f64a3c2cdc1070d08423e7001e871c1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-flows — AI-generated documentation
@@ -12,22 +12,17 @@
 
 ## Overview
 
-The `@typeagent/agent-flows` package provides shared workflow infrastructure for TypeAgent flow agents. It includes utilities for script validation, execution, grammar generation, and schema building, enabling consistent and secure handling of flow actions across different agents.
+The `@typeagent/agent-flows` package provides shared workflow infrastructure for TypeAgent flow agents. It consolidates common functionalities such as script validation, execution, grammar generation, and schema building into a single library. This ensures consistent behavior across different agents and reduces redundancy.
 
 ## What it does
 
-This package offers several key functionalities:
+The package offers several key functionalities:
 
-- **Script Validation**: Ensures that scripts adhere to predefined rules and constraints, preventing the use of dangerous calls and blocked identifiers.
-  - Actions: `createScriptValidator`, `transpileScript`
-- **Script Execution**: Executes scripts within a controlled environment, applying necessary overrides and timeouts.
-  - Actions: `createScriptExecutor`
-- **Grammar Generation**: Constructs grammar rules for parsing and interpreting flow actions.
-  - Actions: `generateGrammarRuleText`, `extractRuleNames`, `buildStartRule`, `assembleDynamicGrammar`
-- **Schema Building**: Generates TypeScript types for flow actions, facilitating type-safe interactions.
-  - Actions: `generateFlowActionTypes`, `buildUnionType`
-- **Sandbox Declaration**: Generates TypeScript declarations for sandbox environments, ensuring scripts run with the correct context.
-  - Actions: `createSandboxDeclarationGenerator`
+- **Script Validation**: Ensures that scripts adhere to predefined rules and constraints, preventing the use of dangerous calls and blocked identifiers. Key actions include `createScriptValidator` and `transpileScript`.
+- **Script Execution**: Executes scripts within a controlled environment, applying necessary overrides and timeouts. The primary action for this functionality is `createScriptExecutor`.
+- **Grammar Generation**: Constructs grammar rules for parsing and interpreting flow actions. This includes actions like `generateGrammarRuleText`, `extractRuleNames`, `buildStartRule`, and `assembleDynamicGrammar`.
+- **Schema Building**: Generates TypeScript types for flow actions, facilitating type-safe interactions. Key actions include `generateFlowActionTypes` and `buildUnionType`.
+- **Sandbox Declaration**: Generates TypeScript declarations for sandbox environments, ensuring scripts run with the correct context. The main action here is `createSandboxDeclarationGenerator`.
 
 These functionalities are used by various TypeAgent packages, such as `browser-typeagent`, `powershell-typeagent`, and `taskflow-typeagent`.
 
@@ -85,10 +80,10 @@ External: `typescript`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/execution/scriptExecutor.ts`, `./src/grammar/grammarBuilder.ts`, …and 5 more under `./src/`.
+`./src/index.ts`, `./src/authoring/llmResponse.ts`, `./src/authoring/naming.ts`, …and 12 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-flows docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-flows docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

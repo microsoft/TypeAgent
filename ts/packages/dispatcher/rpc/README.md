@@ -4,7 +4,7 @@ Package that provider RPC for dispatcher.
 
 ## Breaking change (2026-05)
 
-`Dispatcher.processCommand` was removed (interface, RPC method, and server handler). Callers must use `submitCommand` and await the synthesized `completion` promise returned by `createDispatcherRpcClient`, or use the `awaitCommand` helper from `@typeagent/dispatcher-types`. Pre-2026-05 clients and servers are not wire-compatible. See [`docs/architecture/messageQueueing.md`](../../../docs/architecture/messageQueueing.md) §14.1.
+`Dispatcher.processCommand` was removed (interface, RPC method, and server handler). Callers must use `submitCommand` and await the synthesized `completion` promise returned by `createDispatcherRpcClient`, or use the `awaitCommand` helper from `@typeagent/dispatcher-types`. Pre-2026-05 clients and servers are not wire-compatible. See [`docs/architecture/core/messageQueueing.md`](../../../docs/architecture/core/messageQueueing.md) §14.1.
 
 ## Trademarks
 

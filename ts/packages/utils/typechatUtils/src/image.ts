@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Storage } from "@typeagent/agent-sdk";
-import { getBlob } from "aiclient";
+import { getBlob } from "@typeagent/aiclient";
 import ExifReader from "exifreader";
 import {
     MultimodalPromptContent,
@@ -16,7 +16,7 @@ import {
     reverseGeocode,
     ReverseGeocodeAddressLookup,
 } from "./location.js";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "date-fns";

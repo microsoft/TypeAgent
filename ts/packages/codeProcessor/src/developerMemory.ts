@@ -15,7 +15,7 @@ import {
     ScoredItem,
 } from "typeagent";
 import path from "path";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import { CodeReviewer } from "./codeReviewer.js";
 import { CodeReview, LineReview, Severity } from "./codeReviewSchema.js";
 

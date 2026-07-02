@@ -119,7 +119,7 @@ import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import {
     SearchProviderCommandHandlerTable,
@@ -3169,7 +3169,12 @@ class InferActionsHandler implements CommandHandlerNoParams {
             if (newActions.length > 0 && agentContext.choiceManager) {
                 // Register choice callback for number responses
                 const choiceId = agentContext.choiceManager.registerChoice(
-                    async (response: boolean | number[]) => {
+                    async (
+                        response:
+                            | boolean
+                            | number[]
+                            | { selected: number; remember: boolean },
+                    ) => {
                         const selectedIndices = response as number[];
                         if (selectedIndices.length === 0) {
                             return createActionResult(

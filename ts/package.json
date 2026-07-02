@@ -27,6 +27,8 @@
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
     "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
+    "devtunnel:setup": "node tools/scripts/setup-devtunnel.mjs",
+    "devtunnel:status": "node tools/scripts/list-tunnels.mjs",
     "docs:generate": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write",
     "docs:generate:dry": "node tools/docsAutogen/bin/docs-autogen.cjs --render --dry-run",
     "docs:generate:llm": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write --llm",
@@ -58,6 +60,7 @@
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
+    "start:agent-server:tunnel": "pnpm -C packages/agentServer/server run start:tunnel",
     "start:mcp": "pnpm -C packages/commandExecutor run start",
     "stop:agent-server": "pnpm -C packages/agentServer/server run stop",
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
@@ -74,7 +77,7 @@
     "shx": "^0.4.0",
     "tsx": "^4.21.0"
   },
-  "packageManager": "pnpm@10.34.0+sha512.8736169c56fdb6e26afb5d7e2bd5f4c99cc299620d8bdc288cb354e6dd0936bd4ea62276d1a6b2de4b6e971a00a530e0e08bbeeda63da5d820118d3d7e21ff69",
+  "packageManager": "pnpm@10.34.2+sha512.9ae7e3fe477c52bbce1ddc8aa196ff243ed4b48f1ceaa7455820adfa7a48b5f57e817ed2d20e5f3c2c3646dfedba360567693e534572dccd252fb2eb8b7c044c",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"

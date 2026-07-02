@@ -144,7 +144,7 @@ describe("resolveSinceRef", () => {
         expect(r.source).toBe("watermark");
     });
 
-    it("returns source: 'none' when no since ref can be determined", async () => {
+    it("returns source: 'none' with onDefaultBranch on the default branch (cold start)", async () => {
         const repo: FakeRepo = {
             branch: "main",
             refs: new Map([["HEAD", "head-sha"]]),
@@ -154,5 +154,23 @@ describe("resolveSinceRef", () => {
         const git = new Git("/repo", fakeRunner(repo));
         const r = await resolveSinceRef(git);
         expect(r.source).toBe("none");
+        if (r.source === "none") {
+            expect(r.onDefaultBranch).toBe(true);
+        }
+    });
+
+    it("returns source: 'none' with onDefaultBranch false off the default branch with no baseline", async () => {
+        const repo: FakeRepo = {
+            branch: "feature/x",
+            refs: new Map([["HEAD", "head-sha"]]),
+            tags: new Map(),
+            mergeBases: new Map(),
+        };
+        const git = new Git("/repo", fakeRunner(repo));
+        const r = await resolveSinceRef(git);
+        expect(r.source).toBe("none");
+        if (r.source === "none") {
+            expect(r.onDefaultBranch).toBe(false);
+        }
     });
 });

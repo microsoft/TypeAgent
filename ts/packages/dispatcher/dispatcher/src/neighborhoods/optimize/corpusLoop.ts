@@ -34,7 +34,7 @@ import {
 import type { CaseResult, EvaluationResult, OptimizationRun } from "./types.js";
 import { DEFAULT_CONCURRENCY, ensureDir, pmap } from "./util.js";
 
-import { openai, type ChatModel } from "aiclient";
+import { openai, type ChatModel } from "@typeagent/aiclient";
 import { schemaGuidelines } from "../../translation/schemaGuidelines.js";
 
 // =============================================================================

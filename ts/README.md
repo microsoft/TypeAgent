@@ -131,7 +131,7 @@ To get the required config and keys saved to `config.local.yaml` under the `ts` 
 
 - Run `npm run getKeys [--vault <name>]` at the root to pull secret from the key vault with `<name>`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 
-Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
+Note: Shared keys don't include Spotify integration, which can be created using the [Spotify API keys instructions](./packages/agents/player/README.md)
 
 ### Keyless API Access
 

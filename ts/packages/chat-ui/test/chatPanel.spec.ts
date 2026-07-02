@@ -194,6 +194,56 @@ describe("agent running rail", () => {
         panel.setIdle();
         expect(agentRail(root)).toBeNull();
     });
+
+    it("step mode clears prior running rails and completion applies token metrics", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+
+        panel.addAgentMessage(
+            "phase 1",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+        expect(
+            root.querySelectorAll(
+                ".chat-message-agent > .chat-message-status-rail",
+            ).length,
+        ).toBe(1);
+
+        panel.addAgentMessage(
+            "phase 2",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+        // Only the current step bubble should still be marked running.
+        expect(
+            root.querySelectorAll(
+                ".chat-message-agent > .chat-message-status-rail",
+            ).length,
+        ).toBe(1);
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+            },
+        });
+
+        expect(
+            root.querySelectorAll(
+                ".chat-message-agent > .chat-message-status-rail",
+            ).length,
+        ).toBe(0);
+        expect(root.textContent).toContain("Action Tokens:");
+        expect(root.textContent).toContain("12");
+    });
 });
 
 describe("roadrunner (explained) placement", () => {

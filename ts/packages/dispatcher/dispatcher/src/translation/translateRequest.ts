@@ -22,6 +22,15 @@ import {
 } from "../context/collisionTelemetry.js";
 import { getAgentPriority } from "./matchCollision.js";
 import {
+    detectRegistryAmbiguity,
+    escalateKnownAmbiguousMatch,
+    resolvePreferenceClarify,
+    peekOneShotPick,
+    consumeOneShotPick,
+    getPreferenceContext,
+} from "../context/collisionResolution.js";
+import { PreferenceMember } from "../context/collisionPreferences.js";
+import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
 } from "typechat-utils";
@@ -58,7 +67,7 @@ import registerDebug from "debug";
 import { ActionConfig } from "./actionConfig.js";
 import type { UserContext } from "./userContext.js";
 import { DispatcherConfig } from "../context/session.js";
-import { openai as ai, CompleteUsageStatsCallback } from "aiclient";
+import { openai as ai, CompleteUsageStatsCallback } from "@typeagent/aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
 
@@ -252,6 +261,7 @@ async function pickInitialSchema(
 ): Promise<PickInitialSchemaResult> {
     const switchConfig = systemContext.session.getConfig().translation.switch;
     const collisionCfg = systemContext.session.getConfig().collision.llmSelect;
+    const prefCfg = systemContext.session.getConfig().collision.preference;
     if (switchConfig.fixed !== "") {
         if (!activeSchemas.has(switchConfig.fixed)) {
             throw new Error("Fixed initial schema not active");
@@ -269,8 +279,11 @@ async function pickInitialSchema(
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
         // When LLM-select collision detection is on, ask for top-N so we can
-        // compare scores and decide whether the choice is ambiguous.
-        const maxMatches = collisionCfg.detect
+        // compare scores and decide whether the choice is ambiguous. The
+        // registry-first detector also needs the candidate set, so request
+        // multiple matches whenever either mode is active.
+        const wantMultiple = collisionCfg.detect || prefCfg.registryFirst;
+        const maxMatches = wantMultiple
             ? Math.max(2, collisionCfg.topN)
             : debugSemanticSearch.enabled
               ? 5
@@ -292,6 +305,136 @@ async function pickInitialSchema(
                 );
                 if (result.length > 0) {
                     const found = result[0].item.actionSchemaFile.schemaName;
+                    const topActionName = result[0].item.definition.name;
+
+                    // Build a clarify PickInitialSchemaResult from a resolved
+                    // member list, emitting a tagged collision event.
+                    const clarifyFrom = (
+                        members: PreferenceMember[],
+                        note: string,
+                        neighborhoodIds?: string[],
+                    ): PickInitialSchemaResult => {
+                        const candidates: AgentMatchCandidate[] = members.map(
+                            (m) => ({
+                                schemaName: m.schemaName,
+                                actionName: m.actionName,
+                            }),
+                        );
+                        const clarify = buildClarifyMultipleAgentMatches(
+                            request,
+                            candidates,
+                            neighborhoodIds,
+                        );
+                        const action = createExecutableAction(
+                            DispatcherClarifyName,
+                            clarify.actionName,
+                            clarify.parameters as unknown as ParamObjectType,
+                        );
+                        emitCollisionEvent(
+                            {
+                                kind: "llmSelect",
+                                request,
+                                candidates,
+                                firstMatchCandidate: candidates[0],
+                                strategy: collisionCfg.strategy,
+                                note:
+                                    neighborhoodIds !== undefined &&
+                                    neighborhoodIds.length > 0
+                                        ? `${note} [${neighborhoodIds.join(",")}]`
+                                        : note,
+                            },
+                            systemContext,
+                        );
+                        return { kind: "clarify", clarify: action };
+                    };
+
+                    // For the `preference-clarify` strategy, a single confident
+                    // match can still be "known to be ambiguous" via the
+                    // persisted registry. Escalate to clarify in that case.
+                    const escalateConfident = ():
+                        | PickInitialSchemaResult
+                        | undefined => {
+                        if (
+                            !collisionCfg.detect ||
+                            collisionCfg.strategy !== "preference-clarify" ||
+                            found === DispatcherName
+                        ) {
+                            return undefined;
+                        }
+                        const members = escalateKnownAmbiguousMatch(
+                            { schemaName: found, actionName: topActionName },
+                            systemContext,
+                        );
+                        if (members === undefined) {
+                            return undefined;
+                        }
+                        return clarifyFrom(
+                            members.members,
+                            "registry-known-ambiguous",
+                            members.neighborhoodIds,
+                        );
+                    };
+
+                    // Registry-first detection mode: an independent on/off
+                    // switch that scans the whole embedding candidate set
+                    // against the neighborhood registry, regardless of the
+                    // embedding score-delta detector. Runs before the
+                    // score-delta logic so the registry wins when both are on.
+                    if (prefCfg.registryFirst && found !== DispatcherName) {
+                        const match = detectRegistryAmbiguity(
+                            result.map((r) => ({
+                                schemaName: r.item.actionSchemaFile.schemaName,
+                                actionName: r.item.definition.name,
+                            })),
+                            systemContext,
+                        );
+                        if (match !== undefined) {
+                            // Honor a pending one-shot pick from a resolved
+                            // clarify card: pin the schema to the user's choice
+                            // instead of re-showing the card.
+                            const pick = peekOneShotPick(
+                                match.members,
+                                systemContext,
+                            );
+                            if (
+                                pick !== undefined &&
+                                activeSchemas.has(pick.schemaName)
+                            ) {
+                                consumeOneShotPick(pick, systemContext);
+                                return {
+                                    kind: "schema",
+                                    schemaName: pick.schemaName,
+                                };
+                            }
+                            // Tier 1: honor a learned/explicit preference so
+                            // "remember this choice" auto-resolves here too,
+                            // and clearing it makes us clarify again.
+                            if (prefCfg.enabled) {
+                                const pref =
+                                    systemContext.collisionPreferences.find(
+                                        match.members,
+                                        getPreferenceContext(systemContext),
+                                    );
+                                if (
+                                    pref !== undefined &&
+                                    activeSchemas.has(pref.chosen.schemaName)
+                                ) {
+                                    systemContext.collisionPreferences.recordHit(
+                                        pref.key,
+                                    );
+                                    return {
+                                        kind: "schema",
+                                        schemaName: pref.chosen.schemaName,
+                                    };
+                                }
+                            }
+                            return clarifyFrom(
+                                match.members,
+                                "registry-first",
+                                match.neighborhoodIds,
+                            );
+                        }
+                    }
 
                     // Ambiguity check: top-2 score delta within threshold.
                     // Skip when the top result is already the dispatcher (unknown/clarify)
@@ -324,9 +467,17 @@ async function pickInitialSchema(
                             }
                             schemaName = decision.schemaName;
                         } else if (found !== DispatcherName) {
+                            const escalation = escalateConfident();
+                            if (escalation !== undefined) {
+                                return escalation;
+                            }
                             schemaName = found;
                         }
                     } else if (found !== DispatcherName) {
+                        const escalation = escalateConfident();
+                        if (escalation !== undefined) {
+                            return escalation;
+                        }
                         // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
                         schemaName = found;
                     }
@@ -405,6 +556,72 @@ function applyLlmSelectStrategy(
                     firstMatchCandidate: cluster[0],
                     strategy,
                     elapsedMs: performance.now() - startedAt,
+                },
+                systemContext,
+            );
+            return { kind: "clarify", clarify: action };
+        }
+        case "preference-clarify": {
+            const executable: PreferenceMember[] = cluster.map((c) => ({
+                schemaName: c.schemaName,
+                actionName: c.actionName,
+            }));
+            const dec = resolvePreferenceClarify(executable, systemContext);
+            if (dec.kind === "preferred") {
+                const chosenC =
+                    cluster.find(
+                        (c) =>
+                            c.schemaName === dec.chosen.schemaName &&
+                            c.actionName === dec.chosen.actionName,
+                    ) ?? cluster[0];
+                emitCollisionEvent(
+                    {
+                        kind: "llmSelect",
+                        request,
+                        candidates: cluster,
+                        chosen: chosenC,
+                        firstMatchCandidate: cluster[0],
+                        strategy,
+                        elapsedMs: performance.now() - startedAt,
+                        note: "preference-hit",
+                    },
+                    systemContext,
+                );
+                return { kind: "schema", schemaName: chosenC.schemaName };
+            }
+            if (dec.kind === "first-match") {
+                chosen = cluster[0];
+                break;
+            }
+            const candidates: AgentMatchCandidate[] = dec.members.map(
+                (m) =>
+                    cluster.find(
+                        (c) =>
+                            c.schemaName === m.schemaName &&
+                            c.actionName === m.actionName,
+                    ) ?? {
+                        schemaName: m.schemaName,
+                        actionName: m.actionName,
+                    },
+            );
+            const clarify = buildClarifyMultipleAgentMatches(
+                request,
+                candidates,
+            );
+            const action = createExecutableAction(
+                DispatcherClarifyName,
+                clarify.actionName,
+                clarify.parameters as unknown as ParamObjectType,
+            );
+            emitCollisionEvent(
+                {
+                    kind: "llmSelect",
+                    request,
+                    candidates,
+                    firstMatchCandidate: cluster[0],
+                    strategy,
+                    elapsedMs: performance.now() - startedAt,
+                    note: "preference-miss-clarify",
                 },
                 systemContext,
             );

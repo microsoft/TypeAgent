@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d9fb5b6d5f736fd8f6092bdf63b292ba4f03add55f9cf68e5683b2fd9ddbfa71 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b3bae37b1536e8e2bd1c736aa65b7d859ae9059cee2454bc4ec361491d851110 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music-local — AI-generated documentation
@@ -86,10 +86,10 @@ Start by opening [localPlayerSchema.ts](./src/agent/localPlayerSchema.ts) and [l
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: `chalk`, `debug`, `play-sound`
 
@@ -110,6 +110,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

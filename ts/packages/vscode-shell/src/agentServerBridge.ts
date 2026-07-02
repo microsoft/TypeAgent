@@ -3,9 +3,24 @@
 
 import * as vscode from "vscode";
 import * as os from "os";
-import { connectAgentServer } from "@typeagent/agent-server-client";
+import {
+    connectAgentServer,
+    type AgentServerConnection,
+} from "@typeagent/agent-server-client";
+import {
+    findOrCreateNamedConversation,
+    manageConversation,
+    switchConversationSafe,
+    type ConversationActionResult,
+    type ManageConversationContext,
+    type ManageConversationPayload,
+} from "@typeagent/agent-server-client/conversation";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { AGENT_SERVER_DEFAULT_URL } from "@typeagent/agent-server-protocol";
+import {
+    createBackoff,
+    type Backoff,
+} from "@typeagent/websocket-utils/backoff";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
 import {
@@ -26,6 +41,10 @@ import {
     type CompletionController,
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
+import type {
+    UserContext,
+    ProcessCommandOptions,
+} from "@typeagent/dispatcher-types";
 
 // Internal-only message type unions; re-export for any future consumers.
 export type {
@@ -43,9 +62,17 @@ function escapeHtml(str: string): string {
         .replace(/'/g, "&#39;");
 }
 
-/** Match the server's case-insensitive name comparison (see `ensureNameAvailable`). */
-function normalizeName(s: string): string {
-    return s.trim().toLowerCase();
+/**
+ * Replace `"name"` runs in helper messages with bold-escaped HTML so the
+ * structured `ConversationActionResult.message` (plain text, with names
+ * in double quotes) renders the same way the previous hand-written
+ * messages did.
+ */
+function htmlizeManageMessage(message: string): string {
+    return message.replace(
+        /"([^"]+)"/g,
+        (_, name) => `"<b>${escapeHtml(name)}</b>"`,
+    );
 }
 
 /**
@@ -84,6 +111,7 @@ export class AgentServerBridge {
     }
 
     private connection: LegacyAgentServerConnection | undefined;
+    private rawConnection: AgentServerConnection | undefined;
     /** In-flight connect promise — prevents parallel connect() races. */
     private connectInFlight: Promise<void> | undefined;
     /** In-flight session-join promise — serializes joinSpecificSession calls. */
@@ -109,7 +137,13 @@ export class AgentServerBridge {
     // wait between reconnect attempts. Replaces the old behavior of
     // broadcasting a fresh error/disconnect message every retry cycle.
     private reconnectCountdown: NodeJS.Timeout | undefined;
-    private reconnectAttempt = 0;
+    // Exponential backoff (2s, 4s, 8s, … capped at 30s) shared with the Studio
+    // service connection. Quick first retries recover fast when the server
+    // restarts; the cap keeps the long-tail polite for genuinely-down servers.
+    private readonly reconnectBackoff: Backoff = createBackoff({
+        baseMs: 2000,
+        maxMs: 30000,
+    });
     private reconnectRemainingSec: number | undefined;
     private lastConnectError: string | undefined;
     // Suppress disconnect handler during intentional reconnects
@@ -232,9 +266,11 @@ export class AgentServerBridge {
         this.webviews.add(webview);
 
         // Handle messages from the webview
-        const disposable = webview.onDidReceiveMessage((msg) =>
-            this.handleWebviewMessage(msg, webview),
-        );
+        const disposable = webview.onDidReceiveMessage((msg) => {
+            void this.handleWebviewMessage(msg, webview).catch((e) => {
+                void this.handleWebviewMessageError(msg, e);
+            });
+        });
 
         // Send local user info so bubbles can show a real name/initial
         try {
@@ -302,33 +338,31 @@ export class AgentServerBridge {
         );
 
         try {
-            this.connection = wrapLegacy(
-                await connectAgentServer(serverUrl, () => {
-                    // onDisconnect callback — ignore during intentional reconnects
-                    if (this.isSwitching) {
-                        return;
-                    }
-                    this.isConnected = false;
-                    if (this.session) {
-                        AgentServerBridge.unregisterForSession(
-                            this.session.sessionId,
-                            this,
-                        );
-                    }
-                    this.session = undefined;
-                    this.clearRequestIdMaps();
-                    this.updateStatusBar(false);
-                    this.broadcastToWebviews({
-                        type: "status",
-                        connected: false,
-                    });
-                    this.onStatusChanged?.();
-                    this.scheduleReconnect();
-                }),
-            );
-            // Capture locally so subsequent awaits aren't affected by
-            // any future reassignment of this.connection.
+            this.rawConnection = await connectAgentServer(serverUrl, () => {
+                // onDisconnect callback — ignore during intentional reconnects
+                if (this.isSwitching) {
+                    return;
+                }
+                this.isConnected = false;
+                if (this.session) {
+                    AgentServerBridge.unregisterForSession(
+                        this.session.sessionId,
+                        this,
+                    );
+                }
+                this.session = undefined;
+                this.clearRequestIdMaps();
+                this.updateStatusBar(false);
+                this.broadcastToWebviews({
+                    type: "status",
+                    connected: false,
+                });
+                this.onStatusChanged?.();
+                this.scheduleReconnect();
+            });
+            this.connection = wrapLegacy(this.rawConnection);
             const connection = this.connection;
+            const rawConnection = this.rawConnection;
 
             // Join the session with our ClientIO implementation
             const clientIO = this.createClientIO();
@@ -382,44 +416,17 @@ export class AgentServerBridge {
                 joinOpts.sessionId = this.ephemeralSessionId;
             }
 
-            // Find-or-create the named default (e.g. "VS Code"). On transient
-            // failure we rethrow rather than fall back to the server's "default"
-            // — silently landing there would persist into sidebar.lastSessionId
-            // and prevent ever retrying the named default.
             if (
                 joinOpts.sessionId === undefined &&
                 this.defaultSessionName !== undefined
             ) {
-                const targetNorm = normalizeName(this.defaultSessionName);
-                const existing = await connection.listSessions(
+                // Find-or-create the named default (e.g. "VS Code"). Helper
+                // handles the listConversations race retry internally.
+                const info = await findOrCreateNamedConversation(
+                    rawConnection,
                     this.defaultSessionName,
                 );
-                const match = existing.find(
-                    (s) => normalizeName(s.name) === targetNorm,
-                );
-                if (match !== undefined) {
-                    joinOpts.sessionId = match.sessionId;
-                } else {
-                    try {
-                        const info = await connection.createSession(
-                            this.defaultSessionName,
-                        );
-                        joinOpts.sessionId = info.sessionId;
-                    } catch (createErr) {
-                        // Race with a peer client: re-list and adopt the winner.
-                        const retry = await connection.listSessions(
-                            this.defaultSessionName,
-                        );
-                        const retryMatch = retry.find(
-                            (s) => normalizeName(s.name) === targetNorm,
-                        );
-                        if (retryMatch !== undefined) {
-                            joinOpts.sessionId = retryMatch.sessionId;
-                        } else {
-                            throw createErr;
-                        }
-                    }
-                }
+                joinOpts.sessionId = info.conversationId;
             }
 
             this.session = await connection.joinSession(clientIO, joinOpts);
@@ -436,6 +443,7 @@ export class AgentServerBridge {
                 sessionName: this.getDisplayName(),
             });
             this.onStatusChanged?.();
+            await this.postSessionList();
 
             // Replay history only the first time we join this session.
             // On simple reconnects we already have the bubbles in the DOM
@@ -477,6 +485,7 @@ export class AgentServerBridge {
         if (this.connection) {
             await this.connection.close();
             this.connection = undefined;
+            this.rawConnection = undefined;
             if (this.session) {
                 AgentServerBridge.unregisterForSession(
                     this.session.sessionId,
@@ -546,6 +555,54 @@ export class AgentServerBridge {
         });
     }
 
+    activateNewSessionInput(targetWebview?: vscode.Webview): void {
+        const message: BridgeToWebviewMessage = {
+            type: "activateNewSessionInput",
+        };
+        if (targetWebview) {
+            this.postToWebview(targetWebview, message);
+        } else {
+            this.broadcastToWebviews(message);
+        }
+    }
+
+    private async postSessionList(
+        targetWebview?: vscode.Webview,
+    ): Promise<void> {
+        const post = (msg: BridgeToWebviewMessage) => {
+            if (targetWebview) {
+                this.postToWebview(targetWebview, msg);
+            } else {
+                this.broadcastToWebviews(msg);
+            }
+        };
+
+        if (!this.connection || !this.isConnected) {
+            post({
+                type: "sessionList",
+                sessions: [],
+                currentSessionId: this.session?.sessionId,
+            });
+            return;
+        }
+
+        try {
+            const sessions = await this.connection.listSessions();
+            post({
+                type: "sessionList",
+                sessions: sessions.map((s) => ({
+                    sessionId: s.sessionId,
+                    name: s.name || s.sessionId.substring(0, 8),
+                    clientCount: s.clientCount,
+                    createdAt: s.createdAt,
+                })),
+                currentSessionId: this.session?.sessionId,
+            });
+        } catch (e) {
+            console.warn("[agentServerBridge] listSessions failed:", e);
+        }
+    }
+
     // ── Conversation management ─────────────────────────────────
 
     /**
@@ -576,6 +633,7 @@ export class AgentServerBridge {
         }
 
         await this.joinSpecificSession(pick.sessionId, pick.label);
+        await this.postSessionList();
     }
 
     /**
@@ -611,17 +669,24 @@ export class AgentServerBridge {
         }
 
         const trimmed = name.trim();
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName: trimmed,
+            statusLabel: "Creating",
+        });
         const info = await this.connection.createSession(trimmed);
         await this.joinSpecificSession(info.sessionId, trimmed);
         vscode.window.showInformationMessage(
             `Created and switched to conversation "${trimmed}"`,
         );
+        await this.postSessionList();
     }
 
     /**
      * Rename the current conversation.
      */
-    async renameCurrentSession(): Promise<void> {
+    async renameCurrentSession(newNameFromWebview?: string): Promise<void> {
         if (!this.connection || !this.session) {
             vscode.window.showWarningMessage("No active conversation.");
             return;
@@ -633,30 +698,42 @@ export class AgentServerBridge {
                 .filter((s) => s.sessionId !== this.session!.sessionId)
                 .map((s) => s.name.toLowerCase()),
         );
+        const validateName = (value: string): string | undefined => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return "Conversation name cannot be empty.";
+            }
+            if (existingNames.has(trimmed.toLowerCase())) {
+                return `A conversation named "${trimmed}" already exists.`;
+            }
+            return undefined;
+        };
 
-        const newName = await vscode.window.showInputBox({
-            prompt: "New name for the current conversation",
-            placeHolder: "My Conversation",
-            validateInput: (value) => {
-                if (!value.trim()) {
-                    return "Conversation name cannot be empty";
-                }
-                if (existingNames.has(value.trim().toLowerCase())) {
-                    return `A conversation named "${value.trim()}" already exists`;
-                }
-                return undefined;
-            },
-        });
+        const newName =
+            newNameFromWebview ??
+            (await vscode.window.showInputBox({
+                prompt: "New name for the current conversation",
+                placeHolder: "My Conversation",
+                validateInput: (value) => {
+                    return validateName(value);
+                },
+            }));
 
-        if (!newName) {
+        if (newName === undefined) {
             return;
         }
 
-        await this.connection.renameSession(
-            this.session.sessionId,
-            newName.trim(),
-        );
-        this.nameOverride = newName.trim();
+        const validationError = validateName(newName);
+        if (validationError) {
+            if (newNameFromWebview !== undefined) {
+                throw new Error(validationError);
+            }
+            return;
+        }
+        const trimmed = newName.trim();
+
+        await this.connection.renameSession(this.session.sessionId, trimmed);
+        this.nameOverride = trimmed;
         this.broadcastToWebviews({
             type: "status",
             connected: true,
@@ -664,9 +741,12 @@ export class AgentServerBridge {
             sessionName: this.getDisplayName(),
         });
         this.onStatusChanged?.();
-        vscode.window.showInformationMessage(
-            `Renamed conversation to "${newName.trim()}"`,
-        );
+        await this.postSessionList();
+        if (newNameFromWebview === undefined) {
+            vscode.window.showInformationMessage(
+                `Renamed conversation to "${trimmed}"`,
+            );
+        }
     }
 
     /**
@@ -715,6 +795,7 @@ export class AgentServerBridge {
             vscode.window.showInformationMessage(
                 `Deleted conversation "${pick.label}"`,
             );
+            await this.postSessionList();
         }
     }
 
@@ -732,6 +813,27 @@ export class AgentServerBridge {
     private async joinSpecificSession(
         sessionId: string,
         targetName?: string,
+    ): Promise<boolean> {
+        this.isSwitching = true;
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName,
+            statusLabel: "Connecting",
+        });
+        try {
+            return await this.runSerializedSessionJoin(sessionId);
+        } finally {
+            this.isSwitching = false;
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: false,
+            });
+        }
+    }
+
+    private async runSerializedSessionJoin(
+        sessionId: string,
     ): Promise<boolean> {
         // Serialize concurrent calls. Two joinSpecificSession invocations
         // overlapping (e.g., user rapid-clicks the session picker) would
@@ -752,7 +854,7 @@ export class AgentServerBridge {
         if (!this.connection) {
             return false;
         }
-        const p = this.joinSpecificSessionImpl(sessionId, targetName);
+        const p = this.performSessionJoin(sessionId);
         this.joinInFlight = p.finally(() => {
             if (this.joinInFlight === p) {
                 this.joinInFlight = undefined;
@@ -761,79 +863,75 @@ export class AgentServerBridge {
         return this.joinInFlight;
     }
 
-    private async joinSpecificSessionImpl(
-        sessionId: string,
-        targetName?: string,
-    ): Promise<boolean> {
-        if (!this.connection) {
+    private async performSessionJoin(sessionId: string): Promise<boolean> {
+        if (!this.connection || !this.rawConnection) {
+            return false;
+        }
+        const rawConnection = this.rawConnection;
+
+        const clientIO = this.createClientIO();
+        const oldSessionId = this.session?.sessionId;
+        const ephemeralIdAtStart = this.ephemeralSessionId;
+        let newSession: SessionDispatcher | undefined;
+
+        const result = await switchConversationSafe(
+            rawConnection,
+            clientIO,
+            oldSessionId,
+            sessionId,
+            {
+                onJoined: (joined) => {
+                    newSession = this.applySessionJoinedRebindOnly(
+                        joined,
+                        oldSessionId,
+                    );
+                },
+                onLeftOld: async (leftId) => {
+                    await this.deleteEphemeralIfLeft(
+                        leftId,
+                        ephemeralIdAtStart,
+                        sessionId,
+                        rawConnection,
+                    );
+                    // Broadcasts and replay run post-leave so late
+                    // events from the old conversation can't render
+                    // after the UI has switched.
+                    if (newSession) {
+                        this.broadcastToWebviews({
+                            type: "sessionChanged",
+                            sessionId: newSession.sessionId,
+                            sessionName: this.getDisplayName(),
+                        });
+                        this.broadcastToWebviews({
+                            type: "status",
+                            connected: true,
+                            sessionId: newSession.sessionId,
+                            sessionName: this.getDisplayName(),
+                        });
+                        this.onStatusChanged?.();
+                        await this.replayHistory(newSession);
+                        this.lastReplayedSessionId = newSession.sessionId;
+                    }
+                },
+            },
+            {
+                clientType: "extension",
+                filter: false,
+            },
+        );
+
+        if (result.kind === "join-failed") {
+            const e = result.error as { message?: string } | undefined;
+            vscode.window.showErrorMessage(
+                `Failed to switch conversation: ${e?.message ?? String(result.error)}`,
+            );
             return false;
         }
 
-        if (this.session?.sessionId === sessionId) {
-            return true;
-        }
-
-        this.isSwitching = true;
-        this.broadcastToWebviews({
-            type: "switching",
-            switching: true,
-            targetName,
-        });
-        try {
-            // Phase 1: join new session first
-            const clientIO = this.createClientIO();
-            let newSession: SessionDispatcher;
-            try {
-                newSession = await this.connection.joinSession(clientIO, {
-                    clientType: "extension",
-                    filter: false,
-                    sessionId,
-                });
-            } catch (e: any) {
-                vscode.window.showErrorMessage(
-                    `Failed to switch conversation: ${e?.message ?? String(e)}`,
-                );
-                return false;
-            }
-
-            const oldSession = this.session;
-            this.session = newSession;
-            this.clearRequestIdMaps();
-            this.nameOverride = undefined;
-
-            if (oldSession) {
-                AgentServerBridge.unregisterForSession(
-                    oldSession.sessionId,
-                    this,
-                );
-            }
-            AgentServerBridge.registerForSession(newSession.sessionId, this);
-
-            // Phase 2: leave the old session (best-effort).
-            // If we were on an ephemeral session and we're moving away from
-            // it, also delete it so it doesn't pile up on the server.
-            if (oldSession) {
-                try {
-                    await this.connection.leaveSession(oldSession.sessionId);
-                } catch {
-                    // Best effort
-                }
-                if (
-                    this.ephemeralSessionId &&
-                    oldSession.sessionId === this.ephemeralSessionId &&
-                    newSession.sessionId !== this.ephemeralSessionId
-                ) {
-                    const epId = this.ephemeralSessionId;
-                    this.ephemeralSessionId = undefined;
-                    try {
-                        await this.connection.deleteSession(epId);
-                    } catch {
-                        // Best effort
-                    }
-                }
-            }
-
-            // Phase 3: clear UI and replay history
+        // No-current-session case: switchConversationSafe doesn't
+        // fire onLeftOld when there was nothing to leave, so flush
+        // the broadcasts/replay here.
+        if (oldSessionId === undefined && newSession) {
             this.broadcastToWebviews({
                 type: "sessionChanged",
                 sessionId: newSession.sessionId,
@@ -848,13 +946,70 @@ export class AgentServerBridge {
             this.onStatusChanged?.();
             await this.replayHistory(newSession);
             this.lastReplayedSessionId = newSession.sessionId;
-            return true;
-        } finally {
-            this.isSwitching = false;
-            this.broadcastToWebviews({
-                type: "switching",
-                switching: false,
-            });
+        }
+        return true;
+    }
+
+    private async joinSpecificSessionOrThrow(
+        sessionId: string,
+        targetName?: string,
+        failureMessage?: string,
+    ): Promise<void> {
+        const switched = await this.runSerializedSessionJoin(sessionId);
+        if (!switched) {
+            throw new Error(
+                failureMessage ??
+                    (targetName
+                        ? `Failed to switch to conversation "${targetName}".`
+                        : "Failed to switch conversation."),
+            );
+        }
+    }
+
+    // Rebind-only variant: state mutation + registry swap, no broadcasts.
+    // Used by the manage-conversation path which fires broadcasts from
+    // onAfterSwitched so they happen after the old conversation is left,
+    // avoiding cross-conversation event leakage.
+    private applySessionJoinedRebindOnly(
+        joined: {
+            dispatcher: SessionDispatcher["dispatcher"];
+            conversationId: string;
+            name: string;
+        },
+        oldSessionId: string | undefined,
+    ): SessionDispatcher {
+        const newSession: SessionDispatcher = {
+            dispatcher: joined.dispatcher,
+            sessionId: joined.conversationId,
+            name: joined.name,
+        };
+        this.session = newSession;
+        this.clearRequestIdMaps();
+        this.nameOverride = undefined;
+        if (oldSessionId) {
+            AgentServerBridge.unregisterForSession(oldSessionId, this);
+        }
+        AgentServerBridge.registerForSession(joined.conversationId, this);
+        return newSession;
+    }
+
+    private async deleteEphemeralIfLeft(
+        leftId: string,
+        ephemeralAtStart: string | undefined,
+        newSessionId: string,
+        rawConnection: AgentServerConnection,
+    ): Promise<void> {
+        if (
+            ephemeralAtStart &&
+            leftId === ephemeralAtStart &&
+            newSessionId !== ephemeralAtStart
+        ) {
+            this.ephemeralSessionId = undefined;
+            try {
+                await rawConnection.deleteConversation(ephemeralAtStart);
+            } catch {
+                // Best effort
+            }
         }
     }
 
@@ -1014,7 +1169,7 @@ export class AgentServerBridge {
 
     private async handleWebviewMessage(
         msg: BridgeFromWebviewMessage,
-        _webview: vscode.Webview,
+        webview: vscode.Webview,
     ): Promise<void> {
         switch (msg.type) {
             case "sendCommand":
@@ -1086,7 +1241,7 @@ export class AgentServerBridge {
                 // need to (re-)hydrate the just-loaded webview with
                 // userInfo, current status, and replayed history.
                 if (this.isConnected && this.session) {
-                    this.hydrateWebview(_webview);
+                    this.hydrateWebview(webview);
                 } else {
                     await this.connect();
                 }
@@ -1099,13 +1254,37 @@ export class AgentServerBridge {
                     type: "status",
                     connected: this.isConnected,
                     sessionId: this.session?.sessionId,
+                    sessionName: this.session
+                        ? this.getDisplayName()
+                        : undefined,
                 });
+                break;
+            case "requestSessions":
+                await this.postSessionList(webview);
+                break;
+            case "createSession":
+                await this.createSessionFromWebview(msg.name);
+                break;
+            case "switchSession":
+                await this.switchSessionFromWebview(msg.sessionId);
+                break;
+            case "renameCurrentSession":
+                await this.renameCurrentSession(msg.name);
+                break;
+            case "deleteCurrentSession":
+                await this.deleteCurrentSessionFromWebview();
+                break;
+            case "renameSession":
+                await this.renameSessionFromWebview(msg.sessionId, msg.name);
+                break;
+            case "deleteSession":
+                await this.deleteSessionFromWebview(msg.sessionId);
                 break;
             case "focus":
                 this.onWebviewFocusChanged?.(msg.focused);
                 break;
             case "pcUpdate":
-                this.pcUpdate(_webview, msg.input, msg.direction);
+                this.pcUpdate(webview, msg.input, msg.direction);
                 break;
             case "pcAccept":
                 this.completionController?.accept();
@@ -1379,6 +1558,31 @@ export class AgentServerBridge {
         this.serverToClientRequestId.clear();
     }
 
+    /**
+     * Gather user context from VS Code (active editor, workspace, etc.)
+     */
+    private gatherUserContext(): UserContext {
+        const activeEditor = vscode.window.activeTextEditor;
+        const activeWorkspaceFolder =
+            vscode.workspace.workspaceFolders?.[0]?.name ?? undefined;
+
+        // Build description from active document/language
+        let activeAppDescription: string | undefined;
+        if (activeEditor) {
+            const languageId = activeEditor.document.languageId;
+            const fileName =
+                activeEditor.document.fileName.split(/[\\/]/).pop() ?? "file";
+            activeAppDescription = `${fileName} (${languageId})`;
+        } else if (activeWorkspaceFolder) {
+            activeAppDescription = `Project: ${activeWorkspaceFolder}`;
+        }
+
+        return {
+            activeApp: "vscode",
+            activeAppDescription,
+        };
+    }
+
     private async sendCommand(
         command: string,
         requestId?: string,
@@ -1410,11 +1614,15 @@ export class AgentServerBridge {
         }
 
         try {
+            const userContext = this.gatherUserContext();
+            const options: ProcessCommandOptions = {
+                userContext,
+            };
             const result = await awaitCommand(
                 this.session.dispatcher,
                 command,
                 undefined,
-                undefined,
+                options,
                 requestId,
             );
             // Command finished — tell webview to clean up temporary status
@@ -1793,19 +2001,13 @@ export class AgentServerBridge {
     }
 
     // manage-conversation handler — routed from NL and `@conversation` slash
-    // commands. See ts/docs/architecture/agentServerConversations.md.
+    // commands. See ts/docs/architecture/agents/agentServerConversations.md.
     private async handleManageConversation(
         requestId: any,
         payload: any,
     ): Promise<void> {
         if (!payload || typeof payload !== "object") return;
-        const p = payload as {
-            subcommand?: string;
-            name?: string;
-            newName?: string;
-        };
-
-        if (!this.connection) {
+        if (!this.connection || !this.rawConnection) {
             this.overwriteActionBubble(
                 requestId,
                 {
@@ -1818,48 +2020,180 @@ export class AgentServerBridge {
             return;
         }
 
-        try {
-            switch (p.subcommand) {
-                case "new":
-                    await this.manageNewConversation(requestId, p.name);
-                    break;
-                case "list":
-                    await this.manageListConversations(requestId);
-                    break;
-                case "info":
-                    this.manageConversationInfo(requestId);
-                    break;
-                case "switch":
-                    await this.manageSwitchConversation(requestId, p.name);
-                    break;
-                case "next":
-                case "prev":
-                    await this.manageCycleConversation(requestId, p.subcommand);
-                    break;
-                case "rename":
-                    await this.manageRenameConversation(
-                        requestId,
-                        p.name,
-                        p.newName,
-                    );
-                    break;
-                case "delete":
-                    await this.manageDeleteConversation(requestId, p.name);
-                    break;
-                default:
-                    this.overwriteActionBubble(
-                        requestId,
-                        {
-                            type: "html",
-                            content: `Unknown manage-conversation subcommand: <b>${escapeHtml(
-                                String(p.subcommand ?? ""),
-                            )}</b>`,
-                            kind: "warning",
-                        },
-                        "conversation",
-                    );
+        const willSwitch =
+            payload.subcommand === "new" ||
+            payload.subcommand === "switch" ||
+            payload.subcommand === "next" ||
+            payload.subcommand === "prev";
+
+        // Serialize switch-causing manage ops against in-flight direct
+        // joins (joinSpecificSession) so two switches can't race and
+        // both pass each other's no-op guards.
+        if (willSwitch && this.joinInFlight) {
+            try {
+                await this.joinInFlight;
+            } catch {
+                // Previous join failed — proceed with our own.
             }
+        }
+        const p = this.handleManageConversationImpl(
+            requestId,
+            payload,
+            willSwitch,
+        );
+        if (willSwitch) {
+            this.joinInFlight = p.then(
+                () => true,
+                () => false,
+            );
+            const tracker = this.joinInFlight;
+            tracker.finally(() => {
+                if (this.joinInFlight === tracker) {
+                    this.joinInFlight = undefined;
+                }
+            });
+        }
+        return p;
+    }
+
+    private async handleManageConversationImpl(
+        requestId: any,
+        payload: any,
+        willSwitch: boolean,
+    ): Promise<void> {
+        if (!this.connection || !this.rawConnection) return;
+        const rawConnection = this.rawConnection;
+        const oldSessionId = this.session?.sessionId;
+        const oldSession = this.session;
+        const ephemeralIdAtStart = this.ephemeralSessionId;
+        let joinedSession: SessionDispatcher | undefined;
+        let switchTargetName: string | undefined;
+
+        if (willSwitch) {
+            this.isSwitching = true;
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: true,
+                statusLabel: "Connecting",
+            });
+        }
+
+        const ctx: ManageConversationContext = {
+            currentConversationId: oldSessionId,
+            currentConversationName: this.session?.name,
+            getCurrentConversationId: () => this.session?.sessionId,
+            // Pre-leave: rebind dispatcher + local state only. Broadcasts
+            // and replay must wait until the old conversation is left to
+            // avoid rendering its lingering events into the new UI.
+            // Local rollback is in-hook because manageConversation
+            // catches throws and returns an error result — the outer
+            // catch below would not see them.
+            onSwitched: (joined) => {
+                try {
+                    joinedSession = this.applySessionJoinedRebindOnly(
+                        joined,
+                        oldSessionId,
+                    );
+                    switchTargetName = joined.name;
+                } catch (e) {
+                    if (oldSession !== undefined) {
+                        this.session = oldSession;
+                        AgentServerBridge.unregisterForSession(
+                            joined.conversationId,
+                            this,
+                        );
+                        AgentServerBridge.registerForSession(
+                            oldSession.sessionId,
+                            this,
+                        );
+                    }
+                    joinedSession = undefined;
+                    throw e;
+                }
+            },
+            // Post-leave: safe for broadcasts and history replay.
+            onAfterSwitched: async () => {
+                if (!joinedSession) return;
+                if (oldSessionId !== undefined) {
+                    await this.deleteEphemeralIfLeft(
+                        oldSessionId,
+                        ephemeralIdAtStart,
+                        joinedSession.sessionId,
+                        rawConnection,
+                    );
+                }
+                this.broadcastToWebviews({
+                    type: "sessionChanged",
+                    sessionId: joinedSession.sessionId,
+                    sessionName: this.getDisplayName(),
+                });
+                this.broadcastToWebviews({
+                    type: "status",
+                    connected: true,
+                    sessionId: joinedSession.sessionId,
+                    sessionName: this.getDisplayName(),
+                });
+                this.onStatusChanged?.();
+                await this.replayHistory(joinedSession);
+                this.lastReplayedSessionId = joinedSession.sessionId;
+            },
+            // Helper rolls back the *server-side* join on rebind failure;
+            // onSwitched above restores local state in-hook.
+            onCurrentConversationUpdated: () => {},
+            joinOptions: { clientType: "extension", filter: false },
+            // VS Code cycles in server-listing order to match its
+            // pre-migration UX (the QuickPick uses the same order).
+            cycleOrder: "server-order",
+        };
+
+        try {
+            const result = await manageConversation(
+                rawConnection,
+                this.createClientIO(),
+                ctx,
+                payload as ManageConversationPayload,
+            );
+
+            this.renderManageResult(requestId, result, switchTargetName);
+
+            if (
+                payload.subcommand === "rename" &&
+                result.kind === "ok" &&
+                result.conversation !== undefined &&
+                result.conversation.conversationId ===
+                    this.session?.sessionId &&
+                this.session
+            ) {
+                this.nameOverride = result.conversation.name;
+                this.broadcastToWebviews({
+                    type: "status",
+                    connected: true,
+                    sessionId: this.session.sessionId,
+                    sessionName: this.getDisplayName(),
+                });
+                this.onStatusChanged?.();
+            } else if (
+                payload.subcommand === "delete" &&
+                result.kind === "ok"
+            ) {
+                this.onStatusChanged?.();
+            }
+            await this.postSessionList();
         } catch (e: any) {
+            // Helper rolled back its server-side join — restore our local
+            // state to whatever it was before onSwitched ran.
+            if (joinedSession && oldSession !== undefined) {
+                this.session = oldSession;
+                AgentServerBridge.unregisterForSession(
+                    joinedSession.sessionId,
+                    this,
+                );
+                AgentServerBridge.registerForSession(
+                    oldSession.sessionId,
+                    this,
+                );
+            }
+
             const msg = e?.message ?? String(e);
             this.overwriteActionBubble(
                 requestId,
@@ -1870,426 +2204,379 @@ export class AgentServerBridge {
                 },
                 "conversation",
             );
+        } finally {
+            if (willSwitch) {
+                this.isSwitching = false;
+                this.broadcastToWebviews({
+                    type: "switching",
+                    switching: false,
+                });
+            }
         }
     }
 
-    private async manageNewConversation(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) return;
-        // Auto-name (matches the Electron Shell's format) so unnamed NL requests succeed.
-        let chosen = name?.trim();
-        if (!chosen) {
-            const d = new Date();
-            const pad = (n: number) => n.toString().padStart(2, "0");
-            chosen = `Conversation ${d.getFullYear()}-${pad(
-                d.getMonth() + 1,
-            )}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    private async createSessionFromWebview(name: string): Promise<void> {
+        if (!this.connection) {
+            throw new Error("Not connected to agent server.");
         }
-
-        // On name collision, switch to the existing conversation instead of failing.
-        const targetNorm = normalizeName(chosen);
+        const trimmed = name.trim();
+        if (!trimmed) {
+            throw new Error("Conversation name cannot be empty.");
+        }
         const sessions = await this.connection.listSessions();
         const existing = sessions.find(
-            (s) => normalizeName(s.name) === targetNorm,
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
         );
         if (existing) {
-            const switched = await this.joinSpecificSession(
-                existing.sessionId,
+            await this.transitionToSessionFromWebview(
                 existing.name,
-            );
-            this.displayConversationNotification(
-                switched
-                    ? `A conversation named <b>${escapeHtml(
-                          existing.name,
-                      )}</b> already exists — switched to it.`
-                    : `A conversation named <b>${escapeHtml(
-                          existing.name,
-                      )}</b> already exists, but switching to it failed.`,
-                "warning",
+                "switch",
+                existing.sessionId,
             );
             return;
         }
+        await this.transitionToSessionFromWebview(
+            trimmed,
+            "create",
+            undefined,
+            `Created conversation "${trimmed}" but failed to switch to it.`,
+        );
+    }
 
-        let createdId: string;
-        let createdName: string;
+    private async transitionToSessionFromWebview(
+        targetName: string,
+        mode: "create" | "switch",
+        sessionId?: string,
+        failureMessage?: string,
+        refreshSessionList = true,
+    ): Promise<void> {
+        const statusLabel = mode === "create" ? "Creating" : "Connecting";
+        this.isSwitching = true;
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName,
+            statusLabel,
+        });
         try {
-            const info = await this.connection.createSession(chosen);
-            createdId = info.sessionId;
-            createdName = chosen;
-        } catch (createErr) {
-            // Race with a peer client: re-list and adopt the winner.
-            const retry = await this.connection.listSessions();
-            const retryMatch = retry.find(
-                (s) => normalizeName(s.name) === targetNorm,
-            );
-            if (!retryMatch) {
-                throw createErr;
+            const targetSessionId =
+                mode === "create"
+                    ? (await this.connection!.createSession(targetName))
+                          .sessionId
+                    : sessionId;
+            if (!targetSessionId) {
+                throw new Error("No conversation selected.");
             }
-            const switched = await this.joinSpecificSession(
-                retryMatch.sessionId,
-                retryMatch.name,
+            await this.joinSpecificSessionOrThrow(
+                targetSessionId,
+                targetName,
+                failureMessage,
             );
-            this.displayConversationNotification(
-                switched
-                    ? `A conversation named <b>${escapeHtml(
-                          retryMatch.name,
-                      )}</b> already exists — switched to it.`
-                    : `A conversation named <b>${escapeHtml(
-                          retryMatch.name,
-                      )}</b> already exists, but switching to it failed.`,
-                "warning",
-            );
-            return;
-        }
-
-        const switched = await this.joinSpecificSession(createdId, createdName);
-        this.displayConversationNotification(
-            switched
-                ? `✅ Created and switched to conversation <b>${escapeHtml(
-                      createdName,
-                  )}</b>`
-                : `Created conversation <b>${escapeHtml(
-                      createdName,
-                  )}</b>, but switching to it failed.`,
-            switched ? "info" : "warning",
-        );
-    }
-
-    private async manageListConversations(requestId: any): Promise<void> {
-        if (!this.connection) return;
-        const sessions = await this.connection.listSessions();
-        const currentId = this.session?.sessionId;
-        let html: string;
-        if (sessions.length === 0) {
-            html = "No conversations found.";
-        } else {
-            const rows = sessions.map((s) => {
-                const isCurrent = currentId && s.sessionId === currentId;
-                const marker = isCurrent ? " ← <b>current</b>" : "";
-                const date = new Date(s.createdAt).toLocaleDateString();
-                return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(
-                    s.sessionId,
-                )}) — ${s.clientCount} client(s), created ${escapeHtml(
-                    date,
-                )}${marker}`;
+        } finally {
+            this.isSwitching = false;
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: false,
             });
-            html = `<b>Conversations (${sessions.length})</b><br>${rows.join("<br>")}`;
+            if (refreshSessionList) {
+                await this.postSessionList().catch((e) => {
+                    console.warn(
+                        "[agentServerBridge] postSessionList after transition failed:",
+                        e,
+                    );
+                });
+            }
         }
-        this.overwriteActionBubble(
-            requestId,
-            { type: "html", content: html, kind: "info" },
-            "conversation",
-        );
     }
 
-    private manageConversationInfo(requestId: any): void {
-        const session = this.session;
-        // Use raw session.name (not getDisplayName) to stay consistent with `list`
-        // and produce a string the user can pass to `@conversation switch`.
-        const html = session
-            ? `Current conversation: <b>${escapeHtml(
-                  session.name,
-              )}</b> (${escapeHtml(session.sessionId)})`
-            : "No active conversation.";
-        this.overwriteActionBubble(
-            requestId,
-            { type: "html", content: html, kind: "info" },
-            "conversation",
-        );
-    }
-
-    private async manageSwitchConversation(
-        requestId: any,
-        name?: string,
+    private async handleWebviewMessageError(
+        msg: BridgeFromWebviewMessage,
+        e: unknown,
     ): Promise<void> {
-        if (!this.connection) return;
-        const trimmed = name?.trim();
-        if (!trimmed) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: "A conversation name is required to switch.",
-                    kind: "warning",
-                },
-                "conversation",
-            );
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn("[agentServerBridge] webview message failed:", e);
+
+        if (this.isSessionMutationMessage(msg)) {
+            await this.postSessionList().catch((listError) => {
+                console.warn(
+                    "[agentServerBridge] postSessionList after failure failed:",
+                    listError,
+                );
+            });
+            this.broadcastToWebviews({
+                type: "sessionError",
+                message,
+            });
             return;
         }
-        const targetNorm = normalizeName(trimmed);
-        const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => normalizeName(s.name) === targetNorm,
-        );
-        if (!match) {
-            // Match Electron Shell: error on no match (no create-on-miss).
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: `No conversation named <b>${escapeHtml(
-                        trimmed,
-                    )}</b> found.`,
-                    kind: "warning",
-                },
-                "conversation",
-            );
-            return;
-        }
-        if (match.sessionId === this.session?.sessionId) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: `Already on conversation <b>${escapeHtml(
-                        match.name,
-                    )}</b>.`,
-                    kind: "info",
-                },
-                "conversation",
-            );
-            return;
-        }
-        const switched = await this.joinSpecificSession(
-            match.sessionId,
-            match.name,
-        );
-        if (switched) {
-            this.displayConversationNotification(
-                `✅ Switched to conversation <b>${escapeHtml(match.name)}</b>`,
-            );
+
+        vscode.window.showWarningMessage(message);
+    }
+
+    private isSessionMutationMessage(msg: BridgeFromWebviewMessage): boolean {
+        switch (msg.type) {
+            case "createSession":
+            case "switchSession":
+            case "renameCurrentSession":
+            case "deleteCurrentSession":
+            case "renameSession":
+            case "deleteSession":
+                return true;
+            default:
+                return false;
         }
     }
 
-    private async manageCycleConversation(
-        requestId: any,
-        direction: "next" | "prev",
-    ): Promise<void> {
-        if (!this.connection) return;
+    private async switchSessionFromWebview(sessionId: string): Promise<void> {
+        if (!this.connection) {
+            throw new Error("Not connected to agent server.");
+        }
+        if (!sessionId) {
+            throw new Error("No conversation selected.");
+        }
+        if (sessionId === this.session?.sessionId) {
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: false,
+            });
+            return;
+        }
         const sessions = await this.connection.listSessions();
-        if (sessions.length === 0) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: "No conversations to switch to.",
-                    kind: "warning",
-                },
-                "conversation",
-            );
-            return;
+        const target = sessions.find((s) => s.sessionId === sessionId);
+        if (!target) {
+            throw new Error("Selected conversation no longer exists.");
         }
-        const currentId = this.session?.sessionId;
-        const curIdx = currentId
-            ? sessions.findIndex((s) => s.sessionId === currentId)
-            : -1;
-        const delta = direction === "next" ? 1 : -1;
-        const nextIdx =
-            curIdx === -1
-                ? 0
-                : (curIdx + delta + sessions.length) % sessions.length;
-        const target = sessions[nextIdx];
-        if (target.sessionId === currentId) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content:
-                        "Only one conversation is available — nothing to switch to.",
-                    kind: "warning",
-                },
-                "conversation",
-            );
-            return;
-        }
-        const switched = await this.joinSpecificSession(
-            target.sessionId,
+        await this.transitionToSessionFromWebview(
             target.name,
+            "switch",
+            target.sessionId,
         );
-        if (switched) {
-            this.displayConversationNotification(
-                `✅ Switched to conversation <b>${escapeHtml(target.name)}</b>`,
-            );
-        }
     }
 
-    private async manageRenameConversation(
-        requestId: any,
-        name: string | undefined,
-        newName: string | undefined,
-    ): Promise<void> {
-        if (!this.connection) return;
-        const trimmedNew = newName?.trim();
-        if (!trimmedNew) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content:
-                        "A new name is required to rename the conversation.",
-                    kind: "warning",
-                },
-                "conversation",
-            );
+    private async deleteCurrentSessionFromWebview(): Promise<void> {
+        if (!this.connection || !this.session) {
+            throw new Error("No active conversation.");
+        }
+
+        const currentId = this.session.sessionId;
+        const currentName = this.session.name || currentId.substring(0, 8);
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete current conversation "${currentName}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
+        );
+        if (confirm !== "Delete") {
             return;
         }
 
-        // Resolve target: empty/missing name → rename current.
-        let targetId: string;
-        let isCurrent: boolean;
-        if (name && name.trim()) {
-            const trimmedName = name.trim();
-            const lookupNorm = normalizeName(trimmedName);
-            const sessions = await this.connection.listSessions();
-            const match = sessions.find(
-                (s) => normalizeName(s.name) === lookupNorm,
+        const sessions = await this.connection.listSessions();
+        const fallback = sessions.find((s) => s.sessionId !== currentId);
+
+        if (fallback) {
+            await this.transitionToSessionFromWebview(
+                fallback.name,
+                "switch",
+                fallback.sessionId,
+                `Failed to switch to conversation "${fallback.name}" before deleting the current conversation.`,
+                false,
             );
-            if (!match) {
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: `No conversation named <b>${escapeHtml(
-                            trimmedName,
-                        )}</b> found.`,
-                        kind: "warning",
-                    },
-                    "conversation",
-                );
-                return;
-            }
-            targetId = match.sessionId;
-            isCurrent = targetId === this.session?.sessionId;
         } else {
-            if (!this.session) {
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: "No active conversation to rename.",
-                        kind: "warning",
-                    },
-                    "conversation",
-                );
-                return;
+            const taken = new Set(sessions.map((s) => s.name.toLowerCase()));
+            const base = "New Conversation";
+            let name = base;
+            let suffix = 2;
+            while (taken.has(name.toLowerCase())) {
+                name = `${base} ${suffix++}`;
             }
-            targetId = this.session.sessionId;
-            isCurrent = true;
+            await this.transitionToSessionFromWebview(
+                name,
+                "create",
+                undefined,
+                `Created conversation "${name}" but failed to switch to it before deleting the current conversation.`,
+                false,
+            );
         }
 
-        const newNorm = normalizeName(trimmedNew);
-        const allSessions = await this.connection.listSessions();
-        const collision = allSessions.find(
+        await this.connection.deleteSession(currentId);
+        if (this.ephemeralSessionId === currentId) {
+            this.ephemeralSessionId = undefined;
+        }
+        vscode.window.showInformationMessage(
+            `Deleted conversation "${currentName}"`,
+        );
+        await this.postSessionList();
+    }
+
+    private async renameSessionFromWebview(
+        sessionId: string,
+        newName: string,
+    ): Promise<void> {
+        if (!this.connection) {
+            throw new Error("Not connected to agent server.");
+        }
+        const trimmed = newName.trim();
+        if (!trimmed) {
+            throw new Error("Conversation name cannot be empty.");
+        }
+
+        const sessions = await this.connection.listSessions();
+        const target = sessions.find((s) => s.sessionId === sessionId);
+        if (!target) {
+            throw new Error("Selected conversation no longer exists.");
+        }
+
+        const collision = sessions.find(
             (s) =>
-                s.sessionId !== targetId && normalizeName(s.name) === newNorm,
+                s.sessionId !== sessionId &&
+                s.name.toLowerCase() === trimmed.toLowerCase(),
         );
         if (collision) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: `A conversation named <b>${escapeHtml(
-                        trimmedNew,
-                    )}</b> already exists.`,
-                    kind: "warning",
-                },
-                "conversation",
+            throw new Error(
+                `A conversation named "${trimmed}" already exists.`,
             );
-            return;
         }
 
-        await this.connection.renameSession(targetId, trimmedNew);
-
-        // renameSession doesn't push a name update back, so refresh manually
-        // when the current session was renamed.
-        if (isCurrent && this.session) {
-            this.nameOverride = trimmedNew;
+        await this.connection.renameSession(sessionId, trimmed);
+        if (this.session?.sessionId === sessionId) {
+            this.nameOverride = trimmed;
             this.broadcastToWebviews({
                 type: "status",
                 connected: true,
-                sessionId: this.session.sessionId,
+                sessionId,
                 sessionName: this.getDisplayName(),
             });
             this.onStatusChanged?.();
         }
-
-        this.overwriteActionBubble(
-            requestId,
-            {
-                type: "html",
-                content: `✅ Renamed conversation to <b>${escapeHtml(
-                    trimmedNew,
-                )}</b>`,
-                kind: "info",
-            },
-            "conversation",
-        );
+        await this.postSessionList();
     }
 
-    private async manageDeleteConversation(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) return;
-        const trimmed = name?.trim();
-        if (!trimmed) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: "A conversation name is required to delete.",
-                    kind: "warning",
-                },
-                "conversation",
-            );
+    private async deleteSessionFromWebview(sessionId: string): Promise<void> {
+        if (!this.connection) {
+            throw new Error("Not connected to agent server.");
+        }
+        if (!sessionId) {
+            throw new Error("No conversation selected.");
+        }
+        if (this.session?.sessionId === sessionId) {
+            await this.deleteCurrentSessionFromWebview();
             return;
         }
-        const targetNorm = normalizeName(trimmed);
+
         const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => normalizeName(s.name) === targetNorm,
+        const target = sessions.find((s) => s.sessionId === sessionId);
+        if (!target) {
+            throw new Error("Selected conversation no longer exists.");
+        }
+
+        const targetName = target.name || target.sessionId.substring(0, 8);
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete conversation "${targetName}"? This cannot be undone.`,
+            { modal: true },
+            "Delete",
         );
-        if (!match) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: `Conversation <b>${escapeHtml(
-                        trimmed,
-                    )}</b> not found.`,
-                    kind: "warning",
-                },
-                "conversation",
-            );
+        if (confirm !== "Delete") {
             return;
         }
-        if (match.sessionId === this.session?.sessionId) {
-            this.overwriteActionBubble(
-                requestId,
-                {
-                    type: "html",
-                    content: `Cannot delete the currently active conversation <b>${escapeHtml(
-                        match.name,
-                    )}</b>. Switch to a different conversation first.`,
-                    kind: "warning",
-                },
-                "conversation",
-            );
-            return;
+
+        await this.connection.deleteSession(sessionId);
+        await this.postSessionList();
+    }
+
+    // Map a structured ConversationActionResult to the bridge's two
+    // display surfaces — inline action-bubble overwrite for non-switching
+    // results, conversation-notification banner for switching results
+    // (the request bubble belongs to the old conversation and gets
+    // cleared on sessionChanged).
+    private renderManageResult(
+        requestId: any,
+        result: ConversationActionResult,
+        _switchTargetName?: string,
+    ): void {
+        switch (result.kind) {
+            case "ok":
+                if (result.switched) {
+                    this.displayConversationNotification(
+                        htmlizeManageMessage(result.message),
+                        "info",
+                    );
+                } else {
+                    this.overwriteActionBubble(
+                        requestId,
+                        {
+                            type: "html",
+                            content: htmlizeManageMessage(result.message),
+                            kind: "info",
+                        },
+                        "conversation",
+                    );
+                }
+                return;
+            case "warning":
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: htmlizeManageMessage(result.message),
+                        kind: "warning",
+                    },
+                    "conversation",
+                );
+                return;
+            case "error":
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: `❌ ${htmlizeManageMessage(result.message)}`,
+                        kind: "error",
+                    },
+                    "conversation",
+                );
+                return;
+            case "cancelled":
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: "Cancelled.",
+                        kind: "info",
+                    },
+                    "conversation",
+                );
+                return;
+            case "info":
+                this.overwriteActionBubble(
+                    requestId,
+                    {
+                        type: "html",
+                        content: `Current conversation: <b>${escapeHtml(result.name)}</b> (${escapeHtml(result.conversationId)})`,
+                        kind: "info",
+                    },
+                    "conversation",
+                );
+                return;
+            case "list": {
+                let html: string;
+                if (result.conversations.length === 0) {
+                    html = "No conversations found.";
+                } else {
+                    const rows = result.conversations.map((s) => {
+                        const isCurrent =
+                            s.conversationId === result.currentConversationId;
+                        const marker = isCurrent ? " ← <b>current</b>" : "";
+                        const date = new Date(s.createdAt).toLocaleDateString();
+                        return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${escapeHtml(date)}${marker}`;
+                    });
+                    html = `<b>Conversations (${result.conversations.length})</b><br>${rows.join("<br>")}`;
+                }
+                this.overwriteActionBubble(
+                    requestId,
+                    { type: "html", content: html, kind: "info" },
+                    "conversation",
+                );
+                return;
+            }
         }
-        await this.connection.deleteSession(match.sessionId);
-        this.onStatusChanged?.();
-        this.overwriteActionBubble(
-            requestId,
-            {
-                type: "html",
-                content: `🗑️ Deleted conversation <b>${escapeHtml(match.name)}</b>`,
-                kind: "info",
-            },
-            "conversation",
-        );
     }
 
     public notifyDemoState(
@@ -2383,11 +2670,10 @@ export class AgentServerBridge {
         if (this.reconnectTimer) {
             return;
         }
-        this.reconnectAttempt++;
-        // Backoff: 4s, 6s, 8s, ... capped at 30s. Quick first retries
-        // recover fast when the server restarts; the cap keeps the
-        // long-tail polite for genuinely-down servers.
-        const backoff = Math.min(30, 2 + this.reconnectAttempt * 2);
+        // Seconds the shared exponential backoff says to wait before the next
+        // attempt. The countdown ribbon and reconnect timer below run in
+        // seconds, so round the millisecond delay to whole seconds.
+        const backoff = Math.round(this.reconnectBackoff.next() / 1000);
         this.reconnectRemainingSec = backoff;
         this.broadcastReconnect("waiting");
         if (this.reconnectCountdown) {
@@ -2418,7 +2704,7 @@ export class AgentServerBridge {
         this.broadcastToWebviews({
             type: "reconnectStatus",
             phase,
-            attempt: this.reconnectAttempt,
+            attempt: this.reconnectBackoff.attempt,
             secondsRemaining:
                 phase === "waiting" ? this.reconnectRemainingSec : undefined,
             error: this.lastConnectError,
@@ -2435,7 +2721,7 @@ export class AgentServerBridge {
             this.reconnectCountdown = undefined;
         }
         this.reconnectRemainingSec = undefined;
-        this.reconnectAttempt = 0;
+        this.reconnectBackoff.reset();
         this.lastConnectError = undefined;
         this.broadcastReconnect("cleared");
     }

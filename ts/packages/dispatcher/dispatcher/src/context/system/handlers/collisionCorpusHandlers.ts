@@ -39,7 +39,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 
 import {
     CommandHandlerContext,
@@ -55,6 +55,8 @@ import {
 import {
     runTranslationProbe,
     type TranslationCorpus,
+    type TranslationProbeFile,
+    type TranslationProbeRow,
     type UserContextMode,
 } from "../../../translation/translationProbeRunner.js";
 import type { UserContext } from "../../../translation/userContext.js";
@@ -265,6 +267,7 @@ const DEFAULT_FILES = {
     probe: "probe-results.json",
     reclassified: "probe-results-reclassified.json",
     html: "collisions-viz.html",
+    translator: "translation-results.json",
 } as const;
 
 // =============================================================================
@@ -2265,6 +2268,12 @@ interface VizCell {
         string,
         { misroute: number; tight: number; clean: number }
     >;
+    /** Of this cell's misrouted phrases, how many the LLM *translator* also
+     *  routed away from the expected action (ranker MISROUTE + translator
+     *  MISROUTE). Present only when the visualize command was given
+     *  translator-probe data; undefined otherwise. Powers the
+     *  "translator-confirmed" source view. */
+    translatorConfirmedCount?: number | undefined;
 }
 interface VizSankeyEdge {
     expected: string;
@@ -2279,6 +2288,12 @@ interface VizSankeyEdge {
     sources: ("corpus" | "similarity")[];
     /** Per-style breakdown of `count`. Sums across keys reproduces `count`. */
     countsByStyle?: Record<string, number>;
+    /** Of this edge's misrouted phrases, how many the LLM *translator* also
+     *  routed away from the expected action (ranker MISROUTE + translator
+     *  MISROUTE = the "translator-confirmed" hard-collision case). Present
+     *  only when the visualize command was given translator-probe data;
+     *  undefined otherwise. */
+    translatorConfirmedCount?: number | undefined;
 }
 interface VizPayload {
     summary: {
@@ -2299,6 +2314,20 @@ interface VizPayload {
               pairCount: number;
           }
         | undefined;
+    /** Present only when the visualize command was given translator-probe
+     *  data. Drives the "translator-confirmed" source view and its banner
+     *  note. When absent, that source option is disabled in the viz. */
+    translator?:
+        | {
+              /** Corpus file the translator outcomes were read from. */
+              corpus: string;
+              /** Phrases that joined to a ranker MISROUTE edge and where the
+               *  translator also routed wrong (the CONFIRMED total). */
+              confirmedPhrases: number;
+              /** Distinct misroute edges with at least one CONFIRMED phrase. */
+              confirmedEdges: number;
+          }
+        | undefined;
 }
 
 interface SimilarityEdge {
@@ -2313,8 +2342,54 @@ function buildVisualizationPayload(
     sankeyTop: number,
     similarityEdges: SimilarityEdge[] = [],
     similarityMeta?: { strategy: string; threshold: number },
+    translatorData?: { results: TranslationProbeRow[]; corpus: string },
 ): VizPayload {
     const results = probeFile.results;
+
+    // -----------------------------------------------------------------
+    // Translator cross-tab lookup. When translator-probe data is supplied,
+    // index it by (expectedSchema, expectedAction, phraseText) → translator
+    // verdict so we can mark each ranker MISROUTE phrase as "translator
+    // also wrong" (CONFIRMED) or not. Mirrors translatorMerge.ts's join
+    // key + normalized-action equality used by the neighborhoods viz.
+    // -----------------------------------------------------------------
+    function txKey(schema: string, action: string, phrase: string): string {
+        return `${schema}\u0000${action}\u0000${phrase}`;
+    }
+    function normTxAction(name: string): string {
+        return name.replace(/Action$/i, "").toLowerCase();
+    }
+    // value `true` = translator routed wrong (MISROUTE relative to expected);
+    // `false` = translator picked the expected action. Phrases whose
+    // translator outcome wasn't a clean CLEAN/MISROUTE (CLARIFY/INVALID/
+    // ERROR) are omitted so they don't inflate either side.
+    const txWrongByPhrase = translatorData
+        ? new Map<string, boolean>()
+        : undefined;
+    if (translatorData && txWrongByPhrase) {
+        for (const row of translatorData.results) {
+            if (
+                row.chosenSchema === undefined ||
+                row.chosenAction === undefined
+            )
+                continue;
+            if (row.outcome !== "CLEAN" && row.outcome !== "MISROUTE") continue;
+            const wrong = !(
+                row.chosenSchema === row.expectedSchema &&
+                normTxAction(row.chosenAction) ===
+                    normTxAction(row.expectedAction)
+            );
+            txWrongByPhrase.set(
+                txKey(row.expectedSchema, row.expectedAction, row.phraseText),
+                wrong,
+            );
+        }
+    }
+    // Accumulators (only populated when translator data is present).
+    const txConfirmedByEdge = txWrongByPhrase
+        ? new Map<string, number>()
+        : undefined;
+    let txConfirmedPhrases = 0;
 
     interface Cell {
         CLEAN: number;
@@ -2327,6 +2402,8 @@ function buildVisualizationPayload(
             string,
             { CLEAN: number; TIGHT: number; MISROUTE: number }
         >;
+        /** Misrouted phrases in this cell the translator also got wrong. */
+        translatorConfirmed: number;
     }
     const schemaMatrix = new Map<string, Map<string, Cell>>();
     function bumpMatrix(
@@ -2349,6 +2426,7 @@ function buildVisualizationPayload(
                 total: 0,
                 edges: new Map(),
                 byStyle: new Map(),
+                translatorConfirmed: 0,
             };
             row.set(colSchema, cell);
         }
@@ -2416,6 +2494,24 @@ function buildVisualizationPayload(
             });
             const inCellKey = `${expAction}${SEP}${actAction}`;
             cell.edges.set(inCellKey, (cell.edges.get(inCellKey) ?? 0) + 1);
+
+            // Translator cross-tab: did the LLM translator *also* route this
+            // phrase away from the expected action? If so it's a CONFIRMED
+            // hard collision — bump the per-edge + per-cell counters that
+            // back the "translator-confirmed" source view.
+            if (txWrongByPhrase && txConfirmedByEdge) {
+                const wrong = txWrongByPhrase.get(
+                    txKey(expSchema, expAction, r.phraseText),
+                );
+                if (wrong === true) {
+                    txConfirmedByEdge.set(
+                        edgeK,
+                        (txConfirmedByEdge.get(edgeK) ?? 0) + 1,
+                    );
+                    cell.translatorConfirmed++;
+                    txConfirmedPhrases++;
+                }
+            }
         }
     }
 
@@ -2579,6 +2675,9 @@ function buildVisualizationPayload(
                 sameAgent: r.schema === c.schema,
                 topActionEdges,
                 ...(countsByStyle && { countsByStyle }),
+                ...(txWrongByPhrase && {
+                    translatorConfirmedCount: cell?.translatorConfirmed ?? 0,
+                }),
             });
         }
     }
@@ -2606,6 +2705,9 @@ function buildVisualizationPayload(
                     ? ["corpus", "similarity"]
                     : ["corpus"]) as ("corpus" | "similarity")[],
                 ...(countsByStyle && { countsByStyle }),
+                ...(txConfirmedByEdge && {
+                    translatorConfirmedCount: txConfirmedByEdge.get(k) ?? 0,
+                }),
             };
         })
         .sort((a, b) => b.count - a.count);
@@ -2664,6 +2766,16 @@ function buildVisualizationPayload(
                   pairCount: similarityEdges.length,
               }
             : undefined,
+        translator:
+            txConfirmedByEdge && translatorData
+                ? {
+                      corpus: translatorData.corpus,
+                      confirmedPhrases: txConfirmedPhrases,
+                      confirmedEdges: [...txConfirmedByEdge.values()].filter(
+                          (n) => n > 0,
+                      ).length,
+                  }
+                : undefined,
     };
 }
 
@@ -2827,9 +2939,11 @@ const VIZ_HTML_PREFIX = `<!doctype html>
         <option value="corpus" selected>corpus (misroute phrases)</option>
         <option value="similarity">similarity (embedding pairs)</option>
         <option value="both">both (corpus AND similarity)</option>
+        <option value="tx-confirmed">translator-confirmed</option>
       </select>
     </label>
     <span id="simMeta" class="muted" style="color:var(--muted);font-size:12px;"></span>
+    <span id="txMeta" class="muted" style="color:var(--muted);font-size:12px;"></span>
   </div>
   <div class="style-chips" id="styleChips" style="display:none;">
     <span class="label">Phrase styles (applies to every chart on this page):</span>
@@ -2844,6 +2958,15 @@ const VIZ_HTML_PREFIX = `<!doctype html>
     <div class="help-body">
       <h3>What's being measured</h3>
       <p>Each input row is one phrase generated by an LLM for a specific intended action, replayed through the embedding ranker (the <code>semanticSearchActionSchema</code> call <code>llmSelect</code> uses at runtime). A <b>MISROUTE</b> means the ranker's top-1 candidate wasn't the intended action. The three views below slice the same MISROUTE pile three ways.</p>
+
+      <h3>The source filter</h3>
+      <p>The <b>Source</b> dropdown in the header re-scopes every chart on the page:</p>
+      <ul>
+        <li><b>corpus</b> &mdash; misroute phrases from the probe corpus (the default).</li>
+        <li><b>similarity</b> &mdash; cross-schema action pairs the embedding scan flagged above threshold.</li>
+        <li><b>both</b> &mdash; pairs supported by corpus misroutes <i>and</i> a similarity hit.</li>
+        <li><b>translator-confirmed</b> &mdash; corpus misroutes where the LLM <i>translator</i> also routed the phrase away from the expected action (ranker AND translator both wrong). These are the genuine hard collisions worth explicit policy. Available only when the visualize command was given translator-probe data (<code>@collision corpus translate</code> writes <code>translation-results.json</code>, then <code>visualize</code> folds it in); otherwise the option is disabled. Edges carrying such phrases show a red <b>🛑N</b> badge in the table.</li>
+      </ul>
 
       <h3>The header pills</h3>
       <p>Top-line counts of CLEAN / TIGHT / MISROUTE phrases:</p>
@@ -3069,6 +3192,23 @@ if (PAYLOAD.similarity) {
     document.getElementById("simMeta").textContent = "similarity overlay: not available (run with similarity enabled)";
 }
 
+// Translator overlay meta + option gating. The "translator-confirmed"
+// source is meaningful only when a translator-probe corpus was folded in
+// (each ranker MISROUTE phrase cross-tabbed against the LLM translator's
+// pick). When absent, disable the option and explain how to enable it.
+if (PAYLOAD.translator) {
+    const t = PAYLOAD.translator;
+    document.getElementById("txMeta").innerHTML =
+        \`translator: <b>\${t.confirmedPhrases}</b> confirmed phrase(s) across \${t.confirmedEdges} edge(s)\`;
+} else {
+    const sel = document.getElementById("sourceFilter");
+    for (const opt of sel.options) {
+        if (opt.value === "tx-confirmed") opt.disabled = true;
+    }
+    document.getElementById("txMeta").textContent =
+        "translator overlay: not available (run @collision corpus translate, then visualize)";
+}
+
 // Source filter — drives what the heatmap colors by, what the sankey
 // shows, and what the table lists. Defaults to "corpus" (preserves the
 // pre-similarity-overlay behavior).
@@ -3088,12 +3228,14 @@ document.getElementById("sourceFilter").addEventListener("change", (evt) => {
 function cellMetric(c) {
     // Misroute count is style-filterable; similarity/both pair counts come
     // from the embedding scan and have no per-style breakdown, so they
-    // pass through unchanged.
+    // pass through unchanged. translator-confirmed counts likewise have no
+    // per-style breakdown — they reflect the LLM translator's verdict.
     const mis = cellMisroute(c);
     switch (currentSource) {
         case "similarity": return c.similarityPairs;
         case "both":       return c.bothPairs;
         case "all":        return mis + c.similarityPairs - c.bothPairs;
+        case "tx-confirmed": return c.translatorConfirmedCount || 0;
         case "corpus":
         default:           return mis;
     }
@@ -3190,6 +3332,9 @@ function renderSankey() {
         return;
     } else if (currentSource === "both") {
         baseEdges = all.filter(e => e.sources.includes("corpus") && e.sources.includes("similarity"));
+    } else if (currentSource === "tx-confirmed") {
+        // Corpus edges the translator also got wrong on ≥1 phrase.
+        baseEdges = all.filter(e => e.sources.includes("corpus") && (e.translatorConfirmedCount || 0) > 0);
     } else {
         // "corpus" or "all" — show all corpus-tagged sankey edges.
         baseEdges = all.filter(e => e.sources.includes("corpus"));
@@ -3261,6 +3406,7 @@ function edgeMatchesSource(e) {
         case "corpus":     return hasCor && !hasSim;
         case "similarity": return hasSim && !hasCor;
         case "both":       return hasCor && hasSim;
+        case "tx-confirmed": return hasCor && (e.translatorConfirmedCount || 0) > 0;
         case "all":
         default:           return true;
     }
@@ -3301,6 +3447,13 @@ function renderTable() {
             : (hasSim
                 ? \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#c084fc;font-weight:600;">sim</span>\`
                 : \`<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#fb923c;font-weight:600;">corpus</span>\`);
+        // Translator-confirmed badge: how many of this edge's misroutes the
+        // LLM translator also got wrong. Only shown when translator data was
+        // folded in and this edge has ≥1 such phrase.
+        const txConfirmed = e.translatorConfirmedCount || 0;
+        const txBadge = (PAYLOAD.translator && txConfirmed > 0)
+            ? \` <span title="ranker AND translator both wrong on \${txConfirmed} phrase(s)" style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;color:#0f1217;background:#ef4444;font-weight:600;">🛑\${txConfirmed}</span>\`
+            : "";
         const liveCount = edgeCount(e);
         const countCell = liveCount > 0 ? liveCount : "·";
         const scoreCell = e.similarityScore !== undefined
@@ -3309,7 +3462,7 @@ function renderTable() {
         tr.innerHTML =
             \`<td class="count">\${countCell}</td>\` +
             \`<td>\${scoreCell}</td>\` +
-            \`<td>\${sourceBadge}</td>\` +
+            \`<td>\${sourceBadge}\${txBadge}</td>\` +
             \`<td class="action">\${escapeHtml(e.expected)}</td>\` +
             \`<td class="muted">→</td>\` +
             \`<td class="action">\${escapeHtml(e.actual)}</td>\`;
@@ -4251,6 +4404,18 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
                 type: "boolean",
                 default: false,
             },
+            translator: {
+                description:
+                    "Translator-probe results JSON to overlay (enables the 'translator-confirmed' source filter). Default: <workdir>/translation-results.json when present. Use --no-translator to skip.",
+                type: "string",
+                optional: true,
+            },
+            "no-translator": {
+                description:
+                    "Skip the translator overlay even if translation-results.json is present",
+                type: "boolean",
+                default: false,
+            },
             workdir: {
                 description:
                     "Directory for default-named files. Default: <instanceDir>/collisions",
@@ -4331,11 +4496,52 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
             });
         }
 
+        // Translator overlay (optional). Enables the "translator-confirmed"
+        // source filter by joining each ranker MISROUTE phrase with the LLM
+        // translator's pick for the same phrase. Best-effort: when the
+        // default file is absent and no explicit path was given, the viz is
+        // built without it (the source option self-disables client-side).
+        const skipTx = params.flags["no-translator"] ?? false;
+        let txData:
+            | { results: TranslationProbeRow[]; corpus: string }
+            | undefined;
+        let txNote = "";
+        if (!skipTx) {
+            const txPathExplicit = params.flags.translator !== undefined;
+            const txPath = defaultPath(
+                systemContext,
+                params.flags.translator,
+                workdir,
+                DEFAULT_FILES.translator,
+            );
+            if (fs.existsSync(txPath)) {
+                try {
+                    const txFile = JSON.parse(
+                        fs.readFileSync(txPath, "utf8"),
+                    ) as TranslationProbeFile;
+                    txData = { results: txFile.results, corpus: txPath };
+                } catch (err) {
+                    displayWarn(
+                        `Failed to read translator results ${txPath}: ${
+                            err instanceof Error ? err.message : String(err)
+                        }. Building without the translator overlay.`,
+                        context,
+                    );
+                }
+            } else if (txPathExplicit) {
+                displayWarn(
+                    `Translator results not found: ${txPath}. Building without the translator overlay (run \`@collision corpus translate\` to populate).`,
+                    context,
+                );
+            }
+        }
+
         const payload = buildVisualizationPayload(
             probeFile,
             sankeyTop,
             simEdges,
             simMeta,
+            txData,
         );
         const html = buildVisualizationHTML(payload);
         fs.writeFileSync(outPath, html);
@@ -4344,6 +4550,15 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
         const simNote = skipSim
             ? '<div style="font-size:11px;color:#c80;margin-top:4px;">similarity overlay disabled (--no-similarity)</div>'
             : `<div style="font-size:11px;color:#777;margin-top:4px;">similarity overlay: ${simEdges.length} pair(s) at threshold ${simThreshold} (strategy <code>${escapeShellHtml(simStrategy)}</code>)</div>`;
+        if (skipTx) {
+            txNote =
+                '<div style="font-size:11px;color:#c80;margin-top:4px;">translator overlay disabled (--no-translator)</div>';
+        } else if (payload.translator) {
+            txNote = `<div style="font-size:11px;color:#777;margin-top:4px;">translator overlay: ${payload.translator.confirmedPhrases} confirmed phrase(s) across ${payload.translator.confirmedEdges} edge(s)</div>`;
+        } else {
+            txNote =
+                '<div style="font-size:11px;color:#777;margin-top:4px;">translator overlay: not available (run <code>@collision corpus translate</code> to enable the translator-confirmed filter)</div>';
+        }
         const skipNote = simSkipped.length
             ? `<div style="font-size:11px;color:#c80;margin-top:4px;">${simSkipped.length} schema(s) failed to load: ${simSkipped.map((s) => `<code>${escapeShellHtml(s.schemaName)}</code>`).join(", ")}</div>`
             : "";
@@ -4354,6 +4569,7 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
             `<div style="font-size:12px;">→ <code>${escapeShellHtml(outPath)}</code></div>` +
             simNote +
             skipNote +
+            txNote +
             `<div style="font-size:11px;color:#777;margin-top:4px;">Open in any browser.</div>` +
             `</div>`;
         const text = [
@@ -4362,6 +4578,11 @@ class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
             skipSim
                 ? `  similarity overlay: disabled`
                 : `  similarity overlay: ${simEdges.length} pair(s) at threshold ${simThreshold}`,
+            skipTx
+                ? `  translator overlay: disabled`
+                : payload.translator
+                  ? `  translator overlay: ${payload.translator.confirmedPhrases} confirmed phrase(s) across ${payload.translator.confirmedEdges} edge(s)`
+                  : `  translator overlay: not available`,
             `  Open in any browser.`,
         ];
         context.actionIO.appendDisplay({
@@ -4454,6 +4675,7 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
             probe: path.join(workdir, DEFAULT_FILES.probe),
             reclassified: path.join(workdir, DEFAULT_FILES.reclassified),
             html: path.join(workdir, DEFAULT_FILES.html),
+            translator: path.join(workdir, DEFAULT_FILES.translator),
         };
 
         // Verify the immediate predecessor's output exists when resuming.
@@ -4595,17 +4817,44 @@ class CollisionCorpusRunCommandHandler implements CommandHandler {
                     DEFAULT_VIZ_SIMILARITY_THRESHOLD,
                     (msg) => displayStatus(msg, context),
                 );
+                // Best-effort translator overlay: if a translate run already
+                // wrote translation-results.json into this workdir, fold it
+                // in so the hotspot HTML offers the translator-confirmed
+                // source filter. Absent file → viz without it (option
+                // self-disables client-side).
+                let txData:
+                    | { results: TranslationProbeRow[]; corpus: string }
+                    | undefined;
+                if (fs.existsSync(files.translator)) {
+                    try {
+                        const txFile = JSON.parse(
+                            fs.readFileSync(files.translator, "utf8"),
+                        ) as TranslationProbeFile;
+                        txData = {
+                            results: txFile.results,
+                            corpus: files.translator,
+                        };
+                    } catch {
+                        // Ignore a malformed translator file in the pipeline;
+                        // the standalone `visualize` command surfaces the
+                        // parse error explicitly.
+                    }
+                }
                 const payload = buildVisualizationPayload(
                     probeFile,
                     sankeyTop,
                     simResult.edges,
                     simResult.meta,
+                    txData,
                 );
                 const html = buildVisualizationHTML(payload);
                 fs.writeFileSync(files.html, html);
                 const sizeKB = (fs.statSync(files.html).size / 1024).toFixed(0);
+                const txStep = payload.translator
+                    ? ` Translator overlay: ${payload.translator.confirmedPhrases} confirmed phrase(s).`
+                    : "";
                 displaySuccess(
-                    `Step 4/4 visualize: ${files.html} (${sizeKB} KB) — open in browser. Similarity overlay: ${simResult.edges.length} pair(s).`,
+                    `Step 4/4 visualize: ${files.html} (${sizeKB} KB) — open in browser. Similarity overlay: ${simResult.edges.length} pair(s).${txStep}`,
                     context,
                 );
             }

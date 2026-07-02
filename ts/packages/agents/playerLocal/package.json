@@ -33,11 +33,11 @@
     "play-sound": "^1.1.6"
   },
   "devDependencies": {
+    "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^22.13.1",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "jest": "^29.7.0",
     "rimraf": "^6.0.1",
@@ -47,7 +47,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [

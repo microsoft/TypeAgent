@@ -23,7 +23,15 @@ type RpcReturn<
     InvokeTargetFunctions extends RpcInvokeFunctions,
     CallTargetFunctions extends RpcCallFunctions,
 > = RpcFuncTypes<"invoke", InvokeTargetFunctions> &
-    RpcFuncTypes<"send", CallTargetFunctions>;
+    RpcFuncTypes<"send", CallTargetFunctions> & {
+        rebind(channel: RpcChannel): void;
+    };
+
+export type RpcOptions = {
+    // When true, a disconnect rejects in-flight calls but leaves invoke/send
+    // intact so the rpc can be reattached to a fresh channel via rebind().
+    rebindable?: boolean;
+};
 
 export function createRpc<
     InvokeTargetFunctions extends RpcInvokeFunctions = {},
@@ -35,6 +43,7 @@ export function createRpc<
     channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
+    options?: RpcOptions,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
     const debugIn = registerDebug(`typeagent:${name}:rpc:in`);
     const debugOut = registerDebug(`typeagent:${name}:rpc:out`);
@@ -47,12 +56,26 @@ export function createRpc<
         }
     >();
 
+    const rebindable = options?.rebindable ?? false;
+    let currentChannel: RpcChannel = channel;
+    let connected = true;
+    let bindGeneration = 0;
+    const errorFunc = () => {
+        throw new Error("Agent channel disconnected");
+    };
+    const rejectAllPending = (reason: string) => {
+        for (const r of pending.values()) {
+            r.reject(new Error(reason));
+        }
+        pending.clear();
+    };
+
     const out = (
         message: RpcMessage,
         cbErr: (err: Error | null) => void = (e) => {},
     ) => {
         debugOut(message);
-        channel.send(message, cbErr);
+        currentChannel.send(message, cbErr);
     };
     const cb = (message: any) => {
         debugIn(message);
@@ -125,20 +148,26 @@ export function createRpc<
             r.reject(new Error(message.error));
         }
     };
-    channel.on("message", cb);
-    channel.once("disconnect", () => {
-        debugError("disconnect");
-        channel.off("message", cb);
-        const errorFunc = () => {
-            throw new Error("Agent channel disconnected");
-        };
-        for (const r of pending.values()) {
-            r.reject(new Error("Agent channel disconnected"));
-        }
-        pending.clear();
-        rpc.invoke = errorFunc;
-        rpc.send = errorFunc;
-    });
+    const bindChannel = (newChannel: RpcChannel) => {
+        currentChannel = newChannel;
+        connected = true;
+        const generation = ++bindGeneration;
+        newChannel.on("message", cb);
+        newChannel.once("disconnect", () => {
+            // Ignore a superseded binding: a later rebind already moved on.
+            if (generation !== bindGeneration) {
+                return;
+            }
+            debugError("disconnect");
+            newChannel.off("message", cb);
+            connected = false;
+            rejectAllPending("Agent channel disconnected");
+            if (!rebindable) {
+                rpc.invoke = errorFunc;
+                rpc.send = errorFunc;
+            }
+        });
+    };
 
     let nextCallId = 0;
     const rpc = {
@@ -146,6 +175,11 @@ export function createRpc<
             name: keyof InvokeTargetFunctions,
             ...args: any[]
         ): Promise<any> {
+            // Fail fast in a rebindable rpc's disconnected window (a poisoned
+            // rpc never reaches here — invoke is replaced outright).
+            if (!connected) {
+                throw new Error("Agent channel disconnected");
+            }
             const message: InvokeMessage = {
                 type: "invoke",
                 callId: nextCallId++,
@@ -164,6 +198,9 @@ export function createRpc<
             });
         },
         send: (name: keyof CallTargetFunctions, ...args: any[]) => {
+            if (!connected) {
+                throw new Error("Agent channel disconnected");
+            }
             out(
                 {
                     type: "call",
@@ -178,7 +215,16 @@ export function createRpc<
                 },
             );
         },
+        rebind: (newChannel: RpcChannel) => {
+            if (!rebindable) {
+                throw new Error("rpc was not created as rebindable");
+            }
+            currentChannel.off("message", cb);
+            rejectAllPending("Agent channel rebound");
+            bindChannel(newChannel);
+        },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
+    bindChannel(channel);
     return rpc;
 }
 

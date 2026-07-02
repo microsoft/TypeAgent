@@ -12,6 +12,7 @@ import {
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
+import type { StdioOptions } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -23,8 +24,10 @@ import {
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
     DispatcherConnectOptions,
+    CreateConversationOptions,
     ConversationInfo,
     JoinConversationResult,
+    RenameConversationOptions,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -104,13 +107,52 @@ export type AgentServerConnection = {
         options?: DispatcherConnectOptions,
     ): Promise<ConversationDispatcher>;
     leaveConversation(conversationId: string): Promise<void>;
-    createConversation(name: string): Promise<ConversationInfo>;
+    createConversation(
+        name: string,
+        options?: CreateConversationOptions,
+    ): Promise<ConversationInfo>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
-    renameConversation(conversationId: string, newName: string): Promise<void>;
+    renameConversation(
+        conversationId: string,
+        newName: string,
+        options?: RenameConversationOptions,
+    ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
+    /**
+     * Reopen the underlying transport and rebind the control rpc onto it,
+     * reusing this connection object instead of building a new one. Returns
+     * false when the transport can't be reopened (caller retries). Per-
+     * conversation channels are dropped — the caller must re-join.
+     */
+    reconnect(): Promise<boolean>;
     close(): Promise<void>;
 };
+
+/**
+ * Options for connecting to the agent-server WebSocket. Use `headers` to pass
+ * tunnel authorization tokens when connecting through a private Dev Tunnel.
+ */
+export interface AgentServerConnectOptions {
+    /** Extra headers sent during the WebSocket upgrade handshake. */
+    headers?: Record<string, string>;
+}
+
+/**
+ * Build the connect options (including tunnel token header) from environment
+ * variables. Returns undefined if no tunnel token is configured.
+ *
+ * Reads: `TYPEAGENT_TUNNEL_TOKEN`
+ */
+export function getConnectOptionsFromEnv():
+    | AgentServerConnectOptions
+    | undefined {
+    const token = process.env.TYPEAGENT_TUNNEL_TOKEN;
+    if (!token) return undefined;
+    return {
+        headers: { "X-Tunnel-Authorization": `tunnel ${token}` },
+    };
+}
 
 /**
  * Build an {@link AgentServerConnection} over an already-connected channel
@@ -129,10 +171,17 @@ export type AgentServerConnection = {
 export function createAgentServerConnection(
     channel: ChannelProviderAdapter,
     closeTransport: () => void,
+    reopenTransport?: () => Promise<ChannelProviderAdapter | undefined>,
 ): AgentServerConnection {
+    // The current transport channel; swapped on reconnect(). All per-call
+    // channel work goes through currentChannel so it follows reconnects.
+    let currentChannel = channel;
     const rpc = createRpc<AgentServerInvokeFunctions>(
         "agent-server:client",
-        channel.createChannel(AgentServerChannelName),
+        currentChannel.createChannel(AgentServerChannelName),
+        undefined,
+        undefined,
+        { rebindable: true },
     );
 
     // Track joined conversations for cleanup on close
@@ -173,7 +222,9 @@ export function createAgentServerConnection(
                 notifyCommandComplete,
                 notifyRequestCancelled,
             } = createDispatcherRpcClient(
-                channel.createChannel(getDispatcherChannelName(conversationId)),
+                currentChannel.createChannel(
+                    getDispatcherChannelName(conversationId),
+                ),
                 result.connectionId,
             );
 
@@ -182,7 +233,9 @@ export function createAgentServerConnection(
                     notifyCommandComplete,
                     notifyRequestCancelled,
                 }),
-                channel.createChannel(getClientIOChannelName(conversationId)),
+                currentChannel.createChannel(
+                    getClientIOChannelName(conversationId),
+                ),
             );
 
             // Override close to leave the conversation rather than close the WebSocket
@@ -210,13 +263,20 @@ export function createAgentServerConnection(
                 return;
             }
             joinedConversations.delete(conversationId);
-            channel.deleteChannel(getDispatcherChannelName(conversationId));
-            channel.deleteChannel(getClientIOChannelName(conversationId));
+            currentChannel.deleteChannel(
+                getDispatcherChannelName(conversationId),
+            );
+            currentChannel.deleteChannel(
+                getClientIOChannelName(conversationId),
+            );
             await rpc.invoke("leaveConversation", conversationId);
         },
 
-        async createConversation(name: string): Promise<ConversationInfo> {
-            return rpc.invoke("createConversation", name);
+        async createConversation(
+            name: string,
+            options?: CreateConversationOptions,
+        ): Promise<ConversationInfo> {
+            return rpc.invoke("createConversation", name, options);
         },
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {
@@ -226,8 +286,14 @@ export function createAgentServerConnection(
         async renameConversation(
             conversationId: string,
             newName: string,
+            options?: RenameConversationOptions,
         ): Promise<void> {
-            return rpc.invoke("renameConversation", conversationId, newName);
+            return rpc.invoke(
+                "renameConversation",
+                conversationId,
+                newName,
+                options,
+            );
         },
 
         async deleteConversation(conversationId: string): Promise<void> {
@@ -235,8 +301,12 @@ export function createAgentServerConnection(
             const entry = joinedConversations.get(conversationId);
             if (entry !== undefined) {
                 joinedConversations.delete(conversationId);
-                channel.deleteChannel(getDispatcherChannelName(conversationId));
-                channel.deleteChannel(getClientIOChannelName(conversationId));
+                currentChannel.deleteChannel(
+                    getDispatcherChannelName(conversationId),
+                );
+                currentChannel.deleteChannel(
+                    getClientIOChannelName(conversationId),
+                );
             }
             return rpc.invoke("deleteConversation", conversationId);
         },
@@ -244,6 +314,22 @@ export function createAgentServerConnection(
         async shutdown(): Promise<void> {
             debug("Requesting server shutdown via existing connection");
             await rpc.invoke("shutdown");
+        },
+
+        async reconnect(): Promise<boolean> {
+            if (closed || reopenTransport === undefined) {
+                return false;
+            }
+            const next = await reopenTransport();
+            if (next === undefined) {
+                return false;
+            }
+            currentChannel = next;
+            rpc.rebind(currentChannel.createChannel(AgentServerChannelName));
+            // The prior transport's per-conversation channels are gone; drop
+            // our local bookkeeping so the caller re-joins cleanly.
+            joinedConversations.clear();
+            return true;
         },
 
         async close(): Promise<void> {
@@ -266,69 +352,108 @@ export function createAgentServerConnection(
 export async function connectAgentServer(
     url: string | URL,
     onDisconnect?: () => void,
+    connectOptions?: AgentServerConnectOptions,
 ): Promise<AgentServerConnection> {
-    return new Promise((resolve, reject: (e: Error) => void) => {
-        const ws = new WebSocket(url);
-        let opened = false;
-        let resolved = false;
+    // A single logical connection over a transport that can be reopened in
+    // place (reconnect()). `currentClose` tracks the live socket's teardown,
+    // and `connectionClosed` fences the onclose/onDisconnect bookkeeping across
+    // reconnects.
+    let connectionClosed = false;
+    let currentWs: WebSocket | undefined;
+    // Identifies the live transport so a superseded socket's onclose (after a
+    // reconnect) can't fire a spurious onDisconnect or clobber bookkeeping.
+    let transportGeneration = 0;
 
-        const channel: ChannelProviderAdapter = createChannelProviderAdapter(
-            "agent-server:client",
-            (message: any) => {
-                debug("Sending message to server:", message);
-                ws.send(JSON.stringify(message));
-            },
-        );
+    // Open a fresh ws + channel; resolves the channel on open, or undefined if
+    // the attempt fails / closes before opening.
+    const openTransport = (): Promise<ChannelProviderAdapter | undefined> =>
+        new Promise((resolve) => {
+            const myGeneration = ++transportGeneration;
+            // Defensively drop any prior socket so a reconnect while the old one
+            // is still open can't leak it; its (now superseded) onclose is
+            // ignored via the generation guard below.
+            currentWs?.close();
+            const ws = new WebSocket(
+                url,
+                connectOptions?.headers
+                    ? { headers: connectOptions.headers }
+                    : undefined,
+            );
+            currentWs = ws;
+            let opened = false;
+            let settled = false;
+            const settle = (value: ChannelProviderAdapter | undefined) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                resolve(value);
+            };
 
-        let connectionClosed = false;
-        const connection = createAgentServerConnection(channel, () => {
+            const channel: ChannelProviderAdapter =
+                createChannelProviderAdapter(
+                    "agent-server:client",
+                    (message: any) => {
+                        debug("Sending message to server:", message);
+                        ws.send(JSON.stringify(message));
+                    },
+                );
+
+            ws.onopen = () => {
+                debug("WebSocket connection established", ws.readyState);
+                opened = true;
+                settle(channel);
+            };
+            ws.onmessage = (event: WebSocket.MessageEvent) => {
+                debug("Received message from server:", event.data);
+                channel.notifyMessage(JSON.parse(event.data.toString()));
+            };
+            ws.onclose = (event: WebSocket.CloseEvent) => {
+                debug("WebSocket connection closed", event.code, event.reason);
+                channel.notifyDisconnected();
+                if (!opened) {
+                    // Closed before onopen fired — a failed attempt.
+                    settle(undefined);
+                    return;
+                }
+                // Ignore a superseded transport's close (a later reconnect
+                // already moved on).
+                if (myGeneration !== transportGeneration) {
+                    return;
+                }
+                if (!connectionClosed) {
+                    connectionClosed = true;
+                    onDisconnect?.();
+                }
+            };
+            ws.onerror = (error: WebSocket.ErrorEvent) => {
+                debugErr("WebSocket error:", error);
+                if (!opened) {
+                    settle(undefined);
+                }
+            };
+        });
+
+    const firstChannel = await openTransport();
+    if (firstChannel === undefined) {
+        throw new Error(`Failed to connect to agent server at ${url}`);
+    }
+
+    return createAgentServerConnection(
+        firstChannel,
+        () => {
             if (connectionClosed) {
                 return;
             }
             connectionClosed = true;
-            ws.close();
-        });
-
-        ws.onopen = () => {
-            debug("WebSocket connection established", ws.readyState);
-            opened = true;
-            resolved = true;
-            resolve(connection);
-        };
-        ws.onmessage = (event: WebSocket.MessageEvent) => {
-            debug("Received message from server:", event.data);
-            channel.notifyMessage(JSON.parse(event.data.toString()));
-        };
-        ws.onclose = (event: WebSocket.CloseEvent) => {
-            debug("WebSocket connection closed", event.code, event.reason);
-            channel.notifyDisconnected();
-            if (!opened) {
-                // Closed before onopen fired — reject the pending promise.
-                if (!resolved) {
-                    resolved = true;
-                    reject(
-                        new Error(
-                            `Failed to connect to agent server at ${url}`,
-                        ),
-                    );
-                }
-                return;
-            }
-            if (!connectionClosed) {
-                connectionClosed = true;
-                onDisconnect?.();
-            }
-        };
-        ws.onerror = (error: WebSocket.ErrorEvent) => {
-            debugErr("WebSocket error:", error);
-            if (!opened && !resolved) {
-                resolved = true;
-                reject(
-                    new Error(`Failed to connect to agent server at ${url}`),
-                );
-            }
-        };
-    });
+            currentWs?.close();
+        },
+        async () => {
+            // Allow a fresh socket after a drop, then reopen.
+            connectionClosed = false;
+            return openTransport();
+        },
+    );
 }
 
 function getAgentServerEntryPoint(): string {
@@ -364,11 +489,26 @@ export function isServerRunning(url: string): Promise<boolean> {
     });
 }
 
+/**
+ * Optional overrides for how the agent-server child process is spawned. The
+ * defaults preserve the standard background-server behavior — its own process
+ * group via `detached`, no console window via `windowsHide`, and ignored stdio.
+ * Callers that need different lifecycle/IO semantics can override individual
+ * fields. Only applies to the direct `node` spawn paths (background/hidden and
+ * non-Windows), not the visible new-window path.
+ */
+export interface AgentServerSpawnOptions {
+    detached?: boolean;
+    windowsHide?: boolean;
+    stdio?: StdioOptions;
+}
+
 function spawnAgentServer(
     serverPath: string,
     port: number,
     hidden: boolean = false,
     idleTimeout: number = 0,
+    spawnOptions: AgentServerSpawnOptions = {},
 ): void {
     // Use an exclusive lock file to prevent two concurrent client processes from
     // both concluding the server is down and each spawning their own copy.
@@ -396,19 +536,17 @@ function spawnAgentServer(
         const isWindows = process.platform === "win32";
         if (isWindows) {
             if (hidden) {
-                // On Windows, detached: true creates a new console window
-                // for the child and any processes it spawns. To avoid this,
-                // spawn via cmd /c start /B which runs the process truly in
-                // the background with no visible windows.
+                // Spawn node directly (no shell) so the absolute serverPath can
+                // never be reinterpreted by a command interpreter. The defaults
+                // give the child its own process group / DETACHED_PROCESS (so it
+                // outlives this client) and suppress the console window
+                // (CREATE_NO_WINDOW); callers can override via spawnOptions.
                 const args = [serverPath, "--port", String(port), ...extraArgs];
-                const child = spawn(
-                    "cmd.exe",
-                    ["/c", "start", "/B", "node", ...args],
-                    {
-                        stdio: "ignore",
-                        windowsHide: true,
-                    },
-                );
+                const child = spawn("node", args, {
+                    detached: spawnOptions.detached ?? true,
+                    stdio: spawnOptions.stdio ?? "ignore",
+                    windowsHide: spawnOptions.windowsHide ?? true,
+                });
                 child.unref();
                 debug(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
@@ -442,8 +580,8 @@ function spawnAgentServer(
                 "node",
                 [serverPath, "--port", String(port), ...extraArgs],
                 {
-                    detached: true,
-                    stdio: "ignore",
+                    detached: spawnOptions.detached ?? true,
+                    stdio: spawnOptions.stdio ?? "ignore",
                 },
             );
             child.unref();
@@ -480,6 +618,7 @@ export async function ensureAgentServer(
     port: number = AGENT_SERVER_DEFAULT_PORT,
     hidden: boolean = false,
     idleTimeout: number = 0,
+    spawnOptions: AgentServerSpawnOptions = {},
 ): Promise<void> {
     const url = `ws://localhost:${port}`;
     if (await isServerRunning(url)) {
@@ -493,7 +632,7 @@ export async function ensureAgentServer(
             console.log("Starting TypeAgent server in a new window...");
         }
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath, port, hidden, idleTimeout);
+        spawnAgentServer(serverPath, port, hidden, idleTimeout, spawnOptions);
         await waitForServer(url);
         console.log("TypeAgent server started.");
     }

@@ -8,7 +8,7 @@ import {
     loadGrammarRules,
     matchGrammar,
     matchGrammarCompletion,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
 async function load(fileName: string) {
     const content = await fs.promises.readFile(fileName, "utf-8");

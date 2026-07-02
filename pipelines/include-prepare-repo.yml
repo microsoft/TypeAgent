@@ -8,6 +8,11 @@ parameters:
     type: string
   - name: registry
     type: string
+  # Set false to skip pnpm-store caching. Useful for manual/scheduled pipelines
+  # where the Windows post-job cache save can exceed its timeout and fail the job.
+  - name: enableCache
+    type: boolean
+    default: true
 
 steps:
   - checkout: self
@@ -34,8 +39,14 @@ steps:
   - template: include-install-pnpm.yml
     parameters:
       buildDirectory: ${{ parameters.buildDirectory }}
+      enableCache: ${{ parameters.enableCache }}
 
   - script: |
       pnpm install --frozen-lockfile --strict-peer-dependencies
     displayName: "Install dependencies"
     workingDirectory: ${{ parameters.buildDirectory }}
+    env:
+      # CI agents may not have outbound access to storage.googleapis.com.
+      # We don't need bundled browser binaries for package/deploy pipelines.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"

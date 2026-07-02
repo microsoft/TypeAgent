@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Grammar } from "action-grammar";
+import type { Grammar } from "@typeagent/action-grammar";
 
 // Re-export types from action-grammar that callers need
-export type { Grammar } from "action-grammar";
+export type { Grammar } from "@typeagent/action-grammar";
 export type {
     RuleId,
     PartId,
@@ -16,9 +16,9 @@ export type {
     PartMatchedEvent,
     PartFailedEvent,
     BacktrackEvent,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 
-import type { RuleId, PartId, TraceEvent } from "action-grammar";
+import type { RuleId, PartId, TraceEvent } from "@typeagent/action-grammar";
 
 // ---------------------------------------------------------------------------
 // Source positions

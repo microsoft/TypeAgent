@@ -1,0 +1,163 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Builds the self-contained agent-server artifact per platform (RID) and
+# publishes it (and the optional-agent bundles) as Azure Artifacts Universal
+# packages to the `typeagent` feed, for install on repo-less machines and for
+# artifact-feed consumption (download + bootstrap).
+#
+# Manual / scheduled, not per-PR. Models azure-build-ts.yml / -package-shell.yml.
+
+trigger: 
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+parameters:
+  # "external" = lean artifact that resolves claude/copilot from PATH (machines
+  # where they're already provisioned / the install-typeagent provisioner).
+  # "full" = bundles the CLIs (works anywhere; larger).
+  - name: variant
+    type: string
+    default: external
+    values:
+      - external
+      - full
+  # Provider profile shipped in the artifact (data/config.<profile>.json).
+  - name: profile
+    type: string
+    default: service
+  - name: publishOptionalAgents
+    type: boolean
+    default: true
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: nodeVersion
+    value: 22
+  # Universal-package version (must be valid semver; Build.BuildId is numeric).
+  - name: packageVersion
+    value: 0.0.1-$(Build.BuildId)
+  # Azure Artifacts feed coordinates (dev.azure.com/msctoproj/AI_Systems/_artifacts/feed/typeagent).
+  - name: adoOrgUrl
+    value: https://dev.azure.com/msctoproj
+  - name: adoProject
+    value: AI_Systems
+  - name: adoFeed
+    value: typeagent
+  - name: stagingDir
+    value: $(Build.ArtifactStagingDirectory)
+
+jobs:
+  - job: build_publish_agent_server
+    displayName: Build & publish agent-server artifact
+    strategy:
+      matrix:
+        win32_x64:
+          image: windows-latest
+          platform: win32
+          arch: x64
+        linux_x64:
+          image: ubuntu-latest
+          platform: linux
+          arch: x64
+        osx_x64:
+          image: macos-latest
+          platform: darwin
+          arch: x64
+        # NOTE: arm64 RIDs (win32/linux/darwin-arm64) need self-hosted or
+        # cross-arch agents; hosted images above are x64. Add when available.
+    pool:
+      vmImage: $(image)
+    steps:
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
+          # Manual/scheduled; skip store caching (the Windows post-job cache save
+          # can exceed its timeout and fail the job after a successful publish).
+          enableCache: false
+
+      - template: include-update-package-version.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          prerelease: ci.$(Build.BuildId)
+
+      # Build agent-server and its dependency closure (the same set pnpm deploy
+      # bundles) via fluid-build. Targeted (not a full `npm run build`) so it is
+      # faster and not blocked by unrelated packages.
+      - script: |
+          pnpm run build agent-server
+        displayName: Build agent-server (+ deps)
+        workingDirectory: $(buildDirectory)
+
+      # Produce the self-contained agent-server folder: pnpm deploy + foreign-arch
+      # prune + service profile (drops optional agents) + optional external-cli
+      # prune (drops bundled Claude/Copilot runtimes). Cross-platform via bash.
+      - bash: |
+          set -euo pipefail
+          EXTRA=""
+          if [ "${{ parameters.variant }}" = "external" ]; then EXTRA="--external-cli"; fi
+          node tools/scripts/deployAgentServer.mjs \
+            --out "$(stagingDir)/agent-server" \
+            --platform "$(platform)" --arch "$(arch)" \
+            --profile "${{ parameters.profile }}" $EXTRA
+        displayName: Deploy agent-server ($(platform)-$(arch), ${{ parameters.variant }})
+        workingDirectory: $(buildDirectory)
+
+      # Package the optional (profile-excluded) agents as self-contained bundles.
+      - ${{ if eq(parameters.publishOptionalAgents, true) }}:
+          - bash: |
+              set -euo pipefail
+              node tools/scripts/packageOptionalAgents.mjs \
+                --out "$(stagingDir)/optional-agents" \
+                --profile "${{ parameters.profile }}" \
+                --platform "$(platform)" --arch "$(arch)"
+            displayName: Package optional agents ($(platform)-$(arch))
+            workingDirectory: $(buildDirectory)
+
+      # Publish to the Universal feed. Auth via the build identity's
+      # System.AccessToken (the build service must have feed Publish role).
+      - bash: |
+          set -euo pipefail
+          az extension add --name azure-devops --only-show-errors || true
+          RID="$(platform)-$(arch)"
+          echo "Publishing agent-server.${RID} v$(packageVersion)"
+          az artifacts universal publish \
+            --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+            --feed "$(adoFeed)" \
+            --name "agent-server.${RID}" --version "$(packageVersion)" \
+            --path "$(stagingDir)/agent-server" \
+            --description "TypeAgent agent-server (${{ parameters.variant }}, profile=${{ parameters.profile }}) for ${RID}"
+        displayName: Publish agent-server.$(platform)-$(arch)
+        workingDirectory: $(buildDirectory)
+        env:
+          AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      - ${{ if eq(parameters.publishOptionalAgents, true) }}:
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              RID="$(platform)-$(arch)"
+              for dir in "$(stagingDir)"/optional-agents/*/; do
+                [ -d "$dir" ] || continue
+                name="$(basename "$dir")"
+                echo "Publishing ${name}.${RID} v$(packageVersion)"
+                az artifacts universal publish \
+                  --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                  --feed "$(adoFeed)" \
+                  --name "${name}.${RID}" --version "$(packageVersion)" \
+                  --path "$dir" \
+                  --description "TypeAgent optional agent ${name} for ${RID}"
+              done
+            displayName: Publish optional agents ($(platform)-$(arch))
+            workingDirectory: $(buildDirectory)
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)

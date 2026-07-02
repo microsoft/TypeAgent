@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { CommandHandler, InteractiveIo, displayHelp } from "interactive-app";
 
 export interface SchemaStudio {

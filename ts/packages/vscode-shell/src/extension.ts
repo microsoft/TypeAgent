@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { ChatViewProvider } from "./chatViewProvider";
-import { AgentServerBridge } from "./agentServerBridge";
+import { ChatViewProvider } from "./chatViewProvider.js";
+import { AgentServerBridge } from "./agentServerBridge.js";
 
 interface ChatEntry {
     bridge: AgentServerBridge;
@@ -161,6 +161,15 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
         vscode.commands.registerCommand("vscode-shell.newSession", () =>
             activeChat?.bridge.newSession(),
+        ),
+        vscode.commands.registerCommand(
+            "vscode-shell.newSidebarSession",
+            async () => {
+                await vscode.commands.executeCommand(
+                    "vscode-shell.chatView.focus",
+                );
+                provider.activateNewSessionInput();
+            },
         ),
         vscode.commands.registerCommand("vscode-shell.renameSession", () =>
             activeChat?.bridge.renameCurrentSession(),

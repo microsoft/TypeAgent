@@ -10,7 +10,7 @@ import {
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
 import { PromptSection, Result } from "typechat";
-import { openai } from "aiclient";
+import { openai } from "@typeagent/aiclient";
 
 export type ChalkColor = {
     foreColor?: ChalkInstance | undefined;

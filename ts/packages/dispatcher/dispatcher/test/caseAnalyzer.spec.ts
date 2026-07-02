@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ChatModel } from "aiclient";
+import type { ChatModel } from "@typeagent/aiclient";
 import type {
     Neighborhood,
     NeighborhoodMember,

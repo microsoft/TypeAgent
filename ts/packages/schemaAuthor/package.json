@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

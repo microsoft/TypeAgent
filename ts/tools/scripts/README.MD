@@ -98,3 +98,24 @@ Only if you have set up your own pipeline and azure blob storage for prebuilt Ty
 
 - **[install-shell.cmd](./install-shell.cmd)**: Shell installation script for prebuilt TypeAgent Shell binaries for Windows hosted in azure blob storage.
 - **[install-shell.sh](./install-shell.sh)**: Shell installation script for prebuilt TypeAgent Shell binaries for Linux/MacOS hosted in azure blob storage.
+
+### TypeAgent agent-server
+
+- **[install-typeagent.ps1](./install-typeagent.ps1)**: Windows bootstrap for a standalone TypeAgent agent-server install. Downloads the payload, registers the Copilot plugin, provisions config, and starts the daemon.
+- **[install-typeagent.sh](./install-typeagent.sh)**: Linux/macOS bootstrap for the same standalone TypeAgent agent-server install flow.
+
+### Dev Tunnels (cross-device access)
+
+Expose the agent-server to another device (phone, tablet, second laptop) via a Microsoft Dev Tunnel. Requires `devtunnel` CLI installed and authenticated (`devtunnel user login`).
+
+- **[setup-devtunnel.mjs](./setup-devtunnel.mjs)**: One-time setup — creates (or reuses) a persistent tunnel, forwards port 8999, and writes `~/.typeagent/devtunnel.json`. Options: `--anonymous` (warned), `--host` (start hosting immediately), `--port <n>`.
+- **[list-tunnels.mjs](./list-tunnels.mjs)**: Lists tunnels with derived client URLs, liveness state, and (with `--token`) connect tokens.
+- **[typeagent-serve.mjs](./typeagent-serve.mjs) tunnel start|stop|status**: Manages the `devtunnel host` background process (works from the repo or the deployed artifact).
+
+Quick start (development):
+
+```bash
+node setup-devtunnel.mjs           # one-time: create tunnel + write config
+pnpm -C packages/agentServer/server run start:tunnel   # start server + tunnel host
+node list-tunnels.mjs --token      # get client URL + connect token
+```

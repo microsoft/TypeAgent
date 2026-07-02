@@ -22,7 +22,6 @@ import {
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerInvokeFunctions,
-    ConversationInfo,
     DispatcherConnectOptions,
     JoinConversationResult,
 } from "@typeagent/agent-server-protocol";
@@ -32,6 +31,16 @@ import {
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_URL,
 } from "@typeagent/agent-server-protocol";
+import type {
+    AgentServerConnection,
+    ConversationDispatcher,
+} from "@typeagent/agent-server-client";
+import {
+    manageConversation as manageConversationHelper,
+    type ConversationActionResult,
+    type ManageConversationContext,
+    type ManageConversationPayload as HelperPayload,
+} from "@typeagent/agent-server-client/conversation";
 
 import registerDebug from "debug";
 
@@ -333,11 +342,12 @@ async function doConnect(): Promise<Dispatcher> {
 /**
  * Join (or rejoin) a conversation and wire up its per-conversation
  * dispatcher RPC client + clientIO server on top of the current WebSocket.
+ * Returns the full ConversationDispatcher shape (matches AgentServerConnection).
  */
-async function bindToConversation(
+async function joinConversationDispatcher(
     options: DispatcherConnectOptions,
     ws: WebSocket,
-): Promise<Dispatcher> {
+): Promise<ConversationDispatcher> {
     if (!serverRpc || !serverChannel || !chatPanelClientIO) {
         throw new Error("Agent server RPC is not initialized");
     }
@@ -378,9 +388,29 @@ async function bindToConversation(
         ws.close();
     };
 
-    activeConversationId = result.conversationId;
-    activeConversationName = result.name;
-    return d;
+    return {
+        dispatcher: d,
+        conversationId: result.conversationId,
+        name: result.name,
+        connectionId: result.connectionId,
+        ...(result.queueSnapshot !== undefined
+            ? { queueSnapshot: result.queueSnapshot }
+            : {}),
+    };
+}
+
+/**
+ * Initial connect-time join: same as joinConversationDispatcher, but
+ * also pins the result to the module-level active conversation state.
+ */
+async function bindToConversation(
+    options: DispatcherConnectOptions,
+    ws: WebSocket,
+): Promise<Dispatcher> {
+    const joined = await joinConversationDispatcher(options, ws);
+    activeConversationId = joined.conversationId;
+    activeConversationName = joined.name;
+    return joined.dispatcher;
 }
 
 /**
@@ -421,20 +451,6 @@ export function getDispatcher(): Dispatcher | undefined {
 // Handles the dispatcher's `manage-conversation` takeAction payload, which
 // both @conversation slash commands and the NL conversation agent emit.
 
-type ManageConversationPayload = {
-    subcommand:
-        | "new"
-        | "list"
-        | "info"
-        | "switch"
-        | "prev"
-        | "next"
-        | "rename"
-        | "delete";
-    name?: string;
-    newName?: string;
-};
-
 type ManageConversationResult = {
     kind: "ok" | "error";
     html: string;
@@ -460,6 +476,16 @@ function escapeHtml(s: string): string {
     });
 }
 
+// Bold-escape `"name"` segments in helper plain-text messages.
+// Non-greedy through the closing quote so names containing ampersands
+// or other escaped entities (which become `&amp;`, `&lt;`, …) still match.
+function htmlizeMessage(message: string): string {
+    return escapeHtml(message).replace(
+        /&quot;(.+?)&quot;/g,
+        (_m, name: string) => `"<b>${name}</b>"`,
+    );
+}
+
 function ok(html: string, switched?: boolean): ManageConversationResult {
     return switched
         ? { kind: "ok", html, switched: true }
@@ -470,69 +496,84 @@ function err(html: string): ManageConversationResult {
     return { kind: "error", html };
 }
 
-function defaultNewName(): string {
-    const dt = new Date();
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `Conversation ${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-}
-
-function findByName(
-    sessions: ConversationInfo[],
-    name: string,
-): ConversationInfo | undefined {
-    const lower = name.toLowerCase();
-    return sessions.find((s) => s.name.toLowerCase() === lower);
-}
-
-async function switchToConversationId(
-    newId: string,
-): Promise<ConversationInfo | undefined> {
-    if (!serverRpc || !serverChannel) {
+// Adapter exposing the module-level browser-extension RPC state as an
+// AgentServerConnection so the shared conversation helpers can drive it.
+// Each call resolves the current module-level state at invocation time
+// so the helper sees post-reconnect transports instead of stale snapshots
+// captured at adapter construction.
+function makeConnectionAdapter(): AgentServerConnection {
+    if (!serverRpc || !serverChannel || !dispatcherWs) {
         throw new Error("Not connected to agent server.");
     }
-    if (!dispatcherWs || dispatcherWs.readyState !== WebSocket.OPEN) {
+    if (dispatcherWs.readyState !== WebSocket.OPEN) {
         throw new Error("Agent server WebSocket is not open.");
     }
-    if (newId === activeConversationId) {
-        return undefined;
-    }
-
-    const oldId = activeConversationId;
-
-    // Join new before tearing down old (matches agentServerClient + CLI).
-    // If the join throws, the existing dispatcher + channels stay live so
-    // the user can retry. No duplicate-channel risk: newId !== oldId here.
-    const newDispatcher = await bindToConversation(
-        {
-            filter: false,
-            clientType: "extension",
-            conversationId: newId,
-        },
-        dispatcherWs,
-    );
-    dispatcher = newDispatcher;
-
-    // Leave old server-side first; in-flight completions for the prior
-    // dispatcher were resolved before this point because callers await
-    // their dispatcher.submitCommand. Then drop our local channel adapters
-    // so a future re-bind to the same id doesn't hit createChannel's
-    // duplicate-name guard.
-    if (oldId && oldId !== activeConversationId) {
-        try {
-            await serverRpc.invoke("leaveConversation", oldId);
-        } catch (e) {
-            debugErr("leaveConversation failed for %s: %o", oldId, e);
+    const requireFresh = (): {
+        rpc: NonNullable<typeof serverRpc>;
+        channel: NonNullable<typeof serverChannel>;
+        ws: NonNullable<typeof dispatcherWs>;
+    } => {
+        if (!serverRpc || !serverChannel || !dispatcherWs) {
+            throw new Error("Lost connection to agent server.");
         }
-        serverChannel.deleteChannel(getDispatcherChannelName(oldId));
-        serverChannel.deleteChannel(getClientIOChannelName(oldId));
-    }
-
-    try {
-        const all = await serverRpc.invoke("listConversations", undefined);
-        return all.find((s) => s.conversationId === newId);
-    } catch {
-        return undefined;
-    }
+        if (dispatcherWs.readyState !== WebSocket.OPEN) {
+            throw new Error("Agent server WebSocket is not open.");
+        }
+        return {
+            rpc: serverRpc,
+            channel: serverChannel,
+            ws: dispatcherWs,
+        };
+    };
+    const notSupported = async (op: string) => {
+        throw new Error(`${op} not supported in browser extension adapter`);
+    };
+    return {
+        joinConversation: (
+            _clientIO: ClientIO,
+            options?: DispatcherConnectOptions,
+        ) => {
+            const { ws } = requireFresh();
+            return joinConversationDispatcher(
+                { filter: false, clientType: "extension", ...(options ?? {}) },
+                ws,
+            );
+        },
+        leaveConversation: async (conversationId: string) => {
+            const { rpc, channel } = requireFresh();
+            try {
+                await rpc.invoke("leaveConversation", conversationId);
+            } finally {
+                channel.deleteChannel(getDispatcherChannelName(conversationId));
+                channel.deleteChannel(getClientIOChannelName(conversationId));
+            }
+        },
+        createConversation: (name: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("createConversation", name);
+        },
+        listConversations: (name?: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("listConversations", name);
+        },
+        renameConversation: (id: string, newName: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke(
+                "renameConversation",
+                id,
+                newName,
+            ) as Promise<void>;
+        },
+        deleteConversation: (id: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("deleteConversation", id) as Promise<void>;
+        },
+        shutdown: () => notSupported("shutdown"),
+        // In-place rebind reconnect isn't driven through this adapter; the
+        // service worker reconnects via its own doConnect path.
+        reconnect: async () => false,
+        close: () => notSupported("close"),
+    };
 }
 
 // Serialize all manageConversation calls so overlapping switches (e.g. a
@@ -559,7 +600,7 @@ export function awaitConversationOps(): Promise<void> {
  * subsequent calls.
  */
 export function manageConversation(
-    payload: ManageConversationPayload,
+    payload: HelperPayload,
 ): Promise<ManageConversationResult> {
     const result = conversationOpQueue.then(
         () => doManageConversation(payload),
@@ -572,225 +613,97 @@ export function manageConversation(
 }
 
 async function doManageConversation(
-    payload: ManageConversationPayload,
+    payload: HelperPayload,
 ): Promise<ManageConversationResult> {
-    if (!serverRpc) {
+    if (!serverRpc || !chatPanelClientIO) {
         return err("❌ Not connected to agent server.");
     }
+    let adapter: AgentServerConnection;
     try {
-        switch (payload.subcommand) {
-            case "new": {
-                const name = payload.name?.trim() || defaultNewName();
-                const created = await serverRpc.invoke(
-                    "createConversation",
-                    name,
-                );
-                // Auto-switch into the newly created conversation (matches Shell).
-                let switched = false;
-                try {
-                    await switchToConversationId(created.conversationId);
-                    switched = true;
-                } catch (e) {
-                    debugErr("auto-switch after new failed: %o", e);
-                }
-                return ok(
-                    switched
-                        ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
-                        : `✅ Created conversation "<b>${escapeHtml(created.name)}</b>" but could not switch.`,
-                    switched,
-                );
-            }
-            case "list": {
-                const sessions = await serverRpc.invoke(
-                    "listConversations",
-                    payload.name,
-                );
-                if (sessions.length === 0) {
-                    return ok("<i>No conversations found.</i>");
-                }
-                sessions.sort(
-                    (a, b) =>
-                        new Date(b.createdAt).getTime() -
-                        new Date(a.createdAt).getTime(),
-                );
-                const items = sessions
-                    .map((s) => {
-                        const cur =
-                            s.conversationId === activeConversationId
-                                ? "▸ "
-                                : "";
-                        return `<li>${cur}${escapeHtml(s.name)}</li>`;
-                    })
-                    .join("");
-                return ok(`<ul>${items}</ul>`);
-            }
-            case "info": {
-                if (!activeConversationId || !activeConversationName) {
-                    return err("Not currently in a conversation.");
-                }
-                return ok(
-                    `<b>Current conversation:</b><br>` +
-                        `Name: ${escapeHtml(activeConversationName)}<br>` +
-                        `<span style="font-family:monospace;font-size:smaller;">${escapeHtml(activeConversationId)}</span>`,
-                );
-            }
-            case "switch": {
-                const name = payload.name?.trim();
-                if (!name) {
-                    return err(
-                        "A conversation name is required to switch. Usage: <code>@conversation switch &lt;name&gt;</code>",
-                    );
-                }
-                const sessions = await serverRpc.invoke(
-                    "listConversations",
-                    undefined,
-                );
-                const target = findByName(sessions, name);
-                if (!target) {
-                    return err(
-                        `❌ Conversation "<b>${escapeHtml(name)}</b>" not found.`,
-                    );
-                }
-                if (target.conversationId === activeConversationId) {
-                    return ok(
-                        `Already in conversation "<b>${escapeHtml(target.name)}</b>".`,
-                    );
-                }
-                await switchToConversationId(target.conversationId);
-                return ok(
-                    `🔀 Switched to conversation "<b>${escapeHtml(target.name)}</b>".`,
-                    true,
-                );
-            }
-            case "prev":
-            case "next": {
-                const sessions = await serverRpc.invoke(
-                    "listConversations",
-                    undefined,
-                );
-                if (sessions.length < 2) {
-                    return err("No other conversations to switch to.");
-                }
-                sessions.sort(
-                    (a, b) =>
-                        new Date(b.createdAt).getTime() -
-                        new Date(a.createdAt).getTime(),
-                );
-                const idx = sessions.findIndex(
-                    (s) => s.conversationId === activeConversationId,
-                );
-                if (idx === -1) {
-                    return err("Current conversation not found in list.");
-                }
-                const delta = payload.subcommand === "next" ? 1 : -1;
-                const target =
-                    sessions[(idx + delta + sessions.length) % sessions.length];
-                await switchToConversationId(target.conversationId);
-                return ok(
-                    `🔀 Switched to ${payload.subcommand === "next" ? "next" : "previous"} conversation "<b>${escapeHtml(target.name)}</b>".`,
-                    true,
-                );
-            }
-            case "rename": {
-                if (!payload.newName) {
-                    return err(
-                        "A new name is required. Usage: <code>@conversation rename [&lt;oldName&gt;] &lt;newName&gt;</code>",
-                    );
-                }
-                let conversationId: string | undefined;
-                let oldName: string | undefined;
-                if (payload.name) {
-                    const sessions = await serverRpc.invoke(
-                        "listConversations",
-                        undefined,
-                    );
-                    const match = findByName(sessions, payload.name);
-                    if (!match) {
-                        return err(
-                            `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
-                        );
-                    }
-                    conversationId = match.conversationId;
-                    oldName = match.name;
-                } else {
-                    conversationId = activeConversationId;
-                    oldName = activeConversationName;
-                }
-                if (!conversationId) {
-                    return err("No conversation to rename.");
-                }
-                await serverRpc.invoke(
-                    "renameConversation",
-                    conversationId,
-                    payload.newName,
-                );
-                if (conversationId === activeConversationId) {
-                    activeConversationName = payload.newName;
-                }
-                return ok(
-                    `✅ Renamed "<b>${escapeHtml(oldName ?? "")}</b>" to "<b>${escapeHtml(payload.newName)}</b>".`,
-                );
-            }
-            case "delete": {
-                const name = payload.name?.trim();
-                if (!name) {
-                    return err(
-                        "A conversation name is required. Usage: <code>@conversation delete &lt;name&gt;</code>",
-                    );
-                }
-                const sessions = await serverRpc.invoke(
-                    "listConversations",
-                    undefined,
-                );
-                const target = findByName(sessions, name);
-                if (!target) {
-                    return err(
-                        `❌ Conversation "<b>${escapeHtml(name)}</b>" not found.`,
-                    );
-                }
-                if (target.conversationId === activeConversationId) {
-                    return err(
-                        "Cannot delete the active conversation. Switch to another conversation first.",
-                    );
-                }
-                // Confirm via the chat panel. Treat absence of `rpcInvoke`
-                // or a rejected prompt as "not confirmed" — refuse the
-                // destructive op rather than silently proceeding.
-                if (!rpcInvoke) {
-                    return err(
-                        "Cannot confirm deletion (chat panel not connected). Aborted.",
-                    );
-                }
-                let confirmed: boolean;
-                try {
-                    confirmed = (await rpcInvoke("chatPanelAskYesNo", {
-                        message: `Delete conversation '${target.name}'?`,
-                        defaultValue: false,
-                    })) as boolean;
-                } catch (e) {
-                    debugErr("yes/no confirm failed: %o", e);
-                    return err("Could not confirm deletion. Aborted.");
-                }
-                if (!confirmed) {
-                    return ok("Cancelled.");
-                }
-                await serverRpc.invoke(
-                    "deleteConversation",
-                    target.conversationId,
-                );
-                return ok(
-                    `🗑️ Deleted conversation "<b>${escapeHtml(target.name)}</b>".`,
-                );
-            }
-            default:
-                return err(
-                    `Unknown manage-conversation subcommand: "<b>${escapeHtml(
-                        (payload as { subcommand: string }).subcommand,
-                    )}</b>"`,
-                );
-        }
+        adapter = makeConnectionAdapter();
     } catch (e: any) {
-        debugErr("manageConversation failed: %o", e);
         return err(`❌ ${escapeHtml(e?.message ?? String(e))}`);
+    }
+
+    const ctx: ManageConversationContext = {
+        currentConversationId: activeConversationId,
+        currentConversationName: activeConversationName,
+        getCurrentConversationId: () => activeConversationId,
+        onSwitched: (joined: ConversationDispatcher) => {
+            dispatcher = joined.dispatcher;
+            activeConversationId = joined.conversationId;
+            activeConversationName = joined.name;
+        },
+        onCurrentConversationUpdated: (updated) => {
+            activeConversationName = updated.name;
+        },
+        joinOptions: { filter: false, clientType: "extension" },
+        // Browser cycle matches its prior UX: newest-first with an error
+        // when the current conversation is missing from the list.
+        cycleOnCurrentNotInList: "error",
+        confirmDestructive: rpcInvoke
+            ? async (_action, target) =>
+                  (await rpcInvoke!("chatPanelAskYesNo", {
+                      message: `Delete conversation '${target.name}'?`,
+                      defaultValue: false,
+                  })) as boolean
+            : // No chat panel → refuse destructive ops rather than silently proceed.
+              async () => false,
+    };
+
+    const result: ConversationActionResult = await manageConversationHelper(
+        adapter,
+        chatPanelClientIO,
+        ctx,
+        payload,
+    );
+
+    return renderActionResult(payload, result);
+}
+
+function renderActionResult(
+    payload: HelperPayload,
+    result: ConversationActionResult,
+): ManageConversationResult {
+    switch (result.kind) {
+        case "ok": {
+            const switched = result.switched === true;
+            const icon =
+                payload.subcommand === "new"
+                    ? "✅"
+                    : payload.subcommand === "rename"
+                      ? "✅"
+                      : payload.subcommand === "delete"
+                        ? "🗑️"
+                        : switched
+                          ? "🔀"
+                          : "";
+            const prefix = icon ? `${icon} ` : "";
+            return ok(`${prefix}${htmlizeMessage(result.message)}`, switched);
+        }
+        case "warning":
+            return err(htmlizeMessage(result.message));
+        case "error":
+            return err(`❌ ${htmlizeMessage(result.message)}`);
+        case "cancelled":
+            return ok("Cancelled.");
+        case "info":
+            return ok(
+                `<b>Current conversation:</b><br>` +
+                    `Name: ${escapeHtml(result.name)}<br>` +
+                    `<span style="font-family:monospace;font-size:smaller;">${escapeHtml(result.conversationId)}</span>`,
+            );
+        case "list": {
+            const items = result.conversations
+                .map((s) => {
+                    const cur =
+                        s.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    return `<li>${cur}${escapeHtml(s.name)}</li>`;
+                })
+                .join("");
+            return ok(`<ul>${items}</ul>`);
+        }
     }
 }

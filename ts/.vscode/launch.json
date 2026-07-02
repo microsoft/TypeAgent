@@ -5,6 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Run TypeAgent Studio Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/typeagent-studio"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/typeagent-studio/dist/**/*.js"
+      ],
+      "preLaunchTask": "build typeagent-studio"
+    },
+    {
       "name": "Launch Chat Memory",
       "type": "node",
       "request": "launch",

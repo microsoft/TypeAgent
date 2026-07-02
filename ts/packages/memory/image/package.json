@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
-    "aiclient": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",

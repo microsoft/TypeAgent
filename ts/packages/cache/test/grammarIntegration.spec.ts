@@ -21,7 +21,7 @@ import {
     GrammarStore as PersistedGrammarStore,
     compileGrammarToNFA,
     loadGrammarRules,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import {
     fromJSONParsedActionSchema,
     ParsedActionSchemaJSON,
@@ -967,7 +967,7 @@ describe("Grammar Integration", () => {
 
                 // Import populateCache dynamically
                 const { populateCache } = await import(
-                    "action-grammar/generation"
+                    "@typeagent/action-grammar/generation"
                 );
 
                 try {
@@ -1044,7 +1044,7 @@ describe("Grammar Integration", () => {
                 // Test that populateCache handles errors gracefully (e.g., invalid schema path)
                 try {
                     const { populateCache } = await import(
-                        "action-grammar/generation"
+                        "@typeagent/action-grammar/generation"
                     );
 
                     const result = await populateCache({

@@ -119,6 +119,61 @@ async function lockUserDataAsync<T>(fn: () => T | Promise<T>): Promise<T> {
     }
 }
 
+/**
+ * Cross-device access config written to `~/.typeagent/devtunnel.json`. Maps the
+ * agent-server (and, in a future Option B, sub-agent) ports onto a Microsoft
+ * Dev Tunnel so remote clients can reach the service. The per-port URL is
+ * *derived* (`wss://<tunnelId>-<port>.<cluster>.<baseDomain>`), not stored, so
+ * the same file supports later dynamic-forwarding work. See the dev-tunnel
+ * discovery design.
+ */
+export interface DevTunnelConfig {
+    /** Tunnel id from `devtunnel create` (e.g. "typeagent-xxxx"). */
+    tunnelId: string;
+    /** Tunnel cluster/region id (e.g. "usw2"). */
+    cluster: string;
+    /** Base domain; defaults to "devtunnels.ms" when absent. */
+    baseDomain?: string;
+    /** Forwarded port → label (e.g. `{ "8999": "agent-server" }`). */
+    ports: { [port: string]: string };
+    /** Tunnel access model; informational for discovery/degradation. */
+    access?: "private" | "anonymous";
+}
+
+function getDevTunnelConfigFilePath() {
+    return path.join(getUserDataDir(), "devtunnel.json");
+}
+
+/**
+ * Read the dev-tunnel config, or `undefined` when the file is missing or
+ * malformed. Unlocked (a plain read), mirroring `readGlobalUserConfig`.
+ */
+export function readDevTunnelConfig(): DevTunnelConfig | undefined {
+    try {
+        const content = fs.readFileSync(getDevTunnelConfigFilePath(), "utf-8");
+        const data: any = JSON.parse(content);
+        if (
+            data &&
+            typeof data.tunnelId === "string" &&
+            typeof data.cluster === "string" &&
+            data.ports &&
+            typeof data.ports === "object"
+        ) {
+            return data as DevTunnelConfig;
+        }
+    } catch {}
+    return undefined;
+}
+
+/** Write the dev-tunnel config under the user-data lock. */
+export function saveDevTunnelConfig(config: DevTunnelConfig) {
+    lockUserData(() => {
+        const content = JSON.stringify(config, null, 2);
+        ensureUserDataDir();
+        fs.writeFileSync(getDevTunnelConfigFilePath(), content);
+    });
+}
+
 function getInstancesDir() {
     return path.join(ensureUserDataDir(), "profiles");
 }

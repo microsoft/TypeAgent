@@ -2,12 +2,388 @@
 /* Shared chat UI styles — used by both Electron shell and Chrome extension */
 
 /* =========================================================================
+   Conversation Bar
+   ========================================================================= */
+
+.conversation-name-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--chat-conversation-border, #d0d0d0);
+  background: var(--chat-conversation-background, #f5f5f5);
+  color: var(--chat-conversation-foreground, #1f1f1f);
+  font-family: inherit;
+}
+
+/* The `display: flex` above overrides the user-agent `[hidden]` rule, so an
+   explicit override is required for the `hidden` property to actually hide the
+   bar (e.g. the Electron shell hides it in local-only mode). */
+.conversation-name-bar[hidden] {
+  display: none;
+}
+
+.conversation-name-label {
+  flex-shrink: 0;
+  color: var(--chat-conversation-muted-foreground, #666);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.conversation-name-btn {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--chat-conversation-foreground, #1f1f1f);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 2px 4px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.conversation-name-btn:hover {
+  color: var(--chat-conversation-link-active-foreground, #0066bf);
+}
+
+.conversation-name-btn:focus {
+  outline: 1px solid var(--chat-conversation-focus-border, #7b61ff);
+  outline-offset: 1px;
+}
+
+.conversation-name-btn.hidden {
+  display: none;
+}
+
+.conversation-rename-editor {
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-rename-editor.hidden {
+  display: none;
+}
+
+.conversation-rename-editor input,
+.conversation-search-inline-rename input,
+.conversation-create-popover input,
+.conversation-search-popover > input {
+  min-width: 0;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--chat-conversation-input-border, #c8c8c8);
+  border-radius: 4px;
+  background: var(--chat-conversation-input-background, #fff);
+  color: var(--chat-conversation-input-foreground, #1f1f1f);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.conversation-rename-editor input {
+  height: 24px;
+  padding: 0 6px;
+}
+
+.conversation-rename-editor input:focus,
+.conversation-search-inline-rename input:focus,
+.conversation-create-popover input:focus,
+.conversation-search-popover > input:focus {
+  outline: none;
+  border-color: var(--chat-conversation-focus-border, #7b61ff);
+}
+
+.conversation-rename-editor input.conflict,
+.conversation-search-inline-rename input.conflict,
+.conversation-create-popover input.conflict {
+  border-color: var(--chat-conversation-error-foreground, #c42b1c);
+}
+
+.conversation-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-action-btn,
+.conversation-search-item-btn {
+  border: 1px solid var(--chat-conversation-button-border, transparent);
+  border-radius: 4px;
+  background: var(--chat-conversation-button-background, #e8e8e8);
+  color: var(--chat-conversation-button-foreground, #1f1f1f);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.conversation-search-item-btn {
+  width: 22px;
+  height: 22px;
+}
+
+.conversation-action-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 16px;
+  display: block;
+}
+
+.conversation-action-btn:hover,
+.conversation-search-item-btn:hover,
+.conversation-create-submit:hover {
+  background: var(--chat-conversation-button-hover-background, #dcdcdc);
+}
+
+.conversation-action-btn:disabled,
+.conversation-search-item-btn:disabled,
+.conversation-create-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.conversation-status-summary {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--chat-conversation-muted-foreground, #666);
+  white-space: nowrap;
+}
+
+.conversation-status-summary.connected {
+  background: var(--chat-conversation-success-foreground, #16825d);
+}
+
+.conversation-status-summary.disconnected {
+  background: var(--chat-conversation-error-foreground, #c42b1c);
+}
+
+.conversation-status-summary.switching,
+.conversation-status-summary.connecting {
+  background: var(--chat-conversation-warning-foreground, #b26a00);
+}
+
+.conversation-status-summary.connected,
+.conversation-status-summary.disconnected,
+.conversation-status-summary.switching,
+.conversation-status-summary.connecting {
+  color: var(--chat-conversation-status-foreground, #fff);
+}
+
+.conversation-popover {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--chat-conversation-input-border, #c8c8c8);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.25));
+  background: var(
+    --chat-conversation-popover-background,
+    var(--chat-conversation-background, #fff)
+  );
+}
+
+.conversation-popover.hidden {
+  display: none;
+}
+
+.conversation-create-popover {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.conversation-create-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-create-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--chat-conversation-error-foreground, #c42b1c);
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.conversation-create-hint::before {
+  content: "x";
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.conversation-create-hint.hidden {
+  display: none;
+}
+
+.conversation-create-submit {
+  flex-shrink: 0;
+  height: 26px;
+  min-width: 26px;
+  border: 1px solid var(--chat-conversation-button-border, transparent);
+  border-radius: 4px;
+  background: var(--chat-conversation-button-background, #e8e8e8);
+  color: var(--chat-conversation-button-foreground, #1f1f1f);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.conversation-search-popover {
+  flex-direction: column;
+  max-height: min(320px, calc(100vh - 96px));
+}
+
+.conversation-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.conversation-search-result-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--chat-conversation-foreground, #1f1f1f);
+  cursor: pointer;
+  padding: 5px 6px;
+  text-align: left;
+  font-family: inherit;
+  font-size: var(--chat-conversation-search-result-font-size, inherit);
+}
+
+.conversation-search-result.hidden {
+  display: none;
+}
+
+.conversation-search-result:hover,
+.conversation-search-result:focus {
+  outline: none;
+  background: var(--chat-conversation-list-hover-background, #eeeeee);
+}
+
+.conversation-search-result.current {
+  background: var(--chat-conversation-list-active-background, #dbeafe);
+  color: var(--chat-conversation-list-active-foreground, #111827);
+}
+
+.conversation-search-result-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-search-result-count,
+.conversation-search-empty {
+  flex-shrink: 0;
+  color: var(--chat-conversation-muted-foreground, #666);
+  font-size: 11px;
+}
+
+.conversation-search-result.current .conversation-search-result-count {
+  color: inherit;
+}
+
+.conversation-search-result-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.conversation-search-result-actions.hidden {
+  display: none;
+}
+
+.conversation-search-separator {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  text-align: center;
+  font-size: 11px;
+  margin: 6px 0;
+  gap: 8px;
+}
+
+.conversation-search-separator-line {
+  flex-grow: 1;
+  background-color: var(--chat-conversation-separator-color, #e0e0e0);
+  height: 1px;
+}
+
+.conversation-search-separator-text {
+  flex-shrink: 0;
+  color: var(--chat-conversation-muted-foreground, #666);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.conversation-search-inline-rename {
+  min-width: 0;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.conversation-search-inline-rename.hidden {
+  display: none;
+}
+
+/* =========================================================================
    Chat Layout
    ========================================================================= */
 
 .chat-panel-wrapper {
   display: flex;
   flex-direction: column;
+  position: relative;
   height: 100%;
   width: 100%;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -155,11 +531,7 @@
    ========================================================================= */
 
 .chat-history-separator {
-  text-align: center;
-  color: #999;
-  font-size: 12px;
   padding: 8px 0;
-  border-top: 1px solid #e0e0e0;
   margin: 8px 20px;
 }
 
@@ -918,16 +1290,17 @@ table.table-message td {
   border-radius: 8px 8px 0 0;
 }
 
-/* A whisper of state color on the rail — just enough to sense the state
-   peripherally without a loud band — plus a divider from the content. */
-.chat-message-status-rail[data-status] {
-  border-bottom: 1px solid rgba(127, 127, 127, 0.22);
-}
+/* Mid-tone state-color block on the rail — sits between the original
+   pastel wash and a fully saturated solid. Amber for queued, blue for
+   running. No opacity, no color-mix; just a muted block so the rail
+   reads as a clear status indicator without competing with the bubble
+   body. The label color below uses dark text for contrast against the
+   lighter mid-tones. */
 .chat-message-status-rail[data-status="running"] {
-  background: rgba(31, 143, 255, 0.07);
+  background: #70b0e0;
 }
 .chat-message-status-rail[data-status="queued"] {
-  background: rgba(233, 168, 0, 0.09);
+  background: #eabf63;
 }
 
 /* Square off the top of the content so the rail and content read as one
@@ -952,34 +1325,23 @@ table.table-message td {
   min-width: 0;
 }
 
-/* De-emphasized state label: minor info, but with a hint of state color so
-   it's not lost. A fallback solid color is declared first for webviews
-   without color-mix() support. */
+/* State label sits on top of the mid-tone state-color block. Dark text
+   gives clean contrast against both amber and blue rails at these
+   lightnesses. Outside a stateful rail the default (gray) still
+   applies. */
 .chat-status-state {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.2px;
   color: #7a7a7a;
   user-select: none;
 }
-.chat-status-state[data-status="running"] {
-  color: rgb(58, 122, 165);
-  color: color-mix(
-    in srgb,
-    var(--vscode-charts-blue, #1f8fff) 60%,
-    var(--vscode-descriptionForeground, #7a7a7a)
-  );
-}
+.chat-status-state[data-status="running"],
 .chat-status-state[data-status="queued"] {
-  color: rgb(150, 120, 40);
-  color: color-mix(
-    in srgb,
-    #e9a800 62%,
-    var(--vscode-descriptionForeground, #7a7a7a)
-  );
+  color: #2c2c2c;
 }
 
 .chat-status-rail-controls {
@@ -1023,9 +1385,17 @@ table.table-message td {
   width: 14px;
   height: 14px;
 }
-.chat-message-status-rail .chat-action-button.danger:hover {
-  background: rgba(192, 57, 43, 0.14);
-  color: #c0392b;
+/* On a stateful (mid-tone) rail, switch icons + hover affordances to
+   dark so they read against the amber/blue block. */
+.chat-message-status-rail[data-status] .chat-action-button {
+  color: #2c2c2c;
+}
+.chat-message-status-rail[data-status] .chat-action-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+.chat-message-status-rail[data-status] .chat-action-button.danger:hover {
+  background: rgba(0, 0, 0, 0.18);
+  color: #2c2c2c;
 }
 
 /* =========================================================================
@@ -1156,14 +1526,14 @@ span.ansi-bright-white-fg {
 .chat-separator-line {
   flex-grow: 1;
   width: 40px;
-  background-color: darkgray;
-  height: 2px;
+  background-color: var(--chat-conversation-separator-color, #e0e0e0);
+  height: 1px;
 }
 
 .chat-separator-text {
   margin: 0px 10px;
-  color: darkgray;
-  height: 20px;
+  color: var(--chat-conversation-muted-foreground, #999);
+  line-height: 1;
 }
 
 /* =========================================================================
@@ -1186,6 +1556,58 @@ span.ansi-bright-white-fg {
 .chat-input-switching .user-textarea,
 .chat-input-history-loading .user-textarea {
   opacity: 0.6;
+}
+
+/* =========================================================================
+   History loading indicator (animated dots, appears in the message area)
+   ========================================================================= */
+.chat-history-loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 0;
+}
+
+.chat-history-loading-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--chat-conversation-muted-foreground, #aaa);
+  animation: chat-history-dot-bounce 1.2s ease-in-out infinite;
+}
+
+.chat-history-loading-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.chat-history-loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.chat-history-loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes chat-history-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* =========================================================================
+   Load-earlier-messages sentinel (invisible; triggers IntersectionObserver)
+   ========================================================================= */
+.chat-load-more-history {
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
 }
 
 /* =========================================================================
@@ -1678,4 +2100,39 @@ span.ansi-bright-white-fg {
 .action-text-editable tr.missing td.name-cell {
   font-style: italic;
   color: lightgray;
+}
+
+/* =========================================================================
+   New Messages Pill (shown when user scrolls away from bottom)
+   ========================================================================= */
+
+.chat-new-messages-pill {
+  display: none;
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: var(--chat-new-messages-bg, #0066bf);
+  color: var(--chat-new-messages-fg, #ffffff);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+  user-select: none;
+  z-index: 100;
+}
+
+.chat-new-messages-pill:hover {
+  background-color: var(--chat-new-messages-bg-hover, #0052a3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.chat-new-messages-pill:active {
+  transform: translateX(-50%) scale(0.98);
 }

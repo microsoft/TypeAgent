@@ -11,7 +11,10 @@ import {
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
 import path from "path";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
-import { EmbeddingModelMetadata, modelMetadata_ada002 } from "aiclient";
+import {
+    EmbeddingModelMetadata,
+    modelMetadata_ada002,
+} from "@typeagent/aiclient";
 
 /**
  * Write a conversation's data to files.

@@ -35,8 +35,8 @@ import {
     matchGrammarWithNFA,
     registerBuiltInEntities,
     globalPhraseSetRegistry,
-} from "action-grammar";
-import { populateCache } from "action-grammar/generation";
+} from "@typeagent/action-grammar";
+import { populateCache } from "@typeagent/action-grammar/generation";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

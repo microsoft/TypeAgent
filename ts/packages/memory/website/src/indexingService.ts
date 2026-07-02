@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ChatModel, TextEmbeddingModel } from "aiclient";
+import { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import { WebsiteCollection } from "./websiteCollection.js";
 import { importWebsites, getDefaultBrowserPaths } from "./importWebsites.js";
 import { IndexingResults } from "knowpro";

@@ -5,7 +5,7 @@ import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
 import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 import type { WebsiteCollection, IndexData } from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";

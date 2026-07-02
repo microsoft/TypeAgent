@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=beaeb39359dc2abf3d8829b91bb46a5cd569c7c7be1ece4fa207158afe519d1c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=45b571ba964184feba0fe0fd399272597bdc5493a3c044d34034212cc841bc5e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowpro — AI-generated documentation
@@ -64,7 +64,7 @@ For detailed examples and further guidance, refer to the [KnowPro test app](../.
 
 Workspace:
 
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [knowledge-processor](../../packages/knowledgeProcessor/README.md)
 - [test-lib](../../packages/testLib/README.md)
 - [typeagent](../../packages/typeagent/README.md)
@@ -91,6 +91,6 @@ External: `async`, `debug`, `fast-levenshtein`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -118,7 +118,7 @@
     "@types/node": "^22.10.5",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.4.1",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "glob": "^11.0.0",
     "mkdirp": "^3.0.1",
     "mocha": "^10.7.3",

@@ -17,7 +17,7 @@ import {
     loadGrammarRules,
     compileGrammarToNFA,
     matchGrammarWithNFA,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import { convertConstructionsToGrammar } from "agent-cache/grammar";
 
 const dataFiles = ["test/data/explanations/**/v5/*.json"];

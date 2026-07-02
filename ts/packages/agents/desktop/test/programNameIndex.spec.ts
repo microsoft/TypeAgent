@@ -3,7 +3,7 @@
 
 import { jest } from "@jest/globals";
 import { createProgramNameIndex } from "../src/programNameIndex.js";
-import { TextEmbeddingModel } from "aiclient";
+import { TextEmbeddingModel } from "@typeagent/aiclient";
 
 /** Build a minimal TextEmbeddingModel stub. */
 function makeModel(

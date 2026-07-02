@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1c84c80985c51fb1a6fe296a4725a9bf7cb1c10b185892233bdeacbef171579b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4576a4a502ef7c57e4a32eb913c077d63ef62aa2d74a0ce91f6f748cfe0c1a26 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # conversation-memory — AI-generated documentation
@@ -74,7 +74,7 @@ By following these steps, you can extend the `conversation-memory` package to su
 
 Workspace:
 
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
 - [memory-storage](../../../packages/memory/storage/README.md)
@@ -101,6 +101,6 @@ External: `async`, `debug`, `mailparser`, `typechat`, `webvtt-parser`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

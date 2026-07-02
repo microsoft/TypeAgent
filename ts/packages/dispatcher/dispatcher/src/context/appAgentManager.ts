@@ -46,7 +46,7 @@ import {
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
     loadGrammarRulesNoThrow,
-} from "action-grammar";
+} from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
 import {
@@ -153,12 +153,27 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
         return undefined;
     }
 
-    if (grammarContent.format !== "ag") {
-        throw new Error(
-            `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
-        );
+    if (grammarContent.format === "ag") {
+        return grammarFromJson(JSON.parse(grammarContent.content));
     }
-    return grammarFromJson(JSON.parse(grammarContent.content));
+    if (grammarContent.format === "agr") {
+        // Parse raw .agr at load time; throw on errors so bad syntax fails loudly.
+        const errors: string[] = [];
+        const grammar = loadGrammarRulesNoThrow(
+            `${actionConfig.schemaName}.agr`,
+            grammarContent.content,
+            errors,
+        );
+        if (errors.length > 0) {
+            throw new Error(
+                `Failed to parse static grammar for ${actionConfig.schemaName}: ${errors.join(", ")}`,
+            );
+        }
+        return grammar ?? undefined;
+    }
+    throw new Error(
+        `Unsupported grammar format '${(grammarContent as { format: string }).format}' for ${actionConfig.schemaName}`,
+    );
 }
 
 export class AppAgentManager implements ActionConfigProvider {

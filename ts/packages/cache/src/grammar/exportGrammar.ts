@@ -7,7 +7,7 @@ import {
     RuleDefinition,
     writeGrammarRules,
     ValueNode,
-} from "action-grammar/rules";
+} from "@typeagent/action-grammar/rules";
 import {
     Construction,
     getDefaultMatchValueTranslator,

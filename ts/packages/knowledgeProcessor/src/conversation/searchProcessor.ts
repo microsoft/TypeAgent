@@ -30,7 +30,7 @@ import {
     createAnswerGenerator,
 } from "./answerGenerator.js";
 import { PromptSection } from "typechat";
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import {
     GetAnswerWithTermsAction,
     SearchTermsAction,

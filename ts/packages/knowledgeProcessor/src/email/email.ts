@@ -23,7 +23,7 @@ import {
     createConversation,
 } from "../conversation/conversation.js";
 import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
 import { createEntitySearchOptions } from "../conversation/entities.js";

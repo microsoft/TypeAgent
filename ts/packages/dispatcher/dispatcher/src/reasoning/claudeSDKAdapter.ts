@@ -7,6 +7,7 @@ import {
     query,
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
+import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import { z } from "zod/v4";
 import {
     ReasoningSDKAdapter,
@@ -54,7 +55,7 @@ class ClaudeReasoningSession implements ReasoningSession {
 
         const queryInstance = query({
             prompt: userMessage,
-            options,
+            options: { ...options, ...claudeExecutableOption() },
         });
 
         for await (const message of queryInstance) {

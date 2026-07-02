@@ -177,15 +177,20 @@ agent-cli connect --memory               # use an ephemeral conversation (delete
 
 ### `@conversation` Commands (Connect Mode)
 
-While in connect mode, you can manage conversations interactively using `@conversation` commands. These commands use conversation names (not UUIDs) everywhere.
+While in connect mode, you can manage conversations interactively using `@conversation` commands. `switch` and `delete` accept either a conversation name (case-insensitive) or its exact id; `rename` operates on the active conversation.
 
-| Command                          | Description                                                          |
-| -------------------------------- | -------------------------------------------------------------------- |
-| `@conversation new <name>`       | Create a new conversation. Prompts to switch to it after creation.   |
-| `@conversation switch <name>`    | Switch to an existing conversation by name (case-insensitive).       |
-| `@conversation list [<filter>]`  | List all conversations. The current conversation is marked with `▸`. |
-| `@conversation rename <newName>` | Rename the current conversation.                                     |
-| `@conversation delete <name>`    | Delete a conversation by name (prompts for confirmation).            |
+| Command                           | Description                                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| `@conversation`                   | Show the conversation command help (same as `@conversation help`).                     |
+| `@conversation help`              | Show the conversation command help.                                                    |
+| `@conversation new [<name>]`      | Create a new conversation (auto-named when omitted). Prompts to switch after creation. |
+| `@conversation switch <id\|name>` | Switch to an existing conversation by id or name (case-insensitive).                   |
+| `@conversation list [<filter>]`   | List all conversations. The current conversation is marked with `▸`.                   |
+| `@conversation info`              | Show the current conversation's name and id.                                           |
+| `@conversation next`              | Switch to the next conversation in the list (wraps around).                            |
+| `@conversation prev`              | Switch to the previous conversation in the list (wraps around).                        |
+| `@conversation rename <newName>`  | Rename the current conversation.                                                       |
+| `@conversation delete <id\|name>` | Delete a conversation by id or name (prompts for confirmation).                        |
 
 Example:
 

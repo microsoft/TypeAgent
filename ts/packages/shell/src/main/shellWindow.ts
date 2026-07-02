@@ -11,7 +11,7 @@ import {
     WebContentsView,
 } from "electron";
 import path from "node:path";
-import type { WebSocketMessageV2 } from "websocket-utils";
+import type { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import { runDemo, breakDemo, isDemoActive } from "./demo.js";
 import {
     ShellUserSettings,

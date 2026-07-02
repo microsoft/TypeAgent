@@ -8,6 +8,7 @@ import type {
     QueueSnapshot,
     CommandResult,
 } from "agent-dispatcher";
+import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 
 export type { ShellUserSettings };
 
@@ -85,6 +86,10 @@ export interface ClientAPI {
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
 
     // Conversation management
+    // Whether the multi-conversation switcher should be shown. True only when
+    // connected to a separate agent server (--connect); false when the shell
+    // hosts the agent server in-process (standalone) or for web/mobile clients.
+    conversationBarEnabled(): Promise<boolean>;
     conversationList(): Promise<ConversationInfo[]>;
     conversationCreate(name: string): Promise<ConversationInfo>;
     conversationSwitch(
@@ -95,6 +100,11 @@ export interface ClientAPI {
     conversationGetCurrent(): Promise<
         { conversationId: string; name: string } | undefined
     >;
+    conversationManageAction(payload: ManageConversationPayload): Promise<{
+        html: string;
+        kind: "info" | "warning" | "error";
+        switched?: boolean;
+    }>;
 }
 
 // Functions that are called from the main process to the renderer process.

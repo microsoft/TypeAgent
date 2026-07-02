@@ -5,12 +5,14 @@ import { WebSocketServer, WebSocket } from "ws";
 import { AddressInfo } from "net";
 import registerDebug from "debug";
 import { isAllowedAgentOrigin } from "./originAllowlist.js";
+import { attachHeartbeat } from "websocket-channel-server";
 
 const debug = registerDebug("typeagent:code:websocket");
 
 export class CodeAgentWebSocketServer {
     private clients: Map<string, WebSocket> = new Map();
     private clientIdCounter = 0;
+    private readonly stopHeartbeat: () => void;
     public onMessage?: (message: string) => void;
     /**
      * Fired after the {@link clients} map mutation completes for any
@@ -36,6 +38,7 @@ export class CodeAgentWebSocketServer {
         public readonly port: number,
     ) {
         this.setupHandlers();
+        this.stopHeartbeat = attachHeartbeat(server);
         debug(`CodeAgentWebSocketServer listening on port ${port}`);
     }
 
@@ -212,6 +215,7 @@ export class CodeAgentWebSocketServer {
      */
     public close(): Promise<void> {
         debug("Closing CodeAgentWebSocketServer");
+        this.stopHeartbeat();
         for (const [, client] of this.clients.entries()) {
             if (client.readyState === WebSocket.OPEN) {
                 client.close();

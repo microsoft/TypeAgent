@@ -15,6 +15,7 @@ body {
   background-color: #00000000;
   /* Light theme: image lightbox backdrop is translucent white. */
   --chat-lightbox-backdrop: rgba(255, 255, 255, 0.85);
+  --chat-conversation-search-result-font-size: 12px;
 }
 
 .dark-mode {
@@ -341,6 +342,68 @@ body {
   background-color: #00000000;
 }
 
+.chat-shell-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  --chat-conversation-background: #f7f7f8;
+  --chat-conversation-border: #d8d8df;
+  --chat-conversation-foreground: #202124;
+  --chat-conversation-muted-foreground: #6f7179;
+  --chat-conversation-link-active-foreground: #2563eb;
+  --chat-conversation-button-background: #e9eaee;
+  --chat-conversation-button-foreground: #202124;
+  --chat-conversation-button-hover-background: #dfe1e7;
+  --chat-conversation-input-background: #ffffff;
+  --chat-conversation-input-foreground: #202124;
+  --chat-conversation-input-border: #c8cbd3;
+  --chat-conversation-focus-border: #2563eb;
+  --chat-conversation-error-foreground: #c42b1c;
+  --chat-conversation-success-foreground: #16825d;
+  --chat-conversation-warning-foreground: #a15c00;
+  --chat-conversation-status-foreground: #ffffff;
+  --chat-conversation-popover-background: #ffffff;
+  --chat-conversation-popover-shadow: rgba(0, 0, 0, 0.22);
+  --chat-conversation-list-hover-background: #eceef4;
+  --chat-conversation-list-active-background: #dbeafe;
+  --chat-conversation-list-active-foreground: #111827;
+  --chat-conversation-separator-color: #e0e0e0;
+}
+
+.dark-mode .chat-shell-layout {
+  --chat-conversation-background: #13131d;
+  --chat-conversation-border: #3b3b4c;
+  --chat-conversation-foreground: #f3f4f6;
+  --chat-conversation-muted-foreground: #a7aab7;
+  --chat-conversation-link-active-foreground: #93c5fd;
+  --chat-conversation-button-background: #303142;
+  --chat-conversation-button-foreground: #f3f4f6;
+  --chat-conversation-button-hover-background: #3b3d52;
+  --chat-conversation-input-background: #161720;
+  --chat-conversation-input-foreground: #f3f4f6;
+  --chat-conversation-input-border: #484a5f;
+  --chat-conversation-focus-border: #93c5fd;
+  --chat-conversation-error-foreground: #f87171;
+  --chat-conversation-success-foreground: #34d399;
+  --chat-conversation-warning-foreground: #fbbf24;
+  --chat-conversation-status-foreground: #161720;
+  --chat-conversation-popover-background: #242536;
+  --chat-conversation-popover-shadow: rgba(0, 0, 0, 0.45);
+  --chat-conversation-list-hover-background: #323449;
+  --chat-conversation-list-active-background: #1d4ed8;
+  --chat-conversation-list-active-foreground: #ffffff;
+  --chat-conversation-separator-color: #3b3b4c;
+}
+
+.chat-shell-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 .inline-ghost {
   color: #9ca3af;
   pointer-events: none;
@@ -431,6 +494,78 @@ body {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+.pick-remember-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background-color: #fafafa;
+}
+
+.pick-remember-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.pick-remember-choice:hover {
+  background-color: #eef4ff;
+}
+
+.pick-remember-choice input[type="radio"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.pick-remember-choice span {
+  font-family:
+    ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.pick-remember-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 6px 8px 0;
+  border-top: 1px solid #e8e8e8;
+  font-size: 12px;
+  color: #555;
+}
+
+.pick-remember-toggle input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.pick-remember-panel .checkbox-buttons {
+  margin-top: 8px;
+}
+
+.pick-remember-panel .choice-button {
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pick-remember-panel .choice-button:first-child {
+  border-color: #3a6cd9;
+  background-color: #3a6cd9;
+  color: #fff;
+}
+
+.pick-remember-panel .choice-button:first-child:hover {
+  background-color: #2f59b5;
 }
 
 .action-text {

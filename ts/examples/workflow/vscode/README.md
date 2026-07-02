@@ -58,7 +58,7 @@ xvfb-run -a pnpm --filter workflow-vscode run test:ui
 ```
 
 See `scripts/extension-test.sh` and
-[`ts/docs/design/workflowSystem/editor/lsp-decisions.md`](../../../docs/design/workflowSystem/editor/lsp-decisions.md).
+[`ts/docs/architecture/workflows/editor/lsp-decisions.md`](../../../docs/architecture/workflows/editor/lsp-decisions.md).
 
 ## Trademarks
 

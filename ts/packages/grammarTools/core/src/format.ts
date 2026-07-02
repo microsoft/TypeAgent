@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseGrammarRules, writeGrammarRules } from "action-grammar";
+import {
+    parseGrammarRules,
+    writeGrammarRules,
+} from "@typeagent/action-grammar";
 
 /**
  * Format a raw `.agr` source string. Returns the formatted text.

@@ -86,7 +86,9 @@ Generation:
 Smart default for --since (when none of --since/--all/--package are given):
   1. If on a non-default branch, the merge-base with origin/main.
   2. Otherwise the docs-bot/last-run watermark tag.
-  3. Otherwise: no-op (warns and exits 0).
+  3. Otherwise, on the default branch with no watermark (first run):
+     regenerate every eligible package (bounded by --max-packages).
+  4. Otherwise (e.g. detached HEAD, no watermark): no-op (warns, exits 0).
 
 Tip: invoke through the launcher (\`pnpm docs:generate\` or
 \`node tools/docsAutogen/bin/docs-autogen.cjs\`) to suppress
@@ -203,17 +205,36 @@ async function main(): Promise<number> {
     } else {
         const since = await resolveSinceRef(git, { explicit: opts.since });
         if (since.source === "none") {
-            emitNoop(opts, since.reason);
-            return 0;
+            // Cold start: no diff baseline exists. On the default branch
+            // this is the first run before any watermark has been seeded,
+            // so regenerate every eligible package (still bounded by the
+            // cost guard below). The workflow advances the watermark
+            // afterwards, so subsequent runs become incremental. Other
+            // "none" cases (e.g. a detached HEAD with no watermark) stay
+            // a no-op to avoid an unexpected full sweep.
+            if (!since.onDefaultBranch) {
+                emitNoop(opts, since.reason);
+                return 0;
+            }
+            selected = eligible;
+            sinceLabel = "first-run (no watermark — full sweep)";
+            if (!opts.json) {
+                process.stderr.write(
+                    `${chalk.yellow(
+                        `docs-autogen: ${since.reason} — regenerating all ${eligible.length} eligible package(s).`,
+                    )}\n`,
+                );
+            }
+        } else {
+            sinceLabel = `${since.source} (${since.sinceRef})`;
+            sinceSha = since.sinceSha;
+            const changedFiles =
+                since.sinceSha === headSha
+                    ? []
+                    : await git.diffNameOnly(since.sinceSha, headSha);
+            const detection = detectChangedPackages(eligible, changedFiles);
+            selected = detection.packages;
         }
-        sinceLabel = `${since.source} (${since.sinceRef})`;
-        sinceSha = since.sinceSha;
-        const changedFiles =
-            since.sinceSha === headSha
-                ? []
-                : await git.diffNameOnly(since.sinceSha, headSha);
-        const detection = detectChangedPackages(eligible, changedFiles);
-        selected = detection.packages;
     }
 
     // Cost guard: cap the number of packages a single run can touch

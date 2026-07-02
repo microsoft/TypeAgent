@@ -176,7 +176,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Choice (yes/no confirmation or multi-select)
     handleChoice?(
         choiceId: string,
-        response: boolean | number[],
+        response: boolean | number[] | { selected: number; remember: boolean },
         context: ActionContext<unknown>,
     ): Promise<ActionResult | undefined>;
 

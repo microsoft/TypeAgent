@@ -95,7 +95,13 @@ export type BridgeToWebviewMessage =
           secondsRemaining?: number;
           error?: string;
       }
-    | { type: "switching"; switching: boolean; targetName?: string }
+    | {
+          type: "switching";
+          switching: boolean;
+          targetName?: string;
+          statusLabel?: "Creating" | "Connecting";
+      }
+    | { type: "activateNewSessionInput" }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
     // Per-conversation queue lifecycle. The bridge forwards the dispatcher's
@@ -166,7 +172,18 @@ export type BridgeToWebviewMessage =
               tokenUsage?: any;
               actionTokenUsage?: any;
           }>;
-      };
+      }
+    | {
+          type: "sessionList";
+          sessions: Array<{
+              sessionId: string;
+              name: string;
+              clientCount: number;
+              createdAt?: string; // ISO 8601
+          }>;
+          currentSessionId?: string;
+      }
+    | { type: "sessionError"; message: string };
 
 /**
  * Messages from webview → extension host
@@ -182,6 +199,13 @@ export type BridgeFromWebviewMessage =
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
+    | { type: "requestSessions" }
+    | { type: "createSession"; name: string }
+    | { type: "switchSession"; sessionId: string }
+    | { type: "renameCurrentSession"; name: string }
+    | { type: "deleteCurrentSession" }
+    | { type: "renameSession"; sessionId: string; name: string }
+    | { type: "deleteSession"; sessionId: string }
     | { type: "focus"; focused: boolean }
     | { type: "pcUpdate"; input: string; direction: CompletionDirection }
     | { type: "pcAccept" }

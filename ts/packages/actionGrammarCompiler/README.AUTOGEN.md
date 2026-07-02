@@ -3,10 +3,10 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=66b46c1eed4cc779997ca3a834bb3ca2c3688c3bb1e86ac995780d589f638949 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=80f5acce55ae2813e3bd7ef2a1a710d654026eddbb1ef038879535a527255036 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# action-grammar-compiler — AI-generated documentation
+# @typeagent/action-grammar-compiler — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
@@ -91,8 +91,8 @@ _No public exports declared in `package.json`._
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
 
 External: `@oclif/core`, `@oclif/plugin-help`
 
@@ -100,6 +100,7 @@ External: `@oclif/core`, `@oclif/plugin-help`
 
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - [calendar](../../packages/agents/calendar/README.md)
+- [code-agent](../../packages/agents/code/README.md)
 - [desktop-automation](../../packages/agents/desktop/README.md)
 - [discord-agent](../../packages/agents/discord/README.md)
 - [github-cli-agent](../../packages/agents/github-cli/README.md)
@@ -107,8 +108,7 @@ External: `@oclif/core`, `@oclif/plugin-help`
 - [list-agent](../../packages/agents/list/README.md)
 - [music](../../packages/agents/player/README.md)
 - [music-local](../../packages/agents/playerLocal/README.md)
-- [onboarding-agent](../../packages/agents/onboarding/README.md)
-- _…and 8 more workspace consumers._
+- _…and 9 more workspace consumers._
 
 ### Files of interest
 
@@ -116,6 +116,6 @@ External: `@oclif/core`, `@oclif/plugin-help`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter action-grammar-compiler docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar-compiler docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -17,6 +17,20 @@ export type ConversationInfo = {
     createdAt: string; // ISO 8601
 };
 
+export type ConversationNameCollisionBehavior = "error" | "appendNumber";
+
+export type ConversationNameCollisionOptions = {
+    /**
+     * How to handle an existing conversation with the same name.
+     * Defaults to "error".
+     */
+    nameCollisionBehavior?: ConversationNameCollisionBehavior;
+};
+
+export type CreateConversationOptions = ConversationNameCollisionOptions;
+
+export type RenameConversationOptions = ConversationNameCollisionOptions;
+
 export type JoinConversationResult = {
     connectionId: string;
     conversationId: string;
@@ -48,11 +62,15 @@ export type AgentServerInvokeFunctions = {
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;
     leaveConversation: (conversationId: string) => Promise<void>;
-    createConversation: (name: string) => Promise<ConversationInfo>;
+    createConversation: (
+        name: string,
+        options?: CreateConversationOptions,
+    ) => Promise<ConversationInfo>;
     listConversations: (name?: string) => Promise<ConversationInfo[]>;
     renameConversation: (
         conversationId: string,
         newName: string,
+        options?: RenameConversationOptions,
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
@@ -127,7 +145,25 @@ export type DiscoveryInvokeFunctions = {
     lookupPort: (param: {
         agentName: string;
         role?: string;
-    }) => Promise<{ port: number | null }>;
+        /**
+         * Hint that the request originates from a remote (non-loopback)
+         * client, so the server should answer with a tunnel `url` (when one
+         * is configured and live) rather than a localhost realm. Optional and
+         * backward compatible — omitted by local clients, which only ever
+         * need the port. See the dev-tunnel discovery design.
+         */
+        remote?: boolean;
+    }) => Promise<{
+        port: number | null;
+        /**
+         * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
+         * tunnel address) the caller should connect to instead of
+         * `ws://localhost:<port>`. Present only when the server resolved a
+         * live tunnel mapping for `port` and the request was remote-realm.
+         * Absent → fall back to the localhost realm using `port`.
+         */
+        url?: string;
+    }>;
 };
 
 /**
@@ -146,11 +182,29 @@ export type DiscoveryInvokeFunctions = {
  */
 export function createDiscoveryHandlers(
     lookup: (agentName: string, role?: string) => number | undefined,
+    /**
+     * Optional URL resolver. When supplied and it returns a string for the
+     * resolved `(agentName, port, remote)`, that URL is attached to the
+     * response so remote clients connect to a tunnel address instead of
+     * localhost. Hosts that don't support tunneling (e.g. the standalone
+     * shell) simply omit it and behavior is unchanged. The agent-server supplies
+     * a resolver that reads the dev-tunnel config and checks host liveness.
+     */
+    resolveUrl?: (
+        agentName: string,
+        port: number,
+        remote?: boolean,
+    ) => string | undefined | Promise<string | undefined>,
 ): DiscoveryInvokeFunctions {
     return {
-        lookupPort: async ({ agentName, role }) => ({
-            port: lookup(agentName, role) ?? null,
-        }),
+        lookupPort: async ({ agentName, role, remote }) => {
+            const port = lookup(agentName, role) ?? null;
+            if (port === null) {
+                return { port };
+            }
+            const url = await resolveUrl?.(agentName, port, remote);
+            return url ? { port, url } : { port };
+        },
     };
 }
 

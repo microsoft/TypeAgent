@@ -15,7 +15,7 @@ import { screenshotCoordinator } from "./screenshotCoordinator";
 import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
 import { setChatPanelRpc } from "./dispatcherConnection";
-import { setContextMenuRpcSend } from "./contextMenu";
+import { setContextMenuRpcSend, initContextMenuSettings } from "./contextMenu";
 import { clearRecordedActions } from "./storage";
 
 import {
@@ -29,6 +29,12 @@ const debug = registerDebug("typeagent:browser:serviceWorker");
 const debugError = registerDebug("typeagent:browser:serviceWorker:error");
 
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
+
+// MV3 service workers are reaped after ~30s idle, destroying the
+// WebSocket and its reconnect timer. A persisted alarm resurrects the
+// worker on the shortest interval Chrome allows (30s) so it can
+// re-establish the connection without a user gesture.
+const KEEPALIVE_ALARM_NAME = "typeagent-keepalive";
 
 let serviceWorkerHandlers: ReturnType<typeof createAllHandlers> | undefined;
 
@@ -52,6 +58,7 @@ export async function initialize(): Promise<void> {
 
     // Initialize context menu
     initializeContextMenu();
+    initContextMenuSettings();
 
     // Set up RPC server for typed view communication
     const allHandlers = createAllHandlers();
@@ -300,6 +307,24 @@ function setupEventListeners(): void {
             }
         } catch (error) {
             console.error("Error on browser startup:", error);
+            reconnectWebSocket();
+        }
+    });
+
+    // Service-worker keepalive: resurrect a dormant worker and re-heal a
+    // dropped WebSocket on a 30s cadence without waiting for user input.
+    chrome.alarms.create(KEEPALIVE_ALARM_NAME, { periodInMinutes: 0.5 });
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+        if (alarm.name !== KEEPALIVE_ALARM_NAME) {
+            return;
+        }
+        try {
+            const connected = await ensureWebsocketConnected();
+            if (!connected) {
+                reconnectWebSocket();
+            }
+        } catch (error) {
+            debugError("Error on keepalive alarm:", error);
             reconnectWebSocket();
         }
     });

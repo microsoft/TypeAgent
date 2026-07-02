@@ -13,6 +13,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./conversation": "./dist/conversation/index.js",
     "./discovery": "./dist/discovery.js"
   },
   "files": [
@@ -37,6 +38,7 @@
     "isomorphic-ws": "^5.0.0"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",

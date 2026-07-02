@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=08cd91d5418642aa01884e6d3a69086197e41d7f07916820c29bcf5ad403a414 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8b097a29312783f33ee928009d24464ef812d51db32f4d945178e69cfe11eabf -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -16,7 +16,7 @@ The `agent-server` package is a TypeScript library that provides a long-running 
 
 ## What it does
 
-The `agent-server` package accepts several actions related to conversation management and server control. These actions include `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`, and `shutdown`. The server listens on a WebSocket endpoint and handles these actions by interacting with the conversation manager and shared dispatcher components. It also supports graceful shutdown and idle timeout features.
+The `agent-server` package handles several actions related to conversation management and server control. These actions include `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`, and `shutdown`. The server listens on a WebSocket endpoint and processes these actions by interacting with the conversation manager and shared dispatcher components. It also supports graceful shutdown and idle timeout features.
 
 ## Setup
 
@@ -65,6 +65,7 @@ By following these steps, you can extend the functionality of the `agent-server`
 ### Entry points
 
 - default → [./dist/server.js](./dist/server.js)
+- `./in-process` → [./dist/inProcessAgentServer.js](./dist/inProcessAgentServer.js)
 
 ### Dependencies
 
@@ -84,9 +85,13 @@ Workspace:
 
 External: `@azure/identity`, `debug`, `dotenv`, `ws`
 
+### Used by
+
+- [agent-shell](../../../packages/shell/README.md)
+
 ### Files of interest
 
-`./src/conversationManager.ts`, `./src/server.ts`, `./src/sharedDispatcher.ts`, …and 3 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/inProcessAgentServer.ts`, …and 6 more under `./src/`.
 
 ### Environment variables
 
@@ -97,6 +102,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

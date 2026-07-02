@@ -20,7 +20,11 @@ import {
     DispatcherClarifyName,
     DispatcherName,
 } from "../context/dispatcher/dispatcherUtils.js";
-import { isCollision, resolveGrammarCollision } from "./matchCollision.js";
+import {
+    isCollision,
+    resolveGrammarCollision,
+    resolveGrammarRegistryFirst,
+} from "./matchCollision.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -279,15 +283,28 @@ export async function matchRequest(
     // is a no-op and we use validated[0], identical to legacy behavior.
     const collisionCfg = config.collision.grammarMatch;
     let chosen = validated[0];
+
+    // Registry-first detection runs independently of grammarMatch.detect: a
+    // single confident cache match can still be registry-known-ambiguous.
+    let decision = resolveGrammarRegistryFirst(
+        validated,
+        systemContext,
+        request,
+    );
     if (
+        decision === undefined &&
         collisionCfg.detect &&
         isCollision(validated, collisionCfg.classifier)
     ) {
-        const decision = resolveGrammarCollision(
-            validated,
-            systemContext,
-            request,
-        );
+        decision = resolveGrammarCollision(validated, systemContext, request);
+    }
+    if (decision !== undefined) {
+        if (decision.kind === "fallthrough") {
+            // A pending one-shot pick names a registry sibling the grammar
+            // didn't match. Bail out of grammar matching so the request falls
+            // through to LLM translation, which pins the schema to the pick.
+            return undefined;
+        }
         if (decision.kind === "match") {
             chosen = decision.match;
         } else {

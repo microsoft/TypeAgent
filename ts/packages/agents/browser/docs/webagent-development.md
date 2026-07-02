@@ -3,7 +3,7 @@
 This guide walks through building a new site-specific WebAgent for the
 TypeAgent browser extension. For framework architecture, see the WebAgent
 section in
-[browserScenarios.md](../../../../docs/architecture/browserScenarios.md).
+[browserScenarios.md](../../../../docs/architecture/browser/browserScenarios.md).
 
 ---
 

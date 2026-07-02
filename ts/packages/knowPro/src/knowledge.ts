@@ -12,7 +12,7 @@ import {
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import { BatchTask, runInBatches } from "./taskQueue.js";
 import { MessageTag, StructuredTag, Tag } from "./interfaces.js";

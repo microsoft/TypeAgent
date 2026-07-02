@@ -12,7 +12,7 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";

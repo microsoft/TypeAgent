@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
-import { ChatModelWithStreaming, openai } from "aiclient";
+import { ChatModelWithStreaming, openai } from "@typeagent/aiclient";
 import { CalendarSearchAction, CalendarDateTime } from "./calSearchSchema.js";
 import {
     TypeChatLanguageModel,
