@@ -59,9 +59,11 @@ export function openImpactReport(
     // Subscription to the shared connection's state, disposed with the panel.
     let stateSub: { dispose(): void } | undefined;
     // The last completed result + its request id. Re-posted whenever the webview
-    // signals `ready` so a run that finished while the iframe was torn down (the
-    // panel is `retainContextWhenHidden: false`, so hidden panels drop posts) is
-    // recovered on reveal — the webview dedupes by request id.
+    // signals `ready` so a run whose result arrived before the webview was
+    // listening (e.g. the first load, or a full extension reload) is recovered
+    // on the next `ready` — the webview dedupes by request id. With the panel
+    // retaining context while hidden, navigate-away/back no longer reloads it,
+    // so this mainly guards the initial-load and extension-reload cases.
     let lastResult:
         | {
               requestId: number;
@@ -82,6 +84,11 @@ export function openImpactReport(
         title: `Impact Report — ${agent}`,
         scriptPath: ["dist", "webview", "impactReport.js"],
         stylePath: ["media", "impactReport.css"],
+        // The panel holds a live service connection and a rendered result, and
+        // the agent/connection context is re-pushed only via a single reveal
+        // `ready` handshake. Retain the context so navigating away and back
+        // keeps that state instead of tearing the webview down and reloading.
+        retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
             stateSub?.dispose();
@@ -126,7 +133,13 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agent, connected: false, available: false });
+            post({
+                type: "init",
+                agent,
+                connected: false,
+                available: false,
+                canValidateWildcards: false,
+            });
             return;
         }
         // Confirm this agent still has a corpus to replay so the webview can
@@ -138,7 +151,22 @@ export function openImpactReport(
         } catch {
             // Connected but listing failed; treat as unavailable for now.
         }
-        post({ type: "init", agent, connected: true, available });
+        // Check whether wildcard validation can actually run for this agent (it
+        // has a validator), so the webview can disable the toggle when there is
+        // nothing to run. A lookup failure stays conservative (toggle disabled).
+        let canValidateWildcards = false;
+        try {
+            canValidateWildcards = await c.canValidateWildcards(agent);
+        } catch {
+            // Leave the toggle disabled rather than offering a no-op.
+        }
+        post({
+            type: "init",
+            agent,
+            connected: true,
+            available,
+            canValidateWildcards,
+        });
         // Recover a result computed while the panel was hidden/reloaded.
         if (lastResult) {
             post({
@@ -360,6 +388,14 @@ export function openImpactReport(
                 // free of LLM calls.
                 versionA: msg.versionA,
                 versionB: msg.versionB,
+                // The webview's mode toggle selects which deterministic dispatch
+                // path to model (grammar-only vs construction-cache-first); the
+                // runtime defaults unknown/missing to the cache-free baseline.
+                mode: msg.mode,
+                // Opt-in wildcard validation: the runtime only acts on it when a
+                // `resolveWildcardValidator` is wired and the agent's manifest
+                // declares it replay-safe; otherwise it is a no-op.
+                validateWildcards: msg.validateWildcards,
                 missPolicy: "needs-explanation",
             });
             post({

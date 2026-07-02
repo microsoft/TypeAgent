@@ -1182,3 +1182,168 @@ test("scanGrammarCollisions defaults to agents loaded across sandboxes", async (
 
     assert.deepEqual(received, []);
 });
+
+// --- Replay mode gating (Level B) -----------------------------------------
+// `replayCorpus` consults the live construction cache only in
+// `completionBased-cache` mode; the default `nfa-grammar` mode matches against
+// the grammar alone. These tests scaffold a real single-schema agent so the
+// auto-engaged grammar path runs, and inject a spy cache resolver so the gating
+// is observable without a real on-disk construction cache.
+
+const GATING_GRAMMAR = [
+    "<Start> = <Pause> | <Resume>;",
+    '<Pause> = pause -> { actionName: "pause" };',
+    '<Resume> = resume -> { actionName: "resume" };',
+].join("\n");
+
+const GATING_SCHEMA_TS = [
+    "export type DemoActions = PauseAction | ResumeAction;",
+    "",
+    "// Pause playback.",
+    'export type PauseAction = { actionName: "pause" };',
+    "",
+    "// Resume playback.",
+    'export type ResumeAction = { actionName: "resume" };',
+    "",
+].join("\n");
+
+const GATING_MANIFEST = JSON.stringify({
+    schema: {
+        originalSchemaFile: "./demoSchema.ts",
+        schemaType: { action: "DemoActions" },
+    },
+});
+
+/**
+ * Scaffold a temp repo whose `packages/agents/demo` is a discoverable
+ * single-schema agent (grammar + schema + manifest), so `resolveRepoRoot` and
+ * `resolveGrammarReplayTarget` engage the real grammar replay path.
+ */
+async function scaffoldGatingRepo(): Promise<string> {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "studio-gating-"));
+    const agentDir = path.join(
+        repoRoot,
+        "packages",
+        "agents",
+        "demo",
+        "src",
+        "agent",
+    );
+    await fs.mkdir(agentDir, { recursive: true });
+    await fs.writeFile(
+        path.join(agentDir, "demoSchema.agr"),
+        GATING_GRAMMAR,
+        "utf8",
+    );
+    await fs.writeFile(
+        path.join(agentDir, "demoSchema.ts"),
+        GATING_SCHEMA_TS,
+        "utf8",
+    );
+    await fs.writeFile(
+        path.join(agentDir, "demoManifest.json"),
+        GATING_MANIFEST,
+        "utf8",
+    );
+    return repoRoot;
+}
+
+function gatingEntry(id: string, utterance: string): CorpusEntry {
+    return {
+        id,
+        utterance,
+        agent: "demo",
+        source: "in-repo",
+        provenance: { sourceUri: `mem://${id}` },
+    };
+}
+
+/** A spy `resolveConstructionCache` that records consults and returns a valid
+ *  layer resolving "pause" from the cache. */
+function spyCacheResolver(record: { consulted: boolean }) {
+    return async () => {
+        record.consulted = true;
+        return {
+            status: "valid" as const,
+            cacheFilePath: "/stub/constructions.json",
+            schemaName: "demo",
+            currentHash: "hash=",
+            cachedHash: "hash=",
+            match(utterance: string) {
+                return utterance === "pause"
+                    ? { schemaName: "demo", actionName: "pause" }
+                    : undefined;
+            },
+        };
+    };
+}
+
+test("replayCorpus skips the construction cache in the default nfa-grammar mode", async () => {
+    const repoRoot = await scaffoldGatingRepo();
+    try {
+        const corpus = new StubCorpusService([gatingEntry("p", "pause")]);
+        const record = { consulted: false };
+        const runtime = createStudioRuntimeCore(
+            createContext([repoRoot]).context,
+            { corpus, resolveConstructionCache: spyCacheResolver(record) },
+        );
+
+        const result = await runtime.replayCorpus({
+            agent: "demo",
+            missPolicy: "needs-explanation",
+            mode: "nfa-grammar",
+        });
+
+        assert.equal(record.consulted, false);
+        assert.notEqual(result.method, "construction-cache");
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("replayCorpus omitting the mode defaults to grammar-only (no cache consult)", async () => {
+    const repoRoot = await scaffoldGatingRepo();
+    try {
+        const corpus = new StubCorpusService([gatingEntry("p", "pause")]);
+        const record = { consulted: false };
+        const runtime = createStudioRuntimeCore(
+            createContext([repoRoot]).context,
+            { corpus, resolveConstructionCache: spyCacheResolver(record) },
+        );
+
+        const result = await runtime.replayCorpus({
+            agent: "demo",
+            missPolicy: "needs-explanation",
+        });
+
+        assert.equal(record.consulted, false);
+        assert.notEqual(result.method, "construction-cache");
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("replayCorpus consults the construction cache in completionBased-cache mode", async () => {
+    const repoRoot = await scaffoldGatingRepo();
+    try {
+        const corpus = new StubCorpusService([gatingEntry("p", "pause")]);
+        const record = { consulted: false };
+        const runtime = createStudioRuntimeCore(
+            createContext([repoRoot]).context,
+            { corpus, resolveConstructionCache: spyCacheResolver(record) },
+        );
+
+        const result = await runtime.replayCorpus({
+            agent: "demo",
+            missPolicy: "needs-explanation",
+            mode: "completionBased-cache",
+        });
+
+        assert.equal(record.consulted, true);
+        // A valid cache layer for the working-tree side surfaces as the
+        // construction-cache method.
+        assert.equal(result.method, "construction-cache");
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});

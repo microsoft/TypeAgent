@@ -230,6 +230,11 @@ export class StudioServiceClient {
         return this.rpc.invoke("listCorpusAgents", this.repoRoot);
     }
 
+    /** Whether wildcard validation can run for `agent` (it has a validator). */
+    canValidateWildcards(agent: string): Promise<boolean> {
+        return this.rpc.invoke("canValidateWildcards", this.repoRoot, agent);
+    }
+
     /** Federated corpus entries for an agent (Corpus tree expansion). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]> {
         return this.rpc.invoke("listCorpusEntries", this.repoRoot, agent);

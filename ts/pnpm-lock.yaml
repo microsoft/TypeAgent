@@ -5873,6 +5873,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../defaultAgentProvider
       ws:
         specifier: ^8.21.0
         version: 8.21.0
