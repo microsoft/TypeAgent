@@ -612,6 +612,7 @@ export class AgentServerBridge {
                     name: s.name || s.sessionId.substring(0, 8),
                     clientCount: s.clientCount,
                     createdAt: s.createdAt,
+                    source: s.source,
                 })),
                 currentSessionId: this.session?.sessionId,
             });

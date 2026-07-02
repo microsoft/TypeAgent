@@ -184,6 +184,7 @@ export type BridgeToWebviewMessage =
               name: string;
               clientCount: number;
               createdAt?: string; // ISO 8601
+              source?: "copilot"; // origin: absent = native TypeAgent
           }>;
           currentSessionId?: string;
       }

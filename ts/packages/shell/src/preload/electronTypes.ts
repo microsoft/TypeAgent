@@ -9,6 +9,7 @@ import type {
     CommandResult,
 } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
+import type { ConversationInfo } from "@typeagent/agent-server-client";
 import type { ConnectionStatus } from "chat-ui";
 
 export type { ShellUserSettings };
@@ -176,13 +177,11 @@ export type UserExpression = {
     text: string;
 };
 
-// Conversation management types
-export type ConversationInfo = {
-    conversationId: string;
-    name: string;
-    clientCount: number;
-    createdAt: string; // ISO 8601
-};
+// Conversation management types.
+// Re-export the authoritative protocol type (via the agent-server client) so
+// the Electron IPC surface stays in lockstep with the server wire shape
+// instead of drifting as a hand-maintained copy.
+export type { ConversationInfo };
 
 export type ConversationSwitchResult = {
     success: boolean;

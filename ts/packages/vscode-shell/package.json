@@ -77,6 +77,11 @@
         "category": "TypeAgent"
       },
       {
+        "command": "vscode-shell.importCopilotSessions",
+        "title": "Import Copilot Sessions",
+        "category": "TypeAgent"
+      },
+      {
         "command": "vscode-shell.clearChat",
         "title": "Clear Chat View",
         "category": "TypeAgent"

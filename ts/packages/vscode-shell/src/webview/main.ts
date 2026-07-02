@@ -551,11 +551,13 @@ window.addEventListener("message", (event) => {
                         name: string;
                         clientCount: number;
                         createdAt?: string;
+                        source?: "copilot";
                     }) => ({
                         conversationId: session.sessionId,
                         name: session.name,
                         clientCount: session.clientCount,
                         createdAt: session.createdAt,
+                        source: session.source,
                     }),
                 ),
                 msg.currentSessionId,

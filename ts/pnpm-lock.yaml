@@ -919,7 +919,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1638,6 +1638,9 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
+      better-sqlite3:
+        specifier: 12.6.2
+        version: 12.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -1660,6 +1663,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@types/better-sqlite3':
+        specifier: 7.6.13
+        version: 7.6.13
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -1671,7 +1677,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -21140,7 +21146,7 @@ snapshots:
 
   '@types/better-sqlite3@7.6.13':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/body-parser@1.19.5':
     dependencies:
@@ -21418,7 +21424,7 @@ snapshots:
 
   '@types/fs-extra@8.1.5':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/fs-extra@9.0.13':
     dependencies:
@@ -21568,7 +21574,7 @@ snapshots:
 
   '@types/node-fetch@2.6.12':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       form-data: 4.0.6
 
   '@types/node@18.19.130':

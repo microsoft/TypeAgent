@@ -173,6 +173,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     name: conversation.name,
                     clientCount: conversation.clientCount,
                     createdAt: conversation.createdAt,
+                    source: conversation.source,
                 })),
                 current?.conversationId,
             );

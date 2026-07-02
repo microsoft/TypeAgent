@@ -412,6 +412,24 @@
   padding: 0 4px;
 }
 
+/* Source group headers ("TypeAgent" / "GitHub Copilot") reuse the separator
+   layout but read as stronger section labels than the temporal separator. */
+.conversation-search-group-header {
+  margin-top: 10px;
+}
+
+.conversation-search-group-header:first-child {
+  margin-top: 2px;
+}
+
+.conversation-search-group-header .conversation-search-separator-text {
+  color: var(--chat-conversation-foreground, #333);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
 .conversation-search-inline-rename {
   min-width: 0;
   width: 100%;

@@ -12,6 +12,8 @@ export type ConversationBarConversation = {
     name: string;
     clientCount?: number;
     createdAt?: string; // ISO 8601 timestamp
+    /** Origin of the conversation. Absent = native TypeAgent; "copilot" = imported mirror. */
+    source?: "copilot";
 };
 
 export type ConversationBarStatus = {
@@ -689,6 +691,28 @@ export class ConversationBar {
             return;
         }
 
+        // When Copilot mirror conversations are present, split the list into
+        // "TypeAgent" and "GitHub Copilot" sections so the two origins are
+        // visually grouped. Without any Copilot mirrors, keep the original
+        // current/previous temporal layout.
+        const copilotMatches = matches.filter((c) => c.source === "copilot");
+        if (copilotMatches.length === 0) {
+            this.renderConversationResultsTemporal(matches);
+            return;
+        }
+
+        const typeAgentMatches = matches.filter((c) => c.source !== "copilot");
+        this.renderConversationGroup("TypeAgent", typeAgentMatches);
+        this.renderConversationGroup("GitHub Copilot", copilotMatches);
+    }
+
+    /**
+     * Render the flat current-first / previous-with-time-separator layout used
+     * when there are no Copilot mirror conversations to group.
+     */
+    private renderConversationResultsTemporal(
+        matches: ConversationBarConversation[],
+    ): void {
         // Separate current conversation from previous ones
         const currentConversation = matches.find(
             (c) => c.conversationId === this.currentConversationId,
@@ -704,39 +728,77 @@ export class ConversationBar {
 
         // Add separator if there are previous conversations
         if (previousConversations.length > 0) {
-            const separatorEl = document.createElement("div");
-            separatorEl.className = "conversation-search-separator";
-
-            const leftLine = document.createElement("div");
-            leftLine.className = "conversation-search-separator-line";
-            separatorEl.appendChild(leftLine);
-
-            const textEl = document.createElement("div");
-            textEl.className = "conversation-search-separator-text";
-
-            // Use the oldest previous conversation's timestamp for the label
             const oldestPrevious =
                 previousConversations[previousConversations.length - 1];
-            if (oldestPrevious.createdAt) {
-                textEl.textContent = formatRelativeTime(
-                    oldestPrevious.createdAt,
-                );
-            } else {
-                textEl.textContent = "earlier";
-            }
-            separatorEl.appendChild(textEl);
-
-            const rightLine = document.createElement("div");
-            rightLine.className = "conversation-search-separator-line";
-            separatorEl.appendChild(rightLine);
-
-            this.searchResultsEl.appendChild(separatorEl);
+            const label = oldestPrevious.createdAt
+                ? formatRelativeTime(oldestPrevious.createdAt)
+                : "earlier";
+            this.searchResultsEl.appendChild(this.makeSearchSeparator(label));
         }
 
         // Render previous conversations
         for (const conversation of previousConversations) {
             this.renderConversationSearchResult(conversation);
         }
+    }
+
+    /**
+     * Render a labeled group (e.g. "TypeAgent" or "GitHub Copilot") as a header
+     * separator followed by its conversations, keeping the current conversation
+     * at the top of its group.
+     */
+    private renderConversationGroup(
+        label: string,
+        conversations: ConversationBarConversation[],
+    ): void {
+        if (conversations.length === 0) {
+            return;
+        }
+        this.searchResultsEl.appendChild(
+            this.makeSearchSeparator(label, "conversation-search-group-header"),
+        );
+        const current = conversations.find(
+            (c) => c.conversationId === this.currentConversationId,
+        );
+        const rest = conversations.filter(
+            (c) => c.conversationId !== this.currentConversationId,
+        );
+        if (current) {
+            this.renderConversationSearchResult(current);
+        }
+        for (const conversation of rest) {
+            this.renderConversationSearchResult(conversation);
+        }
+    }
+
+    /**
+     * Build a labeled separator row (line — text — line) shared by the temporal
+     * separator and the source group headers.
+     */
+    private makeSearchSeparator(
+        text: string,
+        extraClass?: string,
+    ): HTMLElement {
+        const separatorEl = document.createElement("div");
+        separatorEl.className = "conversation-search-separator";
+        if (extraClass) {
+            separatorEl.classList.add(extraClass);
+        }
+
+        const leftLine = document.createElement("div");
+        leftLine.className = "conversation-search-separator-line";
+        separatorEl.appendChild(leftLine);
+
+        const textEl = document.createElement("div");
+        textEl.className = "conversation-search-separator-text";
+        textEl.textContent = text;
+        separatorEl.appendChild(textEl);
+
+        const rightLine = document.createElement("div");
+        rightLine.className = "conversation-search-separator-line";
+        separatorEl.appendChild(rightLine);
+
+        return separatorEl;
     }
 
     private renderConversationSearchResult(
