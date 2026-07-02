@@ -2,17 +2,12 @@
 # Licensed under the MIT License.
 
 - name: Overview
-  href: overview/toc.yml
-  topicHref: index.md
+  href: index.md
 - name: Architecture
-  href: architecture/toc.yml
-  topicHref: architecture/index.md
+  href: architecture/index.md
 - name: Packages
-  href: packages/toc.yml
-  topicHref: packages/index.md
+  href: packages/index.md
 - name: Agents
-  href: agents/toc.yml
-  topicHref: agents/index.md
+  href: agents/index.md
 - name: Contributing
-  href: contributing/toc.yml
-  topicHref: contributing/index.md
+  href: contributing/index.md
