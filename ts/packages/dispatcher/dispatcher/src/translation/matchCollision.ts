@@ -53,7 +53,7 @@ function getPrimary(match: MatchResult): {
  * uses these fields to reconstruct alternative rankings (e.g.
  * counterfactual `score-rank` outcomes) without re-running the matcher.
  */
-function toCandidate(
+export function toCandidate(
     match: MatchResult,
     ctx?: CommandHandlerContext,
 ): CollisionCandidate {

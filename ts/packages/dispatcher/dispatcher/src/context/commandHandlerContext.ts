@@ -94,6 +94,15 @@ import {
 } from "./collisionTelemetry.js";
 import { CollisionPreferenceStore } from "./collisionPreferences.js";
 import { CollisionRegistry } from "./collisionRegistry.js";
+import {
+    ConversationSignalSource,
+    RingBufferSignalSource,
+} from "./contextSelector/conversationSignal.js";
+import {
+    KeywordIndex,
+    agentSchemaSource,
+} from "./contextSelector/keywordIndex.js";
+import { KeywordSidecar } from "./contextSelector/keywordSidecar.js";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
@@ -238,6 +247,13 @@ export type CommandHandlerContext = {
     // chosen candidate; consumed on first read. Covers the "don't remember"
     // case (no durable preference written).
     collisionOneShotPicks: Set<string>;
+
+    // contextSelector (§11). The conversation signal source (produces the
+    // per-turn context vector), the effective-keyword index (derived floor +
+    // sidecar overrides), and the live-tunable keyword sidecar it reads.
+    conversationSignal: ConversationSignalSource;
+    contextSelectorKeywords: KeywordIndex;
+    contextSelectorSidecar: KeywordSidecar;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -729,10 +745,21 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().collision.preference.registryPath,
             collisionChoiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
+            conversationSignal: new RingBufferSignalSource(
+                () => session.getConfig().collision.contextSelector,
+            ),
+            contextSelectorSidecar: KeywordSidecar.load(instanceDir),
+            // Needs `context` for the sidecar getter; assigned after the literal.
+            contextSelectorKeywords: undefined as unknown as KeywordIndex,
             // Replaced below; the queue's broadcaster needs `context` to be
             // available so it can route through `context.clientIO`.
             requestQueue: undefined as unknown as RequestQueue,
         };
+
+        context.contextSelectorKeywords = new KeywordIndex(
+            agentSchemaSource(agents),
+            () => context.contextSelectorSidecar,
+        );
 
         const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
             context.clientIO.queueStateChanged?.(snapshot);
@@ -1184,6 +1211,10 @@ export async function setSessionOnCommandHandlerContext(
     );
     await setAppAgentStates(context);
     context.translatorCache.clear();
+    // Session switch (§7.2): drop the contextSelector conversation buffer and
+    // the derived-keyword cache (agents were closed/reloaded above).
+    context.conversationSignal.reset();
+    context.contextSelectorKeywords.invalidate();
 }
 
 export async function reloadSessionOnCommandHandlerContext(

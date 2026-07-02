@@ -34,6 +34,7 @@ import { getCollisionCorpusCommandHandlers } from "./collisionCorpusHandlers.js"
 import { CollisionNeighborhoodsCommandHandler } from "./collisionNeighborhoodHandlers.js";
 import { getCollisionOptimizeCommandHandlers } from "./collisionOptimizeHandlers.js";
 import { getCollisionPreferenceCommandHandlers } from "./collisionPreferenceHandlers.js";
+import { getCollisionKeywordCommandHandlers } from "./collisionKeywordHandlers.js";
 
 // ---------------------------------------------------------------------------
 // `@collision events` — show recent events captured in the in-memory ring
@@ -1282,6 +1283,7 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
             neighborhoods: new CollisionNeighborhoodsCommandHandler(),
             optimize: getCollisionOptimizeCommandHandlers(),
             preferences: getCollisionPreferenceCommandHandlers(),
+            keywords: getCollisionKeywordCommandHandlers(),
             "list-strategies":
                 new CollisionSimilarListStrategiesCommandHandler(),
         },

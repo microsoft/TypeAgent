@@ -25,6 +25,8 @@ import {
     resolveGrammarCollision,
     resolveGrammarRegistryFirst,
 } from "./matchCollision.js";
+import { resolveContextSelector } from "./matchContextSelector.js";
+import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -282,6 +284,7 @@ export async function matchRequest(
     // Collision detection — opt-in via session config. With detect=false this
     // is a no-op and we use validated[0], identical to legacy behavior.
     const collisionCfg = config.collision.grammarMatch;
+    const contextSelectorCfg = config.collision.contextSelector;
     let chosen = validated[0];
 
     // Registry-first detection runs independently of grammarMatch.detect: a
@@ -293,10 +296,43 @@ export async function matchRequest(
     );
     if (
         decision === undefined &&
-        collisionCfg.detect &&
+        (contextSelectorCfg.detect || collisionCfg.detect) &&
         isCollision(validated, collisionCfg.classifier)
     ) {
-        decision = resolveGrammarCollision(validated, systemContext, request);
+        // contextSelector tier (§11): a confident topical pick resolves here on
+        // the cache path (no LLM). On abstain it either defers to the configured
+        // grammar strategy or escalates the request to LLM translation.
+        let deferToStrategy = false;
+        if (contextSelectorCfg.detect) {
+            const outcome = resolveContextSelector(
+                validated,
+                systemContext,
+                request,
+            );
+            if (outcome.kind === "resolve") {
+                decision = { kind: "match", match: outcome.match };
+                await displayInfo(outcome.note, context);
+            } else if (outcome.kind === "abstain") {
+                if (contextSelectorCfg.abstainFallback === "escalate-to-llm") {
+                    return undefined;
+                }
+                // defer-to-strategy: hand the collision to the configured grammar
+                // strategy below, even if grammarMatch.detect is off (§11.1).
+                deferToStrategy = true;
+            }
+            // outcome.kind === "skip" (not a topical collision): fall through to
+            // today's behavior — never escalate.
+        }
+        if (
+            decision === undefined &&
+            (collisionCfg.detect || deferToStrategy)
+        ) {
+            decision = resolveGrammarCollision(
+                validated,
+                systemContext,
+                request,
+            );
+        }
     }
     if (decision !== undefined) {
         if (decision.kind === "fallthrough") {
