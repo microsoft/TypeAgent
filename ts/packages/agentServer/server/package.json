@@ -47,6 +47,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
@@ -56,6 +57,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",

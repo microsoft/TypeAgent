@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import type {
+    CompletionGroups,
+    PartialParsedCommandParams,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
@@ -26,6 +31,34 @@ function dispatchManageConversation(
         "manage-conversation",
         payload,
     );
+}
+
+// Offer existing conversation names as completions for the given argument.
+// The list is provided by the host (agentServer's ConversationManager) via
+// context.getConversationList; standalone hosts return no completions. Because
+// completion is served by the dispatcher, every client (CLI, shells, browser)
+// gets these suggestions through the same path with no client-side work.
+function completeConversationName(
+    context: SessionContext<CommandHandlerContext>,
+    names: string[],
+    argName: string,
+): CompletionGroups {
+    const groups: CompletionGroups = { groups: [] };
+    if (!names.includes(argName)) {
+        return groups;
+    }
+    const conversations = context.agentContext.getConversationList?.() ?? [];
+    if (conversations.length === 0) {
+        return groups;
+    }
+    groups.groups.push({
+        name: "conversation",
+        completions: conversations.map((c) => c.name),
+        // Names frequently contain spaces (e.g. imported Copilot summaries);
+        // quote them so they parse as a single argument.
+        needQuotes: true,
+    });
+    return groups;
 }
 
 class ConversationNewCommandHandler implements CommandHandler {
@@ -87,6 +120,13 @@ class ConversationSwitchCommandHandler implements CommandHandler {
             name ? { subcommand: "switch", name } : { subcommand: "next" },
         );
     }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        return completeConversationName(context, names, "name");
+    }
 }
 
 class ConversationPrevCommandHandler implements CommandHandlerNoParams {
@@ -135,6 +175,15 @@ class ConversationRenameCommandHandler implements CommandHandler {
                 : { subcommand: "rename", newName: nameOrNewName };
         dispatchManageConversation(context, payload);
     }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        // First arg can name an existing conversation (when a second arg is
+        // supplied); offer existing names there. The new-name arg is freeform.
+        return completeConversationName(context, names, "nameOrNewName");
+    }
 }
 
 class ConversationDeleteCommandHandler implements CommandHandler {
@@ -154,6 +203,13 @@ class ConversationDeleteCommandHandler implements CommandHandler {
             subcommand: "delete",
             name: params.args.name,
         });
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        return completeConversationName(context, names, "name");
     }
 }
 

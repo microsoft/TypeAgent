@@ -112,6 +112,13 @@ export const webapi: ClientAPI = {
     conversationManageAction: async () => {
         throw new Error("Conversation management not supported on mobile");
     },
+    reconnectRetry: async () => {
+        // Web/mobile clients manage their own socket; no manual reconnect.
+        throw new Error("Not implemented");
+    },
+    reconnectStartServer: async () => {
+        throw new Error("Not implemented");
+    },
 };
 
 const dispatcherChannel = createChannelAdapter((message: any) =>
