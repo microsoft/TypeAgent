@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 - name: Overview
-  href: index.md
+  href: overview/index.md
 - name: Architecture
   href: architecture/index.md
 - name: Packages
