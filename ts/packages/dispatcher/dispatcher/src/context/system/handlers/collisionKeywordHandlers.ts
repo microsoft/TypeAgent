@@ -5,12 +5,17 @@
 // overrides consumed by the contextSelector tier (design §5.3). Edits land in
 // the profile-scoped `collision-keywords.json` sidecar as deltas over the
 // derived lexical defaults; the merged effective set feeds the scorer (§9).
+//
+// Target-first grammar (the schema.action is the primary key, §5.3):
+//   @collision keywords                              # list all overrides
+//   @collision keywords <schema.action>             # show derived + overrides, merged
+//   @collision keywords <schema.action> list         # (same as above)
+//   @collision keywords <schema.action> add k1 k2…  # add discriminative keywords
+//   @collision keywords <schema.action> remove k1…  # mask keywords
+//   @collision keywords <schema.action> clear        # revert to derived-only
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
-import {
-    CommandHandler,
-    CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
     displayWarn,
@@ -76,15 +81,42 @@ function showEffective(
     displayResult(lines.join("\n"), context);
 }
 
-class CollisionKeywordsListCommandHandler implements CommandHandler {
+function listAllOverrides(context: ActionContext<CommandHandlerContext>): void {
+    const entries =
+        context.sessionContext.agentContext.contextSelectorSidecar.list();
+    if (entries.length === 0) {
+        displayResult(
+            "No keyword overrides. Add one with `@collision keywords <schema.action> add <keywords…>`.",
+            context,
+        );
+        return;
+    }
+    const lines = entries.map(({ id, delta }) => {
+        const parts: string[] = [];
+        if (delta.replace) parts.push(`replace=[${delta.replace}]`);
+        if (delta.add?.length) parts.push(`add=[${delta.add}]`);
+        if (delta.remove?.length) parts.push(`remove=[${delta.remove}]`);
+        return `- ${id}: ${parts.join(" ")}`;
+    });
+    displayResult(
+        `Keyword overrides (${entries.length}):\n${lines.join("\n")}`,
+        context,
+    );
+}
+
+// Single target-first handler (§5.3). Tokens are parsed manually so the target
+// (schema.action) can come first with an optional trailing verb — matching the
+// documented syntax rather than the framework's verb-first subcommand shape.
+class CollisionKeywordsCommandHandler implements CommandHandler {
     public readonly description =
-        "Show derived + override keywords, merged, for a schema.action (or list all overrides)";
+        "Inspect/tune contextSelector keyword vectors: @collision keywords [<schema.action> [list|add|remove|clear] [keywords…]]";
     public readonly parameters = {
         args: {
-            target: {
+            tokens: {
                 description:
-                    'A schema.action, e.g. "excel.addRow". Omit to list all overrides.',
+                    'e.g. "list.addItems", "list.addItems add grocery shopping", or omit to list all overrides.',
                 type: "string",
+                multiple: true,
                 optional: true,
             },
         },
@@ -94,163 +126,71 @@ class CollisionKeywordsListCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const ctx = context.sessionContext.agentContext;
-        if (params.args.target === undefined) {
-            const entries = ctx.contextSelectorSidecar.list();
-            if (entries.length === 0) {
+        const tokens = params.args.tokens ?? [];
+        if (tokens.length === 0) {
+            listAllOverrides(context);
+            return;
+        }
+        const target = parseTarget(tokens[0]);
+        if (target === undefined) {
+            displayWarn(
+                `Invalid target "${tokens[0]}". Expected schema.action, e.g. "list.addItems".`,
+                context,
+            );
+            return;
+        }
+        const verb = (tokens[1] ?? "list").toLowerCase();
+        const keywords = tokens.slice(2);
+        const sidecar =
+            context.sessionContext.agentContext.contextSelectorSidecar;
+
+        switch (verb) {
+            case "list":
+            case "show":
+                showEffective(context, target);
+                return;
+            case "add":
+                if (keywords.length === 0) {
+                    displayWarn(
+                        `Provide keywords to add, e.g. "@collision keywords ${target.id} add grocery shopping".`,
+                        context,
+                    );
+                    return;
+                }
+                sidecar.addKeywords(target.id, keywords);
+                showEffective(context, target);
+                return;
+            case "remove":
+                if (keywords.length === 0) {
+                    displayWarn(
+                        `Provide keywords to remove, e.g. "@collision keywords ${target.id} remove office".`,
+                        context,
+                    );
+                    return;
+                }
+                sidecar.removeKeywords(target.id, keywords);
+                showEffective(context, target);
+                return;
+            case "clear": {
+                const removed = sidecar.clearEntry(target.id);
                 displayResult(
-                    "No keyword overrides. Add one with `@collision keywords <schema.action> add <keywords…>`.",
+                    removed
+                        ? `Cleared overrides for ${target.id} (reverted to derived-only).`
+                        : `No overrides for ${target.id}.`,
                     context,
                 );
                 return;
             }
-            const lines = entries.map(({ id, delta }) => {
-                const parts: string[] = [];
-                if (delta.replace) parts.push(`replace=[${delta.replace}]`);
-                if (delta.add?.length) parts.push(`add=[${delta.add}]`);
-                if (delta.remove?.length)
-                    parts.push(`remove=[${delta.remove}]`);
-                return `- ${id}: ${parts.join(" ")}`;
-            });
-            displayResult(
-                `Keyword overrides (${entries.length}):\n${lines.join("\n")}`,
-                context,
-            );
-            return;
+            default:
+                displayWarn(
+                    `Unknown verb "${verb}". Use list, add, remove, or clear.`,
+                    context,
+                );
+                return;
         }
-        const target = parseTarget(params.args.target);
-        if (target === undefined) {
-            displayWarn(
-                `Invalid target "${params.args.target}". Expected schema.action.`,
-                context,
-            );
-            return;
-        }
-        showEffective(context, target);
     }
 }
 
-class CollisionKeywordsAddCommandHandler implements CommandHandler {
-    public readonly description =
-        "Add discriminative keywords for a schema.action (layered over the derived defaults)";
-    public readonly parameters = {
-        args: {
-            target: {
-                description: 'The schema.action to tune, e.g. "excel.addRow".',
-                type: "string",
-            },
-            keywords: {
-                description: "One or more keywords to add.",
-                type: "string",
-                multiple: true,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const target = parseTarget(params.args.target);
-        if (target === undefined) {
-            displayWarn(
-                `Invalid target "${params.args.target}". Expected schema.action.`,
-                context,
-            );
-            return;
-        }
-        context.sessionContext.agentContext.contextSelectorSidecar.addKeywords(
-            target.id,
-            params.args.keywords,
-        );
-        showEffective(context, target);
-    }
-}
-
-class CollisionKeywordsRemoveCommandHandler implements CommandHandler {
-    public readonly description =
-        "Remove keywords from a schema.action's effective set (masks derived + added)";
-    public readonly parameters = {
-        args: {
-            target: {
-                description: 'The schema.action to tune, e.g. "excel.addRow".',
-                type: "string",
-            },
-            keywords: {
-                description: "One or more keywords to remove.",
-                type: "string",
-                multiple: true,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const target = parseTarget(params.args.target);
-        if (target === undefined) {
-            displayWarn(
-                `Invalid target "${params.args.target}". Expected schema.action.`,
-                context,
-            );
-            return;
-        }
-        context.sessionContext.agentContext.contextSelectorSidecar.removeKeywords(
-            target.id,
-            params.args.keywords,
-        );
-        showEffective(context, target);
-    }
-}
-
-class CollisionKeywordsClearCommandHandler implements CommandHandler {
-    public readonly description =
-        "Clear all overrides for a schema.action (revert to derived-only)";
-    public readonly parameters = {
-        args: {
-            target: {
-                description: 'The schema.action to reset, e.g. "excel.addRow".',
-                type: "string",
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const target = parseTarget(params.args.target);
-        if (target === undefined) {
-            displayWarn(
-                `Invalid target "${params.args.target}". Expected schema.action.`,
-                context,
-            );
-            return;
-        }
-        const removed =
-            context.sessionContext.agentContext.contextSelectorSidecar.clearEntry(
-                target.id,
-            );
-        displayResult(
-            removed
-                ? `Cleared overrides for ${target.id} (reverted to derived-only).`
-                : `No overrides for ${target.id}.`,
-            context,
-        );
-    }
-}
-
-export function getCollisionKeywordCommandHandlers(): CommandHandlerTable {
-    return {
-        description:
-            "Inspect and tune per-action keyword vectors used by the contextSelector tier",
-        defaultSubCommand: "list",
-        commands: {
-            list: new CollisionKeywordsListCommandHandler(),
-            add: new CollisionKeywordsAddCommandHandler(),
-            remove: new CollisionKeywordsRemoveCommandHandler(),
-            clear: new CollisionKeywordsClearCommandHandler(),
-        },
-    };
+export function getCollisionKeywordCommandHandlers(): CommandHandler {
+    return new CollisionKeywordsCommandHandler();
 }
