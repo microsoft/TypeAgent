@@ -151,7 +151,7 @@ describe("getAddSourceCommandHandlers", () => {
             });
         });
 
-        it("normalizes env/home in baseDir before persisting", async () => {
+        it("does not expand env/home in baseDir before persisting", async () => {
             const envVar = "TA_ADD_PATH_BASEDIR";
             const prev = process.env[envVar];
             const base = fs.mkdtempSync(path.join(os.tmpdir(), "ta-path-add-"));
@@ -162,7 +162,7 @@ describe("getAddSourceCommandHandlers", () => {
                 ).toEqual({
                     kind: "path",
                     name: "local",
-                    baseDir: path.resolve(base, "agents"),
+                    baseDir: path.resolve(`\${${envVar}}/agents`),
                 });
             } finally {
                 if (prev === undefined) {
@@ -171,6 +171,19 @@ describe("getAddSourceCommandHandlers", () => {
                     process.env[envVar] = prev;
                 }
             }
+        });
+
+        it("expands home in baseDir before persisting", async () => {
+            const base = fs.mkdtempSync(path.join(os.homedir(), "ta-path-home-"));
+            const relFromHome = path.relative(os.homedir(), base);
+            const withTilde = path.join("~", relFromHome);
+            expect(
+                await run("path", { name: "local" }, { baseDir: withTilde }),
+            ).toEqual({
+                kind: "path",
+                name: "local",
+                baseDir: path.resolve(base),
+            });
         });
     });
 
@@ -200,7 +213,7 @@ describe("getAddSourceCommandHandlers", () => {
             });
         });
 
-        it("normalizes env/home in catalog path before persisting", async () => {
+        it("does not expand env in catalog path before validating", async () => {
             const envVar = "TA_ADD_CATALOG_DIR";
             const prev = process.env[envVar];
             const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-cat-env-"));
@@ -208,13 +221,9 @@ describe("getAddSourceCommandHandlers", () => {
             fs.writeFileSync(file, JSON.stringify({ agents: {} }));
             process.env[envVar] = dir;
             try {
-                expect(
-                    await run("catalog", { name: "c" }, { catalog: `\${${envVar}}/catalog.json` }),
-                ).toEqual({
-                    kind: "catalog",
-                    name: "c",
-                    catalog: path.resolve(file),
-                });
+                await expect(
+                    runExpectThrow("catalog", { name: "c" }, { catalog: `\${${envVar}}/catalog.json` }),
+                ).rejects.toThrow(/not accessible/);
             } finally {
                 if (prev === undefined) {
                     delete process.env[envVar];
@@ -222,6 +231,21 @@ describe("getAddSourceCommandHandlers", () => {
                     process.env[envVar] = prev;
                 }
             }
+        });
+
+        it("expands home in catalog path before validating", async () => {
+            const dir = fs.mkdtempSync(path.join(os.homedir(), "ta-cat-home-"));
+            const file = path.join(dir, "catalog.json");
+            fs.writeFileSync(file, JSON.stringify({ agents: {} }));
+            const relFromHome = path.relative(os.homedir(), file);
+            const withTilde = path.join("~", relFromHome);
+            expect(
+                await run("catalog", { name: "c" }, { catalog: withTilde }),
+            ).toEqual({
+                kind: "catalog",
+                name: "c",
+                catalog: path.resolve(file),
+            });
         });
 
         it("reports an inaccessible file distinctly from bad JSON", async () => {

@@ -15,7 +15,7 @@ import {
     PathSourceConfig,
 } from "./config.js";
 import { DefaultInstallSourceRegistry } from "./registry.js";
-import { expandPath } from "./paths.js";
+import { expandHome } from "./paths.js";
 
 // Host-owned `@source add <kind>` command handlers. The dispatcher core merges
 // these into the system `@source` table (via `AppAgentInstaller.sourceCommands`)
@@ -55,7 +55,7 @@ function validateCatalogFile(catalog: string): void {
 }
 
 function normalizeAbsolutePath(value: string): string {
-    return path.resolve(expandPath(value));
+    return path.resolve(expandHome(value));
 }
 
 class FeedAddCommandHandler implements CommandHandler {

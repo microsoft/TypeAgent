@@ -14,22 +14,3 @@ export function expandHome(pathname: string): string {
     }
     return pathname;
 }
-
-// Expand ${ENV} references against process.env (design §6 config paths).
-// Unknown variables expand to an empty string.
-export function expandEnv(
-    value: string,
-    env: NodeJS.ProcessEnv = process.env,
-): string {
-    return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => {
-        return env[name] ?? "";
-    });
-}
-
-// Expand both ${ENV} and a leading "~".
-export function expandPath(
-    value: string,
-    env: NodeJS.ProcessEnv = process.env,
-): string {
-    return expandHome(expandEnv(value, env));
-}
