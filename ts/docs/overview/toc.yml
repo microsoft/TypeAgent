@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 - name: Overview
-  href: ../index.md
+  href: index.md
 - name: Getting started
   href: getting-started.md
   items:
