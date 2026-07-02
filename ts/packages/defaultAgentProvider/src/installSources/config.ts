@@ -55,6 +55,16 @@ export interface InstalledAgentRecord {
 export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
 
 /**
+ * A per-operation sink a source calls to surface a non-fatal degrade (e.g. a
+ * corrupt catalog file or a dropped malformed entry) so the host can show it to
+ * the user for the command that triggered it (`@package install`, `@source
+ * where`). Distinct from the source's own process-lifetime debug/console log:
+ * this is scoped to the current resolve so the warning is surfaced once per
+ * command rather than once per process.
+ */
+export type SourceWarning = (message: string) => void;
+
+/**
  * The three install-source kinds (design §3). There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/
@@ -135,13 +145,18 @@ export interface InstallSource {
      * CHEAP + side-effect free: can this source resolve `ref`? A match is a
      * commitment - if `find` returns a candidate, `materialize` must succeed.
      * Returning `undefined` is a non-match; the registry's ordered walk
-     * continues to the next source (§4.1, Q4).
+     * continues to the next source (§4.1, Q4). `onWarn`, when supplied, is a
+     * per-command sink for non-fatal degrade messages (corrupt catalog /
+     * dropped entry) so the host can surface them for the triggering command.
      */
-    find(ref: string): Promise<ResolvedCandidate | undefined>;
+    find(
+        ref: string,
+        onWarn?: SourceWarning,
+    ): Promise<ResolvedCandidate | undefined>;
     /** Does the actual work (npm install / copy / record data). */
     materialize(
         candidate: ResolvedCandidate,
     ): Promise<MaterializedInstallRecord>;
     /** Enumerable sources (`path` is not) advertise their agents. */
-    listAgents?(): Promise<string[]>;
+    listAgents?(onWarn?: SourceWarning): Promise<string[]>;
 }

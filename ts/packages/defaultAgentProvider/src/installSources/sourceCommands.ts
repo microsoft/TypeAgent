@@ -146,7 +146,11 @@ class SourceWhereCommandHandler implements CommandHandler {
     ) {
         const { registry } = this.deps;
         const { ref } = params.args;
-        const candidate = await registry.where(ref);
+        // Surface non-fatal source degrade warnings (e.g. a corrupt catalog
+        // skipped during the walk) once, for this dry-run command.
+        const candidate = await registry.where(ref, (m) =>
+            displayWarn(m, context),
+        );
         if (candidate === undefined) {
             const order = registry
                 .list()

@@ -97,6 +97,39 @@ describe("InstallSourceRegistry resolution", () => {
         );
     });
 
+    it("reports a source degrade to the per-command sink every resolve but dedups the server log", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-bad-"));
+        const file = path.join(dir, "agents.catalog.json");
+        fs.writeFileSync(file, "{ not valid json");
+        const registry = createInstallSourceRegistry(
+            [{ kind: "catalog", name: "bad", catalog: file }],
+            { installDir: tmpInstallDir() },
+        );
+        const original = console.warn;
+        let consoleWarnCount = 0;
+        console.warn = () => {
+            consoleWarnCount++;
+        };
+        try {
+            const first: string[] = [];
+            await expect(
+                registry.resolve("x", undefined, (m) => first.push(m)),
+            ).rejects.toThrow(/no source could resolve 'x'/);
+            const second: string[] = [];
+            await expect(
+                registry.resolve("x", undefined, (m) => second.push(m)),
+            ).rejects.toThrow(/no source could resolve 'x'/);
+            // The per-command sink hears the degrade on BOTH resolves...
+            expect(first).toHaveLength(1);
+            expect(first[0]).toMatch(/catalog source 'bad'/);
+            expect(second).toEqual(first);
+            // ...but the process-lifetime server-log warning fires only once.
+            expect(consoleWarnCount).toBe(1);
+        } finally {
+            console.warn = original;
+        }
+    });
+
     it("where reports the winning source without materializing", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const candidate = await registry.where("dup");

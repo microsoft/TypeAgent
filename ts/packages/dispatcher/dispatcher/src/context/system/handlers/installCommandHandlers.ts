@@ -16,6 +16,7 @@ import {
 import {
     displayStatus,
     displayResult,
+    displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
 
@@ -164,11 +165,16 @@ export class InstallCommandHandler implements CommandHandler {
         }
 
         displayStatus(`Resolving '${ref}'...`, context);
-        const { provider, source } = await installer.install(
+        const { provider, source, warnings } = await installer.install(
             name,
             ref,
             sourceName,
         );
+        // Surface any non-fatal source degrade warnings (e.g. a corrupt catalog
+        // skipped during resolution) once, for this command.
+        for (const warning of warnings ?? []) {
+            displayWarn(warning, context);
+        }
         displayStatus(
             `Found '${ref}' in source '${source}'. Installing as '${name}'...`,
             context,

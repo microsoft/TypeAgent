@@ -93,14 +93,13 @@ export interface FeedSourceConfig {
 
 export interface CatalogSourceConfig {
   kind: "catalog";
-  name: string; // e.g. "builtin", "workspace"
+  name: string; // e.g. "workspace"
   // A JSON file listing available agents, name -> full NpmAppAgentInfo
-  // (module, path, execMode, ...) plus an optional `preinstall` flag (§4.2).
-  // Not tied to a repo - it can live anywhere on the local filesystem; the
-  // bundled "<bundled>" catalog is what ships with the app. In practice only
-  // the bundled catalog sets `preinstall`. Relative package paths resolve
-  // against the catalog's dir.
-  catalog: string; // local filesystem path to the catalog JSON, or "<bundled>" (no remote URLs)
+  // (module, path, execMode, ...). Not tied to a repo - it can live anywhere
+  // on the local filesystem. Relative package paths resolve against the
+  // catalog's dir. The shipped/builtin agents are NOT a catalog source - they
+  // are a separate static provider seeded from the `config.json` agents map.
+  catalog: string; // local filesystem path to the catalog JSON (no remote URLs)
 }
 
 export type InstallSourceConfig =
@@ -109,14 +108,14 @@ export type InstallSourceConfig =
   | CatalogSourceConfig;
 ```
 
-A `catalog` source points at a JSON file that lists the available agents. It can live in a repo, ship in the app, or sit anywhere on disk - it is just a name-to-package map, with an optional `preinstall` flag per entry:
+A `catalog` source points at a JSON file that lists the available agents. It can live in a repo or sit anywhere on disk - it is just a name-to-package map:
 
 ```jsonc
-// e.g. agents.catalog.json (preinstall entries are auto-installed at first run)
+// e.g. agents.catalog.json
 {
   "agents": {
     "montage": { "module": "montage-agent", "path": "montage" },
-    "player": { "module": "music", "path": "player", "preinstall": true },
+    "player": { "module": "music", "path": "player" },
     "markdown": {
       "module": "markdown-agent",
       "path": "markdown",
@@ -125,6 +124,8 @@ A `catalog` source points at a JSON file that lists the available agents. It can
   },
 }
 ```
+
+Nothing in a catalog is installed automatically; a catalog source only resolves an agent short name to a record on an explicit `@package install`. The shipped/builtin agents are not a catalog - they load from a separate static provider (§4.4).
 
 ## 4. Interfaces
 
@@ -195,6 +196,8 @@ export interface DefaultInstallSourceRegistry {
 ```
 
 **Ordered resolution.** With no explicit `--source`, the registry walks `order()` and the first source whose `find` returns a candidate wins. A `find` that returns `undefined` is just a **non-match**, so the walk continues to the next source. The commitment is narrower and applies only _after_ a match: once a source's `find` returns a candidate, that source's `materialize` must succeed or hard-error - we do **not** silently fall through to the next source on a materialize failure (that keeps failures legible). With an explicit `--source`, a non-match is itself a hard error, since you named the source.
+
+**Source degrade is a non-match, not a walk failure.** A source that cannot read its own backing store degrades to "no agents" rather than aborting the walk: a `feed` served offline is skipped (§12 Q3), and a `catalog` whose file is corrupt/unreadable - or that holds a malformed entry (an entry with neither a `path` nor a package `name`, §4.2/§12 Q17) - drops the offending content and behaves as a non-match. A source **reports** every degrade it hits (it holds no dedup state); the registry wraps each source so those reports are surfaced on two channels with the dedup scope each channel wants: **once per process** to the server log (a single `console.warn` dedup covering every read path - resolve, where, listAvailable, seeding), and **once per command** through an optional `onWarn` sink the registry threads into `find`/`listAgents` for a specific `resolve`/`where`. `install` collects the per-command reports into `InstallResult.warnings` and `@package install` shows them via `displayWarn`; `@source where` shows them inline. This keeps a broken catalog visible to the user running the command that hit it, and one bad file or entry never hides the rest of the catalog or the other sources.
 
 ```ts
 async resolve(ref, sourceName?) {

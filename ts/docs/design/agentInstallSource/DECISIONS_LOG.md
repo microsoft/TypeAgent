@@ -1,16 +1,16 @@
 # Implementation Decisions Log
 
 > Running log of decisions made **during implementation** that are **not specified in** or **change**
-> the design ([README.md](./README.md)) or the [EXECUTION_PLAN.md](./EXECUTION_PLAN.md).
+> the design ([DESIGN.md](./DESIGN.md)) or the [EXECUTION_PLAN.md](./EXECUTION_PLAN.md).
 > Append a new entry whenever you choose something the design did not pin down, or deviate from what it says.
-> Keep entries short. If a decision invalidates the design, also update README §12 (decision log) and note it here.
+> Keep entries short. If a decision invalidates the design, also update DESIGN.md §12 (decision log) and note it here.
 
 ## How to use
 
 - Add an entry the moment you make the call — don't batch.
 - Cross-reference the design section / decision (e.g. §4.1, Q20) the entry relates to.
 - Mark each entry's relationship: **Unspecified** (design was silent) or **Deviation** (design said otherwise).
-- If a deviation is later ratified into the design, link the README change.
+- If a deviation is later ratified into the design, link the DESIGN.md change.
 
 ## Entry format
 
@@ -27,38 +27,6 @@
 ---
 
 ## Entries
-
-### 2026-06-26 — Default provider reads bundled catalog only for the default config
-
-- **Milestone / item:** M1 / 1.2
-- **Type:** Unspecified
-- **Design ref:** §3, §7 (plan 1.2 step 4)
-- **Decision:** In the temporary 1.2 adapter, `getDefaultNpmAppAgentProvider` reads the
-  bundled catalog (`agents.catalog.json`) only when `configName` is undefined; named
-  configs (`config.test.json`, `config.all.json`, `config.agent.json`,
-  `config.service.json`) still read their own `config.<name>.json` `agents` map.
-- **Rationale:** Named configs select distinct agent subsets used by tests/dev. The
-  bundled catalog mirrors `config.json` (the default). Routing only the default through
-  the catalog verifies the data move without changing named-config behavior. The
-  `config.json` `agents` map is left in place during M1 (still read by
-  `getIndexingServiceRegistry`); full removal is M2/M4 cleanup.
-- **Design updated?** no (temporary M1 scaffolding; replaced by the single provider in M2)
-
-### 2026-06-26 — Corrupt user catalog degrades; corrupt bundled catalog fails loud
-
-- **Milestone / item:** M1 / 1.3
-- **Type:** Unspecified
-- **Design ref:** §4.1 (ordered resolve walk)
-- **Decision:** `catalogSource.find`/`listAgents` catch read/parse errors for a _user_
-  catalog and degrade to "no agents" (debug-logged) so the ordered resolve walk continues
-  to the next source. A corrupt/unreadable **bundled** catalog (`"<bundled>"`) instead
-  throws loudly, since it is a build artifact and a failure there is a packaging bug.
-  `loadCatalog` wraps raw read/JSON errors with the file path for actionable messages.
-- **Rationale:** A single bad workspace catalog should not break resolution against other
-  configured sources, mirroring the feed source's offline-degrade behavior. Silently
-  masking a packaging defect in the shipped catalog would hide real bugs, so the bundled
-  path stays fail-fast (raised in M1 gate review round 2).
-- **Design updated?** no (robustness detail consistent with the design)
 
 ### 2026-06-27 — Multi-root module resolution via a combine facade over one provider per root
 
@@ -106,35 +74,43 @@
   Documented as a known constraint rather than changed.
 - **Design updated?** no (known constraint; see DEFERRED_REVIEW_LOG)
 
-### 2026-06-27 — Indexing service registry resolves builtins only
+### 2026-06-27 — Indexing service registry resolves across all providers
 
 - **Milestone / item:** M2 / 2.4
 - **Type:** Unspecified
 - **Design ref:** §7
-- **Decision:** `getIndexingServiceRegistry` continues to resolve agents from the config's
-  `agents` map (builtins). Feed/path-installed agents are absent there and are warn-skipped
-  rather than resolved.
-- **Rationale:** Indexing services are a property of builtin agents only; the `config.json`
-  `agents` map is the authoritative builtin list until M4 cleanup. Pre-existing behavior,
-  clarified with a comment (gate review r2).
-- **Design updated?** no (intentional; revisit in M4)
+- **Decision:** `getIndexingServiceRegistry` iterates every app-agent provider (bundled,
+  installed, MCP), reads each agent's manifest, and registers any `manifest.indexingServices`.
+  Installed (feed/path/catalog) agents are included via their manifests, not skipped.
+- **Rationale:** Indexing services are declared per agent in the manifest, so resolving
+  from the live providers covers installed agents too — not just builtins.
+- **Design updated?** no (consistent with §7)
+- **Reconciled 2026-07-02:** Original entry resolved builtins only from the `config.json`
+  `agents` map and warn-skipped installed agents ("revisit in M4"). That limitation is
+  gone — resolution now runs over all providers via their manifests.
 
-### 2026-06-28 — `@update`/`@source remove` data access lives on the installer, not the dispatcher core
+### 2026-06-28 — Install-record data access lives on the installer, not the dispatcher core
 
 - **Milestone / item:** M3 / 3.1
 - **Type:** Deviation
 - **Design ref:** §4.3, §5 (plan 3.1 said "AppAgentInstaller interface unchanged")
-- **Decision:** Added three **optional** methods to `AppAgentInstaller`:
-  `update(name, range?)`, `sources()`, and `recordsUsingSource(sourceName)`. The dispatcher
-  core handlers (`UpdateCommandHandler`, `@source remove`) call these instead of reading
-  `agents.json` directly.
+- **Decision:** Extended `AppAgentInstaller` with **optional** members so the dispatcher
+  core never reads `agents.json`: `update(name, range?)` (re-resolve/refresh),
+  `sourceCommands()` (the host-owned `@source` table, merged in as `@source`),
+  `listInstalled()` (`@package list`), plus `listSources()` and `listAvailable()`
+  (completion). The whole `@source` surface — including the "still referenced" warning on
+  remove — is owned by the host; `recordsUsingSource` is a closure the installer passes into
+  `getSourceCommands`, not a core-visible method.
 - **Rationale:** The dispatcher core must never import `default-agent-provider` and cannot
-  read `agents.json` (that record store lives in the installer's package). `@update` needs
-  the recorded provenance to re-resolve, and `@source remove` needs the list of records
-  using a source to warn. Putting that logic behind optional installer methods keeps the
-  layering rule intact while the core handlers stay thin. Methods are optional so alternate
-  installers (e.g. test doubles) need not implement them.
+  read `agents.json` (that record store lives in the installer's package). Putting this
+  logic behind optional installer members keeps the layering rule intact while the core
+  stays thin. Optional so alternate installers (e.g. test doubles) need not implement them.
 - **Design updated?** no (interface addition consistent with §4.3 intent)
+- **Reconciled 2026-07-02:** Original entry named `sources()` and `recordsUsingSource()`
+  as core-called installer methods plus a core `@source remove` handler. The surface
+  evolved: the host now owns the entire `@source` command table via `sourceCommands()`
+  (there is no core `@source remove` handler), and `sources()` became `listSources()`
+  alongside `listInstalled()` / `listAvailable()`.
 
 ### 2026-06-28 — install/update preserve the re-resolution key in `ref`
 
@@ -167,7 +143,7 @@
   leaves the user with a half-installed or missing agent.
 - **Design updated?** no (consistent with §4.7/§12 Q13)
 
-### 2026-06-28 — Migration shim and `config.json` agents map retained for one release
+### 2026-06-28 — Legacy migration shim retained for one release
 
 - **Milestone / item:** M4 / 4.2
 - **Type:** Unspecified
@@ -175,24 +151,13 @@
 - **Decision:** M4 removed the already-dead `getDefaultNpmAppAgentProvider` /
   `getExternalAppAgentProvider` / `installNpm` / `isNpmSpecifier` (all gone by M2), but
   deliberately keeps the `externalAgentsConfig.json` migration shim (read + rename to
-  `.migrated`) and the builtin `config.json` `agents` map (still read by the indexing
-  registry) for one release.
+  `.migrated`) for one release.
 - **Rationale:** The shim must survive at least one release so existing instances migrate on
-  first run; deleting it now would strand un-migrated installs. The `agents` map removal is
-  coupled to the indexing-registry rework deferred past this feature.
+  first run; deleting it now would strand un-migrated installs.
 - **Design updated?** no (follow-up: file an issue to delete the shim next release)
+- **Reconciled 2026-07-02:** Original entry also kept the `config.json` `agents` map "for
+  one release" as deprecated code read only by the indexing registry, pending removal.
+  After the bundled-agents revert, that map is now the authoritative definition of the
+  shipped/builtin agent set (`seedRecordsFromConfig` / `getBundledAgentNames`) and is
+  permanent by design — not a removal follow-up.
 
-### 2026-06-28 — Catalog entry with neither path nor name fails fast
-
-- **Milestone / item:** Final gate (catalogSource)
-- **Type:** Unspecified
-- **Design ref:** §4.2, §12 Q17 (exactly one resolution handle)
-- **Decision:** `catalogSource.find` now throws a clear error when a matched catalog entry
-  carries neither a `path` nor a package `name`, instead of producing a record with no
-  resolution handle that would only fail (opaquely) at load time.
-- **Rationale:** Q17 requires every record to have exactly one handle. A handle-less entry is
-  a catalog authoring mistake; failing at resolve time (when the user references that key)
-  gives an actionable message and never persists a malformed record. An unknown key still
-  returns `undefined` (non-match) so the ordered walk continues — only a _present but
-  malformed_ entry throws. (Found in final-gate review round 2.)
-- **Design updated?** no (enforces the existing §4.2/Q17 invariant)

@@ -193,7 +193,12 @@ export function getDefaultAppAgentInstaller(
             // resolve + materialize is serialized by the registry's limiter
             // (design §4.1). After it returns, the installer re-takes the same
             // shared limiter to write the record (sequential, not nested).
-            const resolved = await registry.resolve(ref, sourceName);
+            // Collect any non-fatal source degrade warnings raised during the
+            // resolve (deduped) so the command can surface them to the user.
+            const warningSet = new Set<string>();
+            const resolved = await registry.resolve(ref, sourceName, (m) =>
+                warningSet.add(m),
+            );
             // The installer assigns the authoritative dispatcher name.
             const record: InstalledAgentRecord = { ...resolved, name };
             // Preserve the user-supplied lookup key so `@update` can
@@ -216,6 +221,9 @@ export function getDefaultAppAgentInstaller(
             return {
                 provider: buildProviderFor({ [name]: record }),
                 source: record.source,
+                ...(warningSet.size > 0
+                    ? { warnings: [...warningSet] }
+                    : {}),
             };
         },
         async uninstall(name: string): Promise<void> {

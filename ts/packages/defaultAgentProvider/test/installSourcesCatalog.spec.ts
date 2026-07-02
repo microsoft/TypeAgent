@@ -79,16 +79,22 @@ describe("catalogSource", () => {
         expect(await source.find("nope")).toBeUndefined();
     });
 
-    it("find fails fast for an entry with neither path nor name (Q17)", async () => {
-        const file = writeCatalog({ broken: {} });
+    it("drops an entry with neither path nor name (warn + non-match, Q17)", async () => {
+        const file = writeCatalog({
+            broken: {},
+            player: { name: "music" },
+        });
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
             catalog: file,
         });
-        await expect(source.find("broken")).rejects.toThrow(
-            /neither 'path' nor 'name'/,
-        );
+        // Malformed entry is dropped (non-match), not thrown, so the resolve
+        // walk continues and the rest of the catalog stays usable.
+        expect(await source.find("broken")).toBeUndefined();
+        expect(await source.find("player")).toBeDefined();
+        // The dropped entry is never advertised.
+        expect(await source.listAgents!()).toEqual(["player"]);
     });
 
     it("listAgents enumerates the catalog keys", async () => {
@@ -126,5 +132,39 @@ describe("catalogSource", () => {
             catalog: path.join(os.tmpdir(), "ta-does-not-exist.catalog.json"),
         });
         expect(await source.find("anything")).toBeUndefined();
+    });
+
+    it("forwards a corrupt-catalog degrade to the per-command onWarn sink", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-catalog-bad-"));
+        const file = path.join(dir, "agents.catalog.json");
+        fs.writeFileSync(file, "{ not valid json");
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        const warnings: string[] = [];
+        expect(await source.find("anything", (m) => warnings.push(m)))
+            .toBeUndefined();
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(/catalog source 'workspace'/);
+        expect(warnings[0]).toMatch(/not valid JSON/);
+    });
+
+    it("forwards a dropped malformed entry to the per-command onWarn sink", async () => {
+        const file = writeCatalog({ broken: {}, player: { name: "music" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        const warnings: string[] = [];
+        expect(await source.find("broken", (m) => warnings.push(m)))
+            .toBeUndefined();
+        expect(await source.find("player", (m) => warnings.push(m)))
+            .toBeDefined();
+        expect(warnings).toEqual([
+            "catalog source 'workspace': entry 'broken' has neither 'path' nor 'name' - dropped",
+        ]);
     });
 });

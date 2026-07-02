@@ -89,6 +89,10 @@ export interface InstalledAgentInfo {
 export interface InstallResult {
     provider: AppAgentProvider;
     source: string;
+    // Non-fatal warnings surfaced while resolving the ref (e.g. a corrupt
+    // catalog file skipped, or a malformed catalog entry dropped) that the core
+    // should show to the user for this command. Absent/empty when clean.
+    warnings?: string[];
 }
 
 export interface ConstructionProvider {

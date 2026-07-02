@@ -7,6 +7,7 @@ import {
     InstallSourceInfo,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    SourceWarning,
 } from "./config.js";
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
@@ -31,10 +32,19 @@ export interface DefaultInstallSourceRegistry {
     setOrder(names: string[]): void;
     add(config: InstallSourceConfig): void;
     remove(name: string): void;
-    // resolve a ref: explicit source, else walk the configured order.
-    resolve(ref: string, sourceName?: string): Promise<MaterializedInstallRecord>;
+    // resolve a ref: explicit source, else walk the configured order. `onWarn`,
+    // when supplied, receives non-fatal source degrade messages (e.g. a corrupt
+    // catalog) for the caller to surface on the triggering command.
+    resolve(
+        ref: string,
+        sourceName?: string,
+        onWarn?: SourceWarning,
+    ): Promise<MaterializedInstallRecord>;
     // dry-run: report which source would win without materializing.
-    where(ref: string): Promise<ResolvedCandidate | undefined>;
+    where(
+        ref: string,
+        onWarn?: SourceWarning,
+    ): Promise<ResolvedCandidate | undefined>;
 }
 
 export interface RegistryDeps {
@@ -92,11 +102,48 @@ export function createInstallSourceRegistry(
     // (first match wins, §4.1).
     let entries = new Map<string, Entry>();
 
+    // Process-lifetime background sink: a source degrade (corrupt catalog,
+    // dropped entry) is surfaced to the server log at most once per distinct
+    // message, regardless of which read path hit it (resolve, where,
+    // listAvailable, seeding) or whether a command supplied its own sink. The
+    // sources themselves hold NO dedup state - they just report every problem
+    // via `onWarn`; this is the single place the "once per process" policy for
+    // the console lives. A caller's per-command sink composes on top (below),
+    // so an install/where still surfaces the message to the user every time
+    // while the server log stays deduped.
+    const backgroundWarned = new Set<string>();
+    function composeWarn(caller?: SourceWarning): SourceWarning {
+        return (message) => {
+            if (!backgroundWarned.has(message)) {
+                backgroundWarned.add(message);
+                console.warn(`Warning: ${message}`);
+            }
+            caller?.(message);
+        };
+    }
+    // Wrap a built source so every find/listAgents call routes its warnings
+    // through the composed background+caller sink. Wrapping at this single build
+    // choke point means every access path - resolve, where, get()->listAvailable
+    // - gets the server-log dedup for free.
+    function build(config: InstallSourceConfig): InstallSource {
+        const source = buildSource(config, deps);
+        return {
+            ...source,
+            find: (ref, onWarn) => source.find(ref, composeWarn(onWarn)),
+            ...(source.listAgents !== undefined
+                ? {
+                      listAgents: (onWarn) =>
+                          source.listAgents!(composeWarn(onWarn)),
+                  }
+                : {}),
+        };
+    }
+
     for (const config of initialConfigs) {
         if (entries.has(config.name)) {
             throw new Error(`duplicate install source name: '${config.name}'`);
         }
-        entries.set(config.name, { config, source: buildSource(config, deps) });
+        entries.set(config.name, { config, source: build(config) });
     }
 
     function persist(): void {
@@ -137,13 +184,14 @@ export function createInstallSourceRegistry(
         if (entries.has(config.name)) {
             throw new Error(`source '${config.name}' already exists`);
         }
-        entries.set(config.name, { config, source: buildSource(config, deps) });
+        entries.set(config.name, { config, source: build(config) });
         persist();
     }
 
     async function resolveUnlocked(
         ref: string,
         sourceName?: string,
+        onWarn?: SourceWarning,
     ): Promise<MaterializedInstallRecord> {
         if (sourceName !== undefined) {
             const entry = entries.get(sourceName);
@@ -158,7 +206,7 @@ export function createInstallSourceRegistry(
                     `source '${sourceName}' is not available on this host`,
                 );
             }
-            const candidate = await entry.source.find(ref);
+            const candidate = await entry.source.find(ref, onWarn);
             if (candidate === undefined) {
                 // Explicit --source non-match is a hard error (§4.1, §12 Q4).
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
@@ -168,7 +216,9 @@ export function createInstallSourceRegistry(
         // Probe the sources in resolution (map iteration) order; first match
         // wins (§4.1).
         const ordered = resolutionSources();
-        const candidates = await Promise.all(ordered.map((s) => s.find(ref)));
+        const candidates = await Promise.all(
+            ordered.map((s) => s.find(ref, onWarn)),
+        );
         const index = candidates.findIndex((c) => c !== undefined);
         if (index < 0) {
             throw new Error(
@@ -225,17 +275,21 @@ export function createInstallSourceRegistry(
         async resolve(
             ref: string,
             sourceName?: string,
+            onWarn?: SourceWarning,
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter (design §12 Q5). The installer (M2) reuses the
             // same limiter for the record write.
-            return limiter(() => resolveUnlocked(ref, sourceName));
+            return limiter(() => resolveUnlocked(ref, sourceName, onWarn));
         },
-        async where(ref: string): Promise<ResolvedCandidate | undefined> {
+        async where(
+            ref: string,
+            onWarn?: SourceWarning,
+        ): Promise<ResolvedCandidate | undefined> {
             // Dry-run: report which source would win without materializing.
             const ordered = resolutionSources();
             const candidates = await Promise.all(
-                ordered.map((s) => s.find(ref)),
+                ordered.map((s) => s.find(ref, onWarn)),
             );
             return candidates.find((c) => c !== undefined);
         },
