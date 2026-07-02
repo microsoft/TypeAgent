@@ -1,5 +1,3 @@
----
-title: TypeAgent Engineering Wiki
-description: TypeAgent engineering wiki - redirects to the Overview.
-redirect_url: /docs/ai-systems-development-typeagent/overview
----
+<meta http-equiv="refresh" content="0; url=overview/index.html" />
+
+[This wiki has moved to the Overview.](overview/index.md)
