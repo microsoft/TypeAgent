@@ -643,10 +643,16 @@ body {
 /* --- Filter segmented control -------------------------------------------- */
 .filters {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 4px;
+}
+
+.filter-row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 8px 12px 4px;
 }
 
 .filters-label {
@@ -654,6 +660,7 @@ body {
   align-items: center;
   gap: 4px;
   margin-right: 4px;
+  min-width: 52px;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
@@ -714,6 +721,92 @@ body {
   border-radius: 50%;
   flex: 0 0 auto;
   background: currentColor;
+}
+
+/* Verdict chip dots use fixed red/green/neutral fills (red = likely regression,
+   green = improvement, muted = benign, and unchanged has no colour). */
+.chip-dot.verdict-regression {
+  background: var(--vscode-errorForeground);
+}
+
+.chip-dot.verdict-improvement {
+  background: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.chip-dot.verdict-benign {
+  background: var(--vscode-descriptionForeground);
+}
+
+.chip-dot.verdict-neutral {
+  background: var(--vscode-descriptionForeground);
+  opacity: 0.5;
+}
+
+/* The verdict headline: the primary "did anything regress?" answer. */
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.verdict-banner[hidden] {
+  display: none;
+}
+
+.verdict-banner.is-regression {
+  border-color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, transparent);
+}
+
+.verdict-banner.is-regression .codicon {
+  color: var(--vscode-errorForeground);
+}
+
+.verdict-banner.is-clean .codicon {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.verdict-headline {
+  font-weight: 600;
+}
+
+.verdict-detail {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+/* The per-row verdict pill sits next to the structural status, so the diff
+   decoration keeps its meaning and the verdict is a separate colour layer. */
+.verdict-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 0 7px;
+  height: 17px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.verdict-pill.verdict-regression {
+  color: var(--vscode-errorForeground);
+  border-color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, transparent);
+}
+
+.verdict-pill.verdict-improvement {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  border-color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.verdict-pill.verdict-benign {
+  color: var(--vscode-descriptionForeground);
+  border-color: var(--vscode-panel-border);
 }
 
 /* --- Results list (styled like a native tree/list) ----------------------- */
