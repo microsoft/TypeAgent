@@ -39,3 +39,14 @@ export {
     setRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
 } from "./runtimeConfig.js";
+export {
+    createLocalEmbeddingModel,
+    DefaultLocalEmbeddingModel,
+    type LocalEmbeddingModelSettings,
+} from "./localEmbedding.js";
+export {
+    getEmbeddingProvider,
+    isEmbeddingAvailable,
+    tryCreateEmbeddingModel,
+    type EmbeddingProvider,
+} from "./embeddingProvider.js";
