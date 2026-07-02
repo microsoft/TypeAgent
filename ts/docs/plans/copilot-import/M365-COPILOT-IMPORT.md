@@ -52,7 +52,7 @@ store**. Verified on a Windows dev machine (2026-07-02):
 - The M365 Copilot app is a WebView2 host; its `EBWebView` profile has a cache
   and `Local Storage` but **no `.db` / `.sqlite` conversation database**.
 - The conversations live server-side in **Substrate** (the user's Exchange
-  mailbox). Hosts referenced in the app's Local Storage (frequency): 
+  mailbox). Hosts referenced in the app's Local Storage (frequency):
   `graph.microsoft.com` (36×), `www.office.com`, `loki.delve.office.com`,
   `outlook.office.com` / `outlook.office365.com`, `ecs.office.com`,
   `substrate.office.com`.
@@ -63,10 +63,10 @@ So there is nothing to read off disk. Import must go through an **API call**.
 
 ## 3. Two API paths (and the chosen one)
 
-| Path | Auth model | Stability | Chosen? |
-| --- | --- | --- | --- |
-| **Graph export API** — `getAllEnterpriseInteractions` | **Application-only** (`AiEnterpriseInteraction.Read.All`) + tenant admin consent + Copilot license | Documented / supported | ✅ **Yes** (requester is pursuing admin consent) |
-| **Internal Substrate endpoint** — the call the M365 Copilot app itself makes to list/load chats | Delegated user token (audience `substrate.office.com`) | Undocumented, can change without notice | ❌ No (fragile) |
+| Path                                                                                            | Auth model                                                                                         | Stability                               | Chosen?                                          |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
+| **Graph export API** — `getAllEnterpriseInteractions`                                           | **Application-only** (`AiEnterpriseInteraction.Read.All`) + tenant admin consent + Copilot license | Documented / supported                  | ✅ **Yes** (requester is pursuing admin consent) |
+| **Internal Substrate endpoint** — the call the M365 Copilot app itself makes to list/load chats | Delegated user token (audience `substrate.office.com`)                                             | Undocumented, can change without notice | ❌ No (fragile)                                  |
 
 We are targeting the **documented Graph export API**. The internal Substrate
 call is closer to the "just use the user's token" idea and matches the app's
@@ -95,11 +95,11 @@ Returns `200 OK` with a collection of `aiInteraction` objects.
 
 ### Permissions
 
-| Type | Supported? | Permission |
-| --- | --- | --- |
-| Delegated (work/school) | ❌ Not supported | — |
-| Delegated (personal MSA) | ❌ Not supported | — |
-| **Application** | ✅ | **`AiEnterpriseInteraction.Read.All`** |
+| Type                     | Supported?       | Permission                             |
+| ------------------------ | ---------------- | -------------------------------------- |
+| Delegated (work/school)  | ❌ Not supported | —                                      |
+| Delegated (personal MSA) | ❌ Not supported | —                                      |
+| **Application**          | ✅               | **`AiEnterpriseInteraction.Read.All`** |
 
 **Application-only.** There is no delegated form. Requires an Entra app
 registration and **tenant admin consent**.
@@ -107,7 +107,7 @@ registration and **tenant admin consent**.
 ### Licensing / prerequisites
 
 - Requires a valid Microsoft 365 Copilot license with the **`Microsoft
-  Copilot with Graph-grounded chat`** service plan on the target user.
+Copilot with Graph-grounded chat`** service plan on the target user.
 - The target user's tenant must have Copilot enabled and export permitted.
 - **Commercial (worldwide) cloud only** — not available in national cloud
   deployments (GCC High, DoD, etc.).
@@ -122,7 +122,7 @@ registration and **tenant admin consent**.
   - `IPM.SkypeTeams.Message.Copilot.Teams` — Copilot in Teams meetings.
 - `$filter` on `createdDateTime` — must supply **both** a lower and upper
   bound, e.g. `createdDateTime gt 2025-11-24T00:00:00Z and createdDateTime lt
-  2025-11-25T00:00:00Z`.
+2025-11-25T00:00:00Z`.
 - **No `delta`** support; no incremental cursor. Paging is via `$top` + server
   paging. (Import must window by date or page fully.)
 - The API does **not** cover agents created by Copilot Studio.
@@ -131,23 +131,31 @@ registration and **tenant admin consent**.
 
 ```jsonc
 {
-  "id": "1732148356886",                    // per-message id
-  "sessionId": "19:...@thread.v2",          // groups a conversation
-  "requestId": "f128b7a9-...",              // pairs a prompt with its response
+  "id": "1732148356886", // per-message id
+  "sessionId": "19:...@thread.v2", // groups a conversation
+  "requestId": "f128b7a9-...", // pairs a prompt with its response
   "appClass": "IPM.SkypeTeams.Message.Copilot.BizChat",
-  "interactionType": "userPrompt",          // OR "aiResponse"
-  "conversationType": "bizchat",            // OR "appchat", etc.
+  "interactionType": "userPrompt", // OR "aiResponse"
+  "conversationType": "bizchat", // OR "appchat", etc.
   "createdDateTime": "2024-11-21T00:19:16.886Z",
   "locale": "en-us",
-  "from": { /* user identity (aadUser) or bot application identity */ },
-  "body": {
-    "contentType": "text",                  // OR "html", or adaptive-card JSON
-    "content": "What should be on my radar from emails last week?"
+  "from": {
+    /* user identity (aadUser) or bot application identity */
   },
-  "attachments": [ /* may include adaptive cards, file references */ ],
-  "links": [ /* meeting/file/event links */ ],
+  "body": {
+    "contentType": "text", // OR "html", or adaptive-card JSON
+    "content": "What should be on my radar from emails last week?",
+  },
+  "attachments": [
+    /* may include adaptive cards, file references */
+  ],
+  "links": [
+    /* meeting/file/event links */
+  ],
   "mentions": [],
-  "contexts": [ /* e.g. Teams meeting reference */ ]
+  "contexts": [
+    /* e.g. Teams meeting reference */
+  ],
 }
 ```
 
@@ -167,15 +175,15 @@ Notes that affect the importer:
 
 ## 5. Mapping to the existing pipeline
 
-| M365 `aiInteraction` | TypeAgent mirror model |
-| --- | --- |
-| `sessionId` | conversation identity (dedup key for `importCopilotMirror`) |
-| `interactionType: "userPrompt"` | `user-request` display entry (`body.content`) |
-| `interactionType: "aiResponse"` | `set-display` markdown entry (sanitized `body.content`) |
-| `requestId` | pairs a prompt with its response into one turn |
-| `createdDateTime` | turn timestamp |
-| first `userPrompt` of a session | derived mirror name (title fallback) |
-| `appClass` | filter to the desired Copilot surface |
+| M365 `aiInteraction`            | TypeAgent mirror model                                      |
+| ------------------------------- | ----------------------------------------------------------- |
+| `sessionId`                     | conversation identity (dedup key for `importCopilotMirror`) |
+| `interactionType: "userPrompt"` | `user-request` display entry (`body.content`)               |
+| `interactionType: "aiResponse"` | `set-display` markdown entry (sanitized `body.content`)     |
+| `requestId`                     | pairs a prompt with its response into one turn              |
+| `createdDateTime`               | turn timestamp                                              |
+| first `userPrompt` of a session | derived mirror name (title fallback)                        |
+| `appClass`                      | filter to the desired Copilot surface                       |
 
 Everything downstream of "a session with ordered turns" is **already built**
 and reused unchanged:
@@ -196,7 +204,7 @@ and reused unchanged:
    the repo already has AAD/Key Vault infra via `getKeys` / `aiclient`).
    Acquire a token for `https://graph.microsoft.com/.default`.
    - App-only means the call is **per user id** — the importer must be told
-     *which* user to import (the signed-in user's AAD object id, or an admin
+     _which_ user to import (the signed-in user's AAD object id, or an admin
      selection). There is no "me".
 2. **`GraphInteractionReader`.** Calls
    `getAllEnterpriseInteractions` with paging (`$top=100`) and optional
