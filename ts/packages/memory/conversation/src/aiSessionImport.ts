@@ -68,6 +68,43 @@ export type SessionImportOptions = SessionContentOptions & {
      * When false, returns an unindexed memory containing all messages.
      */
     buildIndex?: boolean | undefined;
+    /**
+     * For directory imports, recurse into subdirectories collecting every
+     * `*.jsonl` transcript in the tree. Default false (top-level only).
+     */
+    recurse?: boolean | undefined;
+    /**
+     * Stop after importing this many messages. Useful for sampling a large
+     * corpus. When undefined (default), all messages are imported.
+     */
+    maxMessages?: number | undefined;
+    /**
+     * For directory imports, stop after processing this many transcript
+     * files. Useful for sampling a large corpus. When undefined (default),
+     * all files are imported.
+     */
+    maxFiles?: number | undefined;
+    /**
+     * Optional callback for progress reporting during batch imports.
+     * Called for each file processed: (current, total, filePath) => void
+     */
+    onProgress?: ((current: number, total: number, filePath: string) => void) | undefined;
+    /**
+     * Optional callback for progress reporting during knowledge extraction and indexing.
+     * Called for each message indexed: (current, total) => void
+     */
+    onIndexProgress?: ((current: number, total: number) => void) | undefined;
+    /**
+     * Optional callback invoked when knowledge extraction fails for an
+     * individual message (e.g. the model returned malformed JSON). The import
+     * continues: the message is still added to the memory without extracted
+     * knowledge so it remains searchable by text. When omitted, the import
+     * still continues but the failure is reported via `console.warn`.
+     * Called for each failed message: (current, total, error) => void
+     */
+    onIndexError?:
+        | ((current: number, total: number, error: string) => void)
+        | undefined;
 };
 
 /**
@@ -514,6 +551,8 @@ async function buildSessionMemory(
     extraTags: string[],
     settings: ConversationMemorySettings | undefined,
     buildIndex: boolean,
+    onIndexProgress?: (current: number, total: number) => void,
+    onIndexError?: (current: number, total: number, error: string) => void,
 ): Promise<ConversationMemory> {
     const tags = [...new Set([nameTag, app, ...extraTags])];
     if (!buildIndex) {
@@ -521,12 +560,30 @@ async function buildSessionMemory(
         return new ConversationMemory(nameTag, messages, tags, settings);
     }
     const memory = new ConversationMemory(nameTag, [], tags, settings);
-    for (const message of messages) {
+    for (let i = 0; i < messages.length; i++) {
+        const message = messages[i];
+        // Extract knowledge and index the message. A single message can fail
+        // (e.g. the model returns malformed JSON for knowledge extraction).
+        // Rather than aborting an entire bulk import, fall back to adding the
+        // message without extracted knowledge so it stays searchable by text.
         const result = await memory.addMessage(message, true, true);
         if (!result.success) {
-            throw new Error(
-                `Failed to index ${app} session "${nameTag}": ${result.message}`,
-            );
+            if (onIndexError) {
+                onIndexError(i + 1, messages.length, result.message);
+            } else {
+                console.warn(
+                    `Skipping knowledge extraction for message ${i + 1}/${messages.length} of ${app} session "${nameTag}": ${result.message}`,
+                );
+            }
+            const fallback = await memory.addMessage(message, false, true);
+            if (!fallback.success) {
+                throw new Error(
+                    `Failed to index ${app} session "${nameTag}": ${fallback.message}`,
+                );
+            }
+        }
+        if (onIndexProgress) {
+            onIndexProgress(i + 1, messages.length);
         }
     }
     return memory;
@@ -552,13 +609,19 @@ async function importSessionFile(
     const parsed = await loadParsedSession(transcriptFilePath, app, options);
     const name = options.name ?? getFileName(transcriptFilePath);
     const extraTags = parsed.title ? [parsed.title] : [];
+    const messages =
+        options.maxMessages !== undefined
+            ? parsed.messages.slice(0, options.maxMessages)
+            : parsed.messages;
     return buildSessionMemory(
         name,
         app,
-        parsed.messages,
+        messages,
         extraTags,
         options.settings,
         options.buildIndex ?? true,
+        options.onIndexProgress,
+        options.onIndexError,
     );
 }
 
@@ -568,15 +631,22 @@ async function importSessionDir(
     options?: SessionImportOptions,
 ): Promise<ConversationMemory> {
     options ??= {};
-    const files = (await fs.promises.readdir(dirPath))
-        .filter((f) => f.toLowerCase().endsWith(".jsonl"))
-        .sort();
+    const files = await collectSessionFiles(dirPath, options.recurse ?? false);
     const allMessages: ConversationMessage[] = [];
     const titles: string[] = [];
-    for (const file of files) {
-        const filePath = path.join(dirPath, file);
+    const maxMessages = options.maxMessages;
+    const maxFiles = options.maxFiles;
+    const fileCount =
+        maxFiles !== undefined ? Math.min(maxFiles, files.length) : files.length;
+    for (let i = 0; i < fileCount; i++) {
+        const filePath = files[i];
+        if (options.onProgress) {
+            options.onProgress(i + 1, fileCount, filePath);
+        }
         const parsed = await loadParsedSession(filePath, app, options);
-        const sessionId = getFileName(file);
+        // Use the path relative to the root dir so transcripts with the same
+        // file name in different subfolders stay distinguishable.
+        const sessionId = sessionTagFromPath(dirPath, filePath);
         for (const message of parsed.messages) {
             message.tags.push(`session:${sessionId}`);
         }
@@ -584,6 +654,14 @@ async function importSessionDir(
         if (parsed.title) {
             titles.push(parsed.title);
         }
+        // Stop scanning more files once we have enough messages.
+        if (maxMessages !== undefined && allMessages.length >= maxMessages) {
+            break;
+        }
+    }
+    // Trim any overshoot from the final file so we stop at exactly maxMessages.
+    if (maxMessages !== undefined && allMessages.length > maxMessages) {
+        allMessages.length = maxMessages;
     }
     const name = options.name ?? path.basename(dirPath) ?? "sessions";
     return buildSessionMemory(
@@ -593,7 +671,47 @@ async function importSessionDir(
         titles,
         options.settings,
         options.buildIndex ?? true,
+        options.onIndexProgress,
+        options.onIndexError,
     );
+}
+
+/**
+ * Collect every `*.jsonl` transcript in a directory, optionally recursing into
+ * subdirectories. Results are sorted for deterministic ingest order.
+ */
+async function collectSessionFiles(
+    dirPath: string,
+    recurse: boolean,
+): Promise<string[]> {
+    const entries = await fs.promises.readdir(dirPath, {
+        withFileTypes: true,
+    });
+    const files: string[] = [];
+    for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            if (recurse) {
+                files.push(...(await collectSessionFiles(fullPath, recurse)));
+            }
+        } else if (entry.name.toLowerCase().endsWith(".jsonl")) {
+            files.push(fullPath);
+        }
+    }
+    return files.sort();
+}
+
+/**
+ * Derive a stable session tag from a transcript path relative to the import
+ * root, dropping the extension and normalizing separators to "/".
+ */
+function sessionTagFromPath(rootDir: string, filePath: string): string {
+    const relative = path.relative(rootDir, filePath);
+    const withoutExt = relative.slice(
+        0,
+        relative.length - path.extname(relative).length,
+    );
+    return withoutExt.split(path.sep).join("/");
 }
 
 /**

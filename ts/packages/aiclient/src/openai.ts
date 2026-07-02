@@ -88,6 +88,14 @@ export type CommonApiSettings = {
     timeout?: number | undefined;
     maxRetryAttempts?: number | undefined;
     retryPauseMs?: number | undefined;
+    /**
+     * When a deployment rejects the requested output budget (e.g.
+     * "max_tokens is too large: 16384. This model supports at most 4096
+     * completion tokens"), automatically lower `max_completion_tokens` to
+     * the reported limit and retry once. Defaults to enabled; set to
+     * `false` to surface the error instead.
+     */
+    adaptiveOutputTokens?: boolean | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -525,6 +533,77 @@ export type CompletionUsageStats = {
  * @param tags Tags for tracking usage of this model instance
  * @returns ChatModel
  */
+
+/**
+ * Maximum completion (output) tokens supported by known model families.
+ * Patterns are matched in order against a normalized model/deployment name,
+ * so more specific families (gpt-4.1, gpt-4o) must precede less specific
+ * ones (gpt-4). Used to request the full output budget so large responses
+ * (e.g. knowledge extraction) aren't silently truncated. Unknown models
+ * return undefined and keep the deployment default.
+ */
+const MODEL_MAX_OUTPUT_TOKENS: ReadonlyArray<readonly [RegExp, number]> = [
+    [/gpt-?4\.?1/, 32768], // gpt-4.1, gpt-4.1-mini, gpt-4.1-nano
+    [/gpt-?4-?o/, 16384], // gpt-4o, gpt-4o-mini
+    [/gpt-?5/, 16384], // gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-chat
+    [/gpt-?3\.?5/, 4096], // gpt-3.5-turbo
+    [/gpt-?4/, 4096], // gpt-4, gpt-4-turbo
+    [/(^|[^a-z0-9])o[134]([^a-z0-9]|$)/, 100000], // o1, o3, o4 reasoning
+];
+
+/**
+ * Resolve the underlying model/deployment name from API settings. OpenAI
+ * settings carry `modelName` directly; Azure encodes the deployment in the
+ * endpoint URL (`.../deployments/<name>/...`).
+ */
+function resolveModelName(
+    settings: AzureApiSettings | OpenAIApiSettings,
+): string | undefined {
+    if (settings.modelName) {
+        return settings.modelName;
+    }
+    const match = settings.endpoint?.match(/\/deployments\/([^/?]+)/i);
+    return match?.[1];
+}
+
+/**
+ * Look up the maximum completion (output) tokens for a model name. Returns
+ * undefined for unknown models so callers can fall back to the deployment
+ * default.
+ */
+function getModelMaxOutputTokens(
+    modelName: string | undefined,
+): number | undefined {
+    if (!modelName) {
+        return undefined;
+    }
+    const normalized = modelName.toLowerCase().replace(/_/g, "-");
+    for (const [pattern, maxTokens] of MODEL_MAX_OUTPUT_TOKENS) {
+        if (pattern.test(normalized)) {
+            return maxTokens;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Parse the supported completion-token limit out of a service error such as
+ * `max_tokens is too large: 16384. This model supports at most 4096 completion
+ * tokens, whereas you provided 16384.` Returns the supported limit, or
+ * undefined if the message isn't that error.
+ */
+function parseSupportedCompletionTokens(
+    message: string | undefined,
+): number | undefined {
+    if (!message) {
+        return undefined;
+    }
+    const match = message.match(
+        /supports at most (\d+) completion tokens/i,
+    );
+    return match ? parseInt(match[1], 10) : undefined;
+}
+
 export function createChatModel(
     endpoint?: string | ApiSettings,
     completionSettings?: CompletionSettings,
@@ -604,6 +683,18 @@ function createAzureOpenAIChatModel(
     }
     delete completionSettings.max_tokens;
 
+    // When the caller hasn't capped output, request the full output budget for
+    // the selected model so large responses (e.g. knowledge extraction) aren't
+    // silently truncated at the deployment default. Unknown models keep the
+    // default (left unset).
+    const resolvedModelName = resolveModelName(settings);
+    if (completionSettings.max_completion_tokens === undefined) {
+        const maxOutputTokens = getModelMaxOutputTokens(resolvedModelName);
+        if (maxOutputTokens !== undefined) {
+            completionSettings.max_completion_tokens = maxOutputTokens;
+        }
+    }
+
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
         completionSettings.response_format !== undefined;
@@ -682,12 +773,43 @@ function createAzureOpenAIChatModel(
                 : prompt;
 
         const params = getParams(messages, jsonSchema);
-        const result = await callJsonApiWithPool(pool, buildRequest(params), {
+        let result = await callJsonApiWithPool(pool, buildRequest(params), {
             retryPauseMs: settings.retryPauseMs,
             signal,
         });
         if (!result.success) {
-            return result;
+            // Adaptive output cap: some deployments support fewer completion
+            // tokens than our requested budget and reject the request outright
+            // (e.g. "max_tokens is too large: 16384. This model supports at most
+            // 4096 completion tokens"). Parse the real limit, lower the cap for
+            // this and future calls on this model, and retry once. Enabled by
+            // default; callers can opt out via `adaptiveOutputTokens: false`.
+            const supported =
+                settings.adaptiveOutputTokens !== false
+                    ? parseSupportedCompletionTokens(result.message)
+                    : undefined;
+            if (
+                supported !== undefined &&
+                completionSettings !== undefined &&
+                completionSettings.max_completion_tokens !== supported
+            ) {
+                debugOpenAI(
+                    "lowering max_completion_tokens from %s to %d for model %s per service limit",
+                    completionSettings.max_completion_tokens ?? "<default>",
+                    supported,
+                    resolvedModelName ?? "<unknown>",
+                );
+                completionSettings.max_completion_tokens = supported;
+                // Rebuild the request body so it reflects the lowered cap.
+                params.max_completion_tokens = supported;
+                result = await callJsonApiWithPool(pool, buildRequest(params), {
+                    retryPauseMs: settings.retryPauseMs,
+                    signal,
+                });
+            }
+            if (!result.success) {
+                return result;
+            }
         }
         const data = result.data as ChatCompletion;
         if (!data.choices || data.choices.length === 0) {
@@ -712,6 +834,33 @@ function createAzureOpenAIChatModel(
             TokenCounter.getInstance().add(data.usage, tags);
             usageCallback?.(data.usage);
         } catch {}
+
+        // Instrumentation: surface output size and truncation. The OpenAI/Azure
+        // API reports a cut-off response via finish_reason === "length".
+        const finishReason = data.choices[0].finish_reason;
+        if (debugOpenAI.enabled) {
+            debugOpenAI(
+                "completion model=%s promptChars=%d promptTokens=%s completionTokens=%s maxCompletionTokens=%s finishReason=%s",
+                resolvedModelName ?? "<unknown>",
+                getPromptLength(prompt),
+                data.usage?.prompt_tokens ?? "?",
+                data.usage?.completion_tokens ?? "?",
+                completionSettings?.max_completion_tokens ?? "<default>",
+                finishReason ?? "<none>",
+            );
+        }
+        if (finishReason === "length") {
+            const maxTokens = completionSettings?.max_completion_tokens;
+            return error(
+                `Model output truncated (finish_reason="length"): generated ${
+                    data.usage?.completion_tokens ?? "?"
+                } completion token(s)${
+                    maxTokens !== undefined
+                        ? ` at max_completion_tokens=${maxTokens}`
+                        : ""
+                }. The response is incomplete; reduce the input size or raise the output token limit.`,
+            );
+        }
 
         if (Array.isArray(jsonSchema)) {
             const tool_calls = data.choices[0].message?.tool_calls;
