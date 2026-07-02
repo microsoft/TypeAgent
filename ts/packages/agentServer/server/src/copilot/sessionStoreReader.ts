@@ -179,6 +179,112 @@ export function getSessionStorePathCandidates(): string[] {
     return candidates;
 }
 
+/**
+ * Load the map of Copilot `sessionId` → generated chat title (`customTitle`)
+ * from VS Code's native chat storage.
+ *
+ * The `session-store.db` has no title column — its `summary` is just the first
+ * user message. The human-readable title VS Code shows in its chat list lives
+ * instead in the per-session chat file
+ * `<User>/workspaceStorage/<hash>/chatSessions/<sessionId>.jsonl`, whose
+ * filename matches the store's `sessions.id`. We read the `customTitle` from
+ * each so imported mirrors can be named exactly as the user sees them.
+ *
+ * The chat file is (despite the extension) a single JSON object whose header
+ * carries `customTitle` before the bulky `requests` array, so we read only a
+ * bounded prefix and extract it with a JSON-string-aware regex rather than
+ * parsing multi-megabyte bodies.
+ *
+ * Best-effort: unreadable or title-less files are skipped. Sessions without a
+ * persisted `customTitle` are simply absent from the map (callers fall back to
+ * the store summary — which is what VS Code itself shows for those).
+ *
+ * @param dbPath path to `session-store.db`; the VS Code `User` dir (and thus
+ *   `workspaceStorage`) is derived from it so the titles come from the same
+ *   VS Code flavor as the store.
+ */
+export function loadChatTitles(
+    dbPath: string = getDefaultSessionStorePath(),
+): Map<string, string> {
+    const titles = new Map<string, string>();
+    // <User>/globalStorage/github.copilot-chat/session-store.db → <User>
+    const userDir = path.dirname(path.dirname(path.dirname(dbPath)));
+    const workspaceStorage = path.join(userDir, "workspaceStorage");
+    if (!fs.existsSync(workspaceStorage)) {
+        return titles;
+    }
+
+    let workspaceDirs: string[];
+    try {
+        workspaceDirs = fs.readdirSync(workspaceStorage);
+    } catch (e) {
+        debugError(`Failed to read workspaceStorage: ${e}`);
+        return titles;
+    }
+
+    for (const workspaceDir of workspaceDirs) {
+        const chatSessionsDir = path.join(
+            workspaceStorage,
+            workspaceDir,
+            "chatSessions",
+        );
+        let files: string[];
+        try {
+            if (!fs.existsSync(chatSessionsDir)) {
+                continue;
+            }
+            files = fs.readdirSync(chatSessionsDir);
+        } catch {
+            continue;
+        }
+        for (const file of files) {
+            if (!file.endsWith(".jsonl")) {
+                continue;
+            }
+            const sessionId = file.slice(0, -".jsonl".length);
+            const title = readCustomTitle(path.join(chatSessionsDir, file));
+            if (title) {
+                titles.set(sessionId, title);
+            }
+        }
+    }
+    return titles;
+}
+
+/**
+ * Extract a non-empty `customTitle` from the header of a chat `.jsonl` file,
+ * reading only a bounded prefix (the title precedes the large `requests`
+ * array). Returns undefined when absent, empty, or unreadable.
+ */
+function readCustomTitle(filePath: string): string | undefined {
+    // 64 KiB comfortably covers the header where customTitle lives.
+    const maxHeaderBytes = 64 * 1024;
+    let head: string;
+    try {
+        const fd = fs.openSync(filePath, "r");
+        try {
+            const buffer = Buffer.alloc(maxHeaderBytes);
+            const bytesRead = fs.readSync(fd, buffer, 0, maxHeaderBytes, 0);
+            head = buffer.toString("utf8", 0, bytesRead);
+        } finally {
+            fs.closeSync(fd);
+        }
+    } catch {
+        return undefined;
+    }
+    // Match the JSON-quoted string value (handling escapes) and unescape it.
+    const match = /"customTitle"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(head);
+    if (!match) {
+        return undefined;
+    }
+    try {
+        const title = (JSON.parse(match[1]) as string).trim();
+        return title.length > 0 ? title : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 export type CopilotSessionStore = {
     readonly schemaVersion: number | undefined;
     listSessions(options?: ListSessionsOptions): CopilotSessionRow[];

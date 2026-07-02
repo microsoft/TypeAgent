@@ -376,6 +376,34 @@ describe("deriveMirrorName", () => {
         ).toBe("fix the build");
     });
 
+    test("prefers the VS Code chat title over the summary", () => {
+        expect(
+            deriveMirrorName(
+                {
+                    ...base,
+                    summary: "what changes have we made in this branch?",
+                    branch: "main",
+                    createdAt: "2026-06-01T10:00:00.000Z",
+                },
+                "Branch change summary",
+            ),
+        ).toBe("Branch change summary");
+    });
+
+    test("ignores a blank title and falls back to the summary", () => {
+        expect(
+            deriveMirrorName(
+                {
+                    ...base,
+                    summary: "fix the build",
+                    branch: "main",
+                    createdAt: "2026-06-01T10:00:00.000Z",
+                },
+                "   ",
+            ),
+        ).toBe("fix the build");
+    });
+
     test("falls back to branch and date when summary is empty", () => {
         expect(
             deriveMirrorName({

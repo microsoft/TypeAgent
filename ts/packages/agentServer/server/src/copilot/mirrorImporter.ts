@@ -4,6 +4,7 @@
 import type { ConversationManager } from "../conversationManager.js";
 import {
     getDefaultSessionStorePath,
+    loadChatTitles,
     openCopilotSessionStore,
     type CopilotSessionRow,
 } from "./sessionStoreReader.js";
@@ -83,6 +84,9 @@ export async function importCopilotSessions(
 ): Promise<ImportCopilotSessionsResult> {
     const dbPath = options.dbPath ?? getDefaultSessionStorePath();
     const store = openCopilotSessionStore(dbPath);
+    // Titles the user sees in VS Code live in the native chat files, not the
+    // store; load them so mirrors are named exactly as in VS Code.
+    const titles = loadChatTitles(dbPath);
 
     const result: ImportCopilotSessionsResult = {
         dbPath,
@@ -110,7 +114,7 @@ export async function importCopilotSessions(
             onProgress?.({
                 current: i + 1,
                 total: sessions.length,
-                name: deriveMirrorName(session),
+                name: deriveMirrorName(session, titles.get(session.id)),
             });
             try {
                 const turns = store.readTurns(session.id);
@@ -126,7 +130,7 @@ export async function importCopilotSessions(
 
                 const res = await conversationManager.importCopilotMirror({
                     sessionId: session.id,
-                    name: deriveMirrorName(session),
+                    name: deriveMirrorName(session, titles.get(session.id)),
                     createdAt: session.createdAt,
                     displayLogEntries,
                     lastSyncedTurnIndex,
@@ -163,11 +167,23 @@ export async function importCopilotSessions(
 }
 
 /**
- * Pick a human-readable mirror name: the first non-empty line of the session
- * summary, else "<branch> — <date>", else "Copilot session — <date>". The
- * conversation manager collapses whitespace, clamps length, and de-dups names.
+ * Pick a human-readable mirror name, matching what the user sees in VS Code:
+ *   1. the VS Code generated chat title (`customTitle`) when available,
+ *   2. else the first non-empty line of the session summary (VS Code's own
+ *      fallback for untitled chats — the first user message),
+ *   3. else "<branch> — <date>", else "Copilot session — <date>".
+ * The conversation manager collapses whitespace, clamps length, and de-dups.
+ *
+ * @param title the VS Code `customTitle` for this session, if any.
  */
-export function deriveMirrorName(session: CopilotSessionRow): string {
+export function deriveMirrorName(
+    session: CopilotSessionRow,
+    title?: string | undefined,
+): string {
+    const trimmedTitle = title?.trim();
+    if (trimmedTitle) {
+        return trimmedTitle;
+    }
     const summaryLine = session.summary
         ?.split(/\r?\n/)
         .map((line) => line.trim())

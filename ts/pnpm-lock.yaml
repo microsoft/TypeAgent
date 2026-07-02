@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -640,6 +640,22 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+
+  examples/remoteClient:
+    dependencies:
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/protocol
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   examples/schemaStudio:
     dependencies:
@@ -1677,7 +1693,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
