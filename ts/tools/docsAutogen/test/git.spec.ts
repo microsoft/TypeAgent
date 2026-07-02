@@ -92,4 +92,42 @@ describe("Git arg shape", () => {
             "origin/main",
         ]);
     });
+    // Regression: change detection maps changed files to packages by their
+    // relDir, which is relative to the monorepo root (the git cwd). git prints
+    // paths relative to the repo root by default, so when the monorepo root is
+    // a subdirectory (TypeAgent under `ts/`) the paths carry a `ts/` prefix and
+    // match nothing — the `--since` run silently selects zero packages. The
+    // `--relative` flag makes git speak the same coordinate system.
+    it("passes --relative in diffNameOnly (paths relative to cwd, not repo root)", async () => {
+        const { runner, calls } = recordingRunner(() => ({
+            stdout: "packages/cache/src/cache.ts\n",
+            stderr: "",
+            code: 0,
+        }));
+        const git = new Git("/repo/ts", runner);
+        await git.diffNameOnly("base-sha", "head-sha");
+        expect(calls[0]).toEqual([
+            "diff",
+            "--name-only",
+            "--relative",
+            "base-sha..head-sha",
+            "--",
+        ]);
+    });
+    it("builds a single-ref diffNameOnly refspec with --relative", async () => {
+        const { runner, calls } = recordingRunner(() => ({
+            stdout: "",
+            stderr: "",
+            code: 0,
+        }));
+        const git = new Git("/repo/ts", runner);
+        await git.diffNameOnly("HEAD");
+        expect(calls[0]).toEqual([
+            "diff",
+            "--name-only",
+            "--relative",
+            "HEAD",
+            "--",
+        ]);
+    });
 });

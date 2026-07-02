@@ -16,6 +16,7 @@ import {
     isGenericTask,
     isTypeParamRef,
     SchemaTemplateDefinition,
+    TaskTypeParameter,
 } from "workflow-model";
 import {
     TaskRegistry,
@@ -224,7 +225,9 @@ function cmdListTasks(): void {
     for (const task of allBuiltinTasks) {
         console.log(`${task.name}`);
         if (isGenericTask(task)) {
-            const params = task.typeParameters.map((p) => p.name).join(", ");
+            const params = task.typeParameters
+                .map((p: TaskTypeParameter) => p.name)
+                .join(", ");
             console.log(`  <${params}> (generic)`);
             const inputTmpl = task.inputSchemaTemplate;
             if (

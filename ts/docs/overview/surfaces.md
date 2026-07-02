@@ -5,9 +5,8 @@ front ends that all talk to the same
 [dispatcher](../architecture/core/dispatcher.md) and registered agents. Pick the
 one that fits your workflow.
 
-> Cross-surface usage references: the [Command reference](./command-reference.md)
-> (the `@`-commands the dispatcher understands) and the
-> [keyboard shortcuts](./shell-shortcuts.md) for the Shell.
+> Cross-surface usage reference: the [Command reference](./command-reference.md)
+> — the `@`-commands the dispatcher understands.
 
 ## Desktop & console
 
@@ -17,8 +16,7 @@ The Electron desktop GUI — the primary way to explore TypeAgent — with voice
 input, conversational memory, and the action cache.
 
 - Run: `pnpm run shell` (on Ubuntu 24.04, use `pnpm run shell:nosandbox`).
-- Reference: [Shell](../packages/shell/overview.md) ·
-  [Keyboard shortcuts](./shell-shortcuts.md).
+- Reference: [Shell](../packages/shell/overview.md).
 
 ### TypeAgent CLI
 

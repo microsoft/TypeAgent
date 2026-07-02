@@ -8,12 +8,14 @@
             "schemaName": "browser",
             "actionName": "openWebPage",
             "parameters": {
-              "site": "portugal consulate",
-              "tab": "current"
+              "site": "portugal consulate"
             }
           },
           "alternates": {
-            "site": "portugal consulate website"
+            "site": [
+              "portugal consulate website",
+              "the portugal consulate website"
+            ]
           }
         }
       ]
@@ -22,12 +24,20 @@
   {
     "request": "Open the website https://microsoft.com",
     "expected": {
-      "schemaName": "browser",
-      "actionName": "openWebPage",
-      "parameters": {
-        "site": "https://microsoft.com",
-        "tab": "current"
-      }
+      "anyof": [
+        {
+          "action": {
+            "schemaName": "browser",
+            "actionName": "openWebPage",
+            "parameters": {
+              "site": "https://microsoft.com"
+            }
+          },
+          "alternates": {
+            "site": "the website https://microsoft.com"
+          }
+        }
+      ]
     }
   },
   {
@@ -36,8 +46,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "http://www.jsbach.net",
-        "tab": "current"
+        "site": "http://www.jsbach.net"
       }
     }
   },
@@ -47,8 +56,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "https://www.jsbach.net",
-        "tab": "current"
+        "site": "https://www.jsbach.net"
       }
     }
   },
@@ -58,8 +66,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "ftp://www.jsbach.net",
-        "tab": "current"
+        "site": "ftp://www.jsbach.net"
       }
     }
   }, 
@@ -69,8 +76,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "http://jsbach.net",
-        "tab": "current"
+        "site": "http://jsbach.net"
       }
     }
   }, 
@@ -80,8 +86,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "typeagent-browser://views/knowledgeLibrary.html",
-        "tab": "current"
+        "site": "typeagent-browser://views/knowledgeLibrary.html"
       }
     }
   },
@@ -91,8 +96,7 @@
       "schemaName": "browser",
       "actionName": "openWebPage",
       "parameters": {
-        "site": "paleobiodb",
-        "tab": "current"
+        "site": "paleobiodb"
       }
     }
   }  

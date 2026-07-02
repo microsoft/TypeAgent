@@ -83,6 +83,66 @@ When the dispatcher or an agent calls a `ClientIO` method, the routing layer use
 
 ---
 
+## Dev Tunnel (cross-device access)
+
+Expose the agent-server to another device (phone, tablet, second laptop) via a
+Microsoft Dev Tunnel. The tunnel provides a public `wss://…devtunnels.ms` URL that
+relays WebSocket traffic to your local port 8999.
+
+### Prerequisites
+
+- `devtunnel` CLI installed: `winget install Microsoft.devtunnel`
+- Signed in: `devtunnel user login`
+
+### One-time setup
+
+From the workspace root (`ts/`):
+
+```bash
+pnpm run devtunnel:setup
+```
+
+Creates a persistent tunnel, forwards port 8999, and writes
+`~/.typeagent/devtunnel.json`. Prints your client URL and connect-token command.
+
+### Start with tunnel
+
+```bash
+pnpm run start:tunnel
+```
+
+Starts the agent-server and brings up the tunnel host so remote clients can
+connect. Equivalent to running `pnpm start` + `node typeagent-serve.mjs tunnel start`
+separately.
+
+### Check status and get client URL
+
+```bash
+pnpm run devtunnel:status          # from ts/
+# or
+node ../../../tools/scripts/typeagent-serve.mjs tunnel status
+```
+
+### Stop the tunnel host
+
+```bash
+node ../../../tools/scripts/typeagent-serve.mjs tunnel stop
+```
+
+The agent-server continues running locally; only the remote relay is stopped.
+
+### How it works
+
+When a client calls `discoverPort` with `remote: true`, the server's tunnel
+resolver (`tunnelResolver.ts`) checks whether a tunnel mapping exists for the
+requested port and verifies the host is live (`devtunnel show --json`). If both
+conditions are met, it returns the `wss://` tunnel URL; otherwise it falls back
+to `localhost`.
+
+Enable debug logging with `DEBUG=agent-server:tunnel`.
+
+---
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a51eec350526837f7bfc53321ee1024f4a77502f8d6a444deba855cedcd598af -->
+<!-- AUTOGEN:DOCS:HASH:sha256=627d03c64ac5791a62839c7c3c1fc4196417215627f41d8b255c537752fdf8c2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -12,48 +12,59 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-types` package defines TypeScript types used by the TypeAgent dispatcher. These types are essential for ensuring consistent communication and data handling across various components of the TypeAgent system. By providing a standardized set of types, this package facilitates reliable interactions between different parts of the system, such as agents, clients, and dispatchers.
+The `@typeagent/dispatcher-types` package provides a centralized collection of TypeScript type definitions for the TypeAgent dispatcher. These types are critical for ensuring consistent and type-safe communication between various components of the TypeAgent ecosystem, such as agents, clients, and dispatchers. By standardizing the data structures and interfaces, this package helps maintain compatibility and reliability across the system.
 
 ## What it does
 
-This package provides a collection of TypeScript types that are used by the dispatcher to manage interactions, messages, and statuses. The types defined here are utilized by other packages within the TypeAgent monorepo, such as `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. Key functionalities include:
+The primary purpose of this package is to define and export TypeScript types that are used throughout the TypeAgent dispatcher and its related components. These types are consumed by multiple packages in the TypeAgent monorepo, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. The key functionalities provided by this package include:
 
-- **Defining the structure of dispatcher requests and responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` are used to manage the flow of requests and responses between clients and the dispatcher.
-- **Managing client interactions and messages**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` help in handling client input/output operations and message formatting.
-- **Handling dispatcher statuses and summaries**: Types and helper functions in [src/helpers/status.ts](./src/helpers/status.ts) provide mechanisms to summarize and manage dispatcher statuses.
+- **Dispatcher Requests and Responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` define the structure of requests and responses handled by the dispatcher.
+- **Client Input/Output Operations**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` are used to manage client interactions, including message formatting and data exchange.
+- **Dispatcher Status Management**: The package includes types and helper functions (e.g., `getStatusSummary` in [status.ts](./src/helpers/status.ts)) to represent and summarize the state of the dispatcher.
+- **Queue Management**: Types such as `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState` define the structure and lifecycle of server-side message queues.
+- **Logging and Display**: Types like `SetDisplayEntry` and `AppendDisplayEntry` in [displayLogEntry.ts](./src/displayLogEntry.ts) are used for managing and formatting log entries for display purposes.
+
+These types are foundational for the operation of the TypeAgent dispatcher and its integration with other components in the system.
 
 ## Setup
 
-No additional setup is required beyond installing the package. Simply run `pnpm install` to include this package in your workspace. For detailed setup instructions, see the hand-written README.
+This package does not require any special setup beyond installation. To include it in your project, simply run:
+
+```bash
+pnpm install
+```
+
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The package is structured into several key files, each responsible for different aspects of the dispatcher types:
+The `@typeagent/dispatcher-types` package is organized into several key files, each focusing on a specific aspect of the dispatcher:
 
-- [src/index.ts](./src/index.ts): The main entry point that exports types from other modules.
-- [src/clientIO.ts](./src/clientIO.ts): Defines types related to client input/output operations, such as `IAgentMessage` and `TemplateEditConfig`.
-- [src/dispatcher.ts](./src/dispatcher.ts): Contains core dispatcher types like `RequestId` and constants such as `DispatcherName` and `DispatcherEmoji`.
-- [src/displayLogEntry.ts](./src/displayLogEntry.ts): Defines types for logging display entries, including `SetDisplayEntry` and `AppendDisplayEntry`.
-- [src/pendingInteraction.ts](./src/pendingInteraction.ts): Manages types for pending interactions, such as `PendingInteractionRequest` and `PendingInteractionResponse`.
-- [src/helpers/status.ts](./src/helpers/status.ts): Provides helper functions for summarizing dispatcher statuses.
-- [src/queue.ts](./src/queue.ts): Defines types related to the server-side message queue, such as `QueuedRequest` and `QueueCancelReason`.
+- [src/index.ts](./src/index.ts): The main entry point for the package, exporting all the types and utilities defined in other modules.
+- [src/clientIO.ts](./src/clientIO.ts): Contains types related to client input/output operations, such as `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData`.
+- [src/dispatcher.ts](./src/dispatcher.ts): Defines core dispatcher types, including `RequestId`, `DispatcherName`, and `DispatcherEmoji`.
+- [src/displayLogEntry.ts](./src/displayLogEntry.ts): Provides types for logging and displaying information, such as `SetDisplayEntry` and `AppendDisplayEntry`.
+- [src/pendingInteraction.ts](./src/pendingInteraction.ts): Manages types for pending interactions, including `PendingInteractionRequest` and `PendingInteractionResponse`.
+- [src/helpers/status.ts](./src/helpers/status.ts): Implements helper functions for summarizing dispatcher statuses, such as `getStatusSummary`.
+- [src/queue.ts](./src/queue.ts): Defines types for the server-side message queue, including `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState`.
 - [src/queueStateMirror.ts](./src/queueStateMirror.ts): Implements the client-side mirror of the server's per-conversation queue.
+- [src/awaitCommand.ts](./src/awaitCommand.ts): Provides a utility function `awaitCommand` for submitting commands to the dispatcher and awaiting their completion.
 
 ## How to extend
 
 To extend the `@typeagent/dispatcher-types` package, follow these steps:
 
-1. **Identify the type to extend**: Determine which type or module needs modification or extension. For example, if you need to add a new type related to client interactions, you would start with [clientIO.ts](./src/clientIO.ts).
+1. **Identify the type to extend**: Determine which type or module you need to modify or extend. For example, if you need to add a new type for client interactions, start with [clientIO.ts](./src/clientIO.ts).
 
-2. **Modify or add new types**: Open the relevant file and add your new type definitions or modify existing ones. Ensure that your changes are consistent with the existing structure and naming conventions.
+2. **Modify or add new types**: Open the relevant file and add your new type definitions or modify existing ones. Ensure that your changes align with the existing structure and naming conventions.
 
-3. **Export new types**: If you add new types, make sure they are exported in [index.ts](./src/index.ts) to be accessible from other packages.
+3. **Export new types**: If you add new types, ensure they are exported in [index.ts](./src/index.ts) so they can be accessed by other packages.
 
-4. **Test your changes**: Write tests to validate your new types and ensure they integrate correctly with the rest of the system. You can add tests in a new file or an existing test suite.
+4. **Write tests**: Create or update test cases to validate your changes. This ensures that your modifications work as intended and do not introduce regressions.
 
-5. **Run the tests**: Execute the test suite to verify that your changes do not break existing functionality. Use the command `pnpm test` to run the tests.
+5. **Run tests**: Use the command `pnpm test` to execute the test suite and verify the correctness of your changes.
 
-By following these steps, you can effectively extend the functionality of the `@typeagent/dispatcher-types` package and contribute to the TypeAgent monorepo.
+By following these steps, you can effectively contribute to the `@typeagent/dispatcher-types` package and ensure its continued utility and reliability within the TypeAgent monorepo.
 
 ## Reference
 
@@ -61,8 +72,8 @@ By following these steps, you can effectively extend the functionality of the `@
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- `./helpers/status` → [./dist/helpers/status.js](./dist/helpers/status.js)
+- default → `./dist/index.js` _(not found on disk)_
+- `./helpers/status` → `./dist/helpers/status.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -92,6 +103,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
