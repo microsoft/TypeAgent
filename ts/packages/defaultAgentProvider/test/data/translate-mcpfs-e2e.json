@@ -14,7 +14,7 @@
       }
     },
     {
-      "request": "show me the files in that directory",
+      "request": "list the files in that directory",
       "expected": {
         "schemaName": "mcpfilesystem",
         "actionName": "list_directory",
@@ -26,7 +26,7 @@
       }
     },
     {
-      "request": "read that file",
+      "request": "read the file contents",
       "expected": {
         "anyof": [
           {

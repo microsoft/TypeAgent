@@ -40,6 +40,7 @@
     "install:ext:vscode": "fluid-build . -t install:ext:vscode",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
+    "line-histogram": "npx tsx tools/scripts/lineHistogram.ts",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "montage": "pnpm -C packages/montage exec npm run start",
