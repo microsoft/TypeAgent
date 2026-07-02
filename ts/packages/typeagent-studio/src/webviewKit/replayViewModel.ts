@@ -13,8 +13,10 @@
 import type {
     ActionDelta,
     ReplayCacheState,
+    RegressionVerdict,
     VersionSpec,
 } from "@typeagent/core/replay";
+import { likelyBadChange } from "@typeagent/core/replay";
 import type {
     SideFidelity,
     FidelityLayer,
@@ -34,6 +36,14 @@ export interface ImpactRow {
     status: ReplayRowStatus;
     /** Human word for the status, e.g. "changed". */
     statusLabel: string;
+    /** Value judgment on the change: regression | improvement | benign | neutral. */
+    verdict: RegressionVerdict;
+    /** Pill label for the verdict, e.g. "Likely regression"; empty for neutral. */
+    verdictLabel: string;
+    /** Concise reason shown on hover, e.g. "Action changed"; empty for neutral. */
+    verdictReason: string;
+    /** True when side-B feedback (not the delta shape) drove the verdict. */
+    verdictFromFeedback: boolean;
     /** The corpus utterance (collapsed whitespace, bounded). */
     utterance: string;
     /** How side A (Base) resolved, e.g. "hit" or "hit\u00b7cache". */
@@ -51,6 +61,56 @@ const STATUS_LABEL: Record<ReplayRowStatus, string> = {
     "new-match": "new match",
     "lost-match": "lost match",
 };
+
+/** Pill text for each verdict; neutral (unchanged) rows show no pill. */
+const VERDICT_LABEL: Record<RegressionVerdict, string> = {
+    regression: "Likely regression",
+    improvement: "Improvement",
+    benign: "Benign",
+    neutral: "",
+};
+
+function hasAction(action: unknown): action is { actionName?: unknown } {
+    return typeof action === "object" && action !== null;
+}
+
+/**
+ * Concise, display-only reason for a row's verdict. The verdict itself is the
+ * engine predicate's judgment; this only explains it in the row tooltip and
+ * mirrors the predicate's branches so the two never disagree.
+ */
+function describeVerdict(
+    row: ActionDelta,
+    verdict: RegressionVerdict,
+): { reason: string; fromFeedback: boolean } {
+    if (verdict === "neutral") {
+        return { reason: "", fromFeedback: false };
+    }
+    const rating = row.feedbackB?.rating;
+    if (rating === "down" || rating === "up") {
+        return { reason: "Marked by feedback", fromFeedback: true };
+    }
+    const hasA = hasAction(row.actionA);
+    const hasB = hasAction(row.actionB);
+    if (hasA && !hasB) {
+        return { reason: "No longer resolves", fromFeedback: false };
+    }
+    if (!hasA && hasB) {
+        return { reason: "Now resolves", fromFeedback: false };
+    }
+    if (!hasA && !hasB) {
+        return { reason: "No action either side", fromFeedback: false };
+    }
+    const nameA = (row.actionA as { actionName?: unknown }).actionName;
+    const nameB = (row.actionB as { actionName?: unknown }).actionName;
+    if (nameA !== nameB) {
+        return { reason: "Action changed", fromFeedback: false };
+    }
+    if (verdict === "regression") {
+        return { reason: "Parameter changed", fromFeedback: false };
+    }
+    return { reason: "Only added parameters", fromFeedback: false };
+}
 
 function collapse(text: string, max = 120): string {
     return collapseAndTruncate(text, max);
@@ -79,9 +139,15 @@ export function toImpactRow(
     methodB?: StudioReplayMethod,
 ): ImpactRow {
     const status = classifyReplayRow(row);
+    const verdict = likelyBadChange(row);
+    const { reason, fromFeedback } = describeVerdict(row, verdict);
     return {
         status,
         statusLabel: STATUS_LABEL[status],
+        verdict,
+        verdictLabel: VERDICT_LABEL[verdict],
+        verdictReason: reason,
+        verdictFromFeedback: fromFeedback,
         utterance: collapse(row.utterance),
         resolutionA: sideToken(row.cacheStateA, methodA),
         resolutionB: sideToken(row.cacheStateB, methodB),
@@ -98,7 +164,7 @@ export function toImpactRows(
     return rows.map((row) => toImpactRow(row, methodA, methodB));
 }
 
-export type { ReplayRowStatus };
+export type { ReplayRowStatus, RegressionVerdict };
 
 /** Fixed chip order: differences first (the regression journey), equal last. */
 export const IMPACT_FILTER_ORDER: ReplayRowStatus[] = [
@@ -108,6 +174,46 @@ export const IMPACT_FILTER_ORDER: ReplayRowStatus[] = [
     "equal",
 ];
 
+/** Fixed verdict-chip order: likely regressions first, unchanged last. */
+export const IMPACT_VERDICT_ORDER: RegressionVerdict[] = [
+    "regression",
+    "improvement",
+    "benign",
+    "neutral",
+];
+
+/** Chip label for each verdict filter. */
+const VERDICT_FILTER_LABEL: Record<RegressionVerdict, string> = {
+    regression: "Likely regressions",
+    improvement: "Improvements",
+    benign: "Benign",
+    neutral: "Unchanged",
+};
+
+/** Sort weight so likely regressions surface first, then benign changes, then
+ *  improvements, then unchanged rows. */
+const VERDICT_RANK: Record<RegressionVerdict, number> = {
+    regression: 0,
+    benign: 1,
+    improvement: 2,
+    neutral: 3,
+};
+
+/** Order rows regression-first for the "find a regression" journey; original
+ *  order is preserved within a verdict group. */
+export function sortImpactRowsByVerdict(
+    rows: readonly ImpactRow[],
+): ImpactRow[] {
+    return rows
+        .map((row, index) => ({ row, index }))
+        .sort(
+            (a, b) =>
+                VERDICT_RANK[a.row.verdict] - VERDICT_RANK[b.row.verdict] ||
+                a.index - b.index,
+        )
+        .map((entry) => entry.row);
+}
+
 export interface ImpactFilterChip {
     status: ReplayRowStatus;
     /** Human word for the status, e.g. "changed". */
@@ -116,12 +222,25 @@ export interface ImpactFilterChip {
     count: number;
 }
 
+export interface VerdictFilterChip {
+    verdict: RegressionVerdict;
+    /** Human label for the verdict, e.g. "Likely regressions". */
+    label: string;
+    /** How many received rows have this verdict. */
+    count: number;
+}
+
 /**
- * The default active filter: every status, so a fresh run opens on the "All"
- * view and the user sees the complete result before narrowing down.
+ * The default active status filter: every status, so a fresh run opens on the
+ * "All" view and the user sees the complete result before narrowing down.
  */
 export function defaultImpactFilters(): Set<ReplayRowStatus> {
     return new Set<ReplayRowStatus>(IMPACT_FILTER_ORDER);
+}
+
+/** The default active verdict filter: every verdict (the "All" view). */
+export function defaultVerdictFilters(): Set<RegressionVerdict> {
+    return new Set<RegressionVerdict>(IMPACT_VERDICT_ORDER);
 }
 
 /**
@@ -136,12 +255,27 @@ export function allStatusesActive(
     return chips.every((chip) => chip.count === 0 || active.has(chip.status));
 }
 
-/** Per-status chip descriptors (counts taken from the received rows). */
+/** True when the active verdict set hides nothing that has rows. */
+export function allVerdictsActive(
+    chips: readonly VerdictFilterChip[],
+    active: ReadonlySet<RegressionVerdict>,
+): boolean {
+    return chips.every((chip) => chip.count === 0 || active.has(chip.verdict));
+}
+
+/**
+ * Per-status chip descriptors. Counts reflect only rows passing the active
+ * verdict filter (when given), so the verdict and status tiers compose.
+ */
 export function buildImpactFilterChips(
     rows: readonly ImpactRow[],
+    activeVerdicts?: ReadonlySet<RegressionVerdict>,
 ): ImpactFilterChip[] {
     const counts = new Map<ReplayRowStatus, number>();
     for (const row of rows) {
+        if (activeVerdicts && !activeVerdicts.has(row.verdict)) {
+            continue;
+        }
         counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
     }
     return IMPACT_FILTER_ORDER.map((status) => ({
@@ -151,12 +285,40 @@ export function buildImpactFilterChips(
     }));
 }
 
-/** Keep only rows whose status is in the active set. */
+/**
+ * Per-verdict chip descriptors. Counts reflect only rows passing the active
+ * status filter (when given), so the two tiers compose.
+ */
+export function buildVerdictFilterChips(
+    rows: readonly ImpactRow[],
+    activeStatuses?: ReadonlySet<ReplayRowStatus>,
+): VerdictFilterChip[] {
+    const counts = new Map<RegressionVerdict, number>();
+    for (const row of rows) {
+        if (activeStatuses && !activeStatuses.has(row.status)) {
+            continue;
+        }
+        counts.set(row.verdict, (counts.get(row.verdict) ?? 0) + 1);
+    }
+    return IMPACT_VERDICT_ORDER.map((verdict) => ({
+        verdict,
+        label: VERDICT_FILTER_LABEL[verdict],
+        count: counts.get(verdict) ?? 0,
+    }));
+}
+
+/** Keep only rows whose status and verdict are both in the active sets. The
+ *  verdict set is optional so status-only callers stay valid. */
 export function filterImpactRows(
     rows: readonly ImpactRow[],
-    active: ReadonlySet<ReplayRowStatus>,
+    activeStatuses: ReadonlySet<ReplayRowStatus>,
+    activeVerdicts?: ReadonlySet<RegressionVerdict>,
 ): ImpactRow[] {
-    return rows.filter((row) => active.has(row.status));
+    return rows.filter(
+        (row) =>
+            activeStatuses.has(row.status) &&
+            (!activeVerdicts || activeVerdicts.has(row.verdict)),
+    );
 }
 
 /** True when every received row is `equal` (no differences between A and B). */
@@ -164,24 +326,80 @@ export function allRowsEqual(rows: readonly ImpactRow[]): boolean {
     return rows.length > 0 && rows.every((row) => row.status === "equal");
 }
 
-/**
- * A note describing rows hidden by the active filter (e.g. the `equal` rows the
- * default view omits), or `undefined` when nothing with a non-zero count is
- * hidden.
- */
-export function impactFilterNote(
-    chips: readonly ImpactFilterChip[],
-    active: ReadonlySet<ReplayRowStatus>,
+/** A note for rows the active filters hide, or `undefined` when none are. */
+export function hiddenRowsNote(
+    received: number,
+    shown: number,
 ): string | undefined {
-    const hidden = chips.filter(
-        (chip) => !active.has(chip.status) && chip.count > 0,
-    );
-    if (hidden.length === 0) {
+    const hidden = received - shown;
+    if (hidden <= 0) {
         return undefined;
     }
-    const total = hidden.reduce((sum, chip) => sum + chip.count, 0);
-    const parts = hidden.map((chip) => `${chip.count} ${chip.label}`);
-    return `${total} row${total === 1 ? "" : "s"} hidden (${parts.join(", ")}).`;
+    return `${hidden} row${hidden === 1 ? "" : "s"} hidden by filters.`;
+}
+
+export interface VerdictSummary {
+    regression: number;
+    improvement: number;
+    benign: number;
+    neutral: number;
+}
+
+/** Tally the rows by verdict for the headline banner. */
+export function summarizeVerdicts(rows: readonly ImpactRow[]): VerdictSummary {
+    const summary: VerdictSummary = {
+        regression: 0,
+        improvement: 0,
+        benign: 0,
+        neutral: 0,
+    };
+    for (const row of rows) {
+        summary[row.verdict] += 1;
+    }
+    return summary;
+}
+
+export interface VerdictBanner {
+    /** "regression" when any likely regression exists, else "clean". */
+    tone: "regression" | "clean";
+    /** Primary line, e.g. "3 likely regressions" or "No likely regressions". */
+    headline: string;
+    /** Secondary counts, e.g. "5 improvements · 2 benign · 40 unchanged". */
+    detail: string;
+}
+
+/**
+ * The verdict headline for a completed run — the primary "did anything regress?"
+ * answer. Regressions are the lead; improvements/benign/unchanged are secondary
+ * (zero counts omitted). Returns `undefined` when there are no rows.
+ */
+export function toVerdictBanner(
+    rows: readonly ImpactRow[],
+): VerdictBanner | undefined {
+    if (rows.length === 0) {
+        return undefined;
+    }
+    const s = summarizeVerdicts(rows);
+    const tone = s.regression > 0 ? "regression" : "clean";
+    const headline =
+        s.regression > 0
+            ? `${s.regression} likely regression${
+                  s.regression === 1 ? "" : "s"
+              }`
+            : "No likely regressions";
+    const detail: string[] = [];
+    if (s.improvement > 0) {
+        detail.push(
+            `${s.improvement} improvement${s.improvement === 1 ? "" : "s"}`,
+        );
+    }
+    if (s.benign > 0) {
+        detail.push(`${s.benign} benign`);
+    }
+    if (s.neutral > 0) {
+        detail.push(`${s.neutral} unchanged`);
+    }
+    return { tone, headline, detail: detail.join(" \u00b7 ") };
 }
 
 export interface ImpactEmptyState {

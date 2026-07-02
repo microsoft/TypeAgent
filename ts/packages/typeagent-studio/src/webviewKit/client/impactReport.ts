@@ -29,10 +29,15 @@ import {
     toImpactErrorLine,
     toSideMethodLabel,
     buildImpactFilterChips,
+    buildVerdictFilterChips,
     filterImpactRows,
+    sortImpactRowsByVerdict,
     defaultImpactFilters,
+    defaultVerdictFilters,
     allStatusesActive,
-    impactFilterNote,
+    allVerdictsActive,
+    hiddenRowsNote,
+    toVerdictBanner,
     impactEmptyState,
     allRowsEqual,
     formatProvenanceLine,
@@ -41,6 +46,7 @@ import {
     toFidelityMatrix,
     type ImpactRow,
     type ReplayRowStatus,
+    type RegressionVerdict,
     type ResolvedVersion,
     type RunProvenance,
     type FidelityCell,
@@ -116,6 +122,10 @@ let selectedId: string | undefined;
 // Active status filter; defaults to all statuses (the "All" pill is lit), so a
 // fresh report shows every row and the user narrows with the filter chips.
 const activeFilters = defaultImpactFilters();
+// Active verdict filter; the second, primary filter tier. Composes with the
+// status filter by intersection so a user can narrow to, e.g., changed rows
+// that are likely regressions.
+const activeVerdicts = defaultVerdictFilters();
 // The current selection driving a run. Versions are typed specs resolved by the
 // host's git picker (or the defaults); the agent is fixed for the panel (set
 // from the host `init`, shown read-only and in the tab title).
@@ -260,6 +270,8 @@ subBar.append(provenanceEl, validationEl, statusEl);
 // the drill-in detail pane.
 const contentEl = el("div", "content");
 const notificationEl = el("div", "notification");
+const verdictBannerEl = el("div", "verdict-banner");
+verdictBannerEl.hidden = true;
 const fidelityEl = el("div", "fidelity-panel");
 fidelityEl.hidden = true;
 const filtersEl = el("div", "filters");
@@ -269,6 +281,7 @@ const detailEl = el("div", "detail-pane");
 detailEl.hidden = true;
 contentEl.append(
     notificationEl,
+    verdictBannerEl,
     fidelityEl,
     filtersEl,
     emptyStateEl,
@@ -527,6 +540,8 @@ function renderResult(
     provenanceEl.textContent = "";
     validationEl.textContent = "";
     validationEl.classList.remove("is-degraded");
+    verdictBannerEl.textContent = "";
+    verdictBannerEl.hidden = true;
     fidelityEl.textContent = "";
     fidelityEl.hidden = true;
     filtersEl.textContent = "";
@@ -570,9 +585,12 @@ function renderResult(
     // each version.
     renderFidelity(result.sideFidelity);
 
-    currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
+    currentRows = sortImpactRowsByVerdict(
+        toImpactRows(result.rows, result.methodA, result.methodB),
+    );
     currentTotal = result.summary.rowCount;
 
+    renderVerdictBanner();
     renderFilters();
     renderTable();
 
@@ -736,10 +754,11 @@ function fidelityStatusCell(cellInfo: FidelityCell): HTMLElement {
     return cell;
 }
 
-/** Paint the status filter chips for the rows of the current result. */
+/** Paint the two-tier filter chips: verdict (primary) then structural status
+ *  (secondary). The tiers compose — counts on each reflect the other's active
+ *  selection — so the table shows rows passing both. */
 function renderFilters(): void {
     filtersEl.textContent = "";
-    const chips = buildImpactFilterChips(currentRows);
     // Nothing to filter (no rows, or an error/empty run) — keep the bar hidden.
     if (currentRows.length === 0) {
         filtersEl.hidden = true;
@@ -747,49 +766,77 @@ function renderFilters(): void {
     }
     filtersEl.hidden = false;
 
-    const label = el("span", "filters-label");
-    label.append(codicon("list-filter"), document.createTextNode("Filter"));
-    filtersEl.appendChild(label);
-
-    // The "All" pill resets the view to every row; it reads as active whenever
-    // nothing with rows is hidden.
-    filtersEl.appendChild(
+    const verdictChips = buildVerdictFilterChips(currentRows, activeFilters);
+    const verdictRow = el("div", "filter-row");
+    verdictRow.appendChild(filterLabel("Verdict"));
+    verdictRow.appendChild(
         chipButton(
             "All",
             currentRows.length,
-            allStatusesActive(chips, activeFilters),
+            allVerdictsActive(verdictChips, activeVerdicts),
+            false,
+            selectAllVerdicts,
+        ),
+    );
+    for (const chip of verdictChips) {
+        verdictRow.appendChild(
+            chipButton(
+                chip.label,
+                chip.count,
+                activeVerdicts.has(chip.verdict),
+                chip.count === 0,
+                () => toggleVerdict(chip.verdict),
+                `verdict-${chip.verdict}`,
+            ),
+        );
+    }
+    filtersEl.appendChild(verdictRow);
+
+    const statusChips = buildImpactFilterChips(currentRows, activeVerdicts);
+    const statusRow = el("div", "filter-row");
+    statusRow.appendChild(filterLabel("Status"));
+    statusRow.appendChild(
+        chipButton(
+            "All",
+            statusChips.reduce((sum, chip) => sum + chip.count, 0),
+            allStatusesActive(statusChips, activeFilters),
             false,
             selectAllFilters,
         ),
     );
-
-    for (const chip of chips) {
-        const isActive = activeFilters.has(chip.status);
-        const isEmpty = chip.count === 0;
+    for (const chip of statusChips) {
         // A status with no rows is nothing to filter on — show it for context
         // (a count of 0 is informative) but make it inert.
-        filtersEl.appendChild(
+        statusRow.appendChild(
             chipButton(
                 chip.label,
                 chip.count,
-                isActive,
-                isEmpty,
+                activeFilters.has(chip.status),
+                chip.count === 0,
                 () => toggleFilter(chip.status),
-                chip.status,
+                `status-${chip.status}`,
             ),
         );
     }
+    filtersEl.appendChild(statusRow);
+}
+
+/** A leading label for one filter tier. */
+function filterLabel(labelText: string): HTMLElement {
+    const label = el("span", "filters-label");
+    label.append(codicon("list-filter"), document.createTextNode(labelText));
+    return label;
 }
 
 /** Build one filter pill button. Empty (zero-count) chips render inert. A
- *  `status` adds a colour dot mirroring the row status colour. */
+ *  `dotClass` adds a colour dot mirroring the row's status or verdict colour. */
 function chipButton(
     label: string,
     count: number,
     isActive: boolean,
     isEmpty: boolean,
     onClick: () => void,
-    status?: ReplayRowStatus,
+    dotClass?: string,
 ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
@@ -798,8 +845,8 @@ function chipButton(
     if (isEmpty) classes.push("is-empty");
     button.className = classes.join(" ");
     button.setAttribute("aria-pressed", String(isActive));
-    if (status) {
-        const dot = el("span", `chip-dot status-${status}`);
+    if (dotClass) {
+        const dot = el("span", `chip-dot ${dotClass}`);
         button.appendChild(dot);
     }
     const text = document.createElement("span");
@@ -835,10 +882,59 @@ function toggleFilter(status: ReplayRowStatus): void {
     renderTable();
 }
 
+/** Reset the active verdict filter to every verdict (the "All" view). */
+function selectAllVerdicts(): void {
+    for (const verdict of defaultVerdictFilters()) {
+        activeVerdicts.add(verdict);
+    }
+    renderFilters();
+    renderTable();
+}
+
+/** Toggle one verdict in the active filter and re-render the table in place. */
+function toggleVerdict(verdict: RegressionVerdict): void {
+    if (activeVerdicts.has(verdict)) {
+        activeVerdicts.delete(verdict);
+    } else {
+        activeVerdicts.add(verdict);
+    }
+    renderFilters();
+    renderTable();
+}
+
+/** Paint the verdict headline: the primary "did anything regress?" answer. */
+function renderVerdictBanner(): void {
+    verdictBannerEl.textContent = "";
+    const banner = toVerdictBanner(currentRows);
+    if (!banner) {
+        verdictBannerEl.hidden = true;
+        return;
+    }
+    verdictBannerEl.hidden = false;
+    verdictBannerEl.classList.toggle(
+        "is-regression",
+        banner.tone === "regression",
+    );
+    verdictBannerEl.classList.toggle("is-clean", banner.tone === "clean");
+    verdictBannerEl.appendChild(
+        codicon(banner.tone === "regression" ? "warning" : "pass"),
+    );
+    const headline = el("span", "verdict-headline");
+    headline.textContent = banner.headline;
+    verdictBannerEl.appendChild(headline);
+    if (banner.detail) {
+        const detail = el("span", "verdict-detail");
+        detail.textContent = banner.detail;
+        verdictBannerEl.appendChild(detail);
+    }
+    verdictBannerEl.title =
+        "Heuristic verdict — the report's red/green judgment on each row.";
+}
+
 /** Build the rows table from `currentRows`, honouring the active filter. */
 function renderTable(): void {
     tableWrap.textContent = "";
-    const rows = filterImpactRows(currentRows, activeFilters);
+    const rows = filterImpactRows(currentRows, activeFilters, activeVerdicts);
 
     const table = document.createElement("table");
     const thead = document.createElement("thead");
@@ -876,7 +972,7 @@ function renderTable(): void {
     for (const row of rows) {
         const tr = document.createElement("tr");
         tr.appendChild(cell(row.utterance));
-        tr.appendChild(statusCell(row.status, row.statusLabel));
+        tr.appendChild(statusCell(row));
         tr.appendChild(
             cell(
                 row.resolutionA,
@@ -923,7 +1019,6 @@ function renderTable(): void {
     table.appendChild(tbody);
     tableWrap.appendChild(table);
 
-    const chips = buildImpactFilterChips(currentRows);
     if (rows.length === 0) {
         // Distinguish "filtered everything out" from a genuinely all-equal run
         // (the happy path of the regression journey: nothing changed).
@@ -933,7 +1028,7 @@ function renderTable(): void {
             : "No rows match the active filter.";
         tableWrap.appendChild(empty);
     } else {
-        const hiddenNote = impactFilterNote(chips, activeFilters);
+        const hiddenNote = hiddenRowsNote(currentRows.length, rows.length);
         if (hiddenNote) {
             const note = el("div", "truncation");
             note.textContent = hiddenNote;
@@ -1234,18 +1329,34 @@ function statusIcon(status: ReplayRowStatus): string {
     }
 }
 
-/** The status cell: a coloured codicon + label, like VS Code's diff decorations. */
-function statusCell(
-    status: ReplayRowStatus,
-    label: string,
-): HTMLTableCellElement {
+/** The status cell: the structural diff decoration (colour + icon + label),
+ *  plus a verdict pill (red/green) when the row carries a value judgment. The
+ *  structural encoding is left untouched; the verdict is a separate layer. */
+function statusCell(row: ImpactRow): HTMLTableCellElement {
     const td = document.createElement("td");
     td.className = "col-status";
-    td.title = STATUS_TOOLTIP[status];
-    const wrap = el("span", `status-cell status-${status}`);
-    wrap.append(codicon(statusIcon(status)), text(label));
+    td.title = STATUS_TOOLTIP[row.status];
+    const wrap = el("span", `status-cell status-${row.status}`);
+    wrap.append(codicon(statusIcon(row.status)), text(row.statusLabel));
     td.appendChild(wrap);
+    if (row.verdict !== "neutral") {
+        const pill = el("span", `verdict-pill verdict-${row.verdict}`);
+        pill.textContent = row.verdictLabel;
+        pill.title = verdictTooltip(row);
+        td.appendChild(pill);
+    }
     return td;
+}
+
+/** Hover copy for a verdict pill: the label, its reason, and an honest reminder
+ *  that it is a heuristic. */
+function verdictTooltip(row: ImpactRow): string {
+    const base = row.verdictReason
+        ? `${row.verdictLabel} — ${row.verdictReason}`
+        : row.verdictLabel;
+    return row.verdictFromFeedback
+        ? base
+        : `${base}. Heuristic — confirm from the action diff.`;
 }
 
 /** The latency cell, with a faint expand chevron revealed on hover for rows that

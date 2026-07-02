@@ -17,15 +17,23 @@ import {
     toActionDiff,
     toSideMethodLabel,
     buildImpactFilterChips,
+    buildVerdictFilterChips,
     filterImpactRows,
+    sortImpactRowsByVerdict,
     defaultImpactFilters,
+    defaultVerdictFilters,
     allStatusesActive,
-    impactFilterNote,
+    allVerdictsActive,
+    hiddenRowsNote,
+    summarizeVerdicts,
+    toVerdictBanner,
     impactEmptyState,
     allRowsEqual,
     IMPACT_FILTER_ORDER,
+    IMPACT_VERDICT_ORDER,
     toFidelityMatrix,
     type ReplayRowStatus,
+    type RegressionVerdict,
 } from "../webviewKit/replayViewModel.js";
 import type { SideFidelity } from "@typeagent/core/runtime";
 
@@ -383,25 +391,175 @@ test("filterImpactRows keeps only rows whose status is active", () => {
     assert.equal(shown[0].status, "lost-match");
 });
 
-test("impactFilterNote describes the non-empty hidden statuses", () => {
-    const chips = buildImpactFilterChips(mixedRows());
-    // Hide equal explicitly (the All default shows everything).
-    const differences = new Set<ReplayRowStatus>([
-        "changed",
-        "new-match",
-        "lost-match",
-    ]);
-    const note = impactFilterNote(chips, differences);
-    // The 2 equal rows are hidden.
-    assert.ok(note);
-    assert.ok(/2 rows hidden/.test(note!));
-    assert.ok(/equal/.test(note!));
+test("hiddenRowsNote reports how many rows the filters hide", () => {
+    assert.equal(hiddenRowsNote(5, 3), "2 rows hidden by filters.");
+    assert.equal(hiddenRowsNote(5, 4), "1 row hidden by filters.");
 });
 
-test("impactFilterNote is silent when nothing with rows is hidden", () => {
-    const chips = buildImpactFilterChips(mixedRows());
-    const all = new Set<ReplayRowStatus>(IMPACT_FILTER_ORDER);
-    assert.equal(impactFilterNote(chips, all), undefined);
+test("hiddenRowsNote is silent when nothing is hidden", () => {
+    assert.equal(hiddenRowsNote(5, 5), undefined);
+    assert.equal(hiddenRowsNote(0, 0), undefined);
+});
+
+test("toImpactRow tags each row with a regression verdict", () => {
+    const [regression] = toImpactRows([
+        row({ equal: false, actionA: {}, utteranceId: "l1" }),
+    ]);
+    assert.equal(regression.verdict, "regression");
+    assert.equal(regression.verdictLabel, "Likely regression");
+    assert.equal(regression.verdictReason, "No longer resolves");
+
+    const [improvement] = toImpactRows([
+        row({ equal: false, actionB: {}, utteranceId: "n1" }),
+    ]);
+    assert.equal(improvement.verdict, "improvement");
+    assert.equal(improvement.verdictReason, "Now resolves");
+
+    const [actionChanged] = toImpactRows([
+        row({
+            equal: false,
+            actionA: { actionName: "playTrack" },
+            actionB: { actionName: "playAlbum" },
+            utteranceId: "c1",
+        }),
+    ]);
+    assert.equal(actionChanged.verdict, "regression");
+    assert.equal(actionChanged.verdictReason, "Action changed");
+
+    const [additive] = toImpactRows([
+        row({
+            equal: false,
+            actionA: { actionName: "playTrack", parameters: {} },
+            actionB: {
+                actionName: "playTrack",
+                parameters: { device: "kitchen" },
+            },
+            utteranceId: "c2",
+        }),
+    ]);
+    assert.equal(additive.verdict, "benign");
+    assert.equal(additive.verdictReason, "Only added parameters");
+
+    const [equal] = toImpactRows([row({ equal: true })]);
+    assert.equal(equal.verdict, "neutral");
+    assert.equal(equal.verdictLabel, "");
+});
+
+test("toImpactRow lets side-B feedback override the structural verdict", () => {
+    const [row1] = toImpactRows([
+        row({
+            equal: false,
+            actionA: {},
+            actionB: {},
+            feedbackB: { rating: "down", recordedAt: 0 },
+            utteranceId: "c1",
+        }),
+    ]);
+    assert.equal(row1.verdict, "regression");
+    assert.equal(row1.verdictReason, "Marked by feedback");
+    assert.ok(row1.verdictFromFeedback);
+});
+
+test("sortImpactRowsByVerdict surfaces likely regressions first", () => {
+    const sorted = sortImpactRowsByVerdict(mixedRows());
+    assert.deepEqual(
+        sorted.map((r) => r.verdict),
+        ["regression", "benign", "improvement", "neutral", "neutral"],
+    );
+});
+
+test("summarizeVerdicts tallies every verdict", () => {
+    const s = summarizeVerdicts(mixedRows());
+    assert.equal(s.regression, 1);
+    assert.equal(s.improvement, 1);
+    assert.equal(s.benign, 1);
+    assert.equal(s.neutral, 2);
+});
+
+test("toVerdictBanner leads with regressions when any exist", () => {
+    const banner = toVerdictBanner(mixedRows());
+    assert.ok(banner);
+    assert.equal(banner!.tone, "regression");
+    assert.equal(banner!.headline, "1 likely regression");
+    assert.ok(/1 improvement/.test(banner!.detail));
+    assert.ok(/1 benign/.test(banner!.detail));
+    assert.ok(/2 unchanged/.test(banner!.detail));
+});
+
+test("toVerdictBanner reads clean when nothing likely regressed", () => {
+    const banner = toVerdictBanner(
+        toImpactRows([
+            row({ equal: true, utteranceId: "e1" }),
+            row({ equal: false, actionB: {}, utteranceId: "n1" }),
+        ]),
+    );
+    assert.ok(banner);
+    assert.equal(banner!.tone, "clean");
+    assert.equal(banner!.headline, "No likely regressions");
+    assert.ok(/1 improvement/.test(banner!.detail));
+});
+
+test("toVerdictBanner is undefined for an empty run", () => {
+    assert.equal(toVerdictBanner([]), undefined);
+});
+
+test("buildVerdictFilterChips counts each verdict in fixed order", () => {
+    const chips = buildVerdictFilterChips(mixedRows());
+    assert.deepEqual(
+        chips.map((c) => c.verdict),
+        IMPACT_VERDICT_ORDER,
+    );
+    const byVerdict = new Map(chips.map((c) => [c.verdict, c.count]));
+    assert.equal(byVerdict.get("regression"), 1);
+    assert.equal(byVerdict.get("improvement"), 1);
+    assert.equal(byVerdict.get("benign"), 1);
+    assert.equal(byVerdict.get("neutral"), 2);
+    assert.ok(chips.every((c) => c.label.length > 0));
+});
+
+test("the verdict and status filter tiers compose (cross-filtered counts)", () => {
+    const rows = mixedRows();
+    // Status chips counted within only the regression verdict: just lost-match.
+    const statusChips = buildImpactFilterChips(
+        rows,
+        new Set<RegressionVerdict>(["regression"]),
+    );
+    const byStatus = new Map(statusChips.map((c) => [c.status, c.count]));
+    assert.equal(byStatus.get("lost-match"), 1);
+    assert.equal(byStatus.get("changed"), 0);
+    assert.equal(byStatus.get("equal"), 0);
+
+    // Verdict chips counted within only the changed status: just the benign row.
+    const verdictChips = buildVerdictFilterChips(
+        rows,
+        new Set<ReplayRowStatus>(["changed"]),
+    );
+    const byVerdict = new Map(verdictChips.map((c) => [c.verdict, c.count]));
+    assert.equal(byVerdict.get("benign"), 1);
+    assert.equal(byVerdict.get("regression"), 0);
+});
+
+test("filterImpactRows intersects the status and verdict filters", () => {
+    const rows = mixedRows();
+    const shown = filterImpactRows(
+        rows,
+        new Set<ReplayRowStatus>(["changed", "lost-match"]),
+        new Set<RegressionVerdict>(["regression"]),
+    );
+    // changed row is benign, lost-match is a regression → only the lost-match.
+    assert.equal(shown.length, 1);
+    assert.equal(shown[0].status, "lost-match");
+});
+
+test("allVerdictsActive is true only when nothing with rows is hidden", () => {
+    const chips = buildVerdictFilterChips(mixedRows());
+    assert.ok(allVerdictsActive(chips, defaultVerdictFilters()));
+    const noRegression = new Set<RegressionVerdict>([
+        "improvement",
+        "benign",
+        "neutral",
+    ]);
+    assert.ok(!allVerdictsActive(chips, noRegression));
 });
 
 test("allRowsEqual is true only when every row is equal", () => {
