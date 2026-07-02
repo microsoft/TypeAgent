@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 import { Question } from "./benchmarkSchema.js";
 import { AnswerGradingResponse, GradedQuestion } from "./gradingSchema.js";
 import { createTranslator } from "./models.js";

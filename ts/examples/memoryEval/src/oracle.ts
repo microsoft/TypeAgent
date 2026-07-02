@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel } from "aiclient";
+import { ChatModel } from "@typeagent/aiclient";
 
 const ORACLE_SYSTEM = [
     "You are an oracle that answers questions using ONLY the provided transcript.",

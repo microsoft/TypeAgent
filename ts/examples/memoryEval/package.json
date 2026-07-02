@@ -25,8 +25,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "aiclient": "workspace:*",
     "knowledge-processor": "workspace:*",
     "rem-memory": "workspace:*",
     "typeagent": "workspace:*",
