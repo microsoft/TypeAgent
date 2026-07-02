@@ -22,10 +22,7 @@
       href: tutorial-build-an-agent.md
 - name: Surfaces
   href: surfaces.md
-  items:
-    - name: Command reference
-      href: command-reference.md
-    - name: Keyboard shortcuts
-      href: shell-shortcuts.md
+- name: Command reference
+  href: command-reference.md
 - name: Glossary
   href: glossary.md
