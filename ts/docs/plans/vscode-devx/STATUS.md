@@ -49,7 +49,7 @@ is clear why it waits. There is no second roadmap — depth (L4b) and breadth
 | ----- | -------------------- | ------------------------------------------------------- | ----- | -------------------------------------------------------------------------------- |
 | **A** | J1 Stand up an agent | New-Agent Wizard                                        | P-2   | ❌ not started (onboarding bridge ✅)                                            |
 | **B** | J2 Tune schema       | Schema Studio                                           | P-4   | ❌ not started                                                                   |
-| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3   | 🟡 **long pole** — engine L1–L4a ✅; corpus capture + predicate + measurement ❌ |
+| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3   | 🟡 **long pole** — engine L1–L4a ✅; corpus ✅; predicate + measurement ✅ (92% on real deltas); Impact Report wiring ❌ |
 | **D** | J5 Debug a trace     | Trace Viewer                                            | P-3   | ❌ not started                                                                   |
 | **E** | J6 Observe live      | Live Trace + status bar                                 | P-5   | ❌ not started                                                                   |
 
