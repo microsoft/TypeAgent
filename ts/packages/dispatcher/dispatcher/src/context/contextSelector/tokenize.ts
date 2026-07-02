@@ -186,7 +186,49 @@ export type TokenizeOptions = {
     dropGenericVerbs?: boolean;
     // Minimum token length to keep, protected patterns exempt (default 2).
     minLength?: number;
+    // Apply the conservative plural stemmer (default true). Off only for tests
+    // that inspect raw tokenization.
+    stem?: boolean;
 };
+
+// Conservative, deterministic plural stemmer (part of the §12 determinism
+// contract — pinned, snapshot-tested). It maps common English plurals to their
+// singular so a conversation token ("vampires", "coffins", "items") matches a
+// singular schema keyword ("vampire", "coffin", "item"). Correctness matters
+// only insofar as BOTH the context vector and the keyword vectors pass through
+// the same function — consistency, not linguistics. Deliberately narrow to avoid
+// over-stemming that would fuse unrelated words; not a full Porter stemmer.
+export function stem(token: string): string {
+    // Never touch protected patterns (they aren't pure [a-z0-9]).
+    if (!/^[a-z0-9]+$/.test(token)) {
+        return token;
+    }
+    // "boxes"->"box", "dishes"->"dish", "glasses"->"glass", "watches"->"watch".
+    if (
+        token.length > 4 &&
+        (token.endsWith("ses") ||
+            token.endsWith("xes") ||
+            token.endsWith("zes") ||
+            token.endsWith("ches") ||
+            token.endsWith("shes"))
+    ) {
+        return token.slice(0, -2);
+    }
+    // Plain "-s" plurals: "vampires"->"vampire", "items"->"item", "cells"->"cell",
+    // "movies"->"movie". Guard against "ss"/"us"/"is"/"os"/"as" endings (address,
+    // status, analysis, this) and keep a >=4 length floor so short tokens aren't
+    // mangled. Deliberately no "-ies"->"y" rule: it mangles "-ie" singulars
+    // ("movies"->"movy", "series"->"sery"), and plain "-s" already yields the
+    // correct "movie"/"serie" — consistency between both sides is what matters.
+    if (
+        token.length > 3 &&
+        token.endsWith("s") &&
+        !/(ss|us|is|os|as)$/.test(token)
+    ) {
+        return token.slice(0, -1);
+    }
+    return token;
+}
 
 // Split identifier casing/separators into space-delimited words:
 // "addItems" -> "add Items", "HTMLParser" -> "HTML Parser", "add_items"/"add-items" -> "add items".
@@ -198,12 +240,15 @@ export function deCamelCase(identifier: string): string {
 }
 
 // Canonicalize + tokenize. NFKC-normalize, lowercase, extract protected/word
-// tokens, then drop stopwords, generic verbs, and sub-minimum-length tokens.
-// Deterministic and order-preserving (a caller that needs multiplicity gets it).
+// tokens, stem plurals, then drop stopwords, generic verbs, and sub-minimum-
+// length tokens. Deterministic and order-preserving (a caller that needs
+// multiplicity gets it). Stemming runs before the vocabulary checks so that
+// inflected generic verbs ("removes" -> "remove") are still dropped.
 export function tokenize(text: string, options?: TokenizeOptions): string[] {
     const dropStopwords = options?.dropStopwords ?? true;
     const dropGenericVerbs = options?.dropGenericVerbs ?? true;
     const minLength = options?.minLength ?? 2;
+    const applyStem = options?.stem ?? true;
 
     if (!text) {
         return [];
@@ -213,18 +258,21 @@ export function tokenize(text: string, options?: TokenizeOptions): string[] {
     const out: string[] = [];
     let m: RegExpExecArray | null;
     while ((m = re.exec(normalized)) !== null) {
-        const token = m[0];
-        const isProtected = token.length > 0 && !/^[a-z0-9]+$/.test(token);
-        if (!isProtected) {
-            if (token.length < minLength) {
-                continue;
-            }
-            if (dropStopwords && STOPWORDS.has(token)) {
-                continue;
-            }
-            if (dropGenericVerbs && GENERIC_VERBS.has(token)) {
-                continue;
-            }
+        const raw = m[0];
+        const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
+        if (isProtected) {
+            out.push(raw);
+            continue;
+        }
+        const token = applyStem ? stem(raw) : raw;
+        if (token.length < minLength) {
+            continue;
+        }
+        if (dropStopwords && STOPWORDS.has(token)) {
+            continue;
+        }
+        if (dropGenericVerbs && GENERIC_VERBS.has(token)) {
+            continue;
         }
         out.push(token);
     }

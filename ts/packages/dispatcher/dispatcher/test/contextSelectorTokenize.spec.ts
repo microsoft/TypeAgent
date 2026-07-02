@@ -5,6 +5,7 @@ import {
     tokenize,
     tokenizeIdentifier,
     deCamelCase,
+    stem,
     isStopword,
     isGenericVerb,
 } from "../src/context/contextSelector/tokenize.js";
@@ -18,9 +19,9 @@ describe("contextSelector/tokenize", () => {
     });
 
     it("drops stopwords and generic CRUD verbs", () => {
-        // "add" (generic verb) and "the"/"to" (stopwords) are dropped.
+        // "add" (generic verb) and "the"/"to" (stopwords) dropped; "eggs"->"egg".
         expect(tokenize("add the eggs to my grocery")).toEqual([
-            "eggs",
+            "egg",
             "grocery",
         ]);
         expect(isStopword("the")).toBe(true);
@@ -57,7 +58,7 @@ describe("contextSelector/tokenize", () => {
     });
 
     it("tokenizeIdentifier de-camels then drops generic verbs", () => {
-        expect(tokenizeIdentifier("addItems")).toEqual(["items"]);
+        expect(tokenizeIdentifier("addItems")).toEqual(["item"]); // items -> item
         expect(tokenizeIdentifier("getUserProfile")).toEqual([
             "user",
             "profile",
@@ -73,5 +74,31 @@ describe("contextSelector/tokenize", () => {
     it("returns [] for empty input", () => {
         expect(tokenize("")).toEqual([]);
         expect(tokenize("   ")).toEqual([]);
+    });
+
+    it("stems plurals so conversation words match singular schema keywords", () => {
+        // The exact gap that broke the vampire E2E: plural convo vs singular keyword.
+        expect(tokenize("vampires and coffins")).toEqual(["vampire", "coffin"]);
+        expect(stem("items")).toBe("item");
+        expect(stem("cells")).toBe("cell");
+        expect(stem("spreadsheets")).toBe("spreadsheet");
+        expect(stem("movies")).toBe("movie"); // -ie singular, not "movy"
+        expect(stem("boxes")).toBe("box");
+        expect(stem("dishes")).toBe("dish");
+        expect(stem("glasses")).toBe("glass");
+    });
+
+    it("stemmer avoids mangling non-plural -s endings and short tokens", () => {
+        expect(stem("address")).toBe("address"); // ss guard
+        expect(stem("status")).toBe("status"); // us guard
+        expect(stem("analysis")).toBe("analysis"); // is guard
+        expect(stem("gas")).toBe("gas"); // length floor
+        expect(stem("bus")).toBe("bus"); // us guard
+        expect(stem("c#")).toBe("c#"); // protected untouched
+    });
+
+    it("stems both sides consistently (idempotent on singulars)", () => {
+        expect(stem(stem("vampires"))).toBe("vampire");
+        expect(stem("vampire")).toBe("vampire");
     });
 });

@@ -53,8 +53,8 @@ describe("contextSelector/keywordExtractor", () => {
         expect(kw.has("grocery")).toBe(true);
         expect(kw.has("shopping")).toBe(true);
         expect(kw.has("todo")).toBe(true);
-        expect(kw.has("items")).toBe(true);
-        expect(kw.has("item")).toBe(true);
+        expect(kw.has("item")).toBe(true); // "items"/"item" both stem to "item"
+        expect(kw.has("items")).toBe(false);
         // generic verbs / stopwords are dropped; "list" is a kept domain noun.
         expect(kw.has("add")).toBe(false);
         expect(kw.has("the")).toBe(false);
@@ -90,9 +90,9 @@ describe("contextSelector/keywordExtractor", () => {
         const kw = extractKeywords(input);
         expect(kw.has("row")).toBe(true);
         expect(kw.has("spreadsheet")).toBe(true);
-        expect(kw.has("values")).toBe(true);
+        expect(kw.has("value")).toBe(true); // "values" -> "value"
         expect(kw.has("category")).toBe(true);
-        expect(kw.has("labels")).toBe(true);
+        expect(kw.has("label")).toBe(true); // "labels" -> "label"
     });
 });
 
@@ -114,7 +114,8 @@ describe("contextSelector/keywordSidecar", () => {
     it("keys sub-schema ids by the last dot", () => {
         const s = KeywordSidecar.load(undefined);
         s.addKeywords("excel.chart.addSeries", ["series"]);
-        expect(s.deltaFor("excel.chart", "addSeries")?.add).toContain("series");
+        // "series" stems to "serie" through the shared canonicalizer.
+        expect(s.deltaFor("excel.chart", "addSeries")?.add).toContain("serie");
     });
 
     it("clears an entry", () => {

@@ -457,7 +457,7 @@ A deterministic, LLM-free resolution tier on the **grammarMatch** path that rank
 
 How it works, per collision (all steps deterministic):
 
-1. **Context vector** — a decayed keyword-frequency map of the recent conversation, built from a `contextSelector`-owned ring buffer of the last `windowTurns` user requests, each weighted by `decay^age` (history-only: the current request is excluded). Sourced behind the `ConversationSignalSource` seam so it can later read knowPro topics/entities instead of raw tokens.
+1. **Context vector** — a decayed keyword-frequency map of the recent conversation, built from a `contextSelector`-owned ring buffer of the last `windowTurns` user requests, each weighted by `decay^age` (history-only: the current request is excluded). Tokens are canonicalized and **plural-stemmed** (a conservative, deterministic stemmer so conversational "vampires"/"items" match singular schema keywords "vampire"/"item"). Sourced behind the `ConversationSignalSource` seam so it can later read knowPro topics/entities instead of raw tokens.
 2. **Candidate keywords** — each `(schema, action)`'s effective keyword vector = a derived lexical floor (mined from the live schema text) layered with `collision-keywords.json` sidecar overrides.
 3. **Score** — `TfIdfScorer` sums, per candidate, `contextWeight × candidate-local-IDF` over the overlapping tokens (shared tokens cancel, unique tokens distinguish). Behind the `CollisionScorer` seam so a knowPro-entity or embedding scorer can replace it.
 4. **Decide** — resolve only when a coverage guard, an evidence gate (`minUniqueTokens` + `minMass`), and a clear-winner `margin` all pass; otherwise abstain. Biased toward abstaining.
