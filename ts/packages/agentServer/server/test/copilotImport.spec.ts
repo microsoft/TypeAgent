@@ -576,3 +576,72 @@ describe("importCopilotSessions", () => {
         }
     });
 });
+
+describe("importCopilotMirror title reconciliation", () => {
+    async function createManager(baseDir: string) {
+        return createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            baseDir,
+        );
+    }
+
+    const mirrorParams = (sessionId: string, name: string) => ({
+        sessionId,
+        name,
+        createdAt: "2026-06-01T10:00:00.000Z",
+        displayLogEntries: synthesizeDisplayLog(sessionId, [
+            {
+                sessionId,
+                turnIndex: 0,
+                userMessage: "hi",
+                assistantResponse: "hello",
+                timestamp: "2026-06-01T10:00:00.000Z",
+            },
+        ]),
+        lastSyncedTurnIndex: 0,
+    });
+
+    test("renames an existing mirror when the title changed", async () => {
+        const manager = await createManager(await createTempDir());
+        try {
+            // First import: no VS Code title yet, so name is the first message.
+            const first = await manager.importCopilotMirror(
+                mirrorParams("sess-a", "what changes have we made?"),
+            );
+            expect(first.created).toBe(true);
+
+            // Re-import once Copilot has titled the chat.
+            const second = await manager.importCopilotMirror(
+                mirrorParams("sess-a", "Branch change summary"),
+            );
+            expect(second.created).toBe(false);
+            expect(second.renamed).toBe(true);
+            expect(second.conversationId).toBe(first.conversationId);
+            expect(second.name).toBe("Branch change summary");
+
+            const conversations = manager.listConversations();
+            expect(conversations).toHaveLength(1);
+            expect(conversations[0].name).toBe("Branch change summary");
+        } finally {
+            await manager.close();
+        }
+    });
+
+    test("does not rename when the title is unchanged", async () => {
+        const manager = await createManager(await createTempDir());
+        try {
+            await manager.importCopilotMirror(
+                mirrorParams("sess-a", "Stable title"),
+            );
+            const second = await manager.importCopilotMirror(
+                mirrorParams("sess-a", "Stable title"),
+            );
+            expect(second.created).toBe(false);
+            expect(second.renamed).toBe(false);
+            expect(second.name).toBe("Stable title");
+        } finally {
+            await manager.close();
+        }
+    });
+});

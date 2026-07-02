@@ -48,6 +48,9 @@ class CopilotImportCommandHandler implements CommandHandlerNoParams {
             }
 
             const parts = [`${summary.imported} imported`];
+            if (summary.renamed > 0) {
+                parts.push(`${summary.renamed} renamed`);
+            }
             if (summary.skipped > 0) {
                 parts.push(`${summary.skipped} already imported`);
             }

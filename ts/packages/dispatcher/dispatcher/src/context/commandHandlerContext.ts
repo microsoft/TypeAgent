@@ -158,6 +158,8 @@ export type CopilotImportSummary = {
     total: number;
     imported: number;
     skipped: number;
+    /** Existing mirrors whose name was reconciled to the current VS Code title. */
+    renamed: number;
     failed: number;
 };
 

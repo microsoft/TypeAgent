@@ -73,7 +73,24 @@ export type ImportCopilotMirrorResult = {
     name: string;
     /** False when a mirror for this session already existed (no-op). */
     created: boolean;
+    /**
+     * True when an existing mirror's display name was reconciled to the
+     * current VS Code title during this import. Only meaningful when
+     * `created` is false.
+     */
+    renamed?: boolean;
 };
+
+/**
+ * Normalize a raw mirror name (e.g. a VS Code chat title or session summary):
+ * collapse whitespace and clamp length, leaving room for an appended " (N)"
+ * de-dup suffix. Falls back to a generic label when empty.
+ */
+function normalizeMirrorName(rawName: string): string {
+    return (
+        rawName.trim().replace(/\s+/g, " ").slice(0, 200) || "Copilot session"
+    );
+}
 
 type ConversationMetadata = {
     conversationId: string;
@@ -368,6 +385,7 @@ export async function createConversationManager(
                                     total: r.total,
                                     imported: r.imported,
                                     skipped: r.skipped,
+                                    renamed: r.renamed,
                                     failed: r.failed,
                                 }),
                             ),
@@ -607,23 +625,39 @@ export async function createConversationManager(
         ): Promise<ImportCopilotMirrorResult> {
             const existing = findMirrorBySessionId(params.sessionId);
             if (existing !== undefined) {
-                // Idempotent: a mirror for this Copilot session already exists.
-                // (Appending newly-arrived turns is a later sync phase.)
+                // Content is idempotent, but reconcile the display name so a
+                // re-import adopts a title VS Code generated or changed after
+                // the mirror was first created (early imports fall back to the
+                // first user message until Copilot titles the chat).
+                // Appending newly-arrived turns is a later sync phase.
+                const desiredName = resolveAvailableName(
+                    normalizeMirrorName(params.name),
+                    { nameCollisionBehavior: "appendNumber" },
+                    existing.conversationId,
+                );
+                let renamed = false;
+                if (desiredName !== existing.name) {
+                    debugConversation(
+                        `Reconciling Copilot mirror name "${existing.name}" -> "${desiredName}" (${existing.conversationId})`,
+                    );
+                    existing.name = desiredName;
+                    await saveMetadata();
+                    renamed = true;
+                }
                 return {
                     conversationId: existing.conversationId,
                     name: existing.name,
                     created: false,
+                    renamed,
                 };
             }
 
-            // Summaries can be multi-line and long; collapse whitespace and
-            // clamp, leaving room for an appended " (N)" de-dup suffix.
-            const safeName =
-                params.name.trim().replace(/\s+/g, " ").slice(0, 200) ||
-                "Copilot session";
-            const resolvedName = resolveAvailableName(safeName, {
-                nameCollisionBehavior: "appendNumber",
-            });
+            const resolvedName = resolveAvailableName(
+                normalizeMirrorName(params.name),
+                {
+                    nameCollisionBehavior: "appendNumber",
+                },
+            );
 
             const conversationId = randomUUID();
             const record: ConversationRecord = {

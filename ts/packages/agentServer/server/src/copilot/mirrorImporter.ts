@@ -33,6 +33,11 @@ export type ImportedMirror = {
     sessionId: string;
     /** False when a mirror for this session already existed. */
     created: boolean;
+    /**
+     * True when an existing mirror's name was reconciled to the current VS
+     * Code title during this import.
+     */
+    renamed: boolean;
 };
 
 export type ImportCopilotSessionsResult = {
@@ -42,8 +47,10 @@ export type ImportCopilotSessionsResult = {
     total: number;
     /** Newly created mirrors. */
     imported: number;
-    /** Sessions whose mirror already existed (no-op). */
+    /** Existing mirrors left unchanged (already imported, title unchanged). */
     skipped: number;
+    /** Existing mirrors whose name was reconciled to the current VS Code title. */
+    renamed: number;
     /** Sessions that errored during import. */
     failed: number;
     mirrors: ImportedMirror[];
@@ -93,6 +100,7 @@ export async function importCopilotSessions(
         total: 0,
         imported: 0,
         skipped: 0,
+        renamed: 0,
         failed: 0,
         mirrors: [],
     };
@@ -138,6 +146,10 @@ export async function importCopilotSessions(
 
                 if (res.created) {
                     result.imported++;
+                } else if (res.renamed) {
+                    // Existing mirror whose title we reconciled — count it
+                    // separately from unchanged skips.
+                    result.renamed++;
                 } else {
                     result.skipped++;
                 }
@@ -146,6 +158,7 @@ export async function importCopilotSessions(
                     name: res.name,
                     sessionId: session.id,
                     created: res.created,
+                    renamed: res.renamed ?? false,
                 });
             } catch (e) {
                 result.failed++;
