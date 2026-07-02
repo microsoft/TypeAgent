@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a3b726e4fe1092571a72970beec0ed4cef6263904e815ac75cfadef90e73a259 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9a8fbd291a20b37f81d17f56946d34190618dd77f86e631698f205189293a71c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-grammar — AI-generated documentation
@@ -12,85 +12,130 @@
 
 ## Overview
 
-The `@typeagent/action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It parses, compiles, and matches natural language input against predefined grammar rules to produce structured JSON action objects. This allows user utterances to be converted into typed actions that can be processed by agents.
+The `@typeagent/action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It enables parsing, compiling, and matching natural language input against grammar rules defined in `.agr` files. These rules are used to convert user input, such as natural language commands, into structured JSON action objects that can be processed by agents.
+
+This package is a core component of the TypeAgent ecosystem and is used by several other packages, including `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`.
 
 ## What it does
 
-The package supports defining grammar rules in `.agr` files, a custom DSL designed for natural language processing. These rules can include literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations. The main functionalities include:
+The primary purpose of this package is to process natural language input and match it against predefined grammar rules to produce structured actions. These actions are represented as JSON objects with a specific structure, such as:
 
-- **Parsing**: Converting `.agr` files into an Abstract Syntax Tree (AST) using `parseGrammarRules`.
-- **Compilation**: Transforming the AST into an in-memory `Grammar` representation with `compileGrammar`.
-- **Matching**: Two matching backends are available:
-  - **Recursive backtracking matcher** (`matchGrammar`): Operates directly on the `Grammar` AST.
-  - **NFA/DFA pipeline** (`compileGrammarToNFA`, `matchNFA`, `compileNFAToDFA`, `matchDFA`): Compiles grammar to a token-based NFA and optionally further to a DFA for faster matching.
+```json
+{
+  "actionName": "play",
+  "parameters": {
+    "track": "Shape of You",
+    "artist": "Ed Sheeran"
+  }
+}
+```
 
-The package also includes utilities for grammar serialization, dynamic loading, and entity management.
+### Key Features
+
+1. **Grammar Parsing**:
+
+   - The package parses `.agr` files, which are written in a custom domain-specific language (DSL) designed for defining natural language grammar rules. These rules can include constructs like literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
+   - The `parseGrammarRules` function converts `.agr` files into an Abstract Syntax Tree (AST).
+
+2. **Grammar Compilation**:
+
+   - The parsed grammar rules are compiled into an in-memory `Grammar` representation using the `compileGrammar` function. This representation is optimized for efficient matching.
+
+3. **Matching**:
+
+   - The package provides two matching backends:
+     - **Recursive Backtracking Matcher**: Operates directly on the `Grammar` AST and supports complex patterns with wildcards and nested rules.
+     - **NFA/DFA Pipeline**: Compiles grammar into a token-based Non-deterministic Finite Automaton (NFA) and optionally further into a Deterministic Finite Automaton (DFA) for faster matching.
+
+4. **Entity Management**:
+
+   - The package includes an entity system for defining and managing entities such as dates, times, and numbers. These entities can be used within grammar rules to capture and validate specific types of input.
+
+5. **Dynamic Grammar Loading**:
+
+   - The package supports dynamic loading and caching of grammar rules at runtime, enabling flexible and efficient updates to the grammar.
+
+6. **Grammar Generation**:
+   - The package includes tools for generating grammar rules from schemas and examples using large language models (LLMs) like Claude.
 
 ## Setup
 
-To use the `@typeagent/action-grammar` package, ensure you have the following dependencies installed:
+To use the `@typeagent/action-grammar` package, ensure the following dependencies are installed in your project:
 
 - `@anthropic-ai/claude-agent-sdk`
 - `debug`
 - `dotenv`
 - `regexp.escape`
 
-You can install these dependencies using `pnpm install`. For detailed setup instructions, refer to the hand-written README.
+You can install these dependencies using `pnpm install`. If additional setup steps are required, refer to the hand-written README for detailed instructions.
 
 ## Key Files
 
-The package is structured into several key components:
+The package is organized into several key components, each responsible for specific functionality:
 
-- **Parsing and Compilation**:
+### Parsing and Compilation
 
-  - [grammarRuleParser.ts](./src/grammarRuleParser.ts): Parses `.agr` files into AST.
-  - [grammarCompiler.ts](./src/grammarCompiler.ts): Compiles AST into in-memory `Grammar`.
+- [grammarRuleParser.ts](./src/grammarRuleParser.ts): Implements a recursive descent parser for `.agr` files, converting them into an AST.
+- [grammarCompiler.ts](./src/grammarCompiler.ts): Compiles the AST into an in-memory `Grammar` representation.
+- [grammarTypes.ts](./src/grammarTypes.ts): Defines types for both in-memory and serialized grammar representations.
 
-- **Matching**:
+### Matching
 
-  - [grammarMatcher.ts](./src/grammarMatcher.ts): Implements recursive backtracking matcher.
-  - [nfaCompiler.ts](./src/nfaCompiler.ts): Compiles `Grammar` to NFA.
-  - [nfaInterpreter.ts](./src/nfaInterpreter.ts): Executes NFA with parallel threads.
-  - [dfaCompiler.ts](./src/dfaCompiler.ts): Converts NFA to DFA.
-  - [dfaMatcher.ts](./src/dfaMatcher.ts): Implements DFA-based matching.
+- [grammarMatcher.ts](./src/grammarMatcher.ts): Implements the recursive backtracking matcher for grammar rules.
+- [nfaCompiler.ts](./src/nfaCompiler.ts): Compiles `Grammar` into a token-based NFA.
+- [nfaInterpreter.ts](./src/nfaInterpreter.ts): Executes the NFA with parallel threads and priority-based result selection.
+- [dfaCompiler.ts](./src/dfaCompiler.ts): Converts NFA to DFA using subset construction.
+- [dfaMatcher.ts](./src/dfaMatcher.ts): Implements DFA-based matching for faster performance.
 
-- **Entity Management**:
+### Entity Management
 
-  - [entityRegistry.ts](./src/entityRegistry.ts): Manages entities with validators and converters.
-  - [builtInEntities.ts](./src/builtInEntities.ts): Provides built-in entity converters.
+- [entityRegistry.ts](./src/entityRegistry.ts): Manages entities, including their validators and converters.
+- [builtInEntities.ts](./src/builtInEntities.ts): Provides built-in entity converters for common types like dates, times, and ordinals.
 
-- **Dynamic Loading**:
+### Dynamic Loading
 
-  - [dynamicGrammarLoader.ts](./src/dynamicGrammarLoader.ts): Handles runtime rule loading and validation.
+- [dynamicGrammarLoader.ts](./src/dynamicGrammarLoader.ts): Handles runtime loading and validation of grammar rules.
 
-- **Utilities**:
-  - [grammarRuleWriter.ts](./src/grammarRuleWriter.ts): Pretty-prints grammar rules.
-  - [grammarOptimizer.ts](./src/grammarOptimizer.ts): Provides optimization utilities for grammar.
+### Utilities
+
+- [grammarRuleWriter.ts](./src/grammarRuleWriter.ts): Provides utilities for pretty-printing grammar rules.
+- [grammarOptimizer.ts](./src/grammarOptimizer.ts): Includes optimization utilities for grammar rules.
+
+### Benchmarks
+
+- [dfaBenchmark.ts](./src/bench/dfaBenchmark.ts): Benchmarks DFA vs. NFA performance for various grammars.
+- [grammarOptimizerBenchmark.ts](./src/bench/grammarOptimizerBenchmark.ts): Measures the impact of grammar optimization passes.
+- [grammarOptimizerSyntheticBenchmark.ts](./src/bench/grammarOptimizerSyntheticBenchmark.ts): Tests synthetic grammars designed to stress specific optimizations.
 
 ## How to extend
 
-To extend the `@typeagent/action-grammar` package, follow these steps:
+To extend the functionality of the `@typeagent/action-grammar` package, follow these steps:
 
-1. **Add new grammar rules**:
+1. **Add New Grammar Rules**:
 
    - Create or modify `.agr` files with new rules.
-   - Use `parseGrammarRules` to parse the new rules into AST.
+   - Use `parseGrammarRules` to parse the new rules into an AST.
+   - Compile the rules into a `Grammar` object using `compileGrammar`.
 
-2. **Implement custom matchers or optimizers**:
+2. **Implement Custom Matchers or Optimizers**:
 
    - Extend existing matchers in [grammarMatcher.ts](./src/grammarMatcher.ts) or [dfaMatcher.ts](./src/dfaMatcher.ts).
    - Add new optimization passes in [grammarOptimizer.ts](./src/grammarOptimizer.ts).
 
-3. **Add new entities**:
+3. **Define New Entities**:
 
-   - Define new entities in [entityRegistry.ts](./src/entityRegistry.ts).
+   - Add new entity definitions in [entityRegistry.ts](./src/entityRegistry.ts).
    - Implement converters and validators for the new entities.
 
-4. **Test your changes**:
-   - Write unit tests for new functionalities.
-   - Run benchmarks using scripts in the `bench` directory, such as [dfaBenchmark.ts](./src/bench/dfaBenchmark.ts).
+4. **Enhance Dynamic Loading**:
 
-For a starting point, open [grammarRuleParser.ts](./src/grammarRuleParser.ts) to understand the parsing logic, and [grammarMatcher.ts](./src/grammarMatcher.ts) for matching logic. Ensure all changes are thoroughly tested before integration.
+   - Modify [dynamicGrammarLoader.ts](./src/dynamicGrammarLoader.ts) to support additional runtime loading scenarios.
+
+5. **Test Your Changes**:
+   - Write unit tests for any new functionality.
+   - Use the benchmark scripts in the `bench` directory to evaluate performance impacts.
+
+For contributors new to the package, a good starting point is [grammarRuleParser.ts](./src/grammarRuleParser.ts) to understand how `.agr` files are parsed, and [grammarMatcher.ts](./src/grammarMatcher.ts) for the matching logic. Be sure to follow the existing patterns and conventions in the codebase.
 
 ## Reference
 
@@ -98,10 +143,10 @@ For a starting point, open [grammarRuleParser.ts](./src/grammarRuleParser.ts) to
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- `./completion` → [./dist/completion.js](./dist/completion.js)
-- `./rules` → [./dist/indexRules.js](./dist/indexRules.js)
-- `./generation` → [./dist/generation/index.js](./dist/generation/index.js)
+- default → `./dist/index.js` _(not found on disk)_
+- `./completion` → `./dist/completion.js` _(not found on disk)_
+- `./rules` → `./dist/indexRules.js` _(not found on disk)_
+- `./generation` → `./dist/generation/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -142,6 +187,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

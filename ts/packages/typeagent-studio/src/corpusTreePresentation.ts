@@ -2,6 +2,13 @@
 // Licensed under the MIT License.
 
 import type { CorpusEntry, CorpusSource } from "@typeagent/core/corpus";
+import type { FeedbackRating } from "@typeagent/core/events";
+import { collapseAndTruncate } from "./textFormatting.js";
+import {
+    noteTooltip,
+    type TooltipField,
+    type TooltipModel,
+} from "./tooltipModel.js";
 
 /**
  * Pure, vscode-free mapping from federated corpus entries to tree-node
@@ -18,7 +25,7 @@ export interface CorpusTreeNode {
     id: string;
     label: string;
     description?: string;
-    tooltip?: string;
+    tooltip?: TooltipModel;
     contextValue?: string;
     /** Present on `agent`, `source`, and `entry` nodes. */
     agent?: string;
@@ -26,6 +33,8 @@ export interface CorpusTreeNode {
     source?: CorpusSource;
     /** Present on `entry` nodes. */
     entryId?: string;
+    /** Present on `entry` nodes that carry feedback; drives the row icon. */
+    feedbackRating?: FeedbackRating;
     /** Whether the node should render as expandable. */
     hasChildren: boolean;
 }
@@ -51,8 +60,9 @@ export function buildCorpusAgentNodes(
                 id: "corpus:empty",
                 label: "No corpora available",
                 description: "Load an agent into a sandbox",
-                tooltip:
+                tooltip: noteTooltip(
                     "Corpora are listed per agent loaded into a running sandbox.",
+                ),
                 hasChildren: false,
             },
         ];
@@ -87,7 +97,9 @@ export function buildCorpusSourceNodes(
                 id: `corpus:agent:${agent}:empty`,
                 label: "Seed in-repo corpus\u2026",
                 description: "No entries yet — click to create a corpus file",
-                tooltip: `Click to create corpus/${agent}.utterances.jsonl and open it so you can add labelled utterances for ${agent}.`,
+                tooltip: noteTooltip(
+                    `Click to create corpus/${agent}.utterances.jsonl and open it so you can add labelled utterances for ${agent}.`,
+                ),
                 contextValue: "corpusAgentSeed",
                 agent,
                 hasChildren: false,
@@ -122,14 +134,16 @@ export function buildCorpusEntryNodes(
             kind: "entry" as const,
             id: `corpus:entry:${entry.id}`,
             label: truncateUtterance(entry.utterance),
-            description: entry.feedback
-                ? formatFeedbackBadge(entry.feedback.rating)
-                : undefined,
+            // Feedback is conveyed by the row icon (thumbs up/down), so no
+            // description badge is needed.
             tooltip: buildEntryTooltip(entry),
             contextValue: "corpusEntry",
             agent,
             source,
             entryId: entry.id,
+            ...(entry.feedback
+                ? { feedbackRating: entry.feedback.rating }
+                : {}),
             hasChildren: false,
         }));
 }
@@ -150,11 +164,7 @@ export function formatCorpusSource(source: CorpusSource): string {
 }
 
 export function truncateUtterance(utterance: string): string {
-    const collapsed = utterance.replace(/\s+/g, " ").trim();
-    if (collapsed.length <= MAX_UTTERANCE_LENGTH) {
-        return collapsed;
-    }
-    return `${collapsed.slice(0, MAX_UTTERANCE_LENGTH - 1)}\u2026`;
+    return collapseAndTruncate(utterance, MAX_UTTERANCE_LENGTH);
 }
 
 function countBySource(
@@ -167,28 +177,27 @@ function countBySource(
     return counts;
 }
 
-function formatFeedbackBadge(rating: string): string {
-    return `feedback: ${rating}`;
-}
-
-function buildEntryTooltip(entry: CorpusEntry): string {
-    const lines = [
-        entry.utterance,
-        `Agent: ${entry.agent}`,
-        `Source: ${formatCorpusSource(entry.source)}`,
-        `Origin: ${entry.provenance.sourceUri}`,
+function buildEntryTooltip(entry: CorpusEntry): TooltipModel {
+    const fields: TooltipField[] = [
+        { label: "Agent", value: entry.agent },
+        { label: "Source", value: formatCorpusSource(entry.source) },
+        { label: "Origin", value: entry.provenance.sourceUri, mono: true },
     ];
     if (entry.provenance.requestId) {
-        lines.push(`Request: ${entry.provenance.requestId}`);
+        fields.push({
+            label: "Request",
+            value: entry.provenance.requestId,
+            mono: true,
+        });
     }
     if (entry.feedback) {
-        lines.push(`Feedback: ${entry.feedback.rating}`);
+        fields.push({ label: "Feedback", value: entry.feedback.rating });
         if (entry.feedback.comment) {
-            lines.push(`Comment: ${entry.feedback.comment}`);
+            fields.push({ label: "Comment", value: entry.feedback.comment });
         }
     }
     if (entry.tags && entry.tags.length > 0) {
-        lines.push(`Tags: ${entry.tags.join(", ")}`);
+        fields.push({ label: "Tags", value: entry.tags.join(", ") });
     }
-    return lines.join("\n");
+    return { title: entry.utterance, fields };
 }

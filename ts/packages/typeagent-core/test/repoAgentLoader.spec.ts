@@ -85,6 +85,42 @@ describe("resolveAgentName", () => {
     it("ignores a trailing slash", () => {
         expect(resolveAgentName("packages/agents/photo/")).toBe("photo");
     });
+
+    it("derives the name relative to a configured agent root", () => {
+        expect(
+            resolveAgentName("/custom/agents/weather/src", ["/custom/agents"]),
+        ).toBe("weather");
+    });
+
+    it("uses a configured root over the packages/agents marker", () => {
+        // The ref also contains `packages/agents`, but the configured root is
+        // more specific and wins.
+        expect(
+            resolveAgentName("/work/packages/agents/extra/email/src/manifest", [
+                "/work/packages/agents/extra",
+            ]),
+        ).toBe("email");
+    });
+
+    it("prefers the longest matching configured root", () => {
+        expect(resolveAgentName("/a/b/c/calendar/src", ["/a", "/a/b/c"])).toBe(
+            "calendar",
+        );
+    });
+
+    it("matches a configured root regardless of path separators", () => {
+        expect(
+            resolveAgentName("C:\\custom\\agents\\notes", ["C:/custom/agents"]),
+        ).toBe("notes");
+    });
+
+    it("falls back to the marker when no configured root matches", () => {
+        expect(
+            resolveAgentName("C:/repo/ts/packages/agents/calendar/src", [
+                "/some/other/root",
+            ]),
+        ).toBe("calendar");
+    });
 });
 
 describe("summarizeFindingsToHealth", () => {

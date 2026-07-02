@@ -118,7 +118,7 @@ test("a dropped socket transitions back to disconnected", async () => {
     // Long backoff so the scheduled retry doesn't fire during the test.
     const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
-        backoffMs: [60_000],
+        baseBackoffMs: 60_000,
     });
     try {
         assert.equal(await connection.connect(), true);
@@ -140,7 +140,7 @@ test("a dropped socket transitions back to disconnected", async () => {
 test("connect() resolves false when unreachable", async () => {
     const connection = new StudioServiceConnection(undefined, {
         endpoint: "ws://127.0.0.1:1",
-        backoffMs: [60_000],
+        baseBackoffMs: 60_000,
     });
     try {
         assert.equal(await connection.connect(), false);
@@ -154,7 +154,7 @@ test("reuses the same client across a reconnect (rebind, not recreate)", async (
     const stub = await startStubServer();
     const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
-        backoffMs: [50],
+        baseBackoffMs: 50,
     });
     try {
         assert.equal(await connection.connect(), true);
@@ -183,7 +183,7 @@ test("delivers events over the rebound socket after a reconnect", async () => {
     const stub = await startStubServer();
     const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
-        backoffMs: [50],
+        baseBackoffMs: 50,
     });
     const received: StudioEvent[] = [];
     connection.onEvent((e) => received.push(e));
@@ -207,7 +207,7 @@ test("keeps the same client across multiple sequential reconnects", async () => 
     const stub = await startStubServer();
     const connection = new StudioServiceConnection(undefined, {
         endpoint: stub.endpoint,
-        backoffMs: [50],
+        baseBackoffMs: 50,
     });
     try {
         assert.equal(await connection.connect(), true);
@@ -231,7 +231,7 @@ test("setTarget connects a fresh client to the new endpoint (no stale reuse)", a
     const stubB = await startStubServer();
     const connection = new StudioServiceConnection(undefined, {
         endpoint: stubA.endpoint,
-        backoffMs: [50],
+        baseBackoffMs: 50,
     });
     try {
         assert.equal(await connection.connect(), true);

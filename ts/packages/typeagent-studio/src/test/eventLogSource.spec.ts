@@ -110,7 +110,7 @@ test("StudioServiceEventSource (over the shared connection) seeds + fans out liv
 test("StudioServiceEventSource returns empty when the connection is down", async () => {
     const connection = new StudioServiceConnection(undefined, {
         endpoint: "ws://127.0.0.1:1", // nothing listening
-        backoffMs: [10_000],
+        baseBackoffMs: 10_000,
     });
     const source = new StudioServiceEventSource(connection);
     try {

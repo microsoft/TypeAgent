@@ -641,6 +641,22 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  examples/remoteClient:
+    dependencies:
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/protocol
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/schemaStudio:
     dependencies:
       '@typeagent/action-schema':
@@ -5870,6 +5886,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
+      '@vscode/codicons':
+        specifier: ^0.0.42
+        version: 0.0.42
       '@vscode/vsce':
         specifier: ^3.2.1
         version: 3.4.0
@@ -6039,6 +6058,9 @@ importers:
 
   packages/utils/webSocketUtils:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
@@ -6149,6 +6171,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

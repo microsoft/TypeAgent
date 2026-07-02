@@ -201,7 +201,21 @@ async function cmdStart() {
         return 0;
     }
     if (!fs.existsSync(serverEntry)) {
-        console.error(`Server entry not found at ${serverEntry}.`);
+        // Detect running from the repo source tree (not a deployed artifact).
+        const inRepo = fs.existsSync(
+            path.join(artifactDir, "..", "..", "package.json"),
+        );
+        if (inRepo) {
+            console.error(
+                `typeagent-serve.mjs 'start' is for the deployed artifact only.\n` +
+                    `In development, start the agent-server with:\n` +
+                    `  cd packages/agentServer/server && pnpm start\n` +
+                    `  (or: pnpm run start:tunnel   — to also bring up the dev tunnel)\n\n` +
+                    `Tunnel host commands (tunnel start/stop/status) work from here.`,
+            );
+        } else {
+            console.error(`Server entry not found at ${serverEntry}.`);
+        }
         return 1;
     }
     console.log(`Starting agent server (port ${port})...`);

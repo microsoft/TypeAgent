@@ -9,6 +9,7 @@ import {
     type EventLogEntry,
     type EventLogRow,
 } from "./eventLogPresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 import type { EventLogSource } from "./eventLogSource.js";
 
 /** View id contributed in package.json. */
@@ -29,30 +30,18 @@ export const EVENT_LOG_CAPACITY = 200;
  * repopulate the tree after it's been replaced.
  */
 export class EventLogTreeProvider
-    implements vscode.TreeDataProvider<EventLogRow>, vscode.Disposable
+    extends BaseStudioTreeProvider<EventLogRow>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        EventLogRow | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private subscription: { dispose(): void } | undefined;
     private readonly entries: EventLogEntry[] = [];
     private readonly eventById = new Map<string, StudioEvent>();
     private seq = 0;
     private generation = 0;
-    private connected = false;
 
     constructor(source: EventLogSource) {
+        super();
         this.install(source, ++this.generation);
-    }
-
-    /** Reflect the studio service connection state (drives the empty view). */
-    setConnected(connected: boolean): void {
-        if (connected === this.connected) {
-            return;
-        }
-        this.connected = connected;
-        this.refresh();
     }
 
     /**
@@ -69,39 +58,26 @@ export class EventLogTreeProvider
         this.install(source, ++this.generation);
     }
 
-    refresh(): void {
-        this.emitter.fire(undefined);
-    }
-
     clear(): void {
         this.entries.length = 0;
         this.eventById.clear();
         this.refresh();
     }
 
-    getTreeItem(row: EventLogRow): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            row.label,
-            vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = row.id;
-        item.description = row.description;
-        item.tooltip = row.tooltip;
-        item.contextValue = row.contextValue;
+    protected decorate(item: vscode.TreeItem, row: EventLogRow): void {
         const event = this.eventById.get(row.id);
         item.iconPath = new vscode.ThemeIcon(
             row.kind === "event" && event ? iconForEvent(event) : "info",
         );
-        return item;
     }
 
-    getChildren(row?: EventLogRow): EventLogRow[] {
+    async getChildren(row?: EventLogRow): Promise<EventLogRow[]> {
         if (row) {
             return [];
         }
-        // Disconnected with nothing buffered: render nothing so the view's
-        // welcome content ("connect to the Studio service") shows instead of a
-        // misleading "No events yet" placeholder.
+        // Show the native loading bar while connecting; once connected, render
+        // buffered events (or the "no events yet" placeholder).
+        await this.whenConnected();
         if (!this.connected && this.entries.length === 0) {
             return [];
         }
@@ -174,6 +150,6 @@ export class EventLogTreeProvider
         this.generation++; // invalidate any in-flight seed
         this.subscription?.dispose();
         this.subscription = undefined;
-        this.emitter.dispose();
+        super.dispose();
     }
 }

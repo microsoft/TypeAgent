@@ -18,6 +18,7 @@ import {
     type SandboxManager,
     type SandboxStatus,
 } from "./types.js";
+import { resolveAgentName } from "./agentRef.js";
 
 export interface InMemorySandboxManagerOptions {
     /** Event sink for sandbox lifecycle events. */
@@ -40,7 +41,7 @@ interface InternalSandbox {
  * string. Real dispatcher integration replaces this in a later chunk.
  */
 const defaultAgentLoader: AgentLoader = async (_sandboxId, agentRef) => {
-    const name = deriveAgentName(agentRef);
+    const name = resolveAgentName(agentRef);
     return {
         name,
         schemaHash: "stub",
@@ -49,12 +50,6 @@ const defaultAgentLoader: AgentLoader = async (_sandboxId, agentRef) => {
         sourcePath: agentRef,
     };
 };
-
-function deriveAgentName(agentRef: string): string {
-    const normalized = agentRef.replace(/\\/g, "/");
-    const tail = normalized.split("/").pop() ?? agentRef;
-    return tail.replace(/\.[^.]+$/, "") || agentRef;
-}
 
 /**
  * In-memory implementation of `SandboxManager`.
