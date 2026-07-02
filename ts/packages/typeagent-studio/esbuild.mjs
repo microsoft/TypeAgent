@@ -20,6 +20,18 @@ const nodeBundleAlias = {
 };
 
 /**
+ * Optional local-embedding native stack (transformers.js → onnxruntime-node →
+ * sharp). It is loaded lazily via dynamic import in `@typeagent/aiclient` only
+ * when the embedding provider is "local"; keep it external so esbuild never
+ * tries to bundle onnxruntime's `.node` binaries into the node bundles.
+ */
+const localEmbeddingExternals = [
+    "@huggingface/transformers",
+    "onnxruntime-node",
+    "sharp",
+];
+
+/**
  * Copy runtime assets the bundled code reads from disk into `dist/` so they
  * ship in the `.vsix` and resolve next to the bundle at runtime.
  *
@@ -67,7 +79,7 @@ const extensionConfig = {
     entryPoints: ["src/extension.ts"],
     bundle: true,
     outfile: "dist/extension.js",
-    external: ["vscode"],
+    external: ["vscode", ...localEmbeddingExternals],
     alias: nodeBundleAlias,
     format: "cjs",
     platform: "node",
@@ -100,7 +112,7 @@ const serviceConfig = {
     entryPoints: ["../studio-service/src/main.ts"],
     bundle: true,
     outfile: "dist/studio-service.js",
-    external: ["vscode"],
+    external: ["vscode", ...localEmbeddingExternals],
     alias: nodeBundleAlias,
     format: "cjs",
     platform: "node",
