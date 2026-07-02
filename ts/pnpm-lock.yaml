@@ -641,6 +641,22 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  examples/remoteClient:
+    dependencies:
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/client
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../packages/agentServer/protocol
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/schemaStudio:
     dependencies:
       '@typeagent/action-schema':
