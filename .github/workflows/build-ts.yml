@@ -88,6 +88,11 @@ jobs:
           else
             npm run lint
           fi
+      - name: Restore better-sqlite3 for Node.js
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          pnpm run postinstall:better-sqlite3-node-restore
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts

@@ -45,6 +45,14 @@ export {
     type ConversationBarStatus,
 } from "./conversationBar.js";
 
+export {
+    formatConnectionStatusText,
+    renderConnectionStatus,
+    type ConnectionStatus,
+    type ConnectionActionId,
+    type ConnectionActionHandler,
+} from "./connectionStatus.js";
+
 export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
 
 export type {

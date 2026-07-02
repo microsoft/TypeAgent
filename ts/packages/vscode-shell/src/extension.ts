@@ -177,6 +177,10 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("vscode-shell.deleteSession", () =>
             activeChat?.bridge.deleteSession(),
         ),
+        vscode.commands.registerCommand(
+            "vscode-shell.importCopilotSessions",
+            () => activeChat?.bridge.runCommand("@copilot import"),
+        ),
         vscode.commands.registerCommand("vscode-shell.clearChat", () =>
             activeChat?.bridge.clearChatUI(),
         ),

@@ -1,0 +1,695 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<!--
+  Visual mock of every agent-server connection-status rendering.
+
+  Standalone preview (open directly in a browser) — NOT shipped. It mirrors the
+  real chat-ui markup, CSS, and the shared formatConnectionStatusText() /
+  renderConnectionStatus() logic from packages/chat-ui/src/connectionStatus.ts
+  so the states look and behave like production. Two surfaces are shown:
+
+    1. Conversation-bar status pill — VS Code shell (always) + Electron shell
+       (connected / --connect mode).
+    2. Chat reconnect banner — Electron shell.
+
+  Toggle the theme to see light vs. VS Code dark. Click Retry / Start in the
+  "stopped" examples to confirm the click wiring (logged below each surface).
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connection status — rendering states</title>
+    <style>
+      /* ============================================================
+               Page chrome (mock-only, not part of chat-ui)
+               ============================================================ */
+      :root {
+        --page-bg: #f3f3f3;
+        --page-fg: #1f1f1f;
+        --page-muted: #616161;
+        --card-bg: #ffffff;
+        --card-border: #e0e0e0;
+      }
+      body.theme-dark {
+        --page-bg: #1e1e1e;
+        --page-fg: #cccccc;
+        --page-muted: #9d9d9d;
+        --card-bg: #252526;
+        --card-border: #333333;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 28px 60px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--page-bg);
+        color: var(--page-fg);
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 32px 0 4px;
+        border-bottom: 1px solid var(--card-border);
+        padding-bottom: 6px;
+      }
+      p.lead {
+        margin: 0 0 16px;
+        color: var(--page-muted);
+        font-size: 13px;
+        max-width: 760px;
+      }
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 0;
+        background: var(--page-bg);
+        border-bottom: 1px solid var(--card-border);
+        margin-bottom: 8px;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--card-border);
+        background: var(--card-bg);
+        color: var(--page-fg);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        border-color: #7b61ff;
+      }
+      .example {
+        margin: 14px 0;
+      }
+      .example .caption {
+        font-size: 12px;
+        color: var(--page-muted);
+        margin: 0 0 6px;
+      }
+      .example .caption code {
+        background: rgba(127, 127, 127, 0.16);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+      /* The mock surfaces sit on a card so their own background/border
+               read clearly against the page regardless of theme. */
+      .surface {
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        overflow: hidden;
+        max-width: 760px;
+      }
+      .action-log {
+        font-size: 11px;
+        color: var(--page-muted);
+        margin: 6px 2px 0;
+        min-height: 14px;
+        font-family: "Cascadia Code", Consolas, monospace;
+      }
+      .col2 {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      /* ============================================================
+               Host theme token mappings (copied from the shells)
+               ------------------------------------------------------------
+               Light = chat-ui defaults. Dark = approximate VS Code dark,
+               matching packages/vscode-shell/media/chat.css mappings.
+               ============================================================ */
+      body {
+        --chat-conversation-background: #f5f5f5;
+        --chat-conversation-border: #d0d0d0;
+        --chat-conversation-foreground: #1f1f1f;
+        --chat-conversation-muted-foreground: #666;
+        --chat-conversation-success-foreground: #16825d;
+        --chat-conversation-error-foreground: #c42b1c;
+        --chat-conversation-warning-foreground: #b26a00;
+        --chat-conversation-status-foreground: #fff;
+        --chat-conversation-button-background: #e8e8e8;
+        --chat-conversation-button-foreground: #1f1f1f;
+        --chat-conversation-button-border: transparent;
+        --chat-conversation-button-hover-background: #dcdcdc;
+        --chat-conversation-link-active-foreground: #0066bf;
+        --chat-conversation-focus-border: #7b61ff;
+      }
+      body.theme-dark {
+        --chat-conversation-background: #252526;
+        --chat-conversation-border: #2b2b2b;
+        --chat-conversation-foreground: #cccccc;
+        --chat-conversation-muted-foreground: #9d9d9d;
+        /* success/error/warning keep their brand colors in dark too */
+        --chat-conversation-button-background: #313131;
+        --chat-conversation-button-foreground: #cccccc;
+        --chat-conversation-button-border: #3c3c3c;
+        --chat-conversation-button-hover-background: #3c3c3c;
+        --chat-conversation-link-active-foreground: #4daafc;
+        --chat-conversation-focus-border: #7b61ff;
+      }
+
+      /* ============================================================
+               chat-ui rules — copied verbatim from
+               packages/chat-ui/styles/chat.css (the bits that style the
+               conversation bar, status pill, recovery links, and banner).
+               ============================================================ */
+      .conversation-name-bar {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 31px;
+        padding: 5px 8px;
+        background: var(--chat-conversation-background, #f5f5f5);
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        font-family: inherit;
+      }
+      .conversation-name-label {
+        flex-shrink: 0;
+        color: var(--chat-conversation-muted-foreground, #666);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .conversation-name-btn {
+        min-width: 0;
+        flex: 1;
+        border: 0;
+        background: transparent;
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        cursor: pointer;
+        overflow: hidden;
+        padding: 2px 4px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: inherit;
+        font-size: 12px;
+      }
+      .conversation-name-btn:hover {
+        color: var(--chat-conversation-link-active-foreground, #0066bf);
+      }
+      .conversation-actions {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .conversation-action-btn {
+        border: 1px solid var(--chat-conversation-button-border, transparent);
+        border-radius: 4px;
+        background: var(--chat-conversation-button-background, #e8e8e8);
+        color: var(--chat-conversation-button-foreground, #1f1f1f);
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: inherit;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .conversation-action-btn:hover {
+        background: var(--chat-conversation-button-hover-background, #dcdcdc);
+      }
+
+      .conversation-status-summary {
+        flex-shrink: 0;
+        max-width: 55%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--chat-conversation-muted-foreground, #666);
+        white-space: nowrap;
+      }
+      .conversation-status-summary.connected {
+        background: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .conversation-status-summary.disconnected {
+        background: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .conversation-status-summary.switching,
+      .conversation-status-summary.connecting {
+        background: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+      .conversation-status-summary.connected,
+      .conversation-status-summary.disconnected,
+      .conversation-status-summary.switching,
+      .conversation-status-summary.connecting {
+        color: var(--chat-conversation-status-foreground, #fff);
+      }
+      /* Stopped pill carries Retry / Start links — grow + wrap. */
+      .conversation-status-summary.has-actions {
+        max-width: 100%;
+        white-space: normal;
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      /* Shared recovery links (pill + banner). */
+      .connection-status-action {
+        margin-left: 6px;
+        padding: 1px 8px;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: 600;
+        line-height: 1.4;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .connection-status-action:first-of-type {
+        margin-left: 0;
+      }
+      .connection-status-action:hover {
+        background: var(
+          --chat-connection-action-hover-background,
+          rgba(127, 127, 127, 0.25)
+        );
+      }
+      .connection-status-action:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 1px;
+      }
+      .has-actions .connection-status-text {
+        white-space: normal;
+      }
+
+      .chat-reconnect-banner {
+        background-color: #fff4ce;
+        color: #5c3c00;
+        border-bottom: 1px solid #ffc83d;
+        padding: 6px 12px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 12px;
+        text-align: center;
+        flex: 0 0 auto;
+      }
+      .chat-reconnect-banner.stopped {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      /* Mock-only: give the banner a faux chat body beneath it so the
+               bottom border reads like it does above a real transcript. */
+      .chat-faux-body {
+        height: 46px;
+        background: var(--card-bg);
+      }
+    </style>
+  </head>
+  <body class="theme-light">
+    <div class="toolbar">
+      <strong style="font-size: 13px">Connection status states</strong>
+      <button id="themeBtn" type="button">Switch to dark theme</button>
+      <span class="action-log" id="globalNote"
+        >Click Retry / Start on the “stopped” examples to test the click
+        wiring.</span
+      >
+    </div>
+
+    <h1>Agent-server connection — all rendering states</h1>
+    <p class="lead">
+      Faithful preview of the shared connection-status model. The status text
+      comes from <code>formatConnectionStatusText()</code> and the DOM from
+      <code>renderConnectionStatus()</code> — the same functions the hosts use.
+      The status pill appears in the VS Code shell (always) and the Electron
+      shell in connected mode; the banner appears in the Electron shell above
+      the transcript.
+    </p>
+
+    <h2>1 · Conversation-bar status pill</h2>
+    <p class="lead">
+      Healthy + transient states, then the new give-up “stopped” state with
+      manual recovery links.
+    </p>
+    <div id="pillExamples"></div>
+
+    <h2>2 · Chat reconnect banner (Electron shell)</h2>
+    <p class="lead">
+      Same model, rendered into the warning banner above the chat transcript.
+    </p>
+    <div id="bannerExamples"></div>
+
+    <script>
+      // ----------------------------------------------------------------
+      // Inlined copies of packages/chat-ui/src/connectionStatus.ts so the
+      // mock renders identically to production without a build step.
+      // ----------------------------------------------------------------
+      const DEFAULT_ACTION_LABELS = {
+        retry: "Retry",
+        start: "Start server",
+      };
+
+      function formatConnectionStatusText(status) {
+        const attemptSuffix =
+          status.attempt && status.attempt > 0
+            ? ` (attempt ${status.attempt})`
+            : "";
+        const errorSuffix = status.error ? ` · ${status.error}` : "";
+        switch (status.phase) {
+          case "connecting":
+            return `Disconnected — connecting${attemptSuffix}…`;
+          case "waiting": {
+            const sec = status.secondsRemaining ?? 0;
+            return `Disconnected — retrying in ${sec}s${attemptSuffix}${errorSuffix}`;
+          }
+          case "stopped":
+            return `Disconnected — stopped${attemptSuffix}${errorSuffix}`;
+        }
+      }
+
+      function renderConnectionStatus(
+        container,
+        status,
+        onAction,
+        labels = {},
+      ) {
+        container.replaceChildren();
+        const text = document.createElement("span");
+        text.className = "connection-status-text";
+        text.textContent = formatConnectionStatusText(status);
+        container.appendChild(text);
+
+        const actions =
+          status.phase === "stopped" ? (status.actions ?? []) : [];
+        for (const id of actions) {
+          const action = document.createElement("button");
+          action.type = "button";
+          action.className = `connection-status-action connection-status-action-${id}`;
+          action.textContent = labels[id] ?? DEFAULT_ACTION_LABELS[id];
+          action.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onAction?.(id);
+          });
+          container.appendChild(action);
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // Reproduce ConversationBar.renderStatus() class + content logic so
+      // every pill variant (connected / switching / error / structured /
+      // legacy) is shown exactly as the component would paint it.
+      // ----------------------------------------------------------------
+      function applyPillStatus(statusEl, status, onAction) {
+        if (status.errorText) {
+          statusEl.className = "conversation-status-summary disconnected";
+          statusEl.textContent = status.errorText;
+        } else if (status.switching) {
+          statusEl.className = "conversation-status-summary switching";
+          statusEl.textContent = status.statusLabel ?? "Connecting";
+        } else if (status.connected) {
+          statusEl.className = "conversation-status-summary connected";
+          const parts = ["Connected"];
+          if (status.clientCount)
+            parts.push(
+              `${status.clientCount} client${
+                status.clientCount === 1 ? "" : "s"
+              }`,
+            );
+          if (status.demoSuffix) parts.push(status.demoSuffix);
+          statusEl.textContent = parts.join(" · ");
+        } else if (status.connection) {
+          const connection = status.connection;
+          const stopped = connection.phase === "stopped";
+          const hasActions = stopped && (connection.actions?.length ?? 0) > 0;
+          statusEl.className = `conversation-status-summary disconnected${
+            stopped ? " stopped" : ""
+          }${hasActions ? " has-actions" : ""}`;
+          renderConnectionStatus(statusEl, connection, onAction);
+        } else {
+          statusEl.className = "conversation-status-summary disconnected";
+          statusEl.textContent = status.reconnectText ?? "Disconnected";
+        }
+      }
+
+      function makeConversationBar(name, status, logEl) {
+        const bar = document.createElement("div");
+        bar.className = "conversation-name-bar";
+
+        const label = document.createElement("span");
+        label.className = "conversation-name-label";
+        label.textContent = "Conversation";
+        bar.appendChild(label);
+
+        const nameBtn = document.createElement("button");
+        nameBtn.type = "button";
+        nameBtn.className = "conversation-name-btn";
+        nameBtn.textContent = name;
+        bar.appendChild(nameBtn);
+
+        const statusEl = document.createElement("span");
+        statusEl.setAttribute("aria-live", "polite");
+        bar.appendChild(statusEl);
+
+        const actions = document.createElement("div");
+        actions.className = "conversation-actions";
+        for (const [glyph, title] of [
+          ["✎", "Rename conversation"],
+          ["⌫", "Delete conversation"],
+        ]) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "conversation-action-btn";
+          b.title = title;
+          b.textContent = glyph;
+          actions.appendChild(b);
+        }
+        bar.appendChild(actions);
+
+        applyPillStatus(statusEl, status, (action) => logAction(logEl, action));
+        return bar;
+      }
+
+      function makeBanner(status, logEl) {
+        const wrap = document.createElement("div");
+        const banner = document.createElement("div");
+        banner.className = "chat-reconnect-banner";
+        banner.classList.toggle("stopped", status.phase === "stopped");
+        renderConnectionStatus(banner, status, (action) =>
+          logAction(logEl, action),
+        );
+        const body = document.createElement("div");
+        body.className = "chat-faux-body";
+        wrap.appendChild(banner);
+        wrap.appendChild(body);
+        return wrap;
+      }
+
+      function logAction(logEl, action) {
+        const time = new Date().toLocaleTimeString();
+        logEl.textContent = `▸ ${time} — onAction("${action}") fired`;
+      }
+
+      function addExample(container, caption, node, withLog) {
+        const wrap = document.createElement("div");
+        wrap.className = "example";
+        const cap = document.createElement("div");
+        cap.className = "caption";
+        cap.innerHTML = caption;
+        wrap.appendChild(cap);
+        const surface = document.createElement("div");
+        surface.className = "surface";
+        surface.appendChild(node);
+        wrap.appendChild(surface);
+        let logEl;
+        if (withLog) {
+          logEl = document.createElement("div");
+          logEl.className = "action-log";
+          wrap.appendChild(logEl);
+        }
+        container.appendChild(wrap);
+        return logEl;
+      }
+
+      // ----------------------------------------------------------------
+      // The catalogue of states.
+      // ----------------------------------------------------------------
+      const pillRoot = document.getElementById("pillExamples");
+      const bannerRoot = document.getElementById("bannerExamples");
+
+      const pillStates = [
+        {
+          caption: "<b>Connected</b> — healthy, single client.",
+          name: "Shell",
+          status: { connected: true, clientCount: 1 },
+        },
+        {
+          caption: "<b>Connected</b> — multiple peers on the conversation.",
+          name: "default",
+          status: { connected: true, clientCount: 3 },
+        },
+        {
+          caption:
+            "<b>Switching</b> — creating / joining a conversation. <code>phase n/a</code>",
+          name: "Research",
+          status: { switching: true, statusLabel: "Creating" },
+        },
+        {
+          caption:
+            '<b>Connecting</b> — an attempt is in flight. <code>phase: "connecting"</code>',
+          name: "default",
+          status: {
+            connected: false,
+            connection: { phase: "connecting", attempt: 1 },
+          },
+        },
+        {
+          caption:
+            '<b>Waiting</b> — backoff countdown between attempts. <code>phase: "waiting"</code>',
+          name: "default",
+          status: {
+            connected: false,
+            connection: {
+              phase: "waiting",
+              attempt: 3,
+              secondsRemaining: 5,
+            },
+          },
+        },
+        {
+          caption:
+            '<b>Waiting + last error</b> — countdown with the most recent failure. <code>phase: "waiting"</code>',
+          name: "default",
+          status: {
+            connected: false,
+            connection: {
+              phase: "waiting",
+              attempt: 5,
+              secondsRemaining: 8,
+              error: "ECONNREFUSED 127.0.0.1:8999",
+            },
+          },
+        },
+        {
+          caption:
+            '<b>Stopped</b> — auto-reconnect gave up; manual <b>Retry</b> + <b>Start server</b> links (clickable). <code>phase: "stopped"</code>',
+          name: "default",
+          status: {
+            connected: false,
+            connection: {
+              phase: "stopped",
+              attempt: 12,
+              error: "ECONNREFUSED 127.0.0.1:8999",
+              actions: ["retry", "start"],
+            },
+          },
+          withLog: true,
+        },
+        {
+          caption:
+            "<b>Stopped (retry only)</b> — host offering a single recovery action.",
+          name: "default",
+          status: {
+            connected: false,
+            connection: {
+              phase: "stopped",
+              attempt: 12,
+              actions: ["retry"],
+            },
+          },
+          withLog: true,
+        },
+        {
+          caption:
+            "<b>Error</b> — transient action error (e.g. rename failed). <code>errorText</code>",
+          name: "default",
+          status: { connected: false, errorText: "Rename failed" },
+        },
+        {
+          caption:
+            "<b>Disconnected</b> — idle fallback, no structured state. <code>default</code>",
+          name: "default",
+          status: { connected: false },
+        },
+      ];
+
+      for (const s of pillStates) {
+        let logEl;
+        const node = document.createElement("div");
+        const placeholder = node;
+        logEl = addExample(pillRoot, s.caption, placeholder, s.withLog);
+        placeholder.replaceWith(makeConversationBar(s.name, s.status, logEl));
+      }
+
+      const bannerStates = [
+        {
+          caption:
+            '<b>Connecting</b> — attempt in flight. <code>phase: "connecting"</code>',
+          status: { phase: "connecting", attempt: 1 },
+        },
+        {
+          caption:
+            '<b>Waiting</b> — countdown to next attempt. <code>phase: "waiting"</code>',
+          status: {
+            phase: "waiting",
+            attempt: 4,
+            secondsRemaining: 6,
+          },
+        },
+        {
+          caption: '<b>Waiting + last error</b>. <code>phase: "waiting"</code>',
+          status: {
+            phase: "waiting",
+            attempt: 7,
+            secondsRemaining: 12,
+            error: "ETIMEDOUT",
+          },
+        },
+        {
+          caption:
+            '<b>Stopped</b> — gave up; centered Retry + Start links (clickable). <code>phase: "stopped"</code>',
+          status: {
+            phase: "stopped",
+            attempt: 12,
+            error: "ECONNREFUSED 127.0.0.1:8999",
+            actions: ["retry", "start"],
+          },
+          withLog: true,
+        },
+      ];
+
+      for (const s of bannerStates) {
+        const placeholder = document.createElement("div");
+        const logEl = addExample(bannerRoot, s.caption, placeholder, s.withLog);
+        placeholder.replaceWith(makeBanner(s.status, logEl));
+      }
+
+      // Theme toggle.
+      const themeBtn = document.getElementById("themeBtn");
+      themeBtn.addEventListener("click", () => {
+        const dark = document.body.classList.toggle("theme-dark");
+        document.body.classList.toggle("theme-light", !dark);
+        themeBtn.textContent = dark
+          ? "Switch to light theme"
+          : "Switch to dark theme";
+      });
+    </script>
+  </body>
+</html>

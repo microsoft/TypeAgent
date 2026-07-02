@@ -7,6 +7,7 @@ import type {
     ConversationBarController,
     ConversationBarOptions,
 } from "../src/conversationBar.js";
+import type { ConnectionActionId } from "../src/connectionStatus.js";
 
 type MockConversationBarController = ConversationBarController & {
     requestConversations: jest.MockedFunction<() => void>;
@@ -16,6 +17,7 @@ type MockConversationBarController = ConversationBarController & {
         (conversationId: string, name: string) => void
     >;
     deleteConversation: jest.MockedFunction<(conversationId: string) => void>;
+    connectionAction: jest.MockedFunction<(action: ConnectionActionId) => void>;
 };
 
 function makeBar(
@@ -31,6 +33,7 @@ function makeBar(
             (_conversationId: string, _name: string) => undefined,
         ),
         deleteConversation: jest.fn((_conversationId: string) => undefined),
+        connectionAction: jest.fn((_action: ConnectionActionId) => undefined),
     };
     const bar = new ConversationBar(root, { controller, ...options });
     bar.setStatus({ connected: true });
@@ -193,6 +196,64 @@ describe("ConversationBar", () => {
         });
         expect(status?.textContent).toBe("Creating");
         expect(status?.classList.contains("switching")).toBe(true);
+    });
+
+    it("renders the structured reconnect countdown via the connection model", () => {
+        const { root, bar } = makeBar();
+        const status = root.querySelector<HTMLElement>(
+            ".conversation-status-summary",
+        );
+
+        bar.setStatus({
+            connected: false,
+            connection: {
+                phase: "waiting",
+                attempt: 3,
+                secondsRemaining: 5,
+            },
+        });
+        expect(status?.textContent).toBe(
+            "Disconnected — retrying in 5s (attempt 3)",
+        );
+        expect(status?.classList.contains("stopped")).toBe(false);
+        // No recovery links while still retrying.
+        expect(
+            status?.querySelectorAll(".connection-status-action").length,
+        ).toBe(0);
+    });
+
+    it("renders Retry / Start links once reconnect has stopped and routes clicks", () => {
+        const { root, bar, controller } = makeBar();
+        const status = root.querySelector<HTMLElement>(
+            ".conversation-status-summary",
+        );
+
+        bar.setStatus({
+            connected: false,
+            connection: {
+                phase: "stopped",
+                attempt: 12,
+                error: "ECONNREFUSED",
+                actions: ["retry", "start"],
+            },
+        });
+
+        expect(status?.classList.contains("stopped")).toBe(true);
+        expect(status?.classList.contains("has-actions")).toBe(true);
+        expect(status?.textContent).toContain("stopped");
+        expect(status?.textContent).toContain("ECONNREFUSED");
+
+        const actions = status?.querySelectorAll<HTMLButtonElement>(
+            ".connection-status-action",
+        );
+        expect(actions?.length).toBe(2);
+        expect(actions?.[0].textContent).toBe("Retry");
+        expect(actions?.[1].textContent).toBe("Start server");
+
+        actions?.[0].click();
+        expect(controller.connectionAction).toHaveBeenCalledWith("retry");
+        actions?.[1].click();
+        expect(controller.connectionAction).toHaveBeenCalledWith("start");
     });
 
     it("renames conversations from search results inline", () => {

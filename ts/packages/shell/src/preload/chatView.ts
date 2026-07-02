@@ -10,6 +10,7 @@ import {
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { QueueSnapshot } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
+import type { ConnectionStatus } from "chat-ui";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     createDispatcherRpcClient,
@@ -81,9 +82,12 @@ function registerClient(client: Client) {
     ipcRenderer.on("demo-state", (_, state) => {
         client.demoStateChanged?.(state);
     });
-    ipcRenderer.on("reconnect-status", (_, message: string | undefined) => {
-        client.reconnectStatusChanged?.(message);
-    });
+    ipcRenderer.on(
+        "reconnect-status",
+        (_, status: ConnectionStatus | undefined) => {
+            client.reconnectStatusChanged?.(status);
+        },
+    );
     ipcRenderer.on("show-dialog", (_, key) => {
         client.showDialog(key);
     });
@@ -248,6 +252,12 @@ const api: ClientAPI = {
     },
     conversationManageAction: (payload: ManageConversationPayload) => {
         return ipcRenderer.invoke("conversation-manage-action", payload);
+    },
+    reconnectRetry: () => {
+        return ipcRenderer.invoke("reconnect-retry");
+    },
+    reconnectStartServer: () => {
+        return ipcRenderer.invoke("reconnect-start-server");
     },
 };
 
