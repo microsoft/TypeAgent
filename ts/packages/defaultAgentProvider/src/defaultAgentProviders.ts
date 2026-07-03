@@ -35,7 +35,6 @@ import {
     createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
-    getAppBundleRequirePath,
     getBundledAgentNames,
     loadInstalledRecords,
     readAgentsJson,
@@ -98,10 +97,7 @@ function getInstalledAppAgentProviders(
     }
     const installDir = getInstallDir(instanceConfigs);
     const records = loadInstalledRecords(instanceDir);
-    return createInstalledAppAgentProviders(records, {
-        ...(installDir !== undefined ? { installDir } : {}),
-        appBundleRequirePath: getAppBundleRequirePath(),
-    });
+    return createInstalledAppAgentProviders(records, installDir);
 }
 
 /**
@@ -199,7 +195,6 @@ export function createDefaultInstalledAgentSource(
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall (design §12 Q5).
     const limiter = createLimiter(1);
-    const appBundleRequirePath = getAppBundleRequirePath();
 
     function persistSources(configs: InstallSourceConfig[]): void {
         const current = instanceConfigs.getInstanceConfig();
@@ -266,10 +261,7 @@ export function createDefaultInstalledAgentSource(
     ): AppAgentProvider {
         return withTombstone(
             name,
-            createInstalledAppAgentProvider(name, record, {
-                ...(installDir !== undefined ? { installDir } : {}),
-                appBundleRequirePath,
-            }),
+            createInstalledAppAgentProvider(name, record, installDir),
         );
     }
 

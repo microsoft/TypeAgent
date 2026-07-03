@@ -46,7 +46,7 @@ export function writeAgentsJson(instanceDir: string, data: AgentsJson): void {
 // The runtime root the bundled-catalog `module` records resolve against - the
 // default-agent-provider package's own node_modules, exactly as today's
 // defaultNpm provider does (design §4.1 "Module resolution roots").
-export function getAppBundleRequirePath(): string {
+function getAppBundleRequirePath(): string {
     return getPackageFilePath("./package.json");
 }
 
@@ -228,38 +228,34 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     return info;
 }
 
-type InstalledAgentRoots = {
-    installDir?: string;
-    appBundleRequirePath: string;
-};
-
 // The ordered candidate roots a `module` record resolves against: the feed
 // installDir first (if any), then the app bundle (design §4.1).
-function moduleRootsFor(roots: InstalledAgentRoots): string[] {
-    return roots.installDir !== undefined
-        ? [
-              path.join(roots.installDir, "package.json"),
-              roots.appBundleRequirePath,
-          ]
-        : [roots.appBundleRequirePath];
+function moduleRootsFor(installDir?: string): string[] {
+    const appBundleRoot = getAppBundleRequirePath();
+    return installDir !== undefined
+        ? [path.join(installDir, "package.json"), appBundleRoot]
+        : [appBundleRoot];
 }
 
 /**
  * Build the AppAgentProvider for a SINGLE installed agent record (design §4.4).
  * A `path` record resolves from its explicit absolute path (the requirePath is
  * irrelevant); a `module` record resolves against the provenance roots
- * (installDir first, then the app bundle). This is the runtime unit the dynamic
- * source vends - one single-agent provider per installed agent.
+ * (`installDir` first, then the app bundle). This is the runtime unit the
+ * dynamic source vends - one single-agent provider per installed agent.
  */
 export function createInstalledAppAgentProvider(
     name: string,
     record: InstalledAgentRecord,
-    roots: InstalledAgentRoots,
+    installDir?: string,
 ): AppAgentProvider {
     const requirePath =
         record.path !== undefined
-            ? roots.appBundleRequirePath
-            : resolveModuleRoot(record.module ?? name, moduleRootsFor(roots));
+            ? getAppBundleRequirePath()
+            : resolveModuleRoot(
+                  record.module ?? name,
+                  moduleRootsFor(installDir),
+              );
     return createNpmAppAgentProvider(
         { [name]: recordToNpmInfo(record) },
         requirePath,
@@ -274,10 +270,10 @@ export function createInstalledAppAgentProvider(
  */
 export function createInstalledAppAgentProviders(
     records: Record<string, InstalledAgentRecord>,
-    roots: InstalledAgentRoots,
+    installDir?: string,
 ): AppAgentProvider[] {
     return Object.entries(records).map(([name, record]) =>
-        createInstalledAppAgentProvider(name, record, roots),
+        createInstalledAppAgentProvider(name, record, installDir),
     );
 }
 

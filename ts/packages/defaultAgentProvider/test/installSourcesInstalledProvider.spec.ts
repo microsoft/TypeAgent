@@ -8,7 +8,6 @@ import {
     createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
-    getAppBundleRequirePath,
     readAgentsJson,
 } from "../src/installSources/installedAgents.js";
 import {
@@ -111,16 +110,12 @@ describe("createInstalledAppAgentProviders", () => {
     }
 
     it("builds a single-agent provider for one record (runtime unit)", async () => {
-        const provider = createInstalledAppAgentProvider(
-            "player",
-            {
-                name: "player",
-                kind: "npm",
-                module: "music",
-                source: "bundled",
-            },
-            { appBundleRequirePath: getAppBundleRequirePath() },
-        );
+        const provider = createInstalledAppAgentProvider("player", {
+            name: "player",
+            kind: "npm",
+            module: "music",
+            source: "bundled",
+        });
         expect(provider.getAppAgentNames()).toEqual(["player"]);
         expect(await provider.getAppAgentManifest("player")).toBeDefined();
     });
@@ -134,9 +129,7 @@ describe("createInstalledAppAgentProviders", () => {
                 source: "bundled",
             },
         };
-        const providers = createInstalledAppAgentProviders(records, {
-            appBundleRequirePath: getAppBundleRequirePath(),
-        });
+        const providers = createInstalledAppAgentProviders(records);
         expect(allNames(providers)).toEqual(["player"]);
         const manifest = await providerFor(
             providers,
@@ -160,18 +153,15 @@ describe("createInstalledAppAgentProviders", () => {
                 source: "path",
             },
         };
-        const providers = createInstalledAppAgentProviders(records, {
-            installDir: "/nonexistent/installDir",
-            appBundleRequirePath: getAppBundleRequirePath(),
-        });
+        const providers = createInstalledAppAgentProviders(
+            records,
+            "/nonexistent/installDir",
+        );
         expect(allNames(providers)).toEqual(["mine", "player"]);
     });
 
     it("is well-formed with no records", () => {
-        const providers = createInstalledAppAgentProviders(
-            {},
-            { appBundleRequirePath: getAppBundleRequirePath() },
-        );
+        const providers = createInstalledAppAgentProviders({});
         expect(allNames(providers)).toEqual([]);
     });
 
@@ -192,10 +182,7 @@ describe("createInstalledAppAgentProviders", () => {
                 source: "bundled",
             },
         };
-        const providers = createInstalledAppAgentProviders(records, {
-            installDir,
-            appBundleRequirePath: getAppBundleRequirePath(),
-        });
+        const providers = createInstalledAppAgentProviders(records, installDir);
         expect(allNames(providers)).toEqual(["feedy", "player"]);
         // feed module resolves ONLY from installDir (absent in app bundle)
         const feedManifest = await providerFor(
