@@ -188,3 +188,14 @@ gates. Branch is ready for PR.
 
 
 
+
+## Post-M5 review — enable-state clobber (resolved)
+
+The deferred enable-state concern surfaced as a real regression: the M5 policy
+(`withDisabledByDefault` + explicit install-enable that was applied live but not
+persisted) let any later `setAppAgentStates` recompute a just-installed agent to
+disabled. Resolved by the Model B redesign — honor the manifest default, persist
+state, and reconcile the known-agent set on load with add/removed notifications.
+See DECISIONS_LOG.md "Post-M5 — Enable-state redesign". Tests updated/added
+(appAgentHost reconciliation + wording; install-sources fan-out no longer asserts
+disabled-by-default). No open items.

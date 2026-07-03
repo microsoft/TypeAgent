@@ -468,6 +468,13 @@ type SessionData = {
     cacheData: SessionCacheData;
     tokens?: TokenCounterData;
     indexes?: IndexData[];
+    // The set of app agent names this session has already seen (static + dynamic;
+    // design §5, Model B). Used for load-time reconciliation: agents that became
+    // available while this session was offline are reported as added, and agents
+    // that disappeared as removed. `undefined` means "never recorded" — the first
+    // reconciliation establishes a silent baseline (a brand-new session or the
+    // first load after upgrading to a build that tracks this).
+    knownAgents?: string[] | undefined;
 };
 
 // Fill in missing fields when loading sessions from disk
@@ -512,6 +519,9 @@ export class Session {
     private readonly settings: SessionSettings;
     private config: SessionConfig;
     private cacheData: SessionCacheData;
+    // Names of app agents this session has already seen (design §5, Model B).
+    // `undefined` until the first reconciliation records a baseline.
+    private knownAgents: string[] | undefined;
 
     public static async create(
         settings?: SessionSettings,
@@ -572,6 +582,7 @@ export class Session {
         this.config = cloneConfig(defaultSessionConfig);
         mergeConfig(this.config, this.settings, appAgentStateKeys);
         this.cacheData = sessionData.cacheData;
+        this.knownAgents = sessionData.knownAgents;
 
         // rehydrate token stats
         if (sessionData.tokens) {
@@ -645,6 +656,25 @@ export class Session {
 
     public getSessionDirPath(): string | undefined {
         return this.sessionDirPath;
+    }
+
+    /**
+     * The set of app agent names this session has already seen (design §5,
+     * Model B), or `undefined` if no baseline has been recorded yet.
+     */
+    public getKnownAgents(): readonly string[] | undefined {
+        return this.knownAgents;
+    }
+
+    /**
+     * Record the set of app agent names currently known to this session
+     * (design §5, Model B) and persist it. Called by load-time reconciliation
+     * and by live add/remove so the next load reconciles against an accurate
+     * baseline.
+     */
+    public setKnownAgents(names: readonly string[]): void {
+        this.knownAgents = [...names];
+        this.save();
     }
 
     public getConstructionDataFilePath() {
@@ -731,6 +761,7 @@ export class Session {
                 cacheData: this.cacheData,
                 tokens: TokenCounter.getInstance(),
                 indexes: IndexManager.getInstance().indexes,
+                knownAgents: this.knownAgents,
             };
             debugSession(
                 `Saving session: ${getSessionName(this.sessionDirPath)}`,

@@ -616,55 +616,99 @@ export async function installAppProvider(
 }
 
 /**
- * Apply an explicit enabled state to the agent(s) of a just-added provider
- * (design §5). Unlike {@link setAppAgentStates}, which derives every agent's
- * state from session config, this forces the provider's own schemas/actions/
- * commands to `enable` while leaving all other agents at their current
- * (config-derived) state. Used by the {@link AppAgentHost} add path so the
- * source can set the initial state per its policy (true for the issuing session,
- * false for siblings).
+ * Whether an app agent is currently "on" in this session (design §5, Model B):
+ * either its command surface is enabled or any of its schemas is enabled. Used
+ * to word the add/reconcile notification (enabled vs. disabled).
  */
-async function applyExplicitAgentState(
-    context: CommandHandlerContext,
-    provider: AppAgentProvider,
-    enable: boolean,
-) {
-    const config = context.session.getConfig();
-    const agentNames = new Set(provider.getAppAgentNames());
-    const override: AppAgentStateSettings = {
-        schemas: { ...config.schemas },
-        actions: { ...config.actions },
-        commands: { ...config.commands },
-    };
-    for (const schemaName of context.agents.getSchemaNames()) {
-        if (agentNames.has(getAppAgentName(schemaName))) {
-            override.schemas![schemaName] = enable;
-            override.actions![schemaName] = enable;
+function isAgentEnabled(context: CommandHandlerContext, name: string): boolean {
+    const agents = context.agents;
+    try {
+        if (agents.isCommandEnabled(name)) {
+            return true;
+        }
+    } catch {
+        // Agent has no command surface / not loaded — fall through to schemas.
+    }
+    for (const schemaName of agents.getSchemaNames()) {
+        if (getAppAgentName(schemaName) === name) {
+            try {
+                if (agents.isSchemaEnabled(schemaName)) {
+                    return true;
+                }
+            } catch {
+                // Ignore invalid schema name.
+            }
         }
     }
-    for (const name of agentNames) {
-        override.commands![name] = enable;
-    }
-    const result = await context.agents.setState(context, override);
-    const rollback = processSetAppAgentStateResult(result, context, (message) =>
-        debug(`Install: ${message}`),
-    );
-    if (rollback) {
-        context.session.updateConfig(rollback);
-    }
+    return false;
 }
 
 /**
- * The {@link AppAgentHost.addProvider} body (design §3.1): the
- * {@link installAppProvider} wrapper reworked to apply an **explicit** `enable`
- * instead of deriving state from session config. Registers the provider, applies
- * the explicit state, re-runs collision detection degraded-to-warn, and saves
- * the embedding cache. Runs through the idle-gated applicator (design §7.1).
+ * Add agent names to this session's persisted known set (design §5, Model B) so
+ * a later load reconciles against an accurate baseline. No-op before the
+ * baseline is established (reconciliation records it at load).
  */
+function addKnownAgents(
+    context: CommandHandlerContext,
+    names: readonly string[],
+): void {
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        return;
+    }
+    const next = new Set(known);
+    for (const name of names) {
+        next.add(name);
+    }
+    context.session.setKnownAgents([...next]);
+}
+
 /**
- * Emit the cross-session fan-out system message(s) for a sibling session
- * (design §5): name the agent and its resulting state so the change is visible,
- * not silent. Exported for unit testing of the wording/visibility.
+ * Remove agent names from this session's persisted known set (design §5,
+ * Model B). No-op before the baseline is established.
+ */
+function removeKnownAgents(
+    context: CommandHandlerContext,
+    names: readonly string[],
+): void {
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        return;
+    }
+    const drop = new Set(names);
+    context.session.setKnownAgents(known.filter((n) => !drop.has(n)));
+}
+
+/**
+ * Drop the persisted enable preference for the given agent(s) from session
+ * config (design §5, Model B, sub-decision): an explicit `@uninstall` clears the
+ * schema/action/command overrides so a fresh reinstall starts from the manifest
+ * default. (Reconciliation-removal, by contrast, leaves the entry dormant.)
+ * `schemaNames` must be captured BEFORE the provider is removed, since the
+ * manager no longer knows them afterward.
+ */
+function dropAgentConfig(
+    context: CommandHandlerContext,
+    agentNames: readonly string[],
+    schemaNames: readonly string[],
+): void {
+    const schemas: Record<string, null> = {};
+    const actions: Record<string, null> = {};
+    const commands: Record<string, null> = {};
+    for (const schemaName of schemaNames) {
+        schemas[schemaName] = null;
+        actions[schemaName] = null;
+    }
+    for (const name of agentNames) {
+        commands[name] = null;
+    }
+    context.session.updateSettings({ schemas, actions, commands });
+}
+
+/**
+ * Emit the cross-session fan-out system message for a single add/remove
+ * (design §5, Model B): name the agent and its resulting state so the change is
+ * visible, not silent. Exported for unit testing of the wording/visibility.
  */
 export function emitAgentChangeNotification(
     clientIO: ClientIO,
@@ -675,78 +719,124 @@ export function emitAgentChangeNotification(
     for (const name of provider.getAppAgentNames()) {
         const message =
             op === "remove"
-                ? `Agent '${name}' was uninstalled.`
+                ? `Agent '${name}' was removed.`
                 : enable
-                  ? `Agent '${name}' was installed.`
-                  : `Agent '${name}' was installed (disabled here; \`@config agent ${name}\` to enable).`;
+                  ? `Agent '${name}' was added — enabled.`
+                  : `Agent '${name}' was added — disabled (\`@config agent ${name}\` to enable).`;
         clientIO.notify(undefined, AppAgentEvent.Info, message, DispatcherName);
     }
 }
 
+/**
+ * Reconcile this session's persisted known agent set against what is actually
+ * available now (design §5, Model B). Agents that appeared while the session was
+ * offline are reported as added (adopting their manifest default); agents that
+ * disappeared are reported as removed (their enable preference stays dormant in
+ * config). The first time a session has no recorded baseline (brand-new session,
+ * or first load after upgrading to a build that tracks this) it records a silent
+ * baseline. The known set is persisted so the next load reconciles accurately.
+ */
+export function reconcileKnownAgents(context: CommandHandlerContext): void {
+    const available = context.agents.getAppAgentNames();
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        // No baseline yet: adopt the current set silently.
+        context.session.setKnownAgents(available);
+        return;
+    }
+    const knownSet = new Set(known);
+    const availableSet = new Set(available);
+    const added = available.filter((n) => !knownSet.has(n));
+    const removed = known.filter((n) => !availableSet.has(n));
+    if (added.length !== 0 || removed.length !== 0) {
+        const parts: string[] = [];
+        for (const name of added) {
+            parts.push(
+                isAgentEnabled(context, name)
+                    ? `${name} added — enabled`
+                    : `${name} added — disabled (\`@config agent ${name}\` to enable)`,
+            );
+        }
+        for (const name of removed) {
+            parts.push(`${name} removed`);
+        }
+        context.clientIO.notify(
+            undefined,
+            AppAgentEvent.Info,
+            `Agent set changed: ${parts.join("; ")}.`,
+            DispatcherName,
+        );
+    }
+    context.session.setKnownAgents(available);
+}
+
+/**
+ * The {@link AppAgentHost.addProvider} body (design §3.1, §5, Model B): register
+ * the provider (deriving its enabled state from session config with the manifest
+ * default as fallback, via {@link installAppProvider}), record it in the known
+ * set, and — on a sibling fan-out (`notify`) — surface a system message naming
+ * the agent and its resulting state. Runs through the idle-gated applicator
+ * (design §7.1).
+ */
 async function hostAddProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
-    enable: boolean,
     notify: boolean,
 ) {
-    const useNFAGrammar =
-        context.session.getConfig().cache.grammarSystem === "nfa";
+    await installAppProvider(context, provider);
 
-    // Don't use embedding cache for a new agent.
-    await context.agents.addProvider(
-        provider,
-        context.agentCache.grammarStore,
-        undefined,
-        context.agentGrammarRegistry,
-        useNFAGrammar,
-    );
-
-    await applyExplicitAgentState(context, provider, enable);
-
-    // Re-run collision detection now that a new agent has been installed.
-    // Degrade to warn — installing into a live session must never crash it.
-    try {
-        await runStaticCollisionDetection(context, true);
-    } catch (e) {
-        debugError(`Post-install collision detection failed: ${e}`);
-    }
-
-    const embeddingCachePath = getEmbeddingCachePath(context);
-    if (embeddingCachePath !== undefined) {
-        const unlock = await lockEmbeddingCacheDir(context);
-        try {
-            await saveActionEmbeddings(context, embeddingCachePath);
-        } finally {
-            if (unlock) {
-                await unlock();
-            }
-        }
-    }
+    // Record the newly-added agent(s) so a later load reconciles accurately
+    // (design §5, Model B).
+    addKnownAgents(context, provider.getAppAgentNames());
 
     // Sibling fan-out notification (design §5): surface a system message naming
-    // the agent and its resulting state so the change is visible, not silent.
+    // the agent and its resulting (config/manifest-derived) state.
     if (notify) {
-        emitAgentChangeNotification(context.clientIO, "add", provider, enable);
+        const name = provider.getAppAgentNames()[0];
+        emitAgentChangeNotification(
+            context.clientIO,
+            "add",
+            provider,
+            isAgentEnabled(context, name),
+        );
     }
 }
 
 /**
  * The {@link AppAgentHost.removeProvider} body (design §3.1): tear down a
  * previously-added provider by identity via the {@link AppAgentManager}
- * removeProvider primitive. Runs through the idle-gated applicator (design §7.1).
- * On a sibling fan-out (`notify`), surfaces a system message (design §5).
+ * removeProvider primitive, drop its persisted enable preference (explicit
+ * uninstall; design §5, Model B), and forget it from the known set. Runs through
+ * the idle-gated applicator (design §7.1). On a sibling fan-out (`notify`),
+ * surfaces a system message (design §5).
  */
 async function hostRemoveProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
     notify: boolean,
 ) {
+    const names = provider.getAppAgentNames();
+    // Capture the agent's schema names before removal so we can clear their
+    // persisted config entries afterward.
+    const schemaNames = context.agents
+        .getSchemaNames()
+        .filter((s) => names.includes(getAppAgentName(s)));
+
     await context.agents.removeProvider(
         provider,
         context.agentCache.grammarStore,
     );
+
+    dropAgentConfig(context, names, schemaNames);
+    removeKnownAgents(context, names);
+
     if (notify) {
-        emitAgentChangeNotification(context.clientIO, "remove", provider, false);
+        emitAgentChangeNotification(
+            context.clientIO,
+            "remove",
+            provider,
+            false,
+        );
     }
 }
 
@@ -965,8 +1055,8 @@ export async function initializeCommandHandlerContext(
         // Build the per-dispatcher AppAgentHost applicator (design §3.1, §7.1).
         // Its apply closures reach the fully-built `context`.
         const hostApplyFns: AppAgentHostApplyFns = {
-            applyAdd: (provider, enable, notify) =>
-                hostAddProvider(context, provider, enable, notify),
+            applyAdd: (provider, notify) =>
+                hostAddProvider(context, provider, notify),
             applyRemove: (provider, notify) =>
                 hostRemoveProvider(context, provider, notify),
         };
@@ -1006,6 +1096,11 @@ export async function initializeCommandHandlerContext(
             session.updateDefaultConfig(appAgentStateSettings);
         }
         await setAppAgentStates(context);
+
+        // Reconcile this session's known agent set against what is now available
+        // (design §5, Model B): report agents that appeared/disappeared while it
+        // was offline, and record the baseline for the next load.
+        reconcileKnownAgents(context);
         debug("Context initialized");
         return context;
     } catch (e) {
@@ -1400,6 +1495,10 @@ export async function setSessionOnCommandHandlerContext(
         context.logger,
     );
     await setAppAgentStates(context);
+    // Reconcile the newly-activated session's known agent set (design §5,
+    // Model B): switching to a session that was created/last-saved against a
+    // different available set reports the delta and re-baselines.
+    reconcileKnownAgents(context);
     context.translatorCache.clear();
 }
 

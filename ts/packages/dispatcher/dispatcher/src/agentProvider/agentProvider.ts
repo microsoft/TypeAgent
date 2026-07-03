@@ -36,11 +36,11 @@ export interface AppAgentProvider {
  */
 export interface AppAgentHost {
     /**
-     * Register a provider's agent into this dispatcher's live state. Unlike the
-     * old `installAppProvider`, the initial enabled state is NOT derived from
-     * session config; `enable` is applied explicitly (the source sets it per its
-     * policy — `true` for the issuing session, `false` for siblings; design §5).
-     * Asserts the single-agent invariant
+     * Register a provider's agent into this dispatcher's live state. The initial
+     * enabled state is derived from session config with the agent's manifest
+     * default as the fallback (design §5, Model B): an installed agent honors its
+     * manifest default just like a bundled agent, and a user's per-session
+     * `@config agent` override still wins. Asserts the single-agent invariant
      * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
      * be deferred until the session is idle.
      *
@@ -48,11 +48,7 @@ export interface AppAgentHost {
      * SIBLING; the dispatcher surfaces a system message naming the agent and its
      * resulting state. The issuing session passes `false` and reports inline.
      */
-    addProvider(
-        provider: AppAgentProvider,
-        enable: boolean,
-        notify?: boolean,
-    ): Promise<void>;
+    addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
 
     /**
      * Remove a previously-added provider from this dispatcher by provider
@@ -64,10 +60,7 @@ export interface AppAgentHost {
      * `notify` (design §5): when true (sibling fan-out), the dispatcher surfaces
      * a system message that the agent was uninstalled.
      */
-    removeProvider(
-        provider: AppAgentProvider,
-        notify?: boolean,
-    ): Promise<void>;
+    removeProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
 }
 
 /**

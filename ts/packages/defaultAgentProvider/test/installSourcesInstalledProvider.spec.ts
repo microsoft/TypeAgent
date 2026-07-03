@@ -383,7 +383,7 @@ describe("getDefaultAppAgentSource", () => {
 
 describe("AppAgentSource fan-out (design §4, §5)", () => {
     type HostCall =
-        | { op: "add"; name: string; enable: boolean; notify: boolean }
+        | { op: "add"; name: string; notify: boolean }
         | { op: "remove"; name: string; notify: boolean };
 
     function recordingHost(onAdd?: () => void): {
@@ -394,12 +394,11 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         return {
             calls,
             host: {
-                addProvider: async (p, enable, notify) => {
+                addProvider: async (p, notify) => {
                     onAdd?.();
                     calls.push({
                         op: "add",
                         name: p.getAppAgentNames()[0],
-                        enable,
                         notify: notify ?? false,
                     });
                 },
@@ -416,7 +415,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 
     const flush = () => new Promise((r) => setTimeout(r, 0));
 
-    it("install: issuing enabled+awaited, siblings disabled+notified", async () => {
+    it("install: issuing awaited+inline, siblings notified", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
@@ -432,13 +431,13 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         );
         await flush();
 
-        // Issuing session: enabled, not notified (reports inline).
+        // Issuing session: not notified (reports inline).
         expect(issuing.calls).toEqual([
-            { op: "add", name: "foo", enable: true, notify: false },
+            { op: "add", name: "foo", notify: false },
         ]);
-        // Sibling: disabled, notified.
+        // Sibling: notified.
         expect(sibling.calls).toEqual([
-            { op: "add", name: "foo", enable: false, notify: true },
+            { op: "add", name: "foo", notify: true },
         ]);
     });
 
@@ -472,7 +471,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 
         expect(issuing.calls).toHaveLength(1);
         expect(goodSibling.calls).toEqual([
-            { op: "add", name: "foo", enable: false, notify: true },
+            { op: "add", name: "foo", notify: true },
         ]);
         // The record is committed regardless of sibling failure.
         expect(readAgentsJson(instanceDir)!.agents.foo).toBeDefined();
@@ -527,7 +526,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         expect(gone.calls).toHaveLength(0);
     });
 
-    it("single client (web) degrades cleanly: issuing enabled, no siblings", async () => {
+    it("single client (web) degrades cleanly: issuing inline, no siblings", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const only = recordingHost();
@@ -539,11 +538,9 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
             only.host,
         );
         await flush();
-        // The single client is the issuing session: enabled, not notified, and
-        // there are no siblings to fan out to.
-        expect(only.calls).toEqual([
-            { op: "add", name: "foo", enable: true, notify: false },
-        ]);
+        // The single client is the issuing session: not notified (reports
+        // inline), and there are no siblings to fan out to.
+        expect(only.calls).toEqual([{ op: "add", name: "foo", notify: false }]);
     });
 
     it("update fans out remove-then-add per client (issuing + sibling)", async () => {
@@ -567,18 +564,18 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         await flush();
 
         // Every session sees remove BEFORE add (no coexistence); issuing gets
-        // enabled+no-notify, sibling gets disabled+notify.
+        // no-notify (inline), sibling gets notify.
         expect(issuing.calls).toEqual([
             { op: "remove", name: "foo", notify: false },
-            { op: "add", name: "foo", enable: true, notify: false },
+            { op: "add", name: "foo", notify: false },
         ]);
         expect(sibling.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
-            { op: "add", name: "foo", enable: false, notify: true },
+            { op: "add", name: "foo", notify: true },
         ]);
     });
 
-    it("vends installed agents disabled by default (design §5)", async () => {
+    it("vends installed agents honoring their manifest default (Model B, design §5)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
@@ -597,7 +594,13 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
             p.getAppAgentNames().includes("foo"),
         )!;
         const manifest = await provider.getAppAgentManifest("foo");
-        expect(manifest.defaultEnabled).toBe(false);
+        // The source no longer forces installed agents off: the manifest default
+        // is passed through unchanged (Model B), so this test agent — which sets
+        // no enable defaults — is left undefined rather than forced to false.
+        expect(manifest.defaultEnabled).toBeUndefined();
+        expect(manifest.schemaDefaultEnabled).toBeUndefined();
+        expect(manifest.commandDefaultEnabled).toBeUndefined();
+        expect(manifest.emojiChar).toBe("🧪");
         conn.dispose();
     });
 });

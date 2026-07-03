@@ -10,7 +10,10 @@ import {
 } from "../src/context/appAgentHost.js";
 import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
-import { emitAgentChangeNotification } from "../src/context/commandHandlerContext.js";
+import {
+    emitAgentChangeNotification,
+    reconcileKnownAgents,
+} from "../src/context/commandHandlerContext.js";
 
 // A single-agent provider stub (the shape the source vends).
 function fakeProvider(name: string): AppAgentProvider {
@@ -61,21 +64,19 @@ describe("AppAgentHostApplicator", () => {
 
         // update = remove-then-add, enqueued back-to-back.
         const removeP = host.removeProvider(p);
-        const addP = host.addProvider(p, true);
+        const addP = host.addProvider(p);
         await Promise.all([removeP, addP]);
 
         expect(order).toEqual(["remove:foo", "add:foo"]);
     });
 
-    it("threads enable + notify through to the apply functions", async () => {
+    it("threads notify through to the apply functions", async () => {
         const seen: {
-            enable?: boolean;
             addNotify?: boolean;
             removeNotify?: boolean;
         } = {};
         const apply: AppAgentHostApplyFns = {
-            applyAdd: async (_p, enable, notify) => {
-                seen.enable = enable;
+            applyAdd: async (_p, notify) => {
                 seen.addNotify = notify;
             },
             applyRemove: async (_p, notify) => {
@@ -83,10 +84,9 @@ describe("AppAgentHostApplicator", () => {
             },
         };
         const host = new AppAgentHostApplicator(createLimiter(1), apply);
-        await host.addProvider(fakeProvider("foo"), false, true);
+        await host.addProvider(fakeProvider("foo"), true);
         await host.removeProvider(fakeProvider("foo"), true);
         expect(seen).toEqual({
-            enable: false,
             addNotify: true,
             removeNotify: true,
         });
@@ -105,7 +105,7 @@ describe("AppAgentHostApplicator", () => {
         const host = new AppAgentHostApplicator(createLimiter(1), apply);
 
         let ackResolved = false;
-        const ack = host.addProvider(fakeProvider("foo"), true).then(() => {
+        const ack = host.addProvider(fakeProvider("foo")).then(() => {
             ackResolved = true;
         });
 
@@ -137,7 +137,7 @@ describe("AppAgentHostApplicator", () => {
             await busy.promise;
         });
 
-        const ack = host.addProvider(fakeProvider("foo"), true);
+        const ack = host.addProvider(fakeProvider("foo"));
         await tick();
         // The session is busy, so the op must not have applied yet.
         expect(added).toBe(false);
@@ -195,7 +195,7 @@ describe("AppAgentHostApplicator", () => {
         host.dispose();
 
         await expect(
-            host.addProvider(fakeProvider("foo"), false),
+            host.addProvider(fakeProvider("foo")),
         ).resolves.toBeUndefined();
         await expect(
             host.removeProvider(fakeProvider("foo")),
@@ -227,7 +227,7 @@ describe("AppAgentHostApplicator", () => {
         host.dispose();
         host.dispose();
         await expect(
-            host.addProvider(fakeProvider("late"), false),
+            host.addProvider(fakeProvider("late")),
         ).resolves.toBeUndefined();
         expect(calls).toBe(0);
         expect(host.isClosed).toBe(true);
@@ -243,7 +243,7 @@ describe("AppAgentHostApplicator", () => {
         });
 
         await expect(
-            host.addProvider(fakeMultiProvider("foo", "bar"), true),
+            host.addProvider(fakeMultiProvider("foo", "bar")),
         ).rejects.toThrow(/single-agent provider/i);
         // The invariant fails before the op is ever applied.
         expect(addCalls).toBe(0);
@@ -256,9 +256,9 @@ describe("AppAgentHostApplicator", () => {
             },
             applyRemove: async () => {},
         });
-        await expect(
-            host.addProvider(fakeProvider("foo"), true),
-        ).rejects.toThrow(/collision/);
+        await expect(host.addProvider(fakeProvider("foo"))).rejects.toThrow(
+            /collision/,
+        );
     });
 
     it("propagates applyRemove errors to the ack (symmetric to add)", async () => {
@@ -438,7 +438,7 @@ describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
         };
     }
 
-    it("a fanned-out install to a sibling reports disabled + how to enable", () => {
+    it("a fanned-out add to a sibling reports disabled + how to enable", () => {
         const { messages, clientIO } = captureClientIO();
         emitAgentChangeNotification(
             clientIO,
@@ -447,17 +447,17 @@ describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
             false,
         );
         expect(messages).toEqual([
-            "Agent 'foo' was installed (disabled here; `@config agent foo` to enable).",
+            "Agent 'foo' was added — disabled (`@config agent foo` to enable).",
         ]);
     });
 
     it("an enabled add reports plainly (no config hint)", () => {
         const { messages, clientIO } = captureClientIO();
         emitAgentChangeNotification(clientIO, "add", fakeProvider("foo"), true);
-        expect(messages).toEqual(["Agent 'foo' was installed."]);
+        expect(messages).toEqual(["Agent 'foo' was added — enabled."]);
     });
 
-    it("a fanned-out uninstall reports removal", () => {
+    it("a fanned-out remove reports removal", () => {
         const { messages, clientIO } = captureClientIO();
         emitAgentChangeNotification(
             clientIO,
@@ -465,6 +465,106 @@ describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
             fakeProvider("foo"),
             false,
         );
-        expect(messages).toEqual(["Agent 'foo' was uninstalled."]);
+        expect(messages).toEqual(["Agent 'foo' was removed."]);
+    });
+});
+
+describe("reconcileKnownAgents (load-time reconciliation, §5 Model B)", () => {
+    function makeContext(opts: {
+        available: string[];
+        known: string[] | undefined;
+        // Agents considered "enabled" for the notification wording.
+        enabled?: string[];
+    }) {
+        const enabled = new Set(opts.enabled ?? opts.available);
+        const messages: string[] = [];
+        let saved: string[] | undefined;
+        const context = {
+            agents: {
+                getAppAgentNames: () => opts.available,
+                isCommandEnabled: (name: string) => enabled.has(name),
+                getSchemaNames: () => [] as string[],
+                isSchemaEnabled: () => false,
+            },
+            session: {
+                getKnownAgents: () => opts.known,
+                setKnownAgents: (names: readonly string[]) => {
+                    saved = [...names];
+                },
+            },
+            clientIO: {
+                notify: (
+                    _requestId: unknown,
+                    _event: unknown,
+                    message: string,
+                ) => {
+                    messages.push(message);
+                },
+            },
+        } as any;
+        return { context, messages, getSaved: () => saved };
+    }
+
+    it("records a silent baseline when no known set exists", () => {
+        const { context, messages, getSaved } = makeContext({
+            available: ["browser", "email"],
+            known: undefined,
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual([]);
+        expect(getSaved()).toEqual(["browser", "email"]);
+    });
+
+    it("reports an agent that appeared while offline (enabled)", () => {
+        const { context, messages, getSaved } = makeContext({
+            available: ["browser", "email"],
+            known: ["browser"],
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual(["Agent set changed: email added — enabled."]);
+        expect(getSaved()).toEqual(["browser", "email"]);
+    });
+
+    it("reports an appeared agent as disabled with how-to-enable", () => {
+        const { context, messages } = makeContext({
+            available: ["browser", "email"],
+            known: ["browser"],
+            enabled: ["browser"],
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual([
+            "Agent set changed: email added — disabled (`@config agent email` to enable).",
+        ]);
+    });
+
+    it("reports an agent that disappeared while offline", () => {
+        const { context, messages, getSaved } = makeContext({
+            available: ["browser"],
+            known: ["browser", "email"],
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual(["Agent set changed: email removed."]);
+        expect(getSaved()).toEqual(["browser"]);
+    });
+
+    it("summarizes mixed add + remove in a single message", () => {
+        const { context, messages } = makeContext({
+            available: ["browser", "player"],
+            known: ["browser", "email"],
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual([
+            "Agent set changed: player added — enabled; email removed.",
+        ]);
+    });
+
+    it("stays silent (but re-baselines) when nothing changed", () => {
+        const { context, messages, getSaved } = makeContext({
+            available: ["browser", "email"],
+            known: ["browser", "email"],
+        });
+        reconcileKnownAgents(context);
+        expect(messages).toEqual([]);
+        expect(getSaved()).toEqual(["browser", "email"]);
     });
 });

@@ -29,19 +29,13 @@ type QueuedOp = {
  * isolation (queue ordering, ack timing, idle-gating, dispose auto-ack).
  */
 export type AppAgentHostApplyFns = {
-    // Register a provider's single agent with the given initial enabled state.
+    // Register a provider's single agent; its enabled state is derived from
+    // session config with the manifest default as fallback (design §5, Model B).
     // `notify` requests a sibling-fan-out system message (design §5).
-    applyAdd: (
-        provider: AppAgentProvider,
-        enable: boolean,
-        notify: boolean,
-    ) => Promise<void>;
+    applyAdd: (provider: AppAgentProvider, notify: boolean) => Promise<void>;
     // Unload a previously-added provider by identity. `notify` requests a
     // sibling-fan-out system message (design §5).
-    applyRemove: (
-        provider: AppAgentProvider,
-        notify: boolean,
-    ) => Promise<void>;
+    applyRemove: (provider: AppAgentProvider, notify: boolean) => Promise<void>;
 };
 
 /**
@@ -76,7 +70,6 @@ export class AppAgentHostApplicator implements AppAgentHost {
 
     public addProvider(
         provider: AppAgentProvider,
-        enable: boolean,
         notify: boolean = false,
     ): Promise<void> {
         // Assert the single-agent invariant at the add boundary (design §3.1,
@@ -91,9 +84,7 @@ export class AppAgentHostApplicator implements AppAgentHost {
                 ),
             );
         }
-        return this.enqueue("add", () =>
-            this.apply.applyAdd(provider, enable, notify),
-        );
+        return this.enqueue("add", () => this.apply.applyAdd(provider, notify));
     }
 
     public removeProvider(

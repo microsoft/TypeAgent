@@ -152,32 +152,6 @@ export function getDefaultAppAgentSource(
 }
 
 /**
- * Wrap a provider so its agents are DISABLED by default in every session
- * (design §5). Installed agents are off until explicitly enabled: the issuing
- * session enables one at install (explicitly), and any other/late-connecting
- * session leaves it off until the user runs `@config agent`. All four
- * enable-default manifest fields are forced to `false` so an installed agent
- * cannot silently turn itself on in a session the user did not intend (a user's
- * per-session `@config agent` override still wins — config takes precedence over
- * the manifest default).
- */
-function withDisabledByDefault(provider: AppAgentProvider): AppAgentProvider {
-    return {
-        ...provider,
-        getAppAgentManifest: async (name: string) => {
-            const manifest = await provider.getAppAgentManifest(name);
-            return {
-                ...manifest,
-                defaultEnabled: false,
-                schemaDefaultEnabled: false,
-                actionDefaultEnabled: false,
-                commandDefaultEnabled: false,
-            };
-        },
-    };
-}
-
-/**
  * Per-name lifecycle entry for a dynamic (installed) agent (design §7.2). A name
  * is either `active` (installed and vended) or `removing` (draining across the
  * connected sessions before the name is freed / reused). No two versions of a
@@ -252,17 +226,14 @@ export function createDefaultInstalledAgentSource(
     function buildProviderFor(
         records: Record<string, InstalledAgentRecord>,
     ): AppAgentProvider {
-        const provider = createInstalledAppAgentProvider(records, {
+        // Installed agents honor their manifest default just like bundled agents
+        // (design §5, Model B): the register-time state derivation uses
+        // `config[name] ?? manifestDefault`, and a user's explicit per-session
+        // `@config agent` override still wins.
+        return createInstalledAppAgentProvider(records, {
             ...(installDir !== undefined ? { installDir } : {}),
             appBundleRequirePath,
         });
-        // Installed agents are DISABLED by default in every session (design §5):
-        // only the issuing session enables one (explicitly, at install), and any
-        // other/late-connecting session registers it off until the user runs
-        // `@config agent`. Force the manifest default to false so both the
-        // register-time state derivation and the session config's default land
-        // on "off" (a user's explicit per-session enable in config still wins).
-        return withDisabledByDefault(provider);
     }
 
     // Builtins are the app's shipped bundled agents (their own static
@@ -295,7 +266,7 @@ export function createDefaultInstalledAgentSource(
         };
     }
 
-    // Build the shared, tombstoned, disabled-by-default provider for a record.
+    // Build the shared, tombstoned provider for a record (design §5, §7.3).
     function buildAgentProvider(
         name: string,
         record: InstalledAgentRecord,
@@ -421,9 +392,11 @@ export function createDefaultInstalledAgentSource(
     }
 
     // Fan out an add to every connected session (design §4, §5): the ISSUING
-    // session is awaited (errors surface to the user) and enabled; every SIBLING
-    // is best-effort/async (applied at its next idle), disabled, and notified —
-    // a throw is caught and logged per client, never failing the committed op.
+    // session is awaited (errors surface to the user) and reports inline; every
+    // SIBLING is best-effort/async (applied at its next idle) and notified with
+    // a system message. Each session derives the agent's enabled state from its
+    // own config with the manifest default as fallback (Model B). A sibling
+    // throw is caught and logged per client, never failing the committed op.
     async function fanOutAdd(
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
@@ -432,11 +405,11 @@ export function createDefaultInstalledAgentSource(
             if (host === issuingHost) {
                 continue;
             }
-            host.addProvider(provider, false, true).catch((e) => {
+            host.addProvider(provider, true).catch((e) => {
                 debug(`sibling addProvider failed: ${e}`);
             });
         }
-        await issuingHost.addProvider(provider, true, false);
+        await issuingHost.addProvider(provider, false);
     }
 
     const source: InstalledAgentSourceApi = {

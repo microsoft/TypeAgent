@@ -145,3 +145,50 @@
 
 
 
+
+## Post-M5 — Enable-state redesign ("Model B", §5)
+
+The M1–M5 `withDisabledByDefault` + explicit-`enable` policy (installed agents
+forced off, issuing session forced on) was reworked after review. Symptom: the
+issuing session's install-enable was applied live but **not persisted**, while
+`withDisabledByDefault` forced the manifest default to false — so any later
+`setAppAgentStates` (any `@config`, a slow-agent schema-ready refresh, session
+reload, or restart) recomputed the agent to `config[foo] ?? false = disabled`,
+silently turning a just-installed agent off. That is a regression vs. today
+(manifest default true → agents stay on).
+
+**Decision (Model B), approved by the user ("agree with the sub-decision; the
+table looks right; implement and update the design doc"):**
+
+- **Honor the manifest default.** Remove `withDisabledByDefault`; installed
+  agents derive state from `config[name] ?? manifestDefault` like bundled agents.
+  `AppAgentHost.addProvider` drops the `enable` param (keeps only `notify`).
+- **Persist enable state** (already true via `@config` → `updateSettings`);
+  honoring the manifest default removes the clobber without an explicit persist.
+- **"No surprise" via notification, not forcing-off.** Issuing conversation:
+  inline result. Every other affected conversation: a system message (live
+  siblings now; offline conversations on next open).
+- **Load-time reconciliation** (`reconcileKnownAgents`, §5). Each session
+  persists a `knownAgents` set; on load / session-switch it reports agents that
+  appeared (added — enabled/disabled) or disappeared (removed) while offline,
+  batched into one message. First load with no baseline is a silent baseline
+  (covers brand-new sessions and the first load after upgrade). Also covers a
+  new build changing **static** (bundled/mcp) agents.
+- **Sub-decision — removal disposition.** Reconciliation-removal leaves the
+  session's enable preference **dormant** (config entry stays, inert while the
+  agent is absent); explicit `@uninstall` **drops** the config entry so a fresh
+  reinstall starts clean from the manifest default.
+
+**Files:** `session.ts` (persisted `knownAgents` + get/set); `agentProvider.ts`
++ `appAgentHost.ts` (`addProvider(provider, notify?)`, `applyAdd(provider,
+notify)`); `commandHandlerContext.ts` (`hostAddProvider` = `installAppProvider` +
+mark-known + notify; `hostRemoveProvider` drops config + unmarks known;
+`emitAgentChangeNotification` reworded; new `reconcileKnownAgents` called at init
++ `setSessionOnCommandHandlerContext`; `applyExplicitAgentState` deleted);
+`defaultAgentProviders.ts` (`withDisabledByDefault` removed; `fanOutAdd` siblings
+`addProvider(p, true)`, issuing `addProvider(p, false)`).
+
+**Green:** dispatcher full suite (1009, +6 reconciliation tests) +
+default-agent-provider install-sources (153) + packageAgent (11) + appAgentHost
+(25, +6 reconciliation, notification wording updated). Layering unchanged
+(agent-dispatcher never imports default-agent-provider).
