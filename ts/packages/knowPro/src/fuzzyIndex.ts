@@ -320,6 +320,15 @@ export class TextEmbeddingIndex {
     }
 
     /**
+     * True when an embedding model is available. When false, this index
+     * silently no-ops indexing and returns no matches on lookup, allowing
+     * self-host deployments without an embedding provider to keep working.
+     */
+    public get isEmbeddingEnabled(): boolean {
+        return this.settings.embeddingModel !== undefined;
+    }
+
+    /**
      * Convert text into embeddings and add them to the internal index.
      * This can throw
      * @param textToIndex
@@ -327,6 +336,9 @@ export class TextEmbeddingIndex {
     public async addText(
         textToIndex: string | string[],
     ): Promise<ListIndexingResult> {
+        if (this.settings.embeddingModel === undefined) {
+            return { numberCompleted: 0 };
+        }
         return addTextToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -346,6 +358,9 @@ export class TextEmbeddingIndex {
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
     ): Promise<ListIndexingResult> {
+        if (this.settings.embeddingModel === undefined) {
+            return { numberCompleted: 0 };
+        }
         return addTextBatchToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -364,6 +379,9 @@ export class TextEmbeddingIndex {
         maxMatches?: number,
         minScore?: number,
     ): Promise<Scored[]> {
+        if (this.settings.embeddingModel === undefined) {
+            return [];
+        }
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
         return indexOfNearestTextInIndex(
@@ -380,6 +398,9 @@ export class TextEmbeddingIndex {
         maxMatches?: number,
         minScore?: number,
     ): Promise<Scored[][]> {
+        if (this.settings.embeddingModel === undefined) {
+            return [];
+        }
         maxMatches ??= this.settings.maxMatches;
         minScore ??= this.settings.minScore;
         return indexesOfNearestTextBatchInIndex(
@@ -417,7 +438,7 @@ export function deserializeEmbedding(array: number[]): NormalizedEmbedding {
 }
 
 export type TextEmbeddingIndexSettings = {
-    embeddingModel: TextEmbeddingModel;
+    embeddingModel: TextEmbeddingModel | undefined;
     embeddingSize: number;
     minScore: number;
     maxMatches?: number | undefined;
@@ -427,7 +448,7 @@ export type TextEmbeddingIndexSettings = {
 };
 
 export function createTextEmbeddingIndexSettings(
-    embeddingModel: TextEmbeddingModel,
+    embeddingModel: TextEmbeddingModel | undefined,
     embeddingSize: number,
     minScore?: number,
     maxMatches?: number,

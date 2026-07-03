@@ -64,6 +64,9 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         text: string,
         textLocation: TextLocation,
     ): Promise<ListIndexingResult> {
+        if (this.settings.embeddingModel === undefined) {
+            return { numberCompleted: 0 };
+        }
         const result = await addTextToEmbeddingIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -80,6 +83,9 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         eventHandler?: IndexingEventHandlers,
         batchSize?: number,
     ): Promise<ListIndexingResult> {
+        if (this.settings.embeddingModel === undefined) {
+            return { numberCompleted: 0 };
+        }
         const indexingEvents = createMessageIndexingEventHandler(
             textAndLocations,
             eventHandler,
@@ -106,6 +112,9 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredTextLocation[]> {
+        if (this.settings.embeddingModel === undefined) {
+            return [];
+        }
         const matches = await indexOfNearestTextInIndex(
             this.embeddingIndex,
             this.settings.embeddingModel,
@@ -136,6 +145,9 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<ScoredTextLocation[]> {
+        if (this.settings.embeddingModel === undefined) {
+            return [];
+        }
         const matches = await indexOfNearestTextInIndexSubset(
             this.embeddingIndex,
             this.settings.embeddingModel,

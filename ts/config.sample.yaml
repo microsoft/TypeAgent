@@ -232,6 +232,30 @@ reasoning:
   copilotModel: claude-sonnet-4.5 # override default Copilot reasoning model
 
 # ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Embedding provider                                              ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Selects where text embeddings come from, independent of the chat
+# `modelProvider`. Useful for self-host: e.g. route chat through Copilot
+# while still producing embeddings from a bundled CPU-only local model.
+#
+#   provider:
+#     local  - CPU-only transformers.js model (no GPU, no API key). Weights
+#              download from the Hugging Face hub on first use and are cached.
+#     openai - use the `openAI.endpointEmbedding` / `modelEmbedding` above.
+#     azure  - use the `azureOpenAI` embedding deployment.
+#     none   - disable embeddings; embedding-dependent features degrade
+#              gracefully (see the self-host docs).
+#
+# When omitted, the provider is inferred from the configured embedding
+# endpoints (openAI/azureOpenAI), or disabled if none is present.
+
+embedding:
+  provider: local
+  model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
+  # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
+
+# ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║
 # ╚═══════════════════════════════════════════════════════════════════╝
 #

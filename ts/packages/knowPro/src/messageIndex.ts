@@ -31,6 +31,7 @@ export interface IMessageTextIndexData {
 
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
     readonly size: number;
+    readonly isEmbeddingEnabled?: boolean;
     generateEmbedding(text: string): Promise<NormalizedEmbedding>;
     lookupByEmbedding(
         textEmbedding: NormalizedEmbedding,
@@ -57,6 +58,17 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
 
     public get size(): number {
         return this.textLocationIndex.size;
+    }
+
+    /**
+     * True only when an embedding model is available. When false, message
+     * semantic search is disabled and callers fall back to non-embedding
+     * ranking (see isMessageTextEmbeddingIndex and search.ts).
+     */
+    public get isEmbeddingEnabled(): boolean {
+        return (
+            this.settings.embeddingIndexSettings.embeddingModel !== undefined
+        );
     }
 
     public addMessages(
@@ -117,10 +129,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
 
     public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
         // Note: if you rename generateEmbedding, be sure to also fix isMessageTextEmbeddingIndex
-        return generateEmbeddingWithRetry(
-            this.settings.embeddingIndexSettings.embeddingModel,
-            text,
-        );
+        const embeddingModel =
+            this.settings.embeddingIndexSettings.embeddingModel;
+        if (embeddingModel === undefined) {
+            throw new Error(
+                "Message text embedding index is disabled (no embedding model configured)",
+            );
+        }
+        return generateEmbeddingWithRetry(embeddingModel, text);
     }
 
     public lookupByEmbedding(
@@ -236,6 +252,7 @@ export function isMessageTextEmbeddingIndex(
     return (
         textIndex.generateEmbedding !== undefined &&
         textIndex.lookupByEmbedding !== undefined &&
-        textIndex.lookupInSubsetByEmbedding !== undefined
+        textIndex.lookupInSubsetByEmbedding !== undefined &&
+        (textIndex.isEmbeddingEnabled ?? true)
     );
 }

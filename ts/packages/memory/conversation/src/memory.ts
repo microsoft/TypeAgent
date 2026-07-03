@@ -14,7 +14,7 @@ import { createEmbeddingModelWithCache } from "./common.js";
 
 export interface MemorySettings {
     languageModel: ChatModel;
-    embeddingModel: TextEmbeddingModelWithCache;
+    embeddingModel: TextEmbeddingModelWithCache | undefined;
     embeddingSize: number;
     conversationSettings: kp.ConversationSettings;
     queryTranslator?: kp.SearchQueryTranslator | undefined;
@@ -248,8 +248,10 @@ export abstract class Memory<
         this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
             this.settings.languageModel,
         );
-        this.settings.embeddingModel.getPersistentCache = () =>
-            this.getPersistentEmbeddingCache();
+        if (this.settings.embeddingModel !== undefined) {
+            this.settings.embeddingModel.getPersistentCache = () =>
+                this.getPersistentEmbeddingCache();
+        }
 
         this.addStandardNoiseTerms();
     }
@@ -583,12 +585,16 @@ export abstract class Memory<
         // Turn off caching during indexing because:
         // - LRU caches will not be useful
         // - Any persistent caches will be rebuilt anyway
-        this.settings.embeddingModel.cacheEnabled = false;
+        if (this.settings.embeddingModel !== undefined) {
+            this.settings.embeddingModel.cacheEnabled = false;
+        }
     }
 
     protected endIndexing(): void {
         // See note in beginIndexing for why this was turned off during indexing
-        this.settings.embeddingModel.cacheEnabled = true;
+        if (this.settings.embeddingModel !== undefined) {
+            this.settings.embeddingModel.cacheEnabled = true;
+        }
     }
 
     public getModelInstructions(): PromptSection[] | undefined {

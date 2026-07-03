@@ -36,7 +36,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { createSemanticMap } from "typeagent";
-import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 
 const debug = registerDebug("typeagent:agent:montage");
 
@@ -370,9 +373,11 @@ async function updateMontageContext(
             }
         }
 
-        // create the embedding model for fuzzy matching
+        // create the embedding model for fuzzy matching (undefined when no
+        // embedding provider is configured; fuzzy match then degrades to
+        // exact-title matching).
         if (!agentContext.fuzzyMatchingModel) {
-            agentContext.fuzzyMatchingModel = openai.createEmbeddingModel();
+            agentContext.fuzzyMatchingModel = tryCreateEmbeddingModel();
         }
     } else {
         // shut down service
