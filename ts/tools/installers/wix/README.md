@@ -207,11 +207,11 @@ During an **interactive** install the MSI shows a provider-selection dialog
 / None), and an Ollama host field. The same choices can be driven **silently**
 through public properties:
 
-| Property     | Values                            | Default                   | Notes |
-|--------------|-----------------------------------|---------------------------|-------|
-| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`  | `AISYSTEMS`               | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault). |
-| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                 | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
-| `OLLAMAHOST` | any URL                           | `http://localhost:11434`  | Ollama base URL (used for `OLLAMA` chat and/or embeddings). |
+| Property     | Values                              | Default                  | Notes                                                                           |
+| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
+| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
+| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
 
 ```powershell
 # AI Systems (default) — provisions via az login + getKeys after install

@@ -266,9 +266,7 @@ async function cmdProvision() {
         );
         // Forward provider + all generator options; drop launcher-only flags.
         const drop = new Set(["--port"]);
-        const passthrough = process.argv
-            .slice(3)
-            .filter((a) => !drop.has(a));
+        const passthrough = process.argv.slice(3).filter((a) => !drop.has(a));
         return runInline(generateConfigEntry, passthrough);
     }
 

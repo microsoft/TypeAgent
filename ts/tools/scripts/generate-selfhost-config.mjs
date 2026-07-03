@@ -78,10 +78,7 @@ function resolveOutPath() {
         return path.resolve(process.env.TYPEAGENT_CONFIG_LOCAL);
     }
     if (process.env.TYPEAGENT_CONFIG_DIR) {
-        return path.join(
-            process.env.TYPEAGENT_CONFIG_DIR,
-            "config.local.yaml",
-        );
+        return path.join(process.env.TYPEAGENT_CONFIG_DIR, "config.local.yaml");
     }
     return path.resolve(__dirname, "../../config.local.yaml");
 }
@@ -194,8 +191,7 @@ function buildConfigTree(options) {
             openAI.apiKey ??= "sk-REPLACE_ME";
             openAI.endpointEmbedding =
                 embeddingEndpoint || "https://api.openai.com/v1/embeddings";
-            openAI.modelEmbedding =
-                embeddingModel || "text-embedding-3-small";
+            openAI.modelEmbedding = embeddingModel || "text-embedding-3-small";
             embeddingSection.provider = "openai";
             break;
         case "none":
@@ -285,9 +281,7 @@ function main() {
             `  Prereq: 'ollama serve' running with the '${options.chatModel || DEFAULT_OLLAMA_CHAT_MODEL}' model pulled.`,
         );
     } else {
-        console.log(
-            "  Prereq: an authenticated 'copilot' CLI (github login).",
-        );
+        console.log("  Prereq: an authenticated 'copilot' CLI (github login).");
     }
     if (embedding === "local") {
         console.log(
