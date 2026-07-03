@@ -88,6 +88,20 @@ jobs:
           else
             npm run lint
           fi
+      # Complexity gate (PRs only): the files this PR changes may not add
+      # functions over the cyclomatic/cognitive budget versus the base branch
+      # (a stateless ratchet — the base branch is the baseline, so the count
+      # can only trend down), and any brand-new file is additionally held to a
+      # hard cap.  Tune the thresholds down as hotspots get refactored.
+      - name: Complexity ratchet
+        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        shell: bash
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
+            --cyclomatic 25 --cognitive 30 \
+            --new-file-cyclomatic 25 --new-file-cognitive 30
       - name: Restore better-sqlite3 for Node.js
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts

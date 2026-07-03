@@ -37,12 +37,22 @@
  *   --top <n>          Number of worst offenders to print / embed (default 25).
  *   --root <path>      Directory to scan (default: the ts/ root).
  *   --out-dir <path>   Output directory (default tools/scripts/code/complexity-report).
+ *   --ratchet          CI gate: exit non-zero if the files changed since
+ *                      --base contain more over-budget functions than they did
+ *                      at the merge base. The base branch is the baseline (no
+ *                      baseline file), so the count only ratchets down.
+ *   --base <ref>       Base git ref for --ratchet (default origin/main).
+ *   --new-file-cyclomatic <n>  With --ratchet, fail if any function in a newly
+ *                      added file exceeds cyclomatic <n> (0 = off, default).
+ *   --new-file-cognitive <n>   Same, for cognitive complexity.
  *   --help             Show this help.
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { ESLint, Linter } from "eslint";
 import tseslint from "typescript-eslint";
 
@@ -108,6 +118,10 @@ interface Options {
     cyclomaticBudget: number;
     cognitiveBudget: number;
     top: number;
+    ratchet: boolean;
+    base: string;
+    newCyclomaticCap: number;
+    newCognitiveCap: number;
     help: boolean;
 }
 
@@ -126,6 +140,10 @@ function parseArgs(argv: string[]): Options {
         cyclomaticBudget: 10,
         cognitiveBudget: 15,
         top: 25,
+        ratchet: false,
+        base: "origin/main",
+        newCyclomaticCap: 0,
+        newCognitiveCap: 0,
         help: false,
     };
 
@@ -161,6 +179,24 @@ function parseArgs(argv: string[]): Options {
                 break;
             case "--top":
                 opts.top = parseIntArg(arg, next);
+                i++;
+                break;
+            case "--ratchet":
+                opts.ratchet = true;
+                break;
+            case "--base":
+                if (next === undefined) {
+                    throw new Error(`${arg} requires a git ref`);
+                }
+                opts.base = next;
+                i++;
+                break;
+            case "--new-file-cyclomatic":
+                opts.newCyclomaticCap = parseIntArg(arg, next);
+                i++;
+                break;
+            case "--new-file-cognitive":
+                opts.newCognitiveCap = parseIntArg(arg, next);
                 i++;
                 break;
             case "--root":
@@ -205,6 +241,13 @@ Options:
   --top <n>          Number of worst offenders to print / embed (default 25).
   --root <path>      Directory to scan (default: the ts/ root).
   --out-dir <path>   Output directory (default: tools/scripts/code/complexity-report).
+  --ratchet          CI gate: fail if changed files add complexity vs --base.
+  --base <ref>       Base git ref for --ratchet (default origin/main).
+  --new-file-cyclomatic <n>
+                     With --ratchet, fail if any function in a NEW file exceeds
+                     cyclomatic <n> (0 = disabled, the default).
+  --new-file-cognitive <n>
+                     Same, for cognitive complexity.
   --help             Show this help.`;
 
 // ---------------------------------------------------------------------------
@@ -247,15 +290,12 @@ async function loadSonar(): Promise<unknown> {
     }
 }
 
-async function analyze(opts: Options): Promise<AnalysisResult> {
-    const started = Date.now();
-    const sonar = await loadSonar();
-
-    const ignores = [...IGNORE_DIRS, ...IGNORE_FILES];
-    if (!opts.includeTests) {
-        ignores.push(...TEST_GLOBS);
-    }
-
+/** Build the throwaway flat config used purely to harvest metrics. */
+function buildComplexityConfig(
+    sonar: unknown,
+    useIgnores: boolean,
+    includeTests: boolean,
+): Linter.Config[] {
     // The core `complexity` rule reports when complexity > max, and the minimum
     // complexity of any function is 1. max:0 therefore flags every function so
     // we capture the whole distribution, not just the ones over some limit.
@@ -268,39 +308,40 @@ async function analyze(opts: Options): Promise<AnalysisResult> {
         rules["sonarjs/cognitive-complexity"] = ["warn", 0];
     }
 
-    const eslint = new ESLint({
-        cwd: opts.root,
-        errorOnUnmatchedPattern: false,
-        // Ignore any eslint config in the repo; use only what we define here.
-        overrideConfigFile: true,
-        overrideConfig: [
-            { ignores },
-            {
-                files: [SOURCE_GLOB],
-                languageOptions: {
-                    parser: tseslint.parser as unknown as Linter.Parser,
-                    parserOptions: {
-                        ecmaVersion: "latest",
-                        sourceType: "module",
-                        ecmaFeatures: { jsx: true },
-                    },
-                },
-                plugins,
-                rules,
+    const config: Linter.Config[] = [];
+    if (useIgnores) {
+        const ignores = [...IGNORE_DIRS, ...IGNORE_FILES];
+        if (!includeTests) {
+            ignores.push(...TEST_GLOBS);
+        }
+        config.push({ ignores } as Linter.Config);
+    }
+    config.push({
+        files: [SOURCE_GLOB],
+        languageOptions: {
+            parser: tseslint.parser as unknown as Linter.Parser,
+            parserOptions: {
+                ecmaVersion: "latest",
+                sourceType: "module",
+                ecmaFeatures: { jsx: true },
             },
-        ],
+        },
+        plugins,
+        rules,
     });
+    return config;
+}
 
-    const results = await eslint.lintFiles([SOURCE_GLOB]);
-
+/** Turn ESLint results into FuncRecords, keyed relative to `cwd`. */
+function parseEslintResults(
+    results: ESLint.LintResult[],
+    cwd: string,
+): { functions: FuncRecord[]; parseErrorFiles: number } {
     const functions: FuncRecord[] = [];
     let parseErrorFiles = 0;
 
     for (const res of results) {
-        const rel = path
-            .relative(opts.root, res.filePath)
-            .split(path.sep)
-            .join("/");
+        const rel = path.relative(cwd, res.filePath).split(path.sep).join("/");
 
         // Collect cognitive complexity keyed by the function's start line so we
         // can attach it to the matching cyclomatic record below.
@@ -340,9 +381,48 @@ async function analyze(opts: Options): Promise<AnalysisResult> {
         }
     }
 
+    return { functions, parseErrorFiles };
+}
+
+interface LintOutput {
+    functions: FuncRecord[];
+    parseErrorFiles: number;
+    filesAnalyzed: number;
+}
+
+/** Run ESLint over `patterns` (globs or explicit paths) relative to `cwd`. */
+async function lintToFunctions(
+    cwd: string,
+    patterns: string[],
+    sonar: unknown,
+    useIgnores: boolean,
+    includeTests: boolean,
+): Promise<LintOutput> {
+    const eslint = new ESLint({
+        cwd,
+        errorOnUnmatchedPattern: false,
+        // Ignore any eslint config in the repo; use only what we define here.
+        overrideConfigFile: true,
+        overrideConfig: buildComplexityConfig(sonar, useIgnores, includeTests),
+    });
+    const results = await eslint.lintFiles(patterns);
+    const { functions, parseErrorFiles } = parseEslintResults(results, cwd);
+    return { functions, parseErrorFiles, filesAnalyzed: results.length };
+}
+
+async function analyze(opts: Options): Promise<AnalysisResult> {
+    const started = Date.now();
+    const sonar = await loadSonar();
+    const { functions, parseErrorFiles, filesAnalyzed } = await lintToFunctions(
+        opts.root,
+        [SOURCE_GLOB],
+        sonar,
+        true,
+        opts.includeTests,
+    );
     return {
         functions,
-        filesAnalyzed: results.length,
+        filesAnalyzed,
         parseErrorFiles,
         cognitiveEnabled: sonar !== undefined,
         elapsedMs: Date.now() - started,
@@ -733,6 +813,278 @@ function sortTable(id, col, numeric) {
 }
 
 // ---------------------------------------------------------------------------
+// Ratchet (CI gate)
+// ---------------------------------------------------------------------------
+
+// Path predicates mirroring the ESLint ignores above, for filtering the raw
+// file list that `git diff` returns.
+const SOURCE_EXT_RE = /\.[cm]?[jt]sx?$/;
+const IGNORE_PATH_RE =
+    /(^|\/)(node_modules|dist|build|out|coverage|bin|obj|\.turbo|\.next|bundle)\//;
+const GENERATED_FILE_RE = /(\.d\.ts|\.min\.js|\.bundle\.js)$/;
+const TEST_PATH_RE =
+    /(^|\/)(test|tests|__tests__)\/|\.(spec|test)\.[cm]?[jt]sx?$/;
+
+const EMPTY_LINT: LintOutput = {
+    functions: [],
+    parseErrorFiles: 0,
+    filesAnalyzed: 0,
+};
+
+function isReportableSource(relPath: string, includeTests: boolean): boolean {
+    if (!SOURCE_EXT_RE.test(relPath)) {
+        return false;
+    }
+    if (IGNORE_PATH_RE.test(relPath) || GENERATED_FILE_RE.test(relPath)) {
+        return false;
+    }
+    if (!includeTests && TEST_PATH_RE.test(relPath)) {
+        return false;
+    }
+    return true;
+}
+
+function git(args: string[], cwd: string): string {
+    return execFileSync("git", args, {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: 128 * 1024 * 1024,
+    });
+}
+
+interface DiffEntry {
+    head: string; // path in HEAD
+    base: string | null; // path at the merge base, or null if newly added
+}
+
+/** Parse `git diff --name-status -M` into HEAD/base path pairs. */
+function parseNameStatus(raw: string): DiffEntry[] {
+    const entries: DiffEntry[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+        if (!line) {
+            continue;
+        }
+        const parts = line.split("\t");
+        const status = parts[0];
+        if (status.startsWith("R") || status.startsWith("C")) {
+            entries.push({ base: parts[1], head: parts[2] }); // rename/copy
+        } else if (status === "A") {
+            entries.push({ base: null, head: parts[1] }); // added
+        } else if (status === "D") {
+            continue; // deleted in HEAD — nothing to lint
+        } else {
+            entries.push({ base: parts[1], head: parts[1] }); // modified, etc.
+        }
+    }
+    return entries;
+}
+
+function countOver(
+    functions: FuncRecord[],
+    opts: Options,
+): { overCyclomatic: number; overCognitive: number } {
+    return {
+        overCyclomatic: functions.filter(
+            (f) => f.cyclomatic > opts.cyclomaticBudget,
+        ).length,
+        overCognitive: functions.filter(
+            (f) => f.cognitive > opts.cognitiveBudget,
+        ).length,
+    };
+}
+
+/**
+ * Compare the files changed since --base against their content at the merge
+ * base. Fails (exit 1) if the changed files contain more over-budget functions
+ * than they did before, so complexity in touched code can only ratchet down.
+ * There is no committed baseline: the base branch itself is the baseline.
+ * Returns the desired process exit code.
+ */
+async function runRatchet(opts: Options): Promise<number> {
+    let repoRoot: string;
+    let mergeBase: string;
+    try {
+        repoRoot = git(["rev-parse", "--show-toplevel"], opts.root).trim();
+        mergeBase = git(["merge-base", opts.base, "HEAD"], opts.root).trim();
+    } catch {
+        console.error(
+            `Ratchet: could not resolve base ref "${opts.base}" via git. ` +
+                "Pass --base <ref> (e.g. origin/main) and ensure it is fetched.",
+        );
+        return 2;
+    }
+
+    const entries = parseNameStatus(
+        git(["diff", "--name-status", "-M", mergeBase, "HEAD"], opts.root),
+    ).filter((e) => {
+        if (!isReportableSource(e.head, opts.includeTests)) {
+            return false;
+        }
+        const relToRoot = path.relative(
+            opts.root,
+            path.resolve(repoRoot, e.head),
+        );
+        return !relToRoot.startsWith("..") && !path.isAbsolute(relToRoot);
+    });
+
+    if (entries.length === 0) {
+        console.log("Ratchet: no changed source files to check. OK.");
+        return 0;
+    }
+
+    const sonar = await loadSonar();
+
+    // HEAD side: the changed files as they are in the working tree.
+    const headPaths = entries
+        .map((e) => path.resolve(repoRoot, e.head))
+        .filter((p) => fs.existsSync(p));
+    const head = headPaths.length
+        ? await lintToFunctions(
+              repoRoot,
+              headPaths,
+              sonar,
+              false,
+              opts.includeTests,
+          )
+        : EMPTY_LINT;
+
+    // BASE side: the same files' content at the merge base, materialized into a
+    // temp dir so we compare like-for-like without any committed baseline.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "complexity-base-"));
+    let base: LintOutput = EMPTY_LINT;
+    try {
+        const basePaths: string[] = [];
+        for (const e of entries) {
+            if (!e.base || !isReportableSource(e.base, opts.includeTests)) {
+                continue;
+            }
+            let content: string;
+            try {
+                content = git(["show", `${mergeBase}:${e.base}`], repoRoot);
+            } catch {
+                continue; // not present at the base
+            }
+            const dest = path.join(tmp, e.base);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.writeFileSync(dest, content, "utf8");
+            basePaths.push(dest);
+        }
+        if (basePaths.length) {
+            base = await lintToFunctions(
+                tmp,
+                basePaths,
+                sonar,
+                false,
+                opts.includeTests,
+            );
+        }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    const headOver = countOver(head.functions, opts);
+    const baseOver = countOver(base.functions, opts);
+    const dCyc = headOver.overCyclomatic - baseOver.overCyclomatic;
+    const dCog = headOver.overCognitive - baseOver.overCognitive;
+    const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+    console.log("");
+    console.log(
+        `Ratchet vs ${opts.base} (merge-base ${mergeBase.slice(0, 9)}): ` +
+            `${entries.length} changed source file(s).`,
+    );
+    console.log(
+        `  Over cyclomatic ${opts.cyclomaticBudget}: ` +
+            `${fmt(baseOver.overCyclomatic)} -> ${fmt(headOver.overCyclomatic)} ` +
+            `(${sign(dCyc)})`,
+    );
+    if (sonar) {
+        console.log(
+            `  Over cognitive ${opts.cognitiveBudget}: ` +
+                `${fmt(baseOver.overCognitive)} -> ${fmt(headOver.overCognitive)} ` +
+                `(${sign(dCog)})`,
+        );
+    }
+
+    // Absolute cap on brand-new files: they have no baseline to ratchet
+    // against, so hold them to a hard ceiling instead of just "no worse".
+    const newFiles = new Set(
+        entries.filter((e) => e.base === null).map((e) => e.head),
+    );
+    const capEnabled =
+        newFiles.size > 0 &&
+        (opts.newCyclomaticCap > 0 || opts.newCognitiveCap > 0);
+    const capViolations = capEnabled
+        ? head.functions
+              .filter(
+                  (f) =>
+                      newFiles.has(f.file) &&
+                      ((opts.newCyclomaticCap > 0 &&
+                          f.cyclomatic > opts.newCyclomaticCap) ||
+                          (opts.newCognitiveCap > 0 &&
+                              f.cognitive > opts.newCognitiveCap)),
+              )
+              .sort((a, b) => b.cyclomatic - a.cyclomatic)
+        : [];
+
+    if (capEnabled) {
+        const parts: string[] = [];
+        if (opts.newCyclomaticCap > 0) {
+            parts.push(`cyclomatic ${opts.newCyclomaticCap}`);
+        }
+        if (opts.newCognitiveCap > 0) {
+            parts.push(`cognitive ${opts.newCognitiveCap}`);
+        }
+        console.log(
+            `  New-file cap (${parts.join(", ")}): ${newFiles.size} new file(s), ` +
+                `${capViolations.length} function(s) over.`,
+        );
+    }
+
+    const printTable = (title: string, rows: FuncRecord[]): void => {
+        console.log("");
+        console.log(title);
+        console.log("   CC   Cog  Location");
+        for (const f of rows.slice(0, opts.top)) {
+            console.log(
+                `  ${String(f.cyclomatic).padStart(3)}  ${String(
+                    f.cognitive,
+                ).padStart(4)}  ${f.file}:${f.line}  ${f.name}`,
+            );
+        }
+    };
+
+    const regressed = dCyc > 0 || dCog > 0;
+
+    if (regressed) {
+        const offenders = head.functions
+            .filter(
+                (f) =>
+                    f.cyclomatic > opts.cyclomaticBudget ||
+                    f.cognitive > opts.cognitiveBudget,
+            )
+            .sort((a, b) => b.cyclomatic - a.cyclomatic);
+        printTable(
+            "Ratchet FAILED — reduce complexity in the changed files:",
+            offenders,
+        );
+    }
+
+    if (capViolations.length > 0) {
+        printTable(
+            "New-file cap FAILED — new files must be simpler than the cap:",
+            capViolations,
+        );
+    }
+
+    if (!regressed && capViolations.length === 0) {
+        console.log("Ratchet: OK — changed files did not add complexity.");
+        return 0;
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -740,6 +1092,11 @@ async function main(): Promise<void> {
     const opts = parseArgs(process.argv.slice(2));
     if (opts.help) {
         console.log(HELP);
+        return;
+    }
+
+    if (opts.ratchet) {
+        process.exitCode = await runRatchet(opts);
         return;
     }
 
