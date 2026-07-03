@@ -263,6 +263,14 @@ interface LintOutput {
     filesAnalyzed: number;
 }
 
+// CLI scripts and build/analysis tooling under tools/scripts write to stdout via
+// console by design, so `no-console` does not apply to them. The leading **/
+// keeps this matching whether ESLint's cwd is ts/ (report mode) or the repo root
+// (ratchet mode).
+const CONSOLE_ALLOWED_GLOBS = [
+    "**/tools/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+];
+
 function buildConfig(
     typeAware: boolean,
     useIgnores: boolean,
@@ -306,6 +314,11 @@ function buildConfig(
         },
         rules,
     });
+    // CLI/build scripts legitimately use console for their output.
+    config.push({
+        files: CONSOLE_ALLOWED_GLOBS,
+        rules: { "no-console": "off" },
+    } as Linter.Config);
     return config;
 }
 
