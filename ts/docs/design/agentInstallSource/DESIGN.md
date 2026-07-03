@@ -340,7 +340,7 @@ The installer is a thin wrapper over `registry.resolve(ref, sourceName)` plus wr
 
 ### 4.4 Provider (unchanged contract)
 
-The runtime `AppAgentProvider` contract (`getAppAgentNames` / `getAppAgentManifest` / `loadAppAgent` / `unloadAppAgent`) is unchanged. There is now exactly **one** instance of it for installed agents, backed by `createNpmAppAgentProvider` reading `agents.json`. Sources feed it; they do not replace it.
+The runtime `AppAgentProvider` contract (`getAppAgentNames` / `getAppAgentManifest` / `loadAppAgent` / `unloadAppAgent`) is unchanged. There is exactly **one** installed-agent `AppAgentProvider` presented to the dispatcher, backed by `agents.json`. Internally it is a small routing **facade** over one `createNpmAppAgentProvider` per module-resolution root (`installDir` for feed-installed modules, the app bundle for bundled-catalog modules; path records co-locate with the bundle) - a single root collapses to the one provider with no facade. The facade routes `getAppAgentManifest`/`loadAppAgent`/`unloadAppAgent` by agent name, unions `getAppAgentNames`, broadcasts `setTraceNamespaces`, and forwards the optional async-loading surface (`onSchemaReady` / `getLoadingAgentNames`) when a grouped provider implements it. Sources feed the record store; they do not replace the provider.
 
 ### 4.5 Library / host embedding boundary (unchanged)
 

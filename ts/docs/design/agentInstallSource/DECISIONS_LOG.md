@@ -28,6 +28,43 @@
 
 ## Entries
 
+### 2026-07-02 — Connected-provider plan: `AppAgentSource` + `AppAgentHost` (provider-based), disruptive lifecycle
+
+- **Milestone / item:** Forward-looking (connected-provider; not yet implemented)
+- **Type:** Deviation (reshapes the §4.3 installer + §4.4 single-provider model)
+- **Design ref:** §4.3, §4.4, §4.6/§4.7 — full design in [../connectedProvider/DESIGN.md](../connectedProvider/DESIGN.md)
+- **Decision:** A pending design replaces `AppAgentInstaller` with a host-owned
+  **`AppAgentSource`** the dispatcher `connect()`s to; the source vends **shared**
+  `AppAgentProvider` instances and fans install/uninstall out to every connected session
+  via a dispatcher-implemented **`AppAgentHost`** callback. Locked choices:
+  - **Option B (provider-based):** `AppAgentHost.addProvider(provider, enable)` /
+    `removeProvider(provider)` (by identity), reusing today's `installAppProvider`
+    registration path. Each installed agent is its **own single-agent provider**.
+  - **Disruptive / no coexistence:** agent state is keyed by name, so only one agent per
+    name runs at a time; a name is fully torn down before reuse.
+  - **Two-level lifecycle object:** an idle-gated FIFO `AppAgentHost` (applies at session
+    idle, resolves on ack) + a per-name `DynamicAgentEntry` state machine
+    (`active`/`removing`) in the source that drives fan-out, tracks per-session drain, and
+    gates name reuse during teardown.
+  - **`@package` moves out of core** entirely, contributed by the host as its **own app
+    agent** so its handlers never receive `CommandHandlerContext`.
+  - **Enable policy:** `addProvider(provider, enable)` takes an explicit `enable: boolean`;
+    the source enables on the **issuing** session and disables everywhere else. Siblings
+    surface a **system message** naming the added/removed agent and its state.
+  - **Reject on `removing`:** a user `@package install`/`update` on a name still draining is
+    rejected (retry after drain); only await the issuing session, siblings drain async.
+- **Rationale:** Fixes the multi-dispatcher live-propagation gap (an install in one
+  conversation never reaching siblings live) and removes the read/write two-interface
+  redundancy by making one owner **vend** the read provider. Option B chosen over a
+  single-live-provider (Option A) once coexistence was ruled out: B reuses the proven
+  registration path and **dissolves the module-resolution-root facade** (each agent is
+  single-root), which A would instead reabsorb into a new live provider.
+- **Design updated?** yes — [../connectedProvider/DESIGN.md](../connectedProvider/DESIGN.md).
+  This install-sources DESIGN.md is unchanged; the connected-provider work builds on it and
+  supersedes its §4.3 installer + §4.4 single-provider framing **when implemented**.
+- **Status:** plan only — not implemented. Phased: Phase 1 = layering (source / host /
+  context isolation, issuing-session only); Phase 2 = fan-out + cross-session enable policy.
+
 ### 2026-06-27 — Multi-root module resolution via a combine facade over one provider per root
 
 - **Milestone / item:** M2 / 2.1
@@ -37,14 +74,38 @@
   root (the install dir vs. the app bundle), builds one `createNpmAppAgentProvider` per
   group, and presents them through `combineAppAgentProviders` — a small facade that routes
   `getAppAgentManifest`/`loadAppAgent`/`unloadAppAgent` by agent name (pre-built
-  `owners` map for O(1) routing), unions `getAppAgentNames`, and broadcasts
-  `setTraceNamespaces`. Path records always resolve against the app bundle (their path is
-  absolute); module records probe each root via `createRequire(root).resolve(...)`.
+  `owners` map for O(1) routing), unions `getAppAgentNames`, broadcasts
+  `setTraceNamespaces`, and forwards the optional async-loading surface
+  (`onSchemaReady` / `getLoadingAgentNames`) when a grouped provider implements it. Path
+  records always resolve against the app bundle (their path is absolute); module records
+  probe each root via `createRequire(root).resolve(...)`.
 - **Rationale:** A single `createRequire` root cannot resolve modules installed under a
   separate install dir _and_ modules bundled with the app. The design's "single installed
   provider" intent is preserved because the facade exposes exactly one `AppAgentProvider`
   to the dispatcher; the multi-root split is an internal detail (Q20).
-- **Design updated?** no (resolution detail consistent with §4.1/§6)
+- **Design updated?** yes — [DESIGN.md](./DESIGN.md) §4.4 now describes the installed
+  provider as a routing facade over one `createNpmAppAgentProvider` per module-resolution
+  root (was "exactly one instance backed by `createNpmAppAgentProvider`").
+- **Reconciled 2026-07-02 (optional-surface forwarding):** The facade now forwards
+  `onSchemaReady` / `getLoadingAgentNames` (present only when a grouped provider implements
+  them), not just the read + `setTraceNamespaces` methods. Today's grouped providers are all
+  synchronous `createNpmAppAgentProvider` (neither method), so this is inert now, but it
+  keeps the facade correct if a root provider ever loads async — notably under the pending
+  **connected-provider** design, which promotes `onSchemaReady`/`getLoadingAgentNames` (and
+  a new `connect`) to first-class provider surface.
+- **Note (connected-provider boundary):** the facade is a pure ROUTING layer and stays that
+  way. The connected-provider `connect` seam (client registry + install fan-out) is a
+  separate concern that must wrap the installed provider from the OUTSIDE — the same builder
+  (`createInstalledAppAgentProvider`) also produces the STATIC bundled provider, which must
+  never fan out, so connectability cannot live inside this shared facade.
+- **Superseded-by-plan 2026-07-02 (connected-provider, Option B):** the pending
+  connected-provider design ([../connectedProvider/DESIGN.md](../connectedProvider/DESIGN.md))
+  **dissolves** this facade — each installed agent becomes its own single-agent, single-root
+  `AppAgentProvider`, and the dispatcher's `AppAgentManager` routes across them (as it already
+  does for `[bundled, MCP]`). `combineAppAgentProviders` and the runtime multi-root routing go
+  away; only per-agent root resolution (at install time) survives, and the optional-surface
+  forwarding above becomes moot (the manager handles per-provider optional methods). This
+  entry stays current for the **shipped** install-sources implementation until that work lands.
 
 ### 2026-06-27 — Legacy migration skips names already seeded by a builtin
 

@@ -7,6 +7,7 @@ import path from "node:path";
 import {
     createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
+    combineAppAgentProviders,
     getAppBundleRequirePath,
     readAgentsJson,
 } from "../src/installSources/installedAgents.js";
@@ -15,6 +16,7 @@ import {
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
 import { InstalledAgentRecord } from "../src/installSources/config.js";
+import { AppAgentProvider } from "agent-dispatcher";
 
 function tmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -162,6 +164,71 @@ describe("createInstalledAppAgentProvider", () => {
         // bundled module still resolves from the app bundle root
         const bundledManifest = await provider.getAppAgentManifest("player");
         expect(bundledManifest).toBeDefined();
+    });
+});
+
+describe("combineAppAgentProviders optional-surface forwarding", () => {
+    // Minimal fake provider. The manifest/load paths are never exercised by
+    // these routing tests, so they reject if called.
+    function fakeProvider(
+        names: string[],
+        extra?: Partial<AppAgentProvider>,
+    ): AppAgentProvider {
+        return {
+            getAppAgentNames: () => names,
+            getAppAgentManifest: () => Promise.reject(new Error("unused")),
+            loadAppAgent: () => Promise.reject(new Error("unused")),
+            unloadAppAgent: () => Promise.resolve(),
+            ...extra,
+        };
+    }
+
+    it("omits onSchemaReady/getLoadingAgentNames when no grouped provider has them", () => {
+        const combined = combineAppAgentProviders([
+            fakeProvider(["a"]),
+            fakeProvider(["b"]),
+        ]);
+        expect(combined.getAppAgentNames().sort()).toEqual(["a", "b"]);
+        expect(combined.onSchemaReady).toBeUndefined();
+        expect(combined.getLoadingAgentNames).toBeUndefined();
+    });
+
+    it("registers a single onSchemaReady callback with every async provider and unions getLoadingAgentNames", () => {
+        const registeredWithA: unknown[] = [];
+        const registeredWithB: unknown[] = [];
+        const combined = combineAppAgentProviders([
+            fakeProvider(["a"], {
+                onSchemaReady: (cb) => registeredWithA.push(cb),
+                getLoadingAgentNames: () => ["a"],
+            }),
+            fakeProvider(["b"], {
+                onSchemaReady: (cb) => registeredWithB.push(cb),
+                getLoadingAgentNames: () => ["b"],
+            }),
+        ]);
+        expect(combined.getLoadingAgentNames?.().sort()).toEqual(["a", "b"]);
+        const callback = () => undefined;
+        combined.onSchemaReady?.(callback);
+        // the one caller callback fans out to BOTH grouped providers
+        expect(registeredWithA).toEqual([callback]);
+        expect(registeredWithB).toEqual([callback]);
+    });
+
+    it("exposes the optional method when only some providers implement it", () => {
+        const combined = combineAppAgentProviders([
+            fakeProvider(["a"], { getLoadingAgentNames: () => ["a"] }),
+            fakeProvider(["b"]),
+        ]);
+        expect(combined.getLoadingAgentNames?.()).toEqual(["a"]);
+        expect(combined.onSchemaReady).toBeUndefined();
+    });
+
+    it("returns the sole provider unchanged (preserving its optional surface) for one input", () => {
+        const only = fakeProvider(["a"], {
+            onSchemaReady: () => undefined,
+            getLoadingAgentNames: () => [],
+        });
+        expect(combineAppAgentProviders([only])).toBe(only);
     });
 });
 

@@ -1,8 +1,9 @@
 # Connected AppAgent Provider — Design Doc
 
 > Status: **Proposal / for iteration**
-> Scope: `ts/packages/dispatcher` (provider interface, the dispatcher-side
-> "client" callback that registers/unregisters live agents, removal of the
+> Scope: `ts/packages/dispatcher` (a new `AppAgentSource` connection interface
+> whose `connect()` vends shared `AppAgentProvider`s, the dispatcher-side
+> `AppAgentHost` callback that registers/unregisters live agents, removal of the
 > `AppAgentInstaller` interface and the four core `@package` handlers),
 > `ts/packages/defaultAgentProvider` (host-owned `@package` command surface,
 > install-record store, source taxonomy, fan-out), and the host wiring in
@@ -44,9 +45,11 @@ Two problems motivate this revision:
 2. **Two interfaces describe one thing.** A read-provider and a write-installer
    that refer to the same set of agents are redundant. Install/uninstall state
    (the `agents.json` record store) lives on the installer; the agents it
-   produces are read through the provider. Collocating both — plus the
-   `@package` grammar that mutates them — in one object is simpler and puts the
-   command surface where the state it mutates lives.
+   produces are read through the provider. The fix is a single *owner* — the
+   record store, the `@package` grammar that mutates it, and the connection
+   lifecycle live together — that **vends** the read `AppAgentProvider` rather
+   than sitting beside it as a second, independently-injected interface. This is
+   *vend-not-merge*: the read contract stays a separate, pure interface (§2).
 
 > Out of scope: the source taxonomy (path / catalog / feed), the registry, feed
 > auth, `npm install`, record shapes, and `@package source`. All of that is
@@ -54,48 +57,110 @@ Two problems motivate this revision:
 
 ## 2. The core idea
 
-**A provider is not a passive table the dispatcher reads. It is a service that
-multiple dispatchers _connect_ to. The provider owns the set of agents and the
-operations that mutate it; each connected dispatcher exposes a narrow callback
-the provider uses to register/unregister agents into that dispatcher's live
-state.**
+**The dynamic agent set is owned by a host-side `AppAgentSource`, not injected
+as a passive provider. A dispatcher _connects_ to the source; `connect()` vends
+the (shared) `AppAgentProvider` instances the dispatcher registers, and hands the
+source a narrow callback (`AppAgentHost`) it uses to register/unregister agents
+into that dispatcher's live state as the set changes. Static providers (bundled,
+MCP) stay plain `AppAgentProvider`s, injected exactly as today.**
 
 ```mermaid
 flowchart TB
     subgraph host["default-agent-provider (shared library)"]
-        prov["AppAgentProvider<br/>(owns agents.json + @package + client registry)"]
+        svc["AppAgentSource<br/>(owns agents.json + @package + client registry)"]
+        prov["AppAgentProvider(s)<br/>(shared instances, vended by connect)"]
         reg[(install records<br/>agents.json)]
-        prov --- reg
+        svc --- reg
+        svc -- vends --> prov
     end
-    cmd["@package install/uninstall/update<br/>(host-owned command handlers)"] --> prov
-    prov -- "addAppAgent / removeAppAgent" --> d1["Dispatcher A<br/>(conversation A)"]
-    prov -- "addAppAgent / removeAppAgent" --> d2["Dispatcher B<br/>(conversation B)"]
-    prov -- "addAppAgent / removeAppAgent" --> d3["Dispatcher C<br/>(web client)"]
-    d1 -. "connect(client) / disconnect(client)" .-> prov
-    d2 -. connect/disconnect .-> prov
-    d3 -. connect/disconnect .-> prov
+    cmd["@package install/uninstall/update<br/>(host-owned @package agent)"] --> svc
+    svc -- "addProvider / removeProvider" --> d1["Dispatcher A<br/>(conversation A)"]
+    svc -- "addProvider / removeProvider" --> d2["Dispatcher B<br/>(conversation B)"]
+    svc -- "addProvider / removeProvider" --> d3["Dispatcher C<br/>(web client)"]
+    d1 -. "connect(host) -> { providers, dispose }" .-> svc
+    d2 -. connect .-> svc
+    d3 -. connect .-> svc
 ```
 
 Consequences of this framing:
 
-- **`AppAgentInstaller` is removed.** Its `install` / `uninstall` / `update` move
-  into host-owned `@package` command handlers; its `listInstalled` /
-  `listSources` / `listAvailable` / `sourceCommands` accessors are already
-  host-rendered and simply stay in the host.
+- **`AppAgentInstaller` is replaced by `AppAgentSource`.** The dispatcher-facing
+  surface is just `connect()`; `install` / `uninstall` / `update` are **not**
+  dispatcher-driven — they move into the host's `@package` command handlers and
+  run against the source directly. `listInstalled` / `listSources` /
+  `listAvailable` / `sourceCommands` are already host-rendered and stay in the
+  host.
+- **Static vs dynamic is a *type* distinction.** Plain read providers implement
+  `AppAgentProvider` (unchanged, no `connect`); the dynamic set is an
+  `AppAgentSource`. The dispatcher statically knows which fans out, so a static
+  provider can never be asked to (this closes old Q3).
+- **The provider instances are SHARED across sessions.** `connect()` returns the
+  *same* provider instance(s) to every dispatcher, so the loaded `AppAgent`
+  instance is shared (refcounted in the provider) across all connected
+  sessions — exactly how the base providers are shared today. `connect` adds a
+  fan-out subscriber; it does not clone agents per session.
 - **The four core `@package` handlers are removed** from the dispatcher. The host
-  contributes the **entire** `@package` table (today it contributes only
-  `@package source`), built in the shared `default-agent-provider` library so
-  every host composes/extends one implementation rather than re-implementing it.
-- **The dispatcher exposes a small client interface** (`AppAgentHost`, §3) with
-  exactly the two operations the provider needs: register a now-available agent,
-  and unregister a now-gone one. These are the existing `installAppProvider` /
-  `AppAgentManager.removeAgent` bodies, surfaced as a supported callback.
+  contributes the **entire** `@package` table as its **own app agent** (§3.4),
+  built in the shared `default-agent-provider` library.
+- **Install/uninstall move agents by `AppAgentProvider`** (Option B). Each
+  installed agent is its **own single-agent provider**, resolved to one
+  module-root at install time - so there is no multi-root facade, and the
+  dispatcher's `AppAgentManager` routes across them exactly as it already does
+  for `[bundled, MCP]`.
+- **The dispatcher exposes a small callback** (`AppAgentHost`, §3.1) with two
+  operations the source needs: `addProvider` (register a provider - the
+  `installAppProvider` wrapper body) and `removeProvider` (drop it - **new work**:
+  today's `removeAgent` is name-based and does not track/drop a provider, so
+  `removeProvider` derives the name(s) via `getAppAgentNames()`, calls
+  `removeAgent` per name, and drops the provider's records). `AppAgentProvider`
+  is already public host API; `AppAgentHost` is its dual. The callback is
+  **provider-only** (not name+provider): under Option B name↔provider is 1:1 and
+  the name is already held by both sides (source: the §7.2 tracker key;
+  dispatcher: `getAppAgentNames()`), so threading a redundant `name` would create
+  a second source of truth. The dispatcher instead **asserts the single-agent
+  invariant** (`getAppAgentNames().length === 1`) at `addProvider`.
 - **Install fans out.** A `@package install` resolves + writes the record once,
-  then the provider calls `addAppAgent(name)` on **every** connected dispatcher.
+  then the source calls `addProvider(P)` on **every** connected dispatcher.
   The multi-dispatcher gap (§1.1) closes by construction.
-- **Each dispatcher decides enable-state locally** (§5). The provider says "this
+- **Disruptive / no coexistence.** Agent state (SessionContext, storage) is keyed
+  by agent name, so only one agent per name runs at a time. install / uninstall /
+  update never overlap two versions of a name; a name is fully torn down before
+  it is reused, coordinated by the lifecycle tracker (§7).
+- **Each dispatcher decides enable-state locally** (§5). The source says "this
   agent now exists"; whether it is on or off in a given session is the
   dispatcher's policy, driven by session config.
+
+## Phasing: settle the layering (P2) before the semantics (P1)
+
+This is delivered in two phases so the ownership boundary is right *before* the
+multi-dispatcher behavior is added. (P1/P2 name the two problems in §1: P1 = the
+propagation defect, P2 = the two-interfaces redundancy.)
+
+**Phase 1 - layering.** Move the entire `@package` surface into the host, remove
+`AppAgentInstaller`, and stand up the seams that let host code mutate a
+dispatcher's live session in a *supported* way:
+
+- `AppAgentHost` (§3.1) plus the `connect()` handoff (§3.2), and
+- command-handler **context isolation** (§3.4) so host handlers never receive the
+  dispatcher's `CommandHandlerContext`.
+
+In Phase 1, install/uninstall/update call `addProvider`/`removeProvider` on the
+**issuing** session only - today's live behavior, just relocated out of core. No
+sibling fan-out (§4), no cross-session enable policy (§5), no fan-out failure
+semantics (§7).
+
+Because one provider instance is shared across N dispatchers (§1.1), the client
+**registry** of connected `AppAgentHost`s is *layering*, not fan-out: each
+dispatcher must register its own handle for the provider to reach the right
+session at all. Phase 1 builds `connect()` and the registry, but the issuing
+session is reached through the package agent's own `agentContext` (§3.4), so no
+registry lookup sits on the issuing path.
+
+**Phase 2 - propagation.** Flip "issuing session only" to "iterate the registry"
+(§4 fan-out) and add the cross-session enable policy (§5), the connection
+lifecycle edge cases (§6), and the fan-out failure semantics (§7). This is where
+the §1.1 defect is actually closed; it is a localized change to the single call
+site Phase 1 leaves pointed at one session.
 
 ## 3. Interfaces
 
@@ -106,32 +171,56 @@ _only_ surface the provider uses to mutate live dispatcher state; the provider
 never reaches into grammars, collision detection, or the embedding cache.
 
 ```ts
-// Implemented by the dispatcher (one per CommandHandlerContext).
+// Implemented by the dispatcher (one per CommandHandlerContext). The source
+// holds one per connected session and calls it to fan out install/uninstall.
 export interface AppAgentHost {
-  // Register a newly-available agent into this dispatcher's live state.
-  // Body is today's installAppProvider(): addProvider -> setAppAgentStates ->
-  // collision detection (degraded to warning) -> embedding-cache save.
-  // `enable` carries the per-session default-enable policy (§5).
-  addAppAgent(name: string, enable: AgentEnablePolicy): Promise<void>;
+  // Register a provider's agent into this dispatcher's live state. Body is the
+  // installAppProvider() wrapper (commandHandlerContext.ts): appAgentManager
+  // .addProvider -> collision detection (degraded to warning) -> embedding-cache
+  // save. NOTE: unlike today's installAppProvider, state is NOT derived from
+  // session config via setAppAgentStates/computeStateChange; `enable` is applied
+  // explicitly. `enable` is the agent's initial enabled state in THIS session -
+  // the source sets it per its policy (true for the issuing session, false for
+  // siblings; §5). Asserts the single-agent invariant
+  // (provider.getAppAgentNames().length === 1). Resolves when APPLIED (the ack
+  // the lifecycle tracker waits on, §7) - may be deferred until the session is
+  // idle.
+  addProvider(provider: AppAgentProvider, enable: boolean): Promise<void>;
 
-  // Tear down a now-gone agent. Body is today's AppAgentManager.removeAgent():
-  // drop schemas/grammars, close any live SessionContext, unload from provider.
-  removeAppAgent(name: string): Promise<void>;
+  // Remove a previously-added provider from this dispatcher: unload its agent,
+  // drop schemas/grammars/embeddings, close any live SessionContext, and drop
+  // the provider's records. By provider IDENTITY - the source passes back the
+  // exact instance it added, so there is no name lookup at the boundary and no
+  // empty-provider cruft. Internally derives the name(s) via getAppAgentNames()
+  // and calls the existing name-based removeAgent per name (NEW work: removeAgent
+  // today neither tracks nor drops the provider).
+  removeProvider(provider: AppAgentProvider): Promise<void>;
 }
 ```
 
-> Note: `addAppAgent`/`removeAppAgent` already exist as the function bodies
-> `installAppProvider` ([commandHandlerContext.ts](../../../packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts))
-> and `AppAgentManager.removeAgent`
-> ([appAgentManager.ts](../../../packages/dispatcher/dispatcher/src/context/appAgentManager.ts)).
-> This design promotes them from an internal one-shot call into a named,
-> awaitable client API. No new heavy machinery is introduced.
+> Note: install/uninstall move agents **by `AppAgentProvider`** (Option B) - the
+> dispatcher's existing hosting API. `installAppProvider` already registers a
+> provider; this promotes it, plus a symmetric `removeProvider`, into a supported
+> awaitable callback. Chosen over a name-based `addAgent(name)`/`removeAgent(name)`
+> variant (Option A - see §9) because it reuses the proven registration path and
+> lets each installed agent be its **own single-root provider**, dissolving the
+> module-resolution-root facade. `AppAgentProvider` is already public host API;
+> `AppAgentHost` is its dual - what the dispatcher hands the source.
+>
+> Why not `addProvider(name, provider)` (both)? Rejected as redundant: with the
+> single-agent invariant the name is `getAppAgentNames()[0]` and is already held
+> on both sides (source tracker key + dispatcher-derived), so a second copy only
+> invites divergence. A name-carrying callback only earns its keep for future
+> **multi-agent dynamic providers** (§9 pro 11 / MCP hot-reload), where one
+> provider maps to N names; that is out of scope here.
 
-### 3.2 `AppAgentProvider` — gains a connection lifecycle
+### 3.2 `AppAgentProvider` (unchanged) and the new `AppAgentSource`
+
+`AppAgentProvider` stays a **pure read contract** — no `connect`, no lifecycle.
+Bundled and MCP providers implement only this, exactly as today:
 
 ```ts
 export interface AppAgentProvider {
-  // --- unchanged read surface ---
   getAppAgentNames(): string[];
   getAppAgentManifest(appAgentName: string): Promise<AppAgentManifest>;
   loadAppAgent(appAgentName: string): Promise<AppAgent>;
@@ -139,53 +228,142 @@ export interface AppAgentProvider {
   setTraceNamespaces?(namespaces: string): void;
   onSchemaReady?: (cb: (name: string, m: AppAgentManifest) => void) => void;
   getLoadingAgentNames?(): string[];
+}
+```
 
-  // --- new: connection lifecycle (optional; static providers omit it) ---
-  // The dispatcher registers itself as a client at context init and
-  // deregisters at teardown. A provider with no connect() is a plain static
-  // table (today's behavior) and never fans out.
-  connect?(host: AppAgentHost): AppAgentConnection;
+The **dynamic** set (installed agents) is a separate `AppAgentSource`. The
+dispatcher-facing surface is just `connect()`; the concrete host object also
+carries the write/command surface (`install` / `uninstall` / `update` /
+`packageCommands`), but the dispatcher is handed only the narrow `connect` view,
+so it can never drive an install. (`packageCommands` is the whole `@package`
+table and supersedes the old `AppAgentInstaller.sourceCommands()`, which returned
+only the `@source` subtable; that subtable is now nested under `@package source`,
+§3.3.)
+
+```ts
+// Dispatcher-facing: a source of app agents that participates in a session's
+// lifecycle. Injected (as `appAgentSources`) alongside the static
+// `appAgentProviders`.
+export interface AppAgentSource {
+  // Called once per dispatcher at context init. Returns the provider(s) this
+  // source contributes to THIS session, plus a teardown handle. The source
+  // records `host` for fan-out (§4).
+  connect(host: AppAgentHost): AppAgentConnection;
 }
 
-// Returned by connect(); the dispatcher calls dispose() on teardown so the
-// provider stops fanning out to a dead dispatcher (§6).
 export interface AppAgentConnection {
+  // The provider instance(s) to register into the connecting dispatcher via the
+  // normal addProvider path. These are SHARED singletons owned by the source:
+  // every connect() returns the same instance(s), so a loaded AppAgent is shared
+  // (refcounted) across all connected sessions rather than cloned per session.
+  readonly providers: AppAgentProvider[];
+  // Deregisters THIS host from the source's fan-out registry. It does NOT tear
+  // down the shared providers (other sessions still use them); the dispatcher
+  // unregisters them from its own AppAgentManager as part of context teardown.
   dispose(): void;
 }
 ```
 
+**Why shared, not per-session:** a single agent process/module should back all
+conversations, not spin up one copy per session. The provider already refcounts
+loaded agents (`createNpmAppAgentProvider`), so sharing the provider instance
+across connections yields one `AppAgent` instance loaded on first use and
+unloaded when the last session releases it — the base-provider behavior today,
+now the rule for the installed source too.
+
 ### 3.3 What the host owns
 
 `default-agent-provider` already owns the record store and `@package source`.
-It now also owns:
+The `AppAgentSource` now also owns:
 
+- The **installed providers** it vends from `connect()`: one single-agent
+  `AppAgentProvider` per installed agent, each resolved to a single module-root
+  at install time (no facade). Shared instances - the same object is vended to
+  every session, refcounted. NOTE: this is a change from today's startup path,
+  which builds a *single multi-root* `createInstalledAppAgentProvider(records)`
+  over all `agents.json` records (only `install()` already returns a per-agent
+  provider). The source must vend per-agent providers on connect, not the
+  multi-root one.
 - The full `@package` command table (`install` / `uninstall` / `update` /
-  `list` / `source`), exported from the shared library so each host composes it.
+  `list` / `source`), contributed as its own app agent (§3.4), so each host
+  composes one implementation.
 - The **fan-out**: after a successful record-store mutation, iterate the
-  connected clients and call `addAppAgent` / `removeAppAgent`.
-- The client **registry**: the set of currently-connected `AppAgentHost`s.
+  connected clients and call `addProvider` / `removeProvider`.
+- The client **registry** and the per-name **lifecycle tracker** (§7) that
+  coordinates idle-gated fan-out and gates name reuse during teardown.
 
 The dispatcher core keeps **none** of the `@package` grammar and **no** install
-interface — only `AppAgentHost` (which it implements) and the `connect?` hook it
-calls on each provider.
+interface — only `AppAgentHost` (which it implements) and the `connect()` call it
+makes on each injected `AppAgentSource`.
+
+### 3.4 Command-handler context isolation (host commands run as their own agent)
+
+Host-contributed command handlers must **not** receive the dispatcher's
+`CommandHandlerContext`. Today they do, in practice: `getSystemHandlers()` merges
+the host's `@package source` table into the **system agent's** command table, so
+at execution time a handler's `ActionContext.sessionContext.agentContext` *is*
+the dispatcher's `CommandHandlerContext` — only *typed* `unknown`
+(`ActionContext<unknown>`). A host handler can cast it back and reach dispatcher
+internals (the `AppAgentManager`, grammars, embedding caches). That is a layering
+leak, and it widens as the host owns more of `@package`.
+
+The fix uses isolation the dispatcher **already enforces per agent**. Command
+routing binds every command to its owning agent's context: `resolveCommand`
+picks `actualAppAgentName` from the leading token, and `executeCommand` builds
+the `ActionContext` from `agents.getSessionContext(actualAppAgentName)` — so
+`@browser …` runs with the browser agent's `agentContext` and never sees
+another agent's. `@package` leaks only because it is grafted onto the **system**
+agent instead of being an agent of its own.
+
+So: **the host contributes its `@package` surface as its own app agent, not as a
+subtree of the system agent.** Consequences:
+
+- `@package …` resolves to the package agent, and its
+  `ActionContext.sessionContext.agentContext` is the **host's own** context
+  object, created by the host. The dispatcher never hands it
+  `CommandHandlerContext`. No new gate is required — the existing "an agent only
+  sees its own `agentContext`" invariant does the enforcement, and the leak
+  closes *structurally* rather than by an `unknown` type the host could cast
+  through.
+- Everything a host handler legitimately needs is already reachable without
+  `CommandHandlerContext`: user I/O via `ActionContext.actionIO`
+  (display/status), and the record store / registry via the host's own closures
+  (the `AppAgentSource` is host code).
+- The **one** dispatcher capability these handlers need — mutating the live
+  session (`addProvider` / `removeProvider`) — is the narrow `AppAgentHost`
+  (§3.1), not `CommandHandlerContext`. It lives in the **package agent's own
+  `agentContext`**, placed there when the dispatcher connects that agent
+  (§3.2 / §6).
+
+This also answers **"how does an executing handler reach _its_ session's
+`AppAgentHost`?"** — it reads it off its own `agentContext`, which is
+per-dispatcher by construction, so it is automatically the right session with no
+lookup and no ambient dispatcher reference. The client **registry** (§3.3) is
+needed only to reach the *other* sessions for fan-out (Phase 2); the issuing
+session is just "this agent's own `AppAgentHost`."
+
+> Net: `AppAgentHost` is the *only* dispatcher-side surface a host command
+> handler touches, and it arrives through the host agent's own `agentContext`.
+> `CommandHandlerContext` never crosses the host boundary — not as a real
+> object, not as a castable `unknown`.
 
 ## 4. Install / uninstall / update flow
 
 ```mermaid
 sequenceDiagram
     participant U as User (conversation A)
-    participant H as @package handler (host lib)
-    participant P as Provider (host)
+    participant H as @package agent (host lib)
+    participant S as AppAgentSource (host)
     participant A as Dispatcher A (issuing)
     participant B as Dispatcher B (sibling)
 
     U->>H: @package install foo <ref>
-    H->>P: resolve(ref) + materialize + write record<br/>(serialized by limiter; name-uniqueness<br/>enforced at agents.json write)
-    Note over P: record store is the source of truth
-    P->>A: addAppAgent("foo", policy=issuing)
-    A-->>P: ok (awaited; errors reported to U)
-    P-)B: addAppAgent("foo", policy=existing-session)
-    Note over B: best-effort; disabled by default (§5)
+    H->>S: resolve(ref) + materialize + write record<br/>(serialized by limiter; name-uniqueness<br/>enforced at agents.json write)
+    Note over S: record store is the source of truth
+    S->>A: addProvider(P_foo, enable=true)
+    A-->>S: ok (awaited; errors reported to U)
+    S-)B: addProvider(P_foo, enable=false)
+    Note over B: best-effort; disabled + system message (§5)
     H-->>U: "Agent 'foo' installed from source 's'."
 ```
 
@@ -195,41 +373,39 @@ Key points, contrasted with today:
   of `agents.json`, not of any one dispatcher's live set. The write path already
   enforces `current.agents[name] !== undefined`. The legal-name regex check
   stays in the host handler, before materialize (design §5/§12 Q18 unchanged).
-- **The issuing dispatcher's `addAppAgent` is awaited**, so registration errors
+- **The issuing dispatcher's `addProvider` is awaited**, so registration errors
   (e.g. a collision) surface synchronously to the user who ran the command.
-- **Sibling dispatchers are notified best-effort** and asynchronously; a failure
-  there is logged per-client, never failing the install (the record already
-  committed). Collision detection is already degraded-to-warning on add.
-- **Uninstall / update** are symmetric: mutate the record store, then fan out
-  `removeAppAgent` (and, for update, a subsequent `addAppAgent` for the freshly
-  materialized record — the existing remove-then-add ordering, now per client).
+- **Sibling dispatchers are notified best-effort** and asynchronously (applied at
+  each session's next idle, §7.1); a failure is logged per-client, never failing
+  the install (the record already committed). Collision detection is already
+  degraded-to-warning on add. Each sibling surfaces a **system message** naming
+  the new agent and its enabled/disabled state (§5).
+- **Uninstall / update** mutate the record store, then fan out `removeProvider`
+  (and, for update, a subsequent `addProvider` for the freshly materialized
+  record - remove-then-add, per client, after a full drain since there is no
+  coexistence, §7.2).
 
 ## 5. Enable-state policy across sessions
 
-A freshly added agent's on/off state derives from its manifest `defaultEnabled`
-combined with the session config via `computeStateChange`
-([appAgentManager.ts](../../../packages/dispatcher/dispatcher/src/context/appAgentManager.ts)).
-The connected-client model makes the policy explicit per dispatcher:
+`addProvider(provider, enable)` takes an **explicit** `enable: boolean` - the
+source decides per session and the dispatcher just applies it (rather than the
+provider inferring from `computeStateChange`). Current policy:
 
-| Context                          | Default enable on add                                                 |
-| -------------------------------- | --------------------------------------------------------------------- |
-| Issuing session (ran `@install`) | enabled (user intent)                                                 |
-| Other **existing** live sessions | **disabled** (no surprise)                                            |
-| **New** sessions created later   | host-configurable (manifest `defaultEnabled` or an install-time flag) |
+| Session                          | `enable` on add       |
+| -------------------------------- | --------------------- |
+| Issuing session (ran `@install`) | `true` (user intent)  |
+| Every other session              | `false` (no surprise) |
 
-`AgentEnablePolicy` (passed to `addAppAgent`) encodes which of these applies, so
-the dispatcher applies the right per-session settings rather than the provider
-deciding. "Disabled on existing sessions, configurable for new" is satisfied by:
+So a `@package install` is on in the conversation that ran it and off everywhere
+else. A session that connects *later* registers the agent from
+`connection.providers` at init, likewise **disabled** by default (the record
+exists; the user turns it on per session with `@config agent`).
 
-- fan-out to existing clients passes an **explicit disable** override for that
-  session, and
-- a new session's normal `setAppAgentStates` at init reads the agent's recorded
-  default (manifest or a stored install flag).
-
-> Open question Q1: where is the "default for new sessions" stored — manifest
-> `defaultEnabled` only, or a per-install override persisted next to the record?
-> Leaning toward: manifest default, with an optional `--enabled/--disabled`
-> install flag persisted in the record's `loaderConfig`.
+**Sibling notification.** When a sibling session applies a fan-out `addProvider`
+(or `removeProvider`), it surfaces a **system message** naming the agent and its
+resulting state - e.g. *"Agent 'foo' was installed (disabled here; `@config agent
+foo` to enable)"* / *"Agent 'foo' was uninstalled."* - so the change is visible,
+not silent. The issuing session reports its own result inline as today.
 
 ## 6. Connection lifecycle
 
@@ -238,84 +414,176 @@ timers — see [sharedDispatcher.ts](../../../packages/agentServer/server/src/sh
 The provider must not fan out to a disposed dispatcher.
 
 - **Connect** at `initializeCommandHandlerContext`: the dispatcher calls
-  `provider.connect?(host)` for each provider that supports it and keeps the
-  returned `AppAgentConnection`.
-- **Disconnect** at context teardown: the dispatcher calls `connection.dispose()`,
-  which removes the `AppAgentHost` from the provider's registry.
+  `source.connect(host)` for each injected `AppAgentSource`, registers the
+  returned `connection.providers` into its `AppAgentManager`, and keeps the
+  `AppAgentConnection`.
+- **Disconnect** at context teardown: the dispatcher unregisters those providers
+  from its own manager and calls `connection.dispose()`, which removes this
+  `AppAgentHost` from the source's registry. `dispose()` does NOT tear down the
+  shared provider instances — other sessions still hold them.
 - **Idempotency / races:** `dispose()` must be safe to call once; a fan-out that
-  began before `dispose()` but lands after must no-op (the host can mark itself
-  closed and have `addAppAgent`/`removeAppAgent` reject/skip).
-- **Web vs server asymmetry:** the web API builds a fresh provider per
-  `createWebDispatcher` (one client), while the agent server shares one provider
+  began before `dispose()` but lands after must no-op (the host can mark the
+  connection closed and have `addProvider`/`removeProvider` reject/skip).
+- **Web vs server asymmetry:** the web API builds a fresh source per
+  `createWebDispatcher` (one client), while the agent server shares one source
   across conversations (N clients). The registry degrades cleanly to a single
   client; no host-specific branching.
+- **In-process only — no cross-process fan-out.** An `instanceDir` (and its
+  `agents.json`) is held by a **single process at a time** via the instance-dir
+  process lock, so every connected session sharing that record store lives in
+  one process. In-process fan-out over the connected sessions is therefore
+  complete; there is no second process to notify. (A different process can only
+  own the `instanceDir` after this one releases the lock, at which point it reads
+  the current `agents.json` at startup.)
 
-> Open question Q2: should `connect()` replay the current agent set to the new
-> client, or does the dispatcher still enumerate `getAppAgentNames()` at init and
-> use `connect()` only for _subsequent_ deltas? Leaning toward the latter: init
-> stays a pull (`getAppAgentNames` + `addProvider`), and `connect()` only
-> subscribes to future add/remove — keeping first-run identical to today.
+> Note: the initial set comes from the vended `connection.providers` (register +
+> `getAppAgentNames`, the normal pull); `connect()`'s fan-out then delivers only
+> _subsequent_ add/remove deltas — keeping first-run identical to today. No
+> separate "replay" path is needed.
 
-## 7. Failure semantics
+## 7. Agent lifecycle, fan-out coordination & failure semantics
+
+Because agent state is keyed by name (disruptive / no coexistence, §2), a name
+must be **fully torn down everywhere before it is reused**. But teardown is
+**asynchronous and idle-gated per session** - a session processing a user
+command defers `removeProvider` until it is idle - so a name has a transient
+**draining** window. The source coordinates this with a per-name lifecycle
+entry; the dispatcher applies changes through an idle-gated queue.
+
+### 7.1 Dispatcher side - `AppAgentHost` is an idle-gated FIFO applicator
+
+`addProvider` / `removeProvider` enqueue and apply at the session's next idle
+(between user commands), in FIFO order (so `update`'s remove-then-add lands in
+order). Each returns a Promise that resolves when **applied** - the ack. On
+`dispose()`, queued ops are abandoned and pending removals auto-ack (a gone
+session has removed everything).
+
+### 7.2 Source side - per-name `DynamicAgentEntry`
+
+```ts
+type DynamicAgentEntry =
+  | { status: "active"; provider: AppAgentProvider }        // installed, fanned out
+  | { status: "removing"; pending: Set<AppAgentHost>;       // draining across sessions
+      then?: () => Promise<void> };                         // queued follow-up (update's add)
+// AppAgentSource owns: Map<agentName, DynamicAgentEntry>
+```
+
+- **install:** `absent -> active`; fan out `addProvider(P)`. The name is usable
+  as soon as the record is written; per-session registration is best-effort.
+- **uninstall:** `active -> removing`; remove record; `pending = all connected
+  hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
+  when empty -> `absent` (name free), then run any `then`.
+- **update (disruptive):** materialize the new version first (§4.7). Then
+  `active(P1) -> removing -> (drained) -> active(P2)` with the add as `then`. No
+  two versions ever coexist.
+- **name reuse during `removing`:** a new user `@package install` **or**
+  `@package update` on a name that is still `removing` is **rejected** with a
+  clear "still being removed, retry shortly" error. `then` is used only for the
+  in-flight `update`'s own post-drain add - never to queue a new user op.
+
+### 7.3 Edge cases the entry must cover
+
+- **Connect during `removing`:** a new session registers only from `active`
+  entries -> never picks up a draining name, and is not in `pending`.
+- **Disconnect while in `pending`:** `dispose()` auto-acks -> the source drops
+  that host from every entry's `pending`.
+- **Load during `removing`:** the provider refuses to load a `removing` name
+  even if a draining session still has an instance cached (tombstone) - nothing
+  resurrects it.
+- **`@package list` during drain:** reads `active` entries, so a draining agent
+  is not shown as installed.
+- **Concurrent ops on one name:** the record-write limiter serializes writes, but
+  the async drain outlives it - so per-name serialization lives in the entry
+  (`removing` blocks/queues the next op), not only in the global limiter.
+
+### 7.4 Failure semantics
 
 - **Record write is the commit point.** Once `agents.json` is updated, the
   install/uninstall is durable; fan-out is best-effort notification.
-- **Issuing client:** awaited; failure is reported to the user. The record is
-  still committed (the agent exists on next restart), matching today's behavior
-  where a post-write registration error is logged but the record persists
-  (design DECISIONS_LOG, post-write re-registration).
-- **Sibling clients:** each `addAppAgent` is independent; a throw is caught and
-  logged per client. Collision detection already degrades to a warning.
-- **Update:** materialize-first, then per-client remove-then-add. A failed
-  materialize is a no-op (the old record/agents stay) — unchanged from design §4.7.
+- **Issuing client:** awaited; failure reported to the user. The record is still
+  committed (agent exists on next restart), matching today's post-write
+  re-registration behavior (install-sources DECISIONS_LOG).
+- **Sibling clients:** each `addProvider`/`removeProvider` is independent; a throw
+  is caught and logged per client. Collision detection degrades to a warning.
+- **Update:** materialize-first, then per-client remove-then-add; a failed
+  materialize is a no-op (old record/agents stay) - unchanged from design §4.7.
 
 ## 8. What changes, file by file
 
 | Area                                     | Change                                                                                                                                                                        |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agentProvider.ts` (dispatcher)          | Remove `AppAgentInstaller`. Add `AppAgentHost`, `AppAgentConnection`, and `AppAgentProvider.connect?`.                                                                        |
-| `installCommandHandlers.ts` (dispatcher) | **Deleted** from core. Logic moves to host lib.                                                                                                                               |
-| `systemAgent.ts` `getSystemHandlers`     | Stop building the `@package` umbrella from a core+source mix. The whole `@package` table arrives from the host (as `sourceCommands()` does today).                            |
-| `commandHandlerContext.ts`               | `installAppProvider` body becomes the `AppAgentHost.addAppAgent` implementation; wire `connect()`/`dispose()` into init/teardown. Drop `agentInstaller` from options/context. |
-| `appAgentManager.ts`                     | `removeAgent` becomes `AppAgentHost.removeAppAgent`. No behavior change.                                                                                                      |
-| `default-agent-provider`                 | Add the `@package install/uninstall/update/list` handlers + the client registry + fan-out to the provider. Keep record store, registry, `@package source` as-is.              |
-| `agentServer` / `api` host wiring        | Pass the provider (which now carries `@package`); drop the separate `agentInstaller` option.                                                                                  |
+| `agentProvider.ts` (dispatcher)          | `AppAgentProvider` unchanged (pure read). Remove `AppAgentInstaller`. Add `AppAgentHost`, `AppAgentSource` (`connect`), and `AppAgentConnection` (`{ providers, dispose }`).                                                                        |
+| `installCommandHandlers.ts` (dispatcher) | **Deleted** from core. Logic moves to the host's `@package` agent.                                                                                                                               |
+| `systemAgent.ts` `getSystemHandlers`     | Stop grafting `@package` onto the **system** agent's table entirely. The host contributes `@package` as its **own app agent** with its own `agentContext`, so its handlers never receive `CommandHandlerContext` (§3.4). The system agent keeps only the truly-core `@` commands.                            |
+| `commandHandlerContext.ts`               | Accept `appAgentSources`; at init call `source.connect(host)` and register `connection.providers`; at teardown unregister them + `dispose()`. The `AppAgentHost.addProvider` wrapper lives **here** (today's `installAppProvider`), reworked to apply an **explicit `enable`** instead of deriving state from session config via `setAppAgentStates`/`computeStateChange`; the idle-gated FIFO applicator + ack (§7.1) also lives at this host level. Place the per-dispatcher `AppAgentHost` into the package agent's `agentContext`. Drop `agentInstaller`. |
+| `appAgentManager.ts`                     | Reuse the existing low-level `addProvider` primitive (the wrapper above calls it — they are **not** the same as `AppAgentHost.addProvider`). Add a new `removeProvider(provider)` primitive: derive names via `getAppAgentNames()`, call the existing name-based `removeAgent` per name, and drop the provider's records/refs (today's `removeAgent` is name-only and does neither).                                                                                                      |
+| `default-agent-provider`                 | Implement `AppAgentSource`: own the record store + registry + per-name lifecycle tracker (§7.2); represent each installed agent as its own single-agent provider (single module-root, no facade); contribute `@package` as its own app agent. **Phase 1:** `addProvider`/`removeProvider` on the **issuing** session only. **Phase 2:** fan-out over the registry (§4) + enable policy (§5). Keep source registry / `@package source` as-is.              |
+| `agentServer` / `api` host wiring        | Inject the static providers as `appAgentProviders` and the installed source as `appAgentSources`; drop the separate `agentInstaller` option.                                                                                  |
 
 ## 9. Pros / cons (carried from the analysis)
 
 **Pros**
 
 1. Fixes live propagation across dispatchers in the server (the §1.1 defect).
-2. Single source of truth: provider owns agents + mutation + client registry.
-3. Name-uniqueness validated at the shared record store, not per dispatcher.
-4. Per-session enable policy is explicit and hookable (§5).
-5. Smaller dispatcher core; `@package` lives in the shared host lib, composed
-   (not duplicated) by each host.
-6. Generalizes to other dynamic providers (e.g. MCP hot-reload) via one mechanism.
+2. Clean layering: the `AppAgentSource` **owns** the record store + mutation +
+   registry and **vends** the read providers — one owner, not two independent
+   interfaces, and not a read/write god-object (vend-not-merge).
+3. `AppAgentProvider` stays a **pure read contract** — no `connect`/lifecycle
+   creep, so static providers (bundled, MCP) are untouched.
+4. Static vs dynamic is a **type** (`AppAgentProvider` vs `AppAgentSource`), so a
+   static provider can never be asked to fan out — resolves old Q3.
+5. The dispatcher **cannot drive install**: it is handed only `connect()`.
+6. **Reuses the existing hosting path** (`installAppProvider`/`addProvider`), and
+   each installed agent being its own single-root provider **dissolves the
+   module-resolution-root facade** (Option B vs A, below).
+7. **Shared provider instances** across sessions → one `AppAgent` instance backs
+   all conversations (refcounted), not one copy per session.
+8. Name-uniqueness validated at the shared record store, not per dispatcher.
+9. Per-session enable policy is explicit and hookable (§5).
+10. Smaller dispatcher core; `@package` lives in the shared host lib as one
+   composed app agent.
+11. Generalizes to other dynamic sources (e.g. MCP hot-reload) via one mechanism.
 
 **Cons / new work**
 
-1. The provider gains a client connect/disconnect **lifecycle** — the main new
-   cost; must guard against fan-out to a disposed dispatcher (§6).
-2. **Fan-out partial-failure** semantics must be specified, not inherited (§7).
-3. `AppAgentHost` becomes a **supported dispatcher API** with await/error
+1. The source gains a client connect/disconnect **lifecycle** + a per-name
+   **lifecycle tracker** (§7) — the main new cost; must guard against fan-out to a
+   disposed dispatcher (§6) and gate name reuse during teardown.
+2. **Two injection points** (`appAgentProviders` + `appAgentSources`), and the
+   dispatcher must register/teardown provider(s) obtained from `connect()`.
+3. **O(N) provider objects** (one per installed agent) tracked by the source and
+   registered per session (vs one combined provider).
+4. **Fan-out partial-failure** semantics must be specified, not inherited (§7.4).
+5. `AppAgentHost` becomes a **supported dispatcher API** with await/error
    contract (small but public).
-4. Web vs server **asymmetry** in client-set size must degrade cleanly (§6).
-5. Capability gating / completions for `@package` move to the host lib (§3.3).
+6. Web vs server **asymmetry** in client-set size must degrade cleanly (§6).
+7. Capability gating / completions for `@package` move to the host lib (§3.3).
 
-## 10. Open questions
+### Option A vs B (why provider-based)
 
-- **Q1 (§5):** Storage of the "default for new sessions" enable state — manifest
-  only, or a persisted per-install override?
-- **Q2 (§6):** Does `connect()` replay current agents, or only subscribe to
-  future deltas (init stays a pull)?
-- **Q3:** Should `connect()` be on `AppAgentProvider` or on a separate
-  `ConnectableAppAgentProvider` sub-interface, so static providers (MCP today)
-  are statically known not to fan out?
-- **Q4:** Cross-process hosts — the web API builds providers per dispatcher, so
-  fan-out is in-process only. Do we ever need cross-process fan-out (one install
-  reaching separate API worker processes), or is shared `agents.json` + restart
-  acceptable there (as today)?
-- **Q5:** Ordering guarantee — must sibling fan-out complete before the issuing
-  handler returns its result, or is "eventually, best-effort" sufficient for the
-  UX (status summary / agent list refresh on siblings)?
+**Option A** was a single *live* installed provider with a name-based
+`addAgent(name)`/`removeAgent(name)` callback; **Option B** (chosen) is one
+single-agent `AppAgentProvider` per install with a provider-based
+`addProvider`/`removeProvider` callback. Once **coexistence was ruled out**
+(disruptive; agent state keyed by name), A's edge (per-generation separation) and
+weakness (name-collision on reinstall-while-loaded) both vanished, leaving B
+ahead: it **reuses** the proven `installAppProvider`/`addProvider` path and
+**dissolves** the multi-root facade (each agent is single-root), whereas A would
+build a new live provider that **reabsorbs** that routing. A's only remaining
+edge was a narrower, symmetric name-only callback; B's provider-based callback is
+symmetric too (`addProvider`/`removeProvider` by identity) and matches today's
+hosting API. Cost accepted: O(N) provider objects + a `removeProvider` path.
+
+**Not a hybrid `add/remove(name, provider)`.** A third option — passing *both*
+the name and the provider — was considered and rejected. Under Option B the
+name↔provider mapping is 1:1 (`getAppAgentNames()[0]`), and the name is already
+available on both sides without threading it through the callback: the source
+holds it as its per-name lifecycle-tracker key (§7.2) and the dispatcher derives
+it via `getAppAgentNames()` (removal already loops these into the name-based
+`removeAgent`). A redundant `name` param would add a second source of truth that
+can diverge from `getAppAgentNames()`. Instead the dispatcher **asserts** the
+single-agent invariant (`getAppAgentNames().length === 1`) at `addProvider`, so a
+facade regression fails loudly rather than desyncing the tracker. The hybrid only
+pays off for **multi-agent dynamic providers** (§9 pro 11 / MCP hot-reload), where
+one provider maps to N names and lifecycle events are per-name while add/remove
+are per-provider — a generalization deferred out of this design.

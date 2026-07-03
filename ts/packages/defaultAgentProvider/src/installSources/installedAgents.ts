@@ -225,7 +225,13 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
 // owning provider. Used because the installed-agent provider may span more than
 // one `requirePath` root (feed installDir vs app bundle) while presenting a
 // single provider to the dispatcher (design §4.4).
-function combineAppAgentProviders(
+//
+// This is a pure ROUTING facade. It deliberately does NOT own a connection
+// lifecycle / client registry / fan-out (the `connect` seam in the
+// connected-provider design): that is a separate concern layered OUTSIDE this
+// facade, because the same builder (`createInstalledAppAgentProvider`) also
+// produces the STATIC bundled provider, which must never fan out.
+export function combineAppAgentProviders(
     providers: AppAgentProvider[],
 ): AppAgentProvider {
     if (providers.length === 1) {
@@ -246,7 +252,7 @@ function combineAppAgentProviders(
         }
         return provider;
     }
-    return {
+    const combined: AppAgentProvider = {
         getAppAgentNames() {
             return providers.flatMap((p) => p.getAppAgentNames());
         },
@@ -265,6 +271,27 @@ function combineAppAgentProviders(
             }
         },
     };
+    // Faithfully forward the OPTIONAL async-loading surface too, but expose a
+    // method only when at least one grouped provider implements it, so presence
+    // checks (e.g. `if (provider.onSchemaReady)`) stay accurate:
+    //   - onSchemaReady: register the caller's callback with every async
+    //     provider so a late-ready manifest from any root still propagates.
+    //   - getLoadingAgentNames: union the still-loading names across roots.
+    // Today's grouped providers are all `createNpmAppAgentProvider`, which is
+    // synchronous and implements neither - so in practice these stay absent.
+    // Forwarding keeps the facade correct if a root provider ever loads async.
+    if (providers.some((p) => p.onSchemaReady !== undefined)) {
+        combined.onSchemaReady = (callback) => {
+            for (const provider of providers) {
+                provider.onSchemaReady?.(callback);
+            }
+        };
+    }
+    if (providers.some((p) => p.getLoadingAgentNames !== undefined)) {
+        combined.getLoadingAgentNames = () =>
+            providers.flatMap((p) => p.getLoadingAgentNames?.() ?? []);
+    }
+    return combined;
 }
 
 /**
