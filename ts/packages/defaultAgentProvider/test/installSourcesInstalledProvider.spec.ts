@@ -16,7 +16,14 @@ import {
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
 import { InstalledAgentRecord } from "../src/installSources/config.js";
-import { AppAgentProvider } from "agent-dispatcher";
+import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
+
+// A no-op issuing host used by tests that only exercise the record store or the
+// vended provider set (fan-out behavior is covered by its own describe).
+const noopHost: AppAgentHost = {
+    addProvider: async () => {},
+    removeProvider: async () => {},
+};
 
 function tmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -243,7 +250,7 @@ describe("getDefaultAppAgentProviders", () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
         const agentDir = tmpDir("ta-agent-");
-        await installer.install("namedOnly", agentDir);
+        await installer.install("namedOnly", agentDir, undefined, noopHost);
 
         // Installed agents are vended by the source at connect(), NOT by the
         // static provider list (design §3.3).
@@ -259,7 +266,12 @@ describe("getDefaultAppAgentSource", () => {
     it("connect() vends the @package agent plus a per-agent provider per install", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
-        await built.api.install("namedOnly", tmpDir("ta-agent-"));
+        await built.api.install(
+            "namedOnly",
+            tmpDir("ta-agent-"),
+            undefined,
+            noopHost,
+        );
 
         // A fresh connection sees the freshly installed agent (the shared
         // per-agent provider is added to the vended set on install).
@@ -298,7 +310,12 @@ describe("getDefaultAppAgentSource", () => {
         ).toBe(false);
         // Install, then connect a second session — it must see the new agent
         // in its initial vended set (design §6 note).
-        await built.api.install("later", tmpDir("ta-agent-"));
+        await built.api.install(
+            "later",
+            tmpDir("ta-agent-"),
+            undefined,
+            noopHost,
+        );
         const second = built.connect(fakeHost);
         expect(
             new Set(second.providers.flatMap((p) => p.getAppAgentNames())).has(
@@ -312,7 +329,12 @@ describe("getDefaultAppAgentSource", () => {
     it("dispose() is idempotent and does NOT tear down the shared providers", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
-        await built.api.install("shared", tmpDir("ta-agent-"));
+        await built.api.install(
+            "shared",
+            tmpDir("ta-agent-"),
+            undefined,
+            noopHost,
+        );
         const hostA = {
             addProvider: async () => {},
             removeProvider: async () => {},
@@ -338,8 +360,13 @@ describe("getDefaultAppAgentSource", () => {
     it("uninstall drops the agent from subsequently-vended connections", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
-        await built.api.install("temp", tmpDir("ta-agent-"));
-        await built.api.uninstall("temp");
+        await built.api.install(
+            "temp",
+            tmpDir("ta-agent-"),
+            undefined,
+            noopHost,
+        );
+        await built.api.uninstall("temp", noopHost);
         const host = {
             addProvider: async () => {},
             removeProvider: async () => {},
@@ -354,14 +381,247 @@ describe("getDefaultAppAgentSource", () => {
     });
 });
 
+describe("AppAgentSource fan-out (design §4, §5)", () => {
+    type HostCall =
+        | { op: "add"; name: string; enable: boolean; notify: boolean }
+        | { op: "remove"; name: string; notify: boolean };
+
+    function recordingHost(onAdd?: () => void): {
+        host: AppAgentHost;
+        calls: HostCall[];
+    } {
+        const calls: HostCall[] = [];
+        return {
+            calls,
+            host: {
+                addProvider: async (p, enable, notify) => {
+                    onAdd?.();
+                    calls.push({
+                        op: "add",
+                        name: p.getAppAgentNames()[0],
+                        enable,
+                        notify: notify ?? false,
+                    });
+                },
+                removeProvider: async (p, notify) => {
+                    calls.push({
+                        op: "remove",
+                        name: p.getAppAgentNames()[0],
+                        notify: notify ?? false,
+                    });
+                },
+            },
+        };
+    }
+
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    it("install: issuing enabled+awaited, siblings disabled+notified", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        built.connect(issuing.host);
+        built.connect(sibling.host);
+
+        await built.api.install(
+            "foo",
+            tmpDir("ta-agent-"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+
+        // Issuing session: enabled, not notified (reports inline).
+        expect(issuing.calls).toEqual([
+            { op: "add", name: "foo", enable: true, notify: false },
+        ]);
+        // Sibling: disabled, notified.
+        expect(sibling.calls).toEqual([
+            { op: "add", name: "foo", enable: false, notify: true },
+        ]);
+    });
+
+    it("install: a sibling failure is isolated (install still succeeds)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        const badSibling = {
+            host: {
+                addProvider: async () => {
+                    throw new Error("sibling boom");
+                },
+                removeProvider: async () => {},
+            } as AppAgentHost,
+        };
+        const goodSibling = recordingHost();
+        built.connect(issuing.host);
+        built.connect(badSibling.host);
+        built.connect(goodSibling.host);
+
+        // Must not throw despite the bad sibling.
+        await expect(
+            built.api.install(
+                "foo",
+                tmpDir("ta-agent-"),
+                undefined,
+                issuing.host,
+            ),
+        ).resolves.toBeDefined();
+        await flush();
+
+        expect(issuing.calls).toHaveLength(1);
+        expect(goodSibling.calls).toEqual([
+            { op: "add", name: "foo", enable: false, notify: true },
+        ]);
+        // The record is committed regardless of sibling failure.
+        expect(readAgentsJson(instanceDir)!.agents.foo).toBeDefined();
+    });
+
+    it("uninstall fans removeProvider out to every session", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        built.connect(issuing.host);
+        built.connect(sibling.host);
+        await built.api.install(
+            "foo",
+            tmpDir("ta-agent-"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+        issuing.calls.length = 0;
+        sibling.calls.length = 0;
+
+        await built.api.uninstall("foo", issuing.host);
+        await flush();
+
+        expect(issuing.calls).toEqual([
+            { op: "remove", name: "foo", notify: false },
+        ]);
+        expect(sibling.calls).toEqual([
+            { op: "remove", name: "foo", notify: true },
+        ]);
+    });
+
+    it("does not fan out to a disposed (deregistered) session", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        const gone = recordingHost();
+        built.connect(issuing.host);
+        const goneConn = built.connect(gone.host);
+        goneConn.dispose(); // deregisters `gone` from the client registry
+
+        await built.api.install(
+            "foo",
+            tmpDir("ta-agent-"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+
+        expect(issuing.calls).toHaveLength(1);
+        expect(gone.calls).toHaveLength(0);
+    });
+
+    it("single client (web) degrades cleanly: issuing enabled, no siblings", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const only = recordingHost();
+        built.connect(only.host);
+        await built.api.install(
+            "foo",
+            tmpDir("ta-agent-"),
+            undefined,
+            only.host,
+        );
+        await flush();
+        // The single client is the issuing session: enabled, not notified, and
+        // there are no siblings to fan out to.
+        expect(only.calls).toEqual([
+            { op: "add", name: "foo", enable: true, notify: false },
+        ]);
+    });
+
+    it("update fans out remove-then-add per client (issuing + sibling)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        built.connect(issuing.host);
+        built.connect(sibling.host);
+        await built.api.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+        issuing.calls.length = 0;
+        sibling.calls.length = 0;
+
+        await built.api.update("foo", undefined, issuing.host);
+        await flush();
+
+        // Every session sees remove BEFORE add (no coexistence); issuing gets
+        // enabled+no-notify, sibling gets disabled+notify.
+        expect(issuing.calls).toEqual([
+            { op: "remove", name: "foo", notify: false },
+            { op: "add", name: "foo", enable: true, notify: false },
+        ]);
+        expect(sibling.calls).toEqual([
+            { op: "remove", name: "foo", notify: true },
+            { op: "add", name: "foo", enable: false, notify: true },
+        ]);
+    });
+
+    it("vends installed agents disabled by default (design §5)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await built.api.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing.host,
+        );
+        const conn = built.connect({
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        });
+        const provider = conn.providers.find((p) =>
+            p.getAppAgentNames().includes("foo"),
+        )!;
+        const manifest = await provider.getAppAgentManifest("foo");
+        expect(manifest.defaultEnabled).toBe(false);
+        conn.dispose();
+    });
+});
+
 describe("installed agent source api (install/uninstall/update)", () => {
+    // A no-op issuing host: the record-store logic is independent of the
+    // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /
+    // enable / notification behavior is covered by the "fan-out" describe below.
+    const host: AppAgentHost = {
+        addProvider: async () => {},
+        removeProvider: async () => {},
+    };
+
     it("install resolves via the path source and persists the record with the requested name", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
 
-        const result = await installer.install("myagent", agentDir);
-        expect(result.provider.getAppAgentNames()).toEqual(["myagent"]);
+        const result = await installer.install(
+            "myagent",
+            agentDir,
+            undefined,
+            host,
+        );
         expect(result.source).toBe("path");
 
         const onDisk = readAgentsJson(instanceDir);
@@ -378,41 +638,45 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("dup", agentDir);
-        await expect(installer.install("dup", agentDir)).rejects.toThrow(
-            /already exists/,
-        );
+        await installer.install("dup", agentDir, undefined, host);
+        await expect(
+            installer.install("dup", agentDir, undefined, host),
+        ).rejects.toThrow(/already exists/);
     });
 
     it("rejects installing over a builtin (cannot shadow)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await expect(installer.install("player", agentDir)).rejects.toThrow(
-            /built-in/,
-        );
+        await expect(
+            installer.install("player", agentDir, undefined, host),
+        ).rejects.toThrow(/built-in/);
     });
 
     it("rejects uninstalling a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await expect(installer.uninstall("player")).rejects.toThrow(/built-in/);
+        await expect(installer.uninstall("player", host)).rejects.toThrow(
+            /built-in/,
+        );
     });
 
     it("rejects updating a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await expect(installer.update!("player")).rejects.toThrow(/built-in/);
+        await expect(
+            installer.update("player", undefined, host),
+        ).rejects.toThrow(/built-in/);
     });
 
     it("uninstall drops the record; unknown name rejects", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("gone", agentDir);
-        await installer.uninstall("gone");
+        await installer.install("gone", agentDir, undefined, host);
+        await installer.uninstall("gone", host);
         expect(readAgentsJson(instanceDir)!.agents.gone).toBeUndefined();
-        await expect(installer.uninstall("missing")).rejects.toThrow(
+        await expect(installer.uninstall("missing", host)).rejects.toThrow(
             /not found/,
         );
     });
@@ -424,9 +688,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const c = tmpDir("ta-agent-c-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await Promise.all([
-            installer.install("a", a),
-            installer.install("b", b),
-            installer.install("c", c),
+            installer.install("a", a, undefined, host),
+            installer.install("b", b, undefined, host),
+            installer.install("c", c, undefined, host),
         ]);
         const onDisk = readAgentsJson(instanceDir)!;
         expect(Object.keys(onDisk.agents).sort()).toEqual(["a", "b", "c"]);
@@ -437,7 +701,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(
-            installer.install("x", agentDir, "nosuch"),
+            installer.install("x", agentDir, "nosuch", host),
         ).rejects.toThrow(/unknown source/);
     });
 
@@ -454,10 +718,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("p", agentDir);
+        await installer.install("p", agentDir, undefined, host);
 
-        const { newProvider: provider } = await installer.update!("p");
-        expect(provider.getAppAgentNames()).toEqual(["p"]);
+        await installer.update("p", undefined, host);
         const record = readAgentsJson(instanceDir)!.agents.p;
         expect(record.path).toBe(path.resolve(agentDir));
         expect(record.source).toBe("path");
@@ -467,14 +730,14 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("p", agentDir);
+        await installer.install("p", agentDir, undefined, host);
 
         // A path install has no resolved `ref`; install fills it with the
         // supplied lookup key so a later @update can re-resolve.
         const afterInstall = readAgentsJson(instanceDir)!.agents.p;
         expect(afterInstall.ref).toBe(agentDir);
 
-        await installer.update!("p");
+        await installer.update("p", undefined, host);
         const afterUpdate = readAgentsJson(instanceDir)!.agents.p;
         // The fix under test: update must not drop the re-resolution key.
         expect(afterUpdate.ref).toBeDefined();
@@ -484,29 +747,35 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("update picks up a changed manifest from the recorded path", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir("🧪");
-        const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("p", agentDir);
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        await built.api.install("p", agentDir, undefined, host);
 
         // Edit the on-disk agent, then update.
         fs.writeFileSync(
             path.join(agentDir, "manifest.json"),
             JSON.stringify({ emojiChar: "🚀" }),
         );
-        const { newProvider: provider } = await installer.update!("p");
+        await built.api.update("p", undefined, host);
+        // The freshly materialized provider is vended on the next connect.
+        const conn = built.connect(host);
+        const provider = conn.providers.find((p) =>
+            p.getAppAgentNames().includes("p"),
+        )!;
         const manifest = await provider.getAppAgentManifest("p");
         expect(manifest.emojiChar).toBe("🚀");
+        conn.dispose();
     });
 
     it("a failed update leaves the old record intact (no-op)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("p", agentDir);
+        await installer.install("p", agentDir, undefined, host);
         const before = readAgentsJson(instanceDir)!.agents.p;
 
         // Remove the on-disk target so re-resolution can no longer materialize.
         fs.rmSync(agentDir, { recursive: true, force: true });
-        await expect(installer.update!("p")).rejects.toThrow();
+        await expect(installer.update("p", undefined, host)).rejects.toThrow();
 
         const after = readAgentsJson(instanceDir)!.agents.p;
         expect(after).toEqual(before);
@@ -515,14 +784,16 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("update rejects an unknown agent", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await expect(installer.update!("missing")).rejects.toThrow(/not found/);
+        await expect(
+            installer.update("missing", undefined, host),
+        ).rejects.toThrow(/not found/);
     });
 
     it("update fails when the recorded source is no longer configured", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
-        await installer.install("p", agentDir);
+        await installer.install("p", agentDir, undefined, host);
         // Drop the only configured source out from under the record, then
         // rebuild the installer so it reloads its sources from the edited
         // config (the registry is now host-internal, reached only via config).
@@ -532,7 +803,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         cfg.installSources.sources = [];
         fs.writeFileSync(cfgPath, JSON.stringify(cfg));
         const reloaded = createDefaultInstalledAgentSource(instanceDir).api;
-        await expect(reloaded.update!("p")).rejects.toThrow(
+        await expect(reloaded.update("p", undefined, host)).rejects.toThrow(
             /no longer configured/,
         );
     });

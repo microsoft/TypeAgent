@@ -63,5 +63,45 @@ is that the three rewired host files (server.ts, webDispatcher.ts, instance.ts)
 type-check and their packages build. Full boot is covered by existing host smoke
 tests / CI, not a new unit test.
 
+## Milestone 3 — gate
+
+Review round 1 (Explore subagent): all 9 review-focus items verified correct; no
+blockers. Confirmed issuing-awaited/siblings-best-effort ordering, §5 enable
+policy, two dispose guards (source registry removal + applicator closed flag),
+shared providers survive single-session dispose, update remove-then-add per
+client, single-client degrade, `withDisabledByDefault` preserves optional methods,
+layering intact.
+
+Test-gap round 1 (Explore subagent): P0/P1 gaps identified and **all fixed**:
+- system-message content asserted — extracted `emitAgentChangeNotification`
+  helper + 3 wording tests (disabled-install / enabled-install / uninstall);
+- double-dispose + late-op no-op (applicator);
+- single-client (web) fan-out degrade;
+- update remove-then-add per client (issuing + sibling);
+- late-connect-disabled (manifest default false) distinct from sibling-disabled
+  (fan-out `enable=false`) — both covered.
+Suites: appAgentHost.spec.ts (19), installSourcesInstalledProvider.spec.ts (36),
+packageAgent.spec.ts (11).
+
+Deferred (logged): the deeper "hostAddProvider actively calls setState with the
+agent disabled" assertion is integration-level (needs a live AppAgentManager +
+session); the enable-flag flow is unit-covered (fan-out asserts `enable=false` to
+siblings; the applicator threads it; `applyExplicitAgentState` is the same
+mechanism proven at install). End-to-end web/server boot deferred to the final
+gate.
+
+Review + test-gap round 2: the `Explore` subagent was temporarily unavailable, so
+round 2 was performed as a focused self-review of the round-1 focus areas. It
+found one real §5 nuance — `withDisabledByDefault` originally forced only
+`defaultEnabled: false`, so an installed agent explicitly setting
+`commandDefaultEnabled: true` would still be enabled on a sibling. **Fixed** by
+forcing all four enable-default fields false. All other focus items verified:
+notify emitted only after the op applies; sibling `.catch` attached synchronously;
+update sibling remove-enqueued-before-add; no double-add of the issuing host; the
+extracted `emitAgentChangeNotification` is behavior-identical to the inlined
+version. No remaining P0 gaps.
+
+
+
 
 

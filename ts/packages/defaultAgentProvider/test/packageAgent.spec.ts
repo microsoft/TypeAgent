@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentProvider } from "agent-dispatcher";
+import { AppAgentHost } from "agent-dispatcher";
 import {
     buildPackageCommandTable,
     createPackageAppAgentProvider,
@@ -11,61 +11,46 @@ import {
 } from "../src/installSources/packageAgent.js";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
-function fakeProvider(name: string): AppAgentProvider {
-    return {
-        getAppAgentNames: () => [name],
-        getAppAgentManifest: async () => ({}) as any,
-        loadAppAgent: async () => ({}) as any,
-        unloadAppAgent: async () => {},
-    };
-}
+const noopHost: AppAgentHost = {
+    addProvider: async () => {},
+    removeProvider: async () => {},
+};
 
-type HostCall =
-    | { op: "add"; name: string; enable: boolean }
-    | { op: "remove"; name: string };
+type SourceCall =
+    | {
+          op: "install";
+          name: string;
+          ref: string;
+          sourceName?: string | undefined;
+      }
+    | { op: "uninstall"; name: string }
+    | { op: "update"; name: string; range?: string | undefined };
 
-function fakeHost() {
-    const calls: HostCall[] = [];
-    return {
-        calls,
-        host: {
-            addProvider: async (p: AppAgentProvider, enable: boolean) => {
-                calls.push({
-                    op: "add",
-                    name: p.getAppAgentNames()[0],
-                    enable,
-                });
-            },
-            removeProvider: async (p: AppAgentProvider) => {
-                calls.push({ op: "remove", name: p.getAppAgentNames()[0] });
-            },
+// A source stub that records the handler's delegated calls (the handler is a
+// thin shell over the source, which owns record mutation + fan-out).
+function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
+    api: InstalledAgentSourceApi;
+    calls: SourceCall[];
+} {
+    const calls: SourceCall[] = [];
+    const api: InstalledAgentSourceApi = {
+        install: async (name, ref, sourceName) => {
+            calls.push({ op: "install", name, ref, sourceName });
+            return { source: "path" };
         },
-    };
-}
-
-// A source stub recording calls; each op returns provider(s) by name.
-function fakeSource(
-    overrides: Partial<InstalledAgentSourceApi> = {},
-): InstalledAgentSourceApi {
-    return {
-        install: async (name: string) => ({
-            provider: fakeProvider(name),
-            source: "path",
-        }),
-        uninstall: async (name: string) => ({ provider: fakeProvider(name) }),
-        update: async (name: string) => ({
-            oldProvider: fakeProvider(name),
-            newProvider: fakeProvider(name),
-        }),
+        uninstall: async (name) => {
+            calls.push({ op: "uninstall", name });
+        },
+        update: async (name, range) => {
+            calls.push({ op: "update", name, range });
+        },
         listInstalled: () => [],
         listSources: () => [],
         listAvailable: async () => [],
-        sourceCommands: () => ({
-            description: "sources",
-            commands: {},
-        }),
+        sourceCommands: () => ({ description: "sources", commands: {} }),
         ...overrides,
     };
+    return { api, calls };
 }
 
 function fakeActionContext(agentContext: PackageAgentContext) {
@@ -79,6 +64,10 @@ function fakeActionContext(agentContext: PackageAgentContext) {
     } as any;
 }
 
+function fakeSessionContext(agentContext: PackageAgentContext) {
+    return { agentContext } as any;
+}
+
 function getHandler(
     source: InstalledAgentSourceApi,
     name: "install" | "uninstall" | "update",
@@ -89,10 +78,10 @@ function getHandler(
 
 describe("@package agent", () => {
     it("vends a command-only agent named 'package' with the host-owned context", async () => {
-        const { host } = fakeHost();
+        const { api } = makeSource();
         const ctx: PackageAgentContext = {
-            appAgentHost: host,
-            source: fakeSource(),
+            appAgentHost: noopHost,
+            source: api,
         };
         const provider = createPackageAppAgentProvider(ctx);
         expect(provider.getAppAgentNames()).toEqual([PACKAGE_AGENT_NAME]);
@@ -109,64 +98,56 @@ describe("@package agent", () => {
         expect(manifest.schema).toBeUndefined();
     });
 
-    it("install registers the resolved provider into the issuing session (enable=true)", async () => {
-        const { host, calls } = fakeHost();
-        let installedRef: string | undefined;
-        const source = fakeSource({
-            install: async (name: string, ref: string) => {
-                installedRef = ref;
-                return { provider: fakeProvider(name), source: "path" };
+    it("install delegates to the source with the issuing host", async () => {
+        const { api, calls } = makeSource();
+        const handler = getHandler(api, "install");
+        await handler.run(
+            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            {
+                args: { name: "foo", ref: "/some/path" },
+                flags: { source: "path" },
+            } as any,
+        );
+        expect(calls).toEqual([
+            {
+                op: "install",
+                name: "foo",
+                ref: "/some/path",
+                sourceName: "path",
             },
-        });
-        const handler = getHandler(source, "install");
-        await handler.run(fakeActionContext({ appAgentHost: host, source }), {
-            args: { name: "foo", ref: "/some/path" },
-            flags: {},
-        } as any);
-        expect(installedRef).toBe("/some/path");
-        expect(calls).toEqual([{ op: "add", name: "foo", enable: true }]);
+        ]);
     });
 
     it("install rejects an illegal name before touching the source", async () => {
-        const { host } = fakeHost();
-        let called = false;
-        const source = fakeSource({
-            install: async (name: string) => {
-                called = true;
-                return { provider: fakeProvider(name), source: "path" };
-            },
-        });
-        const handler = getHandler(source, "install");
+        const { api, calls } = makeSource();
+        const handler = getHandler(api, "install");
         await expect(
-            handler.run(fakeActionContext({ appAgentHost: host, source }), {
-                args: { name: "bad name!", ref: "/x" },
-                flags: {},
-            } as any),
+            handler.run(
+                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                { args: { name: "bad name!", ref: "/x" }, flags: {} } as any,
+            ),
         ).rejects.toThrow(/not a legal agent name/i);
-        expect(called).toBe(false);
+        expect(calls).toEqual([]);
     });
 
-    it("uninstall tears down the live provider in the issuing session", async () => {
-        const { host, calls } = fakeHost();
-        const source = fakeSource();
-        const handler = getHandler(source, "uninstall");
-        await handler.run(fakeActionContext({ appAgentHost: host, source }), {
-            args: { name: "foo" },
-        } as any);
-        expect(calls).toEqual([{ op: "remove", name: "foo" }]);
+    it("uninstall delegates to the source with the issuing host", async () => {
+        const { api, calls } = makeSource();
+        const handler = getHandler(api, "uninstall");
+        await handler.run(
+            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            { args: { name: "foo" } } as any,
+        );
+        expect(calls).toEqual([{ op: "uninstall", name: "foo" }]);
     });
 
-    it("update removes-then-adds in the issuing session (FIFO)", async () => {
-        const { host, calls } = fakeHost();
-        const source = fakeSource();
-        const handler = getHandler(source, "update");
-        await handler.run(fakeActionContext({ appAgentHost: host, source }), {
-            args: { name: "foo" },
-        } as any);
-        expect(calls).toEqual([
-            { op: "remove", name: "foo" },
-            { op: "add", name: "foo", enable: true },
-        ]);
+    it("update delegates to the source with the issuing host", async () => {
+        const { api, calls } = makeSource();
+        const handler = getHandler(api, "update");
+        await handler.run(
+            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            { args: { name: "foo", range: "^1.0" } } as any,
+        );
+        expect(calls).toEqual([{ op: "update", name: "foo", range: "^1.0" }]);
     });
 });
 
@@ -191,70 +172,61 @@ describe("@package command table", () => {
 });
 
 describe("@package handler error handling", () => {
-    it("install failure does not register anything (no partial add)", async () => {
-        const { host, calls } = fakeHost();
-        const source = fakeSource({
+    it("install failure propagates to the user", async () => {
+        const { api } = makeSource({
             install: async () => {
                 throw new Error("resolution failed");
             },
         });
-        const handler = getHandler(source, "install");
+        const handler = getHandler(api, "install");
         await expect(
-            handler.run(fakeActionContext({ appAgentHost: host, source }), {
-                args: { name: "foo", ref: "bad" },
-                flags: {},
-            } as any),
+            handler.run(
+                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                { args: { name: "foo", ref: "bad" }, flags: {} } as any,
+            ),
         ).rejects.toThrow(/resolution failed/);
-        expect(calls).toEqual([]);
     });
 
-    it("uninstall failure does not remove anything", async () => {
-        const { host, calls } = fakeHost();
-        const source = fakeSource({
+    it("uninstall failure propagates to the user", async () => {
+        const { api } = makeSource({
             uninstall: async () => {
                 throw new Error("not found");
             },
         });
-        const handler = getHandler(source, "uninstall");
+        const handler = getHandler(api, "uninstall");
         await expect(
-            handler.run(fakeActionContext({ appAgentHost: host, source }), {
-                args: { name: "missing" },
-            } as any),
+            handler.run(
+                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                { args: { name: "missing" } } as any,
+            ),
         ).rejects.toThrow(/not found/);
-        expect(calls).toEqual([]);
     });
 
-    it("update failure (materialize) does not touch the live session", async () => {
-        const { host, calls } = fakeHost();
-        const source = fakeSource({
+    it("update failure propagates to the user", async () => {
+        const { api } = makeSource({
             update: async () => {
                 throw new Error("source no longer configured");
             },
         });
-        const handler = getHandler(source, "update");
+        const handler = getHandler(api, "update");
         await expect(
-            handler.run(fakeActionContext({ appAgentHost: host, source }), {
-                args: { name: "foo" },
-            } as any),
+            handler.run(
+                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                { args: { name: "foo" } } as any,
+            ),
         ).rejects.toThrow(/no longer configured/);
-        expect(calls).toEqual([]);
     });
 });
 
-function fakeSessionContext(agentContext: PackageAgentContext) {
-    return { agentContext } as any;
-}
-
 describe("@package handler completions", () => {
     it("install completes ref from listAvailable and --source from listSources", async () => {
-        const source = fakeSource({
+        const { api } = makeSource({
             listAvailable: async () => ["catalog-agent", "feed-agent"],
             listSources: () => ["catalog", "feed"],
         });
-        const handler = getHandler(source, "install");
-        const { host } = fakeHost();
+        const handler = getHandler(api, "install");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: host, source }),
+            fakeSessionContext({ appAgentHost: noopHost, source: api }),
             {} as any,
             ["ref", "--source"],
         );
@@ -266,17 +238,16 @@ describe("@package handler completions", () => {
     });
 
     it("uninstall/update complete the managed agent names", async () => {
-        const source = fakeSource({
+        const { api } = makeSource({
             listInstalled: () => [
                 { name: "a", source: "path" },
                 { name: "b", source: "feed" },
             ],
         });
-        const { host } = fakeHost();
         for (const which of ["uninstall", "update"] as const) {
-            const handler = getHandler(source, which);
+            const handler = getHandler(api, which);
             const result = await handler.getCompletion!(
-                fakeSessionContext({ appAgentHost: host, source }),
+                fakeSessionContext({ appAgentHost: noopHost, source: api }),
                 {} as any,
                 ["name"],
             );

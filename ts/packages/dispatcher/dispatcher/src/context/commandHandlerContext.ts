@@ -661,10 +661,33 @@ async function applyExplicitAgentState(
  * the explicit state, re-runs collision detection degraded-to-warn, and saves
  * the embedding cache. Runs through the idle-gated applicator (design §7.1).
  */
+/**
+ * Emit the cross-session fan-out system message(s) for a sibling session
+ * (design §5): name the agent and its resulting state so the change is visible,
+ * not silent. Exported for unit testing of the wording/visibility.
+ */
+export function emitAgentChangeNotification(
+    clientIO: ClientIO,
+    op: "add" | "remove",
+    provider: AppAgentProvider,
+    enable: boolean,
+) {
+    for (const name of provider.getAppAgentNames()) {
+        const message =
+            op === "remove"
+                ? `Agent '${name}' was uninstalled.`
+                : enable
+                  ? `Agent '${name}' was installed.`
+                  : `Agent '${name}' was installed (disabled here; \`@config agent ${name}\` to enable).`;
+        clientIO.notify(undefined, AppAgentEvent.Info, message, DispatcherName);
+    }
+}
+
 async function hostAddProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
     enable: boolean,
+    notify: boolean,
 ) {
     const useNFAGrammar =
         context.session.getConfig().cache.grammarSystem === "nfa";
@@ -699,21 +722,32 @@ async function hostAddProvider(
             }
         }
     }
+
+    // Sibling fan-out notification (design §5): surface a system message naming
+    // the agent and its resulting state so the change is visible, not silent.
+    if (notify) {
+        emitAgentChangeNotification(context.clientIO, "add", provider, enable);
+    }
 }
 
 /**
  * The {@link AppAgentHost.removeProvider} body (design §3.1): tear down a
  * previously-added provider by identity via the {@link AppAgentManager}
  * removeProvider primitive. Runs through the idle-gated applicator (design §7.1).
+ * On a sibling fan-out (`notify`), surfaces a system message (design §5).
  */
 async function hostRemoveProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
+    notify: boolean,
 ) {
     await context.agents.removeProvider(
         provider,
         context.agentCache.grammarStore,
     );
+    if (notify) {
+        emitAgentChangeNotification(context.clientIO, "remove", provider, false);
+    }
 }
 
 export async function initializeCommandHandlerContext(
@@ -931,9 +965,10 @@ export async function initializeCommandHandlerContext(
         // Build the per-dispatcher AppAgentHost applicator (design §3.1, §7.1).
         // Its apply closures reach the fully-built `context`.
         const hostApplyFns: AppAgentHostApplyFns = {
-            applyAdd: (provider, enable) =>
-                hostAddProvider(context, provider, enable),
-            applyRemove: (provider) => hostRemoveProvider(context, provider),
+            applyAdd: (provider, enable, notify) =>
+                hostAddProvider(context, provider, enable, notify),
+            applyRemove: (provider, notify) =>
+                hostRemoveProvider(context, provider, notify),
         };
         context.appAgentHost = new AppAgentHostApplicator(
             context.commandLock,

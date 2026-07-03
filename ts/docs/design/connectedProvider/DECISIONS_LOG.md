@@ -65,3 +65,45 @@
   the `@package` handler can drive `AppAgentHost.removeProvider`/`addProvider`
   (remove-then-add) itself. In M3 this fan-out moves into the source.
 
+## Milestone 3 — Fan-out & enable policy
+
+- **`AppAgentHost.addProvider`/`removeProvider` gained an optional `notify`
+  param** (extends design §3.1). It drives the sibling system message (§5): the
+  issuing session passes `notify=false` (reports inline via `actionIO`); siblings
+  pass `notify=true` and the dispatcher surfaces a `clientIO.notify` Info message
+  naming the agent + its resulting state. Chosen over a separate notification
+  channel because the applicator already runs in the sibling's context and has
+  `clientIO`; the flag cleanly distinguishes fan-out from initial connect
+  registration (which does not notify).
+
+- **Fan-out lives in the source** (design §4). `install`/`uninstall`/`update` now
+  take the `issuingHost` and iterate the `clients` registry: siblings are
+  enqueued fire-and-forget FIRST (best-effort; a throw is caught + logged per
+  client, never failing the committed op), then the issuing host is **awaited**
+  (errors surface to the user). Enqueuing siblings before awaiting issuing means a
+  busy issuing session never delays sibling delivery. The `@package` handler is
+  now a thin delegator (validates the name, calls the source, displays the
+  result).
+
+- **Installed agents are disabled by default in every session (§5)** — implemented
+  by wrapping the vended installed provider's `getAppAgentManifest`
+  (`withDisabledByDefault`) to force **all four** enable-default fields
+  (`defaultEnabled`, `schemaDefaultEnabled`, `actionDefaultEnabled`,
+  `commandDefaultEnabled`) to `false`. This makes both the register-time state
+  derivation and the session-config default land on "off", and prevents an
+  installed agent that explicitly sets e.g. `commandDefaultEnabled: true` from
+  silently turning itself on in a non-issuing session (which would violate §5 "no
+  surprise"). A user's explicit per-session `@config agent` enable (persisted in
+  the conversation config) still wins (config precedence).
+  **Consequence:** after `@install` + restart, the agent is disabled until
+  re-enabled — the issuing session's live-enable is not persisted (matching
+  today's install, which also did not persist enable). This is the §5 "no
+  surprise" intent: an agent is on only where/when explicitly enabled.
+  _(The all-four-fields strengthening was applied during the M3 gate round 2.)_
+
+- **`update` fans out remove-then-add per client** (issuing awaited; siblings
+  best-effort). M3 relies on the applicator's FIFO to keep remove-before-add per
+  session; the full **no-coexistence drain** across sessions (§7.2) is added in
+  Milestone 4.
+
+

@@ -23,7 +23,6 @@ import {
 import {
     AppAgentHost,
     AppAgentProvider,
-    InstallResult,
     InstalledAgentInfo,
 } from "agent-dispatcher";
 import chalk from "chalk";
@@ -34,34 +33,33 @@ const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 /**
  * The record-store / registry surface the `@package` handlers use, supplied by
- * the host's `AppAgentSource` (design §3.3). All `agents.json` access and source
- * resolution lives behind this so the handlers never touch the dispatcher's
- * internals. `install`/`uninstall`/`update` mutate the record store and return
- * the affected single-agent provider(s); the handler then registers/tears them
- * down through the session's `AppAgentHost`.
+ * the host's `AppAgentSource` (design §3.3). All `agents.json` access, source
+ * resolution, AND the cross-session fan-out (design §4) live behind this so the
+ * handlers never touch the dispatcher's internals. Each mutating op takes the
+ * `issuingHost` (the session that ran the command, reached off the package
+ * agent's own `agentContext`) so the source can register/enable it awaited while
+ * fanning out to siblings best-effort (design §4, §5).
  */
 export interface InstalledAgentSourceApi {
-    // Resolve + materialize + write a record; returns the freshly built
-    // single-agent provider (plus which source won and any non-fatal warnings).
+    // Resolve + materialize + write a record, then fan out `addProvider`:
+    // issuing session awaited + enabled; siblings best-effort + disabled +
+    // notified (design §4, §5). Returns which source won + any warnings.
     install(
         name: string,
         ref: string,
-        sourceName?: string,
-    ): Promise<InstallResult>;
-    // Drop the record; returns the shared provider instance to remove from the
-    // live session (undefined if it was never registered).
-    uninstall(
-        name: string,
-    ): Promise<{ provider: AppAgentProvider | undefined }>;
-    // Re-materialize against the recorded source; returns the old provider (to
-    // tear down) and the freshly built one (to register).
+        sourceName: string | undefined,
+        issuingHost: AppAgentHost,
+    ): Promise<{ source: string; warnings?: string[] }>;
+    // Drop the record, then fan out `removeProvider` (issuing awaited; siblings
+    // best-effort + notified).
+    uninstall(name: string, issuingHost: AppAgentHost): Promise<void>;
+    // Re-materialize against the recorded source, then fan out remove-then-add
+    // per client (issuing awaited; siblings best-effort + notified).
     update(
         name: string,
-        range?: string,
-    ): Promise<{
-        oldProvider: AppAgentProvider | undefined;
-        newProvider: AppAgentProvider;
-    }>;
+        range: string | undefined,
+        issuingHost: AppAgentHost,
+    ): Promise<void>;
     // Host-rendered summaries of installed agents, backing `@package list`.
     listInstalled(): InstalledAgentInfo[];
     // Source names in resolution order (for `@package install --source`).
@@ -194,22 +192,20 @@ class InstallCommandHandler implements CommandHandler {
         }
 
         displayStatus(`Resolving '${ref}'...`, context);
-        const {
-            provider,
-            source: resolvedSource,
-            warnings,
-        } = await source.install(name, ref, sourceName);
+        // The source resolves + writes the record + fans out to every connected
+        // session (issuing awaited + enabled; siblings best-effort + disabled +
+        // notified — design §4, §5). Errors registering into THIS session
+        // surface here to the user.
+        const { source: resolvedSource, warnings } = await source.install(
+            name,
+            ref,
+            sourceName,
+            appAgentHost,
+        );
         // Surface any non-fatal source degrade warnings once, for this command.
         for (const warning of warnings ?? []) {
             displayWarn(warning, context);
         }
-        displayStatus(
-            `Found '${ref}' in source '${resolvedSource}'. Installing as '${name}'...`,
-            context,
-        );
-        // Register into the issuing session via its own AppAgentHost (design
-        // §3.4). Phase 1: issuing session only; fan-out is added in Milestone 3.
-        await appAgentHost.addProvider(provider, true);
         displayResult(
             `Agent '${name}' installed from source '${resolvedSource}'.`,
             context,
@@ -256,11 +252,9 @@ class UninstallCommandHandler implements CommandHandler {
     ) {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const name = params.args.name;
-        const { provider } = await source.uninstall(name);
-        // Tear down the live agent in the issuing session (design §3.4).
-        if (provider !== undefined) {
-            await appAgentHost.removeProvider(provider);
-        }
+        // Drop the record + fan out removeProvider (issuing awaited; siblings
+        // best-effort + notified — design §4, §5).
+        await source.uninstall(name, appAgentHost);
         displayResult(`Agent '${name}' uninstalled.`, context);
     }
 
@@ -307,13 +301,9 @@ class UpdateCommandHandler implements CommandHandler {
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op (design §4.7,
-        // §12 Q13). Then tear down the old live agent and register the fresh
-        // provider (remove-then-add, design §4.6 / §4.7).
-        const { oldProvider, newProvider } = await source.update(name, range);
-        if (oldProvider !== undefined) {
-            await appAgentHost.removeProvider(oldProvider);
-        }
-        await appAgentHost.addProvider(newProvider, true);
+        // §12 Q13). It then fans out remove-then-add per client (issuing
+        // awaited; siblings best-effort + notified — design §4).
+        await source.update(name, range, appAgentHost);
         displayResult(`Agent '${name}' updated.`, context);
     }
 

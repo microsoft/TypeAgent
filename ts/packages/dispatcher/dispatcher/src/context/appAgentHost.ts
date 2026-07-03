@@ -30,9 +30,18 @@ type QueuedOp = {
  */
 export type AppAgentHostApplyFns = {
     // Register a provider's single agent with the given initial enabled state.
-    applyAdd: (provider: AppAgentProvider, enable: boolean) => Promise<void>;
-    // Unload a previously-added provider by identity.
-    applyRemove: (provider: AppAgentProvider) => Promise<void>;
+    // `notify` requests a sibling-fan-out system message (design §5).
+    applyAdd: (
+        provider: AppAgentProvider,
+        enable: boolean,
+        notify: boolean,
+    ) => Promise<void>;
+    // Unload a previously-added provider by identity. `notify` requests a
+    // sibling-fan-out system message (design §5).
+    applyRemove: (
+        provider: AppAgentProvider,
+        notify: boolean,
+    ) => Promise<void>;
 };
 
 /**
@@ -68,6 +77,7 @@ export class AppAgentHostApplicator implements AppAgentHost {
     public addProvider(
         provider: AppAgentProvider,
         enable: boolean,
+        notify: boolean = false,
     ): Promise<void> {
         // Assert the single-agent invariant at the add boundary (design §3.1,
         // §9 Option A vs B): source-vended providers are single-agent, so a
@@ -81,11 +91,18 @@ export class AppAgentHostApplicator implements AppAgentHost {
                 ),
             );
         }
-        return this.enqueue("add", () => this.apply.applyAdd(provider, enable));
+        return this.enqueue("add", () =>
+            this.apply.applyAdd(provider, enable, notify),
+        );
     }
 
-    public removeProvider(provider: AppAgentProvider): Promise<void> {
-        return this.enqueue("remove", () => this.apply.applyRemove(provider));
+    public removeProvider(
+        provider: AppAgentProvider,
+        notify: boolean = false,
+    ): Promise<void> {
+        return this.enqueue("remove", () =>
+            this.apply.applyRemove(provider, notify),
+        );
     }
 
     /** True once {@link dispose} has been called. */

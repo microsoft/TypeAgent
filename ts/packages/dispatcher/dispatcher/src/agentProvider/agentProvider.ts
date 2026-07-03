@@ -43,8 +43,16 @@ export interface AppAgentHost {
      * Asserts the single-agent invariant
      * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
      * be deferred until the session is idle.
+     *
+     * `notify` (design §5): when true, this is a cross-session fan-out to a
+     * SIBLING; the dispatcher surfaces a system message naming the agent and its
+     * resulting state. The issuing session passes `false` and reports inline.
      */
-    addProvider(provider: AppAgentProvider, enable: boolean): Promise<void>;
+    addProvider(
+        provider: AppAgentProvider,
+        enable: boolean,
+        notify?: boolean,
+    ): Promise<void>;
 
     /**
      * Remove a previously-added provider from this dispatcher by provider
@@ -52,8 +60,14 @@ export interface AppAgentHost {
      * live `SessionContext`, and drop the provider's records. Internally derives
      * the name(s) via `getAppAgentNames()` and calls the name-based
      * `removeAgent` per name. Resolves when APPLIED.
+     *
+     * `notify` (design §5): when true (sibling fan-out), the dispatcher surfaces
+     * a system message that the agent was uninstalled.
      */
-    removeProvider(provider: AppAgentProvider): Promise<void>;
+    removeProvider(
+        provider: AppAgentProvider,
+        notify?: boolean,
+    ): Promise<void>;
 }
 
 /**

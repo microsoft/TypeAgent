@@ -10,6 +10,7 @@ import {
 } from "../src/context/appAgentHost.js";
 import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
+import { emitAgentChangeNotification } from "../src/context/commandHandlerContext.js";
 
 // A single-agent provider stub (the shape the source vends).
 function fakeProvider(name: string): AppAgentProvider {
@@ -64,6 +65,31 @@ describe("AppAgentHostApplicator", () => {
         await Promise.all([removeP, addP]);
 
         expect(order).toEqual(["remove:foo", "add:foo"]);
+    });
+
+    it("threads enable + notify through to the apply functions", async () => {
+        const seen: {
+            enable?: boolean;
+            addNotify?: boolean;
+            removeNotify?: boolean;
+        } = {};
+        const apply: AppAgentHostApplyFns = {
+            applyAdd: async (_p, enable, notify) => {
+                seen.enable = enable;
+                seen.addNotify = notify;
+            },
+            applyRemove: async (_p, notify) => {
+                seen.removeNotify = notify;
+            },
+        };
+        const host = new AppAgentHostApplicator(createLimiter(1), apply);
+        await host.addProvider(fakeProvider("foo"), false, true);
+        await host.removeProvider(fakeProvider("foo"), true);
+        expect(seen).toEqual({
+            enable: false,
+            addNotify: true,
+            removeNotify: true,
+        });
     });
 
     it("resolves the ack only when the op is applied", async () => {
@@ -185,6 +211,25 @@ describe("AppAgentHostApplicator", () => {
         });
         host.dispose();
         expect(() => host.dispose()).not.toThrow();
+        expect(host.isClosed).toBe(true);
+    });
+
+    it("double dispose is safe and a late op after both disposes no-ops", async () => {
+        let calls = 0;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {
+                calls++;
+            },
+            applyRemove: async () => {
+                calls++;
+            },
+        });
+        host.dispose();
+        host.dispose();
+        await expect(
+            host.addProvider(fakeProvider("late"), false),
+        ).resolves.toBeUndefined();
+        expect(calls).toBe(0);
         expect(host.isClosed).toBe(true);
     });
 
@@ -373,5 +418,53 @@ describe("AppAgentManager.removeProvider", () => {
         expect(manager.getAppAgentNames()).toEqual([]);
         expect(manager.getSchemaNames()).not.toContain("foo");
         expect(unloaded).toBe("foo");
+    });
+});
+
+describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
+    function captureClientIO() {
+        const messages: string[] = [];
+        return {
+            messages,
+            clientIO: {
+                notify: (
+                    _requestId: unknown,
+                    _event: unknown,
+                    message: string,
+                ) => {
+                    messages.push(message);
+                },
+            } as any,
+        };
+    }
+
+    it("a fanned-out install to a sibling reports disabled + how to enable", () => {
+        const { messages, clientIO } = captureClientIO();
+        emitAgentChangeNotification(
+            clientIO,
+            "add",
+            fakeProvider("foo"),
+            false,
+        );
+        expect(messages).toEqual([
+            "Agent 'foo' was installed (disabled here; `@config agent foo` to enable).",
+        ]);
+    });
+
+    it("an enabled add reports plainly (no config hint)", () => {
+        const { messages, clientIO } = captureClientIO();
+        emitAgentChangeNotification(clientIO, "add", fakeProvider("foo"), true);
+        expect(messages).toEqual(["Agent 'foo' was installed."]);
+    });
+
+    it("a fanned-out uninstall reports removal", () => {
+        const { messages, clientIO } = captureClientIO();
+        emitAgentChangeNotification(
+            clientIO,
+            "remove",
+            fakeProvider("foo"),
+            false,
+        );
+        expect(messages).toEqual(["Agent 'foo' was uninstalled."]);
     });
 });

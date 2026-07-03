@@ -6,7 +6,6 @@ import {
     AppAgentSource,
     AppAgentConnection,
     AppAgentHost,
-    InstallResult,
     InstalledAgentInfo,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
@@ -44,6 +43,9 @@ import {
 import { createInstallSourceRegistry } from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { createLimiter } from "@typeagent/common-utils";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:defaultAgentProvider:source");
 
 /**
  * Get the default STATIC app agent providers.
@@ -150,6 +152,32 @@ export function getDefaultAppAgentSource(
 }
 
 /**
+ * Wrap a provider so its agents are DISABLED by default in every session
+ * (design §5). Installed agents are off until explicitly enabled: the issuing
+ * session enables one at install (explicitly), and any other/late-connecting
+ * session leaves it off until the user runs `@config agent`. All four
+ * enable-default manifest fields are forced to `false` so an installed agent
+ * cannot silently turn itself on in a session the user did not intend (a user's
+ * per-session `@config agent` override still wins — config takes precedence over
+ * the manifest default).
+ */
+function withDisabledByDefault(provider: AppAgentProvider): AppAgentProvider {
+    return {
+        ...provider,
+        getAppAgentManifest: async (name: string) => {
+            const manifest = await provider.getAppAgentManifest(name);
+            return {
+                ...manifest,
+                defaultEnabled: false,
+                schemaDefaultEnabled: false,
+                actionDefaultEnabled: false,
+                commandDefaultEnabled: false,
+            };
+        },
+    };
+}
+
+/**
  * The concrete installed-agent source (design §3.2). Besides the dispatcher-
  * facing `connect()`, it also carries the write/command surface (`api`) the
  * host-owned `@package` agent uses. The dispatcher is handed only the narrow
@@ -204,10 +232,17 @@ export function createDefaultInstalledAgentSource(
     function buildProviderFor(
         records: Record<string, InstalledAgentRecord>,
     ): AppAgentProvider {
-        return createInstalledAppAgentProvider(records, {
+        const provider = createInstalledAppAgentProvider(records, {
             ...(installDir !== undefined ? { installDir } : {}),
             appBundleRequirePath,
         });
+        // Installed agents are DISABLED by default in every session (design §5):
+        // only the issuing session enables one (explicitly, at install), and any
+        // other/late-connecting session registers it off until the user runs
+        // `@config agent`. Force the manifest default to false so both the
+        // register-time state derivation and the session config's default land
+        // on "off" (a user's explicit per-session enable in config still wins).
+        return withDisabledByDefault(provider);
     }
 
     // Builtins are the app's shipped bundled agents (their own static
@@ -227,17 +262,53 @@ export function createDefaultInstalledAgentSource(
         installedProviders.set(name, buildProviderFor({ [name]: record }));
     }
 
-    // The client registry of connected AppAgentHosts (design §3.3). Built now;
-    // used for cross-session fan-out in Milestone 3. In Phase 1 the issuing
-    // session is reached directly via the package agent's own AppAgentHost.
+    // The client registry of connected AppAgentHosts (design §3.3), used for
+    // cross-session fan-out (design §4). connect() adds; dispose() removes.
     const clients = new Set<AppAgentHost>();
+
+    // Fan out an add to every connected session (design §4, §5): the ISSUING
+    // session is awaited (errors surface to the user) and enabled; every SIBLING
+    // is best-effort/async (applied at its next idle), disabled, and notified —
+    // a throw is caught and logged per client, never failing the committed op.
+    async function fanOutAdd(
+        provider: AppAgentProvider,
+        issuingHost: AppAgentHost,
+    ): Promise<void> {
+        for (const host of clients) {
+            if (host === issuingHost) {
+                continue;
+            }
+            host.addProvider(provider, false, true).catch((e) => {
+                debug(`sibling addProvider failed: ${e}`);
+            });
+        }
+        await issuingHost.addProvider(provider, true, false);
+    }
+
+    // Fan out a remove to every connected session (design §4): issuing awaited;
+    // siblings best-effort/async + notified.
+    async function fanOutRemove(
+        provider: AppAgentProvider,
+        issuingHost: AppAgentHost,
+    ): Promise<void> {
+        for (const host of clients) {
+            if (host === issuingHost) {
+                continue;
+            }
+            host.removeProvider(provider, true).catch((e) => {
+                debug(`sibling removeProvider failed: ${e}`);
+            });
+        }
+        await issuingHost.removeProvider(provider, false);
+    }
 
     const source: InstalledAgentSourceApi = {
         async install(
             name: string,
             ref: string,
-            sourceName?: string,
-        ): Promise<InstallResult> {
+            sourceName: string | undefined,
+            issuingHost: AppAgentHost,
+        ): Promise<{ source: string; warnings?: string[] }> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be shadowed by an install`,
@@ -273,15 +344,18 @@ export function createDefaultInstalledAgentSource(
             // Cache the shared per-agent provider so later connects vend it.
             const provider = buildProviderFor({ [name]: record });
             installedProviders.set(name, provider);
+            // Fan out to every connected session (design §4): issuing awaited +
+            // enabled; siblings best-effort + disabled + notified.
+            await fanOutAdd(provider, issuingHost);
             return {
-                provider,
                 source: record.source,
                 ...(warningSet.size > 0 ? { warnings: [...warningSet] } : {}),
             };
         },
         async uninstall(
             name: string,
-        ): Promise<{ provider: AppAgentProvider | undefined }> {
+            issuingHost: AppAgentHost,
+        ): Promise<void> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be uninstalled`,
@@ -295,19 +369,19 @@ export function createDefaultInstalledAgentSource(
                 delete current.agents[name];
                 writeAgentsJson(instanceDir, current);
             });
-            // Hand back the shared provider so the caller tears it down in the
-            // live session; drop it from the vended set.
+            // Drop the shared provider from the vended set and fan out its
+            // removal to every connected session (design §4).
             const provider = installedProviders.get(name);
             installedProviders.delete(name);
-            return { provider };
+            if (provider !== undefined) {
+                await fanOutRemove(provider, issuingHost);
+            }
         },
         async update(
             name: string,
-            range?: string,
-        ): Promise<{
-            oldProvider: AppAgentProvider | undefined;
-            newProvider: AppAgentProvider;
-        }> {
+            range: string | undefined,
+            issuingHost: AppAgentHost,
+        ): Promise<void> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be updated`,
@@ -394,7 +468,14 @@ export function createDefaultInstalledAgentSource(
             const oldProvider = installedProviders.get(name);
             const newProvider = buildProviderFor({ [name]: record });
             installedProviders.set(name, newProvider);
-            return { oldProvider, newProvider };
+            // Fan out remove-then-add per client (design §4): issuing awaited;
+            // siblings best-effort + notified. No two versions ever coexist —
+            // the remove is enqueued before the add on every session (§7.2 drain
+            // coordination is added in Milestone 4).
+            if (oldProvider !== undefined) {
+                await fanOutRemove(oldProvider, issuingHost);
+            }
+            await fanOutAdd(newProvider, issuingHost);
         },
         sourceCommands() {
             // The host owns the entire `@source` surface (list/order/where/
