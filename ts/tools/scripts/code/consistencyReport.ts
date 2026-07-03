@@ -323,12 +323,10 @@ interface AnalysisResult {
     elapsedMs: number;
 }
 
-function analyze(opts: Options): AnalysisResult {
-    const started = Date.now();
-
+function collectFiles(root: string, includeTests: boolean): string[] {
     const files: string[] = [];
     for (const sub of SCAN_SUBDIRS) {
-        const abs = path.join(opts.root, sub);
+        const abs = path.join(root, sub);
         if (!fs.existsSync(abs)) {
             continue;
         }
@@ -336,85 +334,89 @@ function analyze(opts: Options): AnalysisResult {
             if (!isCodeFile(full)) {
                 continue;
             }
-            const rel = path
-                .relative(opts.root, full)
-                .split(path.sep)
-                .join("/");
-            if (!opts.includeTests && isTestFile(rel)) {
+            const rel = path.relative(root, full).split(path.sep).join("/");
+            if (includeTests || !isTestFile(rel)) {
+                files.push(rel);
+            }
+        }
+    }
+    return files;
+}
+
+/** Record every top-level exported name in `content` under exportMap[name][pkg]. */
+function scanExports(
+    content: string,
+    pkg: string,
+    rel: string,
+    exportMap: Map<string, Map<string, Set<string>>>,
+): void {
+    for (const re of EXPORT_RES) {
+        re.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(content)) !== null) {
+            const name = m[1];
+            if (EXPORT_DENYLIST.has(name)) {
                 continue;
             }
-            files.push(rel);
+            let byPkg = exportMap.get(name);
+            if (!byPkg) {
+                byPkg = new Map();
+                exportMap.set(name, byPkg);
+            }
+            const set = byPkg.get(pkg) ?? new Set<string>();
+            set.add(rel);
+            byPkg.set(pkg, set);
         }
     }
+}
 
-    // name -> packageKey -> set(files)
-    const exportMap = new Map<string, Map<string, Set<string>>>();
-    const envByFile: EnvFile[] = [];
+/** Direct process.env access in a production package (excluding the config readers). */
+function scanEnv(
+    content: string,
+    rel: string,
+    pkg: string,
+): EnvFile | undefined {
+    if (!rel.startsWith(ENV_SCAN_PREFIX) || ENV_ALLOWED(rel)) {
+        return undefined;
+    }
+    const matches = content.match(/process\.env\b/g);
+    return matches && matches.length > 0
+        ? { file: rel, pkg, refs: matches.length }
+        : undefined;
+}
 
-    for (const rel of files) {
-        let content: string;
-        try {
-            content = fs.readFileSync(path.join(opts.root, rel), "utf8");
-        } catch {
+/** Exported names defined in at least `minPackages` different packages. */
+function buildDuplicateExports(
+    exportMap: Map<string, Map<string, Set<string>>>,
+    minPackages: number,
+): DuplicateExport[] {
+    const dups: DuplicateExport[] = [];
+    for (const [name, byPkg] of exportMap) {
+        if (byPkg.size < minPackages) {
             continue;
         }
-        const pkg = packageKeyOf(rel);
-
-        // Check 1: exported symbol names.
-        for (const re of EXPORT_RES) {
-            re.lastIndex = 0;
-            let m: RegExpExecArray | null;
-            while ((m = re.exec(content)) !== null) {
-                const name = m[1];
-                if (EXPORT_DENYLIST.has(name)) {
-                    continue;
-                }
-                let byPkg = exportMap.get(name);
-                if (!byPkg) {
-                    byPkg = new Map();
-                    exportMap.set(name, byPkg);
-                }
-                let set = byPkg.get(pkg);
-                if (!set) {
-                    set = new Set();
-                    byPkg.set(pkg, set);
-                }
-                set.add(rel);
-            }
+        const fileList: string[] = [];
+        for (const set of byPkg.values()) {
+            fileList.push(...set);
         }
-
-        // Check 2: direct process.env access (production packages only).
-        if (rel.startsWith(ENV_SCAN_PREFIX) && !ENV_ALLOWED(rel)) {
-            const matches = content.match(/process\.env\b/g);
-            if (matches && matches.length > 0) {
-                envByFile.push({ file: rel, pkg, refs: matches.length });
-            }
-        }
+        dups.push({
+            name,
+            packageCount: byPkg.size,
+            packages: [...byPkg.keys()].sort(),
+            files: fileList.sort(),
+        });
     }
-
-    // Duplicate exports: names in >= minPackages different packages.
-    const duplicateExports: DuplicateExport[] = [];
-    for (const [name, byPkg] of exportMap) {
-        if (byPkg.size >= opts.minPackages) {
-            const packages = [...byPkg.keys()].sort();
-            const fileList: string[] = [];
-            for (const set of byPkg.values()) {
-                fileList.push(...set);
-            }
-            duplicateExports.push({
-                name,
-                packageCount: byPkg.size,
-                packages,
-                files: fileList.sort(),
-            });
-        }
-    }
-    duplicateExports.sort(
+    return dups.sort(
         (a, b) =>
             b.packageCount - a.packageCount || a.name.localeCompare(b.name),
     );
+}
 
-    // process.env rollups.
+function buildEnvRollups(envByFile: EnvFile[]): {
+    envPackages: EnvPackage[];
+    envFiles: EnvFile[];
+    envTotalRefs: number;
+} {
     const envPkgMap = new Map<string, EnvPackage>();
     let envTotalRefs = 0;
     for (const e of envByFile) {
@@ -424,10 +426,37 @@ function analyze(opts: Options): AnalysisResult {
         r.files += 1;
         envPkgMap.set(e.pkg, r);
     }
-    const envPackages = [...envPkgMap.values()].sort((a, b) => b.refs - a.refs);
-    const envFiles = envByFile.sort((a, b) => b.refs - a.refs);
+    return {
+        envPackages: [...envPkgMap.values()].sort((a, b) => b.refs - a.refs),
+        envFiles: envByFile.sort((a, b) => b.refs - a.refs),
+        envTotalRefs,
+    };
+}
 
-    // Check 3: agent conformance.
+function analyze(opts: Options): AnalysisResult {
+    const started = Date.now();
+    const files = collectFiles(opts.root, opts.includeTests);
+
+    // name -> packageKey -> set(files)
+    const exportMap = new Map<string, Map<string, Set<string>>>();
+    const envByFile: EnvFile[] = [];
+    for (const rel of files) {
+        let content: string;
+        try {
+            content = fs.readFileSync(path.join(opts.root, rel), "utf8");
+        } catch {
+            continue;
+        }
+        const pkg = packageKeyOf(rel);
+        scanExports(content, pkg, rel, exportMap);
+        const env = scanEnv(content, rel, pkg);
+        if (env) {
+            envByFile.push(env);
+        }
+    }
+
+    const duplicateExports = buildDuplicateExports(exportMap, opts.minPackages);
+    const { envPackages, envFiles, envTotalRefs } = buildEnvRollups(envByFile);
     const agents = analyzeAgents(opts.root);
     const agentIssues = agents.filter(
         (a) => !a.hasManifest || !a.hasInstantiate,
