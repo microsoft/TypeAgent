@@ -114,9 +114,11 @@ export function getBundledAgentNames(configName?: string): Set<string> {
 export function createBundledAppAgentProvider(
     configName?: string,
 ): AppAgentProvider {
-    return createInstalledAppAgentProvider(seedRecordsFromConfig(configName), {
+    // Bundled agents all resolve against the single app-bundle root (no
+    // installDir), so there is exactly one group / provider.
+    return createInstalledAppAgentProviders(seedRecordsFromConfig(configName), {
         appBundleRequirePath: getAppBundleRequirePath(),
-    });
+    })[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -221,90 +223,23 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     return info;
 }
 
-// Combine multiple AppAgentProviders into one facade routing each agent to its
-// owning provider. Used because the installed-agent provider may span more than
-// one `requirePath` root (feed installDir vs app bundle) while presenting a
-// single provider to the dispatcher (design §4.4).
-//
-// This is a pure ROUTING facade. It deliberately does NOT own a connection
-// lifecycle / client registry / fan-out (the `connect` seam in the
-// connected-provider design): that is a separate concern layered OUTSIDE this
-// facade, because the same builder (`createInstalledAppAgentProvider`) also
-// produces the STATIC bundled provider, which must never fan out.
-export function combineAppAgentProviders(
-    providers: AppAgentProvider[],
-): AppAgentProvider {
-    if (providers.length === 1) {
-        return providers[0];
-    }
-    // Pre-compute name -> owning provider so routing is O(1), not a linear
-    // scan per call.
-    const owners = new Map<string, AppAgentProvider>();
-    for (const provider of providers) {
-        for (const name of provider.getAppAgentNames()) {
-            owners.set(name, provider);
-        }
-    }
-    function providerFor(name: string): AppAgentProvider {
-        const provider = owners.get(name);
-        if (provider === undefined) {
-            throw new Error(`Invalid app agent: ${name}`);
-        }
-        return provider;
-    }
-    const combined: AppAgentProvider = {
-        getAppAgentNames() {
-            return providers.flatMap((p) => p.getAppAgentNames());
-        },
-        getAppAgentManifest(name) {
-            return providerFor(name).getAppAgentManifest(name);
-        },
-        loadAppAgent(name) {
-            return providerFor(name).loadAppAgent(name);
-        },
-        unloadAppAgent(name) {
-            return providerFor(name).unloadAppAgent(name);
-        },
-        setTraceNamespaces(namespaces: string) {
-            for (const provider of providers) {
-                provider.setTraceNamespaces?.(namespaces);
-            }
-        },
-    };
-    // Faithfully forward the OPTIONAL async-loading surface too, but expose a
-    // method only when at least one grouped provider implements it, so presence
-    // checks (e.g. `if (provider.onSchemaReady)`) stay accurate:
-    //   - onSchemaReady: register the caller's callback with every async
-    //     provider so a late-ready manifest from any root still propagates.
-    //   - getLoadingAgentNames: union the still-loading names across roots.
-    // Today's grouped providers are all `createNpmAppAgentProvider`, which is
-    // synchronous and implements neither - so in practice these stay absent.
-    // Forwarding keeps the facade correct if a root provider ever loads async.
-    if (providers.some((p) => p.onSchemaReady !== undefined)) {
-        combined.onSchemaReady = (callback) => {
-            for (const provider of providers) {
-                provider.onSchemaReady?.(callback);
-            }
-        };
-    }
-    if (providers.some((p) => p.getLoadingAgentNames !== undefined)) {
-        combined.getLoadingAgentNames = () =>
-            providers.flatMap((p) => p.getLoadingAgentNames?.() ?? []);
-    }
-    return combined;
-}
-
 /**
- * Build the single installed-agent AppAgentProvider over a set of records
+ * Build the installed-agent AppAgentProvider(s) over a set of records
  * (design §4.4). `module` records resolve against the provenance roots
  * (installDir first, then the app bundle); `path` records resolve from their
  * explicit absolute path (the requirePath is irrelevant for them). Records are
- * grouped by chosen root so each group reuses one `createNpmAppAgentProvider`.
+ * grouped by chosen root, and each group becomes its own
+ * `createNpmAppAgentProvider` — so an agent set that spans roots is returned as
+ * a LIST of single-root providers rather than combined behind a routing facade.
+ * Callers that expect a single provider (bundled set, or a single-record
+ * installed agent) always resolve to one root, so they can take `[0]`; the
+ * indexing-service enumeration consumes the whole list. At least one (possibly
+ * empty) provider is always returned, so the result is never empty.
  */
-export function createInstalledAppAgentProvider(
+export function createInstalledAppAgentProviders(
     records: Record<string, InstalledAgentRecord>,
     roots: { installDir?: string; appBundleRequirePath: string },
-): AppAgentProvider {
+): AppAgentProvider[] {
     const appBundleRoot = roots.appBundleRequirePath;
     const moduleRoots =
         roots.installDir !== undefined
@@ -346,7 +281,7 @@ export function createInstalledAppAgentProvider(
         ([requirePath, configs]) =>
             createNpmAppAgentProvider(configs, requirePath),
     );
-    return combineAppAgentProviders(providers);
+    return providers;
 }
 
 /**

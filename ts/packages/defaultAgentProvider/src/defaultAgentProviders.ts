@@ -33,7 +33,7 @@ import {
 import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 import {
     createBundledAppAgentProvider,
-    createInstalledAppAgentProvider,
+    createInstalledAppAgentProviders,
     getAppBundleRequirePath,
     getBundledAgentNames,
     loadInstalledRecords,
@@ -81,22 +81,23 @@ export function getDefaultAppAgentProviders(
 }
 
 /**
- * Build the multi-root installed-agent provider from `agents.json`. Used only
- * for static enumeration (e.g. the indexing-service registry) where the live
- * connection lifecycle is not involved. The dispatcher runtime instead gets
- * installed agents from {@link getDefaultAppAgentSource}. Returns undefined when
- * no instance dir is available.
+ * Build the installed-agent provider(s) from `agents.json`. Used only for static
+ * enumeration (e.g. the indexing-service registry) where the live connection
+ * lifecycle is not involved. The dispatcher runtime instead gets installed
+ * agents from {@link getDefaultAppAgentSource}. Returns a per-root-group list
+ * (possibly spanning installDir + app bundle) so no combined routing facade is
+ * needed; empty when no instance dir is available.
  */
-function getInstalledAppAgentProvider(
+function getInstalledAppAgentProviders(
     instanceConfigs: InstanceConfigProvider | undefined,
-): AppAgentProvider | undefined {
+): AppAgentProvider[] {
     const instanceDir = instanceConfigs?.getInstanceDir();
     if (instanceDir === undefined) {
-        return undefined;
+        return [];
     }
     const installDir = getInstallDir(instanceConfigs);
     const records = loadInstalledRecords(instanceDir);
-    return createInstalledAppAgentProvider(records, {
+    return createInstalledAppAgentProviders(records, {
         ...(installDir !== undefined ? { installDir } : {}),
         appBundleRequirePath: getAppBundleRequirePath(),
     });
@@ -229,11 +230,12 @@ export function createDefaultInstalledAgentSource(
         // Installed agents honor their manifest default just like bundled agents
         // (design §5, Model B): the register-time state derivation uses
         // `config[name] ?? manifestDefault`, and a user's explicit per-session
-        // `@config agent` override still wins.
-        return createInstalledAppAgentProvider(records, {
+        // `@config agent` override still wins. A single installed record always
+        // resolves to one root, so there is exactly one provider.
+        return createInstalledAppAgentProviders(records, {
             ...(installDir !== undefined ? { installDir } : {}),
             appBundleRequirePath,
-        });
+        })[0];
     }
 
     // Builtins are the app's shipped bundled agents (their own static
@@ -734,15 +736,12 @@ export async function getIndexingServiceRegistry(
     );
     // Installed agents are vended by the AppAgentSource at runtime, but their
     // indexing services must still be discovered here, so enumerate them from
-    // the static multi-root installed provider too (design §3.3).
+    // the static installed provider list too (design §3.3).
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"
             ? getInstanceConfigProvider(instanceDirOrConfigProvider)
             : instanceDirOrConfigProvider;
-    const installedProvider = getInstalledAppAgentProvider(instanceConfigs);
-    if (installedProvider !== undefined) {
-        providers.push(installedProvider);
-    }
+    providers.push(...getInstalledAppAgentProviders(instanceConfigs));
     const registry = new DefaultIndexingServiceRegistry();
 
     for (const provider of providers) {

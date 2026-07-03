@@ -6,8 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
     createBundledAppAgentProvider,
-    createInstalledAppAgentProvider,
-    combineAppAgentProviders,
+    createInstalledAppAgentProviders,
     getAppBundleRequirePath,
     readAgentsJson,
 } from "../src/installSources/installedAgents.js";
@@ -92,7 +91,24 @@ function makePathAgentDir(emojiChar: string): string {
     return dir;
 }
 
-describe("createInstalledAppAgentProvider", () => {
+describe("createInstalledAppAgentProviders", () => {
+    // Find the provider in a list that owns the given agent name.
+    function providerFor(
+        providers: AppAgentProvider[],
+        name: string,
+    ): AppAgentProvider {
+        const provider = providers.find((p) =>
+            p.getAppAgentNames().includes(name),
+        );
+        if (provider === undefined) {
+            throw new Error(`no provider owns '${name}'`);
+        }
+        return provider;
+    }
+    function allNames(providers: AppAgentProvider[]): string[] {
+        return providers.flatMap((p) => p.getAppAgentNames()).sort();
+    }
+
     it("loads a bundled module record against the app bundle root", async () => {
         const records: Record<string, InstalledAgentRecord> = {
             player: {
@@ -102,15 +118,18 @@ describe("createInstalledAppAgentProvider", () => {
                 source: "bundled",
             },
         };
-        const provider = createInstalledAppAgentProvider(records, {
+        const providers = createInstalledAppAgentProviders(records, {
             appBundleRequirePath: getAppBundleRequirePath(),
         });
-        expect(provider.getAppAgentNames()).toEqual(["player"]);
-        const manifest = await provider.getAppAgentManifest("player");
+        expect(allNames(providers)).toEqual(["player"]);
+        const manifest = await providerFor(
+            providers,
+            "player",
+        ).getAppAgentManifest("player");
         expect(manifest).toBeDefined();
     });
 
-    it("unions agent names across resolution roots and rejects unknown names", async () => {
+    it("unions agent names across records", async () => {
         const records: Record<string, InstalledAgentRecord> = {
             player: {
                 name: "player",
@@ -125,22 +144,19 @@ describe("createInstalledAppAgentProvider", () => {
                 source: "path",
             },
         };
-        const provider = createInstalledAppAgentProvider(records, {
+        const providers = createInstalledAppAgentProviders(records, {
             installDir: "/nonexistent/installDir",
             appBundleRequirePath: getAppBundleRequirePath(),
         });
-        expect(provider.getAppAgentNames().sort()).toEqual(["mine", "player"]);
-        await expect(provider.getAppAgentManifest("nope")).rejects.toThrow(
-            /Invalid app agent/,
-        );
+        expect(allNames(providers)).toEqual(["mine", "player"]);
     });
 
     it("is well-formed with no records", () => {
-        const provider = createInstalledAppAgentProvider(
+        const providers = createInstalledAppAgentProviders(
             {},
             { appBundleRequirePath: getAppBundleRequirePath() },
         );
-        expect(provider.getAppAgentNames()).toEqual([]);
+        expect(allNames(providers)).toEqual([]);
     });
 
     it("routes a feed module to installDir and a bundled module to the app bundle", async () => {
@@ -160,82 +176,23 @@ describe("createInstalledAppAgentProvider", () => {
                 source: "bundled",
             },
         };
-        const provider = createInstalledAppAgentProvider(records, {
+        const providers = createInstalledAppAgentProviders(records, {
             installDir,
             appBundleRequirePath: getAppBundleRequirePath(),
         });
-        expect(provider.getAppAgentNames().sort()).toEqual(["feedy", "player"]);
+        expect(allNames(providers)).toEqual(["feedy", "player"]);
         // feed module resolves ONLY from installDir (absent in app bundle)
-        const feedManifest = await provider.getAppAgentManifest("feedy");
+        const feedManifest = await providerFor(
+            providers,
+            "feedy",
+        ).getAppAgentManifest("feedy");
         expect(feedManifest.emojiChar).toBe("🧪");
         // bundled module still resolves from the app bundle root
-        const bundledManifest = await provider.getAppAgentManifest("player");
+        const bundledManifest = await providerFor(
+            providers,
+            "player",
+        ).getAppAgentManifest("player");
         expect(bundledManifest).toBeDefined();
-    });
-});
-
-describe("combineAppAgentProviders optional-surface forwarding", () => {
-    // Minimal fake provider. The manifest/load paths are never exercised by
-    // these routing tests, so they reject if called.
-    function fakeProvider(
-        names: string[],
-        extra?: Partial<AppAgentProvider>,
-    ): AppAgentProvider {
-        return {
-            getAppAgentNames: () => names,
-            getAppAgentManifest: () => Promise.reject(new Error("unused")),
-            loadAppAgent: () => Promise.reject(new Error("unused")),
-            unloadAppAgent: () => Promise.resolve(),
-            ...extra,
-        };
-    }
-
-    it("omits onSchemaReady/getLoadingAgentNames when no grouped provider has them", () => {
-        const combined = combineAppAgentProviders([
-            fakeProvider(["a"]),
-            fakeProvider(["b"]),
-        ]);
-        expect(combined.getAppAgentNames().sort()).toEqual(["a", "b"]);
-        expect(combined.onSchemaReady).toBeUndefined();
-        expect(combined.getLoadingAgentNames).toBeUndefined();
-    });
-
-    it("registers a single onSchemaReady callback with every async provider and unions getLoadingAgentNames", () => {
-        const registeredWithA: unknown[] = [];
-        const registeredWithB: unknown[] = [];
-        const combined = combineAppAgentProviders([
-            fakeProvider(["a"], {
-                onSchemaReady: (cb) => registeredWithA.push(cb),
-                getLoadingAgentNames: () => ["a"],
-            }),
-            fakeProvider(["b"], {
-                onSchemaReady: (cb) => registeredWithB.push(cb),
-                getLoadingAgentNames: () => ["b"],
-            }),
-        ]);
-        expect(combined.getLoadingAgentNames?.().sort()).toEqual(["a", "b"]);
-        const callback = () => undefined;
-        combined.onSchemaReady?.(callback);
-        // the one caller callback fans out to BOTH grouped providers
-        expect(registeredWithA).toEqual([callback]);
-        expect(registeredWithB).toEqual([callback]);
-    });
-
-    it("exposes the optional method when only some providers implement it", () => {
-        const combined = combineAppAgentProviders([
-            fakeProvider(["a"], { getLoadingAgentNames: () => ["a"] }),
-            fakeProvider(["b"]),
-        ]);
-        expect(combined.getLoadingAgentNames?.()).toEqual(["a"]);
-        expect(combined.onSchemaReady).toBeUndefined();
-    });
-
-    it("returns the sole provider unchanged (preserving its optional surface) for one input", () => {
-        const only = fakeProvider(["a"], {
-            onSchemaReady: () => undefined,
-            getLoadingAgentNames: () => [],
-        });
-        expect(combineAppAgentProviders([only])).toBe(only);
     });
 });
 
