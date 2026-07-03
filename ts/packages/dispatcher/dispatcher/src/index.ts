@@ -16,6 +16,9 @@ export type {
 export type {
     AppAgentProvider,
     AppAgentInstaller,
+    AppAgentHost,
+    AppAgentSource,
+    AppAgentConnection,
     InstallResult,
     InstalledAgentInfo,
     ConstructionProvider,

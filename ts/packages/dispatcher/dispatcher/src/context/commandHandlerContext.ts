@@ -69,10 +69,17 @@ import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
     AppAgentInstaller,
     AppAgentProvider,
+    AppAgentHost,
+    AppAgentSource,
+    AppAgentConnection,
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
-import { RequestMetricsManager } from "../utils/metrics.js";
+import {
+    AppAgentHostApplicator,
+    AppAgentHostApplyFns,
+} from "./appAgentHost.js";
 import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
+import { RequestMetricsManager } from "../utils/metrics.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 import {
@@ -150,6 +157,15 @@ export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
     readonly agentInstaller: AppAgentInstaller | undefined;
+    // The per-dispatcher AppAgentHost applicator (design §3.1, §7.1): an
+    // idle-gated FIFO add/remove surface connected AppAgentSources use to mutate
+    // this session's live agent set. In M2 this instance is placed into the
+    // host-owned `@package` agent's own agentContext (design §3.4).
+    appAgentHost: AppAgentHostApplicator;
+    // Live connections to the injected AppAgentSources. Disposed at context
+    // teardown, which deregisters this host from each source's registry without
+    // tearing down the shared provider instances (design §6).
+    readonly appAgentConnections: AppAgentConnection[];
     // The merged system command table (core commands plus the host's `@source`
     // table when an installer is present). Built once at construction because
     // the installer is fixed for the dispatcher's lifetime; see
@@ -308,6 +324,11 @@ async function getAgentCache(
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
     appAgentProviders?: AppAgentProvider[];
+    // Dynamic (installed) agent sources. Each is connected once per dispatcher
+    // at context init; `connect()` vends the provider(s) to register and a
+    // teardown handle, and lets the source fan out live install/uninstall to
+    // this session (design §3.2).
+    appAgentSources?: AppAgentSource[];
     persistDir?: string | undefined; // the directory to save state.
     instanceDir?: string | undefined; // global instance directory for cross-session agent storage (config, auth tokens, user preferences). When omitted, falls back to persistDir.
     persistSession?: boolean; // default to false,
@@ -597,6 +618,107 @@ export async function installAppProvider(
     }
 }
 
+/**
+ * Apply an explicit enabled state to the agent(s) of a just-added provider
+ * (design §5). Unlike {@link setAppAgentStates}, which derives every agent's
+ * state from session config, this forces the provider's own schemas/actions/
+ * commands to `enable` while leaving all other agents at their current
+ * (config-derived) state. Used by the {@link AppAgentHost} add path so the
+ * source can set the initial state per its policy (true for the issuing session,
+ * false for siblings).
+ */
+async function applyExplicitAgentState(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+    enable: boolean,
+) {
+    const config = context.session.getConfig();
+    const agentNames = new Set(provider.getAppAgentNames());
+    const override: AppAgentStateSettings = {
+        schemas: { ...config.schemas },
+        actions: { ...config.actions },
+        commands: { ...config.commands },
+    };
+    for (const schemaName of context.agents.getSchemaNames()) {
+        if (agentNames.has(getAppAgentName(schemaName))) {
+            override.schemas![schemaName] = enable;
+            override.actions![schemaName] = enable;
+        }
+    }
+    for (const name of agentNames) {
+        override.commands![name] = enable;
+    }
+    const result = await context.agents.setState(context, override);
+    const rollback = processSetAppAgentStateResult(result, context, (message) =>
+        debug(`Install: ${message}`),
+    );
+    if (rollback) {
+        context.session.updateConfig(rollback);
+    }
+}
+
+/**
+ * The {@link AppAgentHost.addProvider} body (design §3.1): the
+ * {@link installAppProvider} wrapper reworked to apply an **explicit** `enable`
+ * instead of deriving state from session config. Registers the provider, applies
+ * the explicit state, re-runs collision detection degraded-to-warn, and saves
+ * the embedding cache. Runs through the idle-gated applicator (design §7.1).
+ */
+async function hostAddProvider(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+    enable: boolean,
+) {
+    const useNFAGrammar =
+        context.session.getConfig().cache.grammarSystem === "nfa";
+
+    // Don't use embedding cache for a new agent.
+    await context.agents.addProvider(
+        provider,
+        context.agentCache.grammarStore,
+        undefined,
+        context.agentGrammarRegistry,
+        useNFAGrammar,
+    );
+
+    await applyExplicitAgentState(context, provider, enable);
+
+    // Re-run collision detection now that a new agent has been installed.
+    // Degrade to warn — installing into a live session must never crash it.
+    try {
+        await runStaticCollisionDetection(context, true);
+    } catch (e) {
+        debugError(`Post-install collision detection failed: ${e}`);
+    }
+
+    const embeddingCachePath = getEmbeddingCachePath(context);
+    if (embeddingCachePath !== undefined) {
+        const unlock = await lockEmbeddingCacheDir(context);
+        try {
+            await saveActionEmbeddings(context, embeddingCachePath);
+        } finally {
+            if (unlock) {
+                await unlock();
+            }
+        }
+    }
+}
+
+/**
+ * The {@link AppAgentHost.removeProvider} body (design §3.1): tear down a
+ * previously-added provider by identity via the {@link AppAgentManager}
+ * removeProvider primitive. Runs through the idle-gated applicator (design §7.1).
+ */
+async function hostRemoveProvider(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+) {
+    await context.agents.removeProvider(
+        provider,
+        context.agentCache.grammarStore,
+    );
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: DispatcherOptions,
@@ -668,6 +790,10 @@ export async function initializeCommandHandlerContext(
             agents,
             portRegistrar,
             agentInstaller: options?.agentInstaller,
+            // Assigned just below once `context` exists (the apply closures need
+            // it); mirrors how `requestQueue` is wired.
+            appAgentHost: undefined as unknown as AppAgentHostApplicator,
+            appAgentConnections: [],
             systemCommands: getSystemHandlers(options?.agentInstaller),
             session,
             persistDir,
@@ -805,7 +931,34 @@ export async function initializeCommandHandlerContext(
         );
 
         await initializeMemory(context, sessionDirPath);
+
+        // Build the per-dispatcher AppAgentHost applicator (design §3.1, §7.1).
+        // Its apply closures reach the fully-built `context`.
+        const hostApplyFns: AppAgentHostApplyFns = {
+            applyAdd: (provider, enable) =>
+                hostAddProvider(context, provider, enable),
+            applyRemove: (provider) => hostRemoveProvider(context, provider),
+        };
+        context.appAgentHost = new AppAgentHostApplicator(
+            context.commandLock,
+            hostApplyFns,
+        );
+
         await addAppAgentProviders(context, options?.appAgentProviders);
+
+        // Connect the injected dynamic agent sources (design §3.2, §6). The
+        // initial set comes from the vended `connection.providers` registered
+        // through the normal path; subsequent add/remove deltas arrive via the
+        // `AppAgentHost` fan-out.
+        if (options?.appAgentSources) {
+            for (const source of options.appAgentSources) {
+                const connection = source.connect(context.appAgentHost);
+                context.appAgentConnections.push(connection);
+                for (const provider of connection.providers) {
+                    await installAppProvider(context, provider);
+                }
+            }
+        }
 
         // Initialize geolocation in the background (non-blocking)
         initializeGeolocation().catch(() => {});
@@ -1162,6 +1315,9 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    // Stop accepting fan-out ops into this (closing) session: abandon queued
+    // add/remove and make any later fan-out a no-op (design §6, §7.1).
+    context.appAgentHost.dispose();
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();
@@ -1170,6 +1326,28 @@ export async function closeCommandHandlerContext(
     }
     // Save the session because the token count is in it.
     context.session.save();
+    // Disconnect the dynamic agent sources (design §6): unregister their vended
+    // providers from this manager and deregister this host from each source's
+    // registry. This does NOT tear down the shared provider instances — other
+    // sessions still hold them.
+    for (const connection of context.appAgentConnections) {
+        for (const provider of connection.providers) {
+            try {
+                await context.agents.removeProvider(
+                    provider,
+                    context.agentCache.grammarStore,
+                );
+            } catch (e) {
+                debugError(`Failed to unregister source provider: ${e}`);
+            }
+        }
+        try {
+            connection.dispose();
+        } catch (e) {
+            debugError(`Failed to dispose source connection: ${e}`);
+        }
+    }
+    context.appAgentConnections.length = 0;
     await context.agents.close();
     if (context.instanceDirLock) {
         await context.instanceDirLock();

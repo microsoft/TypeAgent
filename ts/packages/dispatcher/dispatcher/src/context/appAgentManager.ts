@@ -1155,6 +1155,28 @@ export class AppAgentManager implements ActionConfigProvider {
         }
     }
 
+    /**
+     * Remove a whole provider by identity (design §3.1, §8): derive the
+     * provider's agent name(s) via {@link AppAgentProvider.getAppAgentNames} and
+     * tear each one down through the existing name-based {@link removeAgent}
+     * (schemas, grammars, embeddings, and any live `SessionContext` are dropped
+     * there). A no-op for names this manager never registered (e.g. an unknown
+     * provider) — `removeAgent` skips names it does not know.
+     *
+     * NEW work relative to `removeAgent`, which is name-only and neither tracks
+     * nor drops a provider. Source-vended providers are single-agent (the host
+     * asserts that invariant before add), but this loops defensively over every
+     * vended name.
+     */
+    public async removeProvider(
+        provider: AppAgentProvider,
+        grammarStore?: GrammarStore,
+    ) {
+        for (const name of provider.getAppAgentNames()) {
+            await this.removeAgent(name, grammarStore);
+        }
+    }
+
     public getActionEmbeddings() {
         return this.actionSemanticMap?.embeddings();
     }

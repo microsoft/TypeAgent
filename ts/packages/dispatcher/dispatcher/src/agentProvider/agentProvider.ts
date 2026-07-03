@@ -22,6 +22,79 @@ export interface AppAgentProvider {
     getLoadingAgentNames?(): string[];
 }
 
+/**
+ * The dispatcher-side client callback an {@link AppAgentSource} uses to mutate a
+ * single connected session's live agent set (design §3.1). Implemented by the
+ * dispatcher (one per `CommandHandlerContext`); the source holds one per
+ * connected session and calls it to fan install/uninstall/update out to that
+ * session.
+ *
+ * It is the *only* surface the source uses to mutate live dispatcher state; the
+ * source never reaches into grammars, collision detection, or the embedding
+ * cache. Both operations are applied through an idle-gated FIFO applicator and
+ * resolve when the op is **applied** (the ack the source's lifecycle tracker
+ * waits on, design §7).
+ */
+export interface AppAgentHost {
+    /**
+     * Register a provider's agent into this dispatcher's live state. Unlike the
+     * old `installAppProvider`, the initial enabled state is NOT derived from
+     * session config; `enable` is applied explicitly (the source sets it per its
+     * policy — `true` for the issuing session, `false` for siblings; design §5).
+     * Asserts the single-agent invariant
+     * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
+     * be deferred until the session is idle.
+     */
+    addProvider(provider: AppAgentProvider, enable: boolean): Promise<void>;
+
+    /**
+     * Remove a previously-added provider from this dispatcher by provider
+     * IDENTITY: unload its agent, drop schemas/grammars/embeddings, close any
+     * live `SessionContext`, and drop the provider's records. Internally derives
+     * the name(s) via `getAppAgentNames()` and calls the name-based
+     * `removeAgent` per name. Resolves when APPLIED.
+     */
+    removeProvider(provider: AppAgentProvider): Promise<void>;
+}
+
+/**
+ * The dispatcher-facing surface of the dynamic (installed) agent set (design
+ * §3.2). Injected as `appAgentSources` alongside the static `appAgentProviders`.
+ * The concrete host object also carries the write/command surface
+ * (`install`/`uninstall`/`update`/`packageCommands`), but the dispatcher is
+ * handed only the narrow `connect` view, so it can never drive an install.
+ */
+export interface AppAgentSource {
+    /**
+     * Called once per dispatcher at context init. Returns the provider(s) this
+     * source contributes to THIS session plus a teardown handle. The source
+     * records `host` for fan-out (design §4).
+     */
+    connect(host: AppAgentHost): AppAgentConnection;
+}
+
+/**
+ * The result of {@link AppAgentSource.connect}: the provider(s) to register into
+ * the connecting dispatcher plus a teardown handle (design §3.2).
+ */
+export interface AppAgentConnection {
+    /**
+     * The provider instance(s) to register into the connecting dispatcher via
+     * the normal addProvider path. These are SHARED singletons owned by the
+     * source: every `connect()` returns the same instance(s), so a loaded
+     * `AppAgent` is shared (refcounted) across all connected sessions rather
+     * than cloned per session.
+     */
+    readonly providers: AppAgentProvider[];
+    /**
+     * Deregisters THIS host from the source's fan-out registry. It does NOT tear
+     * down the shared providers (other sessions still use them); the dispatcher
+     * unregisters them from its own `AppAgentManager` as part of context
+     * teardown.
+     */
+    dispose(): void;
+}
+
 export interface AppAgentInstaller {
     // Install `ref`. With no sourceName, the registry walks the configured
     // resolution order (design §4.1) and the first matching source wins; an
