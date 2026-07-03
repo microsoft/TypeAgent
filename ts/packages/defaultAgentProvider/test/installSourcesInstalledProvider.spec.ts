@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
     createBundledAppAgentProvider,
+    createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
     getAppBundleRequirePath,
     readAgentsJson,
@@ -108,6 +109,21 @@ describe("createInstalledAppAgentProviders", () => {
     function allNames(providers: AppAgentProvider[]): string[] {
         return providers.flatMap((p) => p.getAppAgentNames()).sort();
     }
+
+    it("builds a single-agent provider for one record (runtime unit)", async () => {
+        const provider = createInstalledAppAgentProvider(
+            "player",
+            {
+                name: "player",
+                kind: "npm",
+                module: "music",
+                source: "bundled",
+            },
+            { appBundleRequirePath: getAppBundleRequirePath() },
+        );
+        expect(provider.getAppAgentNames()).toEqual(["player"]);
+        expect(await provider.getAppAgentManifest("player")).toBeDefined();
+    });
 
     it("loads a bundled module record against the app bundle root", async () => {
         const records: Record<string, InstalledAgentRecord> = {

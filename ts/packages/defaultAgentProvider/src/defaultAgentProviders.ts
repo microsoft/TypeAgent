@@ -33,6 +33,7 @@ import {
 import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 import {
     createBundledAppAgentProvider,
+    createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
     getAppBundleRequirePath,
     getBundledAgentNames,
@@ -224,20 +225,6 @@ export function createDefaultInstalledAgentSource(
             : {}),
     });
 
-    function buildProviderFor(
-        records: Record<string, InstalledAgentRecord>,
-    ): AppAgentProvider {
-        // Installed agents honor their manifest default just like bundled agents
-        // (design §5, Model B): the register-time state derivation uses
-        // `config[name] ?? manifestDefault`, and a user's explicit per-session
-        // `@config agent` override still wins. A single installed record always
-        // resolves to one root, so there is exactly one provider.
-        return createInstalledAppAgentProviders(records, {
-            ...(installDir !== undefined ? { installDir } : {}),
-            appBundleRequirePath,
-        })[0];
-    }
-
     // Builtins are the app's shipped bundled agents (their own static
     // provider), so they can never be installed-over, uninstalled, or updated.
     function isBuiltin(name: string): boolean {
@@ -269,11 +256,21 @@ export function createDefaultInstalledAgentSource(
     }
 
     // Build the shared, tombstoned provider for a record (design §5, §7.3).
+    // Installed agents honor their manifest default just like bundled agents
+    // (design §5, Model B): the register-time state derivation uses
+    // `config[name] ?? manifestDefault`, and a user's explicit per-session
+    // `@config agent` override still wins.
     function buildAgentProvider(
         name: string,
         record: InstalledAgentRecord,
     ): AppAgentProvider {
-        return withTombstone(name, buildProviderFor({ [name]: record }));
+        return withTombstone(
+            name,
+            createInstalledAppAgentProvider(name, record, {
+                ...(installDir !== undefined ? { installDir } : {}),
+                appBundleRequirePath,
+            }),
+        );
     }
 
     // Seed active entries from agents.json (design §3.3). One single-agent,

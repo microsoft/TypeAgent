@@ -114,11 +114,16 @@ export function getBundledAgentNames(configName?: string): Set<string> {
 export function createBundledAppAgentProvider(
     configName?: string,
 ): AppAgentProvider {
-    // Bundled agents all resolve against the single app-bundle root (no
-    // installDir), so there is exactly one group / provider.
-    return createInstalledAppAgentProviders(seedRecordsFromConfig(configName), {
-        appBundleRequirePath: getAppBundleRequirePath(),
-    })[0];
+    // Bundled agents ship in the app and all resolve against the single
+    // app-bundle root, so they are one provider at that root - no installDir
+    // and no per-record root resolution.
+    const configs: Record<string, NpmAppAgentInfo> = {};
+    for (const [name, record] of Object.entries(
+        seedRecordsFromConfig(configName),
+    )) {
+        configs[name] = recordToNpmInfo(record);
+    }
+    return createNpmAppAgentProvider(configs, getAppBundleRequirePath());
 }
 
 // ---------------------------------------------------------------------------
@@ -223,65 +228,57 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     return info;
 }
 
+type InstalledAgentRoots = {
+    installDir?: string;
+    appBundleRequirePath: string;
+};
+
+// The ordered candidate roots a `module` record resolves against: the feed
+// installDir first (if any), then the app bundle (design §4.1).
+function moduleRootsFor(roots: InstalledAgentRoots): string[] {
+    return roots.installDir !== undefined
+        ? [
+              path.join(roots.installDir, "package.json"),
+              roots.appBundleRequirePath,
+          ]
+        : [roots.appBundleRequirePath];
+}
+
 /**
- * Build the installed-agent AppAgentProvider(s) over a set of records
- * (design §4.4). `module` records resolve against the provenance roots
- * (installDir first, then the app bundle); `path` records resolve from their
- * explicit absolute path (the requirePath is irrelevant for them). Records are
- * grouped by chosen root, and each group becomes its own
- * `createNpmAppAgentProvider` — so an agent set that spans roots is returned as
- * a LIST of single-root providers rather than combined behind a routing facade.
- * Callers that expect a single provider (bundled set, or a single-record
- * installed agent) always resolve to one root, so they can take `[0]`; the
- * indexing-service enumeration consumes the whole list. At least one (possibly
- * empty) provider is always returned, so the result is never empty.
+ * Build the AppAgentProvider for a SINGLE installed agent record (design §4.4).
+ * A `path` record resolves from its explicit absolute path (the requirePath is
+ * irrelevant); a `module` record resolves against the provenance roots
+ * (installDir first, then the app bundle). This is the runtime unit the dynamic
+ * source vends - one single-agent provider per installed agent.
+ */
+export function createInstalledAppAgentProvider(
+    name: string,
+    record: InstalledAgentRecord,
+    roots: InstalledAgentRoots,
+): AppAgentProvider {
+    const requirePath =
+        record.path !== undefined
+            ? roots.appBundleRequirePath
+            : resolveModuleRoot(record.module ?? name, moduleRootsFor(roots));
+    return createNpmAppAgentProvider(
+        { [name]: recordToNpmInfo(record) },
+        requirePath,
+    );
+}
+
+/**
+ * Build one single-agent provider per record (design §4.4). Used for static
+ * enumeration (the indexing-service registry), which consumes the list; the
+ * runtime source builds each agent's provider individually via
+ * {@link createInstalledAppAgentProvider}. Returns [] for no records.
  */
 export function createInstalledAppAgentProviders(
     records: Record<string, InstalledAgentRecord>,
-    roots: { installDir?: string; appBundleRequirePath: string },
+    roots: InstalledAgentRoots,
 ): AppAgentProvider[] {
-    const appBundleRoot = roots.appBundleRequirePath;
-    const moduleRoots =
-        roots.installDir !== undefined
-            ? [path.join(roots.installDir, "package.json"), appBundleRoot]
-            : [appBundleRoot];
-
-    // group: requirePath -> { [agentName]: NpmAppAgentInfo }
-    const groups = new Map<string, Record<string, NpmAppAgentInfo>>();
-    function groupFor(requirePath: string): Record<string, NpmAppAgentInfo> {
-        let group = groups.get(requirePath);
-        if (group === undefined) {
-            group = {};
-            groups.set(requirePath, group);
-        }
-        return group;
-    }
-
-    for (const [name, record] of Object.entries(records)) {
-        const info = recordToNpmInfo(record);
-        if (record.path !== undefined) {
-            // path absolute -> requirePath base unused; co-locate with bundle.
-            groupFor(appBundleRoot)[name] = info;
-        } else {
-            const root = resolveModuleRoot(
-                record.module ?? record.name,
-                moduleRoots,
-            );
-            groupFor(root)[name] = info;
-        }
-    }
-
-    // Always build at least the (possibly empty) app-bundle group so the
-    // provider is well-formed when there are no records.
-    if (groups.size === 0) {
-        groups.set(appBundleRoot, {});
-    }
-
-    const providers = Array.from(groups.entries()).map(
-        ([requirePath, configs]) =>
-            createNpmAppAgentProvider(configs, requirePath),
+    return Object.entries(records).map(([name, record]) =>
+        createInstalledAppAgentProvider(name, record, roots),
     );
-    return providers;
 }
 
 /**
