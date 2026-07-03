@@ -150,6 +150,38 @@ Test-gap: grep gate for removed symbols (empty); install-sources suites (153)
 green; all packages (dispatcher, default-agent-provider, agentServer, api, shell
 node) build. No new tests needed for a docs/hygiene pass.
 
+## Final gate — branch-wide (self-review; Explore subagent unavailable)
+
+Aggregate diff reviewed against the whole design (§§1–9):
+
+- **Layering held across all packages.** `agent-dispatcher/src` has no import of
+  `default-agent-provider` (only two doc comments name it). The interfaces
+  (`AppAgentHost`/`AppAgentSource`/`AppAgentConnection`) live in core; the impl
+  (record store, registry, `@package` agent, client registry, per-name lifecycle
+  tracker) lives only in `default-agent-provider`.
+- **No leftover installer / `@package`-in-core paths.** Grep gate clean for
+  `AppAgentInstaller`, `getDefaultAppAgentInstaller`, `installCommandHandlers`,
+  `.agentInstaller`.
+- **`@package` context isolation as finally wired:** its `agentContext` is the
+  host-owned `PackageAgentContext { appAgentHost, source }`; it never receives
+  `CommandHandlerContext` (asserted by the `initializeAgentContext` identity test).
+- **Every design decision reflected:** Phase 1/2 split (M1–M2 layering, M3–M4
+  propagation); §5 enable policy (issuing true / siblings false + notify /
+  late-connect disabled); §7 lifecycle (active/removing drain, tombstone,
+  name-reuse gating, per-name serialization, commit-point/best-effort split).
+- **Cross-cutting test matrix:** every row is exercised — M1 applicator rows
+  (appAgentHost.spec, 19); M2 rows (packageAgent.spec 11 + installSourcesInstalled
+  Provider.spec); M3 fan-out/enable/notify/dispose rows; M4 drain/tombstone/
+  reuse/failure rows; M5 grep gate. End-to-end multi-conversation flow (install in
+  A → disabled+message in B → uninstall in A drains both → name reusable) is
+  covered at unit scope via fake hosts across the fan-out + lifecycle describes.
+- **Green:** dispatcher full suite (1003) + default-agent-provider install-sources
+  (153) + packageAgent (11) + appAgentHost (19); all touched packages build.
+
+No new findings; no fixes required beyond those already made in the milestone
+gates. Branch is ready for PR.
+
+
 
 
 
