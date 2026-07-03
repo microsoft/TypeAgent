@@ -6,13 +6,11 @@ import {
     ActionContext,
     AppAgentManifest,
     TypeAgentAction,
-    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
-    executeCommandFromHandlers,
-    getCommandCompletionFromHandlers,
+    getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
@@ -248,51 +246,13 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-// The `@package` command surface (install/uninstall/update/list + the nested
-// `@source` table) is NO LONGER grafted onto the system agent. It is contributed
-// by the host as its **own** app agent with its own `agentContext` (design §3.4,
-// implemented in `default-agent-provider`), so its handlers never receive the
-// dispatcher's `CommandHandlerContext`. The system agent keeps only the
-// truly-core `@` commands. The merged table is built once per dispatcher at
-// context construction and stored as `CommandHandlerContext.systemCommands`, so
-// it is the same instance for every
-// `getCommands`/`executeCommand`/`getCommandCompletion`/`@help` call.
-export function getSystemHandlers(): CommandHandlerTable {
-    return systemHandlers;
-}
+const commandInterface = getCommandInterface(systemHandlers);
 
 export const systemAgent: AppAgent = {
     getTemplateSchema: getSystemTemplateSchema,
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
-    getCommands: async (context: SessionContext<CommandHandlerContext>) =>
-        context.agentContext.systemCommands,
-    getCommandCompletion: async (
-        commands,
-        params,
-        names,
-        context: SessionContext<CommandHandlerContext>,
-        direction,
-    ) =>
-        getCommandCompletionFromHandlers(
-            context.agentContext.systemCommands,
-            commands,
-            params,
-            names,
-            context,
-            direction,
-        ),
-    executeCommand: async (
-        commands,
-        params,
-        context: ActionContext<CommandHandlerContext>,
-        attachments,
-    ) =>
-        executeCommandFromHandlers(
-            context.sessionContext.agentContext.systemCommands,
-            commands,
-            params,
-            context,
-            attachments,
-        ),
+    getCommands: commandInterface.getCommands,
+    getCommandCompletion: commandInterface.getCommandCompletion,
+    executeCommand: commandInterface.executeCommand,
 } as AppAgent;

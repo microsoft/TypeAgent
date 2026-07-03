@@ -4,6 +4,7 @@
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { systemHandlers } from "../systemAgent.js";
 import {
     getUsage,
     printAllCommandsWithUsage,
@@ -46,11 +47,7 @@ export class HelpCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         if (params.flags.all) {
             // print all system handlers
-            printAllCommandsWithUsage(
-                systemContext.systemCommands,
-                undefined,
-                context,
-            );
+            printAllCommandsWithUsage(systemHandlers, undefined, context);
 
             // print all agent handlers
             const agentNames: string[] =
@@ -84,7 +81,7 @@ export class HelpCommandHandler implements CommandHandler {
             return;
         } else if (params.args.command === undefined) {
             printStructuredHandlerTableUsage(
-                systemContext.systemCommands,
+                systemHandlers,
                 undefined,
                 context,
             );

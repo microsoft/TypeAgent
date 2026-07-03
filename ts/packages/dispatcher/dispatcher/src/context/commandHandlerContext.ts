@@ -91,8 +91,6 @@ import registerDebug from "debug";
 import path from "node:path";
 import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.js";
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
-import { getSystemHandlers } from "./system/systemAgent.js";
-import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
@@ -164,11 +162,6 @@ export type CommandHandlerContext = {
     // teardown, which deregisters this host from each source's registry without
     // tearing down the shared provider instances (design §6).
     readonly appAgentConnections: AppAgentConnection[];
-    // The merged system command table (core commands plus the host's `@source`
-    // table when an installer is present). Built once at construction because
-    // the installer is fixed for the dispatcher's lifetime; see
-    // getSystemHandlers in system/systemAgent.ts.
-    readonly systemCommands: CommandHandlerTable;
     session: Session;
 
     readonly persistDir: string | undefined;
@@ -914,7 +907,6 @@ export async function initializeCommandHandlerContext(
             // it); mirrors how `requestQueue` is wired.
             appAgentHost: undefined as unknown as AppAgentHostApplicator,
             appAgentConnections: [],
-            systemCommands: getSystemHandlers(),
             session,
             persistDir,
             instanceDir,
