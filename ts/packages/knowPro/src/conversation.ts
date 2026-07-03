@@ -3,7 +3,7 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
-import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
+import { tryCreateEmbeddingModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import {
     TextEmbeddingIndexSettings,
     createTextEmbeddingIndexSettings,
@@ -19,12 +19,23 @@ export interface ConversationSettings {
     semanticRefIndexSettings: SemanticRefIndexSettings;
 }
 
+let embeddingUnavailableAnnounced = false;
+
 export function createConversationSettings(
     embeddingModel?: TextEmbeddingModel | undefined,
     embeddingSize?: number,
 ): ConversationSettings {
-    embeddingModel ??= openai.createEmbeddingModel();
+    // May be undefined when no embedding provider is configured (e.g. Copilot
+    // self-host without a local embedder). Embedding-backed indexes then no-op
+    // and search degrades to exact/alias/edit-distance matching.
+    embeddingModel ??= tryCreateEmbeddingModel();
     embeddingSize ??= 1536;
+    if (embeddingModel === undefined && !embeddingUnavailableAnnounced) {
+        embeddingUnavailableAnnounced = true;
+        console.warn(
+            "knowPro: no embedding provider configured. Semantic (embedding) search over messages and semantic related-term expansion are disabled; exact, alias, and edit-distance matching remain available.",
+        );
+    }
     const minCosineSimilarity = 0.85;
     return {
         relatedTermIndexSettings: {

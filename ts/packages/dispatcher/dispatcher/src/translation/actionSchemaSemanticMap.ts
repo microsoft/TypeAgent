@@ -14,10 +14,11 @@ import {
     SimilarityType,
     TopNCollection,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import { TextEmbeddingModel, tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:semantic");
+const debugError = registerDebug("typeagent:dispatcher:semantic:error");
 
 type Entry = {
     embedding: NormalizedEmbedding;
@@ -29,15 +30,38 @@ export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
 export class ActionSchemaSemanticMap {
     private readonly actionSemanticMaps = new Map<string, Map<string, Entry>>();
-    private readonly model: TextEmbeddingModel;
+    private readonly model: TextEmbeddingModel | undefined;
+    // Set when no embedding provider is configured, or when embedding
+    // generation fails at load time. In that state semantic schema
+    // selection is unavailable and callers fall back to inline/search
+    // routing instead of the daemon failing to start.
+    private disabled: boolean;
     public constructor(model?: TextEmbeddingModel) {
-        this.model = model ?? openai.createEmbeddingModel();
+        this.model = model ?? tryCreateEmbeddingModel();
+        this.disabled = this.model === undefined;
+        if (this.disabled) {
+            debug(
+                "No embedding provider configured; action semantic map disabled (schema routing falls back to inline/search).",
+            );
+        }
     }
+
+    /**
+     * True when semantic schema selection is available. False when no
+     * embedding provider is configured or embeddings failed to load.
+     */
+    public get enabled(): boolean {
+        return !this.disabled && this.model !== undefined;
+    }
+
     public async addActionSchemaFile(
         config: ActionConfig,
         actionSchemaFile: ActionSchemaFile,
         cache?: EmbeddingCache,
     ) {
+        if (!this.enabled) {
+            return;
+        }
         const keys: string[] = [];
         const definitions: ActionSchemaTypeDefinition[] = [];
 
@@ -77,7 +101,7 @@ export class ActionSchemaSemanticMap {
             const start = Date.now();
             try {
                 const embeddings = await generateTextEmbeddingsWithRetry(
-                    this.model,
+                    this.model!,
                     keys,
                 );
                 debug(
@@ -91,11 +115,28 @@ export class ActionSchemaSemanticMap {
                     });
                 }
             } catch (e: any) {
-                debug(
+                // Do not fail agent initialization (which would exit the
+                // daemon) when embeddings are unavailable at load time.
+                // Disable semantic schema selection and fall back to
+                // inline/search routing instead.
+                this.disable(
                     `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`,
                 );
-                throw e;
             }
+        }
+    }
+
+    private disable(reason: string): void {
+        if (this.disabled) {
+            return;
+        }
+        this.disabled = true;
+        this.actionSemanticMaps.clear();
+        debugError(reason);
+        if (process.env.NODE_ENV !== "test") {
+            console.warn(
+                `Action semantic map disabled — schema routing falls back to inline/search. ${reason}`,
+            );
         }
     }
 
@@ -109,7 +150,18 @@ export class ActionSchemaSemanticMap {
         filter: (schemaName: string) => boolean,
         minScore: number = 0,
     ): Promise<ScoredItem<Entry>[]> {
-        const embedding = await generateEmbeddingWithRetry(this.model, request);
+        if (!this.enabled) {
+            return [];
+        }
+        let embedding: NormalizedEmbedding;
+        try {
+            embedding = await generateEmbeddingWithRetry(this.model!, request);
+        } catch (e: any) {
+            this.disable(
+                `Failed to embed request for semantic schema selection: ${e?.message ?? e}`,
+            );
+            return [];
+        }
         const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
         for (const [name, actionSemanticMap] of this.actionSemanticMaps) {
             if (!filter(name)) {

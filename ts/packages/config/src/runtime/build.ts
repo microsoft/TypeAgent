@@ -35,6 +35,8 @@ import {
     DeploymentEndpoint,
     DeploymentMode,
     type AzureOpenAIConfig,
+    type EmbeddingConfig,
+    type EmbeddingProviderMode,
 } from "./types.js";
 
 /**
@@ -158,6 +160,7 @@ export function buildConfig(flat: FlatEnv): Config {
     const reasoning = buildReasoning(remaining);
     const copilot = buildCopilot(remaining);
     const modelProvider = buildModelProvider(remaining);
+    const embedding = buildEmbedding(remaining);
 
     return {
         azureOpenAI,
@@ -174,6 +177,7 @@ export function buildConfig(flat: FlatEnv): Config {
         ...(reasoning ? { reasoning } : {}),
         ...(copilot ? { copilot } : {}),
         ...(modelProvider !== undefined ? { modelProvider } : {}),
+        ...(embedding ? { embedding } : {}),
         extra: new Map(remaining),
     };
 }
@@ -872,6 +876,35 @@ function buildReasoning(flat: Map<string, string>) {
     return {
         ...(Number.isFinite(timeoutMs) ? { timeoutMs } : {}),
         ...(copilotModel !== undefined ? { copilotModel } : {}),
+    };
+}
+
+function buildEmbedding(
+    flat: Map<string, string>,
+): EmbeddingConfig | undefined {
+    const providerRaw = popString(flat, "TYPEAGENT_EMBEDDING_PROVIDER");
+    const model = popString(flat, "TYPEAGENT_EMBEDDING_MODEL");
+    const cacheDir = popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR");
+
+    let provider: EmbeddingProviderMode | undefined;
+    if (providerRaw !== undefined) {
+        const v = providerRaw.toLowerCase();
+        if (v === "local" || v === "openai" || v === "azure" || v === "none") {
+            provider = v;
+        } else {
+            // Unknown value — leave it in extra rather than emitting a
+            // malformed typed field.
+            flat.set("TYPEAGENT_EMBEDDING_PROVIDER", providerRaw);
+        }
+    }
+
+    if (provider === undefined && model === undefined && cacheDir === undefined)
+        return undefined;
+
+    return {
+        ...(provider !== undefined ? { provider } : {}),
+        ...(model !== undefined ? { model } : {}),
+        ...(cacheDir !== undefined ? { cacheDir } : {}),
     };
 }
 

@@ -216,6 +216,31 @@ export interface AzureFoundryConfig {
  */
 export type ModelProviderMode = "azure" | "openai" | "ollama" | "copilot";
 
+/**
+ * Source of text embeddings, independent of the chat `modelProvider`.
+ * - "local": CPU-only transformers.js model bundled with the app.
+ * - "openai" / "azure": hosted embedding endpoints.
+ * - "none": embeddings disabled; consumers must degrade gracefully.
+ */
+export type EmbeddingProviderMode = "local" | "openai" | "azure" | "none";
+
+/**
+ * Embedding provider configuration. Kept separate from chat provider
+ * selection so a deployment can, for example, route chat through Copilot
+ * while still producing embeddings from a bundled local model. Endpoint /
+ * key for hosted providers reuse the existing `openAI` / `azureOpenAI`
+ * embedding entries; this section only selects the provider and (for the
+ * local provider) the model and weight cache directory.
+ */
+export interface EmbeddingConfig {
+    /** Which embedding provider to use. */
+    readonly provider?: EmbeddingProviderMode | undefined;
+    /** Local-provider model id (e.g. `Xenova/all-MiniLM-L6-v2`). */
+    readonly model?: string | undefined;
+    /** Directory used to cache / pre-stage local model weights. */
+    readonly cacheDir?: string | undefined;
+}
+
 export interface ReasoningConfig {
     /** Reasoning-loop timeout in milliseconds (0 = disabled). */
     readonly timeoutMs?: number | undefined;
@@ -262,6 +287,12 @@ export interface Config {
     readonly azureFoundry?: AzureFoundryConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
     readonly copilot?: CopilotConfig | undefined;
+    /**
+     * Embedding provider selection, independent of `modelProvider`. When
+     * omitted the embedding source is inferred from the configured hosted
+     * embedding endpoints (or disabled when none is present).
+     */
+    readonly embedding?: EmbeddingConfig | undefined;
     /**
      * Active provider mode for model resolution. When set, unprefixed
      * `createChatModel` calls route through this provider's mapping.

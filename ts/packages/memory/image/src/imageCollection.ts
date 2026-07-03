@@ -23,7 +23,7 @@ import {
     SemanticRefCollection,
 } from "knowpro";
 import { createEmbeddingCache } from "knowledge-processor";
-import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
+import { tryCreateEmbeddingModel, TextEmbeddingModel } from "@typeagent/aiclient";
 //import registerDebug from "debug";
 import sqlite from "better-sqlite3";
 import * as ms from "memory-storage";
@@ -265,13 +265,20 @@ export class ImageCollection
      * Create an embedding model that can just leverage those embeddings
      * @returns embedding model, size of embedding
      */
-    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+    private createEmbeddingModel(): [TextEmbeddingModel | undefined, number] {
+        // Undefined when no embedding provider is configured; image semantic
+        // search is then disabled while exact/alias term search still works.
+        const innerModel = tryCreateEmbeddingModel();
         return [
-            createEmbeddingCache(
-                openai.createEmbeddingModel(),
-                64,
-                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-            ),
+            innerModel === undefined
+                ? undefined
+                : createEmbeddingCache(
+                      innerModel,
+                      64,
+                      () =>
+                          this.secondaryIndexes.termToRelatedTermsIndex
+                              .fuzzyIndex,
+                  ),
             1536,
         ];
     }
