@@ -405,6 +405,16 @@ function fmt(n: number): string {
     return n.toLocaleString("en-US");
 }
 
+/**
+ * Build an escaped vscode:// deep link that opens the file (optionally at a
+ * given line) in VS Code when the path is clicked in a browser.
+ */
+function vscodeLink(root: string, relFile: string, line?: number): string {
+    const abs = path.resolve(root, relFile).split(path.sep).join("/");
+    const target = line !== undefined ? `${abs}:${line}` : abs;
+    return htmlEscape(encodeURI(`vscode://file/${target}`));
+}
+
 function formatDate(d: Date): string {
     const p = (n: number) => String(n).padStart(2, "0");
     return (
@@ -566,28 +576,32 @@ function distributionBarsHtml(counts: number[]): string {
     }).join("\n");
 }
 
-function funcRowsHtml(functions: FuncRecord[], budgetCc: number): string {
+function funcRowsHtml(
+    root: string,
+    functions: FuncRecord[],
+    budgetCc: number,
+): string {
     return functions
         .map((f) => {
             const over = f.cyclomatic > budgetCc ? " over" : "";
             return `      <tr>
         <td class="num${over}" data-v="${f.cyclomatic}">${fmt(f.cyclomatic)}</td>
         <td class="num" data-v="${f.cognitive}">${fmt(f.cognitive)}</td>
-        <td class="path" data-v="${htmlEscape(f.file)}">${htmlEscape(f.file)}:${f.line}</td>
+        <td class="path" data-v="${htmlEscape(f.file)}"><a href="${vscodeLink(root, f.file, f.line)}">${htmlEscape(f.file)}:${f.line}</a></td>
         <td data-v="${htmlEscape(f.name)}">${htmlEscape(f.name)}</td>
       </tr>`;
         })
         .join("\n");
 }
 
-function fileRowsHtml(files: FileRollup[]): string {
+function fileRowsHtml(root: string, files: FileRollup[]): string {
     return files
         .map((f) => {
             return `      <tr>
         <td class="num" data-v="${f.totalCyclomatic}">${fmt(f.totalCyclomatic)}</td>
         <td class="num" data-v="${f.maxCyclomatic}">${fmt(f.maxCyclomatic)}</td>
         <td class="num" data-v="${f.functions}">${fmt(f.functions)}</td>
-        <td class="path" data-v="${htmlEscape(f.file)}">${htmlEscape(f.file)}</td>
+        <td class="path" data-v="${htmlEscape(f.file)}"><a href="${vscodeLink(root, f.file)}">${htmlEscape(f.file)}</a></td>
       </tr>`;
         })
         .join("\n");
@@ -648,6 +662,8 @@ function buildHtml(
   td.num { text-align: right; font-variant-numeric: tabular-nums; color: #ffcc80; }
   td.num.over { color: #ef5350; font-weight: 700; }
   td.path { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; color: #b0bec5; }
+  td.path a { color: inherit; text-decoration: none; }
+  td.path a:hover { color: #4fc3f7; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -674,7 +690,7 @@ ${distributionBarsHtml(counts)}
       <th onclick="sortTable('fnTable', 3, false)">Function</th>
     </tr></thead>
     <tbody>
-${funcRowsHtml(topFns, opts.cyclomaticBudget)}
+${funcRowsHtml(opts.root, topFns, opts.cyclomaticBudget)}
     </tbody>
   </table>
 
@@ -687,7 +703,7 @@ ${funcRowsHtml(topFns, opts.cyclomaticBudget)}
       <th onclick="sortTable('fileTable', 3, false)">File</th>
     </tr></thead>
     <tbody>
-${fileRowsHtml(topFiles)}
+${fileRowsHtml(opts.root, topFiles)}
     </tbody>
   </table>
 
