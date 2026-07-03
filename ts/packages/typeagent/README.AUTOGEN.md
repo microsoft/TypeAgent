@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=36de64a778f1117df6313f03ac85c5a54e5eec74fd84ce5e9d5f8842192b6725 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=836213ee01d600092065077416ef836f104d37f2e783c281ea88a0a14dbac854 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `typeagent` package is a sample library code used by and intended only for the example agents and apps in the TypeAgent project. It provides various utilities and components that facilitate async processing, vectors and embeddings, storage, text processing, and collections.
+The `typeagent` package is a sample library designed to support the development of agents and applications within the TypeAgent project. It provides a collection of utilities and components for tasks such as asynchronous processing, vector and embedding operations, storage management, text processing, and collection utilities. While it is primarily intended for internal use within the TypeAgent ecosystem, it serves as a foundational library for many other packages and examples in the project.
 
 ## What it does
 
-The `typeagent` package offers a range of functionalities that are essential for building and running agents within the TypeAgent ecosystem. Key capabilities include:
+The `typeagent` package offers a variety of utilities and components that are essential for building and running agents. These include:
 
-- **Async Processing**: Functions like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable concurrent and retryable async operations.
-- **Vectors and Embeddings**: Utilities for handling vector operations and embeddings, such as `vectorIndex` and `semanticMap`, found in the `vector` directory.
-- **Storage**: Components for managing storage, including `objectFolder`, `objectPage`, and `embeddingFS`, located in the `storage` directory.
-- **Text Processing**: Tools for processing text, including `textClassifier` in [textClassifier.ts](./src/classifier/textClassifier.ts) and `createTypeChat` in [chat.ts](./src/chat.ts).
-- **Collections**: Various collection utilities provided in [lib/index.ts](./src/lib/index.ts).
+- **Async Processing**: Functions like `mapAsync` (in [arrayAsync.ts](./src/arrayAsync.ts)) and `callWithRetry` (in [async.ts](./src/async.ts)) provide tools for concurrent and retryable asynchronous operations.
+- **Vectors and Embeddings**: A suite of utilities for working with vectors and embeddings, such as `vectorIndex` and `semanticMap`, located in the `vector` directory.
+- **Storage Management**: Tools for managing data storage, including `objectFolder`, `objectPage`, and `embeddingFS`, which are implemented in the `storage` directory.
+- **Text Processing**: Functions for text-related tasks, such as `createTypeChat` (in [chat.ts](./src/chat.ts)) for chat interactions and `createTextClassifier` (in [textClassifier.ts](./src/classifier/textClassifier.ts)) for text classification.
+- **Collections**: A variety of collection utilities, such as `binarySearch` and `isUndefinedOrEmpty`, provided in [lib/array.ts](./src/lib/array.ts).
 
-These components are used by multiple packages and examples within the TypeAgent project, making `typeagent` a foundational library for the ecosystem.
+These components are widely used across the TypeAgent project, making `typeagent` a critical dependency for other packages and examples.
 
 ## Setup
 
@@ -34,40 +34,44 @@ The `typeagent` package does not require any special setup beyond installing its
 pnpm install
 ```
 
-For detailed setup instructions, see the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `typeagent` package is organized into several key files and directories, each responsible for different aspects of the library:
+The `typeagent` package is organized into several key files and directories, each serving a specific purpose:
 
-- **[src/index.ts](./src/index.ts)**: The main entry point that exports various modules and components.
-- **[src/arrayAsync.ts](./src/arrayAsync.ts)**: Contains functions for async array processing, such as `mapAsync`.
-- **[src/async.ts](./src/async.ts)**: Provides utilities for retrying async operations with `callWithRetry`.
-- **[src/chat.ts](./src/chat.ts)**: Implements the `createTypeChat` function for handling chat interactions.
-- **[src/classifier/textClassifier.ts](./src/classifier/textClassifier.ts)**: Defines the `createTextClassifier` function for text classification.
+- **[src/index.ts](./src/index.ts)**: The main entry point that exports the package's modules and components.
+- **[src/arrayAsync.ts](./src/arrayAsync.ts)**: Contains utilities for asynchronous array processing, such as `mapAsync`.
+- **[src/async.ts](./src/async.ts)**: Provides functions for retrying asynchronous operations, including `callWithRetry`.
+- **[src/chat.ts](./src/chat.ts)**: Implements the `createTypeChat` function, which facilitates chat interactions with context and history.
+- **[src/classifier/textClassifier.ts](./src/classifier/textClassifier.ts)**: Defines the `createTextClassifier` function for text classification tasks.
 - **[src/constraints.ts](./src/constraints.ts)**: Contains the `createConstraintsValidator` function for validating constraints.
-- **[src/dateTime.ts](./src/dateTime.ts)**: Provides utilities for handling date and time operations.
-- **[src/lib/array.ts](./src/lib/array.ts)**: Includes various array utilities, such as `binarySearch`.
+- **[src/dateTime.ts](./src/dateTime.ts)**: Provides utilities for handling and formatting date and time values.
+- **[src/lib/array.ts](./src/lib/array.ts)**: Includes various array utilities, such as `binarySearch` and `isUndefinedOrEmpty`.
+
+Additionally, the `vector` and `storage` directories contain specialized utilities for vector operations and storage management, respectively.
 
 ## How to extend
 
 To extend the `typeagent` package, follow these steps:
 
-1. **Identify the area to extend**: Determine which component or utility you need to modify or add to. For example, if you need to add a new async processing function, start with [arrayAsync.ts](./src/arrayAsync.ts).
+1. **Identify the area to extend**: Determine which component or utility you need to modify or add to. For example, if you need to add a new text processing function, start with [textProcessing.ts](./src/textProcessing.ts).
 
-2. **Create or modify files**: Add new functions or modify existing ones in the appropriate file. Ensure that your code follows the existing patterns and conventions.
+2. **Create or modify files**: Add new functions or modify existing ones in the appropriate file. Follow the established patterns and coding conventions in the package.
 
-3. **Export your additions**: Make sure to export your new functions or components in [index.ts](./src/index.ts) so they are accessible to other parts of the TypeAgent project.
+3. **Update exports**: Ensure that your new functions or components are exported in [index.ts](./src/index.ts) so they can be accessed by other parts of the TypeAgent project.
 
-4. **Write tests**: Add tests for your new functionality to ensure it works as expected. Place your tests in the corresponding test files or create new ones if necessary.
+4. **Write tests**: Create tests for your new functionality to ensure it works as expected. Add these tests to the corresponding test files or create new ones if necessary.
 
-5. **Run tests**: Execute the test suite to verify that your changes do not break existing functionality. Use the following command:
+5. **Run tests**: Use the following command to execute the test suite and verify that your changes do not introduce any regressions:
 
 ```sh
 pnpm test
 ```
 
-By following these steps, you can effectively extend the `typeagent` package and contribute to the TypeAgent project.
+6. **Document your changes**: Update the hand-written README or other relevant documentation to reflect your additions or modifications.
+
+By following these steps, you can contribute to the `typeagent` package and enhance its functionality for the TypeAgent ecosystem.
 
 ## Reference
 
@@ -75,7 +79,7 @@ By following these steps, you can effectively extend the `typeagent` package and
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -106,6 +110,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `88f04471002e27f82ae1ddf73a7ae8acdfe09b5d` on `2026-07-03T09:02:51.801Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

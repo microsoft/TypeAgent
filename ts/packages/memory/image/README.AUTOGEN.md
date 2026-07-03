@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7bce0714b8e70b7b5ff6cfa7ed4c6a6f1b936fa8869aa1d5ac2da3702b240d0a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f414f7f3297989f2faa68c29d4288fabd4da292c35af00dd404f91a5aba7ed92 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-memory — AI-generated documentation
@@ -12,64 +12,108 @@
 
 ## Overview
 
-The `image-memory` package is an experimental TypeScript library designed to implement image memory using structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` library to create an image collection that can be queried based on both knowledge content and metadata. This package is part of the TypeAgent monorepo and integrates with several other packages to provide its functionality.
+The `image-memory` package is an experimental TypeScript library designed to implement image memory using structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` library to create an `ImageCollection` that can be queried using natural language. This package is part of the TypeAgent monorepo and integrates with other packages such as `@typeagent/aiclient`, `knowledge-processor`, and `memory-storage` to provide its functionality.
 
 ## What it does
 
-The `image-memory` package provides the capability to index and query images using natural language. It supports actions such as `importImages` to index images from a specified path and `indexingService` to start an indexing service for images. The package allows images to be searched based on their content and metadata, making it possible to ask questions and get answers about the images in natural language.
+The primary purpose of the `image-memory` package is to enable the indexing and querying of images based on their metadata and knowledge content. This allows users to interact with an image collection using natural language queries, making it easier to retrieve relevant images and associated information.
 
-Key actions include:
+### Key Features
 
-- `importImages`: Indexes images from a specified path.
-- `indexingService`: Starts an indexing service for images.
+- **Image Indexing**: The `importImages` action allows users to index images from a specified path. This process extracts metadata and knowledge from the images and stores them in a structured format.
+- **Indexing Service**: The `indexingService` action starts a service to monitor and index images in a specified folder. This service can handle changes in the folder, such as the addition of new images.
+- **Natural Language Querying**: Users can query the indexed images using natural language to retrieve relevant results based on the images' metadata and knowledge content.
 
-These actions enable users to build and maintain a searchable image collection, leveraging natural language processing to enhance the querying capabilities.
+These features make the `image-memory` package a foundational component for building applications that require intelligent image search and retrieval capabilities.
 
 ## Setup
 
-To set up the `image-memory` package, ensure you have the necessary dependencies installed. The package relies on several internal and external dependencies, including `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, and `typechat`.
+To use the `image-memory` package, follow these steps:
 
-Environment variables:
+1. **Install Dependencies**: Ensure that all required dependencies are installed. The package relies on both internal and external dependencies, including:
 
-- `DEBUG`: Set this variable to enable debug logging.
+   - Internal: `@typeagent/aiclient`, `knowledge-processor`, `knowPro`, `memory-storage`, `telemetry`, `typeagent`, `typechat-utils`
+   - External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, `typechat`
 
-For detailed setup instructions, including how to obtain API keys and configure environment variables, refer to the hand-written README.
+2. **Environment Variables**:
+
+   - `DEBUG`: Set this environment variable to enable debug logging. For example, you can set it to `typeagent:image-memory` to see debug logs specific to this package.
+
+3. **Additional Configuration**:
+   - If you are using the `indexingService` action, ensure that the folder you want to index is accessible and contains the images you wish to process.
+
+For more detailed setup instructions, including how to obtain API keys for external dependencies, refer to the hand-written README.
 
 ## Key Files
 
-The `image-memory` package is structured into several key files, each responsible for different aspects of the functionality:
+The `image-memory` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): The entry point that exports various modules.
-- [imageCollection.ts](./src/imageCollection.ts): Defines the `ImageCollection` class, which represents a collection of images and provides methods for indexing and querying.
-- [imageMeta.ts](./src/imageMeta.ts): Defines the `Image` and `ImageMeta` classes, which represent individual images and their metadata.
-- [importImages.ts](./src/importImages.ts): Provides the `importImages` function to index images from a specified path.
-- [indexingService.ts](./src/indexingService.ts): Starts an indexing service for images.
-- [tables.ts](./src/tables.ts): Defines database tables for storing image metadata.
-
-### Detailed File Responsibilities
-
-- **[index.ts](./src/index.ts)**: Serves as the main entry point, exporting functions and classes from other modules.
-- **[imageCollection.ts](./src/imageCollection.ts)**: Contains the `ImageCollection` class, which manages a collection of images, including methods for adding images and querying them.
-- **[imageMeta.ts](./src/imageMeta.ts)**: Defines the structure for image metadata and individual image objects, including methods for extracting knowledge from images.
+- **[index.ts](./src/index.ts)**: The main entry point of the package, exporting all public modules and functions.
+- **[imageCollection.ts](./src/imageCollection.ts)**: Defines the `ImageCollection` class, which serves as the core data structure for managing and querying images.
+- **[imageMeta.ts](./src/imageMeta.ts)**: Contains the `Image` and `ImageMeta` classes, which represent individual images and their associated metadata.
 - **[importImages.ts](./src/importImages.ts)**: Implements the `importImages` function, which indexes images from a specified path and returns an `ImageCollection`.
 - **[indexingService.ts](./src/indexingService.ts)**: Provides functionality to start and manage an indexing service for images, including monitoring changes in the indexed folder.
-- **[tables.ts](./src/tables.ts)**: Defines the `GeoTable` and `ExposureTable` classes for storing geographic and exposure metadata of images in a SQLite database.
+- **[tables.ts](./src/tables.ts)**: Defines database tables for storing image metadata, such as geographic and exposure information.
+
+### File Responsibilities
+
+1. **[index.ts](./src/index.ts)**:
+
+   - Serves as the main entry point for the package.
+   - Exports key functions and classes, including `importImages`, `indexingService`, `ImageCollection`, and database table definitions.
+
+2. **[imageCollection.ts](./src/imageCollection.ts)**:
+
+   - Implements the `ImageCollection` class, which manages a collection of images.
+   - Provides methods for adding images, querying them, and managing their metadata.
+
+3. **[imageMeta.ts](./src/imageMeta.ts)**:
+
+   - Defines the `Image` class, which represents an individual image and its associated metadata.
+   - Implements methods for extracting knowledge from images and managing metadata.
+
+4. **[importImages.ts](./src/importImages.ts)**:
+
+   - Provides the `importImages` function, which allows users to index images from a specified path.
+   - Supports recursive indexing of directories and handles metadata extraction.
+
+5. **[indexingService.ts](./src/indexingService.ts)**:
+
+   - Starts an indexing service for images, enabling continuous monitoring and indexing of a specified folder.
+   - Tracks the state of the indexing process and provides progress updates.
+
+6. **[tables.ts](./src/tables.ts)**:
+   - Defines the `GeoTable` and `ExposureTable` classes for storing geographic and exposure metadata of images in a SQLite database.
 
 ## How to extend
 
-To extend the `image-memory` package, follow these steps:
+To extend the `image-memory` package, follow these guidelines:
 
-1. **Open the relevant file**: Depending on the functionality you want to add or modify, open the appropriate file. For example, to add new indexing capabilities, start with [indexingService.ts](./src/indexingService.ts).
+1. **Understand the Existing Codebase**:
 
-2. **Follow existing patterns**: Review the existing code to understand the patterns used for indexing and querying images. For example, the `ImageCollection` class in [imageCollection.ts](./src/imageCollection.ts) provides a good example of how to structure a collection of images.
+   - Start by reviewing the key files, especially [imageCollection.ts](./src/imageCollection.ts) and [imageMeta.ts](./src/imageMeta.ts), to understand how images and their metadata are managed.
 
-3. **Add new functionality**: Implement the new functionality by extending the existing classes or adding new ones. Ensure that your code integrates well with the existing structure and follows the established patterns.
+2. **Add New Features**:
 
-4. **Test your changes**: Write tests to verify your changes. Ensure that your new functionality works as expected and does not break existing features.
+   - To add new functionality, such as additional metadata extraction or new querying capabilities, consider extending the `ImageCollection` or `ImageMeta` classes.
+   - For example, you can add new methods to `ImageCollection` to support advanced search features or integrate additional metadata fields in `ImageMeta`.
 
-5. **Run tests**: Execute the tests to validate your changes. Make sure all tests pass before submitting your changes.
+3. **Modify the Indexing Service**:
 
-By following these steps, you can effectively extend the `image-memory` package to add new features or improve existing ones.
+   - If you need to enhance the indexing service, start with [indexingService.ts](./src/indexingService.ts). You can add support for new data sources or improve the monitoring capabilities.
+
+4. **Update Database Schema**:
+
+   - If your changes require new database tables or modifications to existing ones, update [tables.ts](./src/tables.ts) accordingly. Ensure that your changes are backward-compatible and well-documented.
+
+5. **Write Tests**:
+
+   - Add unit tests for your new functionality to ensure it works as expected. Use the existing test cases as a reference for writing your tests.
+
+6. **Run Tests**:
+   - Execute the test suite to verify that your changes do not introduce any regressions. Address any issues before submitting your changes.
+
+By following these steps, you can contribute to the `image-memory` package effectively and ensure that your changes align with the existing codebase and project goals.
 
 ## Reference
 
@@ -77,7 +121,7 @@ By following these steps, you can effectively extend the `image-memory` package 
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -106,6 +150,6 @@ External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `88f04471002e27f82ae1ddf73a7ae8acdfe09b5d` on `2026-07-03T09:02:51.801Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

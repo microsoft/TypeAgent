@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=93c9ae0faefdca0d260970f4fcf2c792de7bebc77dd698bc9a24d05ec5ad7eab -->
+<!-- AUTOGEN:DOCS:HASH:sha256=abaf6b68ab6ba84d04893937cd2f0a42fb02a252c2fdb932732d67990d6a4162 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowledge-processor — AI-generated documentation
@@ -12,45 +12,87 @@
 
 ## Overview
 
-The `knowledge-processor` package is a TypeScript library designed to explore early ideas in Structured Retrieval-Augmented Generation (RAG). It is primarily used by the TypeAgent Dispatcher to implement Agent Memory for the TypeAgent Shell. The package focuses on extracting knowledge from various sources, indexing it for retrieval, generating queries, and producing answers based on the retrieved knowledge.
+The `knowledge-processor` package is a TypeScript library designed to explore early concepts in Structured Retrieval-Augmented Generation (RAG). It is primarily used by the TypeAgent Dispatcher to implement Agent Memory for the TypeAgent Shell. The package focuses on extracting, indexing, and utilizing knowledge from various sources such as conversations, documents, images, and transcripts. It also supports generating structured queries and natural language answers based on retrieved knowledge.
+
+This package is considered sample code and represents an experimental approach to Structured RAG. For the latest developments in this area, refer to the `knowPro` package.
 
 ## What it does
 
-The `knowledge-processor` package provides functionalities to:
+The `knowledge-processor` package provides a set of tools and actions to facilitate the following:
 
-- **Extract knowledge**: from conversations, transcripts, images, and documents.
-- **Index knowledge**: store and index the extracted knowledge and source text for efficient retrieval.
-- **Generate queries**: translate natural language questions into structured queries to retrieve relevant knowledge.
-- **Generate answers**: use the results of queries to generate natural language answers.
+- **Knowledge Extraction**: Extracts structured knowledge from diverse sources, including conversations, documents, images, and transcripts. This is achieved through actions like `extractKnowledge`.
+- **Knowledge Indexing**: Organizes and stores extracted knowledge for efficient retrieval. This includes text indexing, key-value indexing, and temporal indexing.
+- **Query Generation**: Translates natural language questions into structured queries to retrieve relevant knowledge. Actions like `searchKnowledge` are used for this purpose.
+- **Answer Generation**: Produces natural language answers based on the results of queries. Actions such as `generateAnswer` and `createMessage` are central to this functionality.
 
-The package includes several actions related to conversation management, knowledge extraction, and query processing. Key actions include `createMessage`, `extractKnowledge`, `generateAnswer`, and `searchKnowledge`.
+The package is tightly integrated with other components in the TypeAgent ecosystem, such as the `@typeagent/aiclient` for AI model interactions and `typechat-utils` for handling structured data.
 
 ## Setup
 
-To set up the `knowledge-processor` package, ensure you have the necessary dependencies installed. The package relies on several external libraries such as `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, and `typechat`. Additionally, it depends on other workspace packages like `aiclient`, `typeagent`, and `typechat-utils`.
+To use the `knowledge-processor` package, ensure the following prerequisites are met:
 
-For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
+1. **Install Dependencies**: The package depends on several internal and external libraries. Use `pnpm install` to install all required dependencies.
+2. **Environment Variables**: If any environment variables or API keys are required, refer to the hand-written README for detailed instructions on how to configure them.
+3. **External Libraries**: The package relies on external libraries such as `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, and `typechat`. Ensure these are correctly installed and configured.
 
 ## Key Files
 
-The `knowledge-processor` package is organized into several modules, each responsible for different aspects of knowledge processing:
+The `knowledge-processor` package is organized into several key modules, each responsible for a specific aspect of knowledge processing:
 
-- **Conversation**: Handles conversation-related functionalities, including managing conversation topics, extracting knowledge from conversations, and generating answers. Key files include [conversationManager.ts](./src/conversation/conversationManager.ts), [conversation.ts](./src/conversation/conversation.ts), and [answerGenerator.ts](./src/conversation/answerGenerator.ts).
-- **Knowledge Extraction**: Focuses on extracting knowledge from various sources. This includes schemas for knowledge representation and actions for knowledge extraction. Key files include [knowledgeSchema.ts](./src/conversation/knowledgeSchema.ts), [knowledgeActions.ts](./src/conversation/knowledgeActions.ts), and [knowledge.ts](./src/conversation/knowledge.ts).
-- **Indexing**: Manages the indexing of extracted knowledge for efficient retrieval. This includes text indexing, key-value indexing, and temporal indexing. Key files include [textIndex.ts](./src/textIndex.ts), [keyValueIndex.ts](./src/keyValueIndex.ts), and [temporal.ts](./src/temporal.ts).
-- **Storage**: Provides storage solutions for the indexed knowledge. Key files include [storageProvider.ts](./src/storageProvider.ts) and [modelCache.ts](./src/modelCache.ts).
+### Conversation Management
+
+- **[conversationManager.ts](./src/conversation/conversationManager.ts)**: Central to managing conversations and integrating various components like knowledge extraction and indexing.
+- **[conversation.ts](./src/conversation/conversation.ts)**: Handles the core logic for managing conversation topics and messages.
+- **[answerGenerator.ts](./src/conversation/answerGenerator.ts)**: Responsible for generating natural language answers from query results.
+- **[answerContext.ts](./src/conversation/answerContext.ts)**: Defines the structure and handling of context used in answer generation.
+
+### Knowledge Extraction
+
+- **[knowledge.ts](./src/conversation/knowledge.ts)**: Implements methods for extracting and managing knowledge from various sources.
+- **[knowledgeSchema.ts](./src/conversation/knowledgeSchema.ts)**: Defines the schema for representing extracted knowledge.
+- **[knowledgeActions.ts](./src/conversation/knowledgeActions.ts)**: Contains actions related to knowledge extraction and processing.
+
+### Indexing
+
+- **[textIndex.ts](./src/textIndex.ts)**: Manages text-based indexing for efficient retrieval.
+- **[keyValueIndex.ts](./src/keyValueIndex.ts)**: Implements key-value-based indexing mechanisms.
+- **[temporal.ts](./src/temporal.ts)**: Handles temporal indexing and operations on time-based data.
+
+### Storage
+
+- **[storageProvider.ts](./src/storageProvider.ts)**: Provides storage solutions for indexed knowledge.
+- **[modelCache.ts](./src/modelCache.ts)**: Implements caching mechanisms for AI models and other data.
+
+### Schemas
+
+- **[aggregateTopicSchema.ts](./src/conversation/aggregateTopicSchema.ts)**: Defines schemas for managing and aggregating conversation topics.
+- **[answerSchema.ts](./src/conversation/answerSchema.ts)**: Specifies the structure of answers, including their relevance and content.
+- **[dateTimeSchema.ts](./src/conversation/dateTimeSchema.ts)**: Provides schemas for handling date and time data.
 
 ## How to extend
 
 To extend the `knowledge-processor` package, follow these steps:
 
-1. **Identify the module to extend**: Determine whether you need to add functionalities related to conversation management, knowledge extraction, indexing, or storage.
-2. **Open the relevant file**: Start by opening the file that corresponds to the module you want to extend. For example, if you want to add a new knowledge extraction method, open [knowledge.ts](./src/conversation/knowledge.ts).
-3. **Follow existing patterns**: Review the existing code to understand the patterns and structures used. Implement your new functionality following these patterns.
-4. **Add tests**: Ensure your new functionality is well-tested. Add unit tests in the corresponding test files to validate your changes.
-5. **Run tests**: Execute the tests to verify that your changes work as expected and do not break existing functionalities.
+1. **Understand the Existing Structure**: Familiarize yourself with the key files and their responsibilities. For example, if you want to add a new feature for knowledge extraction, start by reviewing [knowledge.ts](./src/conversation/knowledge.ts) and [knowledgeActions.ts](./src/conversation/knowledgeActions.ts).
 
-By following these steps, you can effectively extend the `knowledge-processor` package to meet your specific requirements.
+2. **Add New Functionality**:
+
+   - For new actions, define the action schema in the appropriate file (e.g., [knowledgeSchema.ts](./src/conversation/knowledgeSchema.ts)).
+   - Implement the action logic in the corresponding handler file (e.g., [knowledgeActions.ts](./src/conversation/knowledgeActions.ts)).
+
+3. **Update Indexing or Storage**:
+
+   - If your extension involves new indexing or storage requirements, consider extending the relevant files like [textIndex.ts](./src/textIndex.ts) or [storageProvider.ts](./src/storageProvider.ts).
+
+4. **Test Your Changes**:
+
+   - Add unit tests to validate your new functionality. Place these tests in the appropriate test files.
+   - Run the test suite to ensure your changes do not introduce regressions.
+
+5. **Document Your Changes**:
+   - Update the hand-written README or other relevant documentation to describe your new functionality and how to use it.
+
+By following these guidelines, you can effectively contribute to the `knowledge-processor` package and enhance its capabilities.
 
 ## Reference
 
@@ -58,7 +100,7 @@ By following these steps, you can effectively extend the `knowledge-processor` p
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -91,6 +133,6 @@ External: `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, `typechat`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
+_Auto-generated against commit `88f04471002e27f82ae1ddf73a7ae8acdfe09b5d` on `2026-07-03T09:02:51.801Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

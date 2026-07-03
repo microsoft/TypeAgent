@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8b097a29312783f33ee928009d24464ef812d51db32f4d945178e69cfe11eabf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=33d1e54f8459a2edfda72d6388dfe6a524a3aa779587a58f6c4f0e5ff7a52adf -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,51 +12,86 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers with full conversation management capabilities. It listens for connections, manages conversations, and facilitates communication between clients and agents.
+The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It manages conversations, facilitates communication between clients and agents, and supports features like conversation persistence, idle timeouts, and graceful shutdown.
 
 ## What it does
 
-The `agent-server` package handles several actions related to conversation management and server control. These actions include `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`, and `shutdown`. The server listens on a WebSocket endpoint and processes these actions by interacting with the conversation manager and shared dispatcher components. It also supports graceful shutdown and idle timeout features.
+The `agent-server` package is responsible for managing WebSocket connections and enabling communication between clients and agents. It provides a set of actions for conversation management and server control, including:
+
+- `joinConversation` and `leaveConversation` for managing client participation in conversations.
+- `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation` for conversation lifecycle management.
+- `shutdown` for gracefully stopping the server.
+
+The server listens on a WebSocket endpoint and uses a `ConversationManager` to handle conversation-related operations. It also includes a `SharedDispatcher` to manage multiple client connections within a single conversation. The server can be configured to shut down after a specified period of inactivity using the `--idle-timeout` flag.
+
+Additionally, the package supports integration with Microsoft Dev Tunnels, allowing the server to be exposed to remote devices for cross-device access.
 
 ## Setup
 
-To set up the `agent-server`, you need to configure the following environment variables:
+To set up the `agent-server`, ensure the following environment variables are configured:
 
-- `AGENT_SERVER_PORT`: The port on which the server will listen for WebSocket connections.
-- `TYPEAGENT_USER_NAME`: The username for the TypeAgent user.
+- `AGENT_SERVER_PORT`: Specifies the port on which the server will listen for WebSocket connections. The default is `8999`.
+- `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. If not set, the server will attempt to use the system's username.
+- `XDG_CONFIG_HOME`: Specifies the base directory for configuration files. If not set, the default is typically `~/.config`.
 
-Ensure these variables are set in your environment or in a `.env` file. For detailed setup instructions, see the hand-written README.
+You can set these variables in your environment or define them in a `.env` file. For more details on starting the server and configuring it, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-server` package is structured around several key components:
+The `agent-server` package is organized into several key files, each responsible for specific functionality:
 
-### `server.ts` — WebSocket listener
+### [server.ts](./src/server.ts) — WebSocket Listener
 
-The `server.ts` file is responsible for setting up the WebSocket server and managing connections. It creates a `ConversationManager` at startup and calls `createWebSocketChannelServer` to accept connections. For each connection, it exposes `AgentServerInvokeFunctions` over the `agent-server` RPC channel, handling actions such as joining and leaving conversations, creating and listing conversations, and shutting down the server.
+This file initializes the WebSocket server and manages incoming connections. It creates a `ConversationManager` instance and uses `createWebSocketChannelServer` to start listening for WebSocket connections. It also exposes the `AgentServerInvokeFunctions` over the `agent-server` RPC channel, enabling actions such as:
 
-### `conversationManager.ts` — Conversation pool
+- Managing conversations (e.g., `joinConversation`, `createConversation`, `listConversations`).
+- Handling server control actions like `shutdown`.
 
-The `conversationManager.ts` file maintains a pool of per-conversation `SharedDispatcher` instances. It handles persistence of conversation metadata, lazy initialization of dispatchers, automatic creation of default conversations, and cleanup of ephemeral conversations. It also supports idle shutdown based on the `--idle-timeout` flag.
+### [conversationManager.ts](./src/conversationManager.ts) — Conversation Pool
 
-### `sharedDispatcher.ts` — Routing layer
+This file manages a pool of `SharedDispatcher` instances, each corresponding to a conversation. Key responsibilities include:
 
-The `sharedDispatcher.ts` file manages multiple client connections within a single conversation. It wraps a dispatcher context and routes client IO methods based on connection IDs. This ensures that each client's display output is isolated while sharing the same dispatcher and conversation context.
+- **Persistence**: Stores conversation metadata and data in the file system under the `~/.typeagent/profiles/dev/conversations/` directory.
+- **Lazy Initialization**: Creates `SharedDispatcher` instances on demand and tears them down after a period of inactivity.
+- **Default Conversations**: Automatically creates a default conversation if none exists.
+- **Ephemeral Cleanup**: Removes temporary conversations left over from crashed processes during server startup.
+- **Idle Shutdown**: Supports shutting down the server after a specified period of inactivity.
 
-### `status.ts` and `stop.ts` — Server control
+### [sharedDispatcher.ts](./src/sharedDispatcher.ts) — Routing Layer
 
-The `status.ts` and `stop.ts` files provide utilities for checking the server status and stopping the server, respectively. They use the `@typeagent/agent-server-client` package to interact with the server.
+This file manages multiple client connections within a single conversation. It wraps a dispatcher context and routes client IO methods based on connection IDs. Key features include:
+
+- **Connection Management**: Assigns unique `connectionId`s to clients and maintains a routing table.
+- **Client Isolation**: Ensures that each client's display output is isolated while sharing the same dispatcher and conversation context.
+- **Routing Logic**: Routes client IO methods (e.g., `setDisplay`, `askYesNo`, `requestChoice`) to the appropriate client based on the `connectionId`.
+
+### [connectionHandler.ts](./src/connectionHandler.ts) — Connection Management
+
+This file defines the logic for handling individual WebSocket connections. It interacts with the `ConversationManager` to manage conversations and uses the `agent-server` RPC channel to expose server functions to connected clients.
+
+### [copilot/displayLogSynthesis.ts](./src/copilot/displayLogSynthesis.ts) — Display Log Synthesis
+
+This file provides utilities for synthesizing display logs from Copilot session data. It converts Copilot session turns into `DisplayLogEntry` streams, enabling imported sessions to render in the conversation UI.
+
+### [copilot/mirrorImporter.ts](./src/copilot/mirrorImporter.ts) — Copilot Session Importer
+
+This file handles the import of Copilot sessions into the conversation manager. It reads session data from a SQLite database and creates corresponding conversations in the `agent-server`.
+
+### [inProcessAgentServer.ts](./src/inProcessAgentServer.ts) — In-Process Server
+
+This file provides an in-process implementation of the agent server, allowing it to run within the same process as the client. It is useful for scenarios where a separate server process is not required.
 
 ## How to extend
 
 To extend the `agent-server` package, follow these steps:
 
-1. **Start with `server.ts`**: This file sets up the WebSocket server and manages connections. You can add new RPC functions or modify existing ones to handle additional actions.
-2. **Modify `conversationManager.ts`**: If you need to change how conversations are managed, this is the file to edit. You can add new behaviors or modify existing ones related to conversation persistence, initialization, and cleanup.
-3. **Update `sharedDispatcher.ts`**: To change how client connections are routed within a conversation, modify this file. You can add new routing logic or adjust the existing methods for handling client IO.
-4. **Test your changes**: Ensure that your modifications are working correctly by running the server and testing the new or modified actions. You can use the provided `status.ts` and `stop.ts` utilities to control the server during testing.
+1. **Understand the architecture**: Start by reviewing the key files mentioned above to understand how the server, conversation manager, and dispatcher components interact.
+2. **Add new actions**: To introduce new server actions, modify the `server.ts` file to expose additional RPC functions. Implement the corresponding logic in the appropriate files, such as `conversationManager.ts` or `sharedDispatcher.ts`.
+3. **Enhance conversation management**: If you need to change how conversations are handled, edit `conversationManager.ts`. For example, you can add new persistence mechanisms or modify the behavior of default conversations.
+4. **Modify routing logic**: To customize how client IO methods are routed within a conversation, update `sharedDispatcher.ts`. You can add new routing rules or adjust existing ones.
+5. **Test your changes**: Use the provided utilities in `status.ts` and `stop.ts` to test your modifications. Ensure that the server behaves as expected and that new features work correctly.
 
-By following these steps, you can extend the functionality of the `agent-server` package to meet your specific needs.
+By following these guidelines, you can effectively extend the functionality of the `agent-server` package to meet your specific requirements.
 
 ## Reference
 
@@ -64,8 +99,8 @@ By following these steps, you can extend the functionality of the `agent-server`
 
 ### Entry points
 
-- default → [./dist/server.js](./dist/server.js)
-- `./in-process` → [./dist/inProcessAgentServer.js](./dist/inProcessAgentServer.js)
+- default → `./dist/server.js` _(not found on disk)_
+- `./in-process` → `./dist/inProcessAgentServer.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -83,7 +118,7 @@ Workspace:
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
 - [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
-External: `@azure/identity`, `debug`, `dotenv`, `ws`
+External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Used by
 
@@ -91,17 +126,18 @@ External: `@azure/identity`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/inProcessAgentServer.ts`, …and 6 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 10 more under `./src/`.
 
 ### Environment variables
 
-_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_PORT`
 - `TYPEAGENT_USER_NAME`
+- `XDG_CONFIG_HOME`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `88f04471002e27f82ae1ddf73a7ae8acdfe09b5d` on `2026-07-03T09:02:51.801Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
