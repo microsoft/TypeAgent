@@ -96,6 +96,9 @@ function getInstalledAppAgentProviders(
         return [];
     }
     const installDir = getInstallDir(instanceConfigs);
+    if (installDir === undefined) {
+        return [];
+    }
     const records = loadInstalledRecords(instanceDir);
     return createInstalledAppAgentProviders(records, installDir);
 }
@@ -259,9 +262,11 @@ export function createDefaultInstalledAgentSource(
         name: string,
         record: InstalledAgentRecord,
     ): AppAgentProvider {
+        // installDir is guaranteed resolved above (the source throws otherwise);
+        // the `!` bridges TS's lack of narrowing across this nested closure.
         return withTombstone(
             name,
-            createInstalledAppAgentProvider(name, record, installDir),
+            createInstalledAppAgentProvider(name, record, installDir!),
         );
     }
 

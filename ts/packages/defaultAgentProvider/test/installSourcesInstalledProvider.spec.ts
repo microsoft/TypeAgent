@@ -91,60 +91,37 @@ function makePathAgentDir(emojiChar: string): string {
     return dir;
 }
 
-describe("createInstalledAppAgentProviders", () => {
-    // Find the provider in a list that owns the given agent name.
-    function providerFor(
-        providers: AppAgentProvider[],
-        name: string,
-    ): AppAgentProvider {
-        const provider = providers.find((p) =>
-            p.getAppAgentNames().includes(name),
-        );
-        if (provider === undefined) {
-            throw new Error(`no provider owns '${name}'`);
-        }
-        return provider;
-    }
+describe("createInstalledAppAgentProvider(s)", () => {
     function allNames(providers: AppAgentProvider[]): string[] {
         return providers.flatMap((p) => p.getAppAgentNames()).sort();
     }
 
-    it("builds a single-agent provider for one record (runtime unit)", async () => {
-        const provider = createInstalledAppAgentProvider("player", {
-            name: "player",
-            kind: "npm",
-            module: "music",
-            source: "bundled",
-        });
-        expect(provider.getAppAgentNames()).toEqual(["player"]);
-        expect(await provider.getAppAgentManifest("player")).toBeDefined();
-    });
-
-    it("loads a bundled module record against the app bundle root", async () => {
-        const records: Record<string, InstalledAgentRecord> = {
-            player: {
-                name: "player",
+    it("resolves a feed module from installDir (runtime unit)", async () => {
+        const moduleName = "fake-feed-agent";
+        const installDir = makeInstallDirWithAgent(moduleName);
+        const provider = createInstalledAppAgentProvider(
+            "feedy",
+            {
+                name: "feedy",
                 kind: "npm",
-                module: "music",
-                source: "bundled",
+                module: moduleName,
+                source: "typeagent",
             },
-        };
-        const providers = createInstalledAppAgentProviders(records);
-        expect(allNames(providers)).toEqual(["player"]);
-        const manifest = await providerFor(
-            providers,
-            "player",
-        ).getAppAgentManifest("player");
-        expect(manifest).toBeDefined();
+            installDir,
+        );
+        expect(provider.getAppAgentNames()).toEqual(["feedy"]);
+        // The module resolves ONLY from installDir (it is absent from the bundle).
+        const manifest = await provider.getAppAgentManifest("feedy");
+        expect(manifest.emojiChar).toBe("🧪");
     });
 
-    it("unions agent names across records", async () => {
+    it("builds one provider per record and unions their names", () => {
         const records: Record<string, InstalledAgentRecord> = {
-            player: {
-                name: "player",
+            feedy: {
+                name: "feedy",
                 kind: "npm",
-                module: "music",
-                source: "bundled",
+                module: "fake-feed-agent",
+                source: "typeagent",
             },
             mine: {
                 name: "mine",
@@ -157,45 +134,14 @@ describe("createInstalledAppAgentProviders", () => {
             records,
             "/nonexistent/installDir",
         );
-        expect(allNames(providers)).toEqual(["mine", "player"]);
+        expect(providers).toHaveLength(2);
+        expect(allNames(providers)).toEqual(["feedy", "mine"]);
     });
 
-    it("is well-formed with no records", () => {
-        const providers = createInstalledAppAgentProviders({});
-        expect(allNames(providers)).toEqual([]);
-    });
-
-    it("routes a feed module to installDir and a bundled module to the app bundle", async () => {
-        const moduleName = "fake-feed-agent";
-        const installDir = makeInstallDirWithAgent(moduleName);
-        const records: Record<string, InstalledAgentRecord> = {
-            feedy: {
-                name: "feedy",
-                kind: "npm",
-                module: moduleName,
-                source: "typeagent",
-            },
-            player: {
-                name: "player",
-                kind: "npm",
-                module: "music",
-                source: "bundled",
-            },
-        };
-        const providers = createInstalledAppAgentProviders(records, installDir);
-        expect(allNames(providers)).toEqual(["feedy", "player"]);
-        // feed module resolves ONLY from installDir (absent in app bundle)
-        const feedManifest = await providerFor(
-            providers,
-            "feedy",
-        ).getAppAgentManifest("feedy");
-        expect(feedManifest.emojiChar).toBe("🧪");
-        // bundled module still resolves from the app bundle root
-        const bundledManifest = await providerFor(
-            providers,
-            "player",
-        ).getAppAgentManifest("player");
-        expect(bundledManifest).toBeDefined();
+    it("returns [] for no records", () => {
+        expect(
+            createInstalledAppAgentProviders({}, "/nonexistent/installDir"),
+        ).toEqual([]);
     });
 });
 

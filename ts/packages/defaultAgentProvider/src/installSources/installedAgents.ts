@@ -3,7 +3,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import registerDebug from "debug";
 import { AppAgentProvider } from "agent-dispatcher";
 import { InstalledAgentRecord } from "./config.js";
@@ -192,25 +191,8 @@ export function migrateLegacyExternalAgents(
 }
 
 // ---------------------------------------------------------------------------
-// Provider building (design §4.4): one AppAgentProvider over agents.json.
+// Provider building (design §4.4): one single-agent provider per install.
 // ---------------------------------------------------------------------------
-
-// Resolve which runtime root a `module` record loads from (design §4.1
-// "Module resolution roots"): probe the candidate roots in order (installDir
-// for feed-installed modules, then the app bundle for bundled-catalog modules)
-// and pick the first where the package's agent manifest resolves. Falls back
-// to the last root so a genuinely missing module errors legibly at load.
-function resolveModuleRoot(module: string, roots: string[]): string {
-    for (const root of roots) {
-        try {
-            createRequire(root).resolve(`${module}/agent/manifest`);
-            return root;
-        } catch {
-            // not resolvable from this root; try the next
-        }
-    }
-    return roots[roots.length - 1];
-}
 
 function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     // path records: the loader ignores `name` in its path branch (design §4.2),
@@ -228,37 +210,23 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
     return info;
 }
 
-// The ordered candidate roots a `module` record resolves against: the feed
-// installDir first (if any), then the app bundle (design §4.1).
-function moduleRootsFor(installDir?: string): string[] {
-    const appBundleRoot = getAppBundleRequirePath();
-    return installDir !== undefined
-        ? [path.join(installDir, "package.json"), appBundleRoot]
-        : [appBundleRoot];
-}
-
 /**
  * Build the AppAgentProvider for a SINGLE installed agent record (design §4.4).
- * A `path` record resolves from its explicit absolute path (the requirePath is
- * irrelevant); a `module` record resolves against the provenance roots
- * (`installDir` first, then the app bundle). This is the runtime unit the
- * dynamic source vends - one single-agent provider per installed agent.
+ * Installed agents are feed installs materialized under `installDir`, so a
+ * `module` record resolves from `installDir`; a `path` record resolves from its
+ * own absolute path (the requirePath is irrelevant, so `installDir` is a
+ * harmless base). This is the runtime unit the dynamic source vends - one
+ * single-agent provider per installed agent. (Bundled agents are the separate,
+ * app-bundle-rooted {@link createBundledAppAgentProvider}.)
  */
 export function createInstalledAppAgentProvider(
     name: string,
     record: InstalledAgentRecord,
-    installDir?: string,
+    installDir: string,
 ): AppAgentProvider {
-    const requirePath =
-        record.path !== undefined
-            ? getAppBundleRequirePath()
-            : resolveModuleRoot(
-                  record.module ?? name,
-                  moduleRootsFor(installDir),
-              );
     return createNpmAppAgentProvider(
         { [name]: recordToNpmInfo(record) },
-        requirePath,
+        path.join(installDir, "package.json"),
     );
 }
 
@@ -270,7 +238,7 @@ export function createInstalledAppAgentProvider(
  */
 export function createInstalledAppAgentProviders(
     records: Record<string, InstalledAgentRecord>,
-    installDir?: string,
+    installDir: string,
 ): AppAgentProvider[] {
     return Object.entries(records).map(([name, record]) =>
         createInstalledAppAgentProvider(name, record, installDir),
