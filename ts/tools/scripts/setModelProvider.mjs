@@ -173,8 +173,7 @@ function patchConfig(cfg, options) {
 
     if (provider === "copilot") {
         const copilot = ensureObject(cfg, "copilot");
-        copilot.defaultModel =
-            options.copilotModel || DEFAULT_COPILOT_MODEL;
+        copilot.defaultModel = options.copilotModel || DEFAULT_COPILOT_MODEL;
     } else if (provider === "ollama") {
         const openAI = ensureObject(cfg, "openAI");
         openAI.apiKey ??= "ollama";
