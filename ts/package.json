@@ -107,6 +107,7 @@
       "exifreader",
       "keytar",
       "koffi",
+      "onnxruntime-node",
       "protobufjs",
       "puppeteer",
       "sharp"
