@@ -40,6 +40,18 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
 
     <!-- ═══════════════════════════════════════════════
+         Endpoint provider selection (self-host)
+         Public properties (pass uppercase on the msiexec command line, e.g.
+           msiexec /i TypeAgent.msi PROVIDER=OLLAMA
+         AISYSTEMS (default) leaves config provisioning to the interactive
+         post-install step (az login + getKeys). OLLAMA/COPILOT synthesize a
+         config.local.yaml during install via generate-selfhost-config.
+         ═══════════════════════════════════════════════ -->
+    <Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" />
+    <Property Id="EMBEDDING" Value="LOCAL" Secure="yes" />
+    <Property Id="OLLAMAHOST" Value="http://localhost:11434" Secure="yes" />
+
+    <!-- ═══════════════════════════════════════════════
          Directory layout
          ═══════════════════════════════════════════════ -->
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -139,13 +151,151 @@
                   Return="ignore"
                   Impersonate="yes" />
 
+    <!-- ═══════════════════════════════════════════════
+         Custom action — self-host config provisioning
+         For PROVIDER=OLLAMA/COPILOT, synthesize config.local.yaml via
+         generate-selfhost-config (bundled under agent-server\tools). Runs as the
+         installing user so it writes to the user's ~/.typeagent config dir and so
+         'node' resolves from the user PATH. AISYSTEMS mode is skipped here (its
+         provisioning is the interactive az login + getKeys post-install step).
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="ProvisionSelfHostConfig"
+           Before="ProvisionSelfHostConfig"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command &quot;&amp; node '[INSTALLFOLDER]typeagent-serve.mjs' provision --provider '[PROVIDER]' --embedding '[EMBEDDING]' --ollama-host '[OLLAMAHOST]' --force&quot;" />
+
+    <CustomAction Id="ProvisionSelfHostConfig"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
     <InstallExecuteSequence>
       <Custom Action="RegisterCopilotPlugin"   After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
 
-    <!-- UI: minimal built-in sequence for install progress/finish -->
-    <UIRef Id="WixUI_Minimal" />
+    <!-- UI: custom sequence adding a provider/embedding selection dialog -->
+    <UIRef Id="WixUI_TypeAgent" />
 
   </Product>
+
+  <!-- ═══════════════════════════════════════════════
+       Custom UI scheme: WixUI_TypeAgent
+       WelcomeDlg → LicenseAgreementDlg → ProviderDlg → VerifyReadyDlg
+       Adds a provider/embedding selection dialog bound to the public
+       PROVIDER / EMBEDDING / OLLAMAHOST properties. Modeled on
+       WixUI_InstallDir (minus the install-directory dialog, since this
+       product installs to a fixed per-user location).
+       ═══════════════════════════════════════════════ -->
+  <Fragment>
+    <UI Id="WixUI_TypeAgent">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+      <Property Id="WixUI_Mode" Value="InstallDir" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+
+      <!-- ═══ Provider / embedding selection dialog ═══ -->
+      <Dialog Id="ProviderDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
+                 TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Endpoint providers" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="15"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="Choose how TypeAgent connects to language models." />
+
+        <Control Id="ProviderLabel" Type="Text" X="20" Y="55" Width="330" Height="12"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Completion (chat) provider" />
+        <Control Id="ProviderRadio" Type="RadioButtonGroup" X="24" Y="70"
+                 Width="326" Height="52" Property="PROVIDER">
+          <RadioButtonGroup Property="PROVIDER">
+            <RadioButton Value="AISYSTEMS" X="0" Y="0" Width="322" Height="16"
+                         Text="AI Systems — download config from Azure Key Vault (needs az login access)" />
+            <RadioButton Value="OLLAMA" X="0" Y="17" Width="322" Height="16"
+                         Text="Ollama — local OpenAI-compatible server (no Key Vault)" />
+            <RadioButton Value="COPILOT" X="0" Y="34" Width="322" Height="16"
+                         Text="GitHub Copilot — Copilot SDK chat via an authenticated copilot CLI" />
+          </RadioButtonGroup>
+        </Control>
+
+        <Control Id="EmbeddingLabel" Type="Text" X="20" Y="128" Width="330" Height="12"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Embedding provider (Ollama / Copilot only)" />
+        <Control Id="EmbeddingRadio" Type="RadioButtonGroup" X="24" Y="143"
+                 Width="326" Height="52" Property="EMBEDDING">
+          <RadioButtonGroup Property="EMBEDDING">
+            <RadioButton Value="LOCAL" X="0" Y="0" Width="322" Height="14"
+                         Text="Local — bundled CPU-only model (no GPU, API key or network)" />
+            <RadioButton Value="OLLAMA" X="0" Y="14" Width="322" Height="14"
+                         Text="Ollama — embeddings from the local Ollama server" />
+            <RadioButton Value="OPENAI" X="0" Y="28" Width="322" Height="14"
+                         Text="OpenAI — embeddings from an OpenAI endpoint (configure post-install)" />
+            <RadioButton Value="NONE" X="0" Y="42" Width="322" Height="14"
+                         Text="None — disable embeddings (semantic features degrade gracefully)" />
+          </RadioButtonGroup>
+        </Control>
+
+        <Control Id="OllamaHostLabel" Type="Text" X="20" Y="205" Width="70" Height="14"
+                 Transparent="yes" NoPrefix="yes" Text="Ollama host:" />
+        <Control Id="OllamaHostEdit" Type="Edit" X="92" Y="203" Width="258" Height="16"
+                 Property="OLLAMAHOST" Text="{80}" />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+                 Text="!(loc.WixUIBack)" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+                 Default="yes" Text="!(loc.WixUINext)" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+                 Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+      </Dialog>
+
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
+
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">NOT Installed</Publish>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">Installed AND PATCH</Publish>
+
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">LicenseAccepted = "1"</Publish>
+
+      <Publish Dialog="ProviderDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="ProviderDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ProviderDlg" Order="1">NOT Installed</Publish>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2">Installed AND NOT PATCH</Publish>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="3">Installed AND PATCH</Publish>
+
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg">1</Publish>
+
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg">1</Publish>
+
+      <InstallUISequence>
+        <Show Dialog="WelcomeDlg" Before="ProgressDlg">NOT Installed</Show>
+      </InstallUISequence>
+
+      <Property Id="ARPNOMODIFY" Value="1" />
+    </UI>
+
+    <UIRef Id="WixUI_Common" />
+  </Fragment>
 </Wix>

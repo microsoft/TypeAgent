@@ -465,3 +465,4 @@ ts/packages/agentSdkWrapper/plans/
 /.pnpm-store
 /ts/packages/copilot-plugin/dist-exe
 /ts/msi-out
+ts/config.local.yaml.bak

@@ -17,18 +17,22 @@
        variant bundles those runtimes, so this step is skipped.
     3. Downloads the agent-server Universal package for this RID from the feed.
     4. Installs and registers the Copilot CLI plugin (from feed by default, or -PluginSource).
-    5. Runs config provisioning (getKeys, browser login) and starts the daemon
-       via the artifact's typeagent-serve.mjs.
+    5. Runs config provisioning and starts the daemon via the artifact's
+       typeagent-serve.mjs. Config provisioning depends on -Provider:
+         aisystems (default) - getKeys + browser login (AI Systems Key Vault).
+         ollama / copilot     - synthesize config.local.yaml locally (no Key Vault).
     6. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
        client on another device can reach the service.
 
   Azure CLI (with az login) is used to download from the feed. This is the
-  install-time exception; runtime config provisioning still uses getKeys'
-  browser credential (no az login needed for that).
+  install-time exception; runtime config provisioning uses getKeys' browser
+  credential (aisystems) or a locally generated config (ollama/copilot).
 
 .EXAMPLE
   pwsh ./install-typeagent.ps1
   pwsh ./install-typeagent.ps1 -Variant full -Version 0.0.1-12345
+  pwsh ./install-typeagent.ps1 -Provider ollama    # local chat, no Key Vault
+  pwsh ./install-typeagent.ps1 -Provider copilot   # Copilot SDK chat, no Key Vault
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
   pwsh ./install-typeagent.ps1 -BootstrapPrereqs
   pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
@@ -65,7 +69,23 @@ param(
     [switch]$DevTunnel,
     # With -DevTunnel: allow anonymous client access (WARNING: removes the only
     # access control on the otherwise-unauthenticated service). Default private.
-    [switch]$DevTunnelAnonymous
+    [switch]$DevTunnelAnonymous,
+    # Endpoint provider for LLM calls:
+    #   aisystems - download config from the AI Systems Key Vault (default, needs az login access).
+    #   ollama    - local OpenAI-compatible chat via 'ollama serve' (no Key Vault).
+    #   copilot   - GitHub Copilot SDK chat via an authenticated 'copilot' CLI (no Key Vault).
+    [ValidateSet("aisystems", "ollama", "copilot")]
+    [string]$Provider = "aisystems",
+    # Embedding source for ollama/copilot providers (independent of chat):
+    #   local (default, bundled CPU-only), ollama, openai, or none.
+    [ValidateSet("local", "ollama", "openai", "none")]
+    [string]$Embedding = "local",
+    [string]$OllamaHost = "http://localhost:11434",
+    [string]$ChatModel = "",
+    [string]$CopilotModel = "",
+    [string]$EmbeddingEndpoint = "",
+    [string]$EmbeddingModel = "",
+    [string]$OpenAIKey = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -542,37 +562,78 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  Copilot plugin '$pluginName' registered successfully"
 
 # --- 5. Provision config + start the daemon ----------------------------------
-Write-Step "Provisioning config (getKeys, browser login)"
-$provisionOutput = & node $serve provision 2>&1
-$provisionExitCode = $LASTEXITCODE
-if ($provisionOutput) { $provisionOutput | ForEach-Object { Write-Host $_ } }
+if ($Provider -eq "aisystems") {
+    Write-Step "Provisioning config (getKeys, browser login)"
+    $provisionOutput = & node $serve provision 2>&1
+    $provisionExitCode = $LASTEXITCODE
+    if ($provisionOutput) { $provisionOutput | ForEach-Object { Write-Host $_ } }
 
-if ($provisionExitCode -ne 0) {
-    $provisionText = ($provisionOutput | Out-String)
-    $isKeyVaultAuthError = (
-        $provisionText -match "Caller is not authorized" -or
-        $provisionText -match "Microsoft\.KeyVault/vaults/secrets/getSecret/action" -or
-        $provisionText -match "Failed to read 'typeagent-config' from vault"
-    )
+    if ($provisionExitCode -ne 0) {
+        $provisionText = ($provisionOutput | Out-String)
+        $isKeyVaultAuthError = (
+            $provisionText -match "Caller is not authorized" -or
+            $provisionText -match "Microsoft\.KeyVault/vaults/secrets/getSecret/action" -or
+            $provisionText -match "Failed to read 'typeagent-config' from vault"
+        )
 
-    if ($isKeyVaultAuthError) {
-        Write-Host "" 
-        Write-Host "Key Vault access failed for the current Azure identity." -ForegroundColor Yellow
-        Write-Host "Launching 'az login' so you can select an identity with access..." -ForegroundColor Yellow
-        & az login --only-show-errors | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Fail "Config provisioning failed and az login did not complete successfully."
+        if ($isKeyVaultAuthError) {
+            Write-Host "" 
+            Write-Host "Key Vault access failed for the current Azure identity." -ForegroundColor Yellow
+            Write-Host "Launching 'az login' so you can select an identity with access..." -ForegroundColor Yellow
+            & az login --only-show-errors | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Fail "Config provisioning failed and az login did not complete successfully."
+            }
+
+            Write-Step "Retrying config provisioning after az login"
+            $retryOutput = & node $serve provision 2>&1
+            $retryExitCode = $LASTEXITCODE
+            if ($retryOutput) { $retryOutput | ForEach-Object { Write-Host $_ } }
+            if ($retryExitCode -ne 0) {
+                Fail "Config provisioning failed after re-authentication. Confirm the selected identity has Key Vault access."
+            }
+        } else {
+            Fail "Config provisioning failed."
         }
+    }
+} else {
+    # Self-host provider: synthesize config.local.yaml locally (no Key Vault / az login).
+    Write-Step "Provisioning config for '$Provider' provider (self-host, no Key Vault)"
+    $provisionArgs = @($serve, "provision", "--provider", $Provider, "--force", "--embedding", $Embedding)
+    if ($Provider -eq "ollama") {
+        $provisionArgs += @("--ollama-host", $OllamaHost)
+        if ($ChatModel) { $provisionArgs += @("--chat-model", $ChatModel) }
+    }
+    if ($Provider -eq "copilot" -and $CopilotModel) {
+        $provisionArgs += @("--copilot-model", $CopilotModel)
+    }
+    if ($Embedding -eq "ollama") {
+        $provisionArgs += @("--ollama-host", $OllamaHost)
+    }
+    if ($EmbeddingEndpoint) { $provisionArgs += @("--embedding-endpoint", $EmbeddingEndpoint) }
+    if ($EmbeddingModel) { $provisionArgs += @("--embedding-model", $EmbeddingModel) }
+    if ($OpenAIKey) { $provisionArgs += @("--openai-key", $OpenAIKey) }
 
-        Write-Step "Retrying config provisioning after az login"
-        $retryOutput = & node $serve provision 2>&1
-        $retryExitCode = $LASTEXITCODE
-        if ($retryOutput) { $retryOutput | ForEach-Object { Write-Host $_ } }
-        if ($retryExitCode -ne 0) {
-            Fail "Config provisioning failed after re-authentication. Confirm the selected identity has Key Vault access."
+    & node @provisionArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Self-host config generation failed for provider '$Provider'."
+    }
+
+    if ($Provider -eq "ollama") {
+        Write-Host "  Reminder: ensure 'ollama serve' is running and the '$(if ($ChatModel) { $ChatModel } else { 'llama3.2' })' model is pulled." -ForegroundColor Yellow
+        # Best-effort reachability probe (non-fatal).
+        try {
+            $probe = [System.Net.HttpWebRequest]::Create("$OllamaHost/api/tags")
+            $probe.Timeout = 2000
+            $probe.Method = "GET"
+            $probe.GetResponse().Close()
+            Write-Host "  Ollama reachable at $OllamaHost." -ForegroundColor Green
+        } catch {
+            Write-Host "  WARNING: could not reach Ollama at $OllamaHost. Start it before using the agent." -ForegroundColor Yellow
         }
-    } else {
-        Fail "Config provisioning failed."
+    }
+    if ($Provider -eq "copilot") {
+        Write-Host "  Reminder: the 'copilot' CLI must be installed and authenticated (github login)." -ForegroundColor Yellow
     }
 }
 
@@ -585,23 +646,27 @@ $typeAgentConfigDir = if ($env:TYPEAGENT_CONFIG_DIR) {
     Join-Path $env:USERPROFILE ".typeagent"
 }
 $configLocalPath = Join-Path $typeAgentConfigDir "config.local.yaml"
-$hasEmbeddingEnv = -not [string]::IsNullOrWhiteSpace($env:AZURE_OPENAI_ENDPOINT_EMBEDDING)
+# Embeddings may come from an Azure/OpenAI endpoint OR the bundled local model
+# (embedding.provider: local). "none" intentionally disables embeddings and the
+# dependent features degrade gracefully, so no endpoint is required.
+$hasEmbeddingEnv = (-not [string]::IsNullOrWhiteSpace($env:AZURE_OPENAI_ENDPOINT_EMBEDDING)) -or
+    (-not [string]::IsNullOrWhiteSpace($env:OPENAI_ENDPOINT_EMBEDDING)) -or
+    (-not [string]::IsNullOrWhiteSpace($env:TYPEAGENT_EMBEDDING_PROVIDER))
 $hasEmbeddingInFile = $false
 if (Test-Path $configLocalPath) {
-    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpoint_embedding" -Quiet)
+    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpointEmbedding|endpoint_embedding|^embedding:|provider:\s*(local|openai|azure|none)" -Quiet)
 }
 
 if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
     $msg = @(
-        "Provisioning completed, but required embedding config was not found.",
-        "Missing: AZURE_OPENAI_ENDPOINT_EMBEDDING",
-        "Checked: env var and '$configLocalPath'",
-        "The agent server will start and then exit immediately without this setting.",
-        "Re-run provisioning with an identity that can read the expected config source (e.g. Key Vault),",
-        "or set AZURE_OPENAI_ENDPOINT_EMBEDDING in the environment/config before start.",
+        "Provisioning completed, but no embedding configuration was found.",
+        "Expected one of: an embedding endpoint (AZURE_OPENAI_ENDPOINT_EMBEDDING / OPENAI_ENDPOINT_EMBEDDING / endpointEmbedding),",
+        "or an 'embedding:' section (provider: local | openai | azure | none) in the config.",
+        "Checked: env vars and '$configLocalPath'",
+        "Without embeddings, semantic search and related features are disabled (the server still starts).",
         "For detailed startup diagnostics: set TYPEAGENT_DEBUG=1 and run 'node typeagent-serve.mjs start --debug', then 'node typeagent-serve.mjs logs'."
     ) -join [Environment]::NewLine
-    Fail $msg
+    Write-Warning $msg
 }
 
 # --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
@@ -654,8 +719,8 @@ if (-not $NoStart) {
                 "Remediation:",
                 "  1) az login   (choose an account with access to the OpenAI resource/deployment)",
                 "  2) Verify config.local.yaml points to a deployment your selected principal can use",
-                "  3) Re-run: node \"$serve\" start --debug",
-                "  4) Check logs: node \"$serve\" logs"
+                "  3) Re-run: node `"$serve`" start --debug",
+                "  4) Check logs: node `"$serve`" logs"
             ) -join [Environment]::NewLine
             Fail $msg
         }
@@ -663,7 +728,7 @@ if (-not $NoStart) {
         if (Test-Path $daemonLogPath) {
             Write-Host "  Agent-server daemon log: $daemonLogPath" -ForegroundColor Yellow
         }
-        Fail "Agent server failed to start. Re-run with TYPEAGENT_DEBUG=1 and inspect 'node \"$serve\" logs'."
+        Fail "Agent server failed to start. Re-run with TYPEAGENT_DEBUG=1 and inspect 'node `"$serve`" logs'."
     }
 }
 
