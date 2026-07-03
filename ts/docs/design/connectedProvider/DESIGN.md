@@ -1,6 +1,7 @@
 # Connected AppAgent Provider — Design Doc
 
-> Status: **Proposal / for iteration**
+> Status: **Implemented** (Milestones 1–5; see
+> [EXECUTION_PLAN.md](./EXECUTION_PLAN.md), [DECISIONS_LOG.md](./DECISIONS_LOG.md))
 > Scope: `ts/packages/dispatcher` (a new `AppAgentSource` connection interface
 > whose `connect()` vends shared `AppAgentProvider`s, the dispatcher-side
 > `AppAgentHost` callback that registers/unregisters live agents, removal of the

@@ -8,7 +8,7 @@ import { getAddSourceCommandHandlers } from "../src/installSources/addSource.js"
 
 // `getAddSourceCommandHandlers` owns the per-kind `@source add` grammar +
 // validation. The dispatcher core merges these typed handlers into `@source`
-// (via `AppAgentInstaller.sourceCommands`) and parses the args/flags; here we
+// (via `InstalledAgentSourceApi.sourceCommands`) and parses the args/flags; here we
 // invoke each handler directly with already-parsed params and assert the
 // config it hands to `registry.add` (or the validation error it throws).
 

@@ -23,7 +23,7 @@ import { getAddSourceCommandHandlers } from "./addSource.js";
 // The host owns the entire `@source` command surface. The dispatcher core has
 // no install-source registry interface: it contributes only the live-session
 // `@install`/`@uninstall`/`@update` commands and merges this whole table in as
-// `@source` (via `AppAgentInstaller.sourceCommands()`). All knowledge of the
+// `@source` (via `InstalledAgentSourceApi.sourceCommands()`). All knowledge of the
 // kind taxonomy, listing/ordering, resolution preview, and the add grammar
 // lives here.
 
@@ -33,7 +33,7 @@ export interface SourceCommandsDeps {
     // `sourceName`, powering `@source remove`'s "still referenced" warning.
     // Injected (rather than imported) so this command module stays decoupled
     // from the installed-agent record store: the installer owns agents.json
-    // access and supplies a closure over it (see getDefaultAppAgentInstaller).
+    // access and supplies a closure over it (see createDefaultInstalledAgentSource).
     recordsUsingSource: (sourceName: string) => string[];
 }
 
@@ -259,7 +259,7 @@ class SourceRemoveCommandHandler implements CommandHandler {
 /**
  * Build the host's full `@source` command table (list / order / where / remove
  * / add). The dispatcher core merges this in as `@source` via
- * `AppAgentInstaller.sourceCommands()`.
+ * `InstalledAgentSourceApi.sourceCommands()`.
  */
 export function getSourceCommands(
     deps: SourceCommandsDeps,

@@ -8,7 +8,7 @@
 // about how sources are configured, listed, resolved, or recorded - it only
 // contributes the live-session `@install`/`@uninstall`/`@update` commands and
 // receives the whole `@source` command table from the host via
-// `AppAgentInstaller.sourceCommands()`. Keeping these here frees the core of
+// `InstalledAgentSourceApi.sourceCommands()`. Keeping these here frees the core of
 // npm / Azure Artifacts vocabulary (registry URLs, scopes, catalog paths) and
 // lets the host own how a source is added, listed, ordered, removed, and
 // persisted - including any future auth UI.

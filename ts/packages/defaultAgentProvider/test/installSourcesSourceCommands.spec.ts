@@ -5,7 +5,7 @@ import { getSourceCommands } from "../src/installSources/sourceCommands.js";
 
 // `getSourceCommands` is the host's full `@source` table (list / order / where
 // / remove / add). The dispatcher core merges it in verbatim via
-// `AppAgentInstaller.sourceCommands()` and knows none of this grammar. Here we
+// `InstalledAgentSourceApi.sourceCommands()` and knows none of this grammar. Here we
 // drive each handler directly with already-parsed params against a fake
 // registry, asserting the registry calls (and rendered text where it matters).
 

@@ -16,10 +16,10 @@ The `default-agent-provider` package is a TypeScript library that serves as the 
 
 ## What it does
 
-This package provides default implementations for various agent-related functionalities, including agent providers, agent installers, dispatcher options, and indexing service registries. It includes functions to retrieve default configurations and providers for both built-in and external agents. Key functionalities include:
+This package provides default implementations for various agent-related functionalities, including agent providers, the connected app-agent source, dispatcher options, and indexing service registries. It includes functions to retrieve default configurations and providers for both built-in and external agents. Key functionalities include:
 
-- `getDefaultAppAgentProviders`: Retrieves the default application agent providers.
-- `getDefaultAppAgentInstaller`: Provides the default application agent installer.
+- `getDefaultAppAgentProviders`: Retrieves the default (static) application agent providers.
+- `getDefaultAppAgentSource`: Provides the default connected app-agent source (owns the installed-agent record store and the host-owned `@package` agent).
 - `getDefaultDispatcherOptions`: Returns the default dispatcher options.
 - `getIndexingServiceRegistry`: Gets the indexing service registry.
 - `getDefaultConstructionProvider`: Provides the default construction provider.
@@ -64,7 +64,7 @@ The package is structured into several key files, each responsible for different
 ### Key Functions and Their Responsibilities
 
 - `getDefaultAppAgentProviders`: Located in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function initializes and retrieves the default application agent providers.
-- `getDefaultAppAgentInstaller`: Also in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function provides the default application agent installer.
+- `getDefaultAppAgentSource`: Also in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function provides the default connected app-agent source.
 - `getDefaultDispatcherOptions`: Found in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function returns the default dispatcher options.
 - `getIndexingServiceRegistry`: Located in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function gets the indexing service registry.
 - `getDefaultConstructionProvider`: Defined in [defaultConstructionProvider.ts](./src/defaultConstructionProvider.ts), this function provides the default construction provider.

@@ -19,7 +19,7 @@ import { createLimiter, Limiter } from "@typeagent/common-utils";
  * configuration, ordered resolution (design §4.1), and the typed `add(config)`
  * used by seeding, tests, and the host's `@source` command handlers. This is
  * entirely host-internal - the dispatcher core has no registry interface; it
- * receives the `@source` command table via `AppAgentInstaller.sourceCommands()`.
+ * receives the `@source` command table via `InstalledAgentSourceApi.sourceCommands()`.
  */
 export interface DefaultInstallSourceRegistry {
     // Host-rendered summaries for `@source list`.

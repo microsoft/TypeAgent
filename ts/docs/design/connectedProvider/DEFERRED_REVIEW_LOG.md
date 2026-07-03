@@ -131,6 +131,26 @@ installSourcesInstalledProvider.spec.ts (44) + packageAgent.spec.ts (11) green.
 Deferred: none for M4. End-to-end multi-conversation flow is exercised at unit
 scope via fake hosts; the real dispatcher wiring is covered by the final gate.
 
+## Milestone 5 — light gate (1 review + 1 test-gap)
+
+Hygiene milestone (docs + dead-code sweep); comments/docs only, no runtime change.
+
+Review: grep gate is clean — no code or comment reference to `AppAgentInstaller`,
+`getDefaultAppAgentInstaller`, `installCommandHandlers`, or `.agentInstaller`
+remains anywhere under `ts/packages` / `ts/examples`. The old
+`installAppProvider` is intentionally KEPT (not dead): it is still used to
+register a source's vended providers at `connect()` init through the
+config-derived state path, which is what makes late-connect "disabled by default"
+hold (the manifest default is false). The `@package`/`@source` graft helpers in
+the system agent were already removed in M2. Stale doc comments updated to the
+new `AppAgentSource` / `InstalledAgentSourceApi` model; README.AUTOGEN.md updated
+(`getDefaultAppAgentSource`); DESIGN.md status flipped to **Implemented**.
+
+Test-gap: grep gate for removed symbols (empty); install-sources suites (153)
+green; all packages (dispatcher, default-agent-provider, agentServer, api, shell
+node) build. No new tests needed for a docs/hygiene pass.
+
+
 
 
 
