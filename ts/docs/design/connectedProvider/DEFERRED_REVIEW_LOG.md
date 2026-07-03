@@ -101,6 +101,37 @@ update sibling remove-enqueued-before-add; no double-add of the issuing host; th
 extracted `emitAgentChangeNotification` is behavior-identical to the inlined
 version. No remaining P0 gaps.
 
+## Milestone 4 — gate
+
+The `Explore` subagent was unavailable for this milestone, so the gate was run as
+a rigorous self-review (both review passes + test-gap) plus tests.
+
+Review — found one real concurrency bug: `update`'s `materialize` await runs while
+the entry is still `active`, so a concurrent `uninstall` (from another session)
+could start draining P1 while `update` then overwrote the entry with P2 —
+coexistence + a wedged drain. The design (§7.3 point 6) explicitly requires
+per-name serialization beyond the global write limiter. **Fixed** by adding a
+per-name `busy` guard (`assertNameFree` + `busy.add`/finally-`busy.delete`)
+wrapping the synchronous span of install/uninstall/update; combined with the
+`removing` state this fully serializes concurrent ops on one name. Other checks:
+`drainDrop` is idempotent (status guard + `entries.delete` before `then`, so a
+host dropped via both its `.finally` and `dispose()` cannot double-run `then`);
+concurrent uninstalls are caught by the record "not found" check after the first
+deletes; the update `then`'s `fanOutAdd` to a possibly-disconnected issuing host
+is safe (its applicator is closed → no-op); every fire-and-forget has `.catch`.
+
+Test-gap — added: reuse-during-removing rejected (install + update) and allowed
+once drained; connect-during-removing skips the draining name; disconnect-while-
+pending completes the drain; load-during-removing refused (tombstone); `@package
+list` hides a draining agent (update in progress); update adds new only after old
+drains everywhere (no coexistence); failed update leaves the agent active +
+vended everywhere; a throwing sibling still drains (record committed, name freed).
+installSourcesInstalledProvider.spec.ts (44) + packageAgent.spec.ts (11) green.
+
+Deferred: none for M4. End-to-end multi-conversation flow is exercised at unit
+scope via fake hosts; the real dispatcher wiring is covered by the final gate.
+
+
 
 
 

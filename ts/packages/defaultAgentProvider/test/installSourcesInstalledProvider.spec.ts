@@ -602,6 +602,272 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
     });
 });
 
+describe("AppAgentSource lifecycle tracker (design §7)", () => {
+    // An issuing host whose ops resolve immediately.
+    function fastHost(): AppAgentHost {
+        return {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+    }
+
+    // A sibling host whose removeProvider blocks until released, so a drain
+    // stays in the `removing` window under test.
+    function gatedHost() {
+        let release!: () => void;
+        const gate = new Promise<void>((res) => {
+            release = res;
+        });
+        return {
+            release,
+            host: {
+                addProvider: async () => {},
+                removeProvider: async () => {
+                    await gate;
+                },
+            } as AppAgentHost,
+        };
+    }
+
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    async function installFoo(
+        built: ReturnType<typeof createDefaultInstalledAgentSource>,
+        issuing: AppAgentHost,
+    ) {
+        await built.api.install("foo", tmpDir("ta-agent-"), undefined, issuing);
+        await flush();
+    }
+
+    it("rejects install/update on a name still draining, allows it once drained", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+
+        // Uninstall starts a drain; the gated sibling keeps it `removing`.
+        const uninstalling = built.api.uninstall("foo", issuing);
+        await flush();
+
+        // Reuse during removing is rejected (design §7.3).
+        await expect(
+            built.api.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+        ).rejects.toThrow(/still being removed/i);
+        await expect(
+            built.api.update("foo", undefined, issuing),
+        ).rejects.toThrow(/still being removed/i);
+
+        // Release the drain; the name frees and can be reused.
+        gated.release();
+        await uninstalling;
+        await flush();
+        await expect(
+            built.api.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+        ).resolves.toBeDefined();
+    });
+
+    it("connect during removing skips the draining name", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+        const uninstalling = built.api.uninstall("foo", issuing);
+        await flush();
+
+        // A new session must NOT pick up the draining name (design §7.3).
+        const late = built.connect(fastHost());
+        expect(
+            new Set(late.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "foo",
+            ),
+        ).toBe(false);
+        late.dispose();
+
+        gated.release();
+        await uninstalling;
+    });
+
+    it("disconnect while pending completes the drain (auto-ack)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        const gatedConn = built.connect(gated.host);
+        await installFoo(built, issuing);
+        await built.api.uninstall("foo", issuing);
+        await flush();
+
+        // The gated sibling still pends. Disposing its connection drops it from
+        // the drain, which completes the drain and frees the name (design §7.3).
+        gatedConn.dispose();
+        await flush();
+        await expect(
+            built.api.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+        ).resolves.toBeDefined();
+    });
+
+    it("refuses to load a name while it is removing (tombstone)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        const holder = built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+        // A session connected after install holds the shared provider.
+        const holderConn = built.connect(fastHost());
+        const provider = holderConn.providers.find((p) =>
+            p.getAppAgentNames().includes("foo"),
+        )!;
+
+        const uninstalling = built.api.uninstall("foo", issuing);
+        await flush();
+        // Loading a draining name is refused even though the provider is cached.
+        await expect(provider.loadAppAgent("foo")).rejects.toThrow(
+            /being removed/i,
+        );
+
+        gated.release();
+        await uninstalling;
+        holder.dispose();
+        holderConn.dispose();
+    });
+
+    it("@package list hides a draining agent (update in progress)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await built.api.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing,
+        );
+        await flush();
+
+        // Update starts a drain of the old version; the record now points at the
+        // new version but the entry is `removing`, so list must hide it.
+        const updating = built.api.update("foo", undefined, issuing);
+        await flush();
+        expect(built.api.listInstalled().map((i) => i.name)).not.toContain(
+            "foo",
+        );
+
+        gated.release();
+        await updating;
+        await flush();
+        // After the drain + re-add, it is listed again.
+        expect(built.api.listInstalled().map((i) => i.name)).toContain("foo");
+    });
+
+    it("update adds the new version only after the old drains everywhere (no coexistence)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHostForLifecycle();
+        const gated = gatedHost();
+        built.connect(issuing.host);
+        built.connect(gated.host);
+        await built.api.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+        issuing.calls.length = 0;
+
+        const updating = built.api.update("foo", undefined, issuing.host);
+        await flush();
+        // The old version has been removed on the issuing session, but the new
+        // one is NOT added yet — the drain (gated sibling) has not completed.
+        expect(issuing.calls).toEqual([{ op: "remove" }]);
+
+        gated.release();
+        await updating;
+        await flush();
+        // Once drained, the new version is added.
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    // A recording host that only tracks the op kind (for ordering assertions).
+    function recordingHostForLifecycle() {
+        const calls: { op: "add" | "remove" }[] = [];
+        return {
+            calls,
+            host: {
+                addProvider: async () => {
+                    calls.push({ op: "add" });
+                },
+                removeProvider: async () => {
+                    calls.push({ op: "remove" });
+                },
+            } as AppAgentHost,
+        };
+    }
+
+    it("a failed update leaves the agent active + vended everywhere (§7.4)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        built.connect(issuing);
+        const agentDir = makePathAgentDir("🧪");
+        await built.api.install("foo", agentDir, undefined, issuing);
+        await flush();
+
+        // Break re-resolution so the materialize fails.
+        fs.rmSync(agentDir, { recursive: true, force: true });
+        await expect(
+            built.api.update("foo", undefined, issuing),
+        ).rejects.toThrow();
+
+        // The entry is still active (no drain started) and a new session vends
+        // the old provider — the failed update is a true no-op.
+        const conn = built.connect(fastHost());
+        expect(
+            new Set(conn.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "foo",
+            ),
+        ).toBe(true);
+        conn.dispose();
+    });
+
+    it("a throwing sibling still drains (record committed, name freed)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const throwingSibling: AppAgentHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {
+                throw new Error("sibling remove boom");
+            },
+        };
+        built.connect(issuing);
+        built.connect(throwingSibling);
+        await installFoo(built, issuing);
+
+        // The sibling throws on removeProvider, but its failure still drops it
+        // from `pending` (design §7.4), so the drain completes and the record
+        // stays committed.
+        await built.api.uninstall("foo", issuing);
+        await flush();
+        expect(readAgentsJson(instanceDir)!.agents.foo).toBeUndefined();
+        // Name is freed despite the sibling failure — reuse is allowed.
+        await expect(
+            built.api.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+        ).resolves.toBeDefined();
+    });
+});
+
 describe("installed agent source api (install/uninstall/update)", () => {
     // A no-op issuing host: the record-store logic is independent of the
     // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /

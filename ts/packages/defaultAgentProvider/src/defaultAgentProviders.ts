@@ -178,6 +178,26 @@ function withDisabledByDefault(provider: AppAgentProvider): AppAgentProvider {
 }
 
 /**
+ * Per-name lifecycle entry for a dynamic (installed) agent (design §7.2). A name
+ * is either `active` (installed and vended) or `removing` (draining across the
+ * connected sessions before the name is freed / reused). No two versions of a
+ * name ever coexist: install/uninstall/update transition through these states,
+ * and a name that is `removing` is off-limits until every session has acked the
+ * teardown.
+ */
+type DynamicAgentEntry =
+    | { status: "active"; provider: AppAgentProvider }
+    | {
+          status: "removing";
+          // The provider being torn down (kept for the load tombstone, §7.3).
+          provider: AppAgentProvider;
+          // Hosts that have not yet acked the removal. Empty ⇒ drained.
+          pending: Set<AppAgentHost>;
+          // Queued follow-up run once drained (an update's post-drain add, §7.2).
+          then?: () => Promise<void>;
+      };
+
+/**
  * The concrete installed-agent source (design §3.2). Besides the dispatcher-
  * facing `connect()`, it also carries the write/command surface (`api`) the
  * host-owned `@package` agent uses. The dispatcher is handed only the narrow
@@ -251,20 +271,154 @@ export function createDefaultInstalledAgentSource(
         return getBundledAgentNames().has(name);
     }
 
-    // Shared per-agent provider instances (design §3.3): one single-agent,
-    // single-root provider per installed record, seeded from agents.json and
-    // vended (the same instance) to every connected session. install/uninstall/
-    // update keep this map in sync so later connects see the current set.
-    const installedProviders = new Map<string, AppAgentProvider>();
+    // Per-name lifecycle tracker (design §7.2): the source of truth for the
+    // dynamic agent set. A name is `active` (vended) or `removing` (draining).
+    const entries = new Map<string, DynamicAgentEntry>();
+
+    // Wrap a provider with a load tombstone (design §7.3): while its name is
+    // `removing`, refuse to load it even if a draining session still holds the
+    // instance, so nothing resurrects a name mid-teardown.
+    function withTombstone(
+        name: string,
+        provider: AppAgentProvider,
+    ): AppAgentProvider {
+        return {
+            ...provider,
+            loadAppAgent: async (agentName: string) => {
+                if (entries.get(name)?.status === "removing") {
+                    throw new Error(
+                        `Agent '${name}' is being removed; cannot load.`,
+                    );
+                }
+                return provider.loadAppAgent(agentName);
+            },
+        };
+    }
+
+    // Build the shared, tombstoned, disabled-by-default provider for a record.
+    function buildAgentProvider(
+        name: string,
+        record: InstalledAgentRecord,
+    ): AppAgentProvider {
+        return withTombstone(name, buildProviderFor({ [name]: record }));
+    }
+
+    // Seed active entries from agents.json (design §3.3). One single-agent,
+    // single-root provider per record; shared (the same instance) across every
+    // connected session.
     for (const [name, record] of Object.entries(
         loadInstalledRecords(instanceDir),
     )) {
-        installedProviders.set(name, buildProviderFor({ [name]: record }));
+        entries.set(name, {
+            status: "active",
+            provider: buildAgentProvider(name, record),
+        });
+    }
+
+    // The providers to vend to a connecting session: the `active` set only —
+    // never a draining name (design §7.3 connect-during-removing).
+    function activeProviders(): AppAgentProvider[] {
+        const providers: AppAgentProvider[] = [];
+        for (const entry of entries.values()) {
+            if (entry.status === "active") {
+                providers.push(entry.provider);
+            }
+        }
+        return providers;
     }
 
     // The client registry of connected AppAgentHosts (design §3.3), used for
     // cross-session fan-out (design §4). connect() adds; dispose() removes.
     const clients = new Set<AppAgentHost>();
+
+    // Per-name in-flight guard (design §7.3 point 6: per-name serialization lives
+    // in the entry, not only in the global write limiter). A name is `busy` for
+    // the synchronous span of an install/uninstall/update op (resolve +
+    // materialize + record write); `removing` covers the subsequent async drain.
+    // Together they serialize concurrent ops on one name — e.g. an `update`
+    // materializing cannot be overtaken by a concurrent `uninstall` starting a
+    // drain of the same name.
+    const busy = new Set<string>();
+
+    // Reject a mutating op on a name that is still draining (design §7.3
+    // name-reuse-during-removing): the name is off-limits until fully torn down.
+    function assertNotRemoving(name: string): void {
+        if (entries.get(name)?.status === "removing") {
+            throw new Error(
+                `Agent '${name}' is still being removed; retry shortly.`,
+            );
+        }
+    }
+
+    // Reject if the name is draining OR another op on it is in flight (design
+    // §7.3 per-name serialization).
+    function assertNameFree(name: string): void {
+        assertNotRemoving(name);
+        if (busy.has(name)) {
+            throw new Error(
+                `Agent '${name}' has an operation in progress; retry shortly.`,
+            );
+        }
+    }
+
+    // Drop a host from a draining name's `pending` set (an ack, a per-client
+    // failure, or a disconnect). When the last host drains, free the name and
+    // run any queued follow-up (an update's post-drain add, §7.2).
+    function drainDrop(name: string, host: AppAgentHost): void {
+        const entry = entries.get(name);
+        if (entry?.status !== "removing") {
+            return;
+        }
+        entry.pending.delete(host);
+        if (entry.pending.size === 0) {
+            const then = entry.then;
+            // Free the name first so `then` (or a new op) sees `absent`.
+            entries.delete(name);
+            if (then !== undefined) {
+                then().catch((e) => {
+                    debug(`post-drain follow-up for '${name}' failed: ${e}`);
+                });
+            }
+        }
+    }
+
+    // Begin draining a name across every connected session (design §7.2): the
+    // issuing host is awaited (errors surface); siblings are best-effort +
+    // notified. Every host's ack — success, failure, or disconnect — drops it
+    // from `pending` so a failed/gone session never wedges name reuse.
+    async function startDrain(
+        name: string,
+        provider: AppAgentProvider,
+        issuingHost: AppAgentHost,
+        then?: () => Promise<void>,
+    ): Promise<void> {
+        const pending = new Set<AppAgentHost>(clients);
+        // The issuing host is always part of the drain even if it never
+        // formally connected (defensive).
+        pending.add(issuingHost);
+        entries.set(name, {
+            status: "removing",
+            provider,
+            pending,
+            ...(then ? { then } : {}),
+        });
+
+        for (const host of clients) {
+            if (host === issuingHost) {
+                continue;
+            }
+            host.removeProvider(provider, true)
+                .catch((e) => {
+                    debug(`sibling removeProvider failed: ${e}`);
+                })
+                .finally(() => drainDrop(name, host));
+        }
+        try {
+            await issuingHost.removeProvider(provider, false);
+        } finally {
+            drainDrop(name, issuingHost);
+        }
+    }
 
     // Fan out an add to every connected session (design §4, §5): the ISSUING
     // session is awaited (errors surface to the user) and enabled; every SIBLING
@@ -285,23 +439,6 @@ export function createDefaultInstalledAgentSource(
         await issuingHost.addProvider(provider, true, false);
     }
 
-    // Fan out a remove to every connected session (design §4): issuing awaited;
-    // siblings best-effort/async + notified.
-    async function fanOutRemove(
-        provider: AppAgentProvider,
-        issuingHost: AppAgentHost,
-    ): Promise<void> {
-        for (const host of clients) {
-            if (host === issuingHost) {
-                continue;
-            }
-            host.removeProvider(provider, true).catch((e) => {
-                debug(`sibling removeProvider failed: ${e}`);
-            });
-        }
-        await issuingHost.removeProvider(provider, false);
-    }
-
     const source: InstalledAgentSourceApi = {
         async install(
             name: string,
@@ -314,43 +451,54 @@ export function createDefaultInstalledAgentSource(
                     `Agent '${name}' is built-in and cannot be shadowed by an install`,
                 );
             }
-            // resolve + materialize is serialized by the registry's limiter
-            // (design §4.1). After it returns, we re-take the same shared
-            // limiter to write the record (sequential, not nested). Collect any
-            // non-fatal source degrade warnings raised during the resolve.
-            const warningSet = new Set<string>();
-            const resolved = await registry.resolve(ref, sourceName, (m) =>
-                warningSet.add(m),
-            );
-            // The source assigns the authoritative dispatcher name.
-            const record: InstalledAgentRecord = { ...resolved, name };
-            // Preserve the user-supplied lookup key so `@update` can
-            // re-resolve a catalog agent installed under a different name than
-            // its catalog key (catalog `materialize` leaves `ref` unset). Feed
-            // records already carry their specifier in `ref`; this only fills
-            // the gap for catalog/path records.
-            if (record.ref === undefined) {
-                record.ref = ref;
-            }
-            // Persist the record under the same serialization domain.
-            await limiter(async () => {
-                const current = readAgentsJson(instanceDir) ?? { agents: {} };
-                if (current.agents[name] !== undefined) {
-                    throw new Error(`Agent '${name}' already exists`);
+            // Serialize on the name; reject if it is draining or busy (§7.3).
+            assertNameFree(name);
+            busy.add(name);
+            try {
+                // resolve + materialize is serialized by the registry's limiter
+                // (design §4.1). After it returns, we re-take the same shared
+                // limiter to write the record (sequential, not nested). Collect
+                // any non-fatal source degrade warnings raised during resolve.
+                const warningSet = new Set<string>();
+                const resolved = await registry.resolve(ref, sourceName, (m) =>
+                    warningSet.add(m),
+                );
+                // The source assigns the authoritative dispatcher name.
+                const record: InstalledAgentRecord = { ...resolved, name };
+                // Preserve the user-supplied lookup key so `@update` can
+                // re-resolve a catalog agent installed under a different name
+                // than its catalog key (catalog `materialize` leaves `ref`
+                // unset).
+                if (record.ref === undefined) {
+                    record.ref = ref;
                 }
-                current.agents[name] = record;
-                writeAgentsJson(instanceDir, current);
-            });
-            // Cache the shared per-agent provider so later connects vend it.
-            const provider = buildProviderFor({ [name]: record });
-            installedProviders.set(name, provider);
-            // Fan out to every connected session (design §4): issuing awaited +
-            // enabled; siblings best-effort + disabled + notified.
-            await fanOutAdd(provider, issuingHost);
-            return {
-                source: record.source,
-                ...(warningSet.size > 0 ? { warnings: [...warningSet] } : {}),
-            };
+                // Persist the record under the same serialization domain.
+                await limiter(async () => {
+                    const current = readAgentsJson(instanceDir) ?? {
+                        agents: {},
+                    };
+                    if (current.agents[name] !== undefined) {
+                        throw new Error(`Agent '${name}' already exists`);
+                    }
+                    current.agents[name] = record;
+                    writeAgentsJson(instanceDir, current);
+                });
+                // Build the shared per-agent provider and mark the name active
+                // so later connects vend it (design §7.2 absent → active).
+                const provider = buildAgentProvider(name, record);
+                entries.set(name, { status: "active", provider });
+                // Fan out to every connected session (design §4): issuing
+                // awaited + enabled; siblings best-effort + disabled + notified.
+                await fanOutAdd(provider, issuingHost);
+                return {
+                    source: record.source,
+                    ...(warningSet.size > 0
+                        ? { warnings: [...warningSet] }
+                        : {}),
+                };
+            } finally {
+                busy.delete(name);
+            }
         },
         async uninstall(
             name: string,
@@ -361,20 +509,30 @@ export function createDefaultInstalledAgentSource(
                     `Agent '${name}' is built-in and cannot be uninstalled`,
                 );
             }
-            await limiter(async () => {
-                const current = readAgentsJson(instanceDir) ?? { agents: {} };
-                if (current.agents[name] === undefined) {
-                    throw new Error(`Agent '${name}' not found`);
+            // Serialize on the name; reject if it is draining or busy (§7.3).
+            assertNameFree(name);
+            busy.add(name);
+            try {
+                const entry = entries.get(name);
+                await limiter(async () => {
+                    const current = readAgentsJson(instanceDir) ?? {
+                        agents: {},
+                    };
+                    if (current.agents[name] === undefined) {
+                        throw new Error(`Agent '${name}' not found`);
+                    }
+                    delete current.agents[name];
+                    writeAgentsJson(instanceDir, current);
+                });
+                // The record write is the commit point (design §7.4). Now drain
+                // the live agent across every connected session (active →
+                // removing → absent, design §7.2). The name stays off-limits
+                // until fully drained (the `removing` state outlives this op).
+                if (entry?.status === "active") {
+                    await startDrain(name, entry.provider, issuingHost);
                 }
-                delete current.agents[name];
-                writeAgentsJson(instanceDir, current);
-            });
-            // Drop the shared provider from the vended set and fan out its
-            // removal to every connected session (design §4).
-            const provider = installedProviders.get(name);
-            installedProviders.delete(name);
-            if (provider !== undefined) {
-                await fanOutRemove(provider, issuingHost);
+            } finally {
+                busy.delete(name);
             }
         },
         async update(
@@ -387,95 +545,111 @@ export function createDefaultInstalledAgentSource(
                     `Agent '${name}' is built-in and cannot be updated`,
                 );
             }
-            // Look up the recorded provenance and re-resolve against its
-            // recorded source (design §5). The whole materialize runs first;
-            // the old record is overwritten only after it succeeds, so a failed
-            // update leaves the old agent intact (design §4.7, §12 Q13).
-            const existing = readAgentsJson(instanceDir)?.agents[name];
-            if (existing === undefined) {
-                throw new Error(`Agent '${name}' not found`);
-            }
-            const sourceEntry = registry.get(existing.source);
-            if (sourceEntry === undefined) {
-                throw new Error(
-                    `Source '${existing.source}' for agent '${name}' is no longer configured; ` +
-                        `re-add it with '@source add' to update, or '@uninstall ${name}'.`,
-                );
-            }
-            // Build the re-resolution ref from the record, per source kind.
-            let ref: string;
-            switch (sourceEntry.kind) {
-                case "feed": {
-                    // Re-resolve the package, optionally constrained by range;
-                    // omitting range targets the latest available version.
-                    const moduleName = existing.module;
-                    if (moduleName === undefined) {
-                        throw new Error(
-                            `Feed record for '${name}' is missing its 'module' (corrupt record).`,
-                        );
-                    }
-                    ref =
-                        range !== undefined
-                            ? `${moduleName}@${range}`
-                            : moduleName;
-                    break;
+            // Serialize on the name; reject if it is draining or busy (§7.3).
+            assertNameFree(name);
+            busy.add(name);
+            try {
+                // Look up the recorded provenance and re-resolve against its
+                // recorded source (design §5). The whole materialize runs
+                // first; the old record is overwritten only after it succeeds,
+                // so a failed update is a no-op (design §4.7, §12 Q13).
+                const existing = readAgentsJson(instanceDir)?.agents[name];
+                if (existing === undefined) {
+                    throw new Error(`Agent '${name}' not found`);
                 }
-                case "path": {
-                    // Re-materialize from the recorded path (picks up a moved /
-                    // rebuilt local agent).
-                    if (existing.path === undefined) {
-                        throw new Error(
-                            `Agent '${name}' has no recorded path to refresh.`,
-                        );
-                    }
-                    ref = existing.path;
-                    break;
-                }
-                case "catalog": {
-                    // Re-look-up the catalog key. Prefer the preserved lookup
-                    // key (`ref`, set at install) so renamed installs still
-                    // re-resolve; fall back to the dispatcher name for older
-                    // records (it equals the key for builtins / same-name
-                    // installs).
-                    ref = existing.ref ?? existing.name;
-                    break;
-                }
-                default: {
+                const sourceEntry = registry.get(existing.source);
+                if (sourceEntry === undefined) {
                     throw new Error(
-                        `unknown source kind for '${name}': ${String(
-                            sourceEntry.kind,
-                        )}`,
+                        `Source '${existing.source}' for agent '${name}' is no longer configured; ` +
+                            `re-add it with '@source add' to update, or '@uninstall ${name}'.`,
                     );
                 }
+                // Build the re-resolution ref from the record, per source kind.
+                let ref: string;
+                switch (sourceEntry.kind) {
+                    case "feed": {
+                        // Re-resolve, optionally constrained by range; omitting
+                        // range targets the latest available version.
+                        const moduleName = existing.module;
+                        if (moduleName === undefined) {
+                            throw new Error(
+                                `Feed record for '${name}' is missing its 'module' (corrupt record).`,
+                            );
+                        }
+                        ref =
+                            range !== undefined
+                                ? `${moduleName}@${range}`
+                                : moduleName;
+                        break;
+                    }
+                    case "path": {
+                        // Re-materialize from the recorded path.
+                        if (existing.path === undefined) {
+                            throw new Error(
+                                `Agent '${name}' has no recorded path to refresh.`,
+                            );
+                        }
+                        ref = existing.path;
+                        break;
+                    }
+                    case "catalog": {
+                        // Re-look-up the catalog key; prefer the preserved
+                        // lookup key (`ref`, set at install).
+                        ref = existing.ref ?? existing.name;
+                        break;
+                    }
+                    default: {
+                        throw new Error(
+                            `unknown source kind for '${name}': ${String(
+                                sourceEntry.kind,
+                            )}`,
+                        );
+                    }
+                }
+                // Materialize the new version (serialized by the registry
+                // limiter).
+                const resolved = await registry.resolve(ref, existing.source);
+                const record: InstalledAgentRecord = { ...resolved, name };
+                if (record.ref === undefined) {
+                    record.ref = ref;
+                }
+                // Overwrite only after a successful materialize (§12 Q13). This
+                // is the commit point (design §7.4); a failed materialize above
+                // is a no-op that leaves the old record + agent intact.
+                await limiter(async () => {
+                    const current = readAgentsJson(instanceDir) ?? {
+                        agents: {},
+                    };
+                    current.agents[name] = record;
+                    writeAgentsJson(instanceDir, current);
+                });
+                // Disruptive update (design §7.2): drain the OLD version across
+                // every session first, then (post-drain) add the NEW one — so no
+                // two versions of the name ever coexist. The freshly
+                // materialized provider is added as the drain's `then`. If there
+                // is no active entry to drain, add directly.
+                const oldEntry = entries.get(name);
+                const newProvider = buildAgentProvider(name, record);
+                const addNew = () => {
+                    entries.set(name, {
+                        status: "active",
+                        provider: newProvider,
+                    });
+                    return fanOutAdd(newProvider, issuingHost);
+                };
+                if (oldEntry?.status === "active") {
+                    await startDrain(
+                        name,
+                        oldEntry.provider,
+                        issuingHost,
+                        addNew,
+                    );
+                } else {
+                    await addNew();
+                }
+            } finally {
+                busy.delete(name);
             }
-            // Materialize the new version (serialized by the registry limiter).
-            const resolved = await registry.resolve(ref, existing.source);
-            const record: InstalledAgentRecord = { ...resolved, name };
-            // Preserve the re-resolution key across updates, the same way
-            // install does, so repeated `@update`s of a renamed catalog agent
-            // keep re-looking-up the original key (catalog `materialize` leaves
-            // `ref` unset).
-            if (record.ref === undefined) {
-                record.ref = ref;
-            }
-            // Overwrite only after a successful materialize (§12 Q13).
-            await limiter(async () => {
-                const current = readAgentsJson(instanceDir) ?? { agents: {} };
-                current.agents[name] = record;
-                writeAgentsJson(instanceDir, current);
-            });
-            // Swap the shared provider for the freshly materialized one.
-            const oldProvider = installedProviders.get(name);
-            const newProvider = buildProviderFor({ [name]: record });
-            installedProviders.set(name, newProvider);
-            // Fan out remove-then-add per client (design §4): issuing awaited;
-            // siblings best-effort + notified. No two versions ever coexist —
-            // the remove is enqueued before the add on every session (§7.2 drain
-            // coordination is added in Milestone 4).
-            if (oldProvider !== undefined) {
-                await fanOutRemove(oldProvider, issuingHost);
-            }
-            await fanOutAdd(newProvider, issuingHost);
         },
         sourceCommands() {
             // The host owns the entire `@source` surface (list/order/where/
@@ -495,16 +669,22 @@ export function createDefaultInstalledAgentSource(
             // The source owns only mutable install records (`agents.json`).
             // Bundled agents are provided separately by the bundled provider and
             // are intentionally excluded from these install summaries. A record
-            // carries exactly one resolution handle (ref / module / path).
+            // carries exactly one resolution handle (ref / module / path). A
+            // name that is currently `removing` (draining) is hidden — it is not
+            // an installed agent anymore (design §7.3).
             const agents = readAgentsJson(instanceDir)?.agents ?? {};
-            return Object.values(agents).map((record) => {
-                const handle = record.ref ?? record.module ?? record.path;
-                return {
-                    name: record.name,
-                    source: record.source,
-                    ...(handle !== undefined ? { handle } : {}),
-                };
-            });
+            return Object.values(agents)
+                .filter(
+                    (record) => entries.get(record.name)?.status !== "removing",
+                )
+                .map((record) => {
+                    const handle = record.ref ?? record.module ?? record.path;
+                    return {
+                        name: record.name,
+                        source: record.source,
+                        ...(handle !== undefined ? { handle } : {}),
+                    };
+                });
         },
         listSources(): string[] {
             // Source names in resolution order, for `@package install --source`
@@ -534,14 +714,16 @@ export function createDefaultInstalledAgentSource(
         connect(host: AppAgentHost): AppAgentConnection {
             clients.add(host);
             // The package agent is per-connection (its agentContext carries this
-            // session's AppAgentHost); the installed providers are shared.
+            // session's AppAgentHost); the installed providers are shared. A
+            // connecting session registers only from `active` entries — never a
+            // draining name (design §7.3 connect-during-removing).
             const packageProvider = createPackageAppAgentProvider({
                 appAgentHost: host,
                 source,
             });
             const providers: AppAgentProvider[] = [
                 packageProvider,
-                ...installedProviders.values(),
+                ...activeProviders(),
             ];
             return {
                 providers,
@@ -551,6 +733,12 @@ export function createDefaultInstalledAgentSource(
                     // still hold them; the dispatcher unregisters them from its
                     // own manager at teardown.
                     clients.delete(host);
+                    // Disconnect while draining (design §7.3): a gone session has
+                    // removed everything, so drop it from every draining name's
+                    // pending set (which may complete a drain).
+                    for (const name of [...entries.keys()]) {
+                        drainDrop(name, host);
+                    }
                 },
             };
         },
