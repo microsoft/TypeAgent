@@ -25,6 +25,7 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
+    "code-complexity": "npx tsx tools/scripts/code/complexityReport.ts",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
     "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
     "devtunnel:setup": "node tools/scripts/setup-devtunnel.mjs",
@@ -107,7 +108,7 @@
       "exifreader",
       "keytar",
       "koffi",
-      "protobufjs",
+      "onnxruntime-node",
       "puppeteer",
       "sharp"
     ],

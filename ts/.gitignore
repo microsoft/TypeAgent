@@ -23,6 +23,9 @@ examples/schemaStudio/output/
 # Contains actual account names, endpoints, and subdomain names — never commit.
 tools/scripts/pools.inventory.json
 
+# Generated complexity report output (tools/scripts/code/complexityReport.ts).
+tools/scripts/code/complexity-report/
+
 # Per-developer YAML config overrides loaded by @typeagent/config.
 # Holds local endpoints, deployment names, and (in Phase 1) secrets.
 # Never commit.
