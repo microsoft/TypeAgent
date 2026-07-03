@@ -3,7 +3,9 @@
 
 import {
     AppAgentProvider,
-    AppAgentInstaller,
+    AppAgentSource,
+    AppAgentConnection,
+    AppAgentHost,
     InstallResult,
     InstalledAgentInfo,
     IndexingServiceRegistry,
@@ -14,6 +16,10 @@ import {
     InstallSourceConfig,
     InstalledAgentRecord,
 } from "./installSources/config.js";
+import {
+    createPackageAppAgentProvider,
+    InstalledAgentSourceApi,
+} from "./installSources/packageAgent.js";
 
 import path from "node:path";
 import {
@@ -40,51 +46,58 @@ import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { createLimiter } from "@typeagent/common-utils";
 
 /**
- * Get the default app agent providers.
+ * Get the default STATIC app agent providers.
  *
  * Returns the static bundled-agent provider (the app's shipped agents, always
- * present) plus, for the default config with a real instance dir, the installed-
- * agent provider built from `agents.json`, plus the MCP provider when
- * configured. The bundled agents are NOT an install source - they are their own
- * provider and are never installed/uninstalled/updated (design revert).
+ * present) plus the MCP provider when configured. The installed agents
+ * (`agents.json`) are NO LONGER returned here — they are vended by the connected
+ * {@link getDefaultAppAgentSource} as per-agent providers (design §3.3), so a
+ * host injects them via `appAgentSources`, not `appAgentProviders`. The bundled
+ * agents are their own static provider and are never installed/uninstalled.
  *
  * @param instanceDirOrConfigProvider - Either the instance directory string or
- *   an InstanceConfigProvider. Undefined builds only the bundled provider (no
- *   agents.json).
+ *   an InstanceConfigProvider. Undefined builds only the bundled provider.
  * @param configName - Optional config name (e.g. "test" -> config.test.json).
- *   Named configs select a fixed bundled agent set in-memory. If an instance
- *   dir is available, installed agents from `agents.json` are also loaded.
  */
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
     configName?: string,
 ): AppAgentProvider[] {
-    const instanceConfigs =
-        typeof instanceDirOrConfigProvider === "string"
-            ? getInstanceConfigProvider(instanceDirOrConfigProvider)
-            : instanceDirOrConfigProvider;
     // The bundled agents are always present as their own static provider.
     const providers: AppAgentProvider[] = [
         createBundledAppAgentProvider(configName),
     ];
-    // Installed agents (agents.json) are loaded whenever an instance dir is
-    // available.
-    const instanceDir = instanceConfigs?.getInstanceDir();
-    if (instanceDir !== undefined) {
-        const installDir = getInstallDir(instanceConfigs);
-        const records = loadInstalledRecords(instanceDir);
-        providers.push(
-            createInstalledAppAgentProvider(records, {
-                ...(installDir !== undefined ? { installDir } : {}),
-                appBundleRequirePath: getAppBundleRequirePath(),
-            }),
-        );
-    }
+    const instanceConfigs =
+        typeof instanceDirOrConfigProvider === "string"
+            ? getInstanceConfigProvider(instanceDirOrConfigProvider)
+            : instanceDirOrConfigProvider;
     const mcpProvider = getDefaultMcpAppAgentProvider(instanceConfigs);
     if (mcpProvider !== undefined) {
         providers.push(mcpProvider);
     }
     return providers;
+}
+
+/**
+ * Build the multi-root installed-agent provider from `agents.json`. Used only
+ * for static enumeration (e.g. the indexing-service registry) where the live
+ * connection lifecycle is not involved. The dispatcher runtime instead gets
+ * installed agents from {@link getDefaultAppAgentSource}. Returns undefined when
+ * no instance dir is available.
+ */
+function getInstalledAppAgentProvider(
+    instanceConfigs: InstanceConfigProvider | undefined,
+): AppAgentProvider | undefined {
+    const instanceDir = instanceConfigs?.getInstanceDir();
+    if (instanceDir === undefined) {
+        return undefined;
+    }
+    const installDir = getInstallDir(instanceConfigs);
+    const records = loadInstalledRecords(instanceDir);
+    return createInstalledAppAgentProvider(records, {
+        ...(installDir !== undefined ? { installDir } : {}),
+        appBundleRequirePath: getAppBundleRequirePath(),
+    });
 }
 
 /**
@@ -104,25 +117,49 @@ export function getDefaultDispatcherOptions(
 }
 
 /**
- * Options for {@link getDefaultAppAgentInstaller}. Remote hosts (e.g. the web
- * API server) set `excludePathSources` to skip `path` sources during
- * resolution, whose refs would otherwise resolve against the server's own
- * filesystem. This narrows only the runtime resolution walk; the persisted and
- * seeded source lists keep every source.
+ * Options for {@link getDefaultAppAgentSource}. Remote hosts (e.g. the web API
+ * server) set `excludePathSources` to skip `path` sources during resolution,
+ * whose refs would otherwise resolve against the server's own filesystem.
  */
-export type DefaultAppAgentInstallerOptions = InstallSourcesResolveOptions;
+export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions;
 
 /**
- * Build the registry-backed installer for the default host (design §4.3, §4.5).
- * A thin wrapper over `registry.resolve(ref, sourceName)` plus writing the
- * resulting record to `agents.json`. The registry (path / catalog / feed
- * sources) hangs off the installer so `@source` is available wherever
- * `@install` is.
+ * Build the registry-backed {@link AppAgentSource} for the default host (design
+ * §3.2, §3.3). It owns the `agents.json` record store + the source registry and:
+ *
+ * - vends **one single-agent provider per installed record** (shared instances,
+ *   refcounted) at `connect()`, plus the host-owned `@package` app agent
+ *   (design §3.4) bound to that session's {@link AppAgentHost};
+ * - implements install/uninstall/update by mutating the record store and, in
+ *   Phase 1 (this milestone), registering/tearing down on the **issuing session
+ *   only** — the handler reaches its own `AppAgentHost` off the package agent's
+ *   `agentContext`. Cross-session fan-out over the client registry is added in
+ *   Milestone 3.
  */
-export function getDefaultAppAgentInstaller(
+/**
+ * Build the registry-backed {@link AppAgentSource} for the default host (design
+ * §3.2, §3.3). Thin wrapper over {@link createDefaultInstalledAgentSource} that
+ * narrows the return to the dispatcher-facing `connect()` view, so a host can
+ * never drive an install through it.
+ */
+export function getDefaultAppAgentSource(
     instanceDir: string,
-    options?: DefaultAppAgentInstallerOptions,
-): AppAgentInstaller {
+    options?: DefaultAppAgentSourceOptions,
+): AppAgentSource {
+    return createDefaultInstalledAgentSource(instanceDir, options);
+}
+
+/**
+ * The concrete installed-agent source (design §3.2). Besides the dispatcher-
+ * facing `connect()`, it also carries the write/command surface (`api`) the
+ * host-owned `@package` agent uses. The dispatcher is handed only the narrow
+ * `AppAgentSource` view (see {@link getDefaultAppAgentSource}); `api` is exposed
+ * for the host wiring and tests.
+ */
+export function createDefaultInstalledAgentSource(
+    instanceDir: string,
+    options?: DefaultAppAgentSourceOptions,
+): AppAgentSource & { readonly api: InstalledAgentSourceApi } {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
     // The installer always has a concrete instanceDir, so installDir is
@@ -179,7 +216,23 @@ export function getDefaultAppAgentInstaller(
         return getBundledAgentNames().has(name);
     }
 
-    return {
+    // Shared per-agent provider instances (design §3.3): one single-agent,
+    // single-root provider per installed record, seeded from agents.json and
+    // vended (the same instance) to every connected session. install/uninstall/
+    // update keep this map in sync so later connects see the current set.
+    const installedProviders = new Map<string, AppAgentProvider>();
+    for (const [name, record] of Object.entries(
+        loadInstalledRecords(instanceDir),
+    )) {
+        installedProviders.set(name, buildProviderFor({ [name]: record }));
+    }
+
+    // The client registry of connected AppAgentHosts (design §3.3). Built now;
+    // used for cross-session fan-out in Milestone 3. In Phase 1 the issuing
+    // session is reached directly via the package agent's own AppAgentHost.
+    const clients = new Set<AppAgentHost>();
+
+    const source: InstalledAgentSourceApi = {
         async install(
             name: string,
             ref: string,
@@ -191,15 +244,14 @@ export function getDefaultAppAgentInstaller(
                 );
             }
             // resolve + materialize is serialized by the registry's limiter
-            // (design §4.1). After it returns, the installer re-takes the same
-            // shared limiter to write the record (sequential, not nested).
-            // Collect any non-fatal source degrade warnings raised during the
-            // resolve (deduped) so the command can surface them to the user.
+            // (design §4.1). After it returns, we re-take the same shared
+            // limiter to write the record (sequential, not nested). Collect any
+            // non-fatal source degrade warnings raised during the resolve.
             const warningSet = new Set<string>();
             const resolved = await registry.resolve(ref, sourceName, (m) =>
                 warningSet.add(m),
             );
-            // The installer assigns the authoritative dispatcher name.
+            // The source assigns the authoritative dispatcher name.
             const record: InstalledAgentRecord = { ...resolved, name };
             // Preserve the user-supplied lookup key so `@update` can
             // re-resolve a catalog agent installed under a different name than
@@ -218,15 +270,18 @@ export function getDefaultAppAgentInstaller(
                 current.agents[name] = record;
                 writeAgentsJson(instanceDir, current);
             });
+            // Cache the shared per-agent provider so later connects vend it.
+            const provider = buildProviderFor({ [name]: record });
+            installedProviders.set(name, provider);
             return {
-                provider: buildProviderFor({ [name]: record }),
+                provider,
                 source: record.source,
-                ...(warningSet.size > 0
-                    ? { warnings: [...warningSet] }
-                    : {}),
+                ...(warningSet.size > 0 ? { warnings: [...warningSet] } : {}),
             };
         },
-        async uninstall(name: string): Promise<void> {
+        async uninstall(
+            name: string,
+        ): Promise<{ provider: AppAgentProvider | undefined }> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be uninstalled`,
@@ -240,8 +295,19 @@ export function getDefaultAppAgentInstaller(
                 delete current.agents[name];
                 writeAgentsJson(instanceDir, current);
             });
+            // Hand back the shared provider so the caller tears it down in the
+            // live session; drop it from the vended set.
+            const provider = installedProviders.get(name);
+            installedProviders.delete(name);
+            return { provider };
         },
-        async update(name: string, range?: string): Promise<AppAgentProvider> {
+        async update(
+            name: string,
+            range?: string,
+        ): Promise<{
+            oldProvider: AppAgentProvider | undefined;
+            newProvider: AppAgentProvider;
+        }> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be updated`,
@@ -255,8 +321,8 @@ export function getDefaultAppAgentInstaller(
             if (existing === undefined) {
                 throw new Error(`Agent '${name}' not found`);
             }
-            const source = registry.get(existing.source);
-            if (source === undefined) {
+            const sourceEntry = registry.get(existing.source);
+            if (sourceEntry === undefined) {
                 throw new Error(
                     `Source '${existing.source}' for agent '${name}' is no longer configured; ` +
                         `re-add it with '@source add' to update, or '@uninstall ${name}'.`,
@@ -264,7 +330,7 @@ export function getDefaultAppAgentInstaller(
             }
             // Build the re-resolution ref from the record, per source kind.
             let ref: string;
-            switch (source.kind) {
+            switch (sourceEntry.kind) {
                 case "feed": {
                     // Re-resolve the package, optionally constrained by range;
                     // omitting range targets the latest available version.
@@ -303,7 +369,7 @@ export function getDefaultAppAgentInstaller(
                 default: {
                     throw new Error(
                         `unknown source kind for '${name}': ${String(
-                            source.kind,
+                            sourceEntry.kind,
                         )}`,
                     );
                 }
@@ -324,7 +390,11 @@ export function getDefaultAppAgentInstaller(
                 current.agents[name] = record;
                 writeAgentsJson(instanceDir, current);
             });
-            return buildProviderFor({ [name]: record });
+            // Swap the shared provider for the freshly materialized one.
+            const oldProvider = installedProviders.get(name);
+            const newProvider = buildProviderFor({ [name]: record });
+            installedProviders.set(name, newProvider);
+            return { oldProvider, newProvider };
         },
         sourceCommands() {
             // The host owns the entire `@source` surface (list/order/where/
@@ -341,11 +411,10 @@ export function getDefaultAppAgentInstaller(
             });
         },
         listInstalled(): InstalledAgentInfo[] {
-            // The installer owns only mutable install records (`agents.json`).
+            // The source owns only mutable install records (`agents.json`).
             // Bundled agents are provided separately by the bundled provider and
-            // are intentionally excluded from installer-owned install summaries.
-            // A record carries exactly one resolution handle (ref / module /
-            // path).
+            // are intentionally excluded from these install summaries. A record
+            // carries exactly one resolution handle (ref / module / path).
             const agents = readAgentsJson(instanceDir)?.agents ?? {};
             return Object.values(agents).map((record) => {
                 const handle = record.ref ?? record.module ?? record.path;
@@ -369,9 +438,40 @@ export function getDefaultAppAgentInstaller(
                 registry
                     .list()
                     .map((info) => registry.get(info.name))
-                    .map((source) => source?.listAgents?.() ?? []),
+                    .map((entry) => entry?.listAgents?.() ?? []),
             );
             return [...new Set(lists.flat())];
+        },
+    };
+
+    // The dispatcher-facing AppAgentSource surface (design §3.2): connect() is
+    // the only view the dispatcher gets, so it can never drive an install. The
+    // concrete object also carries `api` (the write/command surface) for the
+    // host-owned `@package` agent and tests.
+    return {
+        api: source,
+        connect(host: AppAgentHost): AppAgentConnection {
+            clients.add(host);
+            // The package agent is per-connection (its agentContext carries this
+            // session's AppAgentHost); the installed providers are shared.
+            const packageProvider = createPackageAppAgentProvider({
+                appAgentHost: host,
+                source,
+            });
+            const providers: AppAgentProvider[] = [
+                packageProvider,
+                ...installedProviders.values(),
+            ];
+            return {
+                providers,
+                dispose() {
+                    // Deregister this host from the fan-out registry (design §6).
+                    // Does NOT tear down the shared providers — other sessions
+                    // still hold them; the dispatcher unregisters them from its
+                    // own manager at teardown.
+                    clients.delete(host);
+                },
+            };
         },
     };
 }
@@ -390,6 +490,17 @@ export async function getIndexingServiceRegistry(
         instanceDirOrConfigProvider,
         configName,
     );
+    // Installed agents are vended by the AppAgentSource at runtime, but their
+    // indexing services must still be discovered here, so enumerate them from
+    // the static multi-root installed provider too (design §3.3).
+    const instanceConfigs =
+        typeof instanceDirOrConfigProvider === "string"
+            ? getInstanceConfigProvider(instanceDirOrConfigProvider)
+            : instanceDirOrConfigProvider;
+    const installedProvider = getInstalledAppAgentProvider(instanceConfigs);
+    if (installedProvider !== undefined) {
+        providers.push(installedProvider);
+    }
     const registry = new DefaultIndexingServiceRegistry();
 
     for (const provider of providers) {

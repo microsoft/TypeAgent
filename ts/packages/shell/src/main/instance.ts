@@ -17,7 +17,7 @@ import { ShellWindow } from "./shellWindow.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import {
-    getDefaultAppAgentInstaller,
+    getDefaultAppAgentSource,
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
@@ -511,7 +511,7 @@ async function initializeDispatcher(
                         browser: browserControl.control,
                     },
                     portRegistrar,
-                    agentInstaller: getDefaultAppAgentInstaller(instanceDir),
+                    appAgentSources: [getDefaultAppAgentSource(instanceDir)],
                     persistSession: true,
                     storageProvider: getFsStorageProvider(),
                     metrics: true,

@@ -12,7 +12,7 @@ import {
     readAgentsJson,
 } from "../src/installSources/installedAgents.js";
 import {
-    getDefaultAppAgentInstaller,
+    createDefaultInstalledAgentSource,
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
 import { InstalledAgentRecord } from "../src/installSources/config.js";
@@ -239,24 +239,126 @@ describe("getDefaultAppAgentProviders", () => {
         expect(providers[0].getAppAgentNames()).toContain("player");
     });
 
-    it("loads installed agents for named configs by default", async () => {
+    it("no longer includes installed agents (they move to the AppAgentSource)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         const agentDir = tmpDir("ta-agent-");
         await installer.install("namedOnly", agentDir);
 
+        // Installed agents are vended by the source at connect(), NOT by the
+        // static provider list (design §3.3).
         const providers = getDefaultAppAgentProviders(instanceDir, "agent");
-        const allNames = new Set(providers.flatMap((p) => p.getAppAgentNames()));
-        expect(allNames.has("namedOnly")).toBe(true);
+        const allNames = new Set(
+            providers.flatMap((p) => p.getAppAgentNames()),
+        );
+        expect(allNames.has("namedOnly")).toBe(false);
     });
-
 });
 
-describe("getDefaultAppAgentInstaller", () => {
+describe("getDefaultAppAgentSource", () => {
+    it("connect() vends the @package agent plus a per-agent provider per install", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        await built.api.install("namedOnly", tmpDir("ta-agent-"));
+
+        // A fresh connection sees the freshly installed agent (the shared
+        // per-agent provider is added to the vended set on install).
+        const fakeHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+        const connection = built.connect(fakeHost);
+        const names = new Set(
+            connection.providers.flatMap((p) => p.getAppAgentNames()),
+        );
+        // The host-owned @package agent is always vended.
+        expect(names.has("package")).toBe(true);
+        // Each installed agent is its own single-root provider.
+        expect(names.has("namedOnly")).toBe(true);
+        const installedProvider = connection.providers.find((p) =>
+            p.getAppAgentNames().includes("namedOnly"),
+        )!;
+        expect(installedProvider.getAppAgentNames()).toEqual(["namedOnly"]);
+        connection.dispose();
+    });
+
+    it("a later connect() sees an agent installed after an earlier connect", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const fakeHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+        // First connection: nothing installed yet.
+        const first = built.connect(fakeHost);
+        expect(
+            new Set(first.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "later",
+            ),
+        ).toBe(false);
+        // Install, then connect a second session — it must see the new agent
+        // in its initial vended set (design §6 note).
+        await built.api.install("later", tmpDir("ta-agent-"));
+        const second = built.connect(fakeHost);
+        expect(
+            new Set(second.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "later",
+            ),
+        ).toBe(true);
+        first.dispose();
+        second.dispose();
+    });
+
+    it("dispose() is idempotent and does NOT tear down the shared providers", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        await built.api.install("shared", tmpDir("ta-agent-"));
+        const hostA = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+        const hostB = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+        const connA = built.connect(hostA);
+        connA.dispose();
+        expect(() => connA.dispose()).not.toThrow();
+        // A new connection still vends the shared installed provider — a single
+        // session's dispose must not tear it down (design §6).
+        const connB = built.connect(hostB);
+        expect(
+            new Set(connB.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "shared",
+            ),
+        ).toBe(true);
+        connB.dispose();
+    });
+
+    it("uninstall drops the agent from subsequently-vended connections", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        await built.api.install("temp", tmpDir("ta-agent-"));
+        await built.api.uninstall("temp");
+        const host = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        };
+        const conn = built.connect(host);
+        expect(
+            new Set(conn.providers.flatMap((p) => p.getAppAgentNames())).has(
+                "temp",
+            ),
+        ).toBe(false);
+        conn.dispose();
+    });
+});
+
+describe("installed agent source api (install/uninstall/update)", () => {
     it("install resolves via the path source and persists the record with the requested name", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
 
         const result = await installer.install("myagent", agentDir);
         expect(result.provider.getAppAgentNames()).toEqual(["myagent"]);
@@ -275,7 +377,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("rejects installing over an existing name", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("dup", agentDir);
         await expect(installer.install("dup", agentDir)).rejects.toThrow(
             /already exists/,
@@ -285,7 +387,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("rejects installing over a builtin (cannot shadow)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(installer.install("player", agentDir)).rejects.toThrow(
             /built-in/,
         );
@@ -293,20 +395,20 @@ describe("getDefaultAppAgentInstaller", () => {
 
     it("rejects uninstalling a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(installer.uninstall("player")).rejects.toThrow(/built-in/);
     });
 
     it("rejects updating a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(installer.update!("player")).rejects.toThrow(/built-in/);
     });
 
     it("uninstall drops the record; unknown name rejects", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("gone", agentDir);
         await installer.uninstall("gone");
         expect(readAgentsJson(instanceDir)!.agents.gone).toBeUndefined();
@@ -320,7 +422,7 @@ describe("getDefaultAppAgentInstaller", () => {
         const a = tmpDir("ta-agent-a-");
         const b = tmpDir("ta-agent-b-");
         const c = tmpDir("ta-agent-c-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await Promise.all([
             installer.install("a", a),
             installer.install("b", b),
@@ -333,7 +435,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("rejects an explicit unknown source", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(
             installer.install("x", agentDir, "nosuch"),
         ).rejects.toThrow(/unknown source/);
@@ -351,10 +453,10 @@ describe("getDefaultAppAgentInstaller", () => {
     it("update re-materializes a path agent and keeps the record", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir);
 
-        const provider = await installer.update!("p");
+        const { newProvider: provider } = await installer.update!("p");
         expect(provider.getAppAgentNames()).toEqual(["p"]);
         const record = readAgentsJson(instanceDir)!.agents.p;
         expect(record.path).toBe(path.resolve(agentDir));
@@ -364,7 +466,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("preserves the re-resolution key (ref) across update", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir);
 
         // A path install has no resolved `ref`; install fills it with the
@@ -382,7 +484,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("update picks up a changed manifest from the recorded path", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir("🧪");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir);
 
         // Edit the on-disk agent, then update.
@@ -390,7 +492,7 @@ describe("getDefaultAppAgentInstaller", () => {
             path.join(agentDir, "manifest.json"),
             JSON.stringify({ emojiChar: "🚀" }),
         );
-        const provider = await installer.update!("p");
+        const { newProvider: provider } = await installer.update!("p");
         const manifest = await provider.getAppAgentManifest("p");
         expect(manifest.emojiChar).toBe("🚀");
     });
@@ -398,7 +500,7 @@ describe("getDefaultAppAgentInstaller", () => {
     it("a failed update leaves the old record intact (no-op)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir);
         const before = readAgentsJson(instanceDir)!.agents.p;
 
@@ -412,14 +514,14 @@ describe("getDefaultAppAgentInstaller", () => {
 
     it("update rejects an unknown agent", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(installer.update!("missing")).rejects.toThrow(/not found/);
     });
 
     it("update fails when the recorded source is no longer configured", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = getDefaultAppAgentInstaller(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir);
         // Drop the only configured source out from under the record, then
         // rebuild the installer so it reloads its sources from the edited
@@ -429,7 +531,7 @@ describe("getDefaultAppAgentInstaller", () => {
         cfg.installSources.order = [];
         cfg.installSources.sources = [];
         fs.writeFileSync(cfgPath, JSON.stringify(cfg));
-        const reloaded = getDefaultAppAgentInstaller(instanceDir);
+        const reloaded = createDefaultInstalledAgentSource(instanceDir).api;
         await expect(reloaded.update!("p")).rejects.toThrow(
             /no longer configured/,
         );

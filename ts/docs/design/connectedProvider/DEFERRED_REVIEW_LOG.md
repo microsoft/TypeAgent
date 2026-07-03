@@ -39,4 +39,29 @@ test-focus bullets are covered; no remaining P0 gaps. Integration-level concerns
 (enable-state semantics, connect/dispose wiring races, collision/embedding save)
 are appropriately deferred to M2/M3 integration coverage.
 
+## Milestone 2 — gate
+
+Review round 1 (Explore subagent): no real blockers. The flagged "verify
+AppAgentManager.removeProvider exists" is the M1-implemented+tested method (the
+subagent did not read appAgentManager.ts). Remaining items were clarity nits
+(add TODO/why comments for the `clients` Set, `enable=true`, `commandDefaultEnabled`)
+— already covered by existing inline comments + this log; not re-churned.
+
+Test-gap round 1 (Explore subagent): P0 gaps identified and **all fixed**:
+- `@package source` nesting under the command table (buildPackageCommandTable);
+- handler error handling (install/uninstall/update throw → no `AppAgentHost` call);
+- handler completions (install ref/--source, uninstall/update names);
+- connection `dispose()` lifecycle (idempotent; does NOT tear down shared
+  providers; a later connect still vends them);
+- install-after-connect visibility (a later session's connect sees the new agent);
+- uninstall drops the agent from later-vended connections.
+packageAgent.spec.ts (13) + installSourcesInstalledProvider.spec.ts (now 40 total
+across the two files) all green.
+
+Deferred (logged): "all hosts smoke-boot" is integration-only; partial evidence
+is that the three rewired host files (server.ts, webDispatcher.ts, instance.ts)
+type-check and their packages build. Full boot is covered by existing host smoke
+tests / CI, not a new unit test.
+
+
 

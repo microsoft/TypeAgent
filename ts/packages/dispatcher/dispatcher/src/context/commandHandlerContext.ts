@@ -67,7 +67,6 @@ import {
 } from "./appAgentManager.js";
 import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
-    AppAgentInstaller,
     AppAgentProvider,
     AppAgentHost,
     AppAgentSource,
@@ -156,7 +155,6 @@ export function ensureCommandResult(
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
-    readonly agentInstaller: AppAgentInstaller | undefined;
     // The per-dispatcher AppAgentHost applicator (design §3.1, §7.1): an
     // idle-gated FIFO add/remove surface connected AppAgentSources use to mutate
     // this session's live agent set. In M2 this instance is placed into the
@@ -365,7 +363,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     traceId?: string; // optional additional for logging identification
 
     // Additional integration options
-    agentInstaller?: AppAgentInstaller;
     constructionProvider?: ConstructionProvider;
     explanationAsynchronousMode?: boolean; // default to true
 
@@ -789,12 +786,11 @@ export async function initializeCommandHandlerContext(
         const context: CommandHandlerContext = {
             agents,
             portRegistrar,
-            agentInstaller: options?.agentInstaller,
             // Assigned just below once `context` exists (the apply closures need
             // it); mirrors how `requestQueue` is wired.
             appAgentHost: undefined as unknown as AppAgentHostApplicator,
             appAgentConnections: [],
-            systemCommands: getSystemHandlers(options?.agentInstaller),
+            systemCommands: getSystemHandlers(),
             session,
             persistDir,
             instanceDir,

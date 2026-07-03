@@ -20,7 +20,6 @@ import {
     type CommandHandlerContext,
     getRequestId,
 } from "../commandHandlerContext.js";
-import { AppAgentInstaller } from "../../agentProvider/agentProvider.js";
 import { setActivityContext } from "../../execute/activityContext.js";
 import { DispatcherActivityName } from "../dispatcher/dispatcherUtils.js";
 import { clearReasoningSession as clearClaudeReasoningSession } from "../../reasoning/claude.js";
@@ -58,12 +57,6 @@ import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
-import {
-    InstallCommandHandler,
-    UninstallCommandHandler,
-    UpdateCommandHandler,
-    ListInstalledCommandHandler,
-} from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
 import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
@@ -255,45 +248,17 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-// The host (via `AppAgentInstaller`) owns agent installation: the
-// `sourceCommands()` table (list/order/where/remove/add) and the
-// `agents.json` record store behind `listInstalled()`, so the dispatcher core
-// never learns the source-kind taxonomy or the source management grammar. When
-// an installer is present, the core exposes a single `@package` umbrella
-// command grouping the live-session install operations (`install`/`uninstall`/
-// `update`/`list`) with the host's `@source` table nested under it. The merged
-// table is built once per dispatcher at context construction and stored as
-// `CommandHandlerContext.systemCommands` (the installer is fixed for the
-// dispatcher's lifetime), so it is the same instance for every
-// `getCommands`/`executeCommand`/`getCommandCompletion`/`@help` call. Absent
-// installer -> no `@package`.
-export function getSystemHandlers(
-    installer: AppAgentInstaller | undefined,
-): CommandHandlerTable {
-    if (installer === undefined) {
-        return systemHandlers;
-    }
-    const sourceCommands = installer.sourceCommands?.();
-    const packageCommands: CommandHandlerTable = {
-        description: "Manage installed agents and their install sources",
-        defaultSubCommand: "list",
-        commands: {
-            list: new ListInstalledCommandHandler(),
-            install: new InstallCommandHandler(),
-            update: new UpdateCommandHandler(),
-            uninstall: new UninstallCommandHandler(),
-            ...(sourceCommands !== undefined
-                ? { source: sourceCommands }
-                : {}),
-        },
-    };
-    return {
-        ...systemHandlers,
-        commands: {
-            ...systemHandlers.commands,
-            package: packageCommands,
-        },
-    };
+// The `@package` command surface (install/uninstall/update/list + the nested
+// `@source` table) is NO LONGER grafted onto the system agent. It is contributed
+// by the host as its **own** app agent with its own `agentContext` (design §3.4,
+// implemented in `default-agent-provider`), so its handlers never receive the
+// dispatcher's `CommandHandlerContext`. The system agent keeps only the
+// truly-core `@` commands. The merged table is built once per dispatcher at
+// context construction and stored as `CommandHandlerContext.systemCommands`, so
+// it is the same instance for every
+// `getCommands`/`executeCommand`/`getCommandCompletion`/`@help` call.
+export function getSystemHandlers(): CommandHandlerTable {
+    return systemHandlers;
 }
 
 export const systemAgent: AppAgent = {
