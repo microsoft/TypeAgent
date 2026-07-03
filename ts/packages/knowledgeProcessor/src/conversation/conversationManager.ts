@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { ChatModel, openai, tryCreateEmbeddingModel } from "@typeagent/aiclient";
+import {
+    ChatModel,
+    openai,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import {
     ObjectFolderSettings,
     SearchOptions,

@@ -10,7 +10,11 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai, isEmbeddingAvailable } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    openai,
+    isEmbeddingAvailable,
+} from "@typeagent/aiclient";
 import registerDebug from "debug";
 import type { WindowInfo } from "./platform/windowEnumerator.js";
 

@@ -3,7 +3,10 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
-import { tryCreateEmbeddingModel, TextEmbeddingModel } from "@typeagent/aiclient";
+import {
+    tryCreateEmbeddingModel,
+    TextEmbeddingModel,
+} from "@typeagent/aiclient";
 import {
     TextEmbeddingIndexSettings,
     createTextEmbeddingIndexSettings,

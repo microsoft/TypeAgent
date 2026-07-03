@@ -255,7 +255,6 @@ embedding:
   model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
   # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
 
-
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║
 # ╚═══════════════════════════════════════════════════════════════════╝

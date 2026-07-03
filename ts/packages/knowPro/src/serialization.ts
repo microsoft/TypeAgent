@@ -72,7 +72,10 @@ export async function readConversationDataFromFile(
         fileData,
         embeddingSize,
     );
-    if (!embeddingsCompatible && getStoredEmbeddingSize(fileData) !== undefined) {
+    if (
+        !embeddingsCompatible &&
+        getStoredEmbeddingSize(fileData) !== undefined
+    ) {
         console.warn(
             `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
         );
@@ -109,7 +112,10 @@ export async function readConversationDataFromBuffer(
         fileData,
         embeddingSize,
     );
-    if (!embeddingsCompatible && getStoredEmbeddingSize(fileData) !== undefined) {
+    if (
+        !embeddingsCompatible &&
+        getStoredEmbeddingSize(fileData) !== undefined
+    ) {
         console.warn(
             `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
         );

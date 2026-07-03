@@ -89,7 +89,10 @@ export type RelatedTermIndexSettings = {
 export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
     private aliasMap: TermToRelatedTermsMap;
     private embeddingIndex: TermEmbeddingIndex | undefined;
-    private fuzzyTermIndex: TermEmbeddingIndex | TermEditDistanceIndex | undefined;
+    private fuzzyTermIndex:
+        | TermEmbeddingIndex
+        | TermEditDistanceIndex
+        | undefined;
 
     constructor(public settings: RelatedTermIndexSettings) {
         this.aliasMap = new TermToRelatedTermsMap();

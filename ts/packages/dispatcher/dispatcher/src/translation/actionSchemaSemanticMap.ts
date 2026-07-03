@@ -14,7 +14,10 @@ import {
     SimilarityType,
     TopNCollection,
 } from "typeagent";
-import { TextEmbeddingModel, tryCreateEmbeddingModel } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:semantic");
