@@ -32,6 +32,18 @@ tools/scripts/code/duplication-report/
 # Generated consistency report output (tools/scripts/code/consistencyReport.ts).
 tools/scripts/code/consistency-report/
 
+# Generated lint report output (tools/scripts/code/lintReport.ts).
+tools/scripts/code/lint-report/
+
+# Generated circular-dependency report output (tools/scripts/code/circularDepsReport.ts).
+tools/scripts/code/circular-report/
+
+# Generated dead-code report output (tools/scripts/code/deadCodeReport.ts).
+tools/scripts/code/deadcode-report/
+
+# Generated debt-markers report output (tools/scripts/code/debtMarkersReport.ts).
+tools/scripts/code/debt-report/
+
 # Per-developer YAML config overrides loaded by @typeagent/config.
 # Holds local endpoints, deployment names, and (in Phase 1) secrets.
 # Never commit.
