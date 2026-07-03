@@ -106,11 +106,50 @@ openAI:
   maxRetryAttempts: 3
 
   # Ollama / local OpenAI-compatible endpoint.
-  # Also emits OLLAMA_ENDPOINT for backward compatibility.
+  # NOTE: use the BASE url here (no /v1/chat/completions). It is emitted verbatim
+  # as OLLAMA_ENDPOINT and the client appends the /v1/chat/completions (chat) and
+  # /v1/embeddings (embedding) paths itself. A full path here would be doubled.
   local:
     apiKey: None # Ollama doesn't require a key
-    endpoint: http://localhost:11434/v1/chat/completions
+    endpoint: http://localhost:11434
     model: phi3
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Self-host provider presets                                      ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# For machines WITHOUT AI Systems Key Vault access, TypeAgent can run entirely
+# against a local (Ollama) or Copilot-SDK chat backend. The install scripts and
+# MSI generate one of these config.local.yaml shapes automatically via
+# `typeagent-serve.mjs provision --provider ollama|copilot`
+# (tools/scripts/generate-selfhost-config.mjs). The blocks below are the
+# equivalent hand-written config; omit the `vault:` section in these modes.
+#
+# --- Ollama (local chat + local embeddings) --------------------------------
+# modelProvider: ollama
+# openAI:
+#   apiKey: ollama            # dummy, non-empty
+#   local:
+#     apiKey: None
+#     endpoint: http://localhost:11434   # BASE url (see note above)
+#     model: llama3.2
+# embedding:
+#   provider: local           # bundled CPU-only model; no GPU / key / network
+#   model: Xenova/all-MiniLM-L6-v2
+#
+# --- Copilot (Copilot SDK chat + local embeddings) -------------------------
+# modelProvider: copilot
+# copilot:
+#   defaultModel: claude-sonnet-4.5   # requires an authenticated `copilot` CLI
+# embedding:
+#   provider: local
+#   model: Xenova/all-MiniLM-L6-v2
+#
+# To use Ollama for embeddings instead of the bundled local model, set
+# `embedding.provider: openai` and add
+# `openAI.endpointEmbedding: http://localhost:11434/v1/embeddings` (FULL path)
+# plus `openAI.modelEmbedding: nomic-embed-text`. Set `embedding.provider: none`
+# to disable embeddings entirely (semantic/fuzzy features degrade gracefully).
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure Speech SDK                                                ║
