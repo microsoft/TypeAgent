@@ -102,6 +102,38 @@ jobs:
           npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
             --cyclomatic 25 --cognitive 30 \
             --new-file-cyclomatic 25 --new-file-cognitive 30
+      # Lint ratchet (PRs only): the files this PR changes may not add ESLint
+      # violations (no-explicit-any, no-console, no-unused-vars, ...) versus the
+      # base branch.  Syntactic rules only, so it is fast; the count can only
+      # trend down.  Run `npm run code-lint` locally to see the full report.
+      - name: Lint ratchet
+        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        shell: bash
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          npm run code-lint -- --ratchet --base "origin/${{ github.base_ref }}"
+      # Circular-dependency ratchet (PRs only): fail if the change introduces a
+      # runtime import cycle not already present at the base.  Builds the cycle
+      # set for HEAD and for the merge base (via a throwaway git worktree), so
+      # this step is heavier than the others (madge runs twice).
+      - name: Circular dependency ratchet
+        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        shell: bash
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}"
+      # Test-debt gate (PRs only): zero tolerance for focused tests
+      # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
+      # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.
+      - name: Test debt gate
+        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        shell: bash
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
