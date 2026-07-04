@@ -322,6 +322,15 @@ class UpdateCommandHandler implements CommandHandler {
         // no-coexistence, §7.2): the old version is removed across every session
         // before the new one is added anywhere, so the agent is briefly absent
         // in every session and the re-add lands asynchronously after the drain.
+        //
+        // TODO (update-coordination rework - see
+        // docs/design/connectedProvider/UPDATE_COORDINATION.md): the planned
+        // coordinated update is user-CANCELABLE. Cancel must ride the
+        // out-of-band interrupt/abort path (NOT a queued `cancel` command, which
+        // would deadlock behind the frozen command lock) and map to a
+        // source-coordinated rollback to v1. For now cancel need only be
+        // AVAILABLE on the source update API (abort-driven); design + wire the
+        // user-facing cancel UX here later.
         await source.update(name, range, appAgentHost);
         displayResult(
             `Agent '${name}' updated; it briefly reloads in each session.`,
