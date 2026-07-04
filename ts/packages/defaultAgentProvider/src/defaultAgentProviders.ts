@@ -389,7 +389,11 @@ export function createDefaultInstalledAgentSource(
                 .finally(() => drainDrop(name, host));
         }
         try {
-            await issuingHost.removeProvider(provider, false, dropConfig);
+            // The issuing session dispatches this from within its own `@package`
+            // command (holding the command lock), so it must apply INLINE
+            // (immediate) — the idle-gated queue would deadlock on that lock
+            // (design §7.1).
+            await issuingHost.removeProvider(provider, false, dropConfig, true);
         } finally {
             drainDrop(name, issuingHost);
         }
@@ -413,7 +417,11 @@ export function createDefaultInstalledAgentSource(
                 debug(`sibling addProvider failed: ${e}`);
             });
         }
-        await issuingHost.addProvider(provider, false);
+        // The issuing session dispatches this from within its own `@package`
+        // command (holding the command lock), so it must apply INLINE
+        // (immediate) — the idle-gated queue would deadlock on that lock
+        // (design §7.1).
+        await issuingHost.addProvider(provider, false, true);
     }
 
     const source: InstalledAgentSourceApi = {
