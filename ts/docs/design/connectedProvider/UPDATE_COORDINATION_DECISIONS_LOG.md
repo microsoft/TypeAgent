@@ -83,3 +83,42 @@
   interface change additive; `exactOptionalPropertyTypes` forced the explicit
   `| undefined` widening on the option types.
 - **Design updated?** no.
+
+### 2025-XX-XX — Uniform enqueue: the issuing session is fanned out like a sibling
+
+- **Milestone / item:** M2 / §5.4
+- **Type:** Deviation (removes the previously-implemented inline "immediate" path).
+- **Design ref:** §5.4 (uniform enqueue), §7.1 (idle-gated applicator).
+- **Decision:** Deleted the `immediate` parameter on
+  `AppAgentHost.addProvider`/`removeProvider` and the applicator's
+  `applyImmediate` fast path. Every session — INCLUDING the one that issued the
+  `@package` command — now enqueues its add/remove on its own idle-gated FIFO
+  applicator and is notified with a system message. `fanOutAdd`/`startDrain`
+  build `targets = new Set(clients); targets.add(issuingHost)` and loop with
+  `notify=true`; both are synchronous `void` functions that return once the ops
+  are wired (non-blocking). `install`/`uninstall`/`update` no longer await the
+  issuing host's op, so they return before the fan-out add / drain completes and
+  the terminal state is reported via the fan-out notification ("…will load/
+  unload/reload in each session shortly").
+- **Rationale:** The old inline path applied the issuing session's change under
+  the command lock the issuing `@package` command still held; awaiting it now
+  would deadlock. Treating the issuing session identically to siblings removes
+  the special case, guarantees FIFO remove-then-add ordering per session, and is
+  the ownership flip M3's `replaceProvider` barrier builds on. A regression test
+  (`deadlock-free: install/uninstall/update return while the issuing session's
+  command lock is held`) pins the non-blocking contract.
+- **Design updated?** no — matches §5.4 intent; fold the "issuing == sibling"
+  wording into UPDATE_COORDINATION.md in the M5 docs pass.
+
+### 2025-XX-XX — `pruneAgentRoot` guards against any falsy `installRoot`
+
+- **Milestone / item:** M2 / §5.5 (hardening surfaced in M2 review round 2)
+- **Type:** Unspecified (defensive).
+- **Design ref:** §5.5 GC.
+- **Decision:** `pruneAgentRoot` now early-returns on `!installRoot` (was
+  `=== undefined`), so a corrupt empty-string `installRoot` can never join to the
+  whole `agents/` dir and get recursively removed.
+- **Rationale:** Install-ids are source-generated and non-empty, so this is
+  theoretical, but the downside (wiping every agent's root) is severe enough to
+  warrant the one-line guard on a destructive `rmSync`.
+- **Design updated?** no.

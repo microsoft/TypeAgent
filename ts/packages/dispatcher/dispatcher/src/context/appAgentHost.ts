@@ -77,7 +77,6 @@ export class AppAgentHostApplicator implements AppAgentHost {
     public addProvider(
         provider: AppAgentProvider,
         notify: boolean = false,
-        immediate: boolean = false,
     ): Promise<void> {
         // Assert the single-agent invariant at the add boundary (design §3.1,
         // §9 Option A vs B): source-vended providers are single-agent, so a
@@ -92,40 +91,16 @@ export class AppAgentHostApplicator implements AppAgentHost {
             );
         }
         const run = () => this.apply.applyAdd(provider, notify);
-        return immediate ? this.applyImmediate("add", run) : this.enqueue("add", run);
+        return this.enqueue("add", run);
     }
 
     public removeProvider(
         provider: AppAgentProvider,
         notify: boolean = false,
         dropConfig: boolean = true,
-        immediate: boolean = false,
     ): Promise<void> {
         const run = () => this.apply.applyRemove(provider, notify, dropConfig);
-        return immediate
-            ? this.applyImmediate("remove", run)
-            : this.enqueue("remove", run);
-    }
-
-    /**
-     * Apply an op INLINE for the issuing session, bypassing the command-lock
-     * gate (design §7.1). The caller is the session's own running `@package`
-     * command, which already holds the command lock — so routing through the
-     * idle-gated queue (which re-acquires that same non-reentrant lock) would
-     * deadlock. Running inline is safe: no other command can interleave (the
-     * caller holds the lock), and the queued-op pump is itself blocked on that
-     * lock, so it cannot run concurrently. Respects {@link dispose}: a torn-down
-     * session has already removed everything, so a late op is a no-op.
-     */
-    private async applyImmediate(
-        kind: "add" | "remove",
-        run: () => Promise<void>,
-    ): Promise<void> {
-        if (this.closed) {
-            debug(`Skipping immediate ${kind} on closed host`);
-            return;
-        }
-        await run();
+        return this.enqueue("remove", run);
     }
 
     /** True once {@link dispose} has been called. */

@@ -67,7 +67,11 @@ function pruneAgentRoot(
     installDir: string,
     installRoot: string | undefined,
 ): void {
-    if (installRoot === undefined) {
+    // Guard against any falsy root (undefined, or a corrupt empty string): an
+    // empty `installRoot` would join to the whole `agents/` dir and a recursive
+    // rm would wipe every agent's root. A record without a dedicated root
+    // (path/catalog/legacy) simply has nothing to prune.
+    if (!installRoot) {
         return;
     }
     const dir = path.join(agentRootsDir(installDir), installRoot);
@@ -432,78 +436,66 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
-    // Begin draining a name across every connected session (design §7.2): the
-    // issuing host is awaited (errors surface); siblings are best-effort +
-    // notified. Every host's ack — success, failure, or disconnect — drops it
-    // from `pending` so a failed/gone session never wedges name reuse.
+    // Begin draining a name across every connected session (design §7.2, §5.4).
+    // Every host — INCLUDING the issuing one — enqueues the remove on its own
+    // idle-gated applicator and is notified; none is applied inline under a held
+    // command lock (the inline path was removed in the uniform-enqueue model,
+    // §5.4). Every host's ack — success, failure, or disconnect — drops it from
+    // `pending` so a failed/gone session never wedges name reuse. Returns
+    // immediately once the drain is wired: the actual teardown lands at each
+    // session's next idle, and the post-drain `then` fires when `pending`
+    // empties (an update's async re-add, §7.2).
     //
     // `dropConfig` (design §5, Model B): forwarded to every session's
     // `removeProvider`. An uninstall passes `true` so each session clears the
     // agent's persisted enable preference; an update passes `false` so the
     // remove leg of its remove-then-add swap preserves that preference across
     // the version bump.
-    async function startDrain(
+    function startDrain(
         name: string,
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
         dropConfig: boolean,
         then?: () => Promise<void>,
-    ): Promise<void> {
-        const pending = new Set<AppAgentHost>(clients);
-        // The issuing host is always part of the drain even if it never
-        // formally connected (defensive).
-        pending.add(issuingHost);
+    ): void {
+        // The issuing host is always part of the drain even if it never formally
+        // connected (defensive); it is otherwise treated exactly like a sibling.
+        const targets = new Set<AppAgentHost>(clients);
+        targets.add(issuingHost);
         entries.set(name, {
             status: "removing",
             provider,
-            pending,
+            pending: new Set(targets),
             ...(then ? { then } : {}),
         });
 
-        for (const host of clients) {
-            if (host === issuingHost) {
-                continue;
-            }
+        for (const host of targets) {
             host.removeProvider(provider, true, dropConfig)
                 .catch((e) => {
-                    debug(`sibling removeProvider failed: ${e}`);
+                    debug(`removeProvider failed: ${e}`);
                 })
                 .finally(() => drainDrop(name, host));
         }
-        try {
-            // The issuing session dispatches this from within its own `@package`
-            // command (holding the command lock), so it must apply INLINE
-            // (immediate) — the idle-gated queue would deadlock on that lock
-            // (design §7.1).
-            await issuingHost.removeProvider(provider, false, dropConfig, true);
-        } finally {
-            drainDrop(name, issuingHost);
-        }
     }
 
-    // Fan out an add to every connected session (design §4, §5): the ISSUING
-    // session is awaited (errors surface to the user) and reports inline; every
-    // SIBLING is best-effort/async (applied at its next idle) and notified with
-    // a system message. Each session derives the agent's enabled state from its
-    // own config with the manifest default as fallback (Model B). A sibling
-    // throw is caught and logged per client, never failing the committed op.
-    async function fanOutAdd(
+    // Fan out an add to every connected session (design §4, §5, §5.4): every
+    // host — INCLUDING the issuing one — enqueues the add on its own idle-gated
+    // applicator and is notified with a system message; none is applied inline
+    // under a held command lock (§5.4). Each session derives the agent's enabled
+    // state from its own config with the manifest default as fallback (Model B).
+    // A per-host throw is caught and logged, never failing the committed op.
+    // Returns immediately; each add lands at that session's next idle.
+    function fanOutAdd(
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
-    ): Promise<void> {
-        for (const host of clients) {
-            if (host === issuingHost) {
-                continue;
-            }
+    ): void {
+        const targets = new Set<AppAgentHost>(clients);
+        targets.add(issuingHost);
+        for (const host of targets) {
             host.addProvider(provider, true).catch((e) => {
-                debug(`sibling addProvider failed: ${e}`);
+                debug(`addProvider failed: ${e}`);
             });
         }
-        // The issuing session dispatches this from within its own `@package`
-        // command (holding the command lock), so it must apply INLINE
-        // (immediate) — the idle-gated queue would deadlock on that lock
-        // (design §7.1).
-        await issuingHost.addProvider(provider, false, true);
     }
 
     const source: InstalledAgentSourceApi = {
@@ -556,9 +548,12 @@ export function createDefaultInstalledAgentSource(
                 // so later connects vend it (design §7.2 absent → active).
                 const provider = buildAgentProvider(name, record);
                 entries.set(name, { status: "active", provider });
-                // Fan out to every connected session (design §4): issuing
-                // awaited + enabled; siblings best-effort + disabled + notified.
-                await fanOutAdd(provider, issuingHost);
+                // Fan out the add to every connected session — including the
+                // issuing one — through each session's idle-gated applicator
+                // (design §4, §5.4). Non-blocking: the record is already
+                // committed, so the load lands at each session's next idle and
+                // the terminal state is reported via the fan-out notification.
+                fanOutAdd(provider, issuingHost);
                 return {
                     source: record.source,
                     ...(warningSet.size > 0
@@ -608,7 +603,7 @@ export function createDefaultInstalledAgentSource(
                 // agent's version-scoped install root is pruned (design §5.5 GC;
                 // the startup orphan sweep is the backstop if this never runs).
                 if (entry?.status === "active") {
-                    await startDrain(
+                    startDrain(
                         name,
                         entry.provider,
                         issuingHost,
@@ -686,19 +681,23 @@ export function createDefaultInstalledAgentSource(
                 // one is added. The old root differs from the new one (unique
                 // install-id), so this never touches v2's files.
                 const oldRoot = existing.installRoot;
-                const addNew = () => {
+                const addNew = async () => {
                     entries.set(name, {
                         status: "active",
                         provider: newProvider,
                     });
-                    return fanOutAdd(newProvider, issuingHost).then(() => {
-                        if (oldRoot !== record.installRoot) {
-                            pruneAgentRoot(installDir, oldRoot);
-                        }
-                    });
+                    // The old version has fully drained by the time this
+                    // post-drain follow-up runs, so its root is safe to reclaim
+                    // now (it differs from the new one via the unique install-id,
+                    // so this never touches v2's files). The re-add is then
+                    // fanned out non-blocking to every session (§5.4).
+                    if (oldRoot !== record.installRoot) {
+                        pruneAgentRoot(installDir, oldRoot);
+                    }
+                    fanOutAdd(newProvider, issuingHost);
                 };
                 if (oldEntry?.status === "active") {
-                    await startDrain(
+                    startDrain(
                         name,
                         oldEntry.provider,
                         issuingHost,

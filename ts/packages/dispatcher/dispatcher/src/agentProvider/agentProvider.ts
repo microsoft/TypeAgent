@@ -44,22 +44,13 @@ export interface AppAgentHost {
      * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
      * be deferred until the session is idle.
      *
-     * `notify` (design §5): when true, this is a cross-session fan-out to a
-     * SIBLING; the dispatcher surfaces a system message naming the agent and its
-     * resulting state. The issuing session passes `false` and reports inline.
-     *
-     * `immediate` (design §7.1): apply INLINE without waiting for the session's
-     * next idle. The issuing session passes `true` because it dispatches this
-     * from WITHIN its own `@package` command — it already holds the command
-     * lock, so the normal idle-gated queue would deadlock (the op can never
-     * acquire the lock the running command still holds). Sibling fan-outs pass
-     * `false` (the default) so they apply between that session's user commands.
+     * `notify` (design §5): when true, the dispatcher surfaces a system message
+     * naming the agent and its resulting state. Because every op — including the
+     * issuing session's — now applies asynchronously through the idle-gated
+     * queue (the inline path was removed, §5.4), the issuing session is notified
+     * like a sibling so the terminal outcome is reported when the op settles.
      */
-    addProvider(
-        provider: AppAgentProvider,
-        notify?: boolean,
-        immediate?: boolean,
-    ): Promise<void>;
+    addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
 
     /**
      * Remove a previously-added provider from this dispatcher by provider
@@ -68,8 +59,10 @@ export interface AppAgentHost {
      * the name(s) via `getAppAgentNames()` and calls the name-based
      * `removeAgent` per name. Resolves when APPLIED.
      *
-     * `notify` (design §5): when true (sibling fan-out), the dispatcher surfaces
-     * a system message that the agent was uninstalled.
+     * `notify` (design §5): when true, the dispatcher surfaces a system message
+     * that the agent was uninstalled/updated. As with {@link addProvider}, the
+     * issuing session is notified like a sibling now that every op applies
+     * through the idle-gated queue (§5.4).
      *
      * `dropConfig` (design §5, Model B): when true (default — an explicit
      * `@uninstall`), the agent's persisted enable preference (its
@@ -77,17 +70,11 @@ export interface AppAgentHost {
      * from the manifest default. An `@update` passes `false` so the remove leg
      * of its remove-then-add swap preserves the user's per-session preference
      * across a version bump.
-     *
-     * `immediate` (design §7.1): apply INLINE without waiting for the session's
-     * next idle, for the same reason as {@link addProvider} — the issuing
-     * session dispatches this from within its own command and passes `true`;
-     * sibling fan-outs pass `false`.
      */
     removeProvider(
         provider: AppAgentProvider,
         notify?: boolean,
         dropConfig?: boolean,
-        immediate?: boolean,
     ): Promise<void>;
 }
 

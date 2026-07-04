@@ -44,13 +44,15 @@ const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
  */
 export interface InstalledAgentSourceApi {
     // Resolve + materialize + write a record, then fan out `addProvider` to
-    // every connected session: the issuing session is awaited (errors surface),
-    // siblings are best-effort + notified (design §4, §5). Each session derives
-    // the agent's enabled state from its own config with the manifest default
-    // as fallback (Model B, §5) - no session is force-enabled or force-disabled.
-    // Returns which source won + any warnings. `onStatus`, when supplied, is
-    // called as each source is probed during the sequential resolution walk so
-    // the caller can show a live status line.
+    // every connected session (design §4, §5, §5.4). Resolve/materialize errors
+    // surface synchronously (the record commit is the fail-fast boundary); the
+    // apply then lands asynchronously on every session — INCLUDING the issuing
+    // one — through its idle-gated applicator, each notified with a system
+    // message. Each session derives the agent's enabled state from its own
+    // config with the manifest default as fallback (Model B, §5). Returns which
+    // source won + any warnings once the record is committed. `onStatus`, when
+    // supplied, is called as each source is probed during the sequential
+    // resolution walk so the caller can show a live status line.
     install(
         name: string,
         ref: string,
@@ -58,17 +60,21 @@ export interface InstalledAgentSourceApi {
         issuingHost: AppAgentHost,
         onStatus?: SourceStatus,
     ): Promise<{ source: string; warnings?: string[] }>;
-    // Drop the record, then fan out `removeProvider` (issuing awaited; siblings
-    // best-effort + notified).
+    // Drop the record (commit), then fan out `removeProvider` to every session —
+    // including the issuing one — through its idle-gated applicator, each
+    // notified (design §4, §5, §5.4). Returns once the record is dropped; the
+    // unload lands at each session's next idle.
     uninstall(name: string, issuingHost: AppAgentHost): Promise<void>;
-    // Re-materialize against the recorded source, then do a DISRUPTIVE
-    // drain-then-add (global no-coexistence, §7.2): the old version is removed
-    // across EVERY session before the new one is added to ANY, so two versions
-    // of the name are never loaded at once (required because an agent's
-    // persisted storage is keyed by agent name and cannot be shared between
-    // versions). The issuing session is awaited for the remove + record commit;
-    // the re-add lands afterwards (async), so the agent is briefly absent in
-    // every session mid-update.
+    // Re-materialize against the recorded source (fail-fast on error), write the
+    // record (commit), then start a DISRUPTIVE drain-then-add (global
+    // no-coexistence, §7.2): the old version is removed across EVERY session
+    // before the new one is added to ANY, so two versions of the name are never
+    // loaded at once (required because an agent's persisted storage is keyed by
+    // agent name and cannot be shared between versions). The whole swap is
+    // enqueued on every session's idle-gated applicator — including the issuing
+    // one (§5.4) — so this returns as soon as the record is committed ("update
+    // started"); the drain + re-add settle asynchronously and are surfaced via
+    // per-session fan-out notifications.
     update(
         name: string,
         range: string | undefined,
@@ -207,11 +213,12 @@ class InstallCommandHandler implements CommandHandler {
 
         displayStatus(`Resolving '${ref}'...`, context);
         // The source resolves + writes the record + fans out to every connected
-        // session: the issuing session is awaited (errors registering into THIS
-        // session surface here to the user), siblings are best-effort + notified
-        // (design §4, §5). Each session honors the agent's manifest default
-        // (Model B, §5). The status callback reports which source is being
-        // probed as the sequential resolution walk advances.
+        // session (design §4, §5, §5.4). Resolve/materialize errors surface here
+        // (fail-fast on the record commit); the apply then lands asynchronously
+        // on every session — including THIS one — through its idle-gated
+        // applicator, each honoring the agent's manifest default (Model B, §5).
+        // The status callback reports which source is being probed as the
+        // sequential resolution walk advances.
         const { source: resolvedSource, warnings } = await source.install(
             name,
             ref,
@@ -224,7 +231,7 @@ class InstallCommandHandler implements CommandHandler {
             displayWarn(warning, context);
         }
         displayResult(
-            `Agent '${name}' installed from source '${resolvedSource}'.`,
+            `Agent '${name}' installed from source '${resolvedSource}'; it will load in each session shortly.`,
             context,
         );
     }
@@ -269,10 +276,14 @@ class UninstallCommandHandler implements CommandHandler {
     ) {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const name = params.args.name;
-        // Drop the record + fan out removeProvider (issuing awaited; siblings
-        // best-effort + notified — design §4, §5).
+        // Drop the record (commit) + fan out removeProvider to every session —
+        // including THIS one — through its idle-gated applicator, each notified
+        // (design §4, §5, §5.4). The unload lands at each session's next idle.
         await source.uninstall(name, appAgentHost);
-        displayResult(`Agent '${name}' uninstalled.`, context);
+        displayResult(
+            `Agent '${name}' uninstalled; it will unload from each session shortly.`,
+            context,
+        );
     }
 
     public async getCompletion(
@@ -318,10 +329,12 @@ class UpdateCommandHandler implements CommandHandler {
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op (design §4.7,
-        // §12 Q13). It then does a disruptive drain-then-add (global
-        // no-coexistence, §7.2): the old version is removed across every session
-        // before the new one is added anywhere, so the agent is briefly absent
-        // in every session and the re-add lands asynchronously after the drain.
+        // §12 Q13) and that error surfaces here. It then STARTS a disruptive
+        // drain-then-add (global no-coexistence, §7.2) that is enqueued on every
+        // session's idle-gated applicator — including THIS one (§5.4) — so this
+        // returns as soon as the record is committed ("update started"); the old
+        // version drains and the new one re-adds asynchronously, surfaced via
+        // per-session fan-out notifications.
         //
         // TODO (update-coordination rework - see
         // docs/design/connectedProvider/UPDATE_COORDINATION.md): the planned
@@ -333,7 +346,7 @@ class UpdateCommandHandler implements CommandHandler {
         // user-facing cancel UX here later.
         await source.update(name, range, appAgentHost);
         displayResult(
-            `Agent '${name}' updated; it briefly reloads in each session.`,
+            `Agent '${name}' update started; it will reload in each session shortly.`,
             context,
         );
     }

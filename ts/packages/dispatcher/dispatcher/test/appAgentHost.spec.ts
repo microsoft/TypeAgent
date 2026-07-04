@@ -149,35 +149,7 @@ describe("AppAgentHostApplicator", () => {
         expect(added).toBe(true);
     });
 
-    it("immediate: applies inline while the session is busy (no deadlock)", async () => {
-        // Reproduces the @package deadlock: the issuing session dispatches the
-        // op from WITHIN its own command (holding the single command-lock slot),
-        // so the normal idle-gated queue would wait for a lock the caller never
-        // releases. `immediate` must apply inline instead.
-        const commandLock = createLimiter(1);
-        let added = false;
-        let removed = false;
-        const apply: AppAgentHostApplyFns = {
-            applyAdd: async () => {
-                added = true;
-            },
-            applyRemove: async () => {
-                removed = true;
-            },
-        };
-        const host = new AppAgentHostApplicator(commandLock, apply);
-
-        // Simulate the running @package command holding the command lock while
-        // it awaits the issuing-session registration inline.
-        await commandLock(async () => {
-            await host.addProvider(fakeProvider("foo"), false, true);
-            expect(added).toBe(true);
-            await host.removeProvider(fakeProvider("foo"), false, true, true);
-            expect(removed).toBe(true);
-        });
-    });
-
-    it("immediate: threads notify/dropConfig through and no-ops after dispose", async () => {
+    it("threads notify/dropConfig through and no-ops after dispose", async () => {
         const seen: {
             addNotify?: boolean;
             removeNotify?: boolean;
@@ -196,8 +168,9 @@ describe("AppAgentHostApplicator", () => {
             },
         };
         const host = new AppAgentHostApplicator(createLimiter(1), apply);
-        await host.addProvider(fakeProvider("foo"), true, true);
-        await host.removeProvider(fakeProvider("foo"), true, false, true);
+        // No command is holding the lock, so each enqueued op applies at idle.
+        await host.addProvider(fakeProvider("foo"), true);
+        await host.removeProvider(fakeProvider("foo"), true, false);
         expect(seen).toEqual({
             addNotify: true,
             removeNotify: true,
@@ -205,9 +178,9 @@ describe("AppAgentHostApplicator", () => {
         });
 
         host.dispose();
-        // A late immediate op after teardown is a no-op (design §6).
+        // A late op after teardown is a no-op (design §6).
         await expect(
-            host.addProvider(fakeProvider("foo"), false, true),
+            host.addProvider(fakeProvider("foo"), false),
         ).resolves.toBeUndefined();
         expect(calls).toBe(2);
     });

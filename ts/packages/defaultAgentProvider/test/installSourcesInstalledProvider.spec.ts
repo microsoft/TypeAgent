@@ -17,6 +17,7 @@ import {
 } from "../src/defaultAgentProviders.js";
 import { InstalledAgentRecord } from "../src/installSources/config.js";
 import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
+import { createLimiter } from "@typeagent/common-utils";
 
 // A no-op issuing host used by tests that only exercise the record store or the
 // vended provider set (fan-out behavior is covered by its own describe).
@@ -393,7 +394,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 
     const flush = () => new Promise((r) => setTimeout(r, 0));
 
-    it("install: issuing awaited+inline, siblings notified", async () => {
+    it("install: fans the add out to every session (issuing + sibling), all notified", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
@@ -409,9 +410,10 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         );
         await flush();
 
-        // Issuing session: not notified (reports inline).
+        // Uniform enqueue model (§5.4): the issuing session enqueues + is
+        // notified just like a sibling (the inline path was removed).
         expect(issuing.calls).toEqual([
-            { op: "add", name: "foo", notify: false },
+            { op: "add", name: "foo", notify: true },
         ]);
         // Sibling: notified.
         expect(sibling.calls).toEqual([
@@ -476,7 +478,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         await flush();
 
         expect(issuing.calls).toEqual([
-            { op: "remove", name: "foo", notify: false },
+            { op: "remove", name: "foo", notify: true },
         ]);
         expect(sibling.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
@@ -504,7 +506,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         expect(gone.calls).toHaveLength(0);
     });
 
-    it("single client (web) degrades cleanly: issuing inline, no siblings", async () => {
+    it("single client (web) degrades cleanly: issuing enqueues, no siblings", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const only = recordingHost();
@@ -516,9 +518,9 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
             only.host,
         );
         await flush();
-        // The single client is the issuing session: not notified (reports
-        // inline), and there are no siblings to fan out to.
-        expect(only.calls).toEqual([{ op: "add", name: "foo", notify: false }]);
+        // The single client is the issuing session: it enqueues + is notified
+        // like any other session (uniform enqueue, §5.4); no siblings to fan to.
+        expect(only.calls).toEqual([{ op: "add", name: "foo", notify: true }]);
     });
 
     it("update fans out remove-then-add per client (issuing + sibling)", async () => {
@@ -541,11 +543,11 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         await built.testApi.update("foo", undefined, issuing.host);
         await flush();
 
-        // Every session sees remove BEFORE add (no coexistence); issuing gets
-        // no-notify (inline), sibling gets notify.
+        // Every session sees remove BEFORE add (no coexistence); every session
+        // — issuing included — enqueues + is notified (uniform enqueue, §5.4).
         expect(issuing.calls).toEqual([
-            { op: "remove", name: "foo", notify: false },
-            { op: "add", name: "foo", notify: false },
+            { op: "remove", name: "foo", notify: true },
+            { op: "add", name: "foo", notify: true },
         ]);
         expect(sibling.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
@@ -580,6 +582,89 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         expect(manifest.commandDefaultEnabled).toBeUndefined();
         expect(manifest.emojiChar).toBe("🧪");
         conn.dispose();
+    });
+
+    it("deadlock-free: install/uninstall/update return while the issuing session's command lock is held (idle-gated, not inline)", async () => {
+        // Model the issuing session as a real idle-gated applicator: every op is
+        // gated on the session's single-slot command lock — the SAME lock the
+        // in-flight `@package` command holds while it runs (§5.4, §7.1). If any
+        // source method AWAITED the issuing host's enqueued op it would block on
+        // that held lock forever (deadlock). The uniform-enqueue model must fan
+        // out non-blocking, so each op RETURNS while the lock is held and the
+        // apply lands only once the command releases it.
+        const commandLock = createLimiter(1);
+        const applied: HostCall[] = [];
+        const issuing: AppAgentHost = {
+            addProvider: (p, notify) =>
+                commandLock(async () => {
+                    applied.push({
+                        op: "add",
+                        name: p.getAppAgentNames()[0],
+                        notify: notify ?? false,
+                    });
+                }),
+            removeProvider: (p, notify) =>
+                commandLock(async () => {
+                    applied.push({
+                        op: "remove",
+                        name: p.getAppAgentNames()[0],
+                        notify: notify ?? false,
+                    });
+                }),
+        };
+
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        built.connect(issuing);
+
+        // Occupy the command lock's only slot to simulate the `@package` command
+        // still running when it calls into the source. Each `hold()` returns a
+        // release fn; nothing the source enqueues can apply until it is called.
+        const hold = () => {
+            let release!: () => void;
+            const done = new Promise<void>((res) => {
+                release = res;
+            });
+            void commandLock(() => done);
+            return release;
+        };
+
+        // install: must RESOLVE with the lock held, add queued (not inline).
+        let release = hold();
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing,
+        );
+        await flush();
+        expect(applied).toHaveLength(0); // queued behind the held command
+        release();
+        await flush();
+        expect(applied).toEqual([{ op: "add", name: "foo", notify: true }]);
+
+        // update: remove-then-add, both queued behind a fresh held command.
+        applied.length = 0;
+        release = hold();
+        await built.testApi.update("foo", undefined, issuing);
+        await flush();
+        expect(applied).toHaveLength(0);
+        release();
+        await flush();
+        expect(applied).toEqual([
+            { op: "remove", name: "foo", notify: true },
+            { op: "add", name: "foo", notify: true },
+        ]);
+
+        // uninstall: likewise returns while a third command holds the lock.
+        applied.length = 0;
+        release = hold();
+        await built.testApi.uninstall("foo", issuing);
+        await flush();
+        expect(applied).toHaveLength(0);
+        release();
+        await flush();
+        expect(applied).toEqual([{ op: "remove", name: "foo", notify: true }]);
     });
 });
 
@@ -800,6 +885,42 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await flush();
         // Once drained, the new version is added.
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("update re-adds exactly once even when a sibling throws mid-drain", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHostForLifecycle();
+        // A sibling whose removeProvider always rejects: its `.finally(drainDrop)`
+        // must still drop it from `pending` so the drain completes and the
+        // post-drain re-add (§7.2) fires — exactly once, never zero or twice.
+        const throwingSibling: AppAgentHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {
+                throw new Error("sibling remove boom");
+            },
+        };
+        built.connect(issuing.host);
+        built.connect(throwingSibling);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+        issuing.calls.length = 0;
+
+        await built.testApi.update("foo", undefined, issuing.host);
+        await flush();
+
+        // The throwing sibling did not wedge the drain: the swap completed with
+        // exactly one remove followed by exactly one add on the issuing session.
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        // The name is free + active again (listed, and reusable).
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
     });
 
     // A recording host that only tracks the op kind (for ordering assertions).
@@ -1035,6 +1156,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(oldRootDir)).toBe(true);
 
         await installer.update("p", undefined, host);
+        // The swap drains + re-adds asynchronously (uniform enqueue, §5.4); the
+        // old-root prune runs in the post-drain follow-up, so let it settle.
+        await new Promise((r) => setTimeout(r, 0));
 
         // The swap dropped installRoot (path re-resolve), so the old root is a
         // genuine orphan and must have been pruned.
@@ -1061,6 +1185,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(rootDir)).toBe(true);
 
         await installer.uninstall("p", host);
+        // The drain (and its post-drain prune) settles asynchronously (§5.4).
+        await new Promise((r) => setTimeout(r, 0));
 
         expect(fs.existsSync(rootDir)).toBe(false);
         expect(readAgentsJson(instanceDir)!.agents.p).toBeUndefined();
@@ -1097,6 +1223,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
             JSON.stringify({ emojiChar: "🚀" }),
         );
         await built.testApi.update("p", undefined, host);
+        // The swap drains + re-adds asynchronously (uniform enqueue, §5.4); let
+        // it settle so the new version is active before we vend a connection.
+        await new Promise((r) => setTimeout(r, 0));
         // The freshly materialized provider is vended on the next connect.
         const conn = built.connect(host);
         const provider = conn.providers.find((p) =>
