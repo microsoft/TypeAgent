@@ -322,6 +322,27 @@ export function createFeedSource(
                 loaderConfig: { execMode: "separate" }, // §12 Q16
             };
         },
+        async reresolve(
+            candidate: ResolvedCandidate,
+            opts?: { range?: string | undefined },
+        ): Promise<ResolvedCandidate | undefined> {
+            // The package name (`module`) is the handle; a version `range`
+            // narrows the target, omitting it takes the latest available
+            // version (design §5). A candidate without a module is corrupt.
+            const moduleName = candidate.module;
+            if (moduleName === undefined) {
+                throw new Error(
+                    `feed candidate is missing its 'module' (corrupt record).`,
+                );
+            }
+            const ref =
+                opts?.range !== undefined
+                    ? `${moduleName}@${opts.range}`
+                    : moduleName;
+            // Re-run the membership check: a package pulled from the feed
+            // returns undefined -> host reports it is no longer resolvable.
+            return this.find(ref);
+        },
         async materialize(
             candidate: ResolvedCandidate,
         ): Promise<MaterializedInstallRecord> {

@@ -205,6 +205,64 @@ describe("feedSource.find", () => {
     });
 });
 
+describe("feedSource.reresolve", () => {
+    function sourceWith(packages: string[]) {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        return createFeedSource(CONFIG, {
+            installDir,
+            tokenRunner: goodToken,
+            fetchFn: fakeFetch({
+                packages,
+                keywords: Object.fromEntries(
+                    packages.map((p) => [p, ["typeagent-agent"]]),
+                ),
+            }),
+        });
+    }
+
+    it("re-resolves off the candidate's `module`, latest when no range", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        const candidate = await source.reresolve!({
+            source: "typeagent",
+            module: "@typeagent/foo-agent",
+            ref: "@typeagent/foo-agent@1.0.0",
+        });
+        expect(candidate).toBeDefined();
+        expect(candidate!.module).toBe("@typeagent/foo-agent");
+        // No range -> target the bare module (latest).
+        expect(candidate!.ref).toBe("@typeagent/foo-agent");
+    });
+
+    it("applies a version range to the module", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        const candidate = await source.reresolve!(
+            {
+                source: "typeagent",
+                module: "@typeagent/foo-agent",
+            },
+            { range: "^2.0.0" },
+        );
+        expect(candidate!.ref).toBe("@typeagent/foo-agent@^2.0.0");
+    });
+
+    it("returns undefined when the package left the feed", async () => {
+        const source = sourceWith(["@typeagent/other-agent"]);
+        expect(
+            await source.reresolve!({
+                source: "typeagent",
+                module: "@typeagent/foo-agent",
+            }),
+        ).toBeUndefined();
+    });
+
+    it("throws on a corrupt candidate with no module", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        await expect(
+            source.reresolve!({ source: "typeagent" }),
+        ).rejects.toThrow(/missing its 'module'/i);
+    });
+});
+
 describe("feedAuth", () => {
     it("throws an actionable az login hint when az is unavailable", async () => {
         clearTokenCacheForTest();

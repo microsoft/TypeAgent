@@ -452,15 +452,12 @@ export function createDefaultInstalledAgentSource(
                     (m) => warningSet.add(m),
                     onStatus,
                 );
-                // The source assigns the authoritative dispatcher name.
+                // The source assigns the authoritative dispatcher name. The
+                // source's `materialize` already persists its own re-resolution
+                // handle (feed: the spec; catalog: the key; path: the path), so
+                // `@update` can reconstruct the candidate later (design §5, §12
+                // Q13) - no host-side key backfill needed.
                 const record: InstalledAgentRecord = { ...resolved, name };
-                // Preserve the user-supplied lookup key so `@update` can
-                // re-resolve a catalog agent installed under a different name
-                // than its catalog key (catalog `materialize` leaves `ref`
-                // unset).
-                if (record.ref === undefined) {
-                    record.ref = ref;
-                }
                 // Persist the record under the same serialization domain.
                 await limiter(async () => {
                     const current = readAgentsJson(instanceDir) ?? {
@@ -549,62 +546,15 @@ export function createDefaultInstalledAgentSource(
                 if (existing === undefined) {
                     throw new Error(`Agent '${name}' not found`);
                 }
-                const sourceEntry = registry.get(existing.source);
-                if (sourceEntry === undefined) {
-                    throw new Error(
-                        `Source '${existing.source}' for agent '${name}' is no longer configured; ` +
-                            `re-add it with '@source add' to update, or '@uninstall ${name}'.`,
-                    );
-                }
-                // Build the re-resolution ref from the record, per source kind.
-                let ref: string;
-                switch (sourceEntry.kind) {
-                    case "feed": {
-                        // Re-resolve, optionally constrained by range; omitting
-                        // range targets the latest available version.
-                        const moduleName = existing.module;
-                        if (moduleName === undefined) {
-                            throw new Error(
-                                `Feed record for '${name}' is missing its 'module' (corrupt record).`,
-                            );
-                        }
-                        ref =
-                            range !== undefined
-                                ? `${moduleName}@${range}`
-                                : moduleName;
-                        break;
-                    }
-                    case "path": {
-                        // Re-materialize from the recorded path.
-                        if (existing.path === undefined) {
-                            throw new Error(
-                                `Agent '${name}' has no recorded path to refresh.`,
-                            );
-                        }
-                        ref = existing.path;
-                        break;
-                    }
-                    case "catalog": {
-                        // Re-look-up the catalog key; prefer the preserved
-                        // lookup key (`ref`, set at install).
-                        ref = existing.ref ?? existing.name;
-                        break;
-                    }
-                    default: {
-                        throw new Error(
-                            `unknown source kind for '${name}': ${String(
-                                sourceEntry.kind,
-                            )}`,
-                        );
-                    }
-                }
-                // Materialize the new version (serialized by the registry
-                // limiter).
-                const resolved = await registry.resolve(ref, existing.source);
+                // Re-resolve + materialize against the recorded source. The
+                // source that produced the record owns the whole re-resolution
+                // policy (which handle to read, how `range` applies, and
+                // corrupt-record validation) via InstallSource.reresolve; the
+                // registry runs it + materialize under the shared limiter and
+                // preserves the re-resolution handle so a later update still
+                // works (design §5, §12 Q13).
+                const resolved = await registry.reresolve(existing, { range });
                 const record: InstalledAgentRecord = { ...resolved, name };
-                if (record.ref === undefined) {
-                    record.ref = ref;
-                }
                 // Overwrite only after a successful materialize (§12 Q13). This
                 // is the commit point (design §7.4); a failed materialize above
                 // is a no-op that leaves the old record + agent intact.
@@ -784,6 +734,21 @@ export async function getIndexingServiceRegistry(
                             // (feed / path) are absent here and intentionally
                             // skip indexing-service registration (warn-only
                             // below), not a hard failure.
+                            //
+                            // TODO: two gaps for installed (feed/path) agents:
+                            //  1. their indexing-service scripts can't be
+                            //     resolved through the builtin `agents` map
+                            //     (they aren't in it), so they are warn-skipped
+                            //     here - resolve service paths from the
+                            //     installed record's module root instead.
+                            //  2. this registry is a STATIC snapshot built at
+                            //     startup; it does NOT react to runtime
+                            //     @package install/uninstall/update (which the
+                            //     AppAgentSource fans out live). So installing an
+                            //     agent that declares an indexing service won't
+                            //     register it until restart, and an uninstall
+                            //     won't unregister it - hook the registry into
+                            //     the source lifecycle.
                             const agentConfigs = getProviderConfig().agents;
                             const agentConfig = agentConfigs[agentName];
 

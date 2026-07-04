@@ -13,6 +13,7 @@ import {
 // `path` source (design §3, §4.1, §4.2, §12 Q17).
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
 //   materialize = record data { path, source }, omitting `module` and `name`
+//   reresolve   = re-stat the record's absolute `path` (its handle)
 // `ref` is a filesystem path: absolute or (only when a baseDir is configured)
 // relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
@@ -35,22 +36,38 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         return path.resolve(baseDir, ref);
     }
 
+    async function find(ref: string): Promise<ResolvedCandidate | undefined> {
+        const full = resolveRef(ref);
+        if (full === undefined) {
+            // Relative ref with no configured baseDir: non-match, so the
+            // ordered walk continues to the next source.
+            return undefined;
+        }
+        try {
+            await fs.promises.stat(full);
+        } catch {
+            return undefined; // non-match: the ordered walk continues
+        }
+        return { source: config.name, path: full };
+    }
+
     return {
         name: config.name,
         kind: "path",
-        async find(ref: string): Promise<ResolvedCandidate | undefined> {
-            const full = resolveRef(ref);
-            if (full === undefined) {
-                // Relative ref with no configured baseDir: non-match, so the
-                // ordered walk continues to the next source.
-                return undefined;
+        find,
+        async reresolve(
+            candidate: ResolvedCandidate,
+        ): Promise<ResolvedCandidate | undefined> {
+            // The absolute `path` IS the handle; `range` is meaningless for a
+            // path install and ignored. A candidate without a path is corrupt.
+            if (candidate.path === undefined) {
+                throw new Error(
+                    `path candidate has no recorded path to refresh (corrupt record).`,
+                );
             }
-            try {
-                await fs.promises.stat(full);
-            } catch {
-                return undefined; // non-match: the ordered walk continues
-            }
-            return { source: config.name, path: full };
+            // Re-stat: a deleted path returns undefined -> host reports it is no
+            // longer resolvable, leaving the old agent intact (design §7.4).
+            return find(candidate.path);
         },
         async materialize(
             candidate: ResolvedCandidate,

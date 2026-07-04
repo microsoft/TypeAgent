@@ -5,6 +5,7 @@ import {
     InstallSource,
     InstallSourceConfig,
     InstallSourceInfo,
+    InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
     SourceStatus,
@@ -42,6 +43,20 @@ export interface DefaultInstallSourceRegistry {
     resolve(
         ref: string,
         sourceName?: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): Promise<MaterializedInstallRecord>;
+    // Re-resolve + re-materialize a previously-installed record against its
+    // recorded source (design §5, §12 Q13), for `@update`. The source that
+    // produced the record owns the whole policy (which handle to read, how a
+    // version `range` applies, corrupt-record validation) via
+    // {@link InstallSource.reresolve}; the registry just runs it + materialize
+    // under the shared limiter and carries the source's re-resolution handle
+    // (`ref`) through so the next update still works. Throws when the source is
+    // gone, does not support update, or no longer resolves the record.
+    reresolve(
+        record: InstalledAgentRecord,
+        opts?: { range?: string | undefined },
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
@@ -137,6 +152,16 @@ export function createInstallSourceRegistry(
         return {
             ...source,
             find: (ref, onWarn) => source.find(ref, composeWarn(onWarn)),
+            ...(source.reresolve !== undefined
+                ? {
+                      reresolve: (candidate, opts, onWarn) =>
+                          source.reresolve!(
+                              candidate,
+                              opts,
+                              composeWarn(onWarn),
+                          ),
+                  }
+                : {}),
             ...(source.listAgents !== undefined
                 ? {
                       listAgents: (onWarn) =>
@@ -294,6 +319,66 @@ export function createInstallSourceRegistry(
             return limiter(() =>
                 resolveUnlocked(ref, sourceName, onWarn, onStatus),
             );
+        },
+        async reresolve(
+            record: InstalledAgentRecord,
+            opts?: { range?: string | undefined },
+            onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
+        ): Promise<MaterializedInstallRecord> {
+            // Mirror resolve(): the whole re-resolve -> materialize runs under
+            // the shared limiter (design §12 Q5).
+            return limiter(async () => {
+                const entry = entries.get(record.source);
+                if (entry === undefined) {
+                    // Friendly, actionable message: the recorded source was
+                    // removed since install (design §5).
+                    throw new Error(
+                        `Source '${record.source}' for agent '${record.name}' is no longer configured; ` +
+                            `re-add it with '@source add' to update, or '@uninstall ${record.name}'.`,
+                    );
+                }
+                if (entry.source.reresolve === undefined) {
+                    throw new Error(
+                        `Source '${record.source}' does not support updating agent '${record.name}'.`,
+                    );
+                }
+                onStatus?.(
+                    `Re-resolving '${record.name}' from source '${record.source}'...`,
+                );
+                // The source speaks only ResolvedCandidate. Recover the
+                // candidate this source produced at install time from the
+                // record's fields, dropping the persistence-only `name`/`kind`
+                // so they never leak into a source.
+                const prior: ResolvedCandidate = { source: record.source };
+                if (record.module !== undefined) {
+                    prior.module = record.module;
+                }
+                if (record.path !== undefined) {
+                    prior.path = record.path;
+                }
+                if (record.ref !== undefined) {
+                    prior.ref = record.ref;
+                }
+                if (record.loaderConfig !== undefined) {
+                    prior.loaderConfig = record.loaderConfig;
+                }
+                const candidate = await entry.source.reresolve(
+                    prior,
+                    opts,
+                    onWarn,
+                );
+                if (candidate === undefined) {
+                    throw new Error(
+                        `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
+                    );
+                }
+                // The source's `materialize` persists its own re-resolution
+                // handle (feed: spec; catalog: key; path: path), so the
+                // re-materialized record is already self-sufficient for the next
+                // update - no host-side carry needed.
+                return entry.source.materialize(candidate);
+            });
         },
         async where(
             ref: string,

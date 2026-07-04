@@ -17,7 +17,9 @@ const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 // `catalog` source (design §3, §4.1, §4.2, §12 Q6, Q17, Q19).
 //   find        = map lookup in the catalog JSON
 //   materialize = record data `path` (relative paths resolve against the
-//                 catalog dir) or `module`; carries execMode
+//                 catalog dir) or `module`; carries execMode; stores the key
+//                 in `ref` (its re-resolution handle)
+//   reresolve   = re-look-up the catalog key carried in the candidate's `ref`
 // `ref` is an agent short name (the catalog key).
 //
 // A catalog entry with a `path` becomes a path-resolved record (omits
@@ -111,6 +113,23 @@ export function createCatalogSource(
             }
             return candidate;
         },
+        async reresolve(
+            candidate: ResolvedCandidate,
+            _opts: { range?: string | undefined } | undefined,
+            onWarn?: SourceWarning,
+        ): Promise<ResolvedCandidate | undefined> {
+            // The catalog key is the handle, carried in the candidate's `ref`
+            // (set by find at install and preserved on the record). `range` is
+            // meaningless for a catalog and ignored. A candidate without a key
+            // is corrupt; a dropped/removed key re-looks-up to undefined -> host
+            // reports it is no longer resolvable.
+            if (candidate.ref === undefined) {
+                throw new Error(
+                    `catalog candidate has no key to re-resolve (corrupt record).`,
+                );
+            }
+            return this.find(candidate.ref, onWarn);
+        },
         async materialize(
             candidate: ResolvedCandidate,
         ): Promise<MaterializedInstallRecord> {
@@ -121,6 +140,18 @@ export function createCatalogSource(
             if (candidate.loaderConfig !== undefined) {
                 record.loaderConfig = candidate.loaderConfig;
             }
+            // The catalog key is this source's re-resolution handle: `find`
+            // (and `reresolve`, which calls it) always set it, so a candidate
+            // without one is an invariant violation - fail fast rather than
+            // persist a record `@update` can never re-look-up. Stored even when
+            // the agent was installed under a different dispatcher name than its
+            // key (the record's own name is host-assigned, not stored here).
+            if (candidate.ref === undefined) {
+                throw new Error(
+                    `catalog source '${config.name}' got a candidate without a key (ref)`,
+                );
+            }
+            record.ref = candidate.ref;
             // Exactly one resolution handle (§4.2, Q17).
             if (candidate.path !== undefined) {
                 record.path = candidate.path;

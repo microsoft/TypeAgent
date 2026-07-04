@@ -647,7 +647,7 @@ flowchart TD
 
 Backward compatibility is **best effort** for one release and may be dropped if a path turns out non-trivial or brittle in implementation. The priority is correctness of the new install-source model.
 
-- **`externalAgentsConfig.json` -> `agents.json`.** A startup shim reads any legacy `externalAgentsConfig.json` and migrates **only `path` entries** into `InstalledAgentRecord` form (`source: "path"`), then renames the old file. Legacy npm/feed entries (installed via `TYPEAGENT_FEED_REGISTRY`) are **dropped** rather than guessed into a `feed` source - the user re-installs them from the configured feed (§12 Q14). One release of shim code, then delete.
+- **`externalAgentsConfig.json` -> `agents.json`.** A startup shim reads any legacy `externalAgentsConfig.json` and migrates **only `path` entries** into `InstalledAgentRecord` form (`source: "path"`), then renames the old file. Legacy npm/feed entries (installed via `TYPEAGENT_FEED_REGISTRY`) are **dropped** rather than guessed into a `feed` source - the user re-installs them from the configured feed (§12 Q14). A migrated `path` entry that **collides with a name already present in the seeded records is skipped** (the pre-installed builtin wins), so a legacy entry can never silently shadow a builtin catalog agent of the same name on first-run seeding. One release of shim code, then delete.
 - **`data/config.json` `agents` map -> bundled catalog JSON** with `preinstall` flags. Mechanical.
 - Dev instances can simply be reset instead of migrated.
 

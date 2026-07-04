@@ -162,6 +162,31 @@ export interface InstallSource {
         ref: string,
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
+    /**
+     * The INVERSE of {@link find}, in candidate space: given the
+     * `ResolvedCandidate` this source produced for an agent at install time
+     * (recovered by the host from the persisted record), produce a FRESH
+     * candidate for the current version - so `@update` never has to know which
+     * candidate field is this source's re-resolution handle, or how a version
+     * `range` applies (design §5, §12 Q13). The source owns that policy
+     * entirely: which handle it reads (`module` / `path` / the catalog key in
+     * `ref`), how `opts.range` narrows the target, and validating a corrupt
+     * candidate. Because the source speaks only `ref` / `ResolvedCandidate`, the
+     * persisted `InstalledAgentRecord` (its dispatcher `name`, loader `kind`)
+     * never leaks in - the host maps record <-> candidate.
+     *
+     * Like `find` this is CHEAP + side-effect free and its match is a
+     * commitment (the returned candidate must `materialize`). Returns
+     * `undefined` when the agent no longer resolves (path deleted, catalog key
+     * gone, feed package removed) so the host can surface a clear "no longer
+     * resolvable" error. Optional so a test-double source can omit it (its
+     * agents are then not updatable).
+     */
+    reresolve?(
+        candidate: ResolvedCandidate,
+        opts?: { range?: string | undefined },
+        onWarn?: SourceWarning,
+    ): Promise<ResolvedCandidate | undefined>;
     /** Does the actual work (npm install / copy / record data). */
     materialize(
         candidate: ResolvedCandidate,

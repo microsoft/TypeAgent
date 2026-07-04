@@ -901,22 +901,22 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(record.source).toBe("path");
     });
 
-    it("preserves the re-resolution key (ref) across update", async () => {
+    it("path re-resolution uses the record's `path` handle (no `ref` needed)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
         const installer = createDefaultInstalledAgentSource(instanceDir).api;
         await installer.install("p", agentDir, undefined, host);
 
-        // A path install has no resolved `ref`; install fills it with the
-        // supplied lookup key so a later @update can re-resolve.
+        // A path install has no re-resolution `ref`: the path source's handle
+        // is `path` (its record field), so nothing is persisted in `ref` and
+        // @update re-resolves straight off `path`.
         const afterInstall = readAgentsJson(instanceDir)!.agents.p;
-        expect(afterInstall.ref).toBe(agentDir);
+        expect(afterInstall.ref).toBeUndefined();
 
         await installer.update("p", undefined, host);
         const afterUpdate = readAgentsJson(instanceDir)!.agents.p;
-        // The fix under test: update must not drop the re-resolution key.
-        expect(afterUpdate.ref).toBeDefined();
-        expect(afterUpdate.ref).toBe(afterUpdate.path);
+        expect(afterUpdate.path).toBe(path.resolve(agentDir));
+        expect(afterUpdate.source).toBe("path");
     });
 
     it("update picks up a changed manifest from the recorded path", async () => {

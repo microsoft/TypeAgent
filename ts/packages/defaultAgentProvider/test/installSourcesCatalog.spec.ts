@@ -167,4 +167,59 @@ describe("catalogSource", () => {
             "catalog source 'workspace': entry 'broken' has neither 'path' nor 'name' - dropped",
         ]);
     });
+
+    it("materialize persists the catalog key as `ref` (its re-resolution handle)", async () => {
+        const file = writeCatalog({ music: { name: "music-agent" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        const candidate = await source.find("music");
+        const record = await source.materialize(candidate!);
+        expect(record.module).toBe("music-agent");
+        expect(record.ref).toBe("music"); // key persisted for @update
+    });
+
+    it("reresolve re-looks-up the candidate's key (ref), ignoring range", async () => {
+        const file = writeCatalog({ music: { name: "music-agent" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        // The catalog key ("music") is carried in the candidate's `ref` (it can
+        // differ from the dispatcher name the agent is installed under).
+        const candidate = await source.reresolve!(
+            { source: "workspace", ref: "music" },
+            { range: "2.0.0" }, // meaningless for a catalog; ignored
+        );
+        expect(candidate).toBeDefined();
+        expect(candidate!.module).toBe("music-agent");
+        expect(candidate!.ref).toBe("music"); // key round-trips
+    });
+
+    it("reresolve throws on a corrupt candidate with no key", async () => {
+        const file = writeCatalog({ music: { name: "music-agent" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        await expect(
+            source.reresolve!({ source: "workspace" }),
+        ).rejects.toThrow(/no key to re-resolve/i);
+    });
+
+    it("reresolve returns undefined when the catalog key is gone", async () => {
+        const file = writeCatalog({ other: { name: "other-agent" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        expect(
+            await source.reresolve!({ source: "workspace", ref: "music" }),
+        ).toBeUndefined();
+    });
 });

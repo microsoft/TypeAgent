@@ -66,4 +66,31 @@ describe("pathSource", () => {
         const source = createPathSource({ kind: "path", name: "path" });
         expect(source.listAgents).toBeUndefined();
     });
+
+    it("reresolve re-stats the candidate's `path` handle (ignores range)", async () => {
+        const dir = tmpDir("ta-pathrr-");
+        const source = createPathSource({ kind: "path", name: "path" });
+        const candidate = await source.reresolve!(
+            { source: "path", path: path.resolve(dir) },
+            { range: "1.2.3" }, // meaningless for a path install; ignored
+        );
+        expect(candidate).toBeDefined();
+        expect(candidate!.path).toBe(path.resolve(dir));
+        expect(candidate!.source).toBe("path");
+    });
+
+    it("reresolve returns undefined when the candidate path is gone", async () => {
+        const source = createPathSource({ kind: "path", name: "path" });
+        const missing = path.join(os.tmpdir(), "ta-rr-missing-xyz-123");
+        expect(
+            await source.reresolve!({ source: "path", path: missing }),
+        ).toBeUndefined();
+    });
+
+    it("reresolve throws on a corrupt candidate with no path", async () => {
+        const source = createPathSource({ kind: "path", name: "path" });
+        await expect(
+            source.reresolve!({ source: "path" }),
+        ).rejects.toThrow(/no recorded path/i);
+    });
 });

@@ -60,7 +60,7 @@
 - **Kind:** Review finding
 - **Raised by:** review round 2 (major #2)
 - **Summary:** `getProviderConfig(configName?)` caches the first config it loads and ignores later `configName` arguments. In theory a process that mixed multiple named configs would get the wrong one.
-- **Why not addressed:** TypeAgent runs a single config per process; no-arg callers (mcp, constructions, indexing) are designed to read the active named config. A per-name `Map` would regress those processes by letting an unrelated no-arg call pin the default. Confirmed correct for real usage and left unchanged (see DECISIONS_LOG 2026-06-27).
+- **Why not addressed:** TypeAgent runs a single config per process; no-arg callers (mcp, constructions, indexing) are designed to read the active named config. A per-name `Map` would regress those processes by letting an unrelated no-arg call pin the default. Confirmed correct for real usage and left unchanged.
 - **Follow-up:** none (revisit only if multi-config-per-process is ever introduced).
 
 ### 2026-06-27 — Indexing registry skips non-builtin (feed/path) agents
