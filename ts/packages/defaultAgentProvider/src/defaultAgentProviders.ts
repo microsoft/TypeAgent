@@ -353,10 +353,17 @@ export function createDefaultInstalledAgentSource(
     // issuing host is awaited (errors surface); siblings are best-effort +
     // notified. Every host's ack — success, failure, or disconnect — drops it
     // from `pending` so a failed/gone session never wedges name reuse.
+    //
+    // `dropConfig` (design §5, Model B): forwarded to every session's
+    // `removeProvider`. An uninstall passes `true` so each session clears the
+    // agent's persisted enable preference; an update passes `false` so the
+    // remove leg of its remove-then-add swap preserves that preference across
+    // the version bump.
     async function startDrain(
         name: string,
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
+        dropConfig: boolean,
         then?: () => Promise<void>,
     ): Promise<void> {
         const pending = new Set<AppAgentHost>(clients);
@@ -374,14 +381,14 @@ export function createDefaultInstalledAgentSource(
             if (host === issuingHost) {
                 continue;
             }
-            host.removeProvider(provider, true)
+            host.removeProvider(provider, true, dropConfig)
                 .catch((e) => {
                     debug(`sibling removeProvider failed: ${e}`);
                 })
                 .finally(() => drainDrop(name, host));
         }
         try {
-            await issuingHost.removeProvider(provider, false);
+            await issuingHost.removeProvider(provider, false, dropConfig);
         } finally {
             drainDrop(name, issuingHost);
         }
@@ -497,8 +504,11 @@ export function createDefaultInstalledAgentSource(
                 // the live agent across every connected session (active →
                 // removing → absent, design §7.2). The name stays off-limits
                 // until fully drained (the `removing` state outlives this op).
+                // Uninstall drops each session's persisted enable preference
+                // (dropConfig=true) so a fresh reinstall starts from the
+                // manifest default (design §5, Model B).
                 if (entry?.status === "active") {
-                    await startDrain(name, entry.provider, issuingHost);
+                    await startDrain(name, entry.provider, issuingHost, true);
                 }
             } finally {
                 busy.delete(name);
@@ -596,7 +606,9 @@ export function createDefaultInstalledAgentSource(
                 // every session first, then (post-drain) add the NEW one — so no
                 // two versions of the name ever coexist. The freshly
                 // materialized provider is added as the drain's `then`. If there
-                // is no active entry to drain, add directly.
+                // is no active entry to drain, add directly. The drain passes
+                // dropConfig=false so a version bump preserves each session's
+                // per-session enable preference (design §5, Model B).
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
                 const addNew = () => {
@@ -611,6 +623,7 @@ export function createDefaultInstalledAgentSource(
                         name,
                         oldEntry.provider,
                         issuingHost,
+                        false,
                         addNew,
                     );
                 } else {

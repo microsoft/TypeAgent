@@ -34,8 +34,14 @@ export type AppAgentHostApplyFns = {
     // `notify` requests a sibling-fan-out system message (design §5).
     applyAdd: (provider: AppAgentProvider, notify: boolean) => Promise<void>;
     // Unload a previously-added provider by identity. `notify` requests a
-    // sibling-fan-out system message (design §5).
-    applyRemove: (provider: AppAgentProvider, notify: boolean) => Promise<void>;
+    // sibling-fan-out system message (design §5). `dropConfig` clears the
+    // agent's persisted enable preference (true for uninstall, false for the
+    // remove leg of an update; design §5, Model B).
+    applyRemove: (
+        provider: AppAgentProvider,
+        notify: boolean,
+        dropConfig: boolean,
+    ) => Promise<void>;
 };
 
 /**
@@ -90,9 +96,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
     public removeProvider(
         provider: AppAgentProvider,
         notify: boolean = false,
+        dropConfig: boolean = true,
     ): Promise<void> {
         return this.enqueue("remove", () =>
-            this.apply.applyRemove(provider, notify),
+            this.apply.applyRemove(provider, notify, dropConfig),
         );
     }
 

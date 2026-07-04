@@ -798,15 +798,21 @@ async function hostAddProvider(
 /**
  * The {@link AppAgentHost.removeProvider} body (design §3.1): tear down a
  * previously-added provider by identity via the {@link AppAgentManager}
- * removeProvider primitive, drop its persisted enable preference (explicit
- * uninstall; design §5, Model B), and forget it from the known set. Runs through
- * the idle-gated applicator (design §7.1). On a sibling fan-out (`notify`),
- * surfaces a system message (design §5).
+ * removeProvider primitive, and forget it from the known set. Runs through the
+ * idle-gated applicator (design §7.1). On a sibling fan-out (`notify`), surfaces
+ * a system message (design §5).
+ *
+ * `dropConfig` (design §5, Model B): when true (explicit `@uninstall`), also
+ * clears the agent's persisted enable preference so a fresh reinstall starts
+ * from the manifest default. An `@update` passes `false` so the remove leg of
+ * its remove-then-add swap leaves the user's per-session preference intact
+ * across a version bump.
  */
 async function hostRemoveProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
     notify: boolean,
+    dropConfig: boolean,
 ) {
     const names = provider.getAppAgentNames();
     // Capture the agent's schema names before removal so we can clear their
@@ -820,7 +826,9 @@ async function hostRemoveProvider(
         context.agentCache.grammarStore,
     );
 
-    dropAgentConfig(context, names, schemaNames);
+    if (dropConfig) {
+        dropAgentConfig(context, names, schemaNames);
+    }
     removeKnownAgents(context, names);
 
     if (notify) {
@@ -1049,8 +1057,8 @@ export async function initializeCommandHandlerContext(
         const hostApplyFns: AppAgentHostApplyFns = {
             applyAdd: (provider, notify) =>
                 hostAddProvider(context, provider, notify),
-            applyRemove: (provider, notify) =>
-                hostRemoveProvider(context, provider, notify),
+            applyRemove: (provider, notify, dropConfig) =>
+                hostRemoveProvider(context, provider, notify, dropConfig),
         };
         context.appAgentHost = new AppAgentHostApplicator(
             context.commandLock,

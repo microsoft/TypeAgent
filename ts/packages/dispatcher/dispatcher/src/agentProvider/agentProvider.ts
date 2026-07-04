@@ -59,8 +59,19 @@ export interface AppAgentHost {
      *
      * `notify` (design §5): when true (sibling fan-out), the dispatcher surfaces
      * a system message that the agent was uninstalled.
+     *
+     * `dropConfig` (design §5, Model B): when true (default — an explicit
+     * `@uninstall`), the agent's persisted enable preference (its
+     * schema/action/command overrides) is cleared so a fresh reinstall starts
+     * from the manifest default. An `@update` passes `false` so the remove leg
+     * of its remove-then-add swap preserves the user's per-session preference
+     * across a version bump.
      */
-    removeProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
+    removeProvider(
+        provider: AppAgentProvider,
+        notify?: boolean,
+        dropConfig?: boolean,
+    ): Promise<void>;
 }
 
 /**
