@@ -259,6 +259,14 @@ export interface CopilotConfig {
     readonly defaultModel?: string | undefined;
     /** Override the auto-detected `copilot` CLI binary path. */
     readonly cliPath?: string | undefined;
+    /**
+     * Connect to an already-running Copilot CLI server over TCP instead of
+     * spawning a CLI child process. Format: "host:port", "http://host:port",
+     * or just "port" (defaults to localhost). Mutually exclusive with
+     * `cliPath`; when set it eliminates per-process spawn/startup latency by
+     * reusing a warm, external CLI server.
+     */
+    readonly cliUrl?: string | undefined;
     /** Default reasoning effort to forward for capable models. */
     readonly reasoningEffort?: "low" | "medium" | "high" | "xhigh" | undefined;
     /**

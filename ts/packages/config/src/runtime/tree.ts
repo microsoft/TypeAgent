@@ -447,6 +447,8 @@ export function configToTree(config: Config): ConfigTree {
             c.defaultModel = config.copilot.defaultModel;
         if (config.copilot.cliPath !== undefined)
             c.cliPath = config.copilot.cliPath;
+        if (config.copilot.cliUrl !== undefined)
+            c.cliUrl = config.copilot.cliUrl;
         if (config.copilot.reasoningEffort !== undefined)
             c.reasoningEffort = config.copilot.reasoningEffort;
         if (config.copilot.disableInfiniteSessions !== undefined)
@@ -1022,6 +1024,8 @@ function emitCopilot(node: unknown, out: FlatEnv): void {
         );
     if (c.cliPath !== undefined)
         out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");
+    if (c.cliUrl !== undefined)
+        out.COPILOT_CLI_URL = asString(c.cliUrl, "copilot.cliUrl");
     if (c.reasoningEffort !== undefined)
         out.COPILOT_REASONING_EFFORT = asString(
             c.reasoningEffort,
