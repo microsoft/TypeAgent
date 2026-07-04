@@ -228,4 +228,8 @@ disabled-by-default). No open items.
   (`packageAgent.ts` / `defaultAgentProviders.ts`) and the issuing user sees a
   "briefly reloads in each session" message.
 - **Follow-up:** design + implement blocking dispatch (or an equivalent) for a
-  name in the `removing` state.
+  name in the `removing` state. **Proposed plan:** [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md)
+  — make each dispatcher's update a single `commandLock`-held critical section
+  (like the issuing session already is) so request-vs-update is mutually
+  exclusive and the slip is structurally impossible; user-cancelable with a
+  timeout; update = uninstall+install under one hold. Iterating.

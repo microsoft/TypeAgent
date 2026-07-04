@@ -541,6 +541,10 @@ hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
   two versions ever coexist — **required** because an agent's persisted storage
   is keyed by agent name and cannot be shared between versions, so two versions
   loaded at once would collide on that storage.
+  > **Known gap:** this disruptive swap has a request-slip window — a request to
+  > the name mid-swap can miss or misroute (see DEFERRED_REVIEW_LOG.md). A proposed
+  > rework (single command-lock-held swap per dispatcher, cancelable) is in
+  > [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md).
 - **name reuse during `removing`:** a new user `@package install` **or**
   `@package update` on a name that is still `removing` is **rejected** with a
   clear "still being removed, retry shortly" error. `then` is used only for the
