@@ -177,6 +177,14 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
 }
 
 export class AppAgentManager implements ActionConfigProvider {
+    // TODO: the per-agent routing artifacts below - action schemas
+    // (`actionConfigs` / `actionSchemaFileCache`), grammars (built per record in
+    // `agents`), and action embeddings (`actionSemanticMap`) - are built and
+    // held PER DISPATCHER (one AppAgentManager per CommandHandlerContext). For
+    // installed agents these are identical across dispatchers, so every
+    // `connect()` rebuilds the same artifacts. Share them across dispatchers
+    // (build once per agent version, reference from each manager) to avoid the
+    // redundant rebuild on connect and on `@update`.
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
     private readonly loadingSchemas = new Set<string>();

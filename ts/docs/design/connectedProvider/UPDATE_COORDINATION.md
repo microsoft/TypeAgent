@@ -29,10 +29,9 @@ by the *slowest* session's activity, not by the update work.
    Blue-green (two live versions) is impossible without changing the storage
    contract.
 3. **An update can change grammars / action schemas / embeddings.** These are
-   built per-dispatcher (may become shared later). A schema-changing update
-   requires each dispatcher to rebuild its routing artifacts; that rebuild is
-   CPU-only and does **not** touch the `instanceDir` lock, so it can be
-   pre-staged while `v1` still serves.
+   currently built per-dispatcher. A schema-changing update requires each
+   dispatcher to rebuild its routing artifacts; that rebuild is CPU-only and
+   does **not** touch the `instanceDir` lock.
 4. **UX is open**, to be balanced against implementation complexity. Updates are
    infrequent; a brief, bounded interruption is acceptable if it is cancelable.
 
@@ -88,15 +87,13 @@ lock already provides the exclusion.
 ```
 Source (materialize v2 while v1 still serves):
   1. materialize v2 on disk            (v1 running; failure here aborts cleanly, v1 untouched)
-  2. (optional) each dispatcher PRE-BUILDS v2 grammars/schemas/embeddings off to the side
-                                        (v1 still active with v1 artifacts; shrinks the freeze)
 
 Quiesce + restart (each dispatcher holds its command lock across this):
-  3. each dispatcher acquires its commandLock and enters the held section:
+  2. each dispatcher acquires its commandLock and enters the held section:
        drain in-flight v1 requests, remove v1 routing artifacts locally
-  4. once all dispatchers quiesced + in-flight drained:
+  3. once all dispatchers quiesced + in-flight drained:
        stop v1 process (release instanceDir lock) → start v2 (acquire lock)
-  5. each dispatcher (still holding its lock) swaps in v2 artifacts, releases the lock
+  4. each dispatcher (still holding its lock) swaps in v2 artifacts, releases the lock
 
 Result: foo routes to v2 everywhere; no request ever observed foo absent.
 Prune v1 from disk only after success.
@@ -168,8 +165,6 @@ if cancel / timeout before v2 is serving:
    dispatchers each holding a lock (signal/ack for "quiesced" and "v2 ready")?
 4. **Timeout policy + cancel UX** — default timeout, how cancel is surfaced
    (issuing conversation vs. siblings), and what a sibling sees during the freeze.
-5. **Pre-building v2 artifacts (step 2)** — worth it to shrink the freeze to just
-   the process restart + an O(1) artifact swap? Adds a "prepared" state to manage.
-6. **Deadlock/liveness** while N locks are held awaiting a shared external
+5. **Deadlock/liveness** while N locks are held awaiting a shared external
    process — confirm the process restart never needs anything from a frozen
    dispatcher.
