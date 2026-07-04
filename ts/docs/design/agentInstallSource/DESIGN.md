@@ -308,7 +308,7 @@ export interface InstalledAgentRecord {
 }
 ```
 
-Persisted as the single `agents.json` (replacing both the bundled `agents` map at runtime and `externalAgentsConfig.json`):
+Persisted as the single `agents.json` — the store of **user-installed** agent records (the bundled agent set is defined separately by the `config.json` `agents` map at runtime, not stored here):
 
 ```jsonc
 // instanceDir/agents.json

@@ -9,7 +9,6 @@ import {
     writeAgentsJson,
     seedRecordsFromConfig,
     getBundledAgentNames,
-    migrateLegacyExternalAgents,
     loadInstalledRecords,
 } from "../src/installSources/installedAgents.js";
 import { InstalledAgentRecord } from "../src/installSources/config.js";
@@ -71,79 +70,6 @@ describe("seedRecordsFromConfig", () => {
     });
 });
 
-describe("migrateLegacyExternalAgents", () => {
-    it("migrates only path entries and drops module-only (feed) entries", () => {
-        const dir = tmpInstanceDir();
-        const legacy = path.join(dir, "externalAgentsConfig.json");
-        fs.writeFileSync(
-            legacy,
-            JSON.stringify({
-                agents: {
-                    localagent: { name: "local-pkg", path: "/abs/local" },
-                    feedagent: { name: "@scope/feed-pkg" },
-                },
-            }),
-        );
-        const records: Record<string, InstalledAgentRecord> = {};
-        migrateLegacyExternalAgents(dir, records);
-
-        expect(records.localagent).toBeDefined();
-        expect(records.localagent.path).toBe("/abs/local");
-        expect(records.localagent.source).toBe("path");
-        expect(records.localagent.module).toBeUndefined();
-        // feed/module-only entry is dropped, not guessed into a feed source
-        expect(records.feedagent).toBeUndefined();
-
-        // the old file is renamed (not deleted) so migration is one-time
-        expect(fs.existsSync(legacy)).toBe(false);
-        expect(fs.existsSync(`${legacy}.migrated`)).toBe(true);
-    });
-
-    it("is a no-op when there is no legacy file", () => {
-        const dir = tmpInstanceDir();
-        const records: Record<string, InstalledAgentRecord> = {};
-        expect(() => migrateLegacyExternalAgents(dir, records)).not.toThrow();
-        expect(Object.keys(records)).toHaveLength(0);
-    });
-
-    it("never lets a legacy path entry shadow an existing bundled record", () => {
-        const dir = tmpInstanceDir();
-        fs.writeFileSync(
-            path.join(dir, "externalAgentsConfig.json"),
-            JSON.stringify({
-                agents: { player: { name: "old", path: "/old/player" } },
-            }),
-        );
-        const builtin: InstalledAgentRecord = {
-            name: "player",
-            kind: "npm",
-            module: "music",
-            source: "bundled",
-        };
-        const records: Record<string, InstalledAgentRecord> = {
-            player: builtin,
-        };
-        migrateLegacyExternalAgents(dir, records);
-        // existing bundled record preserved, not overwritten by the legacy path entry
-        expect(records.player).toEqual(builtin);
-    });
-
-    it("resolves a relative legacy path against the instance dir", () => {
-        const dir = tmpInstanceDir();
-        fs.writeFileSync(
-            path.join(dir, "externalAgentsConfig.json"),
-            JSON.stringify({
-                agents: {
-                    rel: { name: "rel-pkg", path: "externalagents/rel" },
-                },
-            }),
-        );
-        const records: Record<string, InstalledAgentRecord> = {};
-        migrateLegacyExternalAgents(dir, records);
-        expect(records.rel.path).toBe(path.resolve(dir, "externalagents/rel"));
-    });
-});
-
 describe("loadInstalledRecords", () => {
     it("returns no installs (and writes an empty agents.json) on first run", () => {
         const dir = tmpInstanceDir();
@@ -196,28 +122,5 @@ describe("loadInstalledRecords", () => {
         expect(records.mine).toBeDefined();
         // the collision is stripped from the persisted file too
         expect(readAgentsJson(dir)!.agents.player).toBeUndefined();
-    });
-
-    it("first run merges migrated legacy path entries", () => {
-        const dir = tmpInstanceDir();
-        fs.writeFileSync(
-            path.join(dir, "externalAgentsConfig.json"),
-            JSON.stringify({
-                agents: { mine: { name: "mine-pkg", path: "/abs/mine" } },
-            }),
-        );
-        const records = loadInstalledRecords(dir);
-        // migrated path agent present (bundled agents are not installs)
-        expect(records.player).toBeUndefined();
-        expect(records.mine).toBeDefined();
-        expect(records.mine.source).toBe("path");
-        expect(records.mine.path).toBe("/abs/mine");
-        // persisted
-        const onDisk = readAgentsJson(dir);
-        expect(onDisk!.agents.mine.path).toBe("/abs/mine");
-        // legacy file renamed
-        expect(fs.existsSync(path.join(dir, "externalAgentsConfig.json"))).toBe(
-            false,
-        );
     });
 });

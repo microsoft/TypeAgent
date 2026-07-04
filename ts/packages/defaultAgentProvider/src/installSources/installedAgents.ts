@@ -3,7 +3,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import registerDebug from "debug";
 import { AppAgentProvider } from "agent-dispatcher";
 import { InstalledAgentRecord } from "./config.js";
 import {
@@ -14,11 +13,11 @@ import {
 import { getProviderConfig } from "../utils/config.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
-const debug = registerDebug("typeagent:dispatcher:installSource:installed");
-
-// The single `agents.json` persisted under the instance dir (design §4.2).
-// Replaces both the bundled `data/config.json` `agents` map at runtime and the
-// legacy `externalAgentsConfig.json`.
+// The single `agents.json` persisted under the instance dir (design §4.2): the
+// store of USER-INSTALLED agent records only. The bundled agent set is defined
+// separately by the `data/config.json` `agents` map at runtime (see
+// {@link seedRecordsFromConfig} / {@link createBundledAppAgentProvider}) - it
+// is not stored here.
 export type AgentsJson = {
     agents: Record<string, InstalledAgentRecord>;
 };
@@ -126,71 +125,6 @@ export function createBundledAppAgentProvider(
 }
 
 // ---------------------------------------------------------------------------
-// Migration shim (design §8, §12 Q14): legacy externalAgentsConfig.json.
-// ---------------------------------------------------------------------------
-
-// Migrate any legacy `externalAgentsConfig.json` into record form, mutating
-// `records` in place. ONLY `path` entries are migrated (`source: "path"`);
-// legacy npm/feed entries are dropped (the user re-installs them from the
-// configured feed). The old file is renamed (not deleted) so the migration is
-// one-time and auditable.
-export function migrateLegacyExternalAgents(
-    instanceDir: string,
-    records: Record<string, InstalledAgentRecord>,
-): void {
-    const legacy = path.join(instanceDir, "externalAgentsConfig.json");
-    if (!fs.existsSync(legacy)) {
-        return;
-    }
-    try {
-        const cfg = JSON.parse(fs.readFileSync(legacy, "utf8"));
-        const agents = cfg?.agents;
-        if (agents !== undefined) {
-            for (const [name, info] of Object.entries(
-                agents as Record<string, NpmAppAgentInfo>,
-            )) {
-                if (info.path === undefined) {
-                    debug(
-                        `migration: dropping legacy non-path agent '${name}' (re-install from feed)`,
-                    );
-                    continue;
-                }
-                if (records[name] !== undefined) {
-                    // Never let a legacy path entry silently shadow a
-                    // pre-installed builtin of the same name.
-                    debug(
-                        `migration: name collision - keeping existing record for '${name}', skipping legacy entry`,
-                    );
-                    continue;
-                }
-                const record: InstalledAgentRecord = {
-                    name,
-                    kind: "npm",
-                    path: path.resolve(instanceDir, info.path),
-                    source: "path",
-                };
-                if (info.execMode !== undefined) {
-                    record.loaderConfig = { execMode: info.execMode };
-                }
-                records[name] = record;
-                debug(`migration: migrated legacy path agent '${name}'`);
-            }
-        }
-    } catch (e) {
-        debug(
-            `migration: failed to read legacy config: ${(e as Error).message}`,
-        );
-    }
-    try {
-        fs.renameSync(legacy, `${legacy}.migrated`);
-    } catch (e) {
-        debug(
-            `migration: failed to rename legacy config: ${(e as Error).message}`,
-        );
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Provider building (design §4.4): one single-agent provider per install.
 // ---------------------------------------------------------------------------
 
@@ -246,13 +180,12 @@ export function createInstalledAppAgentProviders(
 }
 
 /**
- * Load the user-installed agent records from `agents.json` (design §4.2, §8).
+ * Load the user-installed agent records from `agents.json` (design §4.2).
  *
  * The bundled agents are a separate static provider (see
  * {@link createBundledAppAgentProvider}), so this returns ONLY the
  * user-installed agents - never the bundled set. agents.json holds only
- * installs. On first run it migrates any legacy externalAgentsConfig.json and
- * writes the (possibly empty) agents.json.
+ * installs; on first run it writes the (possibly empty) agents.json.
  *
  * Records whose name collides with a bundled agent are dropped: the bundled
  * provider owns that name, and registering it from two providers makes the
@@ -271,15 +204,6 @@ export function loadInstalledRecords(
             if (!bundledNames.has(name)) {
                 installs[name] = record;
             }
-        }
-    }
-    // Migrate legacy path entries straight into installs.
-    migrateLegacyExternalAgents(instanceDir, installs);
-    // A migrated legacy entry could collide with a bundled name; drop it so the
-    // bundled provider stays the sole owner.
-    for (const name of Object.keys(installs)) {
-        if (bundledNames.has(name)) {
-            delete installs[name];
         }
     }
     fs.mkdirSync(instanceDir, { recursive: true });
