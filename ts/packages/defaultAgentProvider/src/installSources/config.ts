@@ -31,6 +31,16 @@ export interface ResolvedCandidate {
 }
 
 /**
+ * The subdirectory under `installDir` that holds the per-agent, version-scoped
+ * install roots (design §5.5). Each feed install materializes into its own
+ * `installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/<installRoot>/node_modules/...` so a
+ * new version never clobbers a still-running one; the startup orphan sweep and
+ * prune-on-swap GC operate on this directory alone (never the legacy shared
+ * `installDir/node_modules`, the marker `package.json`, or feed caches).
+ */
+export const AGENT_INSTALL_ROOTS_SUBDIR = "agents";
+
+/**
  * The single shape the installed-agent provider loads (design §4.2) and the
  * `agents.json` persistence schema. A record carries exactly one resolution
  * handle: `module` (package name, npm-resolved) OR `path` (filesystem-resolved).
@@ -43,6 +53,18 @@ export interface InstalledAgentRecord {
     path?: string; // present for catalog / path installs
     source: string; // provenance, required
     ref?: string; // feed specifier/version
+    // The per-agent, version-scoped install root leaf name (design §5.5): the
+    // subdir under `installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/` a feed install
+    // materialized into, so the provider derives its require-root from the
+    // record instead of the shared `installDir`. Present only for feed
+    // (`module`) installs that own a dedicated root; ABSENT for `path`
+    // (absolute), bundled/catalog, and legacy pre-version-scoping records — the
+    // provider falls back to the shared `installDir` for those (back-compat).
+    installRoot?: string;
+    // The concrete resolved version read from the installed package.json at
+    // materialize time (design §5.5), informational (display / diagnostics).
+    // Optional/back-compat: absent for path/catalog/legacy records.
+    version?: string;
     // Opaque, kind-specific metadata interpreted by the loader named by `kind`
     // (e.g. npm: `{ execMode }`).
     loaderConfig?: Record<string, unknown>;
@@ -187,9 +209,14 @@ export interface InstallSource {
         opts?: { range?: string | undefined },
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
-    /** Does the actual work (npm install / copy / record data). */
+    /** Does the actual work (npm install / copy / record data). `opts.installName`
+     * is the authoritative dispatcher agent name the install is targeting
+     * (the `agents.json` key), so a source can materialize into a per-agent,
+     * version-scoped install root (design §5.5). Sources whose materialize is
+     * already non-destructive (`path`, `catalog`) ignore it. */
     materialize(
         candidate: ResolvedCandidate,
+        opts?: { installName?: string | undefined },
     ): Promise<MaterializedInstallRecord>;
     /** Enumerable sources (`path` is not) advertise their agents. */
     listAgents?(onWarn?: SourceWarning): Promise<string[]>;

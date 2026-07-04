@@ -10,6 +10,7 @@ import {
     FeedSourceConfig,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    AGENT_INSTALL_ROOTS_SUBDIR,
 } from "./config.js";
 import {
     AzTokenRunner,
@@ -53,6 +54,19 @@ function resolveFeedScopes(config: FeedSourceConfig): string[] {
 export function moduleNameFromSpec(spec: string): string {
     const at = spec.lastIndexOf("@");
     return at > 0 ? spec.slice(0, at) : spec;
+}
+
+// Sanitize an arbitrary label (dispatcher name / module name) into a filesystem-
+// safe directory-name component so it can never escape the install root.
+function sanitizeRootLabel(label: string): string {
+    return label.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+// A short, unique, filesystem-safe install-id (design §5.5 _Naming_). Appended
+// to the version-scoped root name so two materializes of the SAME version (e.g.
+// a re-materialize during an update or rollback window) never collide on disk.
+function makeInstallId(): string {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export interface NpmInstallArgs {
@@ -345,6 +359,7 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
+            opts?: { installName?: string | undefined },
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -359,7 +374,23 @@ export function createFeedSource(
                     `feed source '${config.name}' got a candidate without a module/ref`,
                 );
             }
-            ensureInstallRoot(deps.installDir);
+            // Per-agent, version-scoped install root (design §5.5): materialize
+            // into its OWN root under `installDir/agents/` so a new version
+            // never clobbers a still-running one and a failed install is a clean
+            // abort that leaves any prior root intact. The root leaf is keyed by
+            // the dispatcher agent name (falling back to the module name) plus a
+            // unique install-id, so even re-materializing the same version does
+            // not collide.
+            const rootLabel = sanitizeRootLabel(
+                opts?.installName ?? moduleName,
+            );
+            const installRoot = `${rootLabel}@${makeInstallId()}`;
+            const agentRoot = path.join(
+                deps.installDir,
+                AGENT_INSTALL_ROOTS_SUBDIR,
+                installRoot,
+            );
+            ensureInstallRoot(agentRoot);
             const userconfig = await writeTransientNpmAuth(
                 registry,
                 tokenRunner,
@@ -367,29 +398,44 @@ export function createFeedSource(
             try {
                 await npmInstall({
                     spec,
-                    cwd: deps.installDir,
+                    cwd: agentRoot,
                     registry,
                     userconfig,
                 });
             } finally {
                 removeTransientNpmAuth(userconfig);
             }
-            const installed = path.join(
-                deps.installDir,
+            const installedPackageJson = path.join(
+                agentRoot,
                 "node_modules",
                 ...moduleName.split("/"),
                 "package.json",
             );
-            if (!fs.existsSync(installed)) {
+            if (!fs.existsSync(installedPackageJson)) {
                 throw new Error(
-                    `npm install of '${spec}' did not produce '${moduleName}' under ${path.join(deps.installDir, "node_modules")}.`,
+                    `npm install of '${spec}' did not produce '${moduleName}' under ${path.join(agentRoot, "node_modules")}.`,
                 );
+            }
+            // Read the concrete resolved version for the record (informational);
+            // a missing/unparsable version is non-fatal.
+            let version: string | undefined;
+            try {
+                const pkg = JSON.parse(
+                    fs.readFileSync(installedPackageJson, "utf8"),
+                );
+                if (typeof pkg.version === "string") {
+                    version = pkg.version;
+                }
+            } catch {
+                // leave version undefined
             }
             return {
                 kind: "npm",
                 module: moduleName,
                 source: config.name,
                 ref: spec,
+                installRoot,
+                ...(version !== undefined ? { version } : {}),
                 loaderConfig: {
                     execMode: candidate.loaderConfig?.execMode ?? "separate",
                 },

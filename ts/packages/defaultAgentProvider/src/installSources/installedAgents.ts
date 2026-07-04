@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AppAgentProvider } from "agent-dispatcher";
-import { InstalledAgentRecord } from "./config.js";
+import { InstalledAgentRecord, AGENT_INSTALL_ROOTS_SUBDIR } from "./config.js";
 import {
     createNpmAppAgentProvider,
     NpmAppAgentInfo,
@@ -145,13 +145,39 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
 }
 
 /**
+ * The absolute require-root a `module` install record resolves its package
+ * against (design §5.5). A record carrying a per-agent `installRoot` resolves
+ * from its OWN version-scoped root
+ * (`installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/<installRoot>`); a legacy record
+ * without one falls back to the shared `installDir` (back-compat with
+ * pre-version-scoping `agents.json`). `path` records are unaffected (they carry
+ * an absolute path, so this require-root is a harmless base).
+ */
+export function recordRequirePath(
+    record: InstalledAgentRecord,
+    installDir: string,
+): string {
+    const root =
+        record.installRoot !== undefined
+            ? path.join(
+                  installDir,
+                  AGENT_INSTALL_ROOTS_SUBDIR,
+                  record.installRoot,
+              )
+            : installDir;
+    return path.join(root, "package.json");
+}
+
+/**
  * Build the AppAgentProvider for a SINGLE installed agent record (design §4.4).
  * Installed agents are feed installs materialized under `installDir`, so a
- * `module` record resolves from `installDir`; a `path` record resolves from its
- * own absolute path (the requirePath is irrelevant, so `installDir` is a
- * harmless base). This is the runtime unit the dynamic source vends - one
- * single-agent provider per installed agent. (Bundled agents are the separate,
- * app-bundle-rooted {@link createBundledAppAgentProvider}.)
+ * `module` record resolves from its own per-agent version-scoped root
+ * (`record.installRoot`) — or, for a legacy record without one, from the shared
+ * `installDir`; a `path` record resolves from its own absolute path (the
+ * requirePath is irrelevant, so the derived root is a harmless base). This is
+ * the runtime unit the dynamic source vends - one single-agent provider per
+ * installed agent. (Bundled agents are the separate, app-bundle-rooted
+ * {@link createBundledAppAgentProvider}.)
  */
 export function createInstalledAppAgentProvider(
     name: string,
@@ -160,7 +186,7 @@ export function createInstalledAppAgentProvider(
 ): AppAgentProvider {
     return createNpmAppAgentProvider(
         { [name]: recordToNpmInfo(record) },
-        path.join(installDir, "package.json"),
+        recordRequirePath(record, installDir),
     );
 }
 

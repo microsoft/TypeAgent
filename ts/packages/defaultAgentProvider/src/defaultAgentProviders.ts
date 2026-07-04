@@ -15,12 +15,14 @@ import {
     InstallSourceConfig,
     InstalledAgentRecord,
     SourceStatus,
+    AGENT_INSTALL_ROOTS_SUBDIR,
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
 
+import fs from "node:fs";
 import path from "node:path";
 import {
     getInstanceConfigProvider,
@@ -47,6 +49,65 @@ import { createLimiter } from "@typeagent/common-utils";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:defaultAgentProvider:source");
+
+// The directory under `installDir` that holds every per-agent, version-scoped
+// install root (design §5.5). GC (prune-on-swap + startup orphan sweep) operates
+// only within this directory, never the legacy shared `installDir/node_modules`,
+// the marker `package.json`, or feed caches.
+function agentRootsDir(installDir: string): string {
+    return path.join(installDir, AGENT_INSTALL_ROOTS_SUBDIR);
+}
+
+// Remove a single per-agent install root after its version is confirmed gone
+// (design §5.5 GC — prune on swap / after uninstall drain). Best-effort: a
+// prune failure is logged, never fatal (the startup orphan sweep is the
+// backstop). A record without an `installRoot` (path/catalog/legacy) has no
+// dedicated root to prune.
+function pruneAgentRoot(
+    installDir: string,
+    installRoot: string | undefined,
+): void {
+    if (installRoot === undefined) {
+        return;
+    }
+    const dir = path.join(agentRootsDir(installDir), installRoot);
+    try {
+        fs.rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+        debug(`prune of install root '${dir}' failed: ${e}`);
+    }
+}
+
+// Startup orphan sweep (design §5.5 GC): remove any per-agent install root under
+// `installDir/agents/` that is NOT the recorded-current root of some installed
+// agent — e.g. a `v2` dir from a crashed update, or a `v1` dir that should have
+// been pruned on a swap that never completed. Best-effort: a missing agents dir
+// or a failed removal is non-fatal.
+function sweepOrphanAgentRoots(
+    installDir: string,
+    keep: ReadonlySet<string>,
+): void {
+    const dir = agentRootsDir(installDir);
+    let dirents: fs.Dirent[];
+    try {
+        dirents = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return; // no agents dir yet (nothing installed via a version-scoped root)
+    }
+    for (const dirent of dirents) {
+        if (!dirent.isDirectory() || keep.has(dirent.name)) {
+            continue;
+        }
+        try {
+            fs.rmSync(path.join(dir, dirent.name), {
+                recursive: true,
+                force: true,
+            });
+        } catch (e) {
+            debug(`orphan sweep of install root '${dirent.name}' failed: ${e}`);
+        }
+    }
+}
 
 /**
  * Get the default STATIC app agent providers.
@@ -284,14 +345,25 @@ export function createDefaultInstalledAgentSource(
     // Seed active entries from agents.json (design §3.3). One single-agent,
     // single-root provider per record; shared (the same instance) across every
     // connected session.
-    for (const [name, record] of Object.entries(
-        loadInstalledRecords(instanceDir),
-    )) {
+    const installedRecords = loadInstalledRecords(instanceDir);
+    for (const [name, record] of Object.entries(installedRecords)) {
         entries.set(name, {
             status: "active",
             provider: buildAgentProvider(name, record),
         });
     }
+
+    // Startup orphan sweep (design §5.5 GC): keep only each installed agent's
+    // recorded-current version-scoped root; remove any stray root left by a
+    // crashed update (a `v2` dir) or an un-pruned swap (a `v1` dir).
+    sweepOrphanAgentRoots(
+        installDir,
+        new Set(
+            Object.values(installedRecords)
+                .map((record) => record.installRoot)
+                .filter((root): root is string => root !== undefined),
+        ),
+    );
 
     // The providers to vend to a connecting session: the `active` set only —
     // never a draining name (design §7.3 connect-during-removing).
@@ -461,6 +533,7 @@ export function createDefaultInstalledAgentSource(
                     sourceName,
                     (m) => warningSet.add(m),
                     onStatus,
+                    { installName: name },
                 );
                 // The source assigns the authoritative dispatcher name. The
                 // source's `materialize` already persists its own re-resolution
@@ -510,6 +583,11 @@ export function createDefaultInstalledAgentSource(
             busy.add(name);
             try {
                 const entry = entries.get(name);
+                // Capture the version-scoped install root before the record is
+                // deleted so its directory can be pruned once the agent is
+                // confirmed down everywhere (design §5.5 GC).
+                const uninstalledRoot =
+                    readAgentsJson(instanceDir)?.agents[name]?.installRoot;
                 await limiter(async () => {
                     const current = readAgentsJson(instanceDir) ?? {
                         agents: {},
@@ -526,9 +604,21 @@ export function createDefaultInstalledAgentSource(
                 // until fully drained (the `removing` state outlives this op).
                 // Uninstall drops each session's persisted enable preference
                 // (dropConfig=true) so a fresh reinstall starts from the
-                // manifest default (design §5, Model B).
+                // manifest default (design §5, Model B). Once fully drained, the
+                // agent's version-scoped install root is pruned (design §5.5 GC;
+                // the startup orphan sweep is the backstop if this never runs).
                 if (entry?.status === "active") {
-                    await startDrain(name, entry.provider, issuingHost, true);
+                    await startDrain(
+                        name,
+                        entry.provider,
+                        issuingHost,
+                        true,
+                        async () => {
+                            pruneAgentRoot(installDir, uninstalledRoot);
+                        },
+                    );
+                } else {
+                    pruneAgentRoot(installDir, uninstalledRoot);
                 }
             } finally {
                 busy.delete(name);
@@ -563,7 +653,10 @@ export function createDefaultInstalledAgentSource(
                 // registry runs it + materialize under the shared limiter and
                 // preserves the re-resolution handle so a later update still
                 // works (design §5, §12 Q13).
-                const resolved = await registry.reresolve(existing, { range });
+                const resolved = await registry.reresolve(existing, {
+                    range,
+                    installName: name,
+                });
                 const record: InstalledAgentRecord = { ...resolved, name };
                 // Overwrite only after a successful materialize (§12 Q13). This
                 // is the commit point (design §7.4); a failed materialize above
@@ -587,12 +680,22 @@ export function createDefaultInstalledAgentSource(
                 // preference (design §5, Model B).
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
+                // Prune the OLD version's version-scoped install root only after
+                // the swap succeeds (design §5.1, §5.3, §5.5 GC): in this
+                // milestone that is once the old version has drained and the new
+                // one is added. The old root differs from the new one (unique
+                // install-id), so this never touches v2's files.
+                const oldRoot = existing.installRoot;
                 const addNew = () => {
                     entries.set(name, {
                         status: "active",
                         provider: newProvider,
                     });
-                    return fanOutAdd(newProvider, issuingHost);
+                    return fanOutAdd(newProvider, issuingHost).then(() => {
+                        if (oldRoot !== record.installRoot) {
+                            pruneAgentRoot(installDir, oldRoot);
+                        }
+                    });
                 };
                 if (oldEntry?.status === "active") {
                     await startDrain(

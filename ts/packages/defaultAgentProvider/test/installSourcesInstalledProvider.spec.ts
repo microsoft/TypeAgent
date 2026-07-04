@@ -9,6 +9,7 @@ import {
     createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
     readAgentsJson,
+    recordRequirePath,
 } from "../src/installSources/installedAgents.js";
 import {
     createDefaultInstalledAgentSource,
@@ -115,6 +116,76 @@ describe("createInstalledAppAgentProvider(s)", () => {
         expect(manifest.emojiChar).toBe("🧪");
     });
 
+    it("resolves a module from its per-agent version-scoped root (design §5.5)", async () => {
+        // A record carrying an `installRoot` resolves from
+        // installDir/agents/<installRoot>/node_modules, NOT the shared installDir.
+        const moduleName = "scoped-feed-agent";
+        const installDir = tmpDir("ta-installdir-");
+        fs.writeFileSync(
+            path.join(installDir, "package.json"),
+            JSON.stringify({ name: "ta-install-root", private: true }),
+        );
+        const installRoot = "feedy@abc123";
+        const rootDir = path.join(installDir, "agents", installRoot);
+        const pkgDir = path.join(rootDir, "node_modules", moduleName);
+        fs.mkdirSync(pkgDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(rootDir, "package.json"),
+            JSON.stringify({ name: "ta-agent-root", private: true }),
+        );
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify({
+                name: moduleName,
+                version: "2.0.0",
+                exports: { "./agent/manifest": "./manifest.json" },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(pkgDir, "manifest.json"),
+            JSON.stringify({ emojiChar: "📦" }),
+        );
+        // Deliberately DO NOT create installDir/node_modules, so a resolve from
+        // the shared root would fail — proving the per-agent root is used.
+        const provider = createInstalledAppAgentProvider(
+            "feedy",
+            {
+                name: "feedy",
+                kind: "npm",
+                module: moduleName,
+                source: "typeagent",
+                installRoot,
+                version: "2.0.0",
+            },
+            installDir,
+        );
+        const manifest = await provider.getAppAgentManifest("feedy");
+        expect(manifest.emojiChar).toBe("📦");
+    });
+
+    it("recordRequirePath derives per-agent root vs shared installDir", () => {
+        const installDir = "/tmp/ta-install";
+        const scoped: InstalledAgentRecord = {
+            name: "s",
+            kind: "npm",
+            module: "s-mod",
+            source: "typeagent",
+            installRoot: "s@abc",
+        };
+        expect(recordRequirePath(scoped, installDir)).toBe(
+            path.join(installDir, "agents", "s@abc", "package.json"),
+        );
+        const legacy: InstalledAgentRecord = {
+            name: "l",
+            kind: "npm",
+            module: "l-mod",
+            source: "typeagent",
+        };
+        expect(recordRequirePath(legacy, installDir)).toBe(
+            path.join(installDir, "package.json"),
+        );
+    });
+
     it("builds one provider per record and unions their names", () => {
         const records: Record<string, InstalledAgentRecord> = {
             feedy: {
@@ -154,7 +225,8 @@ describe("getDefaultAppAgentProviders", () => {
 
     it("no longer includes installed agents (they move to the AppAgentSource)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         const agentDir = tmpDir("ta-agent-");
         await installer.install("namedOnly", agentDir, undefined, noopHost);
 
@@ -544,7 +616,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
         issuing: AppAgentHost,
     ) {
-        await built.testApi.install("foo", tmpDir("ta-agent-"), undefined, issuing);
+        await built.testApi.install(
+            "foo",
+            tmpDir("ta-agent-"),
+            undefined,
+            issuing,
+        );
         await flush();
     }
 
@@ -563,7 +640,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
 
         // Reuse during removing is rejected (design §7.3).
         await expect(
-            built.testApi.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+            built.testApi.install(
+                "foo",
+                tmpDir("ta-agent-"),
+                undefined,
+                issuing,
+            ),
         ).rejects.toThrow(/still being removed/i);
         await expect(
             built.testApi.update("foo", undefined, issuing),
@@ -574,7 +656,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await uninstalling;
         await flush();
         await expect(
-            built.testApi.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+            built.testApi.install(
+                "foo",
+                tmpDir("ta-agent-"),
+                undefined,
+                issuing,
+            ),
         ).resolves.toBeDefined();
     });
 
@@ -618,7 +705,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         gatedConn.dispose();
         await flush();
         await expect(
-            built.testApi.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+            built.testApi.install(
+                "foo",
+                tmpDir("ta-agent-"),
+                undefined,
+                issuing,
+            ),
         ).resolves.toBeDefined();
     });
 
@@ -676,7 +768,9 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await updating;
         await flush();
         // After the drain + re-add, it is listed again.
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain("foo");
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
     });
 
     it("update adds the new version only after the old drains everywhere (no coexistence)", async () => {
@@ -772,7 +866,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo).toBeUndefined();
         // Name is freed despite the sibling failure — reuse is allowed.
         await expect(
-            built.testApi.install("foo", tmpDir("ta-agent-"), undefined, issuing),
+            built.testApi.install(
+                "foo",
+                tmpDir("ta-agent-"),
+                undefined,
+                issuing,
+            ),
         ).resolves.toBeDefined();
     });
 });
@@ -789,7 +888,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("install resolves via the path source and persists the record with the requested name", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
 
         const result = await installer.install(
             "myagent",
@@ -812,7 +912,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("rejects installing over an existing name", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("dup", agentDir, undefined, host);
         await expect(
             installer.install("dup", agentDir, undefined, host),
@@ -822,7 +923,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("rejects installing over a builtin (cannot shadow)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.install("player", agentDir, undefined, host),
         ).rejects.toThrow(/built-in/);
@@ -830,7 +932,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("rejects uninstalling a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(installer.uninstall("player", host)).rejects.toThrow(
             /built-in/,
         );
@@ -838,7 +941,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("rejects updating a builtin", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.update("player", undefined, host),
         ).rejects.toThrow(/built-in/);
@@ -847,7 +951,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("uninstall drops the record; unknown name rejects", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("gone", agentDir, undefined, host);
         await installer.uninstall("gone", host);
         expect(readAgentsJson(instanceDir)!.agents.gone).toBeUndefined();
@@ -861,7 +966,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const a = tmpDir("ta-agent-a-");
         const b = tmpDir("ta-agent-b-");
         const c = tmpDir("ta-agent-c-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await Promise.all([
             installer.install("a", a, undefined, host),
             installer.install("b", b, undefined, host),
@@ -874,7 +980,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("rejects an explicit unknown source", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.install("x", agentDir, "nosuch", host),
         ).rejects.toThrow(/unknown source/);
@@ -892,7 +999,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("update re-materializes a path agent and keeps the record", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
 
         await installer.update("p", undefined, host);
@@ -901,10 +1009,68 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(record.source).toBe("path");
     });
 
+    // GC (design §5.5): a superseded version-scoped install root is pruned once
+    // the swap completes. A path re-resolve produces a record with no
+    // installRoot, so seeding the pre-update record with an installRoot + a real
+    // on-disk root exercises the `oldRoot !== record.installRoot` prune branch.
+    it("update prunes the old version's install root after the swap", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
+        await installer.install("p", agentDir, undefined, host);
+
+        // Retro-fit a version-scoped root onto the freshly installed record and
+        // create its directory, as if a feed had installed it.
+        const installDir = path.join(instanceDir, "installedAgents");
+        const oldRoot = "p@old1";
+        const oldRootDir = path.join(installDir, "agents", oldRoot);
+        fs.mkdirSync(path.join(oldRootDir, "node_modules"), {
+            recursive: true,
+        });
+        const agentsJsonPath = path.join(instanceDir, "agents.json");
+        const cur = readAgentsJson(instanceDir)!;
+        cur.agents.p.installRoot = oldRoot;
+        fs.writeFileSync(agentsJsonPath, JSON.stringify(cur));
+        expect(fs.existsSync(oldRootDir)).toBe(true);
+
+        await installer.update("p", undefined, host);
+
+        // The swap dropped installRoot (path re-resolve), so the old root is a
+        // genuine orphan and must have been pruned.
+        expect(fs.existsSync(oldRootDir)).toBe(false);
+    });
+
+    // GC (design §5.5): uninstall prunes the agent's version-scoped root once the
+    // agent is confirmed down everywhere.
+    it("uninstall prunes the agent's install root once drained", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const agentDir = tmpDir("ta-agent-");
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
+        await installer.install("p", agentDir, undefined, host);
+
+        const installDir = path.join(instanceDir, "installedAgents");
+        const root = "p@live1";
+        const rootDir = path.join(installDir, "agents", root);
+        fs.mkdirSync(path.join(rootDir, "node_modules"), { recursive: true });
+        const agentsJsonPath = path.join(instanceDir, "agents.json");
+        const cur = readAgentsJson(instanceDir)!;
+        cur.agents.p.installRoot = root;
+        fs.writeFileSync(agentsJsonPath, JSON.stringify(cur));
+        expect(fs.existsSync(rootDir)).toBe(true);
+
+        await installer.uninstall("p", host);
+
+        expect(fs.existsSync(rootDir)).toBe(false);
+        expect(readAgentsJson(instanceDir)!.agents.p).toBeUndefined();
+    });
+
     it("path re-resolution uses the record's `path` handle (no `ref` needed)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
 
         // A path install has no re-resolution `ref`: the path source's handle
@@ -944,7 +1110,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("a failed update leaves the old record intact (no-op)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
         const before = readAgentsJson(instanceDir)!.agents.p;
 
@@ -958,7 +1125,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("update rejects an unknown agent", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.update("missing", undefined, host),
         ).rejects.toThrow(/not found/);
@@ -967,7 +1135,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("update fails when the recorded source is no longer configured", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
         // Drop the only configured source out from under the record, then
         // rebuild the installer so it reloads its sources from the edited
@@ -981,5 +1150,129 @@ describe("installed agent source api (install/uninstall/update)", () => {
         await expect(reloaded.update("p", undefined, host)).rejects.toThrow(
             /no longer configured/,
         );
+    });
+});
+
+describe("startup orphan sweep (design §5.5 GC)", () => {
+    // Seed an instance dir with a path-only source config plus a hand-written
+    // agents.json whose single record points at a version-scoped install root,
+    // and populate installedAgents/agents with that recorded root plus a couple
+    // of stray roots (a crashed-update v2, an un-pruned v1). Constructing the
+    // source must sweep only the strays, keeping the recorded-current root.
+    function seedInstanceWithRoots(
+        records: Record<string, InstalledAgentRecord>,
+        rootDirNames: string[],
+    ): { instanceDir: string; agentsDir: string } {
+        const dir = tmpDir("ta-sweep-");
+        fs.writeFileSync(
+            path.join(dir, "config.json"),
+            JSON.stringify({
+                installSources: {
+                    order: ["path"],
+                    installDir: path.join(dir, "installedAgents"),
+                    sources: [{ kind: "path", name: "path" }],
+                },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(dir, "agents.json"),
+            JSON.stringify({ agents: records }),
+        );
+        const agentsDir = path.join(dir, "installedAgents", "agents");
+        for (const name of rootDirNames) {
+            const rootDir = path.join(agentsDir, name);
+            fs.mkdirSync(path.join(rootDir, "node_modules"), {
+                recursive: true,
+            });
+            fs.writeFileSync(
+                path.join(rootDir, "package.json"),
+                JSON.stringify({ private: true }),
+            );
+        }
+        return { instanceDir: dir, agentsDir };
+    }
+
+    it("removes stray roots but keeps each agent's recorded-current root", () => {
+        const { instanceDir, agentsDir } = seedInstanceWithRoots(
+            {
+                keeper: {
+                    name: "keeper",
+                    kind: "npm",
+                    module: "keeper-mod",
+                    source: "typeagent",
+                    installRoot: "keeper@current",
+                },
+            },
+            // recorded-current + a crashed-update v2 + an un-pruned v1
+            ["keeper@current", "keeper@crashedV2", "keeper@oldV1"],
+        );
+        // Construct the source — this runs the startup orphan sweep.
+        createDefaultInstalledAgentSource(instanceDir);
+        const remaining = fs.readdirSync(agentsDir).sort();
+        expect(remaining).toEqual(["keeper@current"]);
+    });
+
+    it("keeps the current root of every agent (multi-agent keep-set)", () => {
+        const { instanceDir, agentsDir } = seedInstanceWithRoots(
+            {
+                one: {
+                    name: "one",
+                    kind: "npm",
+                    module: "one-mod",
+                    source: "typeagent",
+                    installRoot: "one@cur",
+                },
+                two: {
+                    name: "two",
+                    kind: "npm",
+                    module: "two-mod",
+                    source: "typeagent",
+                    installRoot: "two@cur",
+                },
+            },
+            // both currents + a stray for each
+            ["one@cur", "two@cur", "one@stray", "two@stray"],
+        );
+        createDefaultInstalledAgentSource(instanceDir);
+        // A regression that collapsed the keep-set to a single agent would drop
+        // the other agent's current root.
+        expect(fs.readdirSync(agentsDir).sort()).toEqual([
+            "one@cur",
+            "two@cur",
+        ]);
+    });
+
+    it("leaves the agents dir empty when no record has an install root", () => {
+        const { instanceDir, agentsDir } = seedInstanceWithRoots(
+            {
+                // A legacy record without installRoot references no version-
+                // scoped root, so every stray root is an orphan.
+                legacy: {
+                    name: "legacy",
+                    kind: "npm",
+                    module: "legacy-mod",
+                    source: "typeagent",
+                },
+            },
+            ["legacy@stray1", "legacy@stray2"],
+        );
+        createDefaultInstalledAgentSource(instanceDir);
+        expect(fs.readdirSync(agentsDir)).toEqual([]);
+    });
+
+    it("is a no-op when there is no agents directory yet", () => {
+        const dir = tmpDir("ta-sweep-");
+        fs.writeFileSync(
+            path.join(dir, "config.json"),
+            JSON.stringify({
+                installSources: {
+                    order: ["path"],
+                    installDir: path.join(dir, "installedAgents"),
+                    sources: [{ kind: "path", name: "path" }],
+                },
+            }),
+        );
+        // No agents.json, no installedAgents/agents dir.
+        expect(() => createDefaultInstalledAgentSource(dir)).not.toThrow();
     });
 });

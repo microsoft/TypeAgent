@@ -318,18 +318,21 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                     tokenRunner: goodToken,
                     now: () => 1000,
                     cacheFilePath,
-                    npmInstall: async ({ spec }) => {
+                    npmInstall: async ({ spec, cwd }) => {
                         concurrent++;
                         maxConcurrent = Math.max(maxConcurrent, concurrent);
                         await delay(40);
                         const mod = moduleNameFromSpec(spec);
                         const dir = path.join(
-                            installDir,
+                            cwd,
                             "node_modules",
                             ...mod.split("/"),
                         );
                         fs.mkdirSync(dir, { recursive: true });
-                        fs.writeFileSync(path.join(dir, "package.json"), "{}");
+                        fs.writeFileSync(
+                            path.join(dir, "package.json"),
+                            JSON.stringify({ name: mod, version: "1.0.0" }),
+                        );
                         concurrent--;
                     },
                 },
