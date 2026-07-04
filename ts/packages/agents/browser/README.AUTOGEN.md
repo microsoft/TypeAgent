@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e811e89391643cf6608c673151d88fc4f27992a5c1efccac6871176f934f8016 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=51eeac4276bc5d41d8d8f8c2458c6081a58be8702259d9bd943a374144701c31 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,73 +12,90 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed to control and automate browser actions. It enables the manipulation of browser windows, tabs, and web pages through a set of defined actions. This package is part of the TypeAgent monorepo and integrates with other TypeAgent components to provide a comprehensive browser automation solution.
+The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables interaction with browser windows, tabs, and web pages through a set of predefined actions. This package integrates with other components in the TypeAgent ecosystem, such as the TypeAgent shell and CLI, to provide a cohesive browser automation experience.
 
 ## What it does
 
-The `browser-typeagent` package provides a range of actions for browser control and automation. These actions include `openWebPage`, `indexPage`, `clickOn`, `captureScreenshot`, `getHtmlFragments`, and more. The package allows for the opening, closing, and navigation of browser tabs, scrolling, zooming, and interacting with web pages. It also supports enhanced website indexing with knowledge extraction capabilities.
+The `browser-typeagent` package provides a comprehensive set of actions for controlling and automating browser behavior. These actions include:
 
-The package interacts with other parts of the TypeAgent system, such as the TypeAgent shell and CLI, to receive commands and execute browser actions. It uses WebSocket connections to communicate with clients, including browser extensions and the Electron shell.
+- **Navigation and Tab Management**: Actions like `openWebPage`, `closeWebPage`, `goBack`, `goForward`, `scrollDown`, `scrollUp`, and `changeTabs` allow for opening, closing, and navigating between browser tabs and web pages.
+- **Content Interaction**: Actions such as `clickOn`, `followLinkByText`, `followLinkByPosition`, and `readPageContent` enable interaction with web page elements and content.
+- **Content Extraction and Analysis**: Actions like `captureScreenshot`, `getHtmlFragments`, and `indexPage` allow for capturing and analyzing web page content, including AI-enhanced indexing and knowledge extraction.
+- **Browser Control**: Actions such as `zoomIn`, `zoomOut`, `zoomReset`, and `reloadPage` provide control over the browser's display and functionality.
+
+The package uses a WebSocket server (`AgentWebSocketServer`) to facilitate communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. The WebSocket server supports multiple concurrent sessions, with each session isolated by a unique `sessionId`.
 
 ## Setup
 
-To set up the `browser-typeagent` package, you need to configure the following environment variables:
+To set up the `browser-typeagent` package, follow these steps:
 
-- `BROWSER_WEBSOCKET_PORT`: This variable allows you to pin the WebSocket server port for debugging. Set it to a specific port number before launching the host.
-- `TYPEAGENT_BROWSER_FILES`: This variable should point to the directory containing the browser files required for the agent's operation.
+1. **Configure Environment Variables**:
 
-Additionally, you need to enable developer mode in your browser and load the unpackaged extension. The steps are as follows:
+   - `BROWSER_WEBSOCKET_PORT`: Set this variable to specify the port for the WebSocket server. If not set, the port will be assigned dynamically by the operating system.
+   - `TYPEAGENT_BROWSER_FILES`: Set this variable to the directory containing the browser files required for the agent's operation.
 
-1. Enable developer mode in your browser (Chrome or Edge):
+2. **Enable Developer Mode in Your Browser**:
 
-   - Launch the browser.
-   - Click on the extensions icon next to the address bar and select "Manage extensions."
-   - Enable the developer mode toggle on the extensions page.
+   - For Chrome or Edge:
+     - Launch the browser.
+     - Click on the extensions icon next to the address bar and select "Manage extensions."
+     - Enable the "Developer mode" toggle on the extensions page.
 
-2. Build the extension by running `pnpm run build` in the package folder.
+3. **Build the Extension**:
 
-3. Load the unpackaged extension:
-   - Go to the "Manage extensions" page.
-   - Click on "Load unpackaged extension" and navigate to the `dist/extension` folder of the browser extension package.
+   - Run `pnpm run build` in the package folder to build the browser extension.
 
-For detailed setup instructions, see the hand-written README.
+4. **Load the Unpackaged Extension**:
+
+   - Navigate to the "Manage extensions" page in your browser.
+   - Click on "Load unpackaged extension" and select the `dist/extension` folder of the browser extension package.
+
+5. **Run the Extension**:
+   - Launch the browser where the extension is installed.
+   - Start the TypeAgent shell or CLI, which integrates with the extension to send commands. You can issue commands such as `openWebPage`, `scrollDown`, or `captureScreenshot` from the shell or CLI.
+
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `browser-typeagent` package is structured into several key components:
+The `browser-typeagent` package is organized into several key files, each responsible for specific functionality:
 
-- **Agent WebSocket Server**: Exposes a WebSocket server (`AgentWebSocketServer`) on a dynamically assigned port, allowing clients to connect and communicate with the browser agent. Clients include the Chrome extension and the Electron shell.
-
-- **Session Management**: Supports multiple concurrent sessions by registering handlers under unique `sessionId` keys. The session ID is stored in `BrowserActionContext.sessionId` and is set during context initialization.
-
-- **Client Type Detection**: Differentiates between `extension` and `electron` clients based on their `clientId`. Commands are routed to the active client based on the `preferredClientType`.
-
-- **Channel Multiplexing**: Uses `@typeagent/agent-rpc` to multiplex client connections into two logical channels: `agentService` for invoking browser agent actions and `browserControl` for controlling the browser.
-
-- **Client Storage Model**: Stores connected clients in a nested `Map<sessionId, Map<clientId, BrowserClient>>`, allowing the same `clientId` to exist simultaneously in multiple sessions without collision.
-
-Key files and their responsibilities include:
-
-- browserActionHandler.ts: Handles browser actions such as opening web pages and capturing screenshots.
-- agentWebSocketServer.ts: Manages WebSocket connections and client routing.
-- [browserIndexingService.ts](./src/agent/indexing/browserIndexingService.ts): Provides AI-enhanced indexing with content summarization and quality assessment.
-- [crossContextHtmlReducer.ts](./src/common/crossContextHtmlReducer.ts): Reduces HTML size by removing unnecessary elements and attributes.
+- **browserActionHandler.ts**: Implements the core browser actions, such as `openWebPage`, `clickOn`, and `captureScreenshot`. This file is central to defining and handling browser-related commands.
+- **[agentWebSocketServer.ts](./src/agent/agentWebSocketServer.mts)**: Manages WebSocket connections and routes client requests to the appropriate session and handlers. It supports multiple concurrent sessions and client types.
+- **[browserIndexingService.ts](./src/agent/indexing/browserIndexingService.ts)**: Provides AI-enhanced indexing capabilities, including content summarization and quality assessment for web pages.
+- **[browserActionSchema.mts](./src/agent/browserActionSchema.mts)**: Defines the schema for browser actions, including their parameters and expected behavior.
+- **[browserContentExtractor.mts](./src/agent/browserContentExtractor.mts)**: Handles content extraction from web pages, supporting both standard HTML extraction and browser-based downloading.
+- **[crossContextHtmlReducer.ts](./src/common/crossContextHtmlReducer.ts)**: Optimizes HTML content by removing unnecessary elements and attributes, reducing its size for efficient processing.
 
 ## How to extend
 
-To extend the `browser-typeagent` package, follow these steps:
+To extend the functionality of the `browser-typeagent` package, follow these steps:
 
-1. Open the relevant file based on the functionality you want to add or modify. For example, to add a new browser action, start with browserActionHandler.ts.
+1. **Identify the Relevant File**:
 
-2. Implement the new action or feature following the existing patterns. Ensure that the new functionality integrates with the WebSocket server and session management.
+   - Determine which file corresponds to the functionality you want to modify or extend. For example:
+     - To add a new browser action, start with browserActionHandler.ts.
+     - To modify WebSocket behavior, refer to [agentWebSocketServer.ts](./src/agent/agentWebSocketServer.mts).
 
-3. Update the action schema if necessary. The schema files are located in the `src/agent` directory, such as [browserActionSchema.json](./src/agent/browserActionSchema.json).
+2. **Implement the New Feature**:
 
-4. Test the new functionality by running the TypeAgent shell or CLI and issuing commands to verify the behavior.
+   - Follow the existing patterns in the codebase to implement your changes. For example:
+     - Add a new action handler in browserActionHandler.ts.
+     - Update the action schema in [browserActionSchema.mts](./src/agent/browserActionSchema.mts) to define the parameters and behavior of the new action.
 
-5. Document the new actions and features in the package's README and ensure that the environment variables and setup instructions are updated accordingly.
+3. **Update Session and Client Management**:
 
-By following these steps, you can extend the capabilities of the `browser-typeagent` package and integrate new browser automation features.
+   - If your changes involve session-specific behavior, ensure that the `sessionId` is properly handled in the `AgentWebSocketServer` and related files.
+   - If your changes involve new client types or roles, update the client type detection logic in [agentWebSocketServer.ts](./src/agent/agentWebSocketServer.mts).
+
+4. **Test Your Changes**:
+
+   - Use the TypeAgent shell or CLI to test the new functionality. Issue commands to verify that the new feature works as expected.
+
+5. **Document Your Changes**:
+   - Update the package's documentation to include details about the new feature or action. Ensure that any new environment variables or setup steps are clearly described.
+
+By following these steps, you can effectively extend the `browser-typeagent` package to support additional browser automation capabilities.
 
 ## Reference
 
@@ -87,12 +104,12 @@ By following these steps, you can extend the capabilities of the `browser-typeag
 ### Entry points
 
 - `./agent/manifest` → [./src/agent/manifest.json](./src/agent/manifest.json)
-- `./agent/handlers` → [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
-- `./agent/types` → [./dist/common/browserControl.mjs](./dist/common/browserControl.mjs)
-- `./agent/indexing` → [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
-- `./contentScriptRpc/types` → [./dist/common/contentScriptRpc/types.mjs](./dist/common/contentScriptRpc/types.mjs)
-- `./contentScriptRpc/client` → [./dist/common/contentScriptRpc/client.mjs](./dist/common/contentScriptRpc/client.mjs)
-- `./htmlReducer` → [./dist/common/crossContextHtmlReducer.js](./dist/common/crossContextHtmlReducer.js)
+- `./agent/handlers` → `./dist/agent/browserActionHandler.mjs` _(not found on disk)_
+- `./agent/types` → `./dist/common/browserControl.mjs` _(not found on disk)_
+- `./agent/indexing` → `./dist/agent/indexing/browserIndexingService.js` _(not found on disk)_
+- `./contentScriptRpc/types` → `./dist/common/contentScriptRpc/types.mjs` _(not found on disk)_
+- `./contentScriptRpc/client` → `./dist/common/contentScriptRpc/client.mjs` _(not found on disk)_
+- `./htmlReducer` → `./dist/common/crossContextHtmlReducer.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -145,7 +162,7 @@ _…and 17 more not shown._
 - [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
 - [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
 - [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 286 more under `./src/`._
+- _…and 284 more under `./src/`._
 
 ### Environment variables
 
@@ -156,6 +173,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-04T08:54:09.388Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

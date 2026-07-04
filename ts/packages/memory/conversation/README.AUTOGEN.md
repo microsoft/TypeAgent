@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4576a4a502ef7c57e4a32eb913c077d63ef62aa2d74a0ce91f6f748cfe0c1a26 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9c1e7a44ce8d89425ade9b78afc17b884f75ebd30aa10810b7aeb7967663a233 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # conversation-memory — AI-generated documentation
@@ -12,55 +12,68 @@
 
 ## Overview
 
-The `conversation-memory` package is a TypeScript library designed to implement various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` package to index and search through sequences of timestamped messages, documents, emails, and other forms of conversational data.
+The `conversation-memory` package is a TypeScript library that implements various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` package for indexing and searching through structured data, enabling efficient storage, retrieval, and analysis of conversational and document-based information.
+
+This package is designed to handle a wide range of conversational data, including chat messages, emails, documents, and transcripts. It supports incremental updates, natural language queries, and the generation of human-readable answers based on indexed knowledge.
 
 ## What it does
 
-The `conversation-memory` package provides functionality to manage and query different types of conversational memories, including:
+The `conversation-memory` package provides tools to manage and query different types of conversational memories. These include:
 
-- **Conversation Memory**: Interactive chats, agent interaction history, and invocation/response memory.
-- **Document Memory**: Transcripts of meetings, videos, chats, markdown, and HTML documents.
-- **Email Memory**: Collections of email messages.
-- **Podcast Memory**: Transcripts of podcasts.
+- **Conversation Memory**: Tracks interactive chats, agent interaction history, and invocation/response memory. New messages can be added and indexed incrementally, with extracted knowledge such as entities, actions, and topics enabling precise search and retrieval.
+- **Document Memory**: Manages collections of document parts, such as meeting transcripts, video captions, markdown files, and HTML documents. Documents can be imported, indexed, and queried for summaries, lists, or specific information.
+- **Email Memory**: Handles collections of email messages. Emails can be imported from `.eml` files, indexed, and queried for specific information, such as conversations between specific participants or topics discussed.
+- **Podcast Memory**: Manages podcast transcripts, enabling indexing and querying for specific segments or topics.
 
-These memories are indexed incrementally, allowing new messages, emails, transcript chunks, or document parts to be added and indexed as they come in. The package extracts salient knowledge such as entities, actions, and topics from new messages, enabling precise search and retrieval with low latency. Users can query these memories using natural language or structured search expressions, and the package can generate answers, summaries, and analyses based on the indexed data.
+The package supports two primary query methods:
+
+1. **Natural Language Queries**: Users can ask questions in plain language, and the package translates these into structured search expressions.
+2. **Structured Search Expressions**: Advanced users can directly query the memory using `KnowPro` search expressions for precise results.
+
+The results of these queries can be used to generate answers, summaries, or analyses. Memories are mutable and can be persisted to disk or loaded on demand.
 
 ## Setup
 
-To set up the `conversation-memory` package, follow these steps:
+To use the `conversation-memory` package, follow these steps:
 
-1. Install the necessary dependencies using `pnpm install`.
-2. Set up environment variables as required by the `KnowPro` and `memory-storage` packages.
-3. Ensure you have access to external services like OpenAI for embedding models.
+1. **Install dependencies**: Run `pnpm install` to install the required packages.
+2. **Environment variables**: Ensure that any necessary environment variables for the `KnowPro` and `memory-storage` packages are set. Refer to their respective documentation for details.
+3. **External services**: If using embedding models, ensure access to the required external services, such as OpenAI.
 
-For detailed setup instructions, see the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `conversation-memory` package is organized into several key files and modules:
+The `conversation-memory` package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: Exports the main functionalities of the package, including podcast, memory, conversation memory, email memory, and document memory modules.
-- **[conversationMemory.ts](./src/conversationMemory.ts)**: Implements the `ConversationMemory` class, handling interactive chats and agent interaction history.
-- **[docMemory.ts](./src/docMemory.ts)**: Implements the `DocMemory` class, managing collections of document parts.
-- **[emailMemory.ts](./src/emailMemory.ts)**: Implements the `EmailMemory` class, managing collections of email messages.
-- **[podcast.ts](./src/podcast.ts)**: Implements the `PodcastMemory` class, handling podcast transcripts.
-- **[common.ts](./src/common.ts)**: Contains common utility functions used across different memory types.
-- **[docImport.ts](./src/docImport.ts)**: Handles the import of text documents into `DocMemory`.
-- **[emailImport.ts](./src/emailImport.ts)**: Handles the import of email messages into `EmailMemory`.
+- **[index.ts](./src/index.ts)**: The main entry point, exporting the core functionalities of the package.
+- **[conversationMemory.ts](./src/conversationMemory.ts)**: Implements the `ConversationMemory` class for managing interactive chats and agent interaction history.
+- **[docMemory.ts](./src/docMemory.ts)**: Implements the `DocMemory` class for managing collections of document parts, such as transcripts and markdown files.
+- **[emailMemory.ts](./src/emailMemory.ts)**: Implements the `EmailMemory` class for managing collections of email messages.
+- **[podcast.ts](./src/podcast.ts)**: Implements the `PodcastMemory` class for managing podcast transcripts.
+- **[common.ts](./src/common.ts)**: Provides utility functions for embedding models, indexing state, and error handling.
+- **[docImport.ts](./src/docImport.ts)**: Handles the import of text documents into `DocMemory`, supporting formats like `.vtt`, `.md`, `.html`, and `.txt`.
+- **[emailImport.ts](./src/emailImport.ts)**: Handles the import of email messages in MIME format into `EmailMemory`.
+- **[docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts)**: Defines the schema for document search queries, including entity and facet terms.
 
 ## How to extend
 
 To extend the `conversation-memory` package, follow these steps:
 
-1. **Identify the memory type** you want to extend (e.g., conversation, document, email, podcast).
-2. **Open the corresponding file** (e.g., [conversationMemory.ts](./src/conversationMemory.ts), [docMemory.ts](./src/docMemory.ts), [emailMemory.ts](./src/emailMemory.ts), [podcast.ts](./src/podcast.ts)).
-3. **Add new functionalities** or modify existing ones. Ensure that new messages or data types are properly indexed and searchable.
-4. **Update the schema** if necessary, such as modifying [docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts) for document-related queries.
-5. **Write tests** to validate your changes. Use the `test-lib` package for testing utilities.
+1. **Determine the memory type**: Identify whether you want to extend conversation, document, email, or podcast memory.
+2. **Locate the relevant file**: Open the corresponding file for the memory type you want to extend:
+   - Conversation: [conversationMemory.ts](./src/conversationMemory.ts)
+   - Document: [docMemory.ts](./src/docMemory.ts)
+   - Email: [emailMemory.ts](./src/emailMemory.ts)
+   - Podcast: [podcast.ts](./src/podcast.ts)
+3. **Add or modify functionality**: Implement new methods or enhance existing ones. For example:
+   - To add a new type of memory, create a new class similar to `ConversationMemory` or `DocMemory`.
+   - Implement methods for adding data, indexing, and querying.
+   - Ensure that new data types are properly integrated with the `KnowPro` indexing and search mechanisms.
+4. **Update schemas**: If your changes involve new query types or data structures, update the relevant schema files, such as [docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts).
+5. **Test your changes**: Write unit tests to validate your modifications. Use the `test-lib` package for testing utilities.
 
-For example, to add a new type of conversational memory, you might start by creating a new class similar to `ConversationMemory` and implement methods for adding messages, indexing, and querying. Ensure that the new class integrates with the existing indexing and search mechanisms provided by `KnowPro`.
-
-By following these steps, you can extend the `conversation-memory` package to support additional types of conversational data or enhance its existing capabilities.
+By following these steps, you can extend the `conversation-memory` package to support additional use cases or enhance its existing features. For example, you could add support for a new document format in [docImport.ts](./src/docImport.ts) or implement a new type of memory for a specific use case.
 
 ## Reference
 
@@ -68,7 +81,7 @@ By following these steps, you can extend the `conversation-memory` package to su
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -101,6 +114,6 @@ External: `async`, `debug`, `mailparser`, `typechat`, `webvtt-parser`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-04T08:54:09.388Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
