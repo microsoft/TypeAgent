@@ -85,6 +85,7 @@ const IGNORE_DIRS = [
     "**/.turbo/**",
     "**/.next/**",
     "**/bundle/**",
+    "**/webview-dist/**",
 ];
 
 const IGNORE_FILES = ["**/*.d.ts", "**/*.min.js", "**/*.bundle.js"];
@@ -101,7 +102,7 @@ const SYNTACTIC_RULES: Linter.RulesRecord = {
     "no-console": ["warn", { allow: ["warn", "error"] }],
     "no-debugger": "warn",
     "no-var": "warn",
-    "prefer-const": "warn",
+    "prefer-const": ["warn", { ignoreReadBeforeAssign: true }],
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-unused-vars": [
         "warn",
@@ -119,6 +120,18 @@ const TYPE_AWARE_RULES: Linter.RulesRecord = {
     "@typescript-eslint/no-deprecated": "warn",
 };
 
+// Auto-fixable rules applied by --fix. Kept deliberately narrow: both are
+// mechanical, semantics-preserving fixes, so a bulk fix is safe to land.
+const FIX_RULES: Linter.RulesRecord = {
+    "no-var": "warn",
+    "prefer-const": ["warn", { ignoreReadBeforeAssign: true }],
+};
+
+// Rules that must stay at zero in changed files (trivially auto-fixable, so
+// there is never a reason to introduce one). The ratchet fails if a changed
+// file contains any of these, independent of the net count.
+const ZERO_TOLERANCE_RULES = ["no-var", "prefer-const"];
+
 // ---------------------------------------------------------------------------
 // Argument parsing
 // ---------------------------------------------------------------------------
@@ -132,6 +145,7 @@ interface Options {
     ratchet: boolean;
     base: string;
     newFileMax: number;
+    fix: boolean;
     help: boolean;
 }
 
@@ -152,6 +166,7 @@ function parseArgs(argv: string[]): Options {
         ratchet: false,
         base: "origin/main",
         newFileMax: -1,
+        fix: false,
         help: false,
     };
 
@@ -178,6 +193,9 @@ function parseArgs(argv: string[]): Options {
                 break;
             case "--type-aware":
                 opts.typeAware = true;
+                break;
+            case "--fix":
+                opts.fix = true;
                 break;
             case "--top":
                 opts.top = parseIntArg(arg, next);
@@ -235,6 +253,8 @@ Options:
   --include-tests    Include test files (excluded by default).
   --type-aware       Also run type-aware rules (no-floating-promises,
                      no-misused-promises, no-deprecated). Slower; report only.
+  --fix              Apply the auto-fixable rules (no-var, prefer-const) to the
+                     tree in place. Review + rebuild before committing.
   --top <n>          Number of worst offenders to print / embed (default 25).
   --root <path>      Directory to scan (default: the ts/ root).
   --out-dir <path>   Output directory (default: tools/scripts/code/lint-report).
@@ -665,7 +685,7 @@ async function runReport(opts: Options): Promise<number> {
 
 const SOURCE_EXT_RE = /\.[cm]?[jt]sx?$/;
 const IGNORE_PATH_RE =
-    /(^|\/)(node_modules|dist|build|out|coverage|bin|obj|\.turbo|\.next|bundle)\//;
+    /(^|\/)(node_modules|dist|build|out|coverage|bin|obj|\.turbo|\.next|bundle|webview-dist)\//;
 const GENERATED_FILE_RE = /(\.d\.ts|\.min\.js|\.bundle\.js)$/;
 const TEST_PATH_RE =
     /(^|\/)(test|tests|__tests__)\/|\.(spec|test)\.[cm]?[jt]sx?$/;
@@ -852,6 +872,22 @@ async function runRatchet(opts: Options): Promise<number> {
         newFileFailures.forEach((w) => console.error(w));
     }
 
+    // Zero-tolerance rules: must not appear in changed files at all.
+    const zeroToleranceFailures = ZERO_TOLERANCE_RULES.map((rule) => ({
+        rule,
+        h: headByRule.get(rule) ?? 0,
+    }))
+        .filter((x) => x.h > 0)
+        .map((x) => `  ${x.rule}: ${x.h}`);
+    if (zeroToleranceFailures.length) {
+        failed = true;
+        console.error(
+            "\nRatchet FAILED: zero-tolerance rules present in changed files " +
+                "(auto-fixable — run `npm run code-lint -- --fix`):",
+        );
+        zeroToleranceFailures.forEach((w) => console.error(w));
+    }
+
     if (failed) {
         console.error(
             "\nRun `npm run code-lint` and fix the flagged lines in the files this PR changes.",
@@ -859,6 +895,72 @@ async function runRatchet(opts: Options): Promise<number> {
         return 1;
     }
     console.log("Ratchet OK: changed files do not add lint violations.");
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Fix mode (apply the mechanical, auto-fixable rules in place)
+// ---------------------------------------------------------------------------
+
+function buildFixConfig(
+    useIgnores: boolean,
+    includeTests: boolean,
+): Linter.Config[] {
+    const config: Linter.Config[] = [];
+    if (useIgnores) {
+        const ignores = [...IGNORE_DIRS, ...IGNORE_FILES];
+        if (!includeTests) {
+            ignores.push(...TEST_GLOBS);
+        }
+        config.push({ ignores } as Linter.Config);
+    }
+    config.push({
+        files: [SOURCE_GLOB],
+        languageOptions: {
+            parser: tseslint.parser as unknown as Linter.Parser,
+            parserOptions: {
+                ecmaVersion: "latest",
+                sourceType: "module",
+                ecmaFeatures: { jsx: true },
+            },
+        },
+        rules: FIX_RULES,
+    });
+    return config;
+}
+
+async function runFix(opts: Options): Promise<number> {
+    const started = Date.now();
+    const eslint = new ESLint({
+        cwd: opts.root,
+        errorOnUnmatchedPattern: false,
+        overrideConfigFile: true,
+        overrideConfig: buildFixConfig(true, opts.includeTests),
+        fix: true,
+    });
+    const results = await eslint.lintFiles([SOURCE_GLOB]);
+    await ESLint.outputFixes(results);
+
+    let fixedFiles = 0;
+    let unfixable = 0;
+    for (const r of results) {
+        if (r.output !== undefined) {
+            fixedFiles++;
+        }
+        unfixable += r.messages.length;
+    }
+
+    console.log("");
+    console.log(`Lint auto-fix (rules: ${Object.keys(FIX_RULES).join(", ")})`);
+    console.log(
+        `Rewrote ${num(fixedFiles)} file(s) in ${((Date.now() - started) / 1000).toFixed(1)}s.`,
+    );
+    if (unfixable > 0) {
+        console.log(
+            `${num(unfixable)} occurrence(s) could not be auto-fixed; run \`npm run code-lint\` to see them.`,
+        );
+    }
+    console.log("Review the diff, run prettier, and rebuild before committing.");
     return 0;
 }
 
@@ -878,6 +980,11 @@ async function main(): Promise<void> {
 
     if (opts.help) {
         console.log(HELP);
+        return;
+    }
+
+    if (opts.fix) {
+        process.exitCode = await runFix(opts);
         return;
     }
 
