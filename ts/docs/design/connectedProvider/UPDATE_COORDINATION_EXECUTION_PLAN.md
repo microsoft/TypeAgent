@@ -52,11 +52,14 @@ Milestone 5 is cleanup/docs. A final branch-wide gate closes the branch.
 - "Behavior-preserving" items ship without any user-visible change; "behavior-changing" items are called
   out explicitly.
 - Estimated risk: 🟢 low / 🟡 medium / 🔴 high.
-- **Working log (update as you go):**
-  [UPDATE_COORDINATION_DEFERRED_LOG.md](./UPDATE_COORDINATION_DEFERRED_LOG.md) — every gate **review
-  finding** or **test gap** you deliberately **did not address**, with a rationale. _(Create at the start
-  of Milestone 1.)_ Kept separate from the connected-provider
-  [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) so this follow-up's log reads on its own.
+- **Working logs (update as you go):**
+  - [UPDATE_COORDINATION_DECISIONS_LOG.md](./UPDATE_COORDINATION_DECISIONS_LOG.md) — every decision **not
+    specified in** or **changed from** the design. Append an entry the moment you make the call; if a
+    deviation is ratified, fold it into [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md).
+  - [UPDATE_COORDINATION_DEFERRED_LOG.md](./UPDATE_COORDINATION_DEFERRED_LOG.md) — every gate **review
+    finding** or **test gap** you deliberately **did not address**, with a rationale. _(Both created at the
+    start of Milestone 1.)_ Kept separate from the connected-provider
+    [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) so this follow-up's logs read on their own.
 
 ## Source-of-truth file map (from current code)
 
@@ -112,7 +115,8 @@ suite green _before_ starting the gate so the subagents review a working tree.
 4. **Test-gap round 2 — re-audit after fills.** A new subagent re-checks coverage against the now-larger
    test suite and reports remaining gaps. Fill them (or log them).
 5. **Green gate.** `npm run build`, lint, and the full test suite pass; record any durable lessons in repo
-   memory. Confirm the deferred log is up to date for this milestone.
+   memory. Confirm the [decisions log](./UPDATE_COORDINATION_DECISIONS_LOG.md) and
+   [deferred log](./UPDATE_COORDINATION_DEFERRED_LOG.md) are up to date for this milestone.
 6. **Commit.** Make a single milestone commit with a descriptive message (see _Commit convention_ below);
    include the milestone's working-log updates in the commit. Only then start the next milestone.
 
@@ -132,7 +136,7 @@ needed) with a clear message:
 <area>: <milestone title> (Update Coordination — Milestone N)
 
 - what changed and why, in terms of the design (cite §sections of UPDATE_COORDINATION.md)
-- notable decisions / deviations and their rationale
+- notable decisions / deviations and their rationale (see UPDATE_COORDINATION_DECISIONS_LOG.md)
 - review + test-gap rounds completed; tests added
 - anything deliberately deferred (see UPDATE_COORDINATION_DEFERRED_LOG.md)
 - migration / behavior-change notes for reviewers
