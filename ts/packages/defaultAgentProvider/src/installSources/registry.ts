@@ -7,6 +7,7 @@ import {
     InstallSourceInfo,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    SourceStatus,
     SourceWarning,
 } from "./config.js";
 import { createPathSource } from "./pathSource.js";
@@ -32,18 +33,24 @@ export interface DefaultInstallSourceRegistry {
     setOrder(names: string[]): void;
     add(config: InstallSourceConfig): void;
     remove(name: string): void;
-    // resolve a ref: explicit source, else walk the configured order. `onWarn`,
-    // when supplied, receives non-fatal source degrade messages (e.g. a corrupt
-    // catalog) for the caller to surface on the triggering command.
+    // resolve a ref: explicit source, else walk the configured order
+    // sequentially, first match wins. `onWarn`, when supplied, receives
+    // non-fatal source degrade messages (e.g. a corrupt catalog) for the caller
+    // to surface on the triggering command. `onStatus`, when supplied, is
+    // called with the name of each source as it is probed so the caller can
+    // show a live status line.
     resolve(
         ref: string,
         sourceName?: string,
         onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
-    // dry-run: report which source would win without materializing.
+    // dry-run: report which source would win without materializing. Walks the
+    // configured order sequentially like resolve().
     where(
         ref: string,
         onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
     ): Promise<ResolvedCandidate | undefined>;
 }
 
@@ -192,6 +199,7 @@ export function createInstallSourceRegistry(
         ref: string,
         sourceName?: string,
         onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord> {
         if (sourceName !== undefined) {
             const entry = entries.get(sourceName);
@@ -206,6 +214,7 @@ export function createInstallSourceRegistry(
                     `source '${sourceName}' is not available on this host`,
                 );
             }
+            onStatus?.(`Resolving '${ref}' from source '${sourceName}'...`);
             const candidate = await entry.source.find(ref, onWarn);
             if (candidate === undefined) {
                 // Explicit --source non-match is a hard error (§4.1, §12 Q4).
@@ -213,21 +222,22 @@ export function createInstallSourceRegistry(
             }
             return entry.source.materialize(candidate);
         }
-        // Probe the sources in resolution (map iteration) order; first match
-        // wins (§4.1).
+        // Probe the sources sequentially in resolution (map iteration) order;
+        // first match wins (§4.1), so a later source is never probed once an
+        // earlier one matches.
         const ordered = resolutionSources();
-        const candidates = await Promise.all(
-            ordered.map((s) => s.find(ref, onWarn)),
-        );
-        const index = candidates.findIndex((c) => c !== undefined);
-        if (index < 0) {
-            throw new Error(
-                `no source could resolve '${ref}'. order: [${ordered
-                    .map((s) => s.name)
-                    .join(", ")}]`,
-            );
+        for (const source of ordered) {
+            onStatus?.(`Trying source '${source.name}'...`);
+            const candidate = await source.find(ref, onWarn);
+            if (candidate !== undefined) {
+                return source.materialize(candidate);
+            }
         }
-        return ordered[index].materialize(candidates[index]!);
+        throw new Error(
+            `no source could resolve '${ref}'. order: [${ordered
+                .map((s) => s.name)
+                .join(", ")}]`,
+        );
     }
 
     return {
@@ -276,22 +286,32 @@ export function createInstallSourceRegistry(
             ref: string,
             sourceName?: string,
             onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter (design §12 Q5). The installer (M2) reuses the
             // same limiter for the record write.
-            return limiter(() => resolveUnlocked(ref, sourceName, onWarn));
+            return limiter(() =>
+                resolveUnlocked(ref, sourceName, onWarn, onStatus),
+            );
         },
         async where(
             ref: string,
             onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
         ): Promise<ResolvedCandidate | undefined> {
             // Dry-run: report which source would win without materializing.
+            // Walks the sources sequentially in resolution order, first match
+            // wins, so it never probes a later source than the winner.
             const ordered = resolutionSources();
-            const candidates = await Promise.all(
-                ordered.map((s) => s.find(ref, onWarn)),
-            );
-            return candidates.find((c) => c !== undefined);
+            for (const source of ordered) {
+                onStatus?.(`Trying source '${source.name}'...`);
+                const candidate = await source.find(ref, onWarn);
+                if (candidate !== undefined) {
+                    return candidate;
+                }
+            }
+            return undefined;
         },
     };
 }

@@ -14,6 +14,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     displayResult,
+    displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
@@ -147,9 +148,13 @@ class SourceWhereCommandHandler implements CommandHandler {
         const { registry } = this.deps;
         const { ref } = params.args;
         // Surface non-fatal source degrade warnings (e.g. a corrupt catalog
-        // skipped during the walk) once, for this dry-run command.
-        const candidate = await registry.where(ref, (m) =>
-            displayWarn(m, context),
+        // skipped during the walk) once, for this dry-run command. The status
+        // callback reports which source is being probed as the sequential walk
+        // advances.
+        const candidate = await registry.where(
+            ref,
+            (m) => displayWarn(m, context),
+            (m) => displayStatus(m, context),
         );
         if (candidate === undefined) {
             const order = registry

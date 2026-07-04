@@ -65,6 +65,15 @@ export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
 export type SourceWarning = (message: string) => void;
 
 /**
+ * A per-operation sink the registry's ordered resolution walk calls to report
+ * progress - which source it is currently probing - so the host can surface a
+ * live status line for the triggering command (`@package install`, `@source
+ * where`). Like {@link SourceWarning} it is scoped to the current resolve, not
+ * the process.
+ */
+export type SourceStatus = (message: string) => void;
+
+/**
  * The three install-source kinds (design §3). There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/

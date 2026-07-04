@@ -187,38 +187,55 @@ export interface DefaultInstallSourceRegistry {
   add(config: InstallSourceConfig): void;
   remove(name: string): void;
 
-  // resolve a ref: explicit source, else walk the configured order.
-  resolve(ref: string, sourceName?: string): Promise<InstalledAgentRecord>;
+  // resolve a ref: explicit source, else walk the configured order
+  // sequentially (first match wins). `onWarn` surfaces non-fatal source
+  // degrades; `onStatus` reports each source as it is probed (live status).
+  resolve(
+    ref: string,
+    sourceName?: string,
+    onWarn?: SourceWarning,
+    onStatus?: SourceStatus,
+  ): Promise<InstalledAgentRecord>;
   // dry-run: report which source would win without materializing
-  // (powers `@package source where`).
-  where(ref: string): Promise<ResolvedCandidate | undefined>;
+  // (powers `@package source where`). Same sequential walk as resolve().
+  where(
+    ref: string,
+    onWarn?: SourceWarning,
+    onStatus?: SourceStatus,
+  ): Promise<ResolvedCandidate | undefined>;
 }
 ```
 
-**Ordered resolution.** With no explicit `--source`, the registry walks `order()` and the first source whose `find` returns a candidate wins. A `find` that returns `undefined` is just a **non-match**, so the walk continues to the next source. The commitment is narrower and applies only _after_ a match: once a source's `find` returns a candidate, that source's `materialize` must succeed or hard-error - we do **not** silently fall through to the next source on a materialize failure (that keeps failures legible). With an explicit `--source`, a non-match is itself a hard error, since you named the source.
+**Ordered resolution.** With no explicit `--source`, the registry walks `order()` **sequentially** and the first source whose `find` returns a candidate wins. A `find` that returns `undefined` is just a **non-match**, so the walk continues to the next source; once a source matches, later sources are **never probed**. The commitment is narrower and applies only _after_ a match: once a source's `find` returns a candidate, that source's `materialize` must succeed or hard-error - we do **not** silently fall through to the next source on a materialize failure (that keeps failures legible). With an explicit `--source`, a non-match is itself a hard error, since you named the source.
+
+**Status reporting.** The walk takes an optional `onStatus` sink (per-command, like `onWarn`) that it calls with the name of each source as it is probed (`Trying source '<name>'...`, or `Resolving '<ref>' from source '<name>'...` for an explicit `--source`). `@package install` and `@source where` wire it to `displayStatus` so the user sees a live line naming the source currently being tried. Because the walk is sequential, the status line advances one source at a time and stops at the winner.
 
 **Source degrade is a non-match, not a walk failure.** A source that cannot read its own backing store degrades to "no agents" rather than aborting the walk: a `feed` served offline is skipped (§12 Q3), and a `catalog` whose file is corrupt/unreadable - or that holds a malformed entry (an entry with neither a `path` nor a package `name`, §4.2/§12 Q17) - drops the offending content and behaves as a non-match. A source **reports** every degrade it hits (it holds no dedup state); the registry wraps each source so those reports are surfaced on two channels with the dedup scope each channel wants: **once per process** to the server log (a single `console.warn` dedup covering every read path - resolve, where, listAvailable, seeding), and **once per command** through an optional `onWarn` sink the registry threads into `find`/`listAgents` for a specific `resolve`/`where`. `install` collects the per-command reports into `InstallResult.warnings` and `@package install` shows them via `displayWarn`; `@source where` shows them inline. This keeps a broken catalog visible to the user running the command that hit it, and one bad file or entry never hides the rest of the catalog or the other sources.
 
 ```ts
-async resolve(ref, sourceName?) {
+async resolve(ref, sourceName?, onWarn?, onStatus?) {
   if (sourceName) {
     const s = this.get(sourceName) ?? fail(`unknown source '${sourceName}'`);
-    const c = (await s.find(ref)) ?? fail(`'${ref}' not found in '${sourceName}'`);
+    onStatus?.(`Resolving '${ref}' from source '${sourceName}'...`);
+    const c = (await s.find(ref, onWarn)) ?? fail(`'${ref}' not found in '${sourceName}'`);
     return s.materialize(c);
   }
-  // probe the ordered sources; cheap local sources resolve synchronously,
-  // feed probes run against a cached list (see below).
+  // probe the ordered sources sequentially; the first match wins and later
+  // sources are never probed. Cheap local sources resolve instantly; feed
+  // probes run against a cached list (see below).
   const order = this.order();
-  const candidates = await Promise.all(order.map((s) => s.find(ref)));
-  const i = candidates.findIndex((c) => c !== undefined);
-  if (i < 0) fail(`no source could resolve '${ref}'. order: ${order.map(s=>s.name)}`);
-  return order[i].materialize(candidates[i]!);
+  for (const s of order) {
+    onStatus?.(`Trying source '${s.name}'...`);
+    const c = await s.find(ref, onWarn);
+    if (c !== undefined) return s.materialize(c);
+  }
+  fail(`no source could resolve '${ref}'. order: ${order.map(s=>s.name)}`);
 }
 ```
 
 The **order is user-configurable and changeable at runtime** via `@package source order ...` (§5), persisted to instance config. First-match-wins gives the override semantics dev wants: putting `workspace` (or `path`) ahead of `typeagent` makes a local agent shadow the feed automatically.
 
-**Feed probe cost.** A `feed.find` must not run `npm install`. It checks the package against a **locally cached package list** for that feed (refreshed on a **~1h TTL** from the feed's package-list API - see _Feed enumeration_ below), so the common case is a cache hit with no network. **Offline**, the cache is served as-is and the feed is **skipped in the walk** rather than failing the install. Probes across the ordered sources also run **in parallel** (`Promise.all` above), so the slowest source (a cold feed cache) bounds latency rather than the sum. Cheap local sources (`path`, `catalog`) almost always answer first anyway; feeds are typically last in the order.
+**Feed probe cost.** A `feed.find` must not run `npm install`. It checks the package against a **locally cached package list** for that feed (refreshed on a **~1h TTL** from the feed's package-list API - see _Feed enumeration_ below), so the common case is a cache hit with no network. **Offline**, the cache is served as-is and the feed is **skipped in the walk** rather than failing the install. Because the walk is **sequential and stops at the first match**, a feed is only ever probed when every earlier source in the order was a non-match - and cheap local sources (`path`, `catalog`) almost always answer first, so the cold-feed-cache cost is paid only when nothing local resolves the ref. Feeds are typically last in the order for exactly this reason.
 
 **Feed auth.** Both the metadata query and `materialize`'s `npm install` authenticate with a **short-lived bearer token minted by the Azure CLI** - `az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798` (the Azure DevOps resource GUID) - injected into a transient per-install npm auth config scoped to the feed `registry`. No persistent `.npmrc` credentials and no `vsts-npm-auth` / `azureauth` state. The token is cached in memory for its lifetime and re-minted on expiry. If `az` is not installed or not logged in, the install fails fast with an actionable `az login` hint (§5).
 

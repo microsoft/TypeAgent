@@ -70,6 +70,46 @@ describe("InstallSourceRegistry resolution", () => {
         expect(record.source).toBe("b");
     });
 
+    it("probes sources sequentially and stops at the first match", async () => {
+        // "dup" exists in both catalogs; with order [a, b] the walk must match
+        // 'a' and never probe 'b'.
+        const registry = twoCatalogRegistry(["a", "b"]);
+        const probed: string[] = [];
+        const a = registry.get("a")!;
+        const b = registry.get("b")!;
+        const wrapFind = (source: typeof a) => {
+            const original = source.find.bind(source);
+            source.find = (ref, onWarn) => {
+                probed.push(source.name);
+                return original(ref, onWarn);
+            };
+        };
+        wrapFind(a);
+        wrapFind(b);
+        await registry.resolve("dup");
+        expect(probed).toEqual(["a"]);
+    });
+
+    it("reports each probed source to the status sink", async () => {
+        const registry = twoCatalogRegistry(["a", "b"]);
+        const status: string[] = [];
+        // "onlyb" only matches 'b', so both sources are probed in order.
+        await registry.resolve("onlyb", undefined, undefined, (m) =>
+            status.push(m),
+        );
+        expect(status).toEqual([
+            "Trying source 'a'...",
+            "Trying source 'b'...",
+        ]);
+    });
+
+    it("reports the named source to the status sink for an explicit --source", async () => {
+        const registry = twoCatalogRegistry(["a", "b"]);
+        const status: string[] = [];
+        await registry.resolve("dup", "b", undefined, (m) => status.push(m));
+        expect(status).toEqual(["Resolving 'dup' from source 'b'..."]);
+    });
+
     it("explicit --source bypasses the order", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const record = await registry.resolve("dup", "b");

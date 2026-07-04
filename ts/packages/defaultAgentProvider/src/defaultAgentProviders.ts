@@ -14,6 +14,7 @@ import {
 import {
     InstallSourceConfig,
     InstalledAgentRecord,
+    SourceStatus,
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
@@ -421,6 +422,7 @@ export function createDefaultInstalledAgentSource(
             ref: string,
             sourceName: string | undefined,
             issuingHost: AppAgentHost,
+            onStatus?: SourceStatus,
         ): Promise<{ source: string; warnings?: string[] }> {
             if (isBuiltin(name)) {
                 throw new Error(
@@ -436,8 +438,11 @@ export function createDefaultInstalledAgentSource(
                 // limiter to write the record (sequential, not nested). Collect
                 // any non-fatal source degrade warnings raised during resolve.
                 const warningSet = new Set<string>();
-                const resolved = await registry.resolve(ref, sourceName, (m) =>
-                    warningSet.add(m),
+                const resolved = await registry.resolve(
+                    ref,
+                    sourceName,
+                    (m) => warningSet.add(m),
+                    onStatus,
                 );
                 // The source assigns the authoritative dispatcher name.
                 const record: InstalledAgentRecord = { ...resolved, name };

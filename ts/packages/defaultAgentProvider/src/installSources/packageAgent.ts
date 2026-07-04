@@ -26,6 +26,7 @@ import {
     InstalledAgentInfo,
 } from "agent-dispatcher";
 import chalk from "chalk";
+import { SourceStatus } from "./config.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -44,11 +45,14 @@ export interface InstalledAgentSourceApi {
     // Resolve + materialize + write a record, then fan out `addProvider`:
     // issuing session awaited + enabled; siblings best-effort + disabled +
     // notified (design §4, §5). Returns which source won + any warnings.
+    // `onStatus`, when supplied, is called as each source is probed during the
+    // sequential resolution walk so the caller can show a live status line.
     install(
         name: string,
         ref: string,
         sourceName: string | undefined,
         issuingHost: AppAgentHost,
+        onStatus?: SourceStatus,
     ): Promise<{ source: string; warnings?: string[] }>;
     // Drop the record, then fan out `removeProvider` (issuing awaited; siblings
     // best-effort + notified).
@@ -195,12 +199,14 @@ class InstallCommandHandler implements CommandHandler {
         // The source resolves + writes the record + fans out to every connected
         // session (issuing awaited + enabled; siblings best-effort + disabled +
         // notified — design §4, §5). Errors registering into THIS session
-        // surface here to the user.
+        // surface here to the user. The status callback reports which source is
+        // being probed as the sequential resolution walk advances.
         const { source: resolvedSource, warnings } = await source.install(
             name,
             ref,
             sourceName,
             appAgentHost,
+            (message) => displayStatus(message, context),
         );
         // Surface any non-fatal source degrade warnings once, for this command.
         for (const warning of warnings ?? []) {
