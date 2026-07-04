@@ -8,7 +8,12 @@ export * as bing from "./bing.js";
 export * from "./restClient.js";
 export * from "./auth.js";
 export * from "./tokenCounter.js";
-export { getCopilotClient } from "./copilotModels.js";
+export {
+    getCopilotClient,
+    warmupCopilotClient,
+    warmupCopilotFromConfig,
+    type CopilotClientOptions,
+} from "./copilotModels.js";
 export {
     copilotApiSettingsFromConfig,
     type CopilotApiSettings,

@@ -11,6 +11,7 @@ export type CopilotApiSettings = CommonApiSettings & {
     modelType: ModelType.Chat;
     modelName: string;
     cliPath?: string;
+    cliUrl?: string;
     reasoningEffort?: CopilotReasoningEffort;
     disableInfiniteSessions: boolean;
 };
@@ -29,6 +30,7 @@ export function copilotApiSettingsFromConfig(
         endpoint: "copilot-cli",
         modelName: resolvedModel,
         ...(copilot?.cliPath !== undefined ? { cliPath: copilot.cliPath } : {}),
+        ...(copilot?.cliUrl !== undefined ? { cliUrl: copilot.cliUrl } : {}),
         ...(copilot?.reasoningEffort !== undefined
             ? { reasoningEffort: copilot.reasoningEffort }
             : {}),

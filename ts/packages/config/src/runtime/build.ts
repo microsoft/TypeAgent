@@ -810,6 +810,7 @@ function buildModelProvider(
 function buildCopilot(flat: Map<string, string>) {
     const defaultModel = popString(flat, "COPILOT_DEFAULT_MODEL");
     const cliPath = popString(flat, "COPILOT_CLI_PATH");
+    const cliUrl = popString(flat, "COPILOT_CLI_URL");
     const reasoningEffortRaw = popString(flat, "COPILOT_REASONING_EFFORT");
     const disableInfiniteRaw = popString(
         flat,
@@ -823,6 +824,7 @@ function buildCopilot(flat: Map<string, string>) {
     if (
         defaultModel === undefined &&
         cliPath === undefined &&
+        cliUrl === undefined &&
         reasoningEffortRaw === undefined &&
         disableInfiniteRaw === undefined &&
         maxConcurrency === undefined &&
@@ -853,6 +855,7 @@ function buildCopilot(flat: Map<string, string>) {
     return {
         ...(defaultModel !== undefined ? { defaultModel } : {}),
         ...(cliPath !== undefined ? { cliPath } : {}),
+        ...(cliUrl !== undefined ? { cliUrl } : {}),
         ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
         ...(disableInfiniteSessions !== undefined
             ? { disableInfiniteSessions }

@@ -22,6 +22,17 @@ import { setActiveModelProvider } from "./providerMode.js";
 
 let cached: Config | undefined;
 
+// When the active provider is Copilot, eagerly start the CLI client so the
+// first user-visible request doesn't pay the one-time spawn/startup cost.
+// Dynamic import avoids a static import cycle (copilotModels -> copilotSettings
+// -> runtimeConfig); fire-and-forget so host startup is never blocked.
+function maybePrewarmCopilot(config: Config): void {
+    if (config.modelProvider !== "copilot") return;
+    void import("./copilotModels.js")
+        .then((m) => m.warmupCopilotFromConfig())
+        .catch(() => {});
+}
+
 /**
  * Replace the cached typed Config. Hosts should call this after they
  * finish populating `process.env` and before any aiclient operation.
@@ -31,6 +42,7 @@ export function setRuntimeConfig(config: Config): void {
     if (config.modelProvider !== undefined) {
         setActiveModelProvider(config.modelProvider);
     }
+    maybePrewarmCopilot(config);
 }
 
 /**
@@ -46,6 +58,7 @@ export function initRuntimeConfigFromProcessEnv(): Config {
     if (cached.modelProvider !== undefined) {
         setActiveModelProvider(cached.modelProvider);
     }
+    maybePrewarmCopilot(cached);
     return cached;
 }
 
