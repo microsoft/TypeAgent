@@ -1,7 +1,7 @@
 # Connected AppAgent Provider — Design Doc
 
 > Status: **Implemented** (Milestones 1–5; see
-> [EXECUTION_PLAN.md](./EXECUTION_PLAN.md), [DECISIONS_LOG.md](./DECISIONS_LOG.md))
+> [EXECUTION_PLAN.md](./EXECUTION_PLAN.md))
 > Scope: `ts/packages/dispatcher` (a new `AppAgentSource` connection interface
 > whose `connect()` vends shared `AppAgentProvider`s, the dispatcher-side
 > `AppAgentHost` callback that registers/unregisters live agents, removal of the
@@ -538,7 +538,9 @@ hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
   when empty -> `absent` (name free), then run any `then`.
 - **update (disruptive):** materialize the new version first (§4.7). Then
   `active(P1) -> removing -> (drained) -> active(P2)` with the add as `then`. No
-  two versions ever coexist.
+  two versions ever coexist — **required** because an agent's persisted storage
+  is keyed by agent name and cannot be shared between versions, so two versions
+  loaded at once would collide on that storage.
 - **name reuse during `removing`:** a new user `@package install` **or**
   `@package update` on a name that is still `removing` is **rejected** with a
   clear "still being removed, retry shortly" error. `then` is used only for the

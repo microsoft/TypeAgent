@@ -196,6 +196,36 @@ The deferred enable-state concern surfaced as a real regression: the M5 policy
 persisted) let any later `setAppAgentStates` recompute a just-installed agent to
 disabled. Resolved by the Model B redesign — honor the manifest default, persist
 state, and reconcile the known-agent set on load with add/removed notifications.
-See DECISIONS_LOG.md "Post-M5 — Enable-state redesign". Tests updated/added
-(appAgentHost reconciliation + wording; install-sources fan-out no longer asserts
+See DESIGN.md §5 ("Enable-state policy across sessions (Model B)"). Tests
+updated/added (appAgentHost reconciliation + wording; install-sources fan-out no
+longer asserts
 disabled-by-default). No open items.
+
+## Open — request-slip in the update absence window (to revisit)
+
+- **Milestone / gate:** post-implementation design review
+- **Kind:** Design gap (correctness/UX), not yet addressed
+- **Summary:** `@update` is a disruptive drain-then-add (global no-coexistence,
+  §7.2): the old provider is removed across **every** session before the new one
+  is added to **any**. Between a session's remove and its re-add the agent name is
+  fully unregistered from that session's `AppAgentManager`, and the session's
+  `commandLock` is free, so a user request can **slip into the gap**: a request
+  targeting the name gets an "unknown agent" miss or — worse — is **misrouted** to
+  a different agent. Siblings are the worst case: their remove applies at their own
+  next idle and the re-add is deferred until the **global** drain finishes, so the
+  window is bounded by the *slowest* session's activity, not by the update work.
+  The load tombstone (`withTombstone`) does **not** cover this — it guards the
+  draining instant / a session still holding the instance, but once `removeProvider`
+  completes the name is gone from the manager and dispatch never reaches it.
+- **Why not addressed now:** No-coexistence is **required** (an agent's persisted
+  storage is keyed by agent name and cannot be shared between two versions, so two
+  versions loaded at once would collide), which rules out a per-session atomic
+  swap. The remaining fix is to make **dispatch to a `removing` name wait** for the
+  re-add instead of missing (a blocking, dispatch-time analog of the tombstone),
+  which needs a cross-layer hook so the dispatcher knows a name is transiently
+  swapping, and bounds the user's wait by the same global-drain latency. Deferred
+  as a follow-up; for now the behavior is documented in the code comments
+  (`packageAgent.ts` / `defaultAgentProviders.ts`) and the issuing user sees a
+  "briefly reloads in each session" message.
+- **Follow-up:** design + implement blocking dispatch (or an equivalent) for a
+  name in the `removing` state.

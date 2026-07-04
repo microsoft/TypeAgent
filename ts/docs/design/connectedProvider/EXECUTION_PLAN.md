@@ -43,8 +43,9 @@ Milestone 5 is cleanup/docs. A final branch-wide gate closes the branch.
   out explicitly.
 - Estimated risk: 🟢 low / 🟡 medium / 🔴 high.
 - **Working logs (update as you go):**
-  - [DECISIONS_LOG.md](./DECISIONS_LOG.md) — every decision **not specified in** or **changed from** the
-    design. Append the moment you make the call. _(Create at the start of Milestone 1.)_
+  - _DECISIONS_LOG.md_ — was kept during development for every decision **not specified in** or
+    **changed from** the design; after implementation each entry was folded into the design (or
+    superseded/resolved) and the file was removed. DESIGN.md is the design of record.
   - [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) — every gate **review finding** or **test gap** you
     deliberately **did not address**, with a rationale. _(Create at the start of Milestone 1.)_
 
@@ -106,8 +107,7 @@ suite green _before_ starting the gate so the subagents review a working tree.
 4. **Test-gap round 2 — re-audit after fills.** A new subagent re-checks coverage against the now-larger
    test suite and reports remaining gaps. Fill them (or log them).
 5. **Green gate.** `npm run build`, lint, and the full test suite pass; record any durable lessons in repo
-   memory. Confirm [DECISIONS_LOG.md](./DECISIONS_LOG.md) and
-   [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) are up to date for this milestone.
+   memory. Confirm [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) is up to date for this milestone.
 6. **Commit.** Make a single milestone commit with a descriptive message (see _Commit convention_ below);
    include the milestone's working-log updates in the commit. Only then start the next milestone.
 

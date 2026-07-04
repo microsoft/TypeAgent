@@ -577,11 +577,14 @@ export function createDefaultInstalledAgentSource(
                 });
                 // Disruptive update (design §7.2): drain the OLD version across
                 // every session first, then (post-drain) add the NEW one — so no
-                // two versions of the name ever coexist. The freshly
-                // materialized provider is added as the drain's `then`. If there
-                // is no active entry to drain, add directly. The drain passes
-                // dropConfig=false so a version bump preserves each session's
-                // per-session enable preference (design §5, Model B).
+                // two versions of the name ever coexist. No-coexistence is
+                // REQUIRED because an agent's persisted storage is keyed by agent
+                // name and cannot be shared, so two versions loaded at once would
+                // collide on that storage. The freshly materialized provider is
+                // added as the drain's `then`. If there is no active entry to
+                // drain, add directly. The drain passes dropConfig=false so a
+                // version bump preserves each session's per-session enable
+                // preference (design §5, Model B).
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
                 const addNew = () => {

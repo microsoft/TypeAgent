@@ -38,15 +38,19 @@ const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
  * resolution, AND the cross-session fan-out (design §4) live behind this so the
  * handlers never touch the dispatcher's internals. Each mutating op takes the
  * `issuingHost` (the session that ran the command, reached off the package
- * agent's own `agentContext`) so the source can register/enable it awaited while
- * fanning out to siblings best-effort (design §4, §5).
+ * agent's own `agentContext`) so the source can register/tear down the agent in
+ * the issuing session (awaited) while fanning out to siblings best-effort
+ * (design §4, §5).
  */
 export interface InstalledAgentSourceApi {
-    // Resolve + materialize + write a record, then fan out `addProvider`:
-    // issuing session awaited + enabled; siblings best-effort + disabled +
-    // notified (design §4, §5). Returns which source won + any warnings.
-    // `onStatus`, when supplied, is called as each source is probed during the
-    // sequential resolution walk so the caller can show a live status line.
+    // Resolve + materialize + write a record, then fan out `addProvider` to
+    // every connected session: the issuing session is awaited (errors surface),
+    // siblings are best-effort + notified (design §4, §5). Each session derives
+    // the agent's enabled state from its own config with the manifest default
+    // as fallback (Model B, §5) - no session is force-enabled or force-disabled.
+    // Returns which source won + any warnings. `onStatus`, when supplied, is
+    // called as each source is probed during the sequential resolution walk so
+    // the caller can show a live status line.
     install(
         name: string,
         ref: string,
@@ -57,8 +61,14 @@ export interface InstalledAgentSourceApi {
     // Drop the record, then fan out `removeProvider` (issuing awaited; siblings
     // best-effort + notified).
     uninstall(name: string, issuingHost: AppAgentHost): Promise<void>;
-    // Re-materialize against the recorded source, then fan out remove-then-add
-    // per client (issuing awaited; siblings best-effort + notified).
+    // Re-materialize against the recorded source, then do a DISRUPTIVE
+    // drain-then-add (global no-coexistence, §7.2): the old version is removed
+    // across EVERY session before the new one is added to ANY, so two versions
+    // of the name are never loaded at once (required because an agent's
+    // persisted storage is keyed by agent name and cannot be shared between
+    // versions). The issuing session is awaited for the remove + record commit;
+    // the re-add lands afterwards (async), so the agent is briefly absent in
+    // every session mid-update.
     update(
         name: string,
         range: string | undefined,
@@ -197,10 +207,11 @@ class InstallCommandHandler implements CommandHandler {
 
         displayStatus(`Resolving '${ref}'...`, context);
         // The source resolves + writes the record + fans out to every connected
-        // session (issuing awaited + enabled; siblings best-effort + disabled +
-        // notified — design §4, §5). Errors registering into THIS session
-        // surface here to the user. The status callback reports which source is
-        // being probed as the sequential resolution walk advances.
+        // session: the issuing session is awaited (errors registering into THIS
+        // session surface here to the user), siblings are best-effort + notified
+        // (design §4, §5). Each session honors the agent's manifest default
+        // (Model B, §5). The status callback reports which source is being
+        // probed as the sequential resolution walk advances.
         const { source: resolvedSource, warnings } = await source.install(
             name,
             ref,
@@ -307,10 +318,15 @@ class UpdateCommandHandler implements CommandHandler {
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op (design §4.7,
-        // §12 Q13). It then fans out remove-then-add per client (issuing
-        // awaited; siblings best-effort + notified — design §4).
+        // §12 Q13). It then does a disruptive drain-then-add (global
+        // no-coexistence, §7.2): the old version is removed across every session
+        // before the new one is added anywhere, so the agent is briefly absent
+        // in every session and the re-add lands asynchronously after the drain.
         await source.update(name, range, appAgentHost);
-        displayResult(`Agent '${name}' updated.`, context);
+        displayResult(
+            `Agent '${name}' updated; it briefly reloads in each session.`,
+            context,
+        );
     }
 
     public async getCompletion(
