@@ -350,6 +350,11 @@ session is just "this agent's own `AppAgentHost`."
 > `CommandHandlerContext` never crosses the host boundary — not as a real
 > object, not as a castable `unknown`.
 
+The package agent registers under the name **`package`** and its manifest is
+**command-only** (no schema): it declares `commandDefaultEnabled: true` (normally
+enabled) but is deliberately **not** in `alwaysEnabledAgents`, so — unlike the
+`system` agent — it can be toggled off via `@config`.
+
 ## 4. Install / uninstall / update flow
 
 ```mermaid
@@ -506,9 +511,12 @@ entry; the dispatcher applies changes through an idle-gated queue.
 
 `addProvider` / `removeProvider` enqueue and apply at the session's next idle
 (between user commands), in FIFO order (so `update`'s remove-then-add lands in
-order). Each returns a Promise that resolves when **applied** - the ack. On
-`dispose()`, queued ops are abandoned and pending removals auto-ack (a gone
-session has removed everything).
+order). "Next idle" reuses the dispatcher's existing single-slot command limiter
+(`context.commandLock`, a `createLimiter(1)`): each op is enqueued onto that same
+limiter, so it runs only when the slot is free (between user commands) and never
+interleaves with an in-flight command - no second idle-detector. Each returns a
+Promise that resolves when **applied** - the ack. On `dispose()`, queued ops are
+abandoned and pending removals auto-ack (a gone session has removed everything).
 
 ### 7.2 Source side - per-name `DynamicAgentEntry`
 

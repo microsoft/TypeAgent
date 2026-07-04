@@ -143,14 +143,22 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions;
 /**
  * Build the registry-backed {@link AppAgentSource} for the default host (design
  * §3.2, §3.3). Thin wrapper over {@link createDefaultInstalledAgentSource} that
- * narrows the return to the dispatcher-facing `connect()` view, so a host can
- * never drive an install through it.
+ * **strips the test-only `testApi`** via destructuring, returning a runtime
+ * object with only `connect()` — so a host can never reach the write surface,
+ * not even by casting.
  */
 export function getDefaultAppAgentSource(
     instanceDir: string,
     options?: DefaultAppAgentSourceOptions,
 ): AppAgentSource {
-    return createDefaultInstalledAgentSource(instanceDir, options);
+    // Object rest drops `testApi` from the runtime object (not just the type),
+    // so the write surface is unreachable through the host-facing handle.
+    const { testApi, ...source } = createDefaultInstalledAgentSource(
+        instanceDir,
+        options,
+    );
+    void testApi;
+    return source;
 }
 
 /**
@@ -175,15 +183,17 @@ type DynamicAgentEntry =
 
 /**
  * The concrete installed-agent source (design §3.2). Besides the dispatcher-
- * facing `connect()`, it also carries the write/command surface (`api`) the
- * host-owned `@package` agent uses. The dispatcher is handed only the narrow
- * `AppAgentSource` view (see {@link getDefaultAppAgentSource}); `api` is exposed
- * for the host wiring and tests.
+ * facing `connect()`, it also carries the write/command surface (`testApi`).
+ * The `@package` agent reaches that surface through the per-session closure set
+ * up in `connect()`, so the dispatcher is handed only the narrow
+ * `AppAgentSource` view (see {@link getDefaultAppAgentSource}); `testApi` is a
+ * direct handle for unit tests to drive install/uninstall/update without the
+ * command layer.
  */
 export function createDefaultInstalledAgentSource(
     instanceDir: string,
     options?: DefaultAppAgentSourceOptions,
-): AppAgentSource & { readonly api: InstalledAgentSourceApi } {
+): AppAgentSource & { readonly testApi: InstalledAgentSourceApi } {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
     // The installer always has a concrete instanceDir, so installDir is
@@ -652,10 +662,11 @@ export function createDefaultInstalledAgentSource(
 
     // The dispatcher-facing AppAgentSource surface (design §3.2): connect() is
     // the only view the dispatcher gets, so it can never drive an install. The
-    // concrete object also carries `api` (the write/command surface) for the
-    // host-owned `@package` agent and tests.
+    // concrete object also carries `testApi` (the write/command surface) as a
+    // direct handle for unit tests; the `@package` agent gets the same surface
+    // through the per-session closure below, not via `testApi`.
     return {
-        api: source,
+        testApi: source,
         connect(host: AppAgentHost): AppAgentConnection {
             clients.add(host);
             // The package agent is per-connection (its agentContext carries this
