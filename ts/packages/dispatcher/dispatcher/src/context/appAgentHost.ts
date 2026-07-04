@@ -6,12 +6,13 @@ import registerDebug from "debug";
 import {
     AppAgentHost,
     AppAgentProvider,
+    ReplaceProviderOptions,
 } from "../agentProvider/agentProvider.js";
 
 const debug = registerDebug("typeagent:dispatcher:agentHost");
 
 type QueuedOp = {
-    readonly kind: "add" | "remove";
+    readonly kind: "add" | "remove" | "replace";
     readonly run: () => Promise<void>;
     resolve: () => void;
     reject: (reason?: unknown) => void;
@@ -103,13 +104,71 @@ export class AppAgentHostApplicator implements AppAgentHost {
         return this.enqueue("remove", run);
     }
 
+    public replaceProvider(
+        oldProvider: AppAgentProvider,
+        newProviderThunk: (() => AppAgentProvider) | undefined,
+        options: ReplaceProviderOptions,
+    ): Promise<void> {
+        // Assert the single-agent invariant on the old provider at the boundary
+        // (design §3.1); the new provider is asserted below when it is built.
+        const oldNames = oldProvider.getAppAgentNames();
+        if (oldNames.length !== 1) {
+            return Promise.reject(
+                new Error(
+                    `AppAgentHost.replaceProvider requires a single-agent old provider; got ${oldNames.length} name(s): [${oldNames.join(", ")}]`,
+                ),
+            );
+        }
+        const notify = options.notify ?? false;
+        // Default to preserving the enable preference (Model B): a bare
+        // `replaceProvider` is a swap, not a removal, so unlike `removeProvider`
+        // (which defaults dropConfig=true for uninstall) it keeps config by
+        // default. The barrier always passes `dropConfig` explicitly regardless.
+        const dropConfig = options.dropConfig ?? false;
+        // The whole teardown → quiesce → wait → (add) sequence is ONE queued op,
+        // so `pump` holds the session's command lock across all of it: no user
+        // command interleaves between the remove and the add (design §5.7,
+        // closes the update request-slip of §5). Teardown/startup are leaf ops —
+        // they never reacquire the command lock or dispatch a command.
+        const run = async () => {
+            // 1. Teardown leg: unload `old` + drop routing (decrement the shared
+            //    refcount), exactly like a remove.
+            await this.apply.applyRemove(oldProvider, notify, dropConfig);
+            // 2. Signal this host has quiesced — fills its barrier slot.
+            options.onQuiesced();
+            // 3. Park (still holding the command lock) until the source has every
+            //    host's quiesce ACK and has verified the shared old refcount is 0.
+            await options.whenReady;
+            // The session may have been torn down while parked (dispose leaves a
+            // running op to finish, §6): skip the startup leg rather than add the
+            // new version into a closing session. The source already dropped this
+            // host from the barrier on disconnect, so this is a clean no-op.
+            if (this.closed) {
+                return;
+            }
+            // 4. Startup leg (update only): build + add the new version. Omitted
+            //    for uninstall (`old → ∅`).
+            if (newProviderThunk !== undefined) {
+                const newProvider = newProviderThunk();
+                const newNames = newProvider.getAppAgentNames();
+                if (newNames.length !== 1) {
+                    throw new Error(
+                        `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
+                    );
+                }
+                await this.apply.applyAdd(newProvider, notify);
+            }
+        };
+        return this.enqueue("replace", run);
+    }
+
     /** True once {@link dispose} has been called. */
     public get isClosed(): boolean {
         return this.closed;
     }
 
     private enqueue(
-        kind: "add" | "remove",
+        kind: "add" | "remove" | "replace",
         run: () => Promise<void>,
     ): Promise<void> {
         if (this.closed) {

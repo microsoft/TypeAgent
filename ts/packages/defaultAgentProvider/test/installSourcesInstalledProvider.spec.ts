@@ -19,12 +19,42 @@ import { InstalledAgentRecord } from "../src/installSources/config.js";
 import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
 
+// Compose a faithful `replaceProvider` for a test host from its own add/remove,
+// modelling the applicator's single-lock section (design §5.7): remove the old
+// version, quiesce (fill the barrier slot), await the shared `whenReady`, then
+// add the new version (update) or settle (uninstall). This preserves both the
+// recorded remove-then-add op order AND the barrier gating (a host that blocks
+// its removeProvider keeps the barrier pending until released).
+function withReplace(
+    host: Pick<AppAgentHost, "addProvider" | "removeProvider">,
+): AppAgentHost {
+    return {
+        addProvider: host.addProvider,
+        removeProvider: host.removeProvider,
+        replaceProvider: async (oldProvider, newProviderThunk, options) => {
+            await host.removeProvider(
+                oldProvider,
+                options.notify ?? false,
+                options.dropConfig ?? false,
+            );
+            options.onQuiesced();
+            await options.whenReady;
+            if (newProviderThunk !== undefined) {
+                await host.addProvider(
+                    newProviderThunk(),
+                    options.notify ?? false,
+                );
+            }
+        },
+    };
+}
+
 // A no-op issuing host used by tests that only exercise the record store or the
 // vended provider set (fan-out behavior is covered by its own describe).
-const noopHost: AppAgentHost = {
+const noopHost: AppAgentHost = withReplace({
     addProvider: async () => {},
     removeProvider: async () => {},
-};
+});
 
 function tmpDir(prefix: string): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -254,10 +284,10 @@ describe("getDefaultAppAgentSource", () => {
 
         // A fresh connection sees the freshly installed agent (the shared
         // per-agent provider is added to the vended set on install).
-        const fakeHost = {
+        const fakeHost = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
+        });
         const connection = built.connect(fakeHost);
         const names = new Set(
             connection.providers.flatMap((p) => p.getAppAgentNames()),
@@ -276,10 +306,10 @@ describe("getDefaultAppAgentSource", () => {
     it("a later connect() sees an agent installed after an earlier connect", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
-        const fakeHost = {
+        const fakeHost = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
+        });
         // First connection: nothing installed yet.
         const first = built.connect(fakeHost);
         expect(
@@ -314,14 +344,14 @@ describe("getDefaultAppAgentSource", () => {
             undefined,
             noopHost,
         );
-        const hostA = {
+        const hostA = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
-        const hostB = {
+        });
+        const hostB = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
+        });
         const connA = built.connect(hostA);
         connA.dispose();
         expect(() => connA.dispose()).not.toThrow();
@@ -346,10 +376,10 @@ describe("getDefaultAppAgentSource", () => {
             noopHost,
         );
         await built.testApi.uninstall("temp", noopHost);
-        const host = {
+        const host = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
+        });
         const conn = built.connect(host);
         expect(
             new Set(conn.providers.flatMap((p) => p.getAppAgentNames())).has(
@@ -372,7 +402,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         const calls: HostCall[] = [];
         return {
             calls,
-            host: {
+            host: withReplace({
                 addProvider: async (p, notify) => {
                     onAdd?.();
                     calls.push({
@@ -388,7 +418,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
                         notify: notify ?? false,
                     });
                 },
-            },
+            }),
         };
     }
 
@@ -426,12 +456,12 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
         const badSibling = {
-            host: {
+            host: withReplace({
                 addProvider: async () => {
                     throw new Error("sibling boom");
                 },
                 removeProvider: async () => {},
-            } as AppAgentHost,
+            }),
         };
         const goodSibling = recordingHost();
         built.connect(issuing.host);
@@ -483,6 +513,42 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         expect(sibling.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
         ]);
+    });
+
+    it("threads dropConfig=true for uninstall and false for update to every remove leg (Model B)", async () => {
+        // Capture the dropConfig each remove leg receives (the shared
+        // recordingHost drops the third arg; this dedicated host keeps it).
+        const removeCalls: { dropConfig: boolean }[] = [];
+        const rec = withReplace({
+            addProvider: async () => {},
+            removeProvider: async (_p, _notify, dropConfig) => {
+                removeCalls.push({ dropConfig: dropConfig ?? false });
+            },
+        });
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        built.connect(rec);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            rec,
+        );
+        await flush();
+
+        // Update is a version bump: it must PRESERVE the enable preference
+        // (dropConfig=false) across the remove leg of its swap.
+        removeCalls.length = 0;
+        await built.testApi.update("foo", undefined, rec);
+        await flush();
+        expect(removeCalls).toEqual([{ dropConfig: false }]);
+
+        // Uninstall must CLEAR the enable preference (dropConfig=true) so a fresh
+        // reinstall starts from the manifest default.
+        removeCalls.length = 0;
+        await built.testApi.uninstall("foo", rec);
+        await flush();
+        expect(removeCalls).toEqual([{ dropConfig: true }]);
     });
 
     it("does not fan out to a disposed (deregistered) session", async () => {
@@ -566,10 +632,12 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
             undefined,
             issuing.host,
         );
-        const conn = built.connect({
-            addProvider: async () => {},
-            removeProvider: async () => {},
-        });
+        const conn = built.connect(
+            withReplace({
+                addProvider: async () => {},
+                removeProvider: async () => {},
+            }),
+        );
         const provider = conn.providers.find((p) =>
             p.getAppAgentNames().includes("foo"),
         )!;
@@ -594,7 +662,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         // apply lands only once the command releases it.
         const commandLock = createLimiter(1);
         const applied: HostCall[] = [];
-        const issuing: AppAgentHost = {
+        const issuing: AppAgentHost = withReplace({
             addProvider: (p, notify) =>
                 commandLock(async () => {
                     applied.push({
@@ -611,7 +679,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
                         notify: notify ?? false,
                     });
                 }),
-        };
+        });
 
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
@@ -671,10 +739,10 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 describe("AppAgentSource lifecycle tracker (design §7)", () => {
     // An issuing host whose ops resolve immediately.
     function fastHost(): AppAgentHost {
-        return {
+        return withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
-        };
+        });
     }
 
     // A sibling host whose removeProvider blocks until released, so a drain
@@ -686,12 +754,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         });
         return {
             release,
-            host: {
+            host: withReplace({
                 addProvider: async () => {},
                 removeProvider: async () => {
                     await gate;
                 },
-            } as AppAgentHost,
+            }),
         };
     }
 
@@ -891,15 +959,15 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHostForLifecycle();
-        // A sibling whose removeProvider always rejects: its `.finally(drainDrop)`
-        // must still drop it from `pending` so the drain completes and the
-        // post-drain re-add (§7.2) fires — exactly once, never zero or twice.
-        const throwingSibling: AppAgentHost = {
+        // A sibling whose removeProvider always rejects: its barrier slot must
+        // still be filled (the per-host catch → quiesce, design §5.7) so the
+        // barrier completes and the re-add fires — exactly once, never twice.
+        const throwingSibling: AppAgentHost = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
             },
-        };
+        });
         built.connect(issuing.host);
         built.connect(throwingSibling);
         await built.testApi.install(
@@ -923,19 +991,111 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         );
     });
 
+    it("update re-adds exactly once even when a sibling throws in its ADD leg (post-quiesce)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = recordingHostForLifecycle();
+        // A sibling whose REMOVE succeeds (it quiesces, filling its barrier slot)
+        // but whose ADD leg then throws. The source's per-host catch calls
+        // `quiesce` a SECOND time; the barrier is already settled, so the double
+        // quiesce must be a harmless no-op (no double onComplete / re-add).
+        const throwingAddSibling: AppAgentHost = withReplace({
+            addProvider: async () => {
+                throw new Error("sibling add boom");
+            },
+            removeProvider: async () => {},
+        });
+        built.connect(issuing.host);
+        built.connect(throwingAddSibling);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing.host,
+        );
+        await flush();
+        issuing.calls.length = 0;
+
+        await built.testApi.update("foo", undefined, issuing.host);
+        await flush();
+
+        // The post-quiesce add failure did not corrupt the barrier: the issuing
+        // session swapped exactly once and the name is active + listed.
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+    });
+
+    it("update adds v2 on every session only after the LAST session quiesces (staggered)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const fast = recordingHostForLifecycle();
+        const gated = gatedRecordingHost();
+        built.connect(fast.host);
+        built.connect(gated.host);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            fast.host,
+        );
+        await flush();
+        fast.calls.length = 0;
+        gated.calls.length = 0;
+
+        const updating = built.testApi.update("foo", undefined, fast.host);
+        await flush();
+        // The fast session removed v1 and quiesced, but the barrier has not
+        // completed (the gated session has not quiesced), so NEITHER session has
+        // added v2 yet — no coexistence, no partial swap.
+        expect(fast.calls).toEqual([{ op: "remove" }]);
+        expect(gated.calls).toEqual([{ op: "remove" }]);
+
+        gated.release();
+        await updating;
+        await flush();
+        // Once the last session quiesces, v2 is added on BOTH sessions.
+        expect(fast.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(gated.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
     // A recording host that only tracks the op kind (for ordering assertions).
     function recordingHostForLifecycle() {
         const calls: { op: "add" | "remove" }[] = [];
         return {
             calls,
-            host: {
+            host: withReplace({
                 addProvider: async () => {
                     calls.push({ op: "add" });
                 },
                 removeProvider: async () => {
                     calls.push({ op: "remove" });
                 },
-            } as AppAgentHost,
+            }),
+        };
+    }
+
+    // A recording host whose removeProvider records then BLOCKS until released,
+    // so its barrier slot stays pending (it is the "last to quiesce").
+    function gatedRecordingHost() {
+        let release!: () => void;
+        const gate = new Promise<void>((res) => {
+            release = res;
+        });
+        const calls: { op: "add" | "remove" }[] = [];
+        return {
+            release,
+            calls,
+            host: withReplace({
+                addProvider: async () => {
+                    calls.push({ op: "add" });
+                },
+                removeProvider: async () => {
+                    calls.push({ op: "remove" });
+                    await gate;
+                },
+            }),
         };
     }
 
@@ -969,12 +1129,12 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = fastHost();
-        const throwingSibling: AppAgentHost = {
+        const throwingSibling: AppAgentHost = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
             },
-        };
+        });
         built.connect(issuing);
         built.connect(throwingSibling);
         await installFoo(built, issuing);
@@ -1001,10 +1161,10 @@ describe("installed agent source api (install/uninstall/update)", () => {
     // A no-op issuing host: the record-store logic is independent of the
     // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /
     // enable / notification behavior is covered by the "fan-out" describe below.
-    const host: AppAgentHost = {
+    const host: AppAgentHost = withReplace({
         addProvider: async () => {},
         removeProvider: async () => {},
-    };
+    });
 
     it("install resolves via the path source and persists the record with the requested name", async () => {
         const instanceDir = pathOnlyInstanceDir();

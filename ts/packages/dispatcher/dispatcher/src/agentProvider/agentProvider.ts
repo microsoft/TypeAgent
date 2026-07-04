@@ -19,6 +19,16 @@ export interface AppAgentProvider {
     // Only these agents should show ⏳ in the UI. If omitted, no agents are
     // treated as loading.
     getLoadingAgentNames?(): string[];
+    // Optional: the current load refcount for an agent (design §5.6) — how many
+    // holders have `loadAppAgent`-ed it without a matching `unloadAppAgent`. The
+    // installed-agent source's coordinated teardown/swap reads this to VERIFY a
+    // torn-down version's shared process is fully released (count 0) before it
+    // starts the new version or frees the name, rather than inferring it from
+    // teardown ACKs. Providers that do not refcount omit it (treated as 0).
+    getRefCount?(appAgentName: string): number;
+    // Optional companion to {@link getRefCount}: whether the agent currently has
+    // a loaded (refcounted) instance. Omitted by providers that do not refcount.
+    isLoaded?(appAgentName: string): boolean;
 }
 
 /**
@@ -76,6 +86,68 @@ export interface AppAgentHost {
         notify?: boolean,
         dropConfig?: boolean,
     ): Promise<void>;
+
+    /**
+     * Coordinated teardown/swap of an installed agent as ONE command-lock-held
+     * critical section (design §5.1, §5.7) — the primitive both `@update` and
+     * `@uninstall` fan out through, replacing a separate remove-then-add. On this
+     * dispatcher it runs, under a SINGLE command-lock acquisition (no request can
+     * interleave, closing the update request-slip of §5):
+     *
+     *   1. remove `oldProvider` (unload its agent — decrement the SHARED
+     *      refcount — and drop its routing artifacts), exactly like
+     *      {@link removeProvider};
+     *   2. call `onQuiesced()` to fill this host's slot in the source's barrier;
+     *   3. `await whenReady` — park (still holding the lock) until the source has
+     *      every host's quiesce ACK AND has VERIFIED the shared old refcount is 0
+     *      (design §5.6), so the old version is confirmed terminated everywhere
+     *      before anything new starts;
+     *   4. if `newProviderThunk` is given (an `@update`), build + add the new
+     *      version, exactly like {@link addProvider}. OMIT the thunk for an
+     *      `@uninstall` (`old → ∅`): the same section with no add.
+     *
+     * No two versions of the name ever coexist, and no session observes the name
+     * absent across the swap. **Leaf-op invariant (§5.7):** the teardown and
+     * startup legs run under the held command lock and must be leaf ops — process
+     * teardown/launch only, never dispatching a command or reacquiring the lock.
+     *
+     * `notify`/`dropConfig` are forwarded to the remove/add legs exactly as for
+     * {@link removeProvider}/{@link addProvider} (an update passes
+     * `dropConfig=false` to preserve the enable preference across the bump; an
+     * uninstall passes `true`). On {@link dispose} mid-op the host is dropped
+     * from the barrier and the op auto-acks (design §7.3).
+     */
+    replaceProvider(
+        oldProvider: AppAgentProvider,
+        newProviderThunk: (() => AppAgentProvider) | undefined,
+        options: ReplaceProviderOptions,
+    ): Promise<void>;
+}
+
+/**
+ * The source-coordinated barrier hooks passed to {@link AppAgentHost.replaceProvider}
+ * (design §5.6, §5.7).
+ */
+export interface ReplaceProviderOptions {
+    /**
+     * Called by the host once it has torn down `oldProvider` (its leg of the
+     * teardown is done) — fills this host's slot in the source's barrier.
+     */
+    onQuiesced: () => void;
+    /**
+     * Resolved by the SOURCE once every host has quiesced AND verify-0 passes
+     * (the shared old refcount is confirmed 0, design §5.6). Each host parks on
+     * it — under its held command lock — before starting the new version / being
+     * released, so the old version is confirmed gone everywhere first.
+     */
+    whenReady: Promise<void>;
+    /** Forwarded to the remove/add legs (sibling fan-out message, design §5). */
+    notify?: boolean;
+    /**
+     * Forwarded to the remove leg (design §5, Model B): `true` for an uninstall
+     * (clear the enable preference), `false` for an update (preserve it).
+     */
+    dropConfig?: boolean;
 }
 
 /**

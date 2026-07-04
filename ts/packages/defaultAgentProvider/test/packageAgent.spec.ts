@@ -14,6 +14,7 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 const noopHost: AppAgentHost = {
     addProvider: async () => {},
     removeProvider: async () => {},
+    replaceProvider: async () => {},
 };
 
 type SourceCall =

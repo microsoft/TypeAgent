@@ -106,7 +106,7 @@
   the special case, guarantees FIFO remove-then-add ordering per session, and is
   the ownership flip M3's `replaceProvider` barrier builds on. A regression test
   (`deadlock-free: install/uninstall/update return while the issuing session's
-  command lock is held`) pins the non-blocking contract.
+command lock is held`) pins the non-blocking contract.
 - **Design updated?** no — matches §5.4 intent; fold the "issuing == sibling"
   wording into UPDATE_COORDINATION.md in the M5 docs pass.
 
@@ -121,4 +121,62 @@
 - **Rationale:** Install-ids are source-generated and non-empty, so this is
   theoretical, but the downside (wiping every agent's root) is severe enough to
   warrant the one-line guard on a destructive `rmSync`.
+- **Design updated?** no.
+
+### 2025-XX-XX — Coordinated `replaceProvider` barrier + explicit verify-0 (M3 core)
+
+- **Milestone / item:** M3 / §5.1, §5.6, §5.7
+- **Type:** Implements the design (the correctness core).
+- **Decision:** Introduced ONE `replaceProvider(oldProvider, newProviderThunk?,
+options)` primitive on `AppAgentHost`; BOTH `update` and `uninstall` route
+  through it. The applicator runs the whole `applyRemove(old) → onQuiesced() →
+await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
+  `pump` holds the session command lock across the entire remove→wait→add
+  section — no user command interleaves (closes the update request-slip of §5).
+  Uninstall omits the thunk (`old → ∅`, same section, no add). A source-side
+  barrier (`ReplaceBarrier`, replacing `startDrain`/`drainDrop`/`then`) fans
+  `replaceProvider` out to every session non-blocking, collects each host's
+  quiesce via `quiesce()`, and only when `pending` is empty AND `verifyZero`
+  confirms the shared old provider's `getRefCount(name) === 0` runs `onComplete`
+  (flip to active(new) / delete + prune) BEFORE releasing the parked hosts.
+- **verify-0 is EXPLICIT:** the source reads `oldProvider.getRefCount?.(name)`;
+  release is NEVER inferred from quiesce ACKs (a provider without `getRefCount`
+  is treated as released). New optional `getRefCount?`/`isLoaded?` on
+  `AppAgentProvider`; `npmAgentProvider` implements them off its `moduleAgents`
+  refcount. Layering preserved — the check rides the provider interface, so
+  `agent-dispatcher` core never imports `default-agent-provider`.
+- **Rationale:** A single lock-held section per dispatcher is the only way to
+  guarantee no request slips into the window between remove and add on a session;
+  the source-coordinated verify-0 barrier guarantees no two versions of a name
+  are ever loaded at once (persisted storage is keyed by name and cannot be
+  shared). Reusing the existing `applyAdd`/`applyRemove` leaves
+  `commandHandlerContext` wiring unchanged.
+- **Design updated?** no — implements §5.1/§5.6/§5.7; flip UPDATE_COORDINATION.md
+  to "Implemented" in the M5 docs pass.
+
+### 2025-XX-XX — `replaceProvider` defaults `dropConfig=false` (preserve config)
+
+- **Milestone / item:** M3 / §5 Model B (surfaced in M3 review round 2)
+- **Type:** Unspecified (API default choice).
+- **Decision:** `AppAgentHost.replaceProvider` defaults `options.dropConfig` to
+  `false` (preserve the enable preference), unlike `removeProvider` which
+  defaults `true`. The barrier always passes `dropConfig` explicitly
+  (`uninstall→true`, `update→false`), so the default only affects a hypothetical
+  bare caller.
+- **Rationale:** A replace is a swap, not a removal; the conservative default for
+  a swap is to keep the user's per-session enable preference. Documented inline.
+- **Design updated?** no.
+
+### 2025-XX-XX — Parked `replaceProvider` re-checks `closed` after the barrier
+
+- **Milestone / item:** M3 / §5.7, §6 (hardening surfaced in M3 review round 1)
+- **Type:** Unspecified (defensive).
+- **Decision:** After `await options.whenReady`, the applicator's replace op
+  re-checks `this.closed` and skips the startup (add) leg if the session was
+  disposed while parked. `dispose` leaves a running op to finish (§6), so without
+  this a late barrier release could `applyAdd` v2 into a torn-down session.
+- **Rationale:** The source already drops a disconnected host from the barrier,
+  so the add is a pure no-op; the guard makes that explicit and avoids loading v2
+  into a closing manager. Pinned by an applicator test ("a replace parked on
+  whenReady skips the add after dispose").
 - **Design updated?** no.

@@ -228,11 +228,11 @@ export function getDefaultAppAgentSource(
 
 /**
  * Per-name lifecycle entry for a dynamic (installed) agent (design §7.2). A name
- * is either `active` (installed and vended) or `removing` (draining across the
- * connected sessions before the name is freed / reused). No two versions of a
- * name ever coexist: install/uninstall/update transition through these states,
- * and a name that is `removing` is off-limits until every session has acked the
- * teardown.
+ * is either `active` (installed and vended) or `removing` (a coordinated
+ * teardown/swap is in flight across the connected sessions before the name is
+ * freed / reused). No two versions of a name ever coexist: install/uninstall/
+ * update transition through these states, and a name that is `removing` is
+ * off-limits until the barrier completes.
  */
 type DynamicAgentEntry =
     | { status: "active"; provider: AppAgentProvider }
@@ -240,11 +240,34 @@ type DynamicAgentEntry =
           status: "removing";
           // The provider being torn down (kept for the load tombstone, §7.3).
           provider: AppAgentProvider;
-          // Hosts that have not yet acked the removal. Empty ⇒ drained.
-          pending: Set<AppAgentHost>;
-          // Queued follow-up run once drained (an update's post-drain add, §7.2).
-          then?: () => Promise<void>;
+          // The in-flight teardown/swap barrier (design §5.6, §5.7).
+          barrier: ReplaceBarrier;
       };
+
+/**
+ * A source-coordinated teardown/swap barrier (design §5.6, §5.7). Every target
+ * host runs `replaceProvider`, tears down the shared old version, and fills its
+ * slot via `quiesce`; the source resolves the hosts' `whenReady` only once every
+ * slot is filled AND verify-0 confirms the shared old refcount is 0 — so the old
+ * version is confirmed terminated everywhere before the new one starts (update)
+ * or the name is freed (uninstall). Drives both `@update` and `@uninstall`.
+ */
+type ReplaceBarrier = {
+    readonly name: string;
+    // The shared old provider whose refcount verify-0 checks (design §5.6).
+    readonly oldProvider: AppAgentProvider;
+    // Hosts that have not yet quiesced (or disconnected). Empty ⇒ every host has
+    // torn the old version down.
+    readonly pending: Set<AppAgentHost>;
+    // Resolves every parked host's `whenReady` so it proceeds to add the new
+    // version (update) or simply settles (uninstall).
+    readonly release: () => void;
+    // Source-side finalization run exactly once when the barrier completes: for
+    // update, flip the entry to `active(new)` + prune the old root; for
+    // uninstall, free the name + prune.
+    readonly onComplete: () => void;
+    settled: boolean;
+};
 
 /**
  * The concrete installed-agent source (design §3.2). Besides the dispatcher-
@@ -415,66 +438,109 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
-    // Drop a host from a draining name's `pending` set (an ack, a per-client
-    // failure, or a disconnect). When the last host drains, free the name and
-    // run any queued follow-up (an update's post-drain add, §7.2).
-    function drainDrop(name: string, host: AppAgentHost): void {
+    // Verify the shared OLD provider is fully released (design §5.6): its load
+    // refcount is 0 — an EXPLICIT check, never inferred from quiesce ACKs. A
+    // provider that does not refcount (omits `getRefCount`) makes the ACKs
+    // authoritative (treated as released).
+    function verifyZero(barrier: ReplaceBarrier): boolean {
+        const count = barrier.oldProvider.getRefCount?.(barrier.name);
+        return count === undefined || count === 0;
+    }
+
+    // Complete a barrier once every host has quiesced AND verify-0 passes: run
+    // the source-side finalization (flip to the new version / free the name +
+    // prune) exactly once, then release every parked host to add the new version
+    // (update) or settle (uninstall). If verify-0 has not passed yet (a straggler
+    // still holds a ref), stay parked — Milestone 4 adds the timeout/abort that
+    // bounds this wait; until then the no-coexistence guarantee is preserved by
+    // NOT starting the new version / freeing the name.
+    function maybeComplete(barrier: ReplaceBarrier): void {
+        if (barrier.settled || barrier.pending.size > 0) {
+            return;
+        }
+        if (!verifyZero(barrier)) {
+            debug(
+                `barrier '${barrier.name}': all hosts quiesced but refcount != 0; waiting for straggler`,
+            );
+            return;
+        }
+        barrier.settled = true;
+        // Finalize source state BEFORE releasing hosts to add the new version.
+        barrier.onComplete();
+        barrier.release();
+    }
+
+    // Drop a host from a draining name's barrier — a quiesce ACK, a per-host
+    // teardown failure, or a disconnect (design §7.3). A disconnected session has
+    // torn everything down, so it is treated exactly like a quiesce. When the
+    // last slot fills, the barrier completes (verify-0 permitting).
+    function quiesce(name: string, host: AppAgentHost): void {
         const entry = entries.get(name);
         if (entry?.status !== "removing") {
             return;
         }
-        entry.pending.delete(host);
-        if (entry.pending.size === 0) {
-            const then = entry.then;
-            // Free the name first so `then` (or a new op) sees `absent`.
-            entries.delete(name);
-            if (then !== undefined) {
-                then().catch((e) => {
-                    debug(`post-drain follow-up for '${name}' failed: ${e}`);
-                });
-            }
+        if (!entry.barrier.pending.delete(host)) {
+            return;
         }
+        maybeComplete(entry.barrier);
     }
 
-    // Begin draining a name across every connected session (design §7.2, §5.4).
-    // Every host — INCLUDING the issuing one — enqueues the remove on its own
-    // idle-gated applicator and is notified; none is applied inline under a held
-    // command lock (the inline path was removed in the uniform-enqueue model,
-    // §5.4). Every host's ack — success, failure, or disconnect — drops it from
-    // `pending` so a failed/gone session never wedges name reuse. Returns
-    // immediately once the drain is wired: the actual teardown lands at each
-    // session's next idle, and the post-drain `then` fires when `pending`
-    // empties (an update's async re-add, §7.2).
+    // Begin a coordinated teardown/swap across every connected session (design
+    // §5.6, §5.7). Every host — INCLUDING the issuing one — runs `replaceProvider`
+    // on its own idle-gated applicator: under a SINGLE held command lock it
+    // removes the old version, quiesces (fills its barrier slot), then awaits the
+    // shared `whenReady` before adding the new version (update) or settling
+    // (uninstall) — so no request interleaves the swap on any session and no two
+    // versions coexist. Returns immediately once the barrier is wired; the swap
+    // completes when the last host quiesces and verify-0 confirms the shared old
+    // refcount is 0. A per-host failure is treated as a quiesce so a failed/gone
+    // session never wedges the barrier.
     //
-    // `dropConfig` (design §5, Model B): forwarded to every session's
-    // `removeProvider`. An uninstall passes `true` so each session clears the
-    // agent's persisted enable preference; an update passes `false` so the
-    // remove leg of its remove-then-add swap preserves that preference across
-    // the version bump.
-    function startDrain(
+    // `dropConfig` (design §5, Model B): forwarded to every remove leg — `true`
+    // for uninstall (clear the enable preference), `false` for update (preserve
+    // it across the version bump).
+    function startReplace(
         name: string,
-        provider: AppAgentProvider,
+        oldProvider: AppAgentProvider,
         issuingHost: AppAgentHost,
         dropConfig: boolean,
-        then?: () => Promise<void>,
+        newProviderThunk: (() => AppAgentProvider) | undefined,
+        onComplete: () => void,
     ): void {
-        // The issuing host is always part of the drain even if it never formally
-        // connected (defensive); it is otherwise treated exactly like a sibling.
+        // The issuing host is always part of the barrier even if it never
+        // formally connected (defensive); it is otherwise treated as a sibling.
         const targets = new Set<AppAgentHost>(clients);
         targets.add(issuingHost);
+        let release!: () => void;
+        const whenReady = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const barrier: ReplaceBarrier = {
+            name,
+            oldProvider,
+            pending: new Set(targets),
+            release,
+            onComplete,
+            settled: false,
+        };
         entries.set(name, {
             status: "removing",
-            provider,
-            pending: new Set(targets),
-            ...(then ? { then } : {}),
+            provider: oldProvider,
+            barrier,
         });
 
         for (const host of targets) {
-            host.removeProvider(provider, true, dropConfig)
-                .catch((e) => {
-                    debug(`removeProvider failed: ${e}`);
-                })
-                .finally(() => drainDrop(name, host));
+            host.replaceProvider(oldProvider, newProviderThunk, {
+                onQuiesced: () => quiesce(name, host),
+                whenReady,
+                notify: true,
+                dropConfig,
+            }).catch((e) => {
+                // A per-host teardown/add failure must not wedge the barrier:
+                // treat it as a quiesce so the name can still free / swap.
+                debug(`replaceProvider failed for '${name}': ${e}`);
+                quiesce(name, host);
+            });
         }
     }
 
@@ -593,22 +659,27 @@ export function createDefaultInstalledAgentSource(
                     delete current.agents[name];
                     writeAgentsJson(instanceDir, current);
                 });
-                // The record write is the commit point (design §7.4). Now drain
-                // the live agent across every connected session (active →
-                // removing → absent, design §7.2). The name stays off-limits
-                // until fully drained (the `removing` state outlives this op).
-                // Uninstall drops each session's persisted enable preference
-                // (dropConfig=true) so a fresh reinstall starts from the
-                // manifest default (design §5, Model B). Once fully drained, the
-                // agent's version-scoped install root is pruned (design §5.5 GC;
-                // the startup orphan sweep is the backstop if this never runs).
+                // The record write is the commit point (design §7.4). Now tear
+                // the live agent down across every connected session through the
+                // coordinated barrier (active → removing → absent, design §5.6,
+                // §5.7, §7.2): each session's `replaceProvider` (no new-version
+                // thunk) unloads under one held command lock, then the name is
+                // freed only once verify-0 confirms the shared process is down
+                // everywhere. The name stays off-limits until the barrier
+                // completes. Uninstall drops each session's persisted enable
+                // preference (dropConfig=true) so a fresh reinstall starts from
+                // the manifest default (design §5, Model B). Once confirmed down,
+                // the agent's version-scoped install root is pruned (design §5.5
+                // GC; the startup orphan sweep is the backstop).
                 if (entry?.status === "active") {
-                    startDrain(
+                    startReplace(
                         name,
                         entry.provider,
                         issuingHost,
                         true,
-                        async () => {
+                        undefined,
+                        () => {
+                            entries.delete(name);
                             pruneAgentRoot(installDir, uninstalledRoot);
                         },
                     );
@@ -663,49 +734,53 @@ export function createDefaultInstalledAgentSource(
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
                 });
-                // Disruptive update (design §7.2): drain the OLD version across
-                // every session first, then (post-drain) add the NEW one — so no
-                // two versions of the name ever coexist. No-coexistence is
-                // REQUIRED because an agent's persisted storage is keyed by agent
-                // name and cannot be shared, so two versions loaded at once would
-                // collide on that storage. The freshly materialized provider is
-                // added as the drain's `then`. If there is no active entry to
-                // drain, add directly. The drain passes dropConfig=false so a
-                // version bump preserves each session's per-session enable
-                // preference (design §5, Model B).
+                // Disruptive update (design §5.6, §5.7, §7.2): tear the OLD
+                // version down across every session and add the NEW one as ONE
+                // coordinated barrier — each session's `replaceProvider` removes
+                // v1 then (after verify-0 confirms v1 is down everywhere) adds
+                // v2, all under one held command lock, so no two versions of the
+                // name ever coexist and no session observes it absent.
+                // No-coexistence is REQUIRED because an agent's persisted storage
+                // is keyed by agent name and cannot be shared, so two versions
+                // loaded at once would collide on that storage. The barrier
+                // passes dropConfig=false so the version bump preserves each
+                // session's per-session enable preference (design §5, Model B).
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
                 // Prune the OLD version's version-scoped install root only after
-                // the swap succeeds (design §5.1, §5.3, §5.5 GC): in this
-                // milestone that is once the old version has drained and the new
-                // one is added. The old root differs from the new one (unique
-                // install-id), so this never touches v2's files.
+                // the swap succeeds (design §5.1, §5.3, §5.5 GC): once v1 is
+                // confirmed down and v2 is committed as the active entry. The old
+                // root differs from the new one (unique install-id), so this
+                // never touches v2's files.
                 const oldRoot = existing.installRoot;
-                const addNew = async () => {
-                    entries.set(name, {
-                        status: "active",
-                        provider: newProvider,
-                    });
-                    // The old version has fully drained by the time this
-                    // post-drain follow-up runs, so its root is safe to reclaim
-                    // now (it differs from the new one via the unique install-id,
-                    // so this never touches v2's files). The re-add is then
-                    // fanned out non-blocking to every session (§5.4).
-                    if (oldRoot !== record.installRoot) {
-                        pruneAgentRoot(installDir, oldRoot);
-                    }
-                    fanOutAdd(newProvider, issuingHost);
-                };
                 if (oldEntry?.status === "active") {
-                    startDrain(
+                    startReplace(
                         name,
                         oldEntry.provider,
                         issuingHost,
                         false,
-                        addNew,
+                        () => newProvider,
+                        () => {
+                            entries.set(name, {
+                                status: "active",
+                                provider: newProvider,
+                            });
+                            if (oldRoot !== record.installRoot) {
+                                pruneAgentRoot(installDir, oldRoot);
+                            }
+                        },
                     );
                 } else {
-                    await addNew();
+                    // No live old version to tear down: just add the new one to
+                    // every session (non-blocking fan-out, §5.4).
+                    entries.set(name, {
+                        status: "active",
+                        provider: newProvider,
+                    });
+                    if (oldRoot !== record.installRoot) {
+                        pruneAgentRoot(installDir, oldRoot);
+                    }
+                    fanOutAdd(newProvider, issuingHost);
                 }
             } finally {
                 busy.delete(name);
@@ -794,11 +869,11 @@ export function createDefaultInstalledAgentSource(
                     // still hold them; the dispatcher unregisters them from its
                     // own manager at teardown.
                     clients.delete(host);
-                    // Disconnect while draining (design §7.3): a gone session has
-                    // removed everything, so drop it from every draining name's
-                    // pending set (which may complete a drain).
+                    // Disconnect while a teardown/swap is in flight (design
+                    // §7.3): a gone session has removed everything, so drop it
+                    // from every barrier's pending set (which may complete one).
                     for (const name of [...entries.keys()]) {
-                        drainDrop(name, host);
+                        quiesce(name, host);
                     }
                 },
             };

@@ -401,6 +401,204 @@ describe("AppAgentHostApplicator", () => {
             "remove:C",
         ]);
     });
+
+    it("replaceProvider holds one command-lock section across remove → wait → add (no interleave)", async () => {
+        const order: string[] = [];
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+
+        const ready = deferred();
+        let quiesced = false;
+        const replaceAck = host.replaceProvider(
+            fakeProvider("v1"),
+            () => fakeProvider("v2"),
+            {
+                onQuiesced: () => {
+                    quiesced = true;
+                },
+                whenReady: ready.promise,
+            },
+        );
+
+        await tick();
+        // The teardown leg has run and the host has quiesced, but the barrier is
+        // not released yet, so the add is parked — the op still holds the lock.
+        expect(order).toEqual(["remove:v1"]);
+        expect(quiesced).toBe(true);
+
+        // A user op enqueued now is stuck behind the parked replace (single
+        // command-lock section): it must NOT interleave between remove and add.
+        const userAck = host.removeProvider(fakeProvider("user"), true, false);
+        await tick();
+        expect(order).toEqual(["remove:v1"]);
+
+        // Release the barrier: the replace adds v2, then the queued user op runs.
+        ready.resolve();
+        await Promise.all([replaceAck, userAck]);
+        expect(order).toEqual(["remove:v1", "add:v2", "remove:user"]);
+    });
+
+    it("replaceProvider omits the add for an uninstall (old → ∅)", async () => {
+        const order: string[] = [];
+        let quiesced = false;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p, _n, dropConfig) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}:${dropConfig}`);
+            },
+        });
+
+        // Uninstall passes no new-provider thunk and dropConfig=true.
+        const ack = host.replaceProvider(fakeProvider("gone"), undefined, {
+            onQuiesced: () => {
+                quiesced = true;
+            },
+            whenReady: Promise.resolve(),
+            notify: true,
+            dropConfig: true,
+        });
+        await ack;
+
+        // Only the teardown leg ran (with dropConfig threaded); no add.
+        expect(order).toEqual(["remove:gone:true"]);
+        expect(quiesced).toBe(true);
+    });
+
+    it("replaceProvider rejects a multi-agent old provider before any apply", async () => {
+        let calls = 0;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {
+                calls++;
+            },
+            applyRemove: async () => {
+                calls++;
+            },
+        });
+        await expect(
+            host.replaceProvider(
+                fakeMultiProvider("a", "b"),
+                () => fakeProvider("v2"),
+                {
+                    onQuiesced: () => {},
+                    whenReady: Promise.resolve(),
+                },
+            ),
+        ).rejects.toThrow(/single-agent old provider/i);
+        expect(calls).toBe(0);
+    });
+
+    it("replaceProvider rejects a multi-agent new provider after the teardown leg", async () => {
+        const order: string[] = [];
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+        await expect(
+            host.replaceProvider(
+                fakeProvider("v1"),
+                () => fakeMultiProvider("a", "b"),
+                {
+                    onQuiesced: () => {},
+                    whenReady: Promise.resolve(),
+                },
+            ),
+        ).rejects.toThrow(/single-agent new provider/i);
+        // The teardown leg still ran (the old version is down); only the add is
+        // skipped because the new provider violates the invariant.
+        expect(order).toEqual(["remove:v1"]);
+    });
+
+    it("dispose auto-acks a queued replace without running it", async () => {
+        const commandLock = createLimiter(1);
+        let calls = 0;
+        const host = new AppAgentHostApplicator(commandLock, {
+            applyAdd: async () => {
+                calls++;
+            },
+            applyRemove: async () => {
+                calls++;
+            },
+        });
+
+        // Keep the session busy so the replace stays queued.
+        const busy = deferred();
+        const busyDone = commandLock(async () => {
+            await busy.promise;
+        });
+
+        let quiesced = false;
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => fakeProvider("v2"),
+            {
+                onQuiesced: () => {
+                    quiesced = true;
+                },
+                whenReady: Promise.resolve(),
+            },
+        );
+        await tick();
+
+        host.dispose();
+        await expect(ack).resolves.toBeUndefined();
+        // Never ran: neither leg applied and the host never quiesced.
+        expect(calls).toBe(0);
+        expect(quiesced).toBe(false);
+
+        busy.resolve();
+        await busyDone;
+        expect(calls).toBe(0);
+    });
+
+    it("a replace parked on whenReady skips the add after dispose (closed re-check)", async () => {
+        const order: string[] = [];
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+
+        const ready = deferred();
+        let quiesced = false;
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => fakeProvider("v2"),
+            {
+                onQuiesced: () => {
+                    quiesced = true;
+                },
+                whenReady: ready.promise,
+            },
+        );
+
+        await tick();
+        // The teardown leg ran and the host quiesced; the op is parked mid-run
+        // on whenReady (running, so dispose leaves it to finish, §6).
+        expect(order).toEqual(["remove:v1"]);
+        expect(quiesced).toBe(true);
+
+        host.dispose();
+        // Release the barrier: the parked op resumes but must NOT add v2 into a
+        // torn-down session — the closed re-check short-circuits the add leg.
+        ready.resolve();
+        await expect(ack).resolves.toBeUndefined();
+        expect(order).toEqual(["remove:v1"]);
+    });
 });
 
 describe("AppAgentManager.removeProvider", () => {

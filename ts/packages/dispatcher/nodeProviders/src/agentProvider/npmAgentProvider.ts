@@ -227,5 +227,15 @@ export function createNpmAppAgentProvider(
                 agent.trace?.(namespaces);
             }
         },
+        // Expose the shared load refcount so the installed-agent source can
+        // VERIFY a torn-down version is fully released (count 0) before starting
+        // the next version or freeing the name (design §5.6). `unloadAppAgent`
+        // still runs `close()` only at count 0 (unchanged).
+        getRefCount(appAgentName: string) {
+            return moduleAgents.get(appAgentName)?.count ?? 0;
+        },
+        isLoaded(appAgentName: string) {
+            return moduleAgents.has(appAgentName);
+        },
     };
 }
