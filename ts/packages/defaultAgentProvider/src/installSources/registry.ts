@@ -39,15 +39,12 @@ export interface DefaultInstallSourceRegistry {
     // non-fatal source degrade messages (e.g. a corrupt catalog) for the caller
     // to surface on the triggering command. `onStatus`, when supplied, is
     // called with the name of each source as it is probed so the caller can
-    // show a live status line. `opts.installName` is the authoritative
-    // dispatcher agent name the install targets, forwarded to `materialize` so
-    // a source can build a per-agent, version-scoped install root (design §5.5).
+    // show a live status line.
     resolve(
         ref: string,
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
-        opts?: { installName?: string | undefined },
     ): Promise<MaterializedInstallRecord>;
     // Re-resolve + re-materialize a previously-installed record against its
     // recorded source (design §5, §12 Q13), for `@update`. The source that
@@ -57,13 +54,10 @@ export interface DefaultInstallSourceRegistry {
     // under the shared limiter and carries the source's re-resolution handle
     // (`ref`) through so the next update still works. Throws when the source is
     // gone, does not support update, or no longer resolves the record.
-    // `opts.installName` is forwarded to `materialize` for the version-scoped
-    // install root (design §5.5).
     reresolve(
         record: InstalledAgentRecord,
         opts?: {
             range?: string | undefined;
-            installName?: string | undefined;
         },
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
@@ -233,7 +227,6 @@ export function createInstallSourceRegistry(
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
-        installName?: string,
     ): Promise<MaterializedInstallRecord> {
         if (sourceName !== undefined) {
             const entry = entries.get(sourceName);
@@ -254,7 +247,7 @@ export function createInstallSourceRegistry(
                 // Explicit --source non-match is a hard error (§4.1, §12 Q4).
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
             }
-            return entry.source.materialize(candidate, { installName });
+            return entry.source.materialize(candidate);
         }
         // Probe the sources sequentially in resolution (map iteration) order;
         // first match wins (§4.1), so a later source is never probed once an
@@ -264,7 +257,7 @@ export function createInstallSourceRegistry(
             onStatus?.(`Trying source '${source.name}'...`);
             const candidate = await source.find(ref, onWarn);
             if (candidate !== undefined) {
-                return source.materialize(candidate, { installName });
+                return source.materialize(candidate);
             }
         }
         throw new Error(
@@ -321,26 +314,18 @@ export function createInstallSourceRegistry(
             sourceName?: string,
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
-            opts?: { installName?: string | undefined },
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter (design §12 Q5). The installer (M2) reuses the
             // same limiter for the record write.
             return limiter(() =>
-                resolveUnlocked(
-                    ref,
-                    sourceName,
-                    onWarn,
-                    onStatus,
-                    opts?.installName,
-                ),
+                resolveUnlocked(ref, sourceName, onWarn, onStatus),
             );
         },
         async reresolve(
             record: InstalledAgentRecord,
             opts?: {
                 range?: string | undefined;
-                installName?: string | undefined;
             },
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
@@ -395,11 +380,9 @@ export function createInstallSourceRegistry(
                 // The source's `materialize` persists its own re-resolution
                 // handle (feed: spec; catalog: key; path: path), so the
                 // re-materialized record is already self-sufficient for the next
-                // update - no host-side carry needed. `installName` lets the
-                // source build a fresh version-scoped root (design §5.5).
-                return entry.source.materialize(candidate, {
-                    installName: opts?.installName,
-                });
+                // update - no host-side carry needed. It builds a fresh
+                // version-scoped root labeled by the package name (design §5.5).
+                return entry.source.materialize(candidate);
             });
         },
         async where(

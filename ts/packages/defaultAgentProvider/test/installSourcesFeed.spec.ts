@@ -379,7 +379,6 @@ describe("feedSource.materialize", () => {
         });
         const record = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "a" },
         );
         expect(record.module).toBe("@typeagent/a-agent");
         expect(record.ref).toBe("@typeagent/a-agent@1.0.0");
@@ -387,7 +386,9 @@ describe("feedSource.materialize", () => {
         // The record carries the per-agent install root and resolved version
         // (design §5.5), and that root physically exists under installDir/agents.
         expect(record.installRoot).toBeDefined();
-        expect(record.installRoot!.startsWith("a@")).toBe(true);
+        expect(record.installRoot!.startsWith("_typeagent_a-agent@")).toBe(
+            true,
+        );
         expect(record.version).toBe("1.0.0");
         expect(
             fs.existsSync(path.join(installDir, "agents", record.installRoot!)),
@@ -413,7 +414,6 @@ describe("feedSource.materialize", () => {
         });
         await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "myagent" },
         );
         // npm ran with cwd under installDir/agents/<name>@<id>, never the shared
         // installDir itself (so a running version is never clobbered, §5.5).
@@ -443,11 +443,9 @@ describe("feedSource.materialize", () => {
         });
         const first = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "same" },
         );
         const second = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "same" },
         );
         // Distinct roots even at the same version, so v2 never overwrites v1.
         expect(first.installRoot).not.toBe(second.installRoot);
@@ -459,7 +457,7 @@ describe("feedSource.materialize", () => {
         ).toBe(true);
     });
 
-    it("sanitizes a scoped moduleName fallback into a single safe root leaf", async () => {
+    it("sanitizes a scoped moduleName into a single safe root leaf", async () => {
         clearTokenCacheForTest();
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         let seenCwd: string | undefined;
@@ -476,8 +474,8 @@ describe("feedSource.materialize", () => {
                 );
             },
         });
-        // No installName → the scoped moduleName (@typeagent/a-agent) is the
-        // fallback label; it must collapse to a single traversal-safe component.
+        // The scoped moduleName (@typeagent/a-agent) is the root label; it must
+        // collapse to a single traversal-safe component.
         const record = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
         );
@@ -509,7 +507,6 @@ describe("feedSource.materialize", () => {
         });
         const record = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "a" },
         );
         // version is best-effort/informational; its absence is not an error and
         // the record still carries the install root.
@@ -538,7 +535,6 @@ describe("feedSource.materialize", () => {
         });
         const first = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
-            { installName: "a" },
         );
         const firstDir = path.join(installDir, "agents", first.installRoot!);
         expect(fs.existsSync(firstDir)).toBe(true);
@@ -549,7 +545,6 @@ describe("feedSource.materialize", () => {
         await expect(
             source.materialize(
                 (await source.find("@typeagent/a-agent@1.0.0"))!,
-                { installName: "a" },
             ),
         ).rejects.toThrow(/npm boom/);
         expect(fs.existsSync(firstDir)).toBe(true);

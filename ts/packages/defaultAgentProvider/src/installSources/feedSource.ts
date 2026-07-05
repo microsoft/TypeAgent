@@ -359,7 +359,6 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
-            opts?: { installName?: string | undefined },
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -378,12 +377,9 @@ export function createFeedSource(
             // into its OWN root under `installDir/agents/` so a new version
             // never clobbers a still-running one and a failed install is a clean
             // abort that leaves any prior root intact. The root leaf is keyed by
-            // the dispatcher agent name (falling back to the module name) plus a
-            // unique install-id, so even re-materializing the same version does
-            // not collide.
-            const rootLabel = sanitizeRootLabel(
-                opts?.installName ?? moduleName,
-            );
+            // the package name plus a unique install-id, so even re-materializing
+            // the same version does not collide.
+            const rootLabel = sanitizeRootLabel(moduleName);
             const installRoot = `${rootLabel}@${makeInstallId()}`;
             const agentRoot = path.join(
                 deps.installDir,

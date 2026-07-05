@@ -901,7 +901,6 @@ export function createDefaultInstalledAgentSource(
                     sourceName,
                     (m) => warningSet.add(m),
                     onStatus,
-                    { installName: name },
                 );
                 // The source assigns the authoritative dispatcher name. The
                 // source's `materialize` already persists its own re-resolution
@@ -1084,7 +1083,6 @@ export function createDefaultInstalledAgentSource(
                 // works (design §5, §12 Q13).
                 const resolved = await registry.reresolve(existing, {
                     range,
-                    installName: name,
                 });
                 const record: InstalledAgentRecord = { ...resolved, name };
                 // Persist the v2 record only at the barrier COMMIT (in

@@ -229,14 +229,12 @@ export interface InstallSource {
         opts?: { range?: string | undefined },
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
-    /** Does the actual work (npm install / copy / record data). `opts.installName`
-     * is the authoritative dispatcher agent name the install is targeting
-     * (the `agents.json` key), so a source can materialize into a per-agent,
-     * version-scoped install root (design §5.5). Sources whose materialize is
-     * already non-destructive (`path`, `catalog`) ignore it. */
+    /** Does the actual work (npm install / copy / record data). A source that
+     * needs a per-agent, version-scoped install root (design §5.5) labels it
+     * from the candidate's package name. Sources whose materialize is already
+     * non-destructive (`path`, `catalog`) own no such root. */
     materialize(
         candidate: ResolvedCandidate,
-        opts?: { installName?: string | undefined },
     ): Promise<MaterializedInstallRecord>;
     /** Enumerable sources (`path` is not) advertise their agents. */
     listAgents?(onWarn?: SourceWarning): Promise<string[]>;
