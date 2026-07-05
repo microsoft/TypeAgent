@@ -110,8 +110,11 @@ function pathOnlyInstanceDir(): string {
 }
 
 // Build a standalone loadable agent directory (package.json exports +
-// manifest.json) for the `path` source to install/refresh from.
-function makePathAgentDir(emojiChar: string): string {
+// manifest.json) for the `path` source to install/refresh from. The default
+// emoji makes it a drop-in "some valid path agent" fixture for tests that only
+// need a resolvable install (the structural manifest check now validates every
+// source, including `path`).
+function makePathAgentDir(emojiChar = "🧪"): string {
     const dir = tmpDir("ta-pathagent-");
     fs.writeFileSync(
         path.join(dir, "package.json"),
@@ -125,6 +128,60 @@ function makePathAgentDir(emojiChar: string): string {
         path.join(dir, "manifest.json"),
         JSON.stringify({ emojiChar }),
     );
+    return dir;
+}
+
+// Seed an instance dir whose config.json restricts install sources to a single
+// `catalog` source with one module-resolved entry (an npm-package-based source),
+// so an install/update produces a `module` record whose manifest the structural
+// check (design §5.3) reads. When `installModule` is true a resolvable agent
+// package (readable manifest) is laid under the instance's installDir; omitting
+// it leaves the module unresolvable, so the structural check fails.
+function catalogModuleInstanceDir(
+    key: string,
+    moduleName: string,
+    installModule: boolean,
+): string {
+    const dir = tmpDir("ta-catalog-");
+    const installDir = path.join(dir, "installedAgents");
+    fs.mkdirSync(installDir, { recursive: true });
+    const catalogPath = path.join(dir, "catalog.json");
+    fs.writeFileSync(
+        catalogPath,
+        JSON.stringify({ agents: { [key]: { name: moduleName } } }),
+    );
+    fs.writeFileSync(
+        path.join(dir, "config.json"),
+        JSON.stringify({
+            installSources: {
+                order: ["cat"],
+                installDir,
+                sources: [
+                    { kind: "catalog", name: "cat", catalog: catalogPath },
+                ],
+            },
+        }),
+    );
+    if (installModule) {
+        fs.writeFileSync(
+            path.join(installDir, "package.json"),
+            JSON.stringify({ name: "ta-install-root", private: true }),
+        );
+        const pkgDir = path.join(installDir, "node_modules", moduleName);
+        fs.mkdirSync(pkgDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify({
+                name: moduleName,
+                version: "1.0.0",
+                exports: { "./agent/manifest": "./manifest.json" },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(pkgDir, "manifest.json"),
+            JSON.stringify({ emojiChar: "🧪" }),
+        );
+    }
     return dir;
 }
 
@@ -262,7 +319,7 @@ describe("getDefaultAppAgentProviders", () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         await installer.install("namedOnly", agentDir, undefined, noopHost);
 
         // Installed agents are vended by the source at connect(), NOT by the
@@ -281,7 +338,7 @@ describe("getDefaultAppAgentSource", () => {
         const built = createDefaultInstalledAgentSource(instanceDir);
         await built.testApi.install(
             "namedOnly",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             noopHost,
         );
@@ -325,7 +382,7 @@ describe("getDefaultAppAgentSource", () => {
         // in its initial vended set (design §6 note).
         await built.testApi.install(
             "later",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             noopHost,
         );
@@ -344,7 +401,7 @@ describe("getDefaultAppAgentSource", () => {
         const built = createDefaultInstalledAgentSource(instanceDir);
         await built.testApi.install(
             "shared",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             noopHost,
         );
@@ -375,7 +432,7 @@ describe("getDefaultAppAgentSource", () => {
         const built = createDefaultInstalledAgentSource(instanceDir);
         await built.testApi.install(
             "temp",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             noopHost,
         );
@@ -438,7 +495,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 
         await built.testApi.install(
             "foo",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             issuing.host,
         );
@@ -476,7 +533,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         await expect(
             built.testApi.install(
                 "foo",
-                tmpDir("ta-agent-"),
+                makePathAgentDir(),
                 undefined,
                 issuing.host,
             ),
@@ -500,7 +557,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         built.connect(sibling.host);
         await built.testApi.install(
             "foo",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             issuing.host,
         );
@@ -566,7 +623,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
 
         await built.testApi.install(
             "foo",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             issuing.host,
         );
@@ -583,7 +640,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         built.connect(only.host);
         await built.testApi.install(
             "foo",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             only.host,
         );
@@ -775,7 +832,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
     ) {
         await built.testApi.install(
             "foo",
-            tmpDir("ta-agent-"),
+            makePathAgentDir(),
             undefined,
             issuing,
         );
@@ -799,7 +856,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await expect(
             built.testApi.install(
                 "foo",
-                tmpDir("ta-agent-"),
+                makePathAgentDir(),
                 undefined,
                 issuing,
             ),
@@ -815,7 +872,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await expect(
             built.testApi.install(
                 "foo",
-                tmpDir("ta-agent-"),
+                makePathAgentDir(),
                 undefined,
                 issuing,
             ),
@@ -864,7 +921,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await expect(
             built.testApi.install(
                 "foo",
-                tmpDir("ta-agent-"),
+                makePathAgentDir(),
                 undefined,
                 issuing,
             ),
@@ -1153,7 +1210,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await expect(
             built.testApi.install(
                 "foo",
-                tmpDir("ta-agent-"),
+                makePathAgentDir(),
                 undefined,
                 issuing,
             ),
@@ -1228,7 +1285,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1267,48 +1323,12 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         await flush();
     });
 
-    it("a v2 that won't start hits the start timeout and rolls back (§5.3)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
-            updateCoordination: {
-                startTimeoutMs: 20,
-                // v2's start probe hangs forever → only the start timer resolves.
-                verifyStart: () => new Promise<void>(() => {}),
-            },
-        });
-        const issuing = recordingHost();
-        const sibling = recordingHost();
-        built.connect(issuing.host);
-        built.connect(sibling.host);
-        const v1Root = await installFooV1(built, instanceDir, issuing.host);
-        issuing.calls.length = 0;
-        sibling.calls.length = 0;
-
-        const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
-        );
-        await settle();
-
-        expect(outcomes).toEqual(["failed-reverted"]);
-        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
-            v1Root,
-        );
-        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-        expect(sibling.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-    });
-
     it("an out-of-band abort rolls back without deadlocking (§5.3)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             // A long quiesce timeout so ONLY the abort drives the rollback.
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1353,7 +1373,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
-                verifyStart: async () => {},
                 // The shared v1 provider never drops to 0 refs (a wedged loader):
                 // every host quiesces but verify-0 keeps the barrier parked.
                 isLoaded: () => true,
@@ -1387,11 +1406,67 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 
+    it("a session disconnecting as the last barrier slot re-polls verify-0 and commits (no timeout stall)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        // The shared v1 ref is still held while the barrier fills its last slot,
+        // then dropped by the disconnecting session's teardown.
+        let refHeld = true;
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                // Long timeout: only a correct verify-0 RE-POLL (not the
+                // backstop) can commit within the test window.
+                quiesceTimeoutMs: 5_000,
+                isLoaded: () => refHeld,
+            },
+        });
+        const issuing = recordingHost();
+        // A session whose `replaceProvider` auto-acks WITHOUT `onQuiesced`
+        // (models its barrier op queued-not-started at close): it fills its
+        // phase-1 slot from the success continuation, which can empty `pending`
+        // BEFORE its teardown has dropped the shared v1 ref.
+        const closingHost: AppAgentHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+            replaceProvider: async () => {},
+        };
+        built.connect(issuing.host);
+        const closingConn = built.connect(closingHost);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        // Every slot has quiesced, but v1's ref is still held → the barrier is
+        // parked on verify-0 (no commit, no v2 added).
+        await flush();
+        expect(outcomes).toEqual([]);
+        expect(issuing.calls).toEqual([{ op: "remove" }]);
+
+        // The disconnecting session's teardown drops the shared ref, THEN its
+        // source connection is disposed (the real dispatcher close order). The
+        // disconnect must RE-POLL verify-0 so the barrier commits instead of
+        // stalling to the quiesce-timeout rollback.
+        refHeld = false;
+        closingConn.dispose();
+        await settle();
+
+        expect(outcomes).toEqual(["updated"]);
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(readAgentsJson(instanceDir)!.agents.foo).toBeDefined();
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).not.toBe(
+            v1Root,
+        );
+    });
+
     it("reports `updated` and drops the old install root on a clean commit (§5.3)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
-            updateCoordination: { verifyStart: async () => {} },
-        });
+        const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
         built.connect(issuing.host);
         await installFooV1(built, instanceDir, issuing.host);
@@ -1420,7 +1495,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1463,7 +1537,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1524,7 +1597,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
             // update would (wrongly) roll back with `failed-reverted` after 5 s.
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1559,39 +1631,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
             "foo",
         );
-    });
-
-    it("a v2 whose start probe rejects rolls back (failed-reverted, v1 restored)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
-            updateCoordination: {
-                // Long start timeout: only the probe REJECTION can drive rollback.
-                startTimeoutMs: 5_000,
-                verifyStart: async () => {
-                    throw new Error("bad v2 manifest");
-                },
-            },
-        });
-        const issuing = recordingHost();
-        built.connect(issuing.host);
-        const v1Root = await installFooV1(built, instanceDir, issuing.host);
-        issuing.calls.length = 0;
-
-        const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
-        );
-        await settle();
-
-        expect(outcomes).toEqual(["failed-reverted"]);
-        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
-            v1Root,
-        );
-        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 
     it("an uninstall straggler that won't idle rolls back (record + agent restored, name reusable)", async () => {
@@ -1647,7 +1686,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
-                verifyStart: async () => {},
             },
         });
         const issuing = recordingHost();
@@ -1703,7 +1741,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("install resolves via the path source and persists the record with the requested name", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
 
@@ -1727,7 +1765,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("rejects installing over an existing name", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("dup", agentDir, undefined, host);
@@ -1738,7 +1776,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("rejects installing over a builtin (cannot shadow)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
@@ -1766,7 +1804,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("uninstall drops the record; unknown name rejects", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("gone", agentDir, undefined, host);
@@ -1779,9 +1817,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("serializes concurrent installs without losing writes", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const a = tmpDir("ta-agent-a-");
-        const b = tmpDir("ta-agent-b-");
-        const c = tmpDir("ta-agent-c-");
+        const a = makePathAgentDir();
+        const b = makePathAgentDir();
+        const c = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await Promise.all([
@@ -1795,7 +1833,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("rejects an explicit unknown source", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
@@ -1814,7 +1852,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("update re-materializes a path agent and keeps the record", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -1831,13 +1869,10 @@ describe("installed agent source api (install/uninstall/update)", () => {
     // on-disk root exercises the `oldRoot !== record.installRoot` prune branch.
     it("update prunes the old version's install root after the swap", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
-        // Inject an instant `v2` start probe so the swap settles deterministically
-        // within a flush (the default probe reads v2's manifest — an extra async
-        // step); the prune runs in the GC finalizer after every host has swapped.
-        const installer = createDefaultInstalledAgentSource(instanceDir, {
-            updateCoordination: { verifyStart: async () => {} },
-        }).testApi;
+        const agentDir = makePathAgentDir();
+        // The prune runs in the GC finalizer after every host has swapped.
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
 
         // Retro-fit a version-scoped root onto the freshly installed record and
@@ -1870,7 +1905,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
     // agent is confirmed down everywhere.
     it("uninstall prunes the agent's install root once drained", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -1934,9 +1969,8 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("update does not prune the old root while a sibling still references it", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const installer = createDefaultInstalledAgentSource(instanceDir, {
-            updateCoordination: { verifyStart: async () => {} },
-        }).testApi;
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("a", makePathAgentDir("🅰️"), undefined, host);
         await installer.install("b", makePathAgentDir("🅱️"), undefined, host);
 
@@ -1964,7 +1998,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("path re-resolution uses the record's `path` handle (no `ref` needed)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -2008,7 +2042,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("a failed update leaves the old record intact (no-op)", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -2033,7 +2067,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
     it("update fails when the recorded source is no longer configured", async () => {
         const instanceDir = pathOnlyInstanceDir();
-        const agentDir = tmpDir("ta-agent-");
+        const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -2173,5 +2207,65 @@ describe("startup orphan sweep (design §5.5 GC)", () => {
         );
         // No agents.json, no installedAgents/agents dir.
         expect(() => createDefaultInstalledAgentSource(dir)).not.toThrow();
+    });
+});
+
+// Structural manifest check (design §5.3): every install/update — feed, catalog
+// `module`, AND local `path` — validates the freshly-materialized manifest at
+// install/update time, so a corrupt/unreadable agent fails BEFORE anything is
+// recorded (or, on update, before `v1` is torn down) rather than committing a
+// broken agent.
+describe("structural manifest check on install/update (design §5.3)", () => {
+    it("install of an npm-package source fails and records nothing when the manifest is unreadable", async () => {
+        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", false);
+        const built = createDefaultInstalledAgentSource(instanceDir).testApi;
+        await expect(
+            built.install("x", "cat", "cat", noopHost),
+        ).rejects.toThrow();
+        // Nothing persisted: a broken agent is never recorded.
+        expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
+        expect(built.listInstalled().map((i) => i.name)).not.toContain("x");
+    });
+
+    it("install of an npm-package source succeeds when the manifest reads", async () => {
+        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
+        const built = createDefaultInstalledAgentSource(instanceDir).testApi;
+        await built.install("x", "cat", "cat", noopHost);
+        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+    });
+
+    it("update rejects and leaves v1 intact when v2's manifest is unreadable", async () => {
+        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
+        const built = createDefaultInstalledAgentSource(instanceDir).testApi;
+        await built.install("x", "cat", "cat", noopHost);
+        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+
+        // Re-point the catalog key at a fresh, never-resolved (absent) module
+        // so v2's manifest cannot be read; the update must reject WITHOUT
+        // tearing v1 down (no barrier reached). A different module name avoids
+        // Node's module-resolution cache from v1's successful load.
+        fs.writeFileSync(
+            path.join(instanceDir, "catalog.json"),
+            JSON.stringify({ agents: { cat: { name: "cat-mod-absent" } } }),
+        );
+        await expect(built.update("x", undefined, noopHost)).rejects.toThrow();
+        // v1's record is untouched and the name is still installed.
+        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+        expect(built.listInstalled().map((i) => i.name)).toContain("x");
+    });
+
+    it("a `path` install is validated too — a manifest-less directory fails and records nothing", async () => {
+        // A bare directory (no package.json / manifest) installs via the path
+        // source. The structural check is source-agnostic (design §5.3), so an
+        // unreadable manifest fails the install BEFORE anything is recorded —
+        // exactly like an npm-package source.
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir).testApi;
+        const bareDir = tmpDir("ta-bare-");
+        await expect(
+            built.install("p", bareDir, undefined, noopHost),
+        ).rejects.toThrow();
+        expect(readAgentsJson(instanceDir)?.agents.p).toBeUndefined();
+        expect(built.listInstalled().map((i) => i.name)).not.toContain("p");
     });
 });

@@ -5,8 +5,8 @@
 > [UPDATE_COORDINATION_EXECUTION_PLAN.md](./UPDATE_COORDINATION_EXECUTION_PLAN.md),
 > each with an explicit rationale for declining.
 >
-> Distinct from [UPDATE_COORDINATION_DECISIONS_LOG.md](./UPDATE_COORDINATION_DECISIONS_LOG.md):
-> that log records design-level choices **made** during implementation; this log records
+> Distinct from the design ([UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md)), which captures the
+> design-level choices **made** during implementation; this log records
 > gate findings / test gaps **not addressed**.
 
 ## How to use
@@ -151,15 +151,19 @@
 ### 2026-07-05 — DEFERRED: full pre-launch `v2` startability probe
 
 - **Milestone / gate round:** M4 / §5.3
-- **Finding / gap:** The default `verifyStart` only reads `v2`'s manifest
+- **Finding / gap:** The structural check only reads `v2`'s manifest
   (`getAppAgentManifest`); it does not fork/launch `v2` to prove it actually
-  starts. A `v2` that resolves its manifest but crashes on load still commits, and
-  the crash surfaces later as a normal load failure (not an update rollback).
-- **Decision:** Deferred. A full pre-launch probe would fork a process per update
-  purely to verify startability (see decisions log).
-- **Follow-up:** Optionally add an opt-in forking `verifyStart` for feed sources
-  where cold-start failures are likelier; the seam already exists
-  (`updateCoordination.verifyStart`).
+  starts. A `v2` that resolves its manifest but crashes on `instantiate()` still
+  commits, and the crash surfaces later as a normal per-session load failure (not
+  an update rollback).
+- **Decision:** Deferred, and the `verifyStart` seam was REMOVED (TypeAgent never
+  forks a startability probe). The cheap manifest read that used to be the default
+  `verifyStart` moved forward to install/update materialize time (before the
+  barrier, gated to npm-package sources via `record.module !== undefined`), so the
+  common "corrupt/unresolvable `v2`" case fails without ever reaching the swap.
+- **Follow-up:** If forking pre-launch verification is ever wanted, it must be
+  reintroduced as an explicit, opt-in seam — the previous `updateCoordination.verifyStart`
+  hook no longer exists.
 
 ### 2026-07-05 — DEFERRED: user-facing cancel UX + longer-lived abort source
 

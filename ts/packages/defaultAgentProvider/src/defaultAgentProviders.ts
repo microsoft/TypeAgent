@@ -227,17 +227,6 @@ export type UpdateCoordinationOptions = {
     // `v1` whose refcount never reaches 0 (verify-0 never passes) — and roll back
     // (design §5.3). The ultimate backstop for a wedged teardown.
     quiesceTimeoutMs?: number | undefined;
-    // Phase-2 (`v2` start/verify) timeout in ms: accommodate process launch; on
-    // expiry roll back keeping `v1` (design §5.3).
-    startTimeoutMs?: number | undefined;
-    // Overridable `v2` start probe (design §5.3): resolves once `v2` is confirmed
-    // able to start, rejects (or hangs → start-timeout) otherwise. The default
-    // reads `v2`'s freshly-materialized manifest — a cheap, non-forking check that
-    // the new artifacts are resolvable; the real process launches when each host
-    // adds `v2`. Injected by tests to simulate a `v2` that won't start.
-    verifyStart?:
-        | ((provider: AppAgentProvider, name: string) => Promise<void>)
-        | undefined;
     // Overridable verify-0 probe (design §5.6): reports whether the shared OLD
     // version is still loaded so the barrier can confirm it is fully released
     // before starting `v2` / freeing the name. Default reads the provider's
@@ -258,21 +247,10 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
     updateCoordination?: UpdateCoordinationOptions | undefined;
 };
 
-// Conservative defaults for the update-coordination barrier (design §5.3): a
-// short quiesce window (abandon a straggler fast) and a longer start window
-// (accommodate a process launch). Both are wall-clock backstops, not hot paths.
+// Conservative default for the update-coordination barrier (design §5.3): a
+// short quiesce window (abandon a straggler fast). A wall-clock backstop, not a
+// hot path.
 const DEFAULT_QUIESCE_TIMEOUT_MS = 15_000;
-const DEFAULT_START_TIMEOUT_MS = 60_000;
-
-// Default `v2` start probe (design §5.3): confirm the new version's materialized
-// manifest is readable. Cheap and non-forking (the real process launches when a
-// host adds `v2`); a corrupt/unresolvable `v2` fails here and rolls back.
-async function defaultVerifyStart(
-    provider: AppAgentProvider,
-    name: string,
-): Promise<void> {
-    await provider.getAppAgentManifest(name);
-}
 
 /**
  * Build the registry-backed {@link AppAgentSource} for the default host (design
@@ -331,19 +309,19 @@ type DynamicAgentEntry =
  * the §5.3 timeout/cancel/rollback envelope. Every target host runs
  * `replaceProvider`, tears down the shared old (`v1`) version, and fills its slot
  * via `quiesce`. Once every slot is filled AND verify-0 confirms the shared `v1`
- * refcount is 0, the source verifies `v2` can start, then COMMITS — releasing the
- * hosts to add `v2` (update) / settle (uninstall). Any stall — a straggler that
- * won't idle, a `v1` that won't terminate, a `v2` that won't start — or an
- * out-of-band abort resolves to ROLLBACK instead: `v1` is restored in every
+ * refcount is 0, the source COMMITS — releasing the hosts to add `v2` (update) /
+ * settle (uninstall). Any stall — a straggler that won't idle or a `v1` that
+ * won't terminate — or an out-of-band abort resolves to ROLLBACK instead: `v1` is
+ * restored in every
  * session and `v2` is discarded, as if the op never happened (design §5.3). The
  * outcome is decided BEFORE the hosts are released, so a host only ever adds one
  * version (`v2` on commit, `v1` on rollback) — never a second swap round.
  */
 type ReplaceOutcome = "committed" | "rolledback";
 
-// Barrier lifecycle: collect quiesces → verify `v2` starts → release hosts with
+// Barrier lifecycle: collect quiesces → (verify-0 passes) → release hosts with
 // the decided outcome → GC the superseded root once every host has swapped.
-type ReplacePhase = "quiescing" | "starting" | "releasing" | "done";
+type ReplacePhase = "quiescing" | "releasing" | "done";
 
 type ReplaceBarrier = {
     readonly name: string;
@@ -376,13 +354,10 @@ type ReplaceBarrier = {
     // undefined until decided; set exactly once (commit XOR rollback).
     outcome: ReplaceOutcome | undefined;
     // Why a rollback was chosen (design §5.4): an out-of-band abort
-    // (`cancelled`) vs a phase timeout / a `v2` that won't start (`failed`).
-    // Undefined on commit.
+    // (`cancelled`) vs the quiesce timeout (`failed`). Undefined on commit.
     rollbackKind: "cancelled" | "failed" | undefined;
     // Phase-1 backstop timer (straggler / `v1` won't die → rollback, §5.3).
     quiesceTimer: ReturnType<typeof setTimeout> | undefined;
-    // Phase-2 backstop timer (`v2` won't start → rollback, §5.3).
-    startTimer: ReturnType<typeof setTimeout> | undefined;
     // Detaches the out-of-band abort listener (design §5.3 cancel).
     detachAbort: (() => void) | undefined;
 };
@@ -417,13 +392,11 @@ export function createDefaultInstalledAgentSource(
     const limiter = createLimiter(1);
 
     // Resolved update-coordination tunables (design §5.3). Conservative defaults;
-    // tests inject tiny timeouts + a fake `verifyStart` to drive the rollback
-    // paths deterministically.
+    // tests inject a tiny quiesce timeout to drive the rollback paths
+    // deterministically.
     const coord = options?.updateCoordination;
     const quiesceTimeoutMs =
         coord?.quiesceTimeoutMs ?? DEFAULT_QUIESCE_TIMEOUT_MS;
-    const startTimeoutMs = coord?.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
-    const verifyStart = coord?.verifyStart ?? defaultVerifyStart;
     const isLoadedProbe =
         coord?.isLoaded ??
         ((p: AppAgentProvider, n: string) => p.isLoaded?.(n));
@@ -497,6 +470,27 @@ export function createDefaultInstalledAgentSource(
             name,
             createInstalledAppAgentProvider(name, record, installDir!),
         );
+    }
+
+    // Build the shared provider for a freshly-resolved install/update record AND
+    // structurally validate its materialized manifest before we commit (design
+    // §5.3). Source-agnostic: a missing/corrupt manifest is equally fatal whether
+    // the agent came from a feed, a catalog `module`, or a local `path`, so
+    // failing HERE means an install records nothing and an update leaves `v1`
+    // untouched — instead of committing a broken agent that then fails per
+    // session (with `v1` already pruned). Cheap and non-forking: the real agent
+    // process only launches when a host loads it, so a manifest that reads but
+    // throws on `instantiate()` still surfaces as an ordinary per-session load
+    // error (TypeAgent never forks a probe, by design). NOT used for startup
+    // seeding — an already-committed record must load lazily and must never fail
+    // the whole source construction on a since-corrupted on-disk manifest.
+    async function buildValidatedAgentProvider(
+        name: string,
+        record: InstalledAgentRecord,
+    ): Promise<AppAgentProvider> {
+        const provider = buildAgentProvider(name, record);
+        await provider.getAppAgentManifest(name);
+        return provider;
     }
 
     // Seed active entries from agents.json (design §3.3). One single-agent,
@@ -582,10 +576,6 @@ export function createDefaultInstalledAgentSource(
             clearTimeout(barrier.quiesceTimer);
             barrier.quiesceTimer = undefined;
         }
-        if (barrier.startTimer !== undefined) {
-            clearTimeout(barrier.startTimer);
-            barrier.startTimer = undefined;
-        }
         barrier.detachAbort?.();
         barrier.detachAbort = undefined;
     }
@@ -628,7 +618,7 @@ export function createDefaultInstalledAgentSource(
         barrier.release();
         // Surface the terminal status to the issuing conversation (design §5.4):
         // a commit is `updated`; a rollback is `cancelled-reverted` (abort) or
-        // `failed-reverted` (timeout / v2 won't start).
+        // `failed-reverted` (quiesce timeout).
         const status: UpdateOutcomeStatus =
             outcome === "committed"
                 ? "updated"
@@ -651,9 +641,9 @@ export function createDefaultInstalledAgentSource(
         decide(barrier, "committed");
     }
 
-    // Roll back the swap (design §5.3): keep `v1`, discard `v2`. Triggered by a
-    // phase timeout / a `v2` that won't start (`kind: "failed"`) or an out-of-band
-    // abort (`kind: "cancelled"`).
+    // Roll back the swap (design §5.3): keep `v1`, discard `v2`. Triggered by the
+    // quiesce timeout (`kind: "failed"`) or an out-of-band abort
+    // (`kind: "cancelled"`).
     function rollback(
         barrier: ReplaceBarrier,
         kind: "cancelled" | "failed",
@@ -668,11 +658,11 @@ export function createDefaultInstalledAgentSource(
     }
 
     // End of phase 1 (a quiesce arrived): once every host has torn `v1` down AND
-    // verify-0 confirms the shared refcount is 0, either commit an uninstall
-    // straight away (nothing to start) or verify `v2` can start before committing
-    // an update. If verify-0 has not passed (a straggler still holds a ref), stay
-    // parked — the quiesce timer is the backstop that rolls back on expiry, so the
-    // no-coexistence guarantee holds without an unbounded wait (design §5.3).
+    // verify-0 confirms the shared refcount is 0, COMMIT (add `v2` on an update /
+    // free the name on an uninstall). If verify-0 has not passed (a straggler
+    // still holds a ref), stay parked — the quiesce timer is the backstop that
+    // rolls back on expiry, so the no-coexistence guarantee holds without an
+    // unbounded wait (design §5.3).
     function maybeAdvance(barrier: ReplaceBarrier): void {
         if (barrier.outcome !== undefined || barrier.phase !== "quiescing") {
             return;
@@ -686,33 +676,11 @@ export function createDefaultInstalledAgentSource(
             );
             return;
         }
-        // `v1` is confirmed down everywhere.
-        if (barrier.newProvider === undefined) {
-            // Uninstall: nothing to start — commit (free the name).
-            commit(barrier);
-            return;
-        }
-        // Update: confirm `v2` can start before committing the swap (design
-        // §5.3). A start timer bounds the probe; either the probe or the timer
-        // resolves the phase (commit on success, rollback on failure/expiry).
-        barrier.phase = "starting";
-        if (barrier.quiesceTimer !== undefined) {
-            clearTimeout(barrier.quiesceTimer);
-            barrier.quiesceTimer = undefined;
-        }
-        barrier.startTimer = setTimeout(
-            () => rollback(barrier, "failed", "v2 start timeout"),
-            startTimeoutMs,
-        );
-        verifyStart(barrier.newProvider, barrier.name).then(
-            () => {
-                if (barrier.outcome === undefined) {
-                    commit(barrier);
-                }
-            },
-            (e: unknown) =>
-                rollback(barrier, "failed", `v2 start failed: ${e}`),
-        );
+        // `v1` is confirmed down everywhere — commit directly (add `v2` on an
+        // update / free the name on an uninstall). `v2`'s materialized manifest
+        // was already structurally validated before the barrier was armed
+        // (design §5.3), so there is nothing left to probe here.
+        commit(barrier);
     }
 
     // Drop a host from a draining name's phase-1 barrier — a quiesce ACK, a
@@ -761,9 +729,9 @@ export function createDefaultInstalledAgentSource(
     // adding whatever the barrier decides — so no request interleaves the swap on
     // any session and no two versions coexist. Returns immediately once the
     // barrier is wired; the swap resolves to COMMIT (`v2`/free the name) once the
-    // last host quiesces, verify-0 confirms the shared old refcount is 0, and `v2`
-    // starts — or to ROLLBACK (`v1` restored, `v2` discarded) on a phase timeout,
-    // an out-of-band abort, or a `v2` that won't start (design §5.3). A per-host
+    // last host quiesces and verify-0 confirms the shared old refcount is 0 — or
+    // to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout or an
+    // out-of-band abort (design §5.3). A per-host
     // failure is treated as a quiesce so a failed/gone session never wedges it.
     //
     // `dropConfig` (design §5, Model B): forwarded to every remove leg — `true`
@@ -820,7 +788,6 @@ export function createDefaultInstalledAgentSource(
             outcome: undefined,
             rollbackKind: undefined,
             quiesceTimer: undefined,
-            startTimer: undefined,
             detachAbort: undefined,
         };
         entries.set(name, {
@@ -930,6 +897,15 @@ export function createDefaultInstalledAgentSource(
                 // `@update` can reconstruct the candidate later (design §5, §12
                 // Q13) - no host-side key backfill needed.
                 const record: InstalledAgentRecord = { ...resolved, name };
+                // Build the shared per-agent provider AND structurally validate
+                // its freshly-materialized manifest BEFORE persisting (design
+                // §5.3, §7.2 absent → active): a corrupt/unresolvable agent — from
+                // ANY source (feed, catalog `module`, or local `path`) — fails
+                // here, so a broken agent is never recorded.
+                const provider = await buildValidatedAgentProvider(
+                    name,
+                    record,
+                );
                 // Persist the record under the same serialization domain.
                 await limiter(async () => {
                     const current = readAgentsJson(instanceDir) ?? {
@@ -941,9 +917,8 @@ export function createDefaultInstalledAgentSource(
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
                 });
-                // Build the shared per-agent provider and mark the name active
-                // so later connects vend it (design §7.2 absent → active).
-                const provider = buildAgentProvider(name, record);
+                // Mark the name active so later connects vend it (design §7.2
+                // absent → active).
                 entries.set(name, { status: "active", provider });
                 // Fan out the add to every connected session — including the
                 // issuing one — through each session's idle-gated applicator
@@ -1151,20 +1126,30 @@ export function createDefaultInstalledAgentSource(
                 // Coordinated update (design §5.6, §5.7, §7.2): tear the OLD
                 // version down across every session and add the NEW one as ONE
                 // coordinated barrier — each session's `replaceProvider` removes
-                // v1 then (after verify-0 confirms v1 is down everywhere and v2
-                // starts) adds v2, all under one held command lock, so no two
-                // versions of the name ever coexist and no session observes it
-                // absent. No-coexistence is REQUIRED because an agent's persisted
-                // storage is keyed by agent name and cannot be shared, so two
-                // versions loaded at once would collide on that storage. The
-                // barrier passes dropConfig=false so the version bump preserves
-                // each session's per-session enable preference (design §5, Model
-                // B). The update is cancelable (abortSignal) and time-bounded: a
-                // straggler that won't idle, a v1 that won't die, or a v2 that
-                // won't start ROLLS BACK to v1 (design §5.3) — v2 is discarded and
-                // v1 stays the recorded-current version, as if it never happened.
+                // v1 then (after verify-0 confirms v1 is down everywhere) adds v2,
+                // all under one held command lock, so no two versions of the name
+                // ever coexist and no session observes it absent. No-coexistence
+                // is REQUIRED because an agent's persisted storage is keyed by
+                // agent name and cannot be shared, so two versions loaded at once
+                // would collide on that storage. The barrier passes
+                // dropConfig=false so the version bump preserves each session's
+                // per-session enable preference (design §5, Model B). The update
+                // is cancelable (abortSignal) and time-bounded: a straggler that
+                // won't idle or a v1 that won't die ROLLS BACK to v1 (design §5.3)
+                // — v2 is discarded and v1 stays the recorded-current version, as
+                // if it never happened.
                 const oldEntry = entries.get(name);
-                const newProvider = buildAgentProvider(name, record);
+                // Build v2's provider AND structurally validate its
+                // freshly-materialized manifest while v1 is still live (design
+                // §5.3): a corrupt/unresolvable v2 — from ANY source (feed,
+                // catalog `module`, or local `path`) — fails HERE (the update
+                // rejects, v1 untouched, v2's root left for the startup sweep)
+                // rather than committing and failing per-session with v1 already
+                // pruned.
+                const newProvider = await buildValidatedAgentProvider(
+                    name,
+                    record,
+                );
                 // The OLD (v1) version's install root, kept intact until the
                 // swap succeeds so a rollback can restart v1 (design §5.3), and
                 // pruned only after v2 is confirmed serving everywhere AND no
@@ -1355,6 +1340,20 @@ export function createDefaultInstalledAgentSource(
                     // from every barrier's pending set (which may complete one).
                     for (const name of [...entries.keys()]) {
                         quiesce(name, host);
+                        // Re-poll verify-0 even when this host had already left
+                        // `pending`. The dispatcher tears this session's agents
+                        // down — dropping the shared `v1` refcount — BEFORE it
+                        // disposes the connection, so a barrier parked on "all
+                        // quiesced but refcount != 0" (because an auto-acked op
+                        // emptied `pending` before that decrement landed) would
+                        // otherwise sit until the quiesce timeout and spuriously
+                        // roll back. `maybeAdvance` only commits when verify-0
+                        // genuinely passes and is idempotent, so re-polling on a
+                        // disconnect is always safe (design §5.7 close race).
+                        const entry = entries.get(name);
+                        if (entry?.status === "removing") {
+                            maybeAdvance(entry.barrier);
+                        }
                     }
                 },
             };

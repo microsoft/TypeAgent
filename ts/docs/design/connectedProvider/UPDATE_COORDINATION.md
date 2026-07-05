@@ -139,7 +139,9 @@ of the bespoke drain / `pending` / `then` state machine.
   so a request before install is correctly "unknown". No hold needed.
 - **uninstall** (`active → absent`): ends `absent`, which is the _correct_ end
   state; an in-flight request drains, a new one gets a clean "removed". No
-  resume, no slip.
+  resume, no slip. It still runs through the same barrier, so a straggler that
+  won't idle **rolls back** to `active(v1)` (the agent stays installed) — a
+  reverted uninstall the caller is told about, not a silent success (§5.3).
 - **update** (`active(v1) → active(v2)`): the **only** op needing the resume-hold,
   and it is just the other two under one lock.
 
@@ -156,9 +158,49 @@ if cancel / timeout before v2 is serving:
     discard v2  → active(v1), as if the update never happened
 ```
 
-- **Per-phase timeouts:** a short **quiesce** timeout (abandon a straggler fast)
-  and a longer **v2 start/verify** timeout (accommodate process launch); either
-  expiry auto-rolls-back. Config-tunable; start conservative.
+- **Single round — outcome decided before hosts release.** The barrier decides
+  commit vs. rollback **before** it releases the parked hosts; each host then does
+  exactly **one** lock-held remove→add, adding whatever the barrier decided via a
+  single post-barrier thunk: `v2` (commit), the original `v1` (rollback), or
+  nothing (a committed uninstall). There is **no second swap round** — a rollback
+  restores `v1` in the same atomic swap, so no session ever transiently runs `v2`
+  on a rolled-back update. (Rejected: a two-round barrier that adds `v2` then swaps
+  back to `v1` on failure — it doubles the disruption and can strand a session on
+  `v2` if the second round fails.)
+- **The store commit is the barrier decision, not the materialize.** The
+  `agents.json` record is mutated only when the barrier **commits** — update writes
+  the `v2` record on commit; uninstall deletes the record on commit — never before.
+  On rollback the record is left untouched (`v1` stays recorded), so there is
+  nothing to "restore". This makes a crash mid-swap recover cleanly to `v1`: the
+  already-materialized `v2` root is an orphan the startup sweep (§5.5) reclaims,
+  instead of the store coming up on an unverified `v2` with `v1` already pruned.
+  The in-memory entry is flipped **before** the store write (so the name is never
+  stranded mid-swap), and the commit-time GC prune is guarded on the store actually
+  reflecting the new state (so a failed commit-write keeps the old root). (Refines
+  DESIGN §7.4: the record write is still THE commit point — it is just aligned with
+  the barrier's commit, when `v2` becomes live, instead of the earlier materialize.)
+- **Structural check runs _before_ the barrier, not at it.** TypeAgent never
+  forks a startability probe for `v2`, so the barrier itself has nothing to verify
+  beyond verify-0 (v1 down everywhere) and **commits directly** once that passes.
+  The one cheap check worth doing — that `v2`'s freshly-materialized manifest is
+  readable — is pulled **forward to install/update materialize time**, while `v1`
+  is still live: a corrupt/unresolvable `v2` fails there (the op rejects, `v1`
+  untouched, `v2`'s root left for the startup sweep) rather than committing a
+  broken agent. The check is **source-agnostic** — feed, catalog `module`, AND
+  local `path` — because a missing/corrupt manifest is equally fatal however the
+  agent resolved (a bare `path` dir with no manifest fails at install, not per
+  session). It is centralized in a single build-and-validate helper on the
+  install/update path; **startup seeding is deliberately exempt** so an
+  already-committed record whose on-disk manifest later went bad fails lazily at
+  load rather than bricking the whole source construction. _Accepted limit:_ a
+  `v2` whose manifest reads but throws on `instantiate()` still commits and
+  surfaces as an ordinary per-session load error (no rollback) — no worse than
+  before, since no forking probe is ever run.
+- **One timeout — quiesce only.** A short **quiesce** timeout abandons a straggler
+  that won't idle (or a `v1` that won't die) and auto-rolls-back to `v1`. There is
+  **no separate v2 start/verify timeout** because there is no start probe — the
+  structural check above is a synchronous manifest read done before the barrier.
+  Config-tunable; start conservative.
 - **Cancel is out-of-band.** During the freeze the command lock is held, so a
   typed `cancel` command would queue behind the frozen op and **deadlock**. Cancel
   must ride the existing interrupt/abort path (`abortSignal`), not the command
@@ -167,7 +209,10 @@ if cancel / timeout before v2 is serving:
   user-facing cancel UX is deferred (TODO in `packageAgent.ts`).
 - **Surfacing:** the issuing conversation gets async status (§5.4:
   updating / updated / cancelled-reverted / failed-reverted); siblings experience
-  the brief freeze and get a system message on the outcome.
+  the brief freeze and get a system message on the outcome. Uninstall runs through
+  the same barrier and surfaces the analogous terminal outcome (`uninstalled` on a
+  clean commit, `reverted` — still installed — on a straggler-timeout rollback), so
+  the caller is never told an agent is gone when it actually reverted.
 
 ### 5.4 Uniform enqueue model — delete `immediate`
 
@@ -185,6 +230,26 @@ deadlock. Make the issuing session **enqueue like a sibling** instead:
    command result): `@update` returns "update started"; the
    "updated"/"failed"/"cancelled" outcome arrives when the op settles. `@update`
    never blocks the command lock waiting on the cross-session restart.
+
+**Outcome-callback contract.** The async terminal outcome is delivered through a
+one-shot `onOutcome(status)` callback on `update()` and `uninstall()`, invoked
+**exactly once** at the barrier's decide point (or synchronously on the no-barrier
+fast paths below):
+
+- `update`: `status ∈ { "updated", "cancelled-reverted", "failed-reverted" }` —
+  `updated` on commit, `cancelled-reverted` on an abort rollback, `failed-reverted`
+  on a quiesce-timeout rollback.
+- `uninstall`: `status ∈ { "uninstalled", "reverted" }` — `uninstalled` on commit,
+  `reverted` on a straggler-timeout rollback (the agent stays installed).
+- **No-barrier fast paths still fire exactly one outcome.** An update whose old
+  version is not live anywhere (nothing to tear down — no session currently has
+  `v1` loaded) skips the barrier and fires `onOutcome("updated")` directly; a
+  same-version no-op update (§5.5) likewise reports `updated`. So a caller always
+  gets exactly one terminal signal whether or not a barrier ran.
+
+The `@package` handler maps the status to a follow-up status line. A throwing
+callback (a display wrapper) is caught at the source so it can never escape as an
+unhandled rejection nor skip the barrier's GC finalization.
 
 This **deletes the `immediate` parameter and the inline apply path** from
 `AppAgentHost.addProvider`/`removeProvider` (§3.1) entirely — install, uninstall,
@@ -251,6 +316,9 @@ cancel/rollback falls out for free, and same-version updates cost nothing.
   once no remaining `agents.json` record references it** (a sibling may share it),
   plus a startup orphan sweep that keeps the union of every agent's
   recorded-current root (removing a `.tmp-*` or version dir from a crashed update).
+  All reclamation is **best-effort** (recursive+force remove, failures logged, never
+  thrown): a failed prune never blocks the update/uninstall, and the next startup's
+  orphan sweep reconciles it.
 - **Record/provider:** the `InstalledAgentRecord` carries the `installRoot`
   (`module@version`); the provider builder derives the require-root from it instead
   of the shared `installDir`. The concrete version is not stored separately — it is
@@ -300,12 +368,18 @@ cross-call lock ownership, partial states).
 
 The barrier is **source-coordinated** — each op awaits the source's signal, never
 another dispatcher — so there is no dispatcher-to-dispatcher cycle. A host that
-**disconnects** mid-barrier is dropped from it (like today's `drainDrop`).
+**disconnects** mid-barrier is dropped from it (like today's `drainDrop`). A host
+that was **already closed at enqueue time** auto-acks its op without ever running
+`onQuiesced`; the source settles it from the op's success continuation (a second,
+idempotent quiesce) so it fills its barrier slot immediately instead of wedging
+the barrier until the quiesce timeout.
 
 **Liveness (no unavoidable deadlock):**
 
-- The **timeout (§5.3) is the ultimate backstop** — any stall (straggler that
-  won't idle, `v1` that won't die, `v2` that won't start) resolves to rollback.
+- The **timeout (§5.3) is the ultimate backstop** — any stall (a straggler that
+  won't idle or a `v1` that won't die) resolves to rollback. There is no
+  `v2`-start stall: `v2` is added only _after_ verify-0, and its structural check
+  ran before the barrier (§5.3).
 - **Leaf-op invariant:** teardown (`unloadAppAgent`/`close`) and startup
   (`load`/`init`) run under the held command lock and **must be leaf ops** —
   process teardown/launch only, never dispatching a command or reacquiring the
@@ -314,6 +388,64 @@ another dispatcher — so there is no dispatcher-to-dispatcher cycle. A host tha
   (bounded by the timeout).
 - Tests: straggler-times-out-rolls-back; mid-request blocks-then-times-out;
   disconnect-during-freeze drops from the barrier.
+
+### 5.8 Close / disconnect handling
+
+A session can disconnect at **any** point of an install/update/uninstall. The
+source connection's `dispose()` (a) removes the host from the fan-out registry and
+(b) for every in-flight barrier, drops the host from `pending` (idempotent
+`quiesce`) and **re-polls verify-0** (`maybeAdvance`). It never tears down the
+shared providers — sibling sessions still hold them; the dispatcher unregisters
+them from its own manager at teardown.
+
+**Close teardown order (dispatcher, per `closeCommandHandlerContext`):**
+
+1. `appAgentHost.dispose()` — auto-acks every _not-yet-running_ queued op
+   (resolves it); a _running_ op (e.g. a barrier `replaceProvider` parked at
+   `await whenReady`) is left to finish and, on resume, sees `closed` and skips
+   the v2-add leg.
+2. `requestQueue.drainAndStop()`.
+3. Per connection: `agents.removeProvider(provider)` — **unloads the agents,
+   dropping the shared `v1` refcount** — _then_ `connection.dispose()` (the
+   source-side dispose above).
+
+So the refcount **decrement precedes** the source-side `dispose()`. This ordering
+is what makes the disconnect re-poll correct rather than premature.
+
+**Behaviour by phase:**
+
+- **Install** (fan-out add _after_ the store commit): safe at every close point —
+  the record is already committed, the agent reappears on reconnect, and the
+  fan-out notify is best-effort.
+- **Before the barrier snapshots** its target set: a disconnected host is simply
+  absent from `clients`, so it is never a barrier slot.
+- **Barrier op already running** at close: `appAgentHost.dispose()` leaves it to
+  finish; on resume it skips the add (already `closed`) and has already dropped
+  its `v1` ref — a clean exit, no coexistence risk.
+- **Disconnect during phase 1** (normal quiesce): the source `dispose()` fires
+  _after_ step 3's decrement, so its verify-0 re-poll observes the fresh refcount.
+- **Disconnect during rollback / phase 3**: the freed slot's GC falls back to the
+  startup orphan sweep (§5.5).
+
+**The busy-close race the re-poll closes.** A session that closes while its
+barrier op is _queued-not-started_ has that op **auto-acked** by
+`appAgentHost.dispose()` (step 1). The auto-ack's success continuation runs the
+source's idempotent `quiesce`, which can empty `pending` **before** that session's
+`v1` unload (step 3's decrement) has landed. If it was the last slot, verify-0
+then reads a **stale non-zero** refcount and the barrier parks — but nothing
+re-triggers it: the later decrement fires no callback, and `connection.dispose()`
+would early-return from a second `quiesce` (host already gone). The barrier would
+sit until the quiesce timeout and **spuriously roll back** (safe — no coexistence
+— but a clean disconnect becomes a timeout rollback). The fix: `connection.dispose()`
+**re-polls `maybeAdvance`** after its `quiesce`. Because step 3 decremented _before_
+disposing, the re-poll now sees the true refcount and commits. `maybeAdvance` only
+commits when `pending` is empty **and** verify-0 genuinely passes, and it is
+idempotent, so re-polling on every disconnect is always safe.
+
+- Tests: `a session disconnecting as the last barrier slot re-polls verify-0 and
+commits (no timeout stall)` — parks on a held ref, then a disconnect (ref
+  dropped first, per the real close order) commits within the settle window
+  instead of waiting out the timeout.
 
 ## 6. What this removes vs. today
 
