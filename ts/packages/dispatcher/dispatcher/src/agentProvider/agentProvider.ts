@@ -19,17 +19,13 @@ export interface AppAgentProvider {
     // Only these agents should show ⏳ in the UI. If omitted, no agents are
     // treated as loading.
     getLoadingAgentNames?(): string[];
-    // Optional: the current load refcount for an agent (design §5.6) — how many
-    // holders have `loadAppAgent`-ed it without a matching `unloadAppAgent`. The
-    // installed-agent source's coordinated teardown/swap reads this to VERIFY a
-    // torn-down version's shared process is fully released (count 0) before it
-    // starts the new version or frees the name, rather than inferring it from
-    // teardown ACKs. Providers that do not refcount omit it (treated as 0).
-    getRefCount?(appAgentName: string): number;
-    // Optional companion to {@link getRefCount}: whether the agent currently has
-    // a loaded (refcounted) instance. Diagnostics only — the verify-0 teardown
-    // gate uses {@link getRefCount} (count 0) exclusively, not this. Omitted by
-    // providers that do not refcount.
+    // Optional: whether the agent currently has a loaded (refcounted) instance —
+    // i.e. some holder has `loadAppAgent`-ed it without a matching
+    // `unloadAppAgent` (design §5.6). The installed-agent source's coordinated
+    // teardown/swap reads this to VERIFY a torn-down version's shared process is
+    // fully released (not loaded anywhere) before it starts the new version or
+    // frees the name, rather than inferring it from teardown ACKs. Providers that
+    // do not refcount omit it (treated as released).
     isLoaded?(appAgentName: string): boolean;
 }
 

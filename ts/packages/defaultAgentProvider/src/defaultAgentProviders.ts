@@ -238,13 +238,13 @@ export type UpdateCoordinationOptions = {
     verifyStart?:
         | ((provider: AppAgentProvider, name: string) => Promise<void>)
         | undefined;
-    // Overridable verify-0 refcount probe (design §5.6): reports the shared OLD
-    // version's load refcount so the barrier can confirm it reached 0 before
-    // starting `v2` / freeing the name. Default reads the provider's
-    // `getRefCount`. Injected by tests to force the "straggler still holds a ref"
+    // Overridable verify-0 probe (design §5.6): reports whether the shared OLD
+    // version is still loaded so the barrier can confirm it is fully released
+    // before starting `v2` / freeing the name. Default reads the provider's
+    // `isLoaded`. Injected by tests to force the "straggler still holds a ref"
     // park that the quiesce timeout then rolls back.
-    refCount?:
-        | ((provider: AppAgentProvider, name: string) => number | undefined)
+    isLoaded?:
+        | ((provider: AppAgentProvider, name: string) => boolean | undefined)
         | undefined;
 };
 
@@ -424,9 +424,9 @@ export function createDefaultInstalledAgentSource(
         coord?.quiesceTimeoutMs ?? DEFAULT_QUIESCE_TIMEOUT_MS;
     const startTimeoutMs = coord?.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
     const verifyStart = coord?.verifyStart ?? defaultVerifyStart;
-    const refCountProbe =
-        coord?.refCount ??
-        ((p: AppAgentProvider, n: string) => p.getRefCount?.(n));
+    const isLoadedProbe =
+        coord?.isLoaded ??
+        ((p: AppAgentProvider, n: string) => p.isLoaded?.(n));
 
     function persistSources(configs: InstallSourceConfig[]): void {
         const current = instanceConfigs.getInstanceConfig();
@@ -568,13 +568,12 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
-    // Verify the shared OLD provider is fully released (design §5.6): its load
-    // refcount is 0 — an EXPLICIT check, never inferred from quiesce ACKs. A
-    // provider that does not refcount (omits `getRefCount`) makes the ACKs
+    // Verify the shared OLD provider is fully released (design §5.6): it is no
+    // longer loaded anywhere — an EXPLICIT check, never inferred from quiesce
+    // ACKs. A provider that does not refcount (omits `isLoaded`) makes the ACKs
     // authoritative (treated as released).
     function verifyZero(barrier: ReplaceBarrier): boolean {
-        const count = refCountProbe(barrier.oldProvider, barrier.name);
-        return count === undefined || count === 0;
+        return isLoadedProbe(barrier.oldProvider, barrier.name) !== true;
     }
 
     // Cancel any live phase timers + the abort listener (design §5.3). Idempotent.

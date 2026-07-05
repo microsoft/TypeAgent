@@ -149,8 +149,8 @@ describe("dispatcher", () => {
 });
 
 describe("npm provider refcount (design §5.6 verify-0)", () => {
-    // Load the test agent in-process (execMode "dispatcher") so the refcount can
-    // be exercised without forking a child per load.
+    // Load the test agent in-process (execMode "dispatcher") so the loaded state
+    // can be exercised without forking a child per load.
     function makeProvider() {
         return createNpmAppAgentProvider(
             {
@@ -166,37 +166,32 @@ describe("npm provider refcount (design §5.6 verify-0)", () => {
         );
     }
 
-    it("tracks the shared load refcount across repeat loads/unloads", async () => {
+    it("tracks the shared loaded state across repeat loads/unloads", async () => {
         const provider = makeProvider();
 
         // Not loaded yet: verify-0 sees the name as fully released.
         expect(provider.isLoaded?.("test")).toBe(false);
-        expect(provider.getRefCount?.("test")).toBe(0);
 
-        // First load → refcount 1, loaded.
+        // First load → loaded.
         await provider.loadAppAgent("test");
         expect(provider.isLoaded?.("test")).toBe(true);
-        expect(provider.getRefCount?.("test")).toBe(1);
 
-        // A repeat load shares the one process → refcount 2.
+        // A repeat load shares the one process → still loaded.
         await provider.loadAppAgent("test");
-        expect(provider.getRefCount?.("test")).toBe(2);
+        expect(provider.isLoaded?.("test")).toBe(true);
 
-        // One unload → still loaded (a straggler holds it), refcount 1.
+        // One unload → still loaded (a straggler holds it).
         await provider.unloadAppAgent("test");
         expect(provider.isLoaded?.("test")).toBe(true);
-        expect(provider.getRefCount?.("test")).toBe(1);
 
         // Final unload → fully released: the verify-0 signal the source relies on
         // before starting the next version / freeing the name.
         await provider.unloadAppAgent("test");
         expect(provider.isLoaded?.("test")).toBe(false);
-        expect(provider.getRefCount?.("test")).toBe(0);
     });
 
-    it("reports 0 / not-loaded for an unknown agent", () => {
+    it("reports not-loaded for an unknown agent", () => {
         const provider = makeProvider();
-        expect(provider.getRefCount?.("nope")).toBe(0);
         expect(provider.isLoaded?.("nope")).toBe(false);
     });
 });

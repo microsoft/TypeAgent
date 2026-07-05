@@ -1356,7 +1356,7 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
                 verifyStart: async () => {},
                 // The shared v1 provider never drops to 0 refs (a wedged loader):
                 // every host quiesces but verify-0 keeps the barrier parked.
-                refCount: () => 1,
+                isLoaded: () => true,
             },
         });
         const issuing = recordingHost();

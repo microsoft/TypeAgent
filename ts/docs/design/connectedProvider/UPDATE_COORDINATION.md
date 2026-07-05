@@ -277,10 +277,10 @@ not-yet-quiesced or late-joining/racing loader, an in-flight op, or a leaked ref
 update **must not proceed**: wait for the straggler(s) or abort/rollback (§5.3).
 Only once v1 is _confirmed_ terminated does v2 start.
 
-> **API implication:** the shared provider must **expose** its loaded/refcount
-> state (today `count` is private to `createNpmAppAgentProvider`), e.g.
-> `isLoaded(name)` / `getRefCount(name)`, so the source can verify 0 rather than
-> infer it from ACKs alone.
+> **API implication:** the shared provider must **expose** its loaded state
+> (today `count` is private to `createNpmAppAgentProvider`), e.g. `isLoaded(name)`,
+> so the source can verify release rather than infer it from ACKs alone. The
+> source only needs the boolean "still loaded?", not the count magnitude.
 
 With §5.5's version-scoped roots, v1 and v2 are **separate provider instances**
 with **separate refcounts**, so "v1 count → 0 → close" and "v2 first load → start"
