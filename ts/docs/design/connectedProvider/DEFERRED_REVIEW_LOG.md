@@ -48,6 +48,7 @@ subagent did not read appAgentManager.ts). Remaining items were clarity nits
 — already covered by existing inline comments + this log; not re-churned.
 
 Test-gap round 1 (Explore subagent): P0 gaps identified and **all fixed**:
+
 - `@package source` nesting under the command table (buildPackageCommandTable);
 - handler error handling (install/uninstall/update throw → no `AppAgentHost` call);
 - handler completions (install ref/--source, uninstall/update names);
@@ -55,8 +56,8 @@ Test-gap round 1 (Explore subagent): P0 gaps identified and **all fixed**:
   providers; a later connect still vends them);
 - install-after-connect visibility (a later session's connect sees the new agent);
 - uninstall drops the agent from later-vended connections.
-packageAgent.spec.ts (13) + installSourcesInstalledProvider.spec.ts (now 40 total
-across the two files) all green.
+  packageAgent.spec.ts (13) + installSourcesInstalledProvider.spec.ts (now 40 total
+  across the two files) all green.
 
 Deferred (logged): "all hosts smoke-boot" is integration-only; partial evidence
 is that the three rewired host files (server.ts, webDispatcher.ts, instance.ts)
@@ -73,6 +74,7 @@ client, single-client degrade, `withDisabledByDefault` preserves optional method
 layering intact.
 
 Test-gap round 1 (Explore subagent): P0/P1 gaps identified and **all fixed**:
+
 - system-message content asserted — extracted `emitAgentChangeNotification`
   helper + 3 wording tests (disabled-install / enabled-install / uninstall);
 - double-dispose + late-op no-op (applicator);
@@ -80,8 +82,8 @@ Test-gap round 1 (Explore subagent): P0/P1 gaps identified and **all fixed**:
 - update remove-then-add per client (issuing + sibling);
 - late-connect-disabled (manifest default false) distinct from sibling-disabled
   (fan-out `enable=false`) — both covered.
-Suites: appAgentHost.spec.ts (19), installSourcesInstalledProvider.spec.ts (36),
-packageAgent.spec.ts (11).
+  Suites: appAgentHost.spec.ts (19), installSourcesInstalledProvider.spec.ts (36),
+  packageAgent.spec.ts (11).
 
 Deferred (logged): the deeper "hostAddProvider actively calls setState with the
 agent disabled" assertion is integration-level (needs a live AppAgentManager +
@@ -181,14 +183,6 @@ Aggregate diff reviewed against the whole design (§§1–9):
 No new findings; no fixes required beyond those already made in the milestone
 gates. Branch is ready for PR.
 
-
-
-
-
-
-
-
-
 ## Post-M5 review — enable-state clobber (resolved)
 
 The deferred enable-state concern surfaced as a real regression: the M5 policy
@@ -201,10 +195,12 @@ updated/added (appAgentHost reconciliation + wording; install-sources fan-out no
 longer asserts
 disabled-by-default). No open items.
 
-## Open — request-slip in the update absence window (to revisit)
+## Resolved — request-slip in the update absence window
 
-- **Milestone / gate:** post-implementation design review
-- **Kind:** Design gap (correctness/UX), not yet addressed
+- **Milestone / gate:** post-implementation design review → **resolved by the
+  Update Coordination rework** (Milestones 1–5, see
+  [UPDATE_COORDINATION_EXECUTION_PLAN.md](./UPDATE_COORDINATION_EXECUTION_PLAN.md)).
+- **Kind:** Design gap (correctness/UX), **addressed**.
 - **Summary:** `@update` is a disruptive drain-then-add (global no-coexistence,
   §7.2): the old provider is removed across **every** session before the new one
   is added to **any**. Between a session's remove and its re-add the agent name is
@@ -213,7 +209,7 @@ disabled-by-default). No open items.
   targeting the name gets an "unknown agent" miss or — worse — is **misrouted** to
   a different agent. Siblings are the worst case: their remove applies at their own
   next idle and the re-add is deferred until the **global** drain finishes, so the
-  window is bounded by the *slowest* session's activity, not by the update work.
+  window is bounded by the _slowest_ session's activity, not by the update work.
   The load tombstone (`withTombstone`) does **not** cover this — it guards the
   draining instant / a session still holding the instance, but once `removeProvider`
   completes the name is gone from the manager and dispatch never reaches it.
@@ -227,9 +223,19 @@ disabled-by-default). No open items.
   as a follow-up; for now the behavior is documented in the code comments
   (`packageAgent.ts` / `defaultAgentProviders.ts`) and the issuing user sees a
   "briefly reloads in each session" message.
-- **Follow-up:** design + implement blocking dispatch (or an equivalent) for a
-  name in the `removing` state. **Proposed plan:** [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md)
-  — make each dispatcher's update a single `commandLock`-held critical section
-  (like the issuing session already is) so request-vs-update is mutually
-  exclusive and the slip is structurally impossible; user-cancelable with a
-  timeout; update = uninstall+install under one hold. Iterating.
+- **How it was fixed:** update (and uninstall) now run through a single
+  per-dispatcher `commandLock`-held critical section, coordinated by a source-side
+  barrier: every target session tears down `v1` under its own held lock and parks;
+  once all sessions have quiesced (and verify-0 confirms the shared `v1` refcount
+  is 0) the source verifies `v2` starts and COMMITS, releasing each parked session
+  to add `v2` under the same hold. Because the whole op is mutually exclusive with
+  requests on every dispatcher, no user request can slip into a remove→add gap —
+  the slip is structurally impossible. The swap is cancelable and time-bounded
+  (per-phase quiesce/start timeouts), rolling back to `v1` on cancel/timeout/`v2`
+  start failure. Install roots are per-agent + version-scoped so a rollback keeps
+  `v1` durable. See [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md) (Implemented).
+- **Residual follow-ups (tracked in
+  [UPDATE_COORDINATION_DEFERRED_LOG.md](./UPDATE_COORDINATION_DEFERRED_LOG.md)):**
+  a session that `connect()`s mid-`removing` is not yet a barrier target (the load
+  tombstone still guards that window); and the user-facing cancel affordance needs
+  a longer-lived abort source than the per-command signal.

@@ -520,6 +520,12 @@ abandoned and pending removals auto-ack (a gone session has removed everything).
 
 ### 7.2 Source side - per-name `DynamicAgentEntry`
 
+> **Historical shape.** The type block and `update (disruptive)` mechanism below
+> describe the ORIGINAL drain-then-add design. The shipped implementation replaced
+> the `pending`/`then` drain bookkeeping with a source-coordinated `replaceProvider`
+> barrier — see [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md) (Implemented) for
+> the current shape.
+
 ```ts
 type DynamicAgentEntry =
   | { status: "active"; provider: AppAgentProvider } // installed, fanned out
@@ -541,10 +547,13 @@ hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
   two versions ever coexist — **required** because an agent's persisted storage
   is keyed by agent name and cannot be shared between versions, so two versions
   loaded at once would collide on that storage.
-  > **Known gap:** this disruptive swap has a request-slip window — a request to
-  > the name mid-swap can miss or misroute (see DEFERRED_REVIEW_LOG.md). A proposed
-  > rework (single command-lock-held swap per dispatcher, cancelable) is in
-  > [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md).
+  > **Known gap (resolved):** the disruptive swap described above had a
+  > request-slip window — a request to the name mid-swap could miss or misroute.
+  > This has been **superseded**: update (and uninstall) now run through a single
+  > `commandLock`-held critical section per dispatcher, coordinated by a
+  > source-side barrier and made cancelable + time-bounded with rollback to `v1`.
+  > See [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md) (Implemented) and the
+  > resolved item in DEFERRED_REVIEW_LOG.md.
 - **name reuse during `removing`:** a new user `@package install` **or**
   `@package update` on a name that is still `removing` is **rejected** with a
   clear "still being removed, retry shortly" error. `then` is used only for the

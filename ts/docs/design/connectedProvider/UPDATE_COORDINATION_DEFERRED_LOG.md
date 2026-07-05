@@ -209,3 +209,21 @@
 - **Decision:** Still deferred to M5 (or later): unify `connect()` initial
   registration and the barrier fan-out under one FIFO / the session command lock.
 - **Follow-up:** Evaluate in M5 §6 cleanup.
+
+### 2025-XX-XX — KEPT (not removed): load tombstone `withTombstone`
+
+- **Milestone / gate round:** M5 / §6 (5.1 step 2)
+- **Finding / gap:** M5 evaluated removing the load tombstone (`withTombstone`),
+  which refuses `loadAppAgent` for a name while its entry is `removing`. Under the
+  single lock-held barrier, each session's remove + unload are atomic under its
+  own command lock, so the per-session removed-but-still-loadable race the
+  tombstone originally guarded is closed.
+- **Decision:** KEPT, not removed. A surviving window remains: a session that
+  `connect()`s mid-`removing` is NOT a barrier target (the still-open
+  connect-during-removing item), so the barrier's per-session serialization does
+  not cover it. The tombstone is the cheap backstop for exactly that §7.3
+  connect-during-removing case (see the code comments and the entry's
+  `removing.provider` retention).
+- **Follow-up:** Reconsider removing the tombstone once `connect()` initial
+  registration is unified with the barrier fan-out (the connect-mid-removing
+  follow-up above). Until then it stays.

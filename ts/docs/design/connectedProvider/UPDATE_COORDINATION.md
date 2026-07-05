@@ -1,9 +1,13 @@
-# Update Coordination — Rework (Proposed)
+# Update Coordination — Rework (Implemented)
 
-> **Status: Proposed / not implemented.** All key decisions resolved (see the
-> body); addresses the open item "request-slip in the update absence window" in
-> [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md). The shipped behavior is the
-> disruptive global drain-then-add in [DESIGN.md](./DESIGN.md) §7.2.
+> **Status: Implemented.** Shipped across Milestones 1–5 (see
+> [UPDATE_COORDINATION_EXECUTION_PLAN.md](./UPDATE_COORDINATION_EXECUTION_PLAN.md)).
+> Resolves the open item "request-slip in the update absence window" in
+> [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) and supersedes the disruptive
+> global drain-then-add previously described in [DESIGN.md](./DESIGN.md) §7.2.
+> Update/uninstall now run through a single per-dispatcher `commandLock`-held
+> critical section coordinated by a source-side barrier, made cancelable and
+> time-bounded with rollback to `v1`.
 
 ## 1. Problem
 
@@ -15,7 +19,7 @@ its re-add the agent name is fully unregistered from that session's
 it gets an "unknown agent" miss or, worse, is **misrouted** to a different agent.
 Siblings are the worst case: their remove applies at their own next idle and the
 re-add is deferred until the **global** drain finishes, so the window is bounded
-by the *slowest* session's activity, not by the update work.
+by the _slowest_ session's activity, not by the update work.
 
 ## 2. Constraints (facts that shape the design)
 
@@ -26,7 +30,7 @@ by the *slowest* session's activity, not by the update work.
 2. **Global no-coexistence is a correctness requirement (not lock-enforced).**
    An agent's persisted storage is keyed by agent **name** (not version) and is
    shared, so two versions of the same-named agent would collide on it. Nothing
-   *locks* this: the `instanceDir` lock is **per-dispatcher** — it guards a
+   _locks_ this: the `instanceDir` lock is **per-dispatcher** — it guards a
    dispatcher's own instance directory against concurrent dispatcher processes
    and is **not** held by the shared agent process. So the design itself must
    maintain the invariant: `v1` must fully stop before `v2` starts. Blue-green
@@ -54,25 +58,25 @@ step (see `command.ts`, `matchRequest.ts`, `appAgentManager.ts`):
   agents the translator/cache may pick. If a name's schema isn't active the
   translator **picks another agent** (the NL-path misroute).
 - **Execution**: `getActionContext → getAppAgent → loadAppAgent →
-  getSessionContext` actually invokes the handler.
+getSessionContext` actually invokes the handler.
 
 **Implication:** the routing seams (`isAppAgentName` / `getActiveSchemas`) must
 keep seeing the name as **present** during an update, or requests misroute. The
 current bug is that update calls `removeAgent`, which deletes the name **and** its
-schemas, so *both* routing seams go false. Any fix must keep the name registered
+schemas, so _both_ routing seams go false. Any fix must keep the name registered
 throughout and gate only the **execution/instance** side.
 
 ## 4. Key insight — request vs. applicator op are mutually exclusive per op
 
 The applicator idle-gates through the session's `commandLock` (§7.1), the **same**
-lock user requests acquire. So on one dispatcher a request and *a single*
+lock user requests acquire. So on one dispatcher a request and _a single_
 `addProvider`/`removeProvider` op cannot interleave. **But an update is two
 separate lock acquisitions** — `removeProvider(v1)` now, `addProvider(v2)` later
 (after the global drain) — with the lock **released in between**. The slip lives
 in that released gap.
 
 The **issuing** session is currently the exception: it applies its update
-`immediate`/inline *while holding its own command lock* (so its swap is already
+`immediate`/inline _while holding its own command lock_ (so its swap is already
 one locked section) — which is exactly why `addProvider`/`removeProvider` carry an
 `immediate` flag and a second, inline apply path. §5.4 **removes** that special
 case by making the issuing session **enqueue like a sibling**, so all dispatchers
@@ -90,7 +94,7 @@ in §5.4, not the current inline path.)
 
 **Every update is treated as potentially schema-changing** and always uses this
 coordinated freeze — there is no "code-only" fast path. A schema-changing update
-swaps grammars, and grammars are used during *translation* (before execution), so
+swaps grammars, and grammars are used during _translation_ (before execution), so
 a dispatcher on v1-grammars talking to a v2-process would mismatch; the only safe
 option is to freeze all dispatchers in lockstep across the swap. A code-only fast
 path (skip the lockstep when v1≡v2 schemas) was considered and **rejected for
@@ -99,7 +103,7 @@ simplicity**; revisit only if the freeze proves too disruptive.
 **The freeze is centered on the command lock, not a per-name gate.** A per-name
 `held` gate (block only requests for `foo`) sounds lighter, but under the
 always-schema-changing model it can't spare NL traffic: an NL request has no known
-target until *after* translation — which uses the very grammars being swapped — so
+target until _after_ translation — which uses the very grammars being swapped — so
 you'd have to hold all NL requests anyway. Its only real win (letting other agents'
 explicit `@commands` through) doesn't justify the extra routing-seam state, so the
 command lock is both simpler and effectively the same blast radius.
@@ -133,7 +137,7 @@ of the bespoke drain / `pending` / `then` state machine.
 
 - **install** (`absent → active`): slip-free by construction — no prior version,
   so a request before install is correctly "unknown". No hold needed.
-- **uninstall** (`active → absent`): ends `absent`, which is the *correct* end
+- **uninstall** (`active → absent`): ends `absent`, which is the _correct_ end
   state; an in-flight request drains, a new one gets a clean "removed". No
   resume, no slip.
 - **update** (`active(v1) → active(v2)`): the **only** op needing the resume-hold,
@@ -175,7 +179,7 @@ deadlock. Make the issuing session **enqueue like a sibling** instead:
    **return** — the command lock releases naturally at handler end.
 2. At the issuing session's next idle (immediately after the command returns), the
    applicator runs the op as the **same** one atomic lock-held section as every
-   sibling (§5.1). Because the op was enqueued *before* `@update` returned, it
+   sibling (§5.1). Because the op was enqueued _before_ `@update` returned, it
    sits ahead of any later user command in the FIFO — no request slips ahead.
 3. **Completion is reported asynchronously** (a follow-up message / streaming
    command result): `@update` returns "update started"; the
@@ -187,7 +191,7 @@ This **deletes the `immediate` parameter and the inline apply path** from
 and update all apply through the single idle-gated path on every dispatcher,
 issuing included.
 
-> An alternative that makes `@update` *feel* synchronous by awaiting the op
+> An alternative that makes `@update` _feel_ synchronous by awaiting the op
 > off-lock was considered, but it needs the command framework to let a handler
 > **yield the command lock mid-execution** (which is the very constraint that
 > forced `immediate`). The async-status model above avoids that and matches the
@@ -236,9 +240,9 @@ and §5.3 cancel/rollback falls out for free.
 The v1 provider is a shared, **refcounted** singleton
 (`createNpmAppAgentProvider`: `AgentProcess.count`). `unloadAppAgent` runs the
 process teardown (`close()`) **only when the count reaches 0** — i.e. after the
-*last* dispatcher unloads. So the quiesce step (§5.1 step 2) must call
+_last_ dispatcher unloads. So the quiesce step (§5.1 step 2) must call
 **`unloadAppAgent(v1)`** to decrement the shared count, not merely remove routing
-artifacts. The refcount equals the number of dispatchers that actually *loaded*
+artifacts. The refcount equals the number of dispatchers that actually _loaded_
 (used) v1; a dispatcher that added but never loaded it holds no ref.
 
 **Verify count 0 — do not assume it from the ACKs.** After collecting every
@@ -248,7 +252,7 @@ actually 0** (v1 is gone from `moduleAgents` and `close()` has run). If it is
 not-yet-quiesced or late-joining/racing loader, an in-flight op, or a leaked ref)
 — and starting v2 would violate name-keyed no-coexistence. In that case the
 update **must not proceed**: wait for the straggler(s) or abort/rollback (§5.3).
-Only once v1 is *confirmed* terminated does v2 start.
+Only once v1 is _confirmed_ terminated does v2 start.
 
 > **API implication:** the shared provider must **expose** its loaded/refcount
 > state (today `count` is private to `createNpmAppAgentProvider`), e.g.
@@ -268,7 +272,7 @@ for the §5.3 timeout/cancel). Its body: remove v1 artifacts + `unloadAppAgent(v
 → call `onQuiesced()` → `await whenReady` → build/add v2 artifacts → release. The
 source supplies `onQuiesced` (fills a barrier slot) and `whenReady` (a shared
 promise it resolves once §5.6's verify-0 passes and v2 is up). Rejected: a
-`prepare`/`commit` pair that holds the lock *between* two host calls (fragile
+`prepare`/`commit` pair that holds the lock _between_ two host calls (fragile
 cross-call lock ownership, partial states).
 
 The barrier is **source-coordinated** — each op awaits the source's signal, never
@@ -276,6 +280,7 @@ another dispatcher — so there is no dispatcher-to-dispatcher cycle. A host tha
 **disconnects** mid-barrier is dropped from it (like today's `drainDrop`).
 
 **Liveness (no unavoidable deadlock):**
+
 - The **timeout (§5.3) is the ultimate backstop** — any stall (straggler that
   won't idle, `v1` that won't die, `v2` that won't start) resolves to rollback.
 - **Leaf-op invariant:** teardown (`unloadAppAgent`/`close`) and startup

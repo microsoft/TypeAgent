@@ -1066,7 +1066,7 @@ export function createDefaultInstalledAgentSource(
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
                 });
-                // Disruptive update (design §5.6, §5.7, §7.2): tear the OLD
+                // Coordinated update (design §5.6, §5.7, §7.2): tear the OLD
                 // version down across every session and add the NEW one as ONE
                 // coordinated barrier — each session's `replaceProvider` removes
                 // v1 then (after verify-0 confirms v1 is down everywhere and v2
