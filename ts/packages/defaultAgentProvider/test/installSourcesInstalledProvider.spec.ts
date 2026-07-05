@@ -39,11 +39,16 @@ function withReplace(
             );
             options.onQuiesced();
             await options.whenReady;
+            // The source decides post-barrier what to add: v2 (commit update), v1
+            // (rollback), or nothing (commit uninstall / no thunk).
             if (newProviderThunk !== undefined) {
-                await host.addProvider(
-                    newProviderThunk(),
-                    options.notify ?? false,
-                );
+                const newProvider = newProviderThunk();
+                if (newProvider !== undefined) {
+                    await host.addProvider(
+                        newProvider,
+                        options.notify ?? false,
+                    );
+                }
             }
         },
     };
@@ -1157,6 +1162,528 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
     });
 });
 
+describe("Update Coordination — cancel, timeout & rollback (design §5.3)", () => {
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const settle = async () => {
+        // Drain the timer + microtask chain a few times so a phase-timeout /
+        // abort rollback (timer → decide → release → re-add → GC finalize)
+        // completes before assertions.
+        for (let i = 0; i < 4; i++) {
+            await new Promise((r) => setTimeout(r, 5));
+        }
+    };
+
+    // A recording host that tracks op kind. Its removeProvider optionally blocks
+    // on a gate, so it can be held as the "straggler that won't idle" or to keep
+    // the freeze window open for an abort.
+    function recordingHost(gate?: Promise<void>) {
+        const calls: { op: "add" | "remove" }[] = [];
+        return {
+            calls,
+            host: withReplace({
+                addProvider: async () => {
+                    calls.push({ op: "add" });
+                },
+                removeProvider: async () => {
+                    calls.push({ op: "remove" });
+                    if (gate !== undefined) {
+                        await gate;
+                    }
+                },
+            }),
+        };
+    }
+
+    // Install foo (v1) from a path dir and retro-fit a version-scoped install
+    // root onto its record (as if a feed had installed it), so a rollback
+    // (record restored → installRoot kept) is distinguishable from a commit (path
+    // re-resolve → installRoot dropped).
+    async function installFooV1(
+        built: ReturnType<typeof createDefaultInstalledAgentSource>,
+        instanceDir: string,
+        issuing: AppAgentHost,
+    ): Promise<string> {
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir("🧪"),
+            undefined,
+            issuing,
+        );
+        await flush();
+        const v1Root = "foo@v1";
+        fs.mkdirSync(
+            path.join(instanceDir, "installedAgents", "agents", v1Root),
+            { recursive: true },
+        );
+        const cur = readAgentsJson(instanceDir)!;
+        cur.agents.foo.installRoot = v1Root;
+        fs.writeFileSync(
+            path.join(instanceDir, "agents.json"),
+            JSON.stringify(cur),
+        );
+        return v1Root;
+    }
+
+    it("a straggler that won't idle hits the quiesce timeout and rolls back (§5.3)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                quiesceTimeoutMs: 20,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        let releaseStraggler!: () => void;
+        const gate = new Promise<void>((r) => (releaseStraggler = r));
+        const straggler = recordingHost(gate);
+        built.connect(issuing.host);
+        built.connect(straggler.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+        straggler.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        // The straggler never quiesces → the phase-1 backstop fires → rollback.
+        await settle();
+
+        expect(outcomes).toEqual(["failed-reverted"]);
+        // v1 is restored everywhere: record kept (installRoot back), name active.
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+        // The issuing session removed v1 then re-added v1 (rolled back, no v2).
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+
+        releaseStraggler();
+        await flush();
+    });
+
+    it("a v2 that won't start hits the start timeout and rolls back (§5.3)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                startTimeoutMs: 20,
+                // v2's start probe hangs forever → only the start timer resolves.
+                verifyStart: () => new Promise<void>(() => {}),
+            },
+        });
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        built.connect(issuing.host);
+        built.connect(sibling.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+        sibling.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(sibling.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("an out-of-band abort rolls back without deadlocking (§5.3)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            // A long quiesce timeout so ONLY the abort drives the rollback.
+            updateCoordination: {
+                quiesceTimeoutMs: 5_000,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        let releaseFreeze!: () => void;
+        const gate = new Promise<void>((r) => (releaseFreeze = r));
+        const frozen = recordingHost(gate);
+        built.connect(issuing.host);
+        built.connect(frozen.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+        frozen.calls.length = 0;
+
+        const controller = new AbortController();
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            controller.signal,
+            (o) => outcomes.push(o),
+        );
+        // Cancel while the freeze is still open (the frozen host has not idled).
+        controller.abort();
+        await settle();
+        // Release the frozen host afterwards: the rollback must not have wedged
+        // on it (no deadlock), and the late quiesce is a harmless no-op.
+        releaseFreeze();
+        await settle();
+
+        expect(outcomes).toEqual(["cancelled-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("a lingering verify-0 refcount parks the barrier until the quiesce timeout rolls back (§5.6)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                quiesceTimeoutMs: 20,
+                verifyStart: async () => {},
+                // The shared v1 provider never drops to 0 refs (a wedged loader):
+                // every host quiesces but verify-0 keeps the barrier parked.
+                refCount: () => 1,
+            },
+        });
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        // All hosts have quiesced, but verify-0 is non-zero → parked. Before the
+        // timeout, v2 has NOT been added (no commit, no coexistence).
+        await flush();
+        expect(issuing.calls).toEqual([{ op: "remove" }]);
+        expect(outcomes).toEqual([]);
+
+        // The quiesce backstop resolves the park → rollback.
+        await settle();
+        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("reports `updated` and drops the old install root on a clean commit (§5.3)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: { verifyStart: async () => {} },
+        });
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["updated"]);
+        // Commit: the path re-resolve dropped installRoot (v2 record swapped in).
+        expect(
+            readAgentsJson(instanceDir)!.agents.foo.installRoot,
+        ).toBeUndefined();
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("a disconnect during a rollback is safe (name stays active on v1) (§5.3)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                quiesceTimeoutMs: 5_000,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        let releaseFreeze!: () => void;
+        const gate = new Promise<void>((r) => (releaseFreeze = r));
+        const frozen = recordingHost(gate);
+        built.connect(issuing.host);
+        const frozenConn = built.connect(frozen.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+
+        const controller = new AbortController();
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            controller.signal,
+            (o) => outcomes.push(o),
+        );
+        controller.abort();
+        await settle();
+
+        // Disconnect the frozen session mid-rollback: must not throw, and the
+        // name must remain active on v1.
+        expect(() => frozenConn.dispose()).not.toThrow();
+        releaseFreeze();
+        await settle();
+
+        expect(outcomes).toEqual(["cancelled-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+    });
+
+    it("a rolled-back update leaves v1 durable for an immediately-following op (synchronous restore)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                quiesceTimeoutMs: 20,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        let releaseStraggler!: () => void;
+        const gate = new Promise<void>((r) => (releaseStraggler = r));
+        const straggler = recordingHost(gate);
+        built.connect(issuing.host);
+        built.connect(straggler.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        await settle();
+
+        // The restore is synchronous + ordered before the entry flip, so the v1
+        // record + listing are already durable the instant the rollback settles —
+        // no async gap in which a follow-up op could read a stale v2 baseline.
+        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+
+        // A SECOND update issued right after the rollback re-resolves from the
+        // RESTORED v1 record (never a stale v2). It also rolls back (the straggler
+        // is still wedged) and must again land on v1.
+        await built.testApi.update("foo", undefined, issuing.host);
+        await settle();
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+
+        releaseStraggler();
+        await flush();
+    });
+
+    it("a host closed before the swap fills its slot from the success path (no quiesce-timeout stall)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            // A long quiesce timeout: if the closed host stalled phase 1, the
+            // update would (wrongly) roll back with `failed-reverted` after 5 s.
+            updateCoordination: {
+                quiesceTimeoutMs: 5_000,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        // A closed/disposed host: its `replaceProvider` auto-acks immediately
+        // WITHOUT ever calling `onQuiesced` or awaiting `whenReady` (models an
+        // applicator closed at enqueue time). The barrier must still fill its
+        // phase-1 slot for it via the success continuation.
+        const closedHost: AppAgentHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+            replaceProvider: async () => {},
+        };
+        built.connect(issuing.host);
+        built.connect(closedHost);
+        await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        // Commits within a few 5 ms ticks — far under the 5 s timeout — proving
+        // the closed host filled its slot from the success path, not the timer.
+        await settle();
+
+        expect(outcomes).toEqual(["updated"]);
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+    });
+
+    it("a v2 whose start probe rejects rolls back (failed-reverted, v1 restored)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                // Long start timeout: only the probe REJECTION can drive rollback.
+                startTimeoutMs: 5_000,
+                verifyStart: async () => {
+                    throw new Error("bad v2 manifest");
+                },
+            },
+        });
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
+            v1Root,
+        );
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("an uninstall straggler that won't idle rolls back (record + agent restored, name reusable)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: { quiesceTimeoutMs: 20 },
+        });
+        const issuing = recordingHost();
+        let releaseStraggler!: () => void;
+        const gate = new Promise<void>((r) => (releaseStraggler = r));
+        const straggler = recordingHost(gate);
+        built.connect(issuing.host);
+        built.connect(straggler.host);
+        const v1Root = await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+
+        await built.testApi.uninstall("foo", issuing.host);
+        // The straggler never idles → quiesce timeout → rollback: the agent is
+        // NOT removed. Its record + version-scoped root are restored/kept and the
+        // live agent is re-added everywhere.
+        await settle();
+
+        const record = readAgentsJson(instanceDir)!.agents.foo;
+        expect(record).toBeDefined();
+        expect(record.installRoot).toBe(v1Root);
+        expect(
+            fs.existsSync(
+                path.join(instanceDir, "installedAgents", "agents", v1Root),
+            ),
+        ).toBe(true);
+        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
+            "foo",
+        );
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+
+        // The name was freed from `removing`: it is mutable again (a re-install
+        // rejects with "already exists", NOT "still being removed").
+        await expect(
+            built.testApi.install(
+                "foo",
+                makePathAgentDir("🧪"),
+                undefined,
+                issuing.host,
+            ),
+        ).rejects.toThrow(/already exists/i);
+
+        releaseStraggler();
+        await flush();
+    });
+
+    it("a host closed before the swap does not trip a premature commit before the last live session quiesces", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: {
+                quiesceTimeoutMs: 5_000,
+                verifyStart: async () => {},
+            },
+        });
+        const issuing = recordingHost();
+        let releaseLive!: () => void;
+        const gate = new Promise<void>((r) => (releaseLive = r));
+        const liveStraggler = recordingHost(gate);
+        // Closed host: auto-acks + fills its slot from the success path.
+        const closedHost: AppAgentHost = {
+            addProvider: async () => {},
+            removeProvider: async () => {},
+            replaceProvider: async () => {},
+        };
+        built.connect(issuing.host);
+        built.connect(liveStraggler.host);
+        built.connect(closedHost);
+        await installFooV1(built, instanceDir, issuing.host);
+        issuing.calls.length = 0;
+        liveStraggler.calls.length = 0;
+
+        const outcomes: string[] = [];
+        await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            undefined,
+            (o) => outcomes.push(o),
+        );
+        await flush();
+        // The closed host filled its slot, but the LIVE straggler has not
+        // quiesced — so NO host has added v2 yet (no premature commit, no
+        // coexistence).
+        expect(outcomes).toEqual([]);
+        expect(issuing.calls).toEqual([{ op: "remove" }]);
+        expect(liveStraggler.calls).toEqual([{ op: "remove" }]);
+
+        releaseLive();
+        await settle();
+        // Only after the last live session quiesces does the swap commit.
+        expect(outcomes).toEqual(["updated"]);
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+        expect(liveStraggler.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+});
+
 describe("installed agent source api (install/uninstall/update)", () => {
     // A no-op issuing host: the record-store logic is independent of the
     // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /
@@ -1297,8 +1824,12 @@ describe("installed agent source api (install/uninstall/update)", () => {
     it("update prunes the old version's install root after the swap", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");
-        const installer =
-            createDefaultInstalledAgentSource(instanceDir).testApi;
+        // Inject an instant `v2` start probe so the swap settles deterministically
+        // within a flush (the default probe reads v2's manifest — an extra async
+        // step); the prune runs in the GC finalizer after every host has swapped.
+        const installer = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: { verifyStart: async () => {} },
+        }).testApi;
         await installer.install("p", agentDir, undefined, host);
 
         // Retro-fit a version-scoped root onto the freshly installed record and
@@ -1317,7 +1848,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
 
         await installer.update("p", undefined, host);
         // The swap drains + re-adds asynchronously (uniform enqueue, §5.4); the
-        // old-root prune runs in the post-drain follow-up, so let it settle.
+        // old-root prune runs in the GC finalizer once every host has swapped, so
+        // let it settle.
+        await new Promise((r) => setTimeout(r, 0));
         await new Promise((r) => setTimeout(r, 0));
 
         // The swap dropped installRoot (path re-resolve), so the old root is a

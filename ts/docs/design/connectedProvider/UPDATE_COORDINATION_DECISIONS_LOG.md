@@ -180,3 +180,86 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   into a closing manager. Pinned by an applicator test ("a replace parked on
   whenReady skips the add after dispose").
 - **Design updated?** no.
+
+### 2025-XX-XX — Single-round rollback: outcome decided BEFORE hosts release
+
+- **Milestone / item:** M4 / §5.3
+- **Type:** Unspecified
+- **Design ref:** §5.3
+- **Decision:** The barrier decides its outcome (commit / rollback) BEFORE
+  releasing the parked hosts. Each host adds whatever the barrier decided via a
+  single post-barrier thunk `decideAdd`: `v2` on a committed update, the OLD
+  provider (`v1`) on a rollback, or nothing on a committed uninstall. There is no
+  second swap round — hosts remove `v1` (phase 1), park on `whenReady`, then add
+  the decided provider (phase 3) under the SAME held command lock.
+- **Rationale:** A two-round barrier (add `v2`, then on failure swap back to `v1`)
+  would double the disruption and the lock windows and could leave a session on
+  `v2` if the second round fails. Deciding first keeps each session's swap a
+  single atomic remove→add and guarantees no session ever transiently runs `v2`
+  on a rolled-back update.
+- **Design updated?** no — implements §5.3; flip to "Implemented" in M5.
+
+### 2025-XX-XX — Default `verifyStart` = `getAppAgentManifest` (non-forking probe)
+
+- **Milestone / item:** M4 / §5.3 (v2 start verification)
+- **Type:** Unspecified
+- **Design ref:** §5.3
+- **Decision:** The default `v2`-start probe is `provider.getAppAgentManifest(name)`
+  — a cheap, NON-forking manifest read — not a full `loadAppAgent` (which forks a
+  child process in the default `separate` exec mode). Overridable via
+  `updateCoordination.verifyStart`.
+- **Rationale:** A forking pre-launch probe would spawn (and immediately tear
+  down) a process on every update purely to check startability, and would make
+  the existing path-source update tests newly fork. The manifest read catches the
+  common "v2 is corrupt/unresolvable" failure without that cost. A full pre-launch
+  probe is DEFERRED (see deferred log).
+- **Design updated?** no.
+
+### 2025-XX-XX — Rollback record-restore is synchronous, ordered before flip/prune
+
+- **Milestone / item:** M4 / §5.3 (surfaced in M4 review rounds 1 & 2)
+- **Type:** Unspecified
+- **Design ref:** §5.3, §5.5
+- **Decision:** On rollback, `onDecided` restores the pre-op `agents.json` record
+  with a SYNCHRONOUS `readAgentsJson`+`writeAgentsJson`, sequenced BEFORE the
+  in-memory entry flips back to `active(v1)`, before `release()`, and before any
+  `finalizeGc` prune. It is intentionally NOT routed through the write limiter.
+- **Rationale:** Each `agents.json` read-modify-write is atomic (no `await` gap)
+  and touches only this name's key, so a bare synchronous restore cannot lose a
+  concurrent other-name install's write. Doing it synchronously closes two
+  windows a detached async write opened: (1) a following op reading a stale `v2`
+  baseline while the entry already reads `active(v1)`, and (2) a crash stranding
+  the store on a `v2` record whose install root `finalizeGc` had already pruned.
+  `decide()` wraps `onDecided` in try/catch so a write error still runs
+  `release()` (parked hosts add off `barrier.outcome`, so they recover regardless).
+- **Design updated?** no.
+
+### 2025-XX-XX — Success continuation re-quiesces (closed-at-enqueue hosts)
+
+- **Milestone / item:** M4 / §5.3, §5.4 (surfaced in M4 review round 2)
+- **Type:** Unspecified
+- **Design ref:** §5.4, §5.7
+- **Decision:** The per-host `replaceProvider(...).then(success)` continuation
+  calls BOTH `quiesce(name, host)` and `hostSettled` (previously only
+  `hostSettled`). `quiesce` is idempotent (`pending.delete` guards it).
+- **Rationale:** An applicator CLOSED at enqueue time auto-acks with a resolved
+  promise WITHOUT running its op body, so `onQuiesced` never fires. Without the
+  success-path `quiesce`, such a host would keep its phase-1 slot filled until the
+  quiesce timeout → a spurious `failed-reverted`. Quiescing from the success path
+  fills the slot immediately.
+- **Design updated?** no.
+
+### 2025-XX-XX — Update outcome status surfaced via `onOutcome` callback (minimal UX)
+
+- **Milestone / item:** M4 / §4.4
+- **Type:** Unspecified
+- **Design ref:** §4.4, §5.4
+- **Decision:** `update()` gains an `onOutcome?(status)` callback where `status ∈
+{updated, cancelled-reverted, failed-reverted}` (`UpdateOutcomeStatus`), invoked
+  once at decide time. `@package update` maps it to a follow-up status line. The
+  no-live-old-version fan-out branch also fires `onOutcome("updated")`.
+- **Rationale:** The command already returns "update started" synchronously; the
+  async terminal outcome needs a channel. A full user-facing outcome UX (progress,
+  a visible cancel affordance) stays DEFERRED (see deferred log), consistent with
+  §4.2's UX deferral.
+- **Design updated?** no.

@@ -147,3 +147,65 @@
 - **Follow-up:** Address in M4/M5: either run `connect()` initial registration
   under the session command lock, or have update-completion fan v2 out to any
   session that joined after `startReplace`.
+
+### 2025-XX-XX — DEFERRED: full pre-launch `v2` startability probe
+
+- **Milestone / gate round:** M4 / §5.3
+- **Finding / gap:** The default `verifyStart` only reads `v2`'s manifest
+  (`getAppAgentManifest`); it does not fork/launch `v2` to prove it actually
+  starts. A `v2` that resolves its manifest but crashes on load still commits, and
+  the crash surfaces later as a normal load failure (not an update rollback).
+- **Decision:** Deferred. A full pre-launch probe would fork a process per update
+  purely to verify startability (see decisions log).
+- **Follow-up:** Optionally add an opt-in forking `verifyStart` for feed sources
+  where cold-start failures are likelier; the seam already exists
+  (`updateCoordination.verifyStart`).
+
+### 2025-XX-XX — DEFERRED: user-facing cancel UX + longer-lived abort source
+
+- **Milestone / gate round:** M4 / §4.2, §5.3 (surfaced in M4 review round 1)
+- **Finding / gap:** The abort→rollback path is wired and tested with a
+  caller-owned `AbortController`, but `@package update` threads
+  `context.abortSignal` — the PER-COMMAND signal, which is torn down the instant
+  the handler returns "update started". So today nothing can fire it once the swap
+  is actually running; the API-level cancel is reachable only programmatically.
+- **Decision:** Deferred (consistent with the design's §4.2 UX deferral). Source-
+  side abort semantics are complete and locked by tests.
+- **Follow-up:** The cancel UX must supply a LONGER-LIVED abort source — e.g. a
+  registry of in-flight update controllers keyed by agent name that a future
+  "cancel update" affordance aborts — rather than the per-command signal.
+
+### 2025-XX-XX — DEFERRED: wedged-straggler `v2` install dir + phase-3 GC backstop
+
+- **Milestone / gate round:** M4 / §5.3, §5.5 (surfaced in M4 review round 1)
+- **Finding / gap:** Phase 3 (`releasing`) has no timer: a host whose add leg
+  hangs forever leaves `settling` non-empty, so `finalizeGc` (the prune) never
+  runs and a superseded install root lingers. The outcome is already committed and
+  every reachable session is serving correctly; only the GC is skipped.
+- **Decision:** Deferred — the Milestone 1 startup orphan sweep is the backstop
+  (it removes any install root not referenced by the current record).
+- **Follow-up:** None required; revisit only if lingering dirs prove costly.
+
+### 2025-XX-XX — DEFERRED: verify-0 park never re-checks a self-dropping refcount
+
+- **Milestone / gate round:** M4 / §5.6 (surfaced in M4 review round 1)
+- **Finding / gap:** When all hosts have quiesced but verify-0 sees a non-zero
+  shared refcount (a wedged/racing loader), the barrier parks and is resolved ONLY
+  by the quiesce timeout → rollback. There is no hook that re-checks `verifyZero`
+  if the refcount later drops to 0 on its own, so a legitimately-slow-to-release
+  `v1` forces an unnecessary rollback.
+- **Decision:** Deferred. Treating a non-zero count after every host quiesced as a
+  wedged loader and rolling back on timeout is the safe M4 behavior (no unbounded
+  wait, no coexistence).
+- **Follow-up:** Optionally add a refcount-drop notification from the provider so
+  the barrier can advance without waiting out the timeout.
+
+### 2025-XX-XX — STILL OPEN (carried to M5): connect mid-`removing` misses `v2`
+
+- **Milestone / gate round:** M4 (carried from M3 Finding B)
+- **Finding / gap:** Unchanged from M3: a session that `connect()`s while a name
+  is `removing` is not a barrier target and never receives `v2` (nor `v1`) until
+  it reconnects. M4 did not change `connect()`'s registration path.
+- **Decision:** Still deferred to M5 (or later): unify `connect()` initial
+  registration and the barrier fan-out under one FIFO / the session command lock.
+- **Follow-up:** Evaluate in M5 §6 cleanup.

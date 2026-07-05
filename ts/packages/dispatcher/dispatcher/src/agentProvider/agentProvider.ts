@@ -102,9 +102,14 @@ export interface AppAgentHost {
      *      every host's quiesce ACK AND has VERIFIED the shared old refcount is 0
      *      (design §5.6), so the old version is confirmed terminated everywhere
      *      before anything new starts;
-     *   4. if `newProviderThunk` is given (an `@update`), build + add the new
-     *      version, exactly like {@link addProvider}. OMIT the thunk for an
-     *      `@uninstall` (`old → ∅`): the same section with no add.
+     *   4. if `newProviderThunk` is given, call it AFTER the barrier releases and
+     *      add whatever it returns, exactly like {@link addProvider}. The source
+     *      decides post-barrier what to add (design §5.3): the NEW version on a
+     *      committed `@update`, the OLD version on a cancelled/timed-out update
+     *      that ROLLS BACK (`v1` restored), or `undefined` (no add) on a
+     *      committed `@uninstall` (`old → ∅`). A `newProviderThunk` of `undefined`
+     *      at call time is an unconditional no-add (uninstall that can never roll
+     *      back).
      *
      * No two versions of the name ever coexist, and no session observes the name
      * absent across the swap. **Leaf-op invariant (§5.7):** the teardown and
@@ -119,7 +124,7 @@ export interface AppAgentHost {
      */
     replaceProvider(
         oldProvider: AppAgentProvider,
-        newProviderThunk: (() => AppAgentProvider) | undefined,
+        newProviderThunk: (() => AppAgentProvider | undefined) | undefined,
         options: ReplaceProviderOptions,
     ): Promise<void>;
 }

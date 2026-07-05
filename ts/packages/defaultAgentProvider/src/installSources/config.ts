@@ -96,6 +96,18 @@ export type SourceWarning = (message: string) => void;
 export type SourceStatus = (message: string) => void;
 
 /**
+ * The terminal outcome the issuing conversation is told about after a coordinated
+ * `@update` settles asynchronously (design §5.3, §5.4). `updated` = the swap
+ * committed to `v2`; `cancelled-reverted` = an out-of-band abort rolled back to
+ * `v1`; `failed-reverted` = a phase timeout / a `v2` that would not start rolled
+ * back to `v1`. Both reverted outcomes leave `v1` serving in every session.
+ */
+export type UpdateOutcomeStatus =
+    | "updated"
+    | "cancelled-reverted"
+    | "failed-reverted";
+
+/**
  * The three install-source kinds (design §3). There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/

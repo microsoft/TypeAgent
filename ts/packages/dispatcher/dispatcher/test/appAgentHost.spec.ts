@@ -472,6 +472,40 @@ describe("AppAgentHostApplicator", () => {
         expect(quiesced).toBe(true);
     });
 
+    it("replaceProvider omits the add when the thunk returns undefined (post-barrier rollback/uninstall decision)", async () => {
+        const order: string[] = [];
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+
+        // A thunk is supplied, but it resolves to `undefined` — the source
+        // decided post-barrier to add nothing (a rolled-back uninstall, or an
+        // update that reverted with no version to re-add). The teardown leg runs;
+        // the add is skipped without touching the single-agent invariant.
+        let thunkCalls = 0;
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => {
+                thunkCalls++;
+                return undefined;
+            },
+            {
+                onQuiesced: () => {},
+                whenReady: Promise.resolve(),
+                notify: true,
+            },
+        );
+        await ack;
+
+        expect(order).toEqual(["remove:v1"]);
+        expect(thunkCalls).toBe(1);
+    });
+
     it("replaceProvider rejects a multi-agent old provider before any apply", async () => {
         let calls = 0;
         const host = new AppAgentHostApplicator(createLimiter(1), {
@@ -598,6 +632,150 @@ describe("AppAgentHostApplicator", () => {
         ready.resolve();
         await expect(ack).resolves.toBeUndefined();
         expect(order).toEqual(["remove:v1"]);
+    });
+
+    it("replaceProvider on an already-closed host auto-acks without onQuiesced or legs", async () => {
+        // A host that is CLOSED at enqueue time auto-acks with a resolved promise
+        // and never runs `run()`, so `onQuiesced`/the legs/the thunk never fire.
+        // The source barrier's success continuation depends on this: it re-calls
+        // `quiesce` to fill the phase-1 slot for exactly such a host.
+        let calls = 0;
+        let quiesced = false;
+        let thunkCalls = 0;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {
+                calls++;
+            },
+            applyRemove: async () => {
+                calls++;
+            },
+        });
+        host.dispose();
+
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => {
+                thunkCalls++;
+                return fakeProvider("v2");
+            },
+            {
+                onQuiesced: () => {
+                    quiesced = true;
+                },
+                whenReady: Promise.resolve(),
+                notify: true,
+                dropConfig: false,
+            },
+        );
+        await expect(ack).resolves.toBeUndefined();
+        expect(calls).toBe(0);
+        expect(quiesced).toBe(false);
+        expect(thunkCalls).toBe(0);
+    });
+
+    it("replaceProvider calls the thunk exactly once, only after whenReady resolves", async () => {
+        const order: string[] = [];
+        let thunkCalls = 0;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+
+        const ready = deferred();
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => {
+                thunkCalls++;
+                return fakeProvider("v2");
+            },
+            {
+                onQuiesced: () => {},
+                whenReady: ready.promise,
+            },
+        );
+
+        await tick();
+        // Parked on the barrier: the teardown ran but the thunk is NOT called
+        // until the source decides (post-barrier), so the add version is chosen
+        // from post-barrier state.
+        expect(thunkCalls).toBe(0);
+        expect(order).toEqual(["remove:v1"]);
+
+        ready.resolve();
+        await ack;
+        expect(thunkCalls).toBe(1);
+        expect(order).toEqual(["remove:v1", "add:v2"]);
+    });
+
+    it("replaceProvider releases the lock and rejects when the thunk throws (teardown already applied)", async () => {
+        const order: string[] = [];
+        let quiesced = false;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (p) => {
+                order.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            applyRemove: async (p) => {
+                order.push(`remove:${p.getAppAgentNames()[0]}`);
+            },
+        });
+
+        const ack = host.replaceProvider(
+            fakeProvider("v1"),
+            () => {
+                throw new Error("build v2 failed");
+            },
+            {
+                onQuiesced: () => {
+                    quiesced = true;
+                },
+                whenReady: Promise.resolve(),
+            },
+        );
+        await expect(ack).rejects.toThrow(/build v2 failed/);
+        // The teardown leg ran + quiesced (irreversible); the add is skipped.
+        expect(order).toEqual(["remove:v1"]);
+        expect(quiesced).toBe(true);
+        // The single command-lock slot was released on the throw: a following op
+        // still applies (the lock was not leaked).
+        await host.addProvider(fakeProvider("after"));
+        expect(order).toEqual(["remove:v1", "add:after"]);
+    });
+
+    it("replaceProvider threads notify to both legs and defaults dropConfig=false (update)", async () => {
+        const seen: {
+            addNotify?: boolean;
+            removeNotify?: boolean;
+            dropConfig?: boolean;
+        } = {};
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async (_p, n) => {
+                seen.addNotify = n;
+            },
+            applyRemove: async (_p, n, d) => {
+                seen.removeNotify = n;
+                seen.dropConfig = d;
+            },
+        });
+        // No dropConfig supplied → the update default (Model B: preserve the
+        // enable preference across a version bump) must thread `false`.
+        await host.replaceProvider(
+            fakeProvider("v1"),
+            () => fakeProvider("v2"),
+            {
+                onQuiesced: () => {},
+                whenReady: Promise.resolve(),
+                notify: true,
+            },
+        );
+        expect(seen).toEqual({
+            addNotify: true,
+            removeNotify: true,
+            dropConfig: false,
+        });
     });
 });
 

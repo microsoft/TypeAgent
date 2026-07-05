@@ -106,7 +106,7 @@ export class AppAgentHostApplicator implements AppAgentHost {
 
     public replaceProvider(
         oldProvider: AppAgentProvider,
-        newProviderThunk: (() => AppAgentProvider) | undefined,
+        newProviderThunk: (() => AppAgentProvider | undefined) | undefined,
         options: ReplaceProviderOptions,
     ): Promise<void> {
         // Assert the single-agent invariant on the old provider at the boundary
@@ -146,17 +146,22 @@ export class AppAgentHostApplicator implements AppAgentHost {
             if (this.closed) {
                 return;
             }
-            // 4. Startup leg (update only): build + add the new version. Omitted
-            //    for uninstall (`old → ∅`).
+            // 4. Startup leg: call the thunk AFTER the barrier releases and add
+            //    whatever it returns. The source decides post-barrier (design
+            //    §5.3): the NEW version on a committed update, the OLD version on
+            //    a cancelled/timed-out update that ROLLS BACK (v1 restored), or
+            //    `undefined` (no add) on a committed uninstall (`old → ∅`).
             if (newProviderThunk !== undefined) {
                 const newProvider = newProviderThunk();
-                const newNames = newProvider.getAppAgentNames();
-                if (newNames.length !== 1) {
-                    throw new Error(
-                        `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
-                    );
+                if (newProvider !== undefined) {
+                    const newNames = newProvider.getAppAgentNames();
+                    if (newNames.length !== 1) {
+                        throw new Error(
+                            `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
+                        );
+                    }
+                    await this.apply.applyAdd(newProvider, notify);
                 }
-                await this.apply.applyAdd(newProvider, notify);
             }
         };
         return this.enqueue("replace", run);
