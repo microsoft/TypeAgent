@@ -227,23 +227,6 @@ undefined`, so `newRoot` is undefined and the prune is a guarded no-op — the
   covered; only the exact wording is unasserted.
 - **Follow-up:** Optionally record `appendDisplay` and assert the strings.
 
-### 2026-07-05 — TRACK (pre-existing, NOT introduced by this rework): `@update <range>` shell-injection on Windows
-
-- **Milestone / gate round:** Final gate (security, SHOULD-FIX — pre-existing)
-- **Finding / gap:** `feedSource` runs `execFile("npm", ["install", spec, …], {
-shell: process.platform === "win32" })`. With `shell:true` Node does not quote
-  args, and the user-supplied `@update` `range` flows unvalidated into `spec`
-  (`` `${module}@${range}` ``). On Windows a crafted range could execute a shell
-  command. Confirmed present at the branch base `cd48fccc9` — this rework did NOT
-  introduce it, but it lives in the update flow.
-- **Decision:** NOT fixed here (out of scope for the Update Coordination rework;
-  the proper fix — validate `range` against a semver-range grammar and/or drop
-  `shell:true` / pass npm's `.cmd` explicitly — is a separate hardening in
-  `feedSource`, and naive metachar-blocking would wrongly reject valid `||` OR
-  ranges). Flagged to the user.
-- **Follow-up:** File a separate security hardening task for `feedSource`'s npm
-  invocation on Windows.
-
 ### 2026-07-05 — DEFERRED (NITs): fake-timer rollback tests; hung-remove single-session
 
 - **Milestone / gate round:** Final gate (NITs)

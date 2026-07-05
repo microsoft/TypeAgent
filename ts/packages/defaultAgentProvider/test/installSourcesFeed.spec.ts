@@ -7,6 +7,9 @@ import path from "node:path";
 import {
     createFeedSource,
     enumerateFeedAgents,
+    isConcreteVersion,
+    isSafeModuleName,
+    isSafeVersionRange,
     moduleNameFromSpec,
     parseAzureFeed,
 } from "../src/installSources/feedSource.js";
@@ -275,6 +278,19 @@ describe("feedSource.reresolve", () => {
             { range: "^2.0.0" },
         );
         expect(candidate!.ref).toBe("@typeagent/foo-agent@^2.0.0");
+    });
+
+    it("rejects a shell-injection range before it reaches npm", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        await expect(
+            source.reresolve!(
+                {
+                    source: "typeagent",
+                    module: "@typeagent/foo-agent",
+                },
+                { range: "1.0.0 & calc.exe" },
+            ),
+        ).rejects.toThrow(/invalid version range/i);
     });
 
     it("returns undefined when the package left the feed", async () => {
@@ -698,5 +714,78 @@ describe("feedSource cache filename sanitization", () => {
         expect(cacheFiles[0]).not.toContain("/");
         expect(cacheFiles[0]).not.toContain("\\");
         expect(fs.existsSync(path.join(installDir, cacheFiles[0]))).toBe(true);
+    });
+});
+
+describe("feedSource install-spec hardening", () => {
+    it("accepts real semver ranges and dist-tags as version ranges", () => {
+        for (const ok of [
+            "1.0.0",
+            "^1.2.3",
+            "~2.0.0",
+            ">=1.0.0 <2.0.0",
+            "1.0.0 || 2.0.0",
+            "latest",
+            "beta",
+            "next-1",
+        ]) {
+            expect(isSafeVersionRange(ok)).toBe(true);
+        }
+    });
+
+    it("rejects shell-metacharacter version ranges", () => {
+        for (const bad of [
+            "",
+            "1.0.0 & calc.exe",
+            "$(rm -rf /)",
+            "1.0.0; whoami",
+            "`id`",
+            "1.0.0 | net user",
+            "> out.txt",
+        ]) {
+            expect(isSafeVersionRange(bad)).toBe(false);
+        }
+    });
+
+    it("accepts valid (optionally scoped) npm module names", () => {
+        for (const ok of ["a-agent", "@typeagent/foo-agent", "foo.bar_baz"]) {
+            expect(isSafeModuleName(ok)).toBe(true);
+        }
+    });
+
+    it("rejects module names carrying shell metacharacters", () => {
+        for (const bad of ["foo bar", "foo;rm", "foo`id`", "$(x)", "foo|bar"]) {
+            expect(isSafeModuleName(bad)).toBe(false);
+        }
+    });
+
+    it("treats only concrete versions (not ranges/tags) as installable", () => {
+        expect(isConcreteVersion("1.2.3")).toBe(true);
+        expect(isConcreteVersion("^1.2.3")).toBe(false);
+        expect(isConcreteVersion("latest")).toBe(false);
+        expect(isConcreteVersion("1.0.0 & calc.exe")).toBe(false);
+    });
+
+    it("materialize refuses a candidate whose version is not concrete", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            tokenRunner: goodToken,
+            npmInstall: async () => {
+                throw new Error("npm should never be invoked");
+            },
+            fetchFn: packumentFetch(),
+        });
+        // A corrupt candidate that skipped find/reresolve carries an injection
+        // payload as its "version"; the boundary guard rejects it before npm.
+        await expect(
+            source.materialize({
+                source: "typeagent",
+                module: "@typeagent/a-agent",
+                ref: "@typeagent/a-agent",
+                version: "1.0.0 & calc.exe",
+            }),
+        ).rejects.toThrow(/unsafe spec/i);
     });
 });

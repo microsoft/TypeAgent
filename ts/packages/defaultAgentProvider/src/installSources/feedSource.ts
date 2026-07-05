@@ -57,6 +57,35 @@ export function moduleNameFromSpec(spec: string): string {
     return at > 0 ? spec.slice(0, at) : spec;
 }
 
+// A syntactically valid npm package name (optionally scoped). Used as a boundary
+// guard so a corrupt record can never smuggle shell metacharacters into the
+// install spec on the Windows `.cmd` path (design §4.1 hardening).
+export function isSafeModuleName(name: string): boolean {
+    return /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(name);
+}
+
+// A concrete, published npm version (no range operators) -- the only version
+// shape ever handed to `npm install`. Ranges/tags are resolved to one of these
+// by `resolveConcreteVersion` BEFORE materialize (design §5.5).
+export function isConcreteVersion(version: string): boolean {
+    return semver.valid(version) !== null;
+}
+
+// A user-supplied `@update <range>`: either a real semver range (which may
+// legitimately contain spaces, `||`, `>`, `<`, `-`) or an npm dist-tag. Anything
+// else is rejected early (defense in depth) rather than flowing toward npm; a
+// naive metacharacter blocklist would wrongly reject valid `||` OR-ranges, so we
+// validate against the real semver-range grammar instead.
+export function isSafeVersionRange(range: string): boolean {
+    if (range.length === 0) {
+        return false;
+    }
+    if (semver.validRange(range) !== null) {
+        return true;
+    }
+    return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(range);
+}
+
 // Sanitize an arbitrary label (dispatcher name / module name) into a filesystem-
 // safe directory-name component so it can never escape the install root.
 function sanitizeRootLabel(label: string): string {
@@ -129,8 +158,16 @@ function feedsApiBase(info: AzureFeedInfo): string {
 }
 
 async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
+    // Security (design §4.1 hardening): on Windows `npm` is a batch shim, so we
+    // invoke `npm.cmd` explicitly under a shell (Node refuses to spawn a
+    // `.cmd`/`.bat` without `shell:true`). On every other platform we run the
+    // real `npm` binary with NO shell, so an argument is never re-parsed. The
+    // install `spec` is additionally validated to a strict `name@concrete-
+    // version` shape by the caller (see `materialize`), so no shell metacharacter
+    // can reach the command line even on the Windows path.
+    const isWindows = process.platform === "win32";
     await execFileAsync(
-        "npm",
+        isWindows ? "npm.cmd" : "npm",
         [
             "install",
             args.spec,
@@ -140,7 +177,7 @@ async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
             "--userconfig",
             args.userconfig,
         ],
-        { cwd: args.cwd, shell: process.platform === "win32" },
+        { cwd: args.cwd, shell: isWindows },
     );
 }
 
@@ -445,6 +482,15 @@ export function createFeedSource(
                     `feed candidate is missing its 'module' (corrupt record).`,
                 );
             }
+            // Validate the user-supplied range against the real semver-range
+            // grammar (or an npm dist-tag) before it is ever embedded in a spec
+            // (design §4.1 hardening; defense in depth against `@update <range>`
+            // shell injection on Windows).
+            if (opts?.range !== undefined && !isSafeVersionRange(opts.range)) {
+                throw new Error(
+                    `feed source '${config.name}': invalid version range '${opts.range}' for '${moduleName}'`,
+                );
+            }
             const ref =
                 opts?.range !== undefined
                     ? `${moduleName}@${opts.range}`
@@ -482,6 +528,16 @@ export function createFeedSource(
             // Install the exact resolved version -- reproducible, and it matches
             // the content-addressed root name.
             const installSpec = `${moduleName}@${version}`;
+            // Boundary guard (design §4.1 hardening; defense in depth): only a
+            // strict `name@concrete-version` spec is ever handed to `npm install`,
+            // so a corrupt record or an unresolved range can never inject shell
+            // metacharacters into the install command (the Windows path runs npm
+            // under a shell).
+            if (!isSafeModuleName(moduleName) || !isConcreteVersion(version)) {
+                throw new Error(
+                    `feed source '${config.name}': refusing to install unsafe spec '${installSpec}'`,
+                );
+            }
             // Content-addressed install roots (design §5.5): the install unit is
             // the PACKAGE, keyed by `sanitize(module)@version`. Two agents that
             // resolve to the same package+version share ONE root (dedup), a new

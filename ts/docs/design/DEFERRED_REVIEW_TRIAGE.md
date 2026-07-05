@@ -17,7 +17,6 @@
 
 | #   | Area                  | Item                                                             | Priority | Recommendation                                  |
 | --- | --------------------- | ---------------------------------------------------------------- | -------- | ----------------------------------------------- |
-| 1   | Security              | `@update <range>` shell-injection on Windows                     | **P1**   | Fix — drop `shell:true` + validate range        |
 | 2   | Security              | Feed cache file symlink safety                                   | P3       | Do not address (optional `lstat` guard)         |
 | 3   | Security              | Transient npm auth file mode on Windows                          | P3       | Do not address                                  |
 | 4   | Concurrency/lifecycle | Sibling connecting concurrently with in-flight drain leaks agent | **P1**   | Fix with #5 (connect under lock)                |
@@ -52,26 +51,6 @@
 ---
 
 ## 1. Security & hardening
-
-### 1.1 `@update <range>` shell-injection on Windows — **P1, FIX**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"TRACK (pre-existing, NOT introduced by this rework): `@update <range>` shell-injection on Windows"_.
-
-`feedSource` runs `execFile("npm", ["install", spec, …], { shell: process.platform === "win32" })`. With `shell:true` Node does not quote args, and a user-supplied `@update` range flows unvalidated into `` `${module}@${range}` ``. A crafted range can execute an arbitrary shell command on Windows.
-
-**Options**
-
-- **A. Drop `shell:true`; invoke `npm.cmd` explicitly on Windows.**
-  - Pros: removes the injection vector at the root (args are passed as a real argv, never re-parsed by a shell); minimal behavior change.
-  - Cons: must resolve the correct `npm.cmd`/`npm` binary per platform; slightly more launch code.
-- **B. Validate `range` against a semver-range grammar before building `spec`.**
-  - Pros: rejects garbage early with a clear error; defends other call sites too.
-  - Cons: semver ranges legitimately contain `||`, spaces, `>`, `<`, `-` — naive metachar-blocking wrongly rejects valid ranges, so the grammar must be real.
-- **C. Both A and B (defense in depth).**
-  - Pros: root-cause fix + early validation + good error messages.
-  - Cons: most code; small.
-
-**Recommendation: C, prioritizing A.** Removing `shell:true` is the actual security fix; the semver validation is cheap hardening and improves UX. Do **not** rely on metachar blocklists alone. File as a dedicated `feedSource` hardening change (it is pre-existing and out of scope for the update-coordination rework, so it should not block that branch).
 
 ### 1.2 Feed cache file symlink safety — **P3, do not address**
 
