@@ -252,11 +252,11 @@ cancel/rollback falls out for free, and same-version updates cost nothing.
   plus a startup orphan sweep that keeps the union of every agent's
   recorded-current root (removing a `.tmp-*` or version dir from a crashed update).
 - **Record/provider:** the `InstalledAgentRecord` carries the `installRoot`
-  (`module@version`) and resolved `version`; the provider builder derives the
-  require-root from it instead of the shared `installDir`. Same-version detection
-  in `update` keys off `installRoot` being defined and byte-identical, so
-  path/catalog records (no `installRoot`) always re-swap and still pick up an
-  in-place manifest edit.
+  (`module@version`); the provider builder derives the require-root from it instead
+  of the shared `installDir`. The concrete version is not stored separately — it is
+  already embedded in `installRoot`. Same-version detection in `update` keys off
+  `installRoot` being defined and byte-identical, so path/catalog records (no
+  `installRoot`) always re-swap and still pick up an in-place manifest edit.
 
 ### 5.6 Refcount barrier — v1 must actually terminate before v2 starts
 

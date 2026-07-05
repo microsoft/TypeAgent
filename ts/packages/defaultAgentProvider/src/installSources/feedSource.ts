@@ -496,14 +496,12 @@ export function createFeedSource(
             };
             const buildRecord = (
                 installRoot: string,
-                version: string | undefined,
             ): MaterializedInstallRecord => ({
                 kind: "npm",
                 module: moduleName,
                 source: config.name,
                 ref: spec,
                 installRoot,
-                ...(version !== undefined ? { version } : {}),
                 loaderConfig: {
                     execMode: candidate.loaderConfig?.execMode ?? "separate",
                 },
@@ -516,7 +514,7 @@ export function createFeedSource(
                 const installRoot = `${rootLabel}@${candidate.version}`;
                 const finalRoot = path.join(rootsDir, installRoot);
                 if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
-                    return buildRecord(installRoot, candidate.version);
+                    return buildRecord(installRoot);
                 }
             }
 
@@ -560,10 +558,7 @@ export function createFeedSource(
                 if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
                     // Dedup: an install of this exact version already exists;
                     // keep it and let the temp root be cleaned up below.
-                    return buildRecord(
-                        installRoot,
-                        version ?? readInstalledVersion(finalRoot),
-                    );
+                    return buildRecord(installRoot);
                 }
                 // Adopt the temp root as the content-addressed final root. Clear
                 // any stale/partial directory first so the rename can't fail on
@@ -571,7 +566,7 @@ export function createFeedSource(
                 fs.rmSync(finalRoot, { recursive: true, force: true });
                 fs.renameSync(tempRoot, finalRoot);
                 adopted = true;
-                return buildRecord(installRoot, version);
+                return buildRecord(installRoot);
             } finally {
                 if (!adopted) {
                     fs.rmSync(tempRoot, { recursive: true, force: true });

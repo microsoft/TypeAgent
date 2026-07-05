@@ -69,11 +69,9 @@ export interface InstalledAgentRecord {
     // (`module`) installs that own a dedicated root; ABSENT for `path`
     // (absolute), bundled/catalog, and legacy pre-version-scoping records — the
     // provider falls back to the shared `installDir` for those (back-compat).
+    // The concrete resolved version is not stored separately: it is already
+    // embedded in `installRoot` (`sanitize(module)@version`).
     installRoot?: string;
-    // The concrete resolved version read from the installed package.json at
-    // materialize time (design §5.5), informational (display / diagnostics).
-    // Optional/back-compat: absent for path/catalog/legacy records.
-    version?: string;
     // Opaque, kind-specific metadata interpreted by the loader named by `kind`
     // (e.g. npm: `{ execMode }`).
     loaderConfig?: Record<string, unknown>;

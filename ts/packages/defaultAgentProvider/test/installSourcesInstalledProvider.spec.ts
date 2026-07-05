@@ -191,7 +191,6 @@ describe("createInstalledAppAgentProvider(s)", () => {
                 module: moduleName,
                 source: "typeagent",
                 installRoot,
-                version: "2.0.0",
             },
             installDir,
         );

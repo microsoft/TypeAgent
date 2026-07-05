@@ -410,13 +410,10 @@ describe("feedSource.materialize", () => {
         expect(record.module).toBe("@typeagent/a-agent");
         expect(record.ref).toBe("@typeagent/a-agent@1.0.0");
         expect(record.loaderConfig?.execMode).toBe("separate");
-        // The record carries the per-agent install root and resolved version
-        // (design §5.5), and that root physically exists under installDir/agents.
-        expect(record.installRoot).toBeDefined();
-        expect(record.installRoot!.startsWith("_typeagent_a-agent@")).toBe(
-            true,
-        );
-        expect(record.version).toBe("1.0.0");
+        // The record carries the content-addressed install root (which encodes
+        // the resolved version, design §5.5), and that root physically exists
+        // under installDir/agents.
+        expect(record.installRoot).toBe("_typeagent_a-agent@1.0.0");
         expect(
             fs.existsSync(path.join(installDir, "agents", record.installRoot!)),
         ).toBe(true);
@@ -601,13 +598,13 @@ describe("feedSource.materialize", () => {
         expect(path.dirname(seenCwd!)).toBe(path.join(installDir, "agents"));
     });
 
-    it("omits version when the installed package.json has none (installRoot still set)", async () => {
+    it("falls back to an install-id root when no version can be resolved", async () => {
         clearTokenCacheForTest();
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         const source = freshCacheSource({
             installDir,
             // Empty packument so find cannot pin a version; materialize then
-            // derives it from the installed package.json (which has none).
+            // tries the installed package.json (which also has none).
             fetchFn: packumentFetch({ versions: [], distTags: {} }),
             npmInstall: async ({ spec, cwd }: any) => {
                 const mod = moduleNameFromSpec(spec);
@@ -624,10 +621,15 @@ describe("feedSource.materialize", () => {
         const record = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
         );
-        // version is best-effort/informational; its absence is not an error and
-        // the record still carries the install root.
-        expect(record.version).toBeUndefined();
+        // With no resolvable version, the root falls back to a unique install-id
+        // leaf (still labelled by the module) so the install is never lost.
         expect(record.installRoot).toBeDefined();
+        expect(record.installRoot!.startsWith("_typeagent_a-agent@")).toBe(
+            true,
+        );
+        expect(
+            fs.existsSync(path.join(installDir, "agents", record.installRoot!)),
+        ).toBe(true);
     });
 
     it("a failed materialize leaves a prior version-scoped root intact (clean abort)", async () => {
