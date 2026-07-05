@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7334029a4baec56180eef51ce7b9c6e3867886225fcbfa22bd9b541063f066cf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a790433dc1e16c4346ebef2cb2e7382c7c6bf068262305c6b46ebb112db2b634 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -24,7 +24,7 @@ The `agent-shell` package provides a graphical interface for interacting with Ty
 - **Multi-client Notifications**: When multiple clients are connected to the same conversation, the shell displays status messages to inform users of client activity.
 - **Local Mode**: In the absence of an agent server, the shell operates in local mode, hosting a WebSocket for in-process port discovery and enabling external clients to connect to in-process agents.
 
-The shell integrates with other components of the TypeAgent ecosystem, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
+The shell integrates with other components of the TypeAgent ecosystem, such as the dispatcher and agent server, to provide an interactive user experience.
 
 ## Setup
 
@@ -126,6 +126,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-05T09:01:32.154Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
