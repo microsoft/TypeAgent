@@ -396,10 +396,10 @@ export function createFeedSource(
             // already exists (dedup across agents / same-version update no-op).
             // Read-only and best-effort: when the packument is unavailable
             // (offline / auth failure) `version` stays undefined and resolution
-            // is deferred to install time. But when the packument IS available
-            // and lists a version catalog that no published version satisfies,
-            // the requested tag/range/version is simply not installable, so we
-            // fail the find (the host then reports the agent unresolved).
+            // is deferred to install time. But when the packument IS reachable
+            // and no published version satisfies the requested tag/range/version,
+            // it is simply not installable, so we fail the find (the host then
+            // reports the agent unresolved).
             let version: string | undefined;
             const registry = resolveFeedRegistry(config);
             if (registry !== undefined) {
@@ -413,14 +413,11 @@ export function createFeedSource(
                     );
                     if (packument !== undefined) {
                         version = resolveConcreteVersion(ref, packument);
-                        // The packument carries a version catalog (a `versions`
-                        // map and/or `dist-tags`) but nothing matches the
-                        // requested ref -> not installable at this ref.
-                        if (
-                            version === undefined &&
-                            (typeof packument.versions === "object" ||
-                                typeof packument["dist-tags"] === "object")
-                        ) {
+                        // The packument was reachable but no published version
+                        // satisfies the requested tag/range/version -> the ref
+                        // is not installable, so fail the find (the host then
+                        // reports the agent unresolved).
+                        if (version === undefined) {
                             return undefined;
                         }
                     }

@@ -49,10 +49,16 @@ function fakeFetch(opts: {
                 value: opts.packages.map((name) => ({ normalizedName: name })),
             });
         }
-        // packument: last path segment (decoded) is the package name.
+        // packument: last path segment (decoded) is the package name. A real
+        // packument always carries a version catalog, so include one broad
+        // enough for the membership/reresolve tests to pin a concrete version.
         const decoded = decodeURIComponent(url.slice(REGISTRY.length));
         const keywords = opts.keywords[decoded] ?? [];
-        return okJson({ keywords });
+        return okJson({
+            keywords,
+            versions: { "1.0.0": {}, "1.4.0": {}, "2.0.0": {} },
+            "dist-tags": { latest: "2.0.0" },
+        });
     }) as unknown as typeof fetch;
 }
 
