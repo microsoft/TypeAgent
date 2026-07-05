@@ -62,35 +62,6 @@
 - **Rationale:** The sibling fan-out enqueue predates M2; M2 only added the ISSUING session to the enqueue path, and the issuing session is fully initialized and holds its own `commandLock` for the current `@package` command, so its enqueued op runs strictly after that command — race-free. The only susceptible party is a DIFFERENT session mid-`connect()`, which existed before M2. The M3 refcount barrier + `replaceProvider` rework is the natural place to close it (init adds and fan-out removes should share one FIFO order, or the initial registration should run under the session's `commandLock`).
 - **Follow-up:** Revisit during M3 (§5.6/§5.7): run `connect()`'s initial provider registration under the session's `commandLock`, or enqueue the initial adds through the same applicator so init adds and fan-out removes share one FIFO order.
 
-### 2026-07-05 — `dropConfig` true/false not asserted at the source (fan-out) level
-
-- **Milestone / gate round:** M2 / test-gap round 2 (LOW)
-- **Finding / gap:** The fan-out tests' `recordingHost.removeProvider` ignores its 3rd arg, so nothing at the source level pins that `uninstall` fans out `dropConfig=true` (clear each session's enable preference) while `update` fans out `dropConfig=false` (preserve it across a version bump). The applicator side is covered by `appAgentHost.spec.ts` "threads notify/dropConfig through".
-- **Decision:** Deferred.
-- **Rationale:** This is a Model B enable-preference behavior (M1 scope) orthogonal to M2's deadlock-freedom / exactly-once / name-leak guarantees. A regression would silently wipe/preserve a per-session preference but cannot break the coordination invariants this milestone establishes. The plumbing (`startDrain(..., dropConfig, ...)`) is a direct pass-through with no branching.
-- **Follow-up:** Add a `dropConfig` capture to the fan-out `recordingHost` and assert `uninstall→true` / `update→false` when Model B config coverage is revisited.
-
-### 2026-07-05 — verify-0 straggler PARK branch (`getRefCount > 0`) unexercised
-
-- **Milestone / gate round:** M3 / test-gap round 1 (HIGH, by-design limitation)
-- **Finding / gap:** `maybeComplete`'s `!verifyZero` branch — all hosts quiesced
-  but the shared old provider still reports a nonzero refcount, so the barrier
-  parks (no `onComplete`, no coexistence) — is never hit by tests. Every fake
-  host's `removeProvider` is a no-op that never loads/unloads the source's real
-  provider, so `getRefCount` is always 0 and `verifyZero` trivially passes.
-  Exercising the nonzero branch needs a seam to inject a controllable
-  `getRefCount` (or a real in-process load) as the barrier's `oldProvider`.
-- **Decision:** Deferred to M4.
-- **Rationale:** The verify-0 gate itself is a 3-line explicit check reviewed
-  correct in M3's correctness gate (round 1), and its refcount source is
-  unit-tested directly (`npm provider refcount` in `provider.spec.ts`). In M3 a
-  parked barrier is a dead-end until M4 (§5.3) adds the timeout/abort that bounds
-  and recovers it — M4 must introduce a refcount/park control seam anyway, which
-  is the natural home for the straggler-park test (park → timeout → rollback).
-- **Follow-up:** In M4, add the injection seam and test: all hosts quiesce +
-  refcount stays > 0 ⇒ barrier stays parked (entry still `removing`, name hidden,
-  no v2 add, `whenReady` unresolved) until the M4 timeout fires and rolls back.
-
 ### 2026-07-05 — Leaf-op invariant (§5.7) enforced by convention, not at runtime
 
 - **Milestone / gate round:** M3 / review round 2 (LOW)
@@ -106,27 +77,6 @@
   effectively pinned by construction.
 - **Follow-up:** Consider a re-entrancy assertion if a future leg grows a nested
   lock acquisition.
-
-### 2026-07-05 — Indefinite park when a straggler never releases its refcount
-
-- **Milestone / gate round:** M3 / review round 1 (Finding C — by design)
-- **Finding / gap:** If a session's old-version refcount never reaches 0 (a wedged
-  unload), every other session stays parked on `whenReady` holding its command
-  lock with no time bound — a whole-session freeze.
-- **Decision:** Deferred to M4 (explicitly the §5.3 responsibility).
-- **Rationale:** Bounding + rolling back the park is the entire purpose of M4
-  (timeouts, out-of-band cancel, auto-rollback keeping v1). M3 correctly prefers
-  a safe indefinite park (no coexistence) over an unsafe forced completion.
-- **Follow-up:** M4 (§5.3): per-phase timeout + `abortSignal` cancel + rollback.
-
-### 2026-07-05 — RESOLVED: `dropConfig` true/false now asserted at the source level
-
-- **Milestone / gate round:** M3 / test-gap round 1 (closes the M2-deferred item)
-- **Resolution:** The M2 deferred item ("`dropConfig` true/false not asserted at
-  the source (fan-out) level") is now covered by a source test ("threads
-  dropConfig=true for uninstall and false for update to every remove leg (Model
-  B)") using a dedicated recording host that captures the remove leg's 3rd arg.
-- **Follow-up:** none.
 
 ### 2026-07-05 — STILL OPEN: session connecting mid-`removing` update misses v2
 
