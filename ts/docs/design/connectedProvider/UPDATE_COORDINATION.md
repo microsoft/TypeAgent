@@ -11,14 +11,14 @@
 
 ## 1. Problem
 
-`@update` swaps an installed agent `v1 → v2`. Today it is a global, disruptive
-**drain-then-add**: the old provider is removed across **every** connected
-session before the new one is added to **any**. Between a session's remove and
-its re-add the agent name is fully unregistered from that session's
-`AppAgentManager`, so a user request naming the agent can **slip into the gap** —
-it gets an "unknown agent" miss or, worse, is **misrouted** to a different agent.
-Siblings are the worst case: their remove applies at their own next idle and the
-re-add is deferred until the **global** drain finishes, so the window is bounded
+`@update` swaps an installed agent `v1 → v2`. Previously it was a global, disruptive
+**drain-then-add**: the old provider was removed across **every** connected
+session before the new one was added to **any**. Between a session's remove and
+its re-add the agent name was fully unregistered from that session's
+`AppAgentManager`, so a user request naming the agent could **slip into the gap** —
+it got an "unknown agent" miss or, worse, was **misrouted** to a different agent.
+Siblings were the worst case: their remove applied at their own next idle and the
+re-add was deferred until the **global** drain finished, so the window was bounded
 by the _slowest_ session's activity, not by the update work.
 
 ## 2. Constraints (facts that shape the design)

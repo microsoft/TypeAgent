@@ -30,7 +30,7 @@
 
 ## Entries
 
-### 2025-XX-XX — Feed-driven prune tests stand in via `path`-record `installRoot`
+### 2026-07-05 — Feed-driven prune tests stand in via `path`-record `installRoot`
 
 - **Milestone / gate round:** M1 / test-gap round 1
 - **Finding / gap:** A fully realistic prune-on-swap / prune-after-uninstall test would drive a real feed materialize through `createDefaultInstalledAgentSource`, but that factory does not forward a `feedDeps`/`npmInstall` seam, so a feed install cannot be mocked through the source. Only the `path` source is reachable, and its records have no `installRoot`.
@@ -38,7 +38,7 @@
 - **Rationale:** The GC prune branches are exercised by seeding a `path` record with a hand-set `installRoot` plus a real on-disk root, then running `update`/`uninstall` (`installSourcesInstalledProvider.spec.ts`: "update prunes the old version's install root after the swap", "uninstall prunes the agent's install root once drained"). Feed-level materialize + distinct-root behavior is covered directly in `installSourcesFeed.spec.ts`. Adding a `feedDeps` injection seam is production surface not needed for M1.
 - **Follow-up:** If a later milestone needs end-to-end feed→update coverage, add a `feedDeps` param to `createDefaultInstalledAgentSource` (or export `pruneAgentRoot` for a direct unit test).
 
-### 2025-XX-XX — Failed materialize leaves its partial root for the startup sweep
+### 2026-07-05 — Failed materialize leaves its partial root for the startup sweep
 
 - **Milestone / gate round:** M1 / review round 1 (NIT)
 - **Finding / gap:** When `feedSource.materialize` throws, the just-created `installDir/agents/<root>` dir survives (empty/partial) until the next startup orphan sweep, rather than being `rmSync`'d eagerly on the error path.
@@ -46,7 +46,7 @@
 - **Rationale:** This matches the logged design intent (decisions log: "the startup orphan sweep is the backstop"). The partial root is never persisted to a record, is never resolved, and is reclaimed on next startup; eager cleanup adds an error-path branch for no correctness gain. The prior root and shared `installDir` are already proven intact by the clean-abort test.
 - **Follow-up:** none.
 
-### 2025-XX-XX — Direct (non-drain) prune branches left unexercised
+### 2026-07-05 — Direct (non-drain) prune branches left unexercised
 
 - **Milestone / gate round:** M1 / test-gap round 2 (LOW)
 - **Finding / gap:** In `update`/`uninstall`, the prune runs through the `startDrain(...).then` path because startup seeds every record as an `active` entry. The `else` branches that prune directly (no active entry to drain) are not hit by the prune tests.
@@ -54,7 +54,7 @@
 - **Rationale:** Reaching an inactive-entry state at prune time requires contriving a record with no live entry, which does not occur in the normal seed→install→op flow; the branch is a trivial defensive fallback (same `pruneAgentRoot` call, best-effort). The primary drained path is fully covered. Low regression risk.
 - **Follow-up:** none.
 
-### 2025-XX-XX — Sibling connecting concurrently with an in-flight drain can leak the drained agent
+### 2026-07-05 — Sibling connecting concurrently with an in-flight drain can leak the drained agent
 
 - **Milestone / gate round:** M2 / review round 2 (MEDIUM, PRE-EXISTING — not an M2 regression)
 - **Finding / gap:** A session `S` that is mid-`connect()` can end up still hosting an agent that was uninstalled/updated by another session. `connect(S)` adds `S` to `clients` synchronously, then registers its initial providers via `await installAppProvider(...)` NOT wrapped in `S`'s `commandLock`. During that await another session's `uninstall`/`update` → `startDrain` snapshots `clients` (now includes `S`) and enqueues `S.removeProvider(X)`; `S`'s applicator can run that remove (lock is free during init) before `X` is actually registered, so `removeAgent('X')` no-ops, then init registers `X`. Net: `X` stays loaded on `S` while gone everywhere else; `reconcileKnownAgents` records it as known rather than healing it.
@@ -62,7 +62,7 @@
 - **Rationale:** The sibling fan-out enqueue predates M2; M2 only added the ISSUING session to the enqueue path, and the issuing session is fully initialized and holds its own `commandLock` for the current `@package` command, so its enqueued op runs strictly after that command — race-free. The only susceptible party is a DIFFERENT session mid-`connect()`, which existed before M2. The M3 refcount barrier + `replaceProvider` rework is the natural place to close it (init adds and fan-out removes should share one FIFO order, or the initial registration should run under the session's `commandLock`).
 - **Follow-up:** Revisit during M3 (§5.6/§5.7): run `connect()`'s initial provider registration under the session's `commandLock`, or enqueue the initial adds through the same applicator so init adds and fan-out removes share one FIFO order.
 
-### 2025-XX-XX — `dropConfig` true/false not asserted at the source (fan-out) level
+### 2026-07-05 — `dropConfig` true/false not asserted at the source (fan-out) level
 
 - **Milestone / gate round:** M2 / test-gap round 2 (LOW)
 - **Finding / gap:** The fan-out tests' `recordingHost.removeProvider` ignores its 3rd arg, so nothing at the source level pins that `uninstall` fans out `dropConfig=true` (clear each session's enable preference) while `update` fans out `dropConfig=false` (preserve it across a version bump). The applicator side is covered by `appAgentHost.spec.ts` "threads notify/dropConfig through".
@@ -70,7 +70,7 @@
 - **Rationale:** This is a Model B enable-preference behavior (M1 scope) orthogonal to M2's deadlock-freedom / exactly-once / name-leak guarantees. A regression would silently wipe/preserve a per-session preference but cannot break the coordination invariants this milestone establishes. The plumbing (`startDrain(..., dropConfig, ...)`) is a direct pass-through with no branching.
 - **Follow-up:** Add a `dropConfig` capture to the fan-out `recordingHost` and assert `uninstall→true` / `update→false` when Model B config coverage is revisited.
 
-### 2025-XX-XX — verify-0 straggler PARK branch (`getRefCount > 0`) unexercised
+### 2026-07-05 — verify-0 straggler PARK branch (`getRefCount > 0`) unexercised
 
 - **Milestone / gate round:** M3 / test-gap round 1 (HIGH, by-design limitation)
 - **Finding / gap:** `maybeComplete`'s `!verifyZero` branch — all hosts quiesced
@@ -91,7 +91,7 @@
   refcount stays > 0 ⇒ barrier stays parked (entry still `removing`, name hidden,
   no v2 add, `whenReady` unresolved) until the M4 timeout fires and rolls back.
 
-### 2025-XX-XX — Leaf-op invariant (§5.7) enforced by convention, not at runtime
+### 2026-07-05 — Leaf-op invariant (§5.7) enforced by convention, not at runtime
 
 - **Milestone / gate round:** M3 / review round 2 (LOW)
 - **Finding / gap:** Nothing at runtime prevents `applyAdd`/`applyRemove` (the
@@ -107,7 +107,7 @@
 - **Follow-up:** Consider a re-entrancy assertion if a future leg grows a nested
   lock acquisition.
 
-### 2025-XX-XX — Indefinite park when a straggler never releases its refcount
+### 2026-07-05 — Indefinite park when a straggler never releases its refcount
 
 - **Milestone / gate round:** M3 / review round 1 (Finding C — by design)
 - **Finding / gap:** If a session's old-version refcount never reaches 0 (a wedged
@@ -119,7 +119,7 @@
   a safe indefinite park (no coexistence) over an unsafe forced completion.
 - **Follow-up:** M4 (§5.3): per-phase timeout + `abortSignal` cancel + rollback.
 
-### 2025-XX-XX — RESOLVED: `dropConfig` true/false now asserted at the source level
+### 2026-07-05 — RESOLVED: `dropConfig` true/false now asserted at the source level
 
 - **Milestone / gate round:** M3 / test-gap round 1 (closes the M2-deferred item)
 - **Resolution:** The M2 deferred item ("`dropConfig` true/false not asserted at
@@ -128,7 +128,7 @@
   B)") using a dedicated recording host that captures the remove leg's 3rd arg.
 - **Follow-up:** none.
 
-### 2025-XX-XX — STILL OPEN: session connecting mid-`removing` update misses v2
+### 2026-07-05 — STILL OPEN: session connecting mid-`removing` update misses v2
 
 - **Milestone / gate round:** M3 / review round 1 (Finding B — pre-existing)
 - **Finding / gap:** `startReplace` snapshots its target set (`clients ∪ issuing`)
@@ -148,7 +148,7 @@
   under the session command lock, or have update-completion fan v2 out to any
   session that joined after `startReplace`.
 
-### 2025-XX-XX — DEFERRED: full pre-launch `v2` startability probe
+### 2026-07-05 — DEFERRED: full pre-launch `v2` startability probe
 
 - **Milestone / gate round:** M4 / §5.3
 - **Finding / gap:** The default `verifyStart` only reads `v2`'s manifest
@@ -161,7 +161,7 @@
   where cold-start failures are likelier; the seam already exists
   (`updateCoordination.verifyStart`).
 
-### 2025-XX-XX — DEFERRED: user-facing cancel UX + longer-lived abort source
+### 2026-07-05 — DEFERRED: user-facing cancel UX + longer-lived abort source
 
 - **Milestone / gate round:** M4 / §4.2, §5.3 (surfaced in M4 review round 1)
 - **Finding / gap:** The abort→rollback path is wired and tested with a
@@ -175,7 +175,7 @@
   registry of in-flight update controllers keyed by agent name that a future
   "cancel update" affordance aborts — rather than the per-command signal.
 
-### 2025-XX-XX — DEFERRED: wedged-straggler `v2` install dir + phase-3 GC backstop
+### 2026-07-05 — DEFERRED: wedged-straggler `v2` install dir + phase-3 GC backstop
 
 - **Milestone / gate round:** M4 / §5.3, §5.5 (surfaced in M4 review round 1)
 - **Finding / gap:** Phase 3 (`releasing`) has no timer: a host whose add leg
@@ -186,7 +186,7 @@
   (it removes any install root not referenced by the current record).
 - **Follow-up:** None required; revisit only if lingering dirs prove costly.
 
-### 2025-XX-XX — DEFERRED: verify-0 park never re-checks a self-dropping refcount
+### 2026-07-05 — DEFERRED: verify-0 park never re-checks a self-dropping refcount
 
 - **Milestone / gate round:** M4 / §5.6 (surfaced in M4 review round 1)
 - **Finding / gap:** When all hosts have quiesced but verify-0 sees a non-zero
@@ -200,7 +200,7 @@
 - **Follow-up:** Optionally add a refcount-drop notification from the provider so
   the barrier can advance without waiting out the timeout.
 
-### 2025-XX-XX — STILL OPEN (carried to M5): connect mid-`removing` misses `v2`
+### 2026-07-05 — STILL OPEN (carried to M5): connect mid-`removing` misses `v2`
 
 - **Milestone / gate round:** M4 (carried from M3 Finding B)
 - **Finding / gap:** Unchanged from M3: a session that `connect()`s while a name
@@ -210,7 +210,7 @@
   registration and the barrier fan-out under one FIFO / the session command lock.
 - **Follow-up:** Evaluate in M5 §6 cleanup.
 
-### 2025-XX-XX — KEPT (not removed): load tombstone `withTombstone`
+### 2026-07-05 — KEPT (not removed): load tombstone `withTombstone`
 
 - **Milestone / gate round:** M5 / §6 (5.1 step 2)
 - **Finding / gap:** M5 evaluated removing the load tombstone (`withTombstone`),
@@ -227,3 +227,79 @@
 - **Follow-up:** Reconsider removing the tombstone once `connect()` initial
   registration is unified with the barrier fan-out (the connect-mid-removing
   follow-up above). Until then it stays.
+
+### 2026-07-05 — DEFERRED: rollback-prune of a REAL distinct v2 root untested (path-source limit)
+
+- **Milestone / gate round:** Final gate (test-gap, MEDIUM)
+- **Finding / gap:** The `finalizeGc` rollback branch prunes the v2 root
+  (`pruneAgentRoot(installDir, newRoot)`). Every rollback test drives the update
+  through the hermetic `path` source, whose re-resolve yields `installRoot ===
+undefined`, so `newRoot` is undefined and the prune is a guarded no-op — the
+  branch that deletes a REAL, distinct v2 dir on rollback is never exercised.
+- **Decision:** Deferred. The safety-critical direction IS covered: the
+  "rolled-back update leaves v1 durable …" test now asserts the v1 install-root
+  DIRECTORY survives a rollback, catching any regression that pruned `oldRoot`
+  (v1) instead of `newRoot` (v2). Exercising a real v2-root prune requires a
+  feed-style materializing harness (npm/registry mocking) that is disproportionate
+  to a 3-line symmetric branch guarded by `pruneAgentRoot`'s own segment/empty
+  checks.
+- **Follow-up:** Add the distinct-root rollback-prune (and its commit mirror: v2
+  kept, v1 pruned) when a feed materialize harness lands in this spec.
+
+### 2026-07-05 — DEFERRED: source→real-`AppAgentHostApplicator` integration test
+
+- **Milestone / gate round:** Final gate (test-gap, recommended-not-must)
+- **Finding / gap:** The source lifecycle/barrier tests compose `replaceProvider`
+  from a faithful fake (`withReplace`) that acquires the lock twice
+  (remove+add) rather than holding ONE command-lock section. The single-lock /
+  no-interleave invariant is pinned only in the applicator unit test
+  (`appAgentHost.spec`). No test wires the real source barrier to the real
+  `AppAgentHostApplicator`, so a regression swapping the source back to naive
+  remove+add would keep all source tests green.
+- **Decision:** Deferred — the documented M3 unit-split. The single-lock invariant
+  fails loudly in `appAgentHost.spec` on regression; verify-0 nonzero-park is
+  exercised at the source via the `refCount` seam.
+- **Follow-up:** Optional thin source→real-applicator smoke test as hardening.
+
+### 2026-07-05 — DEFERRED: `@package` async status STRINGS not asserted
+
+- **Milestone / gate round:** Final gate (test-gap, LOW)
+- **Finding / gap:** `packageAgent.spec`'s fake `actionIO.appendDisplay` discards
+  output, so the user-visible status strings ("…will load/unload/reload in each
+  session shortly", "update/uninstall started", the terminal outcome lines) are
+  not asserted anywhere. Handler delegation, the record-write commit point, and
+  the async-return boundary ARE covered.
+- **Decision:** Deferred (LOW / cosmetic). The behavior behind the strings is
+  covered; only the exact wording is unasserted.
+- **Follow-up:** Optionally record `appendDisplay` and assert the strings.
+
+### 2026-07-05 — TRACK (pre-existing, NOT introduced by this rework): `@update <range>` shell-injection on Windows
+
+- **Milestone / gate round:** Final gate (security, SHOULD-FIX — pre-existing)
+- **Finding / gap:** `feedSource` runs `execFile("npm", ["install", spec, …], {
+shell: process.platform === "win32" })`. With `shell:true` Node does not quote
+  args, and the user-supplied `@update` `range` flows unvalidated into `spec`
+  (`` `${module}@${range}` ``). On Windows a crafted range could execute a shell
+  command. Confirmed present at the branch base `cd48fccc9` — this rework did NOT
+  introduce it, but it lives in the update flow.
+- **Decision:** NOT fixed here (out of scope for the Update Coordination rework;
+  the proper fix — validate `range` against a semver-range grammar and/or drop
+  `shell:true` / pass npm's `.cmd` explicitly — is a separate hardening in
+  `feedSource`, and naive metachar-blocking would wrongly reject valid `||` OR
+  ranges). Flagged to the user.
+- **Follow-up:** File a separate security hardening task for `feedSource`'s npm
+  invocation on Windows.
+
+### 2026-07-05 — DEFERRED (NITs): fake-timer rollback tests; hung-remove single-session
+
+- **Milestone / gate round:** Final gate (NITs)
+- **Finding / gap:** (a) The §5.3 timeout/rollback suite is real-timer-based
+  (`settle()` = 4×`setTimeout(5)` racing injected 20 ms timeouts); deterministic
+  today but wall-clock-coupled. (b) A pathologically HUNG `applyRemove` (never
+  settles) leaves that one session half-removed and unrestored by rollback — the
+  quiesce timer protects global liveness but not that wedged session (requires a
+  dispatcher-side leaf-op bug outside this rework's contract).
+- **Decision:** Deferred. (a) Prefer `jest.useFakeTimers()` +
+  `advanceTimersByTimeAsync` later. (b) Informational — outside the leaf-op
+  contract; the timeout backstop protects global progress.
+- **Follow-up:** Optional test-harness cleanup; no code change for (b).

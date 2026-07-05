@@ -108,6 +108,14 @@ export type UpdateOutcomeStatus =
     | "failed-reverted";
 
 /**
+ * The terminal outcome the issuing conversation is told about after a coordinated
+ * `@uninstall` settles asynchronously (design §5.3, §5.4). `uninstalled` = the
+ * teardown committed and the name is free; `reverted` = a phase timeout rolled
+ * back and the agent is still installed and serving in every session.
+ */
+export type UninstallOutcomeStatus = "uninstalled" | "reverted";
+
+/**
  * The three install-source kinds (design §3). There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/

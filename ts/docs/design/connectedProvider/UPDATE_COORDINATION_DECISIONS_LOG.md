@@ -33,7 +33,7 @@
 
 ## Entries
 
-### 2025-XX-XX — Install-id keyed roots under an `agents/` subdir
+### 2026-07-05 — Install-id keyed roots under an `agents/` subdir
 
 - **Milestone / item:** M1 / §5.5
 - **Type:** Deviation (bounded) from the literal `<name>@<version>` root naming.
@@ -54,7 +54,7 @@
 - **Design updated?** no — recorded here; will fold into UPDATE_COORDINATION.md §5.5
   wording in M5 docs pass.
 
-### 2025-XX-XX — Best-effort GC: prune-on-swap + startup orphan sweep
+### 2026-07-05 — Best-effort GC: prune-on-swap + startup orphan sweep
 
 - **Milestone / item:** M1 / §5.5
 - **Type:** Unspecified (design mandated non-destructive roots but left reclamation open).
@@ -69,7 +69,7 @@
   never blocks the update/uninstall, and the next startup reconciles.
 - **Design updated?** no — recorded here; fold into §5.5/§6 in M5 docs pass.
 
-### 2025-XX-XX — `installName`/`version` threaded as optional & back-compatible
+### 2026-07-05 — `installName`/`version` threaded as optional & back-compatible
 
 - **Milestone / item:** M1 / §5.5
 - **Type:** Unspecified.
@@ -84,7 +84,7 @@
   `| undefined` widening on the option types.
 - **Design updated?** no.
 
-### 2025-XX-XX — Uniform enqueue: the issuing session is fanned out like a sibling
+### 2026-07-05 — Uniform enqueue: the issuing session is fanned out like a sibling
 
 - **Milestone / item:** M2 / §5.4
 - **Type:** Deviation (removes the previously-implemented inline "immediate" path).
@@ -110,7 +110,7 @@ command lock is held`) pins the non-blocking contract.
 - **Design updated?** no — matches §5.4 intent; fold the "issuing == sibling"
   wording into UPDATE_COORDINATION.md in the M5 docs pass.
 
-### 2025-XX-XX — `pruneAgentRoot` guards against any falsy `installRoot`
+### 2026-07-05 — `pruneAgentRoot` guards against any falsy `installRoot`
 
 - **Milestone / item:** M2 / §5.5 (hardening surfaced in M2 review round 2)
 - **Type:** Unspecified (defensive).
@@ -123,7 +123,7 @@ command lock is held`) pins the non-blocking contract.
   warrant the one-line guard on a destructive `rmSync`.
 - **Design updated?** no.
 
-### 2025-XX-XX — Coordinated `replaceProvider` barrier + explicit verify-0 (M3 core)
+### 2026-07-05 — Coordinated `replaceProvider` barrier + explicit verify-0 (M3 core)
 
 - **Milestone / item:** M3 / §5.1, §5.6, §5.7
 - **Type:** Implements the design (the correctness core).
@@ -154,7 +154,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
 - **Design updated?** no — implements §5.1/§5.6/§5.7; flip UPDATE_COORDINATION.md
   to "Implemented" in the M5 docs pass.
 
-### 2025-XX-XX — `replaceProvider` defaults `dropConfig=false` (preserve config)
+### 2026-07-05 — `replaceProvider` defaults `dropConfig=false` (preserve config)
 
 - **Milestone / item:** M3 / §5 Model B (surfaced in M3 review round 2)
 - **Type:** Unspecified (API default choice).
@@ -167,7 +167,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   a swap is to keep the user's per-session enable preference. Documented inline.
 - **Design updated?** no.
 
-### 2025-XX-XX — Parked `replaceProvider` re-checks `closed` after the barrier
+### 2026-07-05 — Parked `replaceProvider` re-checks `closed` after the barrier
 
 - **Milestone / item:** M3 / §5.7, §6 (hardening surfaced in M3 review round 1)
 - **Type:** Unspecified (defensive).
@@ -181,7 +181,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   whenReady skips the add after dispose").
 - **Design updated?** no.
 
-### 2025-XX-XX — Single-round rollback: outcome decided BEFORE hosts release
+### 2026-07-05 — Single-round rollback: outcome decided BEFORE hosts release
 
 - **Milestone / item:** M4 / §5.3
 - **Type:** Unspecified
@@ -199,7 +199,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   on a rolled-back update.
 - **Design updated?** no — implements §5.3; flip to "Implemented" in M5.
 
-### 2025-XX-XX — Default `verifyStart` = `getAppAgentManifest` (non-forking probe)
+### 2026-07-05 — Default `verifyStart` = `getAppAgentManifest` (non-forking probe)
 
 - **Milestone / item:** M4 / §5.3 (v2 start verification)
 - **Type:** Unspecified
@@ -215,7 +215,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   probe is DEFERRED (see deferred log).
 - **Design updated?** no.
 
-### 2025-XX-XX — Rollback record-restore is synchronous, ordered before flip/prune
+### 2026-07-05 — Rollback record-restore is synchronous, ordered before flip/prune
 
 - **Milestone / item:** M4 / §5.3 (surfaced in M4 review rounds 1 & 2)
 - **Type:** Unspecified
@@ -234,7 +234,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   `release()` (parked hosts add off `barrier.outcome`, so they recover regardless).
 - **Design updated?** no.
 
-### 2025-XX-XX — Success continuation re-quiesces (closed-at-enqueue hosts)
+### 2026-07-05 — Success continuation re-quiesces (closed-at-enqueue hosts)
 
 - **Milestone / item:** M4 / §5.3, §5.4 (surfaced in M4 review round 2)
 - **Type:** Unspecified
@@ -249,7 +249,7 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   fills the slot immediately.
 - **Design updated?** no.
 
-### 2025-XX-XX — Update outcome status surfaced via `onOutcome` callback (minimal UX)
+### 2026-07-05 — Update outcome status surfaced via `onOutcome` callback (minimal UX)
 
 - **Milestone / item:** M4 / §4.4
 - **Type:** Unspecified
@@ -262,4 +262,49 @@ await whenReady → (thunk ? applyAdd(new))` sequence as a SINGLE queued op, so
   async terminal outcome needs a channel. A full user-facing outcome UX (progress,
   a visible cancel affordance) stays DEFERRED (see deferred log), consistent with
   §4.2's UX deferral.
+- **Design updated?** no.
+
+### 2026-07-05 — Persist the store commit at the BARRIER decision, not before it
+
+- **Milestone / item:** Final gate / §5.3, §5.5, §7.4
+- **Type:** Deviation (refines the §7.4 "record write is the commit point")
+- **Design ref:** §5.3, §5.5, §7.4
+- **Decision:** `update()` and `uninstall()` no longer write/delete the
+  `agents.json` record BEFORE the barrier. The record mutation now happens inside
+  `onDecided(committed)`: update writes the v2 record only on commit; uninstall
+  deletes the record only on commit. On rollback the record is untouched (v1 stays
+  recorded), so there is nothing to "restore" — the previous synchronous
+  rollback-restore write is removed. The in-memory entry is flipped BEFORE the
+  store write (never strands the name in `removing` under the tombstone), and
+  `finalizeGc`'s commit prune is guarded on the store actually reflecting the new
+  state (`committed?.installRoot === newRoot` for update; record absent for
+  uninstall) so a failed commit-write keeps the old root.
+- **Rationale:** Two final-gate correctness findings: (1) writing v2 before the
+  barrier meant a crash mid-swap left the store on an UNVERIFIED v2 while the
+  startup orphan sweep pruned v1's root — the exact stranding M4 rollback exists
+  to prevent. Persisting only at commit makes a crash-mid-swap recover cleanly to
+  v1 (v2 root becomes the orphan the sweep reclaims), matching §5.5. (2) the
+  rollback-restore write could throw (disk error) and, being swallowed by
+  `decide()`'s try/catch, leave the entry stuck in `removing` → the tombstone
+  bricked the agent in every session. Not restoring at all removes that failure
+  mode entirely. §7.4 still holds — the record write IS the commit point; it is
+  just aligned with the barrier's commit (when v2 actually becomes live) instead
+  of the earlier materialize.
+- **Design updated?** no (consistent with §7.4's intent; note for a future §5.3
+  wording pass).
+
+### 2026-07-05 — Uninstall surfaces a terminal outcome (`uninstalled` | `reverted`)
+
+- **Milestone / item:** Final gate / §5.4
+- **Type:** Unspecified
+- **Design ref:** §5.4
+- **Decision:** `uninstall()` gains an `onOutcome?(status)` callback
+  (`UninstallOutcomeStatus = "uninstalled" | "reverted"`), mirroring `update()`.
+  `@package uninstall` now prints "uninstall started …" up front and a follow-up
+  status line at the terminal outcome; a straggler-timeout rollback reports
+  "uninstall reverted; the agent is still installed."
+- **Rationale:** Uninstall runs through the same barrier as update and CAN roll
+  back (quiesce timeout), but the handler previously printed an unconditional
+  "uninstalled" success line — telling the user the agent was gone when it had
+  reverted and was still serving. The outcome callback closes that gap.
 - **Design updated?** no.

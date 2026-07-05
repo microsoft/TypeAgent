@@ -1459,7 +1459,7 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         );
     });
 
-    it("a rolled-back update leaves v1 durable for an immediately-following op (synchronous restore)", async () => {
+    it("a rolled-back update leaves v1 durable for an immediately-following op (record never overwritten)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
@@ -1485,9 +1485,10 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         );
         await settle();
 
-        // The restore is synchronous + ordered before the entry flip, so the v1
-        // record + listing are already durable the instant the rollback settles —
-        // no async gap in which a follow-up op could read a stale v2 baseline.
+        // v1 is committed to the store only at the barrier decision, so an update
+        // that rolls back NEVER overwrote the v1 record — it is durable the
+        // instant the rollback settles, with no async gap in which a follow-up op
+        // could read a stale v2 baseline.
         expect(outcomes).toEqual(["failed-reverted"]);
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
@@ -1495,6 +1496,14 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
             "foo",
         );
+        // The rollback GC prunes the v2 root, NEVER v1's: v1's version-scoped
+        // install-root directory must survive so v1 stays loadable (a regression
+        // that pruned `oldRoot` on rollback would delete the restored version).
+        expect(
+            fs.existsSync(
+                path.join(instanceDir, "installedAgents", "agents", v1Root),
+            ),
+        ).toBe(true);
 
         // A SECOND update issued right after the rollback re-resolves from the
         // RESTORED v1 record (never a stale v2). It also rolls back (the straggler

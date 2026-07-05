@@ -26,7 +26,11 @@ import {
     InstalledAgentInfo,
 } from "agent-dispatcher";
 import chalk from "chalk";
-import { SourceStatus, UpdateOutcomeStatus } from "./config.js";
+import {
+    SourceStatus,
+    UninstallOutcomeStatus,
+    UpdateOutcomeStatus,
+} from "./config.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -62,9 +66,16 @@ export interface InstalledAgentSourceApi {
     ): Promise<{ source: string; warnings?: string[] }>;
     // Drop the record (commit), then fan out `removeProvider` to every session —
     // including the issuing one — through its idle-gated applicator, each
-    // notified (design §4, §5, §5.4). Returns once the record is dropped; the
-    // unload lands at each session's next idle.
-    uninstall(name: string, issuingHost: AppAgentHost): Promise<void>;
+    // notified (design §4, §5, §5.4). The teardown is coordinated by the same
+    // barrier as `update`, so a straggler that won't idle ROLLS BACK (the agent
+    // stays installed); `onOutcome` (design §5.4) surfaces that terminal async
+    // status (uninstalled / reverted). Returns as soon as the teardown starts;
+    // the unload lands at each session's next idle.
+    uninstall(
+        name: string,
+        issuingHost: AppAgentHost,
+        onOutcome?: (status: UninstallOutcomeStatus) => void,
+    ): Promise<void>;
     // Re-materialize against the recorded source (fail-fast on error), write the
     // record (commit), then start a coordinated, CANCELABLE, time-bounded swap
     // (global no-coexistence, §5.3, §7.2): the old version is removed across
@@ -283,12 +294,21 @@ class UninstallCommandHandler implements CommandHandler {
     ) {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const name = params.args.name;
-        // Drop the record (commit) + fan out removeProvider to every session —
-        // including THIS one — through its idle-gated applicator, each notified
-        // (design §4, §5, §5.4). The unload lands at each session's next idle.
-        await source.uninstall(name, appAgentHost);
+        // Start the coordinated teardown + fan out removeProvider to every
+        // session — including THIS one — through its idle-gated applicator, each
+        // notified (design §4, §5, §5.4). This returns as soon as the teardown
+        // starts; the unload lands at each session's next idle, and the terminal
+        // outcome (uninstalled / reverted-on-timeout) arrives via `onOutcome`.
+        await source.uninstall(name, appAgentHost, (outcome) => {
+            displayStatus(
+                outcome === "uninstalled"
+                    ? `Agent '${name}' uninstalled.`
+                    : `Agent '${name}' uninstall reverted; the agent is still installed.`,
+                context,
+            );
+        });
         displayResult(
-            `Agent '${name}' uninstalled; it will unload from each session shortly.`,
+            `Agent '${name}' uninstall started; it will unload from each session shortly.`,
             context,
         );
     }

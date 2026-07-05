@@ -16,6 +16,7 @@ import {
     InstalledAgentRecord,
     SourceStatus,
     UpdateOutcomeStatus,
+    UninstallOutcomeStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
 } from "./installSources/config.js";
 import {
@@ -73,6 +74,13 @@ function pruneAgentRoot(
     // rm would wipe every agent's root. A record without a dedicated root
     // (path/catalog/legacy) simply has nothing to prune.
     if (!installRoot) {
+        return;
+    }
+    // Defense-in-depth: the root must be a single path segment. A corrupt or
+    // hand-edited `agents.json` carrying a traversal (`..` or a path separator)
+    // must never let the recursive rm escape the `agents/` roots dir.
+    if (path.basename(installRoot) !== installRoot) {
+        debug(`refusing to prune non-segment install root '${installRoot}'`);
         return;
     }
     const dir = path.join(agentRootsDir(installDir), installRoot);
@@ -605,7 +613,15 @@ export function createDefaultInstalledAgentSource(
                 : barrier.rollbackKind === "cancelled"
                   ? "cancelled-reverted"
                   : "failed-reverted";
-        barrier.onOutcome?.(status);
+        // A throwing user `onOutcome` (a display wrapper) must not escape as an
+        // unhandled rejection nor skip `finalizeIfReady`.
+        try {
+            barrier.onOutcome?.(status);
+        } catch (e) {
+            debug(
+                `barrier '${barrier.name}': onOutcome(${status}) threw: ${e}`,
+            );
+        }
         finalizeIfReady(barrier);
     }
 
@@ -927,6 +943,7 @@ export function createDefaultInstalledAgentSource(
         async uninstall(
             name: string,
             issuingHost: AppAgentHost,
+            onOutcome?: (status: UninstallOutcomeStatus) => void,
         ): Promise<void> {
             if (isBuiltin(name)) {
                 throw new Error(
@@ -938,24 +955,27 @@ export function createDefaultInstalledAgentSource(
             busy.add(name);
             try {
                 const entry = entries.get(name);
-                // Capture the version-scoped install root AND the full record
-                // before deletion: the root so its directory can be pruned once
-                // the agent is confirmed down everywhere (design §5.5 GC), and the
-                // record so a rolled-back uninstall (a straggler that won't idle
-                // times out, design §5.3) can restore it exactly.
+                // Capture the version-scoped install root before the barrier: its
+                // directory is pruned once the agent is confirmed down everywhere
+                // (design §5.5 GC).
                 const deletedRecord = readAgentsJson(instanceDir)?.agents[name];
-                const uninstalledRoot = deletedRecord?.installRoot;
-                await limiter(async () => {
+                if (deletedRecord === undefined) {
+                    throw new Error(`Agent '${name}' not found`);
+                }
+                const uninstalledRoot = deletedRecord.installRoot;
+                // Drop the record only at the barrier COMMIT (in `onDecided`
+                // below), NOT here: while the teardown is in flight the agent
+                // stays the recorded-current install, so a crash mid-uninstall
+                // recovers to the still-installed agent rather than a half-removed
+                // state, and a rollback needs nothing restored (design §5.3, §5.5).
+                const deleteInstalledRecord = () => {
                     const current = readAgentsJson(instanceDir) ?? {
                         agents: {},
                     };
-                    if (current.agents[name] === undefined) {
-                        throw new Error(`Agent '${name}' not found`);
-                    }
                     delete current.agents[name];
                     writeAgentsJson(instanceDir, current);
-                });
-                // The record write is the commit point (design §7.4). Now tear
+                };
+                // The barrier decision is the commit point (design §7.4). Now tear
                 // the live agent down across every connected session through the
                 // coordinated barrier (active → removing → absent, design §5.6,
                 // §5.7, §7.2): each session's `replaceProvider` (no new-version
@@ -979,25 +999,15 @@ export function createDefaultInstalledAgentSource(
                         newProvider: undefined,
                         onDecided: (outcome) => {
                             if (outcome === "committed") {
+                                // Flip in-memory FIRST (never throws) so the name
+                                // is never stranded in `removing`, then drop the
+                                // record — the durable commit point (design §7.4).
                                 entries.delete(name);
+                                deleteInstalledRecord();
                             } else {
-                                // Rollback: restore the record + the live agent.
-                                // The store restore is SYNCHRONOUS and runs BEFORE
-                                // the entry flip / host release / any prune, so no
-                                // concurrent op can observe the agent active while
-                                // the store still lacks its record, and a crash can
-                                // never strand a half-rolled-back state. Each
-                                // agents.json read-modify-write is atomic (no await
-                                // gap) and touches only this name's key, so it is
-                                // safe to sequence here outside the limiter
-                                // (design §5.3).
-                                if (deletedRecord !== undefined) {
-                                    const current = readAgentsJson(
-                                        instanceDir,
-                                    ) ?? { agents: {} };
-                                    current.agents[name] = deletedRecord;
-                                    writeAgentsJson(instanceDir, current);
-                                }
+                                // Rollback: the record was never dropped, so there
+                                // is nothing to restore — just keep v1 live (design
+                                // §5.3).
                                 entries.set(name, {
                                     status: "active",
                                     provider: entry.provider,
@@ -1006,15 +1016,36 @@ export function createDefaultInstalledAgentSource(
                         },
                         finalizeGc: (outcome) => {
                             // Prune the version-scoped root only on a committed
-                            // uninstall; a rollback keeps `v1` intact (design
-                            // §5.3, §5.5 GC).
+                            // uninstall whose record drop actually landed; a
+                            // rollback (or a commit-drop write that failed, leaving
+                            // the record present) keeps `v1` intact (design §5.3,
+                            // §5.5 GC).
                             if (outcome === "committed") {
-                                pruneAgentRoot(installDir, uninstalledRoot);
+                                const stillRecorded =
+                                    readAgentsJson(instanceDir)?.agents[name];
+                                if (stillRecorded === undefined) {
+                                    pruneAgentRoot(installDir, uninstalledRoot);
+                                }
                             }
                         },
+                        // Surface the terminal async status (design §5.4): a
+                        // committed uninstall is `uninstalled`; a straggler-timeout
+                        // rollback is `reverted` (the agent stays installed), so the
+                        // issuing conversation is never left believing a reverted
+                        // uninstall succeeded.
+                        onOutcome: onOutcome
+                            ? (status) =>
+                                  onOutcome(
+                                      status === "updated"
+                                          ? "uninstalled"
+                                          : "reverted",
+                                  )
+                            : undefined,
                     });
                 } else {
+                    deleteInstalledRecord();
                     pruneAgentRoot(installDir, uninstalledRoot);
+                    onOutcome?.("uninstalled");
                 }
             } finally {
                 busy.delete(name);
@@ -1056,16 +1087,20 @@ export function createDefaultInstalledAgentSource(
                     installName: name,
                 });
                 const record: InstalledAgentRecord = { ...resolved, name };
-                // Overwrite only after a successful materialize (§12 Q13). This
-                // is the commit point (design §7.4); a failed materialize above
-                // is a no-op that leaves the old record + agent intact.
-                await limiter(async () => {
+                // Persist the v2 record only at the barrier COMMIT (in
+                // `onDecided` below), NOT here: while the swap is in flight the
+                // recorded-current version must stay v1, so a crash mid-swap
+                // recovers to v1 (the already-materialized v2 root is then an
+                // orphan the startup sweep reclaims) instead of coming up on an
+                // unverified v2 with v1 already pruned (design §5.3, §5.5). A
+                // failed materialize above is a no-op that leaves v1 intact.
+                const writeInstalledRecord = () => {
                     const current = readAgentsJson(instanceDir) ?? {
                         agents: {},
                     };
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
-                });
+                };
                 // Coordinated update (design §5.6, §5.7, §7.2): tear the OLD
                 // version down across every session and add the NEW one as ONE
                 // coordinated barrier — each session's `replaceProvider` removes
@@ -1080,7 +1115,7 @@ export function createDefaultInstalledAgentSource(
                 // B). The update is cancelable (abortSignal) and time-bounded: a
                 // straggler that won't idle, a v1 that won't die, or a v2 that
                 // won't start ROLLS BACK to v1 (design §5.3) — v2 is discarded and
-                // the old record restored, as if the update never happened.
+                // v1 stays the recorded-current version, as if it never happened.
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
                 // The OLD (v1) version's version-scoped install root, kept intact
@@ -1100,26 +1135,22 @@ export function createDefaultInstalledAgentSource(
                         newProvider,
                         onDecided: (outcome) => {
                             if (outcome === "committed") {
+                                // Flip in-memory FIRST (never throws) so the name
+                                // is never stranded in `removing` (the tombstone
+                                // would otherwise brick it), then persist v2 — the
+                                // durable commit point (design §7.4). If that write
+                                // throws, v1 stays the recorded-current version and
+                                // the finalizeGc guard below keeps v1's root.
                                 entries.set(name, {
                                     status: "active",
                                     provider: newProvider,
                                 });
+                                writeInstalledRecord();
                             } else {
-                                // Rollback: restore the old record + keep v1 live
-                                // (design §5.3), discarding v2 as if the update
-                                // never happened. The store restore is SYNCHRONOUS
-                                // and runs BEFORE the entry flip / host release /
-                                // any prune, so no concurrent op can read a stale
-                                // v2 baseline and a crash can never strand the
-                                // store on a to-be-pruned v2 root. Each agents.json
-                                // read-modify-write is atomic (no await gap) and
-                                // touches only this name's key, so it is safe to
-                                // sequence here outside the limiter (design §5.3).
-                                const current = readAgentsJson(instanceDir) ?? {
-                                    agents: {},
-                                };
-                                current.agents[name] = existing;
-                                writeAgentsJson(instanceDir, current);
+                                // Rollback: v1 was never overwritten in the store,
+                                // so there is nothing to restore — just keep v1
+                                // live and discard v2, as if the update never
+                                // happened (design §5.3).
                                 entries.set(name, {
                                     status: "active",
                                     provider: oldEntry.provider,
@@ -1129,9 +1160,18 @@ export function createDefaultInstalledAgentSource(
                         finalizeGc: (outcome) => {
                             // Prune the superseded root only after every host has
                             // swapped (design §5.3: v1 never pruned before v2 is
-                            // serving). Commit discards v1; rollback discards v2.
+                            // serving). Commit discards v1 — but only once v2 is
+                            // actually the persisted record, so a commit-write that
+                            // failed (leaving v1 recorded) keeps v1's root and
+                            // orphans v2 for the startup sweep. Rollback discards
+                            // v2 (v1 stays recorded + serving).
                             if (outcome === "committed") {
-                                if (oldRoot !== newRoot) {
+                                const committed =
+                                    readAgentsJson(instanceDir)?.agents[name];
+                                if (
+                                    committed?.installRoot === newRoot &&
+                                    oldRoot !== newRoot
+                                ) {
                                     pruneAgentRoot(installDir, oldRoot);
                                 }
                             } else {
@@ -1144,10 +1184,11 @@ export function createDefaultInstalledAgentSource(
                         abortSignal,
                     });
                 } else {
-                    // No live old version to tear down: just add the new one to
-                    // every session (non-blocking fan-out, §5.4). There is no
-                    // barrier (nothing to coordinate), so surface the terminal
-                    // status directly.
+                    // No live old version to tear down: commit v2 directly (write
+                    // the record + add to every session); there is no barrier
+                    // (nothing to coordinate), so surface the terminal status
+                    // directly (§5.4).
+                    writeInstalledRecord();
                     entries.set(name, {
                         status: "active",
                         provider: newProvider,

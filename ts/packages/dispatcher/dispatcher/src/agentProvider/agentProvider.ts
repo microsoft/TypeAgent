@@ -27,7 +27,9 @@ export interface AppAgentProvider {
     // teardown ACKs. Providers that do not refcount omit it (treated as 0).
     getRefCount?(appAgentName: string): number;
     // Optional companion to {@link getRefCount}: whether the agent currently has
-    // a loaded (refcounted) instance. Omitted by providers that do not refcount.
+    // a loaded (refcounted) instance. Diagnostics only — the verify-0 teardown
+    // gate uses {@link getRefCount} (count 0) exclusively, not this. Omitted by
+    // providers that do not refcount.
     isLoaded?(appAgentName: string): boolean;
 }
 
