@@ -539,9 +539,10 @@ describe("feedSource.materialize", () => {
         expect((await source.find("@typeagent/a-agent@^1"))!.version).toBe(
             "1.5.0",
         );
-        // The resolved version is pinned into the candidate ref.
+        // The user-specified spec/range is retained in `ref` (for re-resolve);
+        // the concrete resolved version lives in `version`.
         expect((await source.find("@typeagent/a-agent"))!.ref).toBe(
-            "@typeagent/a-agent@2.0.0",
+            "@typeagent/a-agent",
         );
     });
 
@@ -565,6 +566,29 @@ describe("feedSource.materialize", () => {
         // and the ref is the original spec.
         expect(candidate!.version).toBeUndefined();
         expect(candidate!.ref).toBe("@typeagent/a-agent@1.0.0");
+    });
+
+    it("find fails when no published version satisfies the requested range", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = freshCacheSource({
+            installDir,
+            npmInstall: async () => {},
+            // The feed publishes 1.x/2.x only.
+            fetchFn: packumentFetch({
+                versions: ["1.0.0", "2.0.0"],
+                distTags: { latest: "2.0.0" },
+            }),
+        });
+        // An exact version, an unsatisfiable range, and an unknown dist-tag all
+        // have no match in the catalog -> find reports the agent unresolved.
+        expect(await source.find("@typeagent/a-agent@3.0.0")).toBeUndefined();
+        expect(await source.find("@typeagent/a-agent@^3.0.0")).toBeUndefined();
+        expect(await source.find("@typeagent/a-agent@next")).toBeUndefined();
+        // A matching range still resolves.
+        expect((await source.find("@typeagent/a-agent@^1.0.0"))!.version).toBe(
+            "1.0.0",
+        );
     });
 
     it("sanitizes a scoped moduleName into a single safe root leaf", async () => {
@@ -603,9 +627,15 @@ describe("feedSource.materialize", () => {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         const source = freshCacheSource({
             installDir,
-            // Empty packument so find cannot pin a version; materialize then
-            // tries the installed package.json (which also has none).
-            fetchFn: packumentFetch({ versions: [], distTags: {} }),
+            // Packument unavailable (offline) so find cannot pin a version and
+            // defers to install; materialize then reads the installed
+            // package.json (which also carries no version).
+            fetchFn: (async () => ({
+                ok: false,
+                status: 500,
+                statusText: "err",
+                json: async () => ({}),
+            })) as unknown as typeof fetch,
             npmInstall: async ({ spec, cwd }: any) => {
                 const mod = moduleNameFromSpec(spec);
                 const dir = path.join(cwd, "node_modules", ...mod.split("/"));

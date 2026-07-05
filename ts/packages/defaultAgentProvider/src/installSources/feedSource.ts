@@ -394,9 +394,12 @@ export function createFeedSource(
             // §5.5) so `materialize` can name the content-addressed install root
             // (`module@version`) and skip the npm install entirely when that root
             // already exists (dedup across agents / same-version update no-op).
-            // Best-effort and read-only: any failure (offline, auth, unknown
-            // tag/range) leaves `version` undefined and defers resolution to the
-            // install itself, so `find` never regresses to failing the walk.
+            // Read-only and best-effort: when the packument is unavailable
+            // (offline / auth failure) `version` stays undefined and resolution
+            // is deferred to install time. But when the packument IS available
+            // and lists a version catalog that no published version satisfies,
+            // the requested tag/range/version is simply not installable, so we
+            // fail the find (the host then reports the agent unresolved).
             let version: string | undefined;
             const registry = resolveFeedRegistry(config);
             if (registry !== undefined) {
@@ -410,6 +413,16 @@ export function createFeedSource(
                     );
                     if (packument !== undefined) {
                         version = resolveConcreteVersion(ref, packument);
+                        // The packument carries a version catalog (a `versions`
+                        // map and/or `dist-tags`) but nothing matches the
+                        // requested ref -> not installable at this ref.
+                        if (
+                            version === undefined &&
+                            (typeof packument.versions === "object" ||
+                                typeof packument["dist-tags"] === "object")
+                        ) {
+                            return undefined;
+                        }
                     }
                 } catch {
                     // offline / auth failure -> resolve at install time
@@ -418,10 +431,10 @@ export function createFeedSource(
             return {
                 source: config.name,
                 module: moduleName,
-                // Pin `ref` to the exact resolved version when known so the
-                // record keys off a concrete version rather than a moving
-                // tag/range; fall back to the requested spec otherwise.
-                ref: version !== undefined ? `${moduleName}@${version}` : ref,
+                // Retain the user-specified spec/range in `ref` so `reresolve`
+                // can re-look-up against it; the concrete resolved version is
+                // carried separately in `version`.
+                ref,
                 ...(version !== undefined ? { version } : {}),
                 loaderConfig: { execMode: "separate" }, // §12 Q16
             };
@@ -457,12 +470,22 @@ export function createFeedSource(
                 );
             }
             const moduleName = candidate.module;
-            const spec = candidate.ref ?? moduleName;
-            if (moduleName === undefined || spec === undefined) {
+            // The user-facing ref (tag/range/version) is retained for re-resolve;
+            // fall back to the bare module name.
+            const ref = candidate.ref ?? moduleName;
+            if (moduleName === undefined || ref === undefined) {
                 throw new Error(
                     `feed source '${config.name}' got a candidate without a module/ref`,
                 );
             }
+            // What we actually hand to npm: pin to the concrete version resolved
+            // by `find` when known (reproducible, and matches the
+            // content-addressed root), else install the ref/range and read the
+            // installed version back from disk.
+            const installSpec =
+                candidate.version !== undefined
+                    ? `${moduleName}@${candidate.version}`
+                    : ref;
             // Content-addressed install roots (design §5.5): the install unit is
             // the PACKAGE, keyed by `sanitize(module)@version`. Two agents that
             // resolve to the same package+version share ONE root (dedup), a new
@@ -500,7 +523,7 @@ export function createFeedSource(
                 kind: "npm",
                 module: moduleName,
                 source: config.name,
-                ref: spec,
+                ref,
                 installRoot,
                 loaderConfig: {
                     execMode: candidate.loaderConfig?.execMode ?? "separate",
@@ -533,7 +556,7 @@ export function createFeedSource(
                 );
                 try {
                     await npmInstall({
-                        spec,
+                        spec: installSpec,
                         cwd: tempRoot,
                         registry,
                         userconfig,
@@ -543,7 +566,7 @@ export function createFeedSource(
                 }
                 if (!fs.existsSync(installedPkgJsonUnder(tempRoot))) {
                     throw new Error(
-                        `npm install of '${spec}' did not produce '${moduleName}' under ${path.join(tempRoot, "node_modules")}.`,
+                        `npm install of '${installSpec}' did not produce '${moduleName}' under ${path.join(tempRoot, "node_modules")}.`,
                     );
                 }
                 // Name by the concrete version: prefer what `find` resolved, else
