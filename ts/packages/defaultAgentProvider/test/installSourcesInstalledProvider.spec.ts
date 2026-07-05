@@ -1894,6 +1894,75 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(readAgentsJson(instanceDir)!.agents.p).toBeUndefined();
     });
 
+    // Refcount GC (design §5.5): content-addressed roots (`module@version`) are
+    // SHARED across agents that resolve to the same package+version, so a prune
+    // must not delete a root a sibling still references.
+    it("uninstall keeps a shared root until the LAST referencing agent goes", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer =
+            createDefaultInstalledAgentSource(instanceDir).testApi;
+        await installer.install("a", makePathAgentDir("🅰️"), undefined, host);
+        await installer.install("b", makePathAgentDir("🅱️"), undefined, host);
+
+        // Retro-fit BOTH agents onto one shared content-addressed root, as if a
+        // feed had deduped the same package+version across them.
+        const installDir = path.join(instanceDir, "installedAgents");
+        const shared = "shared-mod@1.0.0";
+        const sharedDir = path.join(installDir, "agents", shared);
+        fs.mkdirSync(path.join(sharedDir, "node_modules"), { recursive: true });
+        const cur = readAgentsJson(instanceDir)!;
+        cur.agents.a.installRoot = shared;
+        cur.agents.b.installRoot = shared;
+        fs.writeFileSync(
+            path.join(instanceDir, "agents.json"),
+            JSON.stringify(cur),
+        );
+        expect(fs.existsSync(sharedDir)).toBe(true);
+
+        // Uninstalling `a` must NOT prune the shared root — `b` still references
+        // it.
+        await installer.uninstall("a", host);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(readAgentsJson(instanceDir)!.agents.a).toBeUndefined();
+        expect(fs.existsSync(sharedDir)).toBe(true);
+
+        // Uninstalling the last referencer (`b`) reclaims it.
+        await installer.uninstall("b", host);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(readAgentsJson(instanceDir)!.agents.b).toBeUndefined();
+        expect(fs.existsSync(sharedDir)).toBe(false);
+    });
+
+    it("update does not prune the old root while a sibling still references it", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const installer = createDefaultInstalledAgentSource(instanceDir, {
+            updateCoordination: { verifyStart: async () => {} },
+        }).testApi;
+        await installer.install("a", makePathAgentDir("🅰️"), undefined, host);
+        await installer.install("b", makePathAgentDir("🅱️"), undefined, host);
+
+        const installDir = path.join(instanceDir, "installedAgents");
+        const shared = "shared-mod@1.0.0";
+        const sharedDir = path.join(installDir, "agents", shared);
+        fs.mkdirSync(path.join(sharedDir, "node_modules"), { recursive: true });
+        const cur = readAgentsJson(instanceDir)!;
+        cur.agents.a.installRoot = shared;
+        cur.agents.b.installRoot = shared;
+        fs.writeFileSync(
+            path.join(instanceDir, "agents.json"),
+            JSON.stringify(cur),
+        );
+
+        // Updating `a` re-resolves via the path source (dropping a's installRoot),
+        // so a's old shared root becomes a swap-superseded root — but `b` still
+        // references it, so the refcount-guarded prune must leave it intact.
+        await installer.update("a", undefined, host);
+        await new Promise((r) => setTimeout(r, 0));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(fs.existsSync(sharedDir)).toBe(true);
+        expect(readAgentsJson(instanceDir)!.agents.b.installRoot).toBe(shared);
+    });
+
     it("path re-resolution uses the record's `path` handle (no `ref` needed)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = tmpDir("ta-agent-");

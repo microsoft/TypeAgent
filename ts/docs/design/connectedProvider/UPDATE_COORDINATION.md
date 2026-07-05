@@ -207,33 +207,56 @@ install can corrupt `v1`, and `v1`'s running process has its files changed
 underneath it. (Latent hazard today: `update` npm-installs `v2` over `v1` before
 draining it.)
 
-**Decision — uniform per-agent install roots.** Every feed agent installs into its
-**own** root (e.g. `installDir/<name>/node_modules/...`) with its provider
-require-root pointed there, instead of the single shared `node_modules`. An update
-installs `v2` into a **version-scoped** root (`installDir/<name>@<version>/...`)
-alongside the still-running `v1`, swaps after `v1` stops, and prunes `v1` only on
-success — so materialize is non-destructive, a failed install is a clean abort,
-and §5.3 cancel/rollback falls out for free.
+**Decision — content-addressed, deduplicated install roots.** The install unit is
+the **package**, not the agent. Every feed agent materializes into a
+**content-addressed** root keyed by `sanitize(module)@version`
+(`installDir/agents/<module>@<version>/node_modules/...`), and the provider's
+require-root points there instead of the single shared `node_modules`. Because the
+root is a pure function of package identity + version, it is **deterministic,
+deduplicated, and reference-counted**:
 
-- **Granularity:** one root per **agent** at rest (its current version);
-  transiently **two** during an update (`v1` kept for rollback), collapsing back
-  after prune.
+- Two agents (or two installs) that resolve to the **same** package+version share
+  **one** root — the second materialize is an idempotent no-op (no npm install).
+- A **new** version lands in its **own** root alongside the still-running old one
+  (non-destructive); the swap happens after the old version stops, then the old
+  root is pruned only if no other record still references it.
+- Installing the **same** version again is a true no-op end to end: `find`
+  resolves the concrete version, `materialize` reuses the existing root, and
+  `update` skips the disruptive barrier swap entirely (§5.2).
+
+So materialize is non-destructive, a failed install is a clean abort, §5.3
+cancel/rollback falls out for free, and same-version updates cost nothing.
+
+- **Version resolved on `find`:** the membership check already fetches the
+  packument, so `find` resolves the requested tag/range/exact spec to a **concrete
+  published version** up front (best-effort; offline falls back to letting the
+  install resolve it). This lets `materialize` name the root before installing and
+  skip npm when that root already exists.
+- **Atomic adoption:** the slow path installs into a unique temp root
+  (`agents/.tmp-<id>`) and, on success, atomically renames it to
+  `agents/<module>@<version>` — or discards it if that root already exists (dedup).
+  A crash/failure never leaves a usable-looking partial root behind.
+- **Granularity:** one root per **package+version**, shared by every agent that
+  resolves to it; transiently a second root during an update to a new version
+  (old kept for rollback), collapsing back after prune.
 - **File-level only:** compatible with process-level no-coexistence — still one
   running process; runtime name-keyed storage unchanged.
-- **Trade:** loses npm's cross-agent dependency dedup/hoisting (each agent carries
-  its own deps) in exchange for isolation — clean install/uninstall/update, no
-  clobber, and no "agent A's dep bump breaks agent B".
-- **Naming:** `installDir/<name>@<version>/node_modules/...`, keyed by the
-  dispatcher agent name (the `agents.json` key) + concrete resolved version (from
-  the installed `package.json`); an install-id suffix is a fallback if
-  version-parsing is annoying.
-- **GC:** prune `v1`'s dir on a successful swap (only after `v1` is confirmed down,
-  §5.6) plus a startup orphan sweep that keeps only each agent's recorded-current
-  dir (removing a `v2` dir from a crashed update, or a `v1` dir that should have
-  been pruned). No version retention beyond the transient swap.
-- **Record/provider:** the `InstalledAgentRecord` carries the resolved version (or
-  install-id); the provider builder derives the per-agent require-root from it
-  instead of the shared `installDir`.
+- **Trade:** loses npm's cross-package dependency dedup/hoisting (each
+  package+version carries its own deps) in exchange for isolation and determinism —
+  clean install/uninstall/update, no clobber, safe sharing.
+- **Naming:** `installDir/agents/<sanitize(module)>@<version>/node_modules/...`,
+  keyed by the package name + concrete resolved version. `sanitize` collapses the
+  scope `@`/`/` to a single traversal-safe path component.
+- **GC (refcount):** prune a root on a successful swap or after an uninstall **only
+  once no remaining `agents.json` record references it** (a sibling may share it),
+  plus a startup orphan sweep that keeps the union of every agent's
+  recorded-current root (removing a `.tmp-*` or version dir from a crashed update).
+- **Record/provider:** the `InstalledAgentRecord` carries the `installRoot`
+  (`module@version`) and resolved `version`; the provider builder derives the
+  require-root from it instead of the shared `installDir`. Same-version detection
+  in `update` keys off `installRoot` being defined and byte-identical, so
+  path/catalog records (no `installRoot`) always re-swap and still pick up an
+  in-place manifest edit.
 
 ### 5.6 Refcount barrier — v1 must actually terminate before v2 starts
 

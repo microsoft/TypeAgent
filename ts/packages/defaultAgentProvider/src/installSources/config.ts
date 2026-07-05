@@ -24,6 +24,15 @@ export interface ResolvedCandidate {
     module?: string; // package name (npm-resolved; omitted when path-resolved)
     ref?: string; // feed specifier/version
     path?: string; // catalog / path result
+    // The concrete package version this candidate resolves to, when the source
+    // can determine it cheaply during `find`/`reresolve` (design §5.5): the feed
+    // source reads the packument during the membership check and pins the
+    // dist-tag/range to an exact version here. It lets `materialize` name the
+    // content-addressed install root (`module@version`) up front and skip the
+    // npm install entirely when that root already exists (dedup / same-version
+    // no-op). Optional: a source that cannot resolve offline leaves it undefined
+    // and `materialize` derives the version from the installed package.json.
+    version?: string;
     // Opaque, kind-specific metadata for the loader named by the resulting
     // record's `kind` (e.g. npm: `{ execMode }`). Interpreted by the owning
     // source/loader, not by generic code.

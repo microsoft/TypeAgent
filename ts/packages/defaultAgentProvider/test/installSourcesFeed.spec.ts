@@ -62,6 +62,31 @@ const goodToken = async () =>
         expiresOn: new Date(Date.now() + 3600_000).toISOString(),
     });
 
+// Fake fetch that answers the packument endpoint with a `versions` map +
+// `dist-tags` so `feedSource.find` can resolve a concrete version up front
+// (design §5.5). Defaults expose 1.0.0 + 2.0.0 with latest=2.0.0.
+function packumentFetch(opts?: {
+    versions?: string[];
+    distTags?: Record<string, string>;
+    keywords?: string[];
+}): typeof fetch {
+    const versions = opts?.versions ?? ["1.0.0", "2.0.0"];
+    const versionsMap: Record<string, unknown> = {};
+    for (const v of versions) {
+        versionsMap[v] = { version: v };
+    }
+    const distTags =
+        opts?.distTags ??
+        (versions.length > 0 ? { latest: versions[versions.length - 1] } : {});
+    const keywords = opts?.keywords ?? ["typeagent-agent"];
+    return (async () =>
+        okJson({
+            keywords,
+            versions: versionsMap,
+            "dist-tags": distTags,
+        })) as unknown as typeof fetch;
+}
+
 beforeEach(() => {
     clearTokenCacheForTest();
 });
@@ -306,6 +331,7 @@ describe("feedSource.materialize", () => {
     function freshCacheSource(deps: {
         installDir: string;
         npmInstall: (args: any) => Promise<void>;
+        fetchFn?: typeof fetch;
     }) {
         const cacheFilePath = path.join(deps.installDir, "cache.json");
         fs.writeFileSync(
@@ -321,6 +347,7 @@ describe("feedSource.materialize", () => {
             now: () => 1000,
             tokenRunner: goodToken,
             npmInstall: deps.npmInstall,
+            fetchFn: deps.fetchFn ?? packumentFetch(),
         });
     }
 
@@ -426,12 +453,14 @@ describe("feedSource.materialize", () => {
         );
     });
 
-    it("two materializes for the same agent get distinct roots (non-destructive)", async () => {
+    it("two materializes of the SAME version share one root (dedup, single install)", async () => {
         clearTokenCacheForTest();
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        let installs = 0;
         const source = freshCacheSource({
             installDir,
             npmInstall: async ({ spec, cwd }: any) => {
+                installs++;
                 const mod = moduleNameFromSpec(spec);
                 const dir = path.join(cwd, "node_modules", ...mod.split("/"));
                 fs.mkdirSync(dir, { recursive: true });
@@ -447,14 +476,98 @@ describe("feedSource.materialize", () => {
         const second = await source.materialize(
             (await source.find("@typeagent/a-agent@1.0.0"))!,
         );
-        // Distinct roots even at the same version, so v2 never overwrites v1.
-        expect(first.installRoot).not.toBe(second.installRoot);
+        // Content-addressed by `module@version`: the same version resolves to
+        // the SAME root, and the second materialize is an idempotent no-op that
+        // skips npm entirely (design §5.5 dedup / idempotent install).
+        expect(second.installRoot).toBe(first.installRoot);
+        expect(installs).toBe(1);
         expect(
             fs.existsSync(path.join(installDir, "agents", first.installRoot!)),
         ).toBe(true);
+    });
+
+    it("different versions get distinct, coexisting roots (non-destructive)", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = freshCacheSource({
+            installDir,
+            npmInstall: async ({ spec, cwd }: any) => {
+                const mod = moduleNameFromSpec(spec);
+                const version = spec.slice(spec.lastIndexOf("@") + 1);
+                const dir = path.join(cwd, "node_modules", ...mod.split("/"));
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(
+                    path.join(dir, "package.json"),
+                    JSON.stringify({ name: mod, version }),
+                );
+            },
+        });
+        const v1 = await source.materialize(
+            (await source.find("@typeagent/a-agent@1.0.0"))!,
+        );
+        const v2 = await source.materialize(
+            (await source.find("@typeagent/a-agent@2.0.0"))!,
+        );
+        expect(v1.installRoot).toBe("_typeagent_a-agent@1.0.0");
+        expect(v2.installRoot).toBe("_typeagent_a-agent@2.0.0");
+        // Both roots coexist: installing v2 never clobbered v1.
         expect(
-            fs.existsSync(path.join(installDir, "agents", second.installRoot!)),
+            fs.existsSync(path.join(installDir, "agents", v1.installRoot!)),
         ).toBe(true);
+        expect(
+            fs.existsSync(path.join(installDir, "agents", v2.installRoot!)),
+        ).toBe(true);
+    });
+
+    it("find resolves an exact / dist-tag / range / latest to a concrete version", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = freshCacheSource({
+            installDir,
+            npmInstall: async () => {},
+            fetchFn: packumentFetch({
+                versions: ["1.0.0", "1.5.0", "2.0.0"],
+                distTags: { latest: "2.0.0", beta: "1.5.0" },
+            }),
+        });
+        expect((await source.find("@typeagent/a-agent@1.0.0"))!.version).toBe(
+            "1.0.0",
+        );
+        expect((await source.find("@typeagent/a-agent@beta"))!.version).toBe(
+            "1.5.0",
+        );
+        expect((await source.find("@typeagent/a-agent"))!.version).toBe(
+            "2.0.0",
+        );
+        expect((await source.find("@typeagent/a-agent@^1"))!.version).toBe(
+            "1.5.0",
+        );
+        // The resolved version is pinned into the candidate ref.
+        expect((await source.find("@typeagent/a-agent"))!.ref).toBe(
+            "@typeagent/a-agent@2.0.0",
+        );
+    });
+
+    it("find falls back to no version when the packument is unavailable (offline)", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = freshCacheSource({
+            installDir,
+            npmInstall: async () => {},
+            // packument endpoint 500s -> fetchPackument returns undefined.
+            fetchFn: (async () => ({
+                ok: false,
+                status: 500,
+                statusText: "err",
+                json: async () => ({}),
+            })) as unknown as typeof fetch,
+        });
+        const candidate = await source.find("@typeagent/a-agent@1.0.0");
+        expect(candidate).toBeDefined();
+        // Membership still matched (cached list), but version stays unresolved
+        // and the ref is the original spec.
+        expect(candidate!.version).toBeUndefined();
+        expect(candidate!.ref).toBe("@typeagent/a-agent@1.0.0");
     });
 
     it("sanitizes a scoped moduleName into a single safe root leaf", async () => {
@@ -493,6 +606,9 @@ describe("feedSource.materialize", () => {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         const source = freshCacheSource({
             installDir,
+            // Empty packument so find cannot pin a version; materialize then
+            // derives it from the installed package.json (which has none).
+            fetchFn: packumentFetch({ versions: [], distTags: {} }),
             npmInstall: async ({ spec, cwd }: any) => {
                 const mod = moduleNameFromSpec(spec);
                 const dir = path.join(cwd, "node_modules", ...mod.split("/"));
@@ -539,15 +655,21 @@ describe("feedSource.materialize", () => {
         const firstDir = path.join(installDir, "agents", first.installRoot!);
         expect(fs.existsSync(firstDir)).toBe(true);
 
-        // A subsequent failed install targets its own new root and must not
-        // touch the prior root or the shared installDir.
+        // A subsequent failed install of a DIFFERENT version targets its own new
+        // root (via a temp dir) and must not touch the prior root or the shared
+        // installDir (design §5.5 atomic materialize).
         fail = true;
         await expect(
             source.materialize(
-                (await source.find("@typeagent/a-agent@1.0.0"))!,
+                (await source.find("@typeagent/a-agent@2.0.0"))!,
             ),
         ).rejects.toThrow(/npm boom/);
         expect(fs.existsSync(firstDir)).toBe(true);
+        expect(
+            fs.existsSync(
+                path.join(installDir, "agents", "_typeagent_a-agent@2.0.0"),
+            ),
+        ).toBe(false);
         expect(fs.existsSync(path.join(installDir, "node_modules"))).toBe(
             false,
         );

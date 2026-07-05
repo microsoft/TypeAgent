@@ -122,6 +122,29 @@ function sweepOrphanAgentRoots(
     }
 }
 
+// Is `installRoot` still the recorded root of some agent OTHER than
+// `excludeName` (design §5.5 refcount GC)? Content-addressed roots
+// (`module@version`) are SHARED: two agents that resolve to the same
+// package+version point at ONE root, so a root may be reclaimed only once no
+// remaining record references it. Prune-on-swap and prune-after-uninstall
+// consult this so tearing one agent down never deletes a sibling's live files.
+function isRootReferenced(
+    instanceDir: string,
+    installRoot: string | undefined,
+    excludeName: string,
+): boolean {
+    if (!installRoot) {
+        return false;
+    }
+    const agents = readAgentsJson(instanceDir)?.agents ?? {};
+    for (const [name, record] of Object.entries(agents)) {
+        if (name !== excludeName && record.installRoot === installRoot) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /**
  * Get the default STATIC app agent providers.
  *
@@ -1022,7 +1045,14 @@ export function createDefaultInstalledAgentSource(
                             if (outcome === "committed") {
                                 const stillRecorded =
                                     readAgentsJson(instanceDir)?.agents[name];
-                                if (stillRecorded === undefined) {
+                                if (
+                                    stillRecorded === undefined &&
+                                    !isRootReferenced(
+                                        instanceDir,
+                                        uninstalledRoot,
+                                        name,
+                                    )
+                                ) {
                                     pruneAgentRoot(installDir, uninstalledRoot);
                                 }
                             }
@@ -1043,7 +1073,9 @@ export function createDefaultInstalledAgentSource(
                     });
                 } else {
                     deleteInstalledRecord();
-                    pruneAgentRoot(installDir, uninstalledRoot);
+                    if (!isRootReferenced(instanceDir, uninstalledRoot, name)) {
+                        pruneAgentRoot(installDir, uninstalledRoot);
+                    }
                     onOutcome?.("uninstalled");
                 }
             } finally {
@@ -1099,6 +1131,24 @@ export function createDefaultInstalledAgentSource(
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
                 };
+                // Same-version no-op (design §5.5): a content-addressed feed
+                // re-resolution that lands on a byte-identical install root means
+                // the exact same package+version is already installed and serving
+                // — the disruptive barrier swap would tear the live agent down
+                // and bring the identical version back up for nothing. Skip it:
+                // refresh the record (the resolve may pin a moving tag/range to a
+                // concrete ref) and report success without touching the live
+                // provider or GC. Gated on `installRoot` being DEFINED so
+                // path/catalog/legacy records (no root) always re-swap and still
+                // pick up an in-place manifest edit.
+                if (
+                    record.installRoot !== undefined &&
+                    record.installRoot === existing.installRoot
+                ) {
+                    writeInstalledRecord();
+                    onOutcome?.("updated");
+                    return;
+                }
                 // Coordinated update (design §5.6, §5.7, §7.2): tear the OLD
                 // version down across every session and add the NEW one as ONE
                 // coordinated barrier — each session's `replaceProvider` removes
@@ -1116,12 +1166,14 @@ export function createDefaultInstalledAgentSource(
                 // v1 stays the recorded-current version, as if it never happened.
                 const oldEntry = entries.get(name);
                 const newProvider = buildAgentProvider(name, record);
-                // The OLD (v1) version's version-scoped install root, kept intact
-                // until the swap succeeds so a rollback can restart v1 (design
-                // §5.3), and pruned only after v2 is confirmed serving everywhere.
-                // The new root differs (unique install-id), so a commit-prune of
-                // v1 never touches v2's files and a rollback-prune of v2 never
-                // touches v1's.
+                // The OLD (v1) version's install root, kept intact until the
+                // swap succeeds so a rollback can restart v1 (design §5.3), and
+                // pruned only after v2 is confirmed serving everywhere AND no
+                // other agent still references it (content-addressed roots are
+                // shared, so the prune is refcount-guarded). The new root differs
+                // whenever the version changed (roots are keyed `module@version`,
+                // design §5.5); an update that resolves the same version is a
+                // no-op handled above and never reaches the barrier.
                 const oldRoot = existing.installRoot;
                 const newRoot = record.installRoot;
                 if (oldEntry?.status === "active") {
@@ -1168,12 +1220,24 @@ export function createDefaultInstalledAgentSource(
                                     readAgentsJson(instanceDir)?.agents[name];
                                 if (
                                     committed?.installRoot === newRoot &&
-                                    oldRoot !== newRoot
+                                    oldRoot !== newRoot &&
+                                    !isRootReferenced(
+                                        instanceDir,
+                                        oldRoot,
+                                        name,
+                                    )
                                 ) {
                                     pruneAgentRoot(installDir, oldRoot);
                                 }
                             } else {
-                                if (oldRoot !== newRoot) {
+                                if (
+                                    oldRoot !== newRoot &&
+                                    !isRootReferenced(
+                                        instanceDir,
+                                        newRoot,
+                                        name,
+                                    )
+                                ) {
                                     pruneAgentRoot(installDir, newRoot);
                                 }
                             }
@@ -1191,7 +1255,10 @@ export function createDefaultInstalledAgentSource(
                         status: "active",
                         provider: newProvider,
                     });
-                    if (oldRoot !== record.installRoot) {
+                    if (
+                        oldRoot !== record.installRoot &&
+                        !isRootReferenced(instanceDir, oldRoot, name)
+                    ) {
                         pruneAgentRoot(installDir, oldRoot);
                     }
                     fanOutAdd(newProvider, issuingHost);

@@ -33,6 +33,44 @@
 
 ## Entries
 
+### 2026-07-06 — Content-addressed, deduplicated, refcounted install roots (`module@version`)
+
+- **Milestone / item:** Post-M5 / §5.5
+- **Type:** Deviation (supersedes the 2026-07-05 "install-id keyed roots" entry).
+- **Design ref:** §5.5 (now rewritten to match).
+- **Decision:** The install unit is the **package**, not the agent. Roots are keyed
+  by `sanitize(module)@version` (content-addressed), not `sanitize(name)@installId`.
+  Consequences:
+  - `feedSource.find` resolves the requested spec (exact / dist-tag / semver range /
+    latest) to a **concrete published version** from the packument it already
+    fetches, and pins it onto `ResolvedCandidate.version` (+ a `module@version`
+    `ref`). Best-effort: offline / auth failure leaves `version` undefined and
+    defers to the install. Added a `semver` dependency for range resolution.
+  - `materialize` is idempotent/content-addressed: FAST path returns the existing
+    `agents/<module>@<version>` root with **no npm install** when it already exists;
+    SLOW path installs into `agents/.tmp-<id>` then atomically renames to the final
+    root (or discards the temp if the final already exists = dedup). `makeInstallId`
+    is repurposed as the temp-dir suffix.
+  - `update` treats a re-resolution that lands on a byte-identical `installRoot` as a
+    **true no-op**: it refreshes the record and returns without the barrier swap.
+    Gated on `installRoot` being defined, so path/catalog records still always
+    re-swap (and pick up in-place manifest edits).
+  - GC prune-on-swap and prune-after-uninstall are **refcount-guarded** via a new
+    `isRootReferenced(instanceDir, installRoot, excludeName)` helper: a shared root
+    (two agents at the same package+version) survives until the **last** referencing
+    record is gone. The startup orphan sweep's keep-set (union of all recorded
+    roots) was already refcount-correct.
+- **Rationale:** The user chose the package as the install unit so multiple agents
+  from one package dedup to a single install, same-version updates are free, and new
+  versions coexist non-destructively. Resolving the version on `find` (cheap, one
+  read-only packument GET on the winning source) is what makes the content-addressed
+  name knowable before install and enables the same-version no-op end to end. The
+  chicken/egg that motivated install-ids (version only known post-install) is solved
+  by version-on-find, with the temp+rename slow path as the offline fallback.
+- **Design updated?** yes — §5.5 rewritten (content-addressed / dedup / refcount);
+  the 2026-07-05 install-id and prune-on-swap entries below are superseded for the
+  naming/GC-refcount specifics but retained for history.
+
 ### 2026-07-05 — Install-id keyed roots under an `agents/` subdir
 
 - **Milestone / item:** M1 / §5.5
