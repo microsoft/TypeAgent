@@ -318,6 +318,17 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                     tokenRunner: goodToken,
                     now: () => 1000,
                     cacheFilePath,
+                    // find pins a concrete version from the packument before
+                    // materialize runs; serve one for either requested agent.
+                    fetchFn: (async () => ({
+                        ok: true,
+                        status: 200,
+                        statusText: "OK",
+                        json: async () => ({
+                            versions: { "1.0.0": {} },
+                            "dist-tags": { latest: "1.0.0" },
+                        }),
+                    })) as unknown as typeof fetch,
                     npmInstall: async ({ spec, cwd }) => {
                         concurrent++;
                         maxConcurrent = Math.max(maxConcurrent, concurrent);

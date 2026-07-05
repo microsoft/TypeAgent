@@ -309,9 +309,10 @@ export async function enumerateFeedAgents(
 }
 
 // `feed` source (design §3, §4.1, §4.2, §12 Q3, Q16, Q20).
-//   find        = membership check against a cached package list (~1h TTL;
-//                 offline -> serve stale + skip in the walk)
-//   materialize = npm install into the shared install root
+//   find        = membership check against a cached package list (~1h TTL),
+//                 then a live registry round-trip to pin a concrete version;
+//                 unresolvable (offline / auth / no matching version) -> no match
+//   materialize = npm install the pinned `module@version` into its own root
 // `ref` is an npm specifier / name.
 export function createFeedSource(
     config: FeedSourceConfig,
@@ -390,16 +391,15 @@ export function createFeedSource(
             if (!packages.includes(moduleName)) {
                 return undefined; // non-match (or skipped when offline+empty)
             }
-            // Membership matched: resolve the concrete version up front (design
-            // §5.5) so `materialize` can name the content-addressed install root
-            // (`module@version`) and skip the npm install entirely when that root
-            // already exists (dedup across agents / same-version update no-op).
-            // Read-only and best-effort: when the packument is unavailable
-            // (offline / auth failure) `version` stays undefined and resolution
-            // is deferred to install time. But when the packument IS reachable
-            // and no published version satisfies the requested tag/range/version,
-            // it is simply not installable, so we fail the find (the host then
-            // reports the agent unresolved).
+            // Membership matched: resolve the concrete version (design §5.5) so
+            // every candidate carries a pinned `version`. `materialize` names the
+            // content-addressed install root (`module@version`) from it and skips
+            // the npm install entirely when that root already exists (dedup
+            // across agents / same-version update no-op). Resolving requires a
+            // live registry round-trip (an access token + the packument); if we
+            // can't pin a concrete published version -- offline, auth failure, or
+            // no published version satisfies the ref -- the agent is not
+            // installable, so we fail the find (the host reports it unresolved).
             let version: string | undefined;
             const registry = resolveFeedRegistry(config);
             if (registry !== undefined) {
@@ -413,17 +413,13 @@ export function createFeedSource(
                     );
                     if (packument !== undefined) {
                         version = resolveConcreteVersion(ref, packument);
-                        // The packument was reachable but no published version
-                        // satisfies the requested tag/range/version -> the ref
-                        // is not installable, so fail the find (the host then
-                        // reports the agent unresolved).
-                        if (version === undefined) {
-                            return undefined;
-                        }
                     }
                 } catch {
-                    // offline / auth failure -> resolve at install time
+                    // offline / auth failure -> leave version unresolved
                 }
+            }
+            if (version === undefined) {
+                return undefined;
             }
             return {
                 source: config.name,
@@ -432,7 +428,7 @@ export function createFeedSource(
                 // can re-look-up against it; the concrete resolved version is
                 // carried separately in `version`.
                 ref,
-                ...(version !== undefined ? { version } : {}),
+                version,
                 loaderConfig: { execMode: "separate" }, // §12 Q16
             };
         },
@@ -470,19 +466,22 @@ export function createFeedSource(
             // The user-facing ref (tag/range/version) is retained for re-resolve;
             // fall back to the bare module name.
             const ref = candidate.ref ?? moduleName;
-            if (moduleName === undefined || ref === undefined) {
+            // `find`/`reresolve` always pin a concrete version, so a candidate
+            // reaching materialize must carry one (it names the content-addressed
+            // root and the exact install spec).
+            const version = candidate.version;
+            if (
+                moduleName === undefined ||
+                ref === undefined ||
+                version === undefined
+            ) {
                 throw new Error(
-                    `feed source '${config.name}' got a candidate without a module/ref`,
+                    `feed source '${config.name}' got a candidate without a module/ref/version`,
                 );
             }
-            // What we actually hand to npm: pin to the concrete version resolved
-            // by `find` when known (reproducible, and matches the
-            // content-addressed root), else install the ref/range and read the
-            // installed version back from disk.
-            const installSpec =
-                candidate.version !== undefined
-                    ? `${moduleName}@${candidate.version}`
-                    : ref;
+            // Install the exact resolved version -- reproducible, and it matches
+            // the content-addressed root name.
+            const installSpec = `${moduleName}@${version}`;
             // Content-addressed install roots (design §5.5): the install unit is
             // the PACKAGE, keyed by `sanitize(module)@version`. Two agents that
             // resolve to the same package+version share ONE root (dedup), a new
@@ -495,6 +494,8 @@ export function createFeedSource(
                 AGENT_INSTALL_ROOTS_SUBDIR,
             );
             const rootLabel = sanitizeRootLabel(moduleName);
+            const installRoot = `${rootLabel}@${version}`;
+            const finalRoot = path.join(rootsDir, installRoot);
             const installedPkgJsonUnder = (root: string): string =>
                 path.join(
                     root,
@@ -502,21 +503,7 @@ export function createFeedSource(
                     ...moduleName.split("/"),
                     "package.json",
                 );
-            const readInstalledVersion = (root: string): string | undefined => {
-                try {
-                    const pkg = JSON.parse(
-                        fs.readFileSync(installedPkgJsonUnder(root), "utf8"),
-                    );
-                    return typeof pkg.version === "string"
-                        ? pkg.version
-                        : undefined;
-                } catch {
-                    return undefined;
-                }
-            };
-            const buildRecord = (
-                installRoot: string,
-            ): MaterializedInstallRecord => ({
+            const buildRecord = (): MaterializedInstallRecord => ({
                 kind: "npm",
                 module: moduleName,
                 source: config.name,
@@ -527,15 +514,11 @@ export function createFeedSource(
                 },
             });
 
-            // FAST PATH: the version was resolved during `find` AND a completed
-            // install already sits at the content-addressed root -> reuse it with
-            // no npm install at all (dedup / same-version no-op, design §5.5).
-            if (candidate.version !== undefined) {
-                const installRoot = `${rootLabel}@${candidate.version}`;
-                const finalRoot = path.join(rootsDir, installRoot);
-                if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
-                    return buildRecord(installRoot);
-                }
+            // FAST PATH: a completed install already sits at the
+            // content-addressed root -> reuse it with no npm install at all
+            // (dedup / same-version no-op, design §5.5).
+            if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
+                return buildRecord();
             }
 
             // SLOW PATH: install into a UNIQUE TEMP root first so a failed or
@@ -566,19 +549,10 @@ export function createFeedSource(
                         `npm install of '${installSpec}' did not produce '${moduleName}' under ${path.join(tempRoot, "node_modules")}.`,
                     );
                 }
-                // Name by the concrete version: prefer what `find` resolved, else
-                // read it from the freshly installed package.json.
-                const version =
-                    candidate.version ?? readInstalledVersion(tempRoot);
-                const installRoot =
-                    version !== undefined
-                        ? `${rootLabel}@${version}`
-                        : `${rootLabel}@${makeInstallId()}`; // last-resort unique
-                const finalRoot = path.join(rootsDir, installRoot);
                 if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
                     // Dedup: an install of this exact version already exists;
                     // keep it and let the temp root be cleaned up below.
-                    return buildRecord(installRoot);
+                    return buildRecord();
                 }
                 // Adopt the temp root as the content-addressed final root. Clear
                 // any stale/partial directory first so the rename can't fail on
@@ -586,7 +560,7 @@ export function createFeedSource(
                 fs.rmSync(finalRoot, { recursive: true, force: true });
                 fs.renameSync(tempRoot, finalRoot);
                 adopted = true;
-                return buildRecord(installRoot);
+                return buildRecord();
             } finally {
                 if (!adopted) {
                     fs.rmSync(tempRoot, { recursive: true, force: true });

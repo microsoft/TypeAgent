@@ -190,8 +190,8 @@ describe("feedSource.find", () => {
                 throw new Error("network should not be touched");
             }) as unknown as typeof fetch,
         });
-        const candidate = await source.find("@typeagent/foo-agent");
-        expect(candidate).toBeDefined();
+        // A fresh cache answers membership without any network call.
+        expect(await source.listAgents!()).toContain("@typeagent/foo-agent");
     });
 
     it("serves a stale cache when offline (skips refresh failure)", async () => {
@@ -213,9 +213,10 @@ describe("feedSource.find", () => {
                 throw new Error("offline");
             }) as unknown as typeof fetch,
         });
-        // Stale cache still answers membership.
-        expect(await source.find("@typeagent/foo-agent")).toBeDefined();
-        expect(await source.find("@typeagent/missing")).toBeUndefined();
+        // Stale cache still answers membership (refresh failure is swallowed).
+        const agents = await source.listAgents!();
+        expect(agents).toContain("@typeagent/foo-agent");
+        expect(agents).not.toContain("@typeagent/missing");
     });
 
     it("falls back to an empty list on REST error with no cache", async () => {
@@ -552,7 +553,7 @@ describe("feedSource.materialize", () => {
         );
     });
 
-    it("find falls back to no version when the packument is unavailable (offline)", async () => {
+    it("find returns undefined when the packument is unavailable (offline)", async () => {
         clearTokenCacheForTest();
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         const source = freshCacheSource({
@@ -566,12 +567,9 @@ describe("feedSource.materialize", () => {
                 json: async () => ({}),
             })) as unknown as typeof fetch,
         });
-        const candidate = await source.find("@typeagent/a-agent@1.0.0");
-        expect(candidate).toBeDefined();
-        // Membership still matched (cached list), but version stays unresolved
-        // and the ref is the original spec.
-        expect(candidate!.version).toBeUndefined();
-        expect(candidate!.ref).toBe("@typeagent/a-agent@1.0.0");
+        // Membership matched (cached list), but no concrete version could be
+        // pinned -> the agent is not installable, so find reports it unresolved.
+        expect(await source.find("@typeagent/a-agent@1.0.0")).toBeUndefined();
     });
 
     it("find fails when no published version satisfies the requested range", async () => {
@@ -626,46 +624,6 @@ describe("feedSource.materialize", () => {
         expect(record.installRoot!.startsWith("@")).toBe(false);
         // And the created dir is a direct child of installDir/agents.
         expect(path.dirname(seenCwd!)).toBe(path.join(installDir, "agents"));
-    });
-
-    it("falls back to an install-id root when no version can be resolved", async () => {
-        clearTokenCacheForTest();
-        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
-        const source = freshCacheSource({
-            installDir,
-            // Packument unavailable (offline) so find cannot pin a version and
-            // defers to install; materialize then reads the installed
-            // package.json (which also carries no version).
-            fetchFn: (async () => ({
-                ok: false,
-                status: 500,
-                statusText: "err",
-                json: async () => ({}),
-            })) as unknown as typeof fetch,
-            npmInstall: async ({ spec, cwd }: any) => {
-                const mod = moduleNameFromSpec(spec);
-                const dir = path.join(cwd, "node_modules", ...mod.split("/"));
-                fs.mkdirSync(dir, { recursive: true });
-                // package.json present (so the "did not produce" check passes)
-                // but carries no version field.
-                fs.writeFileSync(
-                    path.join(dir, "package.json"),
-                    JSON.stringify({ name: mod }),
-                );
-            },
-        });
-        const record = await source.materialize(
-            (await source.find("@typeagent/a-agent@1.0.0"))!,
-        );
-        // With no resolvable version, the root falls back to a unique install-id
-        // leaf (still labelled by the module) so the install is never lost.
-        expect(record.installRoot).toBeDefined();
-        expect(record.installRoot!.startsWith("_typeagent_a-agent@")).toBe(
-            true,
-        );
-        expect(
-            fs.existsSync(path.join(installDir, "agents", record.installRoot!)),
-        ).toBe(true);
     });
 
     it("a failed materialize leaves a prior version-scoped root intact (clean abort)", async () => {
