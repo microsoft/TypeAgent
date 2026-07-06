@@ -4,6 +4,7 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import sortPackageJson from "sort-package-json";
 import { rules as copyrightHeadersRules } from "./policyChecks/copyrightHeaders.mjs";
 import { rules as npmPackageRules } from "./policyChecks/npmPackage.mjs";
 import { rules as invisibleUnicodeRules } from "./policyChecks/invisibleUnicode.mjs";
@@ -264,6 +265,15 @@ function main() {
             }
         }
         if (fix) {
+            // Re-normalize package.json key ordering after all rules run: rules
+            // that add a top-level field (e.g. agent-keyword's `keywords`) run
+            // after the npm-package-sort-metadata rule, so a single `--fix` pass
+            // would otherwise leave the new field out of sorted position until
+            // the next pass. Sorting here is idempotent — an already-sorted file
+            // serializes unchanged, so `save()` writes nothing.
+            if (/package\.json$/i.test(file)) {
+                repoFile.json = sortPackageJson(repoFile.json);
+            }
             if (repoFile.save()) {
                 if (coloredFile !== undefined) {
                     console.log(coloredFile);
