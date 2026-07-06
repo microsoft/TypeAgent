@@ -35,7 +35,7 @@ export type GrammarCollisionDecision =
      */
     | { kind: "fallthrough" };
 
-function getPrimary(match: MatchResult): {
+export function getPrimary(match: MatchResult): {
     schemaName: string;
     actionName: string;
 } {

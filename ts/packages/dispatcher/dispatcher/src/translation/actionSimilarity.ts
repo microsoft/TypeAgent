@@ -54,6 +54,7 @@ import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { ActionSchemaFile } from "./actionConfigProvider.js";
 import { ActionConfig } from "./actionConfig.js";
+import { splitCamelCase } from "../utils/identifier.js";
 
 const debug = registerDebug("typeagent:dispatcher:action-similarity");
 
@@ -573,11 +574,7 @@ function buildEntry(
  * (`s3Upload` → `s3 upload`).
  */
 function humanizeActionName(name: string): string {
-    return name
-        .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // camelCase → camel Case
-        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2") // ACRONYMUpper → ACRONYM Upper
-        .toLowerCase()
-        .trim();
+    return splitCamelCase(name).toLowerCase().trim();
 }
 
 function describeParameters(

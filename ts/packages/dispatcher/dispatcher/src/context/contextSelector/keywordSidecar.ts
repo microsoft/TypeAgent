@@ -7,10 +7,10 @@
 // mirrors the CollisionPreferenceStore (load + edit + save), not the read-only
 // registry. Missing/malformed degrades to empty and never throws.
 
-import fs from "node:fs";
 import path from "node:path";
 import registerDebug from "debug";
 import { tokenize } from "./tokenize.js";
+import { readJsonFileSafe, writeJsonFileSafe } from "../../utils/fsUtils.js";
 
 const debugSidecar = registerDebug(
     "typeagent:dispatcher:collision:contextSelector:sidecar",
@@ -122,30 +122,27 @@ export class KeywordSidecar {
             return new KeywordSidecar(undefined, {});
         }
         const filePath = path.join(dir, COLLISION_KEYWORDS_FILE);
-        let overrides: Record<string, KeywordDelta> = {};
-        try {
-            if (fs.existsSync(filePath)) {
-                const raw = fs.readFileSync(filePath, "utf8");
-                const parsed = JSON.parse(raw);
-                // Accept both the wrapped form ({ schemaVersion, overrides })
-                // and a bare `{ "schema.action": delta }` map (§5.1 example).
-                const map =
-                    parsed && typeof parsed === "object" && parsed.overrides
-                        ? parsed.overrides
-                        : parsed;
-                if (map && typeof map === "object") {
-                    for (const [id, d] of Object.entries(map)) {
-                        if (id === "schemaVersion") {
-                            continue;
-                        }
-                        if (d && typeof d === "object") {
-                            overrides[id] = d as KeywordDelta;
-                        }
+        const overrides: Record<string, KeywordDelta> = {};
+        const parsed = readJsonFileSafe(filePath, (e) =>
+            debugSidecar(`Failed to load sidecar from ${filePath}: ${e}`),
+        );
+        if (parsed && typeof parsed === "object") {
+            // Accept both the wrapped form ({ schemaVersion, overrides })
+            // and a bare `{ "schema.action": delta }` map (§5.1 example).
+            const wrapped = parsed as { overrides?: unknown };
+            const map = wrapped.overrides ? wrapped.overrides : parsed;
+            if (map && typeof map === "object") {
+                for (const [id, d] of Object.entries(
+                    map as Record<string, unknown>,
+                )) {
+                    if (id === "schemaVersion") {
+                        continue;
+                    }
+                    if (d && typeof d === "object") {
+                        overrides[id] = d as KeywordDelta;
                     }
                 }
             }
-        } catch (e) {
-            debugSidecar(`Failed to load sidecar from ${filePath}: ${e}`);
         }
         return new KeywordSidecar(filePath, overrides);
     }
@@ -220,15 +217,8 @@ export class KeywordSidecar {
             schemaVersion: COLLISION_KEYWORDS_SCHEMA_VERSION,
             overrides: Object.fromEntries(this.byId.entries()),
         };
-        try {
-            fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-            fs.writeFileSync(
-                this.filePath,
-                JSON.stringify(data, null, 2),
-                "utf8",
-            );
-        } catch (e) {
-            debugSidecar(`Failed to save sidecar to ${this.filePath}: ${e}`);
-        }
+        writeJsonFileSafe(this.filePath, data, (e) =>
+            debugSidecar(`Failed to save sidecar to ${this.filePath}: ${e}`),
+        );
     }
 }

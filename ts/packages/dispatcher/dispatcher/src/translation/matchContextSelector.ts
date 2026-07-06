@@ -16,7 +16,7 @@ import {
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
-import { toCandidate } from "./matchCollision.js";
+import { toCandidate, getPrimary } from "./matchCollision.js";
 import {
     CandidateScore,
     ScorerCandidate,
@@ -42,17 +42,6 @@ export type ContextSelectorOutcome =
     // (e.g. a tiedHeuristics tie between two constructions of the SAME action).
     // The caller must fall through to today's behavior, never escalate.
     | { kind: "skip" };
-
-function primaryOf(match: MatchResult): {
-    schemaName: string;
-    actionName: string;
-} {
-    const first = match.match.actions[0]?.action;
-    return {
-        schemaName: first?.schemaName ?? "",
-        actionName: first?.actionName ?? "",
-    };
-}
 
 type Candidate = ScorerCandidate & { match: MatchResult };
 
@@ -96,7 +85,7 @@ export function resolveContextSelector(
     // action. Effective keywords = derived floor + sidecar overrides.
     const byId = new Map<string, Candidate>();
     for (const match of validated) {
-        const { schemaName, actionName } = primaryOf(match);
+        const { schemaName, actionName } = getPrimary(match);
         if (schemaName === "" || actionName === "") {
             continue;
         }

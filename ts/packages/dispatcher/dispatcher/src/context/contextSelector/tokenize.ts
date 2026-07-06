@@ -7,6 +7,8 @@
 // Map ordering, or wall-clock. No stemmer in v1 (avoids a heavy NLP dependency
 // and a non-deterministic normalization step); parked as a tuning lever.
 
+import { splitCamelCase } from "../../utils/identifier.js";
+
 // Product/language names and spreadsheet refs whose punctuation would otherwise
 // be stripped ("C#" -> "c", ".NET" -> "net"). Matched before the generic word
 // rule so they survive as whole tokens. Lower-cased forms (input is lowercased
@@ -233,10 +235,7 @@ export function stem(token: string): string {
 // Split identifier casing/separators into space-delimited words:
 // "addItems" -> "add Items", "HTMLParser" -> "HTML Parser", "add_items"/"add-items" -> "add items".
 export function deCamelCase(identifier: string): string {
-    return identifier
-        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-        .replace(/[_\-]+/g, " ");
+    return splitCamelCase(identifier).replace(/[_\-]+/g, " ");
 }
 
 // Canonicalize + tokenize. NFKC-normalize, lowercase, extract protected/word
