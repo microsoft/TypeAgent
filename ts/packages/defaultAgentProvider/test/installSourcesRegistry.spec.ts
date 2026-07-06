@@ -5,9 +5,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createInstallSourceRegistry } from "../src/installSources/registry.js";
-import { moduleNameFromSpec } from "../src/installSources/feedSource.js";
+import {
+    createFeedSource,
+    moduleNameFromSpec,
+} from "../src/installSources/feedSource.js";
 import { clearTokenCacheForTest } from "../src/installSources/feedAuth.js";
-import { InstallSourceConfig } from "../src/installSources/config.js";
+import {
+    FeedSourceConfig,
+    InstallSourceConfig,
+} from "../src/installSources/config.js";
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -302,19 +308,21 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
         );
         let concurrent = 0;
         let maxConcurrent = 0;
+        const feedConfig: InstallSourceConfig = {
+            kind: "feed",
+            name: "typeagent",
+            registry:
+                "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent/npm/registry/",
+            scopes: ["@typeagent"],
+        };
         const registry = createInstallSourceRegistry(
-            [
-                {
-                    kind: "feed",
-                    name: "typeagent",
-                    registry:
-                        "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent/npm/registry/",
-                    scopes: ["@typeagent"],
-                },
-            ],
-            {
-                installDir,
-                feedDeps: {
+            [feedConfig],
+            { installDir },
+            // Inject a feed source with a stubbed npm install via the builder
+            // seam, so no test-only dependency field is needed on RegistryDeps.
+            (config) =>
+                createFeedSource(config as FeedSourceConfig, {
+                    installDir,
                     tokenRunner: goodToken,
                     now: () => 1000,
                     cacheFilePath,
@@ -346,8 +354,7 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                         );
                         concurrent--;
                     },
-                },
-            },
+                }),
         );
 
         await Promise.all([

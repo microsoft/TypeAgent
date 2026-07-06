@@ -826,6 +826,25 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
 
     const flush = () => new Promise((r) => setTimeout(r, 0));
 
+    // Poll until `predicate` holds (or time out). Used instead of a fixed
+    // `flush()` when a step involves an unknown number of async hops before the
+    // observable state changes — e.g. `update` awaits `reresolve` + manifest
+    // validation (fs reads) before it flips the entry to `removing` — so the
+    // assertion is deterministic under load rather than racing a single
+    // macrotask. Returns as soon as the predicate is true (no fixed delay).
+    const waitFor = async (
+        predicate: () => boolean,
+        label = "condition",
+    ): Promise<void> => {
+        for (let i = 0; i < 200; i++) {
+            if (predicate()) {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 5));
+        }
+        throw new Error(`waitFor timed out waiting for ${label}`);
+    };
+
     async function installFoo(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
         issuing: AppAgentHost,
@@ -1019,7 +1038,18 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         // Update starts a drain of the old version; the record now points at the
         // new version but the entry is `removing`, so list must hide it.
         const updating = built.testApi.update("foo", undefined, issuing);
-        await flush();
+        // Wait until the drain actually begins (update's reresolve + manifest
+        // validation complete and the entry flips to `removing`) rather than
+        // racing a single macrotask. The gated sibling holds the barrier open, so
+        // once hidden the name stays hidden until we release below.
+        await waitFor(
+            () =>
+                !built.testApi
+                    .listInstalled()
+                    .map((i) => i.name)
+                    .includes("foo"),
+            "foo to enter the draining (removing) state",
+        );
         expect(built.testApi.listInstalled().map((i) => i.name)).not.toContain(
             "foo",
         );

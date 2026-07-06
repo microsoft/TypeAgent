@@ -13,7 +13,7 @@ import {
 } from "./config.js";
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
-import { createFeedSource, FeedSourceDeps } from "./feedSource.js";
+import { createFeedSource } from "./feedSource.js";
 import { createLimiter, Limiter } from "@typeagent/common-utils";
 
 /**
@@ -74,9 +74,6 @@ export interface DefaultInstallSourceRegistry {
 export interface RegistryDeps {
     // Shared npm root all feed sources install into (design §4.1, §12 Q20).
     installDir: string;
-    // Feed-source dependency overrides (token runner, fetch, npm install) for
-    // testing; installDir is supplied separately.
-    feedDeps?: Omit<FeedSourceDeps, "installDir">;
     // Shared serialize-to-one limiter; the installer (M2) reuses it so the
     // record write joins the same serialization domain (design §12 Q5).
     // Defaults to a fresh createLimiter(1) when omitted.
@@ -104,7 +101,6 @@ function buildSource(
         case "feed":
             return createFeedSource(config, {
                 installDir: deps.installDir,
-                ...deps.feedDeps,
             });
         default: {
             const exhaustive: never = config;
@@ -118,6 +114,13 @@ function buildSource(
 export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     deps: RegistryDeps,
+    // Test-only seam: how a config is turned into a live source. Production
+    // never passes this - it defaults to the real per-kind builder. Tests
+    // override it to inject a source with mocked dependencies (e.g. a feed
+    // source with a stubbed npm install) without any test-only field leaking
+    // onto the production {@link RegistryDeps} interface.
+    buildSourceFn: (config: InstallSourceConfig) => InstallSource = (config) =>
+        buildSource(config, deps),
 ): DefaultInstallSourceRegistry {
     const limiter = deps.limiter ?? createLimiter(1);
     type Entry = { config: InstallSourceConfig; source: InstallSource };
@@ -150,7 +153,7 @@ export function createInstallSourceRegistry(
     // choke point means every access path - resolve, where, get()->listAvailable
     // - gets the server-log dedup for free.
     function build(config: InstallSourceConfig): InstallSource {
-        const source = buildSource(config, deps);
+        const source = buildSourceFn(config);
         return {
             ...source,
             find: (ref, onWarn) => source.find(ref, composeWarn(onWarn)),

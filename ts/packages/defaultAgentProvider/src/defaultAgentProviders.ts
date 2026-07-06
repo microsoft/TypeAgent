@@ -320,8 +320,9 @@ type DynamicAgentEntry =
 type ReplaceOutcome = "committed" | "rolledback";
 
 // Barrier lifecycle: collect quiesces → (verify-0 passes) → release hosts with
-// the decided outcome → GC the superseded root once every host has swapped.
-type ReplacePhase = "quiescing" | "releasing" | "done";
+// the decided outcome → GC the superseded root (verify-0 already confirmed the
+// old version is fully unloaded).
+type ReplacePhase = "quiescing" | "releasing";
 
 type ReplaceBarrier = {
     readonly name: string;
@@ -334,10 +335,6 @@ type ReplaceBarrier = {
     // Phase 1: hosts that have not yet quiesced (torn `v1` down). Empty ⇒ every
     // host removed `v1`.
     readonly pending: Set<AppAgentHost>;
-    // Phase 3: released hosts whose add leg has not yet settled. Once empty
-    // (after release) ⇒ every host finished its swap → run the GC finalizer, so
-    // `v1` is never pruned before `v2` is confirmed serving (design §5.3).
-    readonly settling: Set<AppAgentHost>;
     // Resolves (exactly once, when the outcome is decided) with the version a
     // session that connected mid-`removing` should install: `v2` on a committed
     // update, `v1` on a rollback, or nothing (`undefined`) on a committed
@@ -352,13 +349,13 @@ type ReplaceBarrier = {
     readonly resolveDecided: (provider: AppAgentProvider | undefined) => void;
     // Resolves every parked host's `whenReady` so it runs its (decided) add leg.
     readonly release: () => void;
-    // Run once when the outcome is decided (at release, before hosts add): flip
-    // the entry to active(`v2`)/absent on commit, or restore active(`v1`) + the
-    // record on rollback.
+    // Run once when the outcome is decided: flip the entry to active(`v2`)/absent
+    // on commit, or restore active(`v1`) + the record on rollback.
     readonly onDecided: (outcome: ReplaceOutcome) => void;
-    // Run once when the last host settles (`v2` confirmed serving everywhere):
-    // prune the superseded install root (commit: `v1`; rollback: `v2`) per the
-    // Milestone 1 GC rules.
+    // Run once when the outcome is decided (the superseded old version is already
+    // fully unloaded — verify-0 passed before commit — and a rollback's discarded
+    // `v2` was never added): prune the superseded install root (commit: `v1`;
+    // rollback: `v2`) per the Milestone 1 GC rules.
     readonly finalizeGc: (outcome: ReplaceOutcome) => void;
     // Report the terminal outcome to the issuing conversation (design §5.4).
     readonly onOutcome: ((status: UpdateOutcomeStatus) => void) | undefined;
@@ -450,6 +447,17 @@ export function createDefaultInstalledAgentSource(
     // Wrap a provider with a load tombstone (design §7.3): while its name is
     // `removing`, refuse to load it even if a draining session still holds the
     // instance, so nothing resurrects a name mid-teardown.
+    //
+    // DEFENSE IN DEPTH: this is not reachable on the normal path. Throughout the
+    // `removing` window every participant session holds its command lock (parked
+    // in `replaceProvider` awaiting `whenReady`), and a session that connects
+    // mid-`removing` blocks on `whenDecided` — so no command, and therefore no
+    // `loadAppAgent`, can run against a draining name in production. The tombstone
+    // is retained as a cheap backstop that keeps the invariant (never load a
+    // name mid-teardown) locally enforced even if a future load path is added
+    // that does NOT go through the command lock. The direct-load unit test
+    // ("refuses to load a name while it is removing") exercises it by calling
+    // `loadAppAgent` directly, bypassing the lock.
     function withTombstone(
         name: string,
         provider: AppAgentProvider,
@@ -602,10 +610,11 @@ export function createDefaultInstalledAgentSource(
             : barrier.newProvider;
     }
 
-    // Decide the barrier's outcome and advance to phase 3 (design §5.3). Runs
-    // exactly once (guarded by `outcome`): flips the entry (+ restores the record
-    // on rollback), releases every parked host to run its decided add leg, then
-    // GCs immediately if they have all already settled.
+    // Decide the barrier's outcome and release the parked hosts (design §5.3).
+    // Runs exactly once (guarded by `outcome`): flips the entry (+ restores the
+    // record on rollback), releases every parked host to run its decided add
+    // leg, then GCs the superseded root (verify-0 already confirmed the old
+    // version is fully unloaded).
     function decide(barrier: ReplaceBarrier, outcome: ReplaceOutcome): void {
         if (barrier.outcome !== undefined) {
             return;
@@ -644,7 +653,7 @@ export function createDefaultInstalledAgentSource(
                   ? "cancelled-reverted"
                   : "failed-reverted";
         // A throwing user `onOutcome` (a display wrapper) must not escape as an
-        // unhandled rejection nor skip `finalizeIfReady`.
+        // unhandled rejection nor skip the GC.
         try {
             barrier.onOutcome?.(status);
         } catch (e) {
@@ -652,7 +661,20 @@ export function createDefaultInstalledAgentSource(
                 `barrier '${barrier.name}': onOutcome(${status}) threw: ${e}`,
             );
         }
-        finalizeIfReady(barrier);
+        // Prune the superseded install root now the outcome is decided. On a
+        // commit `v1` is already fully unloaded everywhere (verify-0 passed
+        // before commit); on a rollback the discarded `v2` was never added — so
+        // the superseded root is safe to reclaim immediately without waiting on
+        // the hosts' async add legs. A per-host add that later fails prunes the
+        // same root anyway, and the startup orphan sweep remains the backstop. A
+        // throwing finalizer must not escape `decide`.
+        try {
+            barrier.finalizeGc(outcome);
+        } catch (e) {
+            debug(
+                `barrier '${barrier.name}': finalizeGc(${outcome}) threw: ${e}`,
+            );
+        }
     }
 
     function commit(barrier: ReplaceBarrier): void {
@@ -716,29 +738,6 @@ export function createDefaultInstalledAgentSource(
         maybeAdvance(entry.barrier);
     }
 
-    // A host finished (or failed / auto-acked) its `replaceProvider` op — its
-    // phase-3 add leg is done. Once every released host has settled, the swap is
-    // applied in every session, so it is safe to GC the superseded install root
-    // (design §5.3: `v1` is never pruned before `v2` is confirmed serving).
-    function hostSettled(barrier: ReplaceBarrier, host: AppAgentHost): void {
-        if (!barrier.settling.delete(host)) {
-            return;
-        }
-        finalizeIfReady(barrier);
-    }
-
-    function finalizeIfReady(barrier: ReplaceBarrier): void {
-        // Only after the outcome is decided (hosts released) and every host has
-        // finished its add leg. A wedged straggler that never settles leaves the
-        // GC to the Milestone 1 startup orphan sweep (the parked sessions have
-        // already rolled back to `v1` and are serving).
-        if (barrier.phase !== "releasing" || barrier.settling.size > 0) {
-            return;
-        }
-        barrier.phase = "done";
-        barrier.finalizeGc(barrier.outcome!);
-    }
-
     // Begin a coordinated teardown/swap across every connected session (design
     // §5.6, §5.7) wrapped in the §5.3 timeout/cancel/rollback envelope. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
@@ -764,7 +763,7 @@ export function createDefaultInstalledAgentSource(
         newProvider: AppAgentProvider | undefined;
         // Flip the entry (+ restore the record on rollback) at release.
         onDecided: (outcome: ReplaceOutcome) => void;
-        // Prune the superseded install root once every host has swapped.
+        // Prune the superseded install root once the outcome is decided.
         finalizeGc: (outcome: ReplaceOutcome) => void;
         // Report the terminal outcome to the issuing conversation (§5.4).
         onOutcome?: ((status: UpdateOutcomeStatus) => void) | undefined;
@@ -803,7 +802,6 @@ export function createDefaultInstalledAgentSource(
             oldProvider,
             newProvider,
             pending: new Set(targets),
-            settling: new Set(targets),
             whenDecided,
             resolveDecided,
             release,
@@ -856,14 +854,12 @@ export function createDefaultInstalledAgentSource(
                     // fills its phase-1 slot from the success path and never
                     // wedges the barrier until the quiesce timeout.
                     quiesce(name, host);
-                    hostSettled(barrier, host);
                 },
                 (e: unknown) => {
                     // A per-host teardown/add failure must not wedge the barrier:
-                    // unblock phase 1 (if the remove leg threw) and phase 3.
+                    // unblock phase 1 (if the remove leg threw).
                     debug(`replaceProvider failed for '${name}': ${e}`);
                     quiesce(name, host);
-                    hostSettled(barrier, host);
                 },
             );
         }
@@ -1178,9 +1174,10 @@ export function createDefaultInstalledAgentSource(
                 );
                 // The OLD (v1) version's install root, kept intact until the
                 // swap succeeds so a rollback can restart v1 (design §5.3), and
-                // pruned only after v2 is confirmed serving everywhere AND no
-                // other agent still references it (content-addressed roots are
-                // shared, so the prune is refcount-guarded). The new root differs
+                // pruned once the swap commits — v1 is already fully unloaded
+                // everywhere (verify-0 passed before commit) AND no other agent
+                // still references it (content-addressed roots are shared, so the
+                // prune is refcount-guarded). The new root differs
                 // whenever the version changed (roots are keyed `module@version`,
                 // design §5.5); an update that resolves the same version is a
                 // no-op handled above and never reaches the barrier.
