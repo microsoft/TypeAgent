@@ -46,6 +46,9 @@ const SUPPORTED_EXTENSIONS = new Set([
     ".yaml",
 ]);
 
+// Keep each prettier invocation comfortably below Windows shell length limits.
+const MAX_PRETTIER_COMMAND_CHARS = 7000;
+
 function parseArgs(argv) {
     let write = false;
     let base = process.env.PRETTIER_BASE ?? "origin/main";
@@ -151,6 +154,35 @@ function collectChangedFiles(repoRoot, base) {
     return new Set([...committed, ...unstaged, ...staged, ...untracked]);
 }
 
+function splitIntoBatches(files, staticArgs) {
+    const batches = [];
+    const staticLength = staticArgs.join(" ").length;
+
+    let current = [];
+    let currentLength = staticLength;
+
+    for (const file of files) {
+        const addedLength = 1 + file.length;
+        if (
+            current.length > 0 &&
+            currentLength + addedLength > MAX_PRETTIER_COMMAND_CHARS
+        ) {
+            batches.push(current);
+            current = [file];
+            currentLength = staticLength + file.length;
+        } else {
+            current.push(file);
+            currentLength += addedLength;
+        }
+    }
+
+    if (current.length > 0) {
+        batches.push(current);
+    }
+
+    return batches;
+}
+
 function main() {
     const { write, base } = parseArgs(process.argv.slice(2));
     const repoRoot = getRepoRoot();
@@ -183,20 +215,35 @@ function main() {
         "prettier",
         write ? "--write" : "--check",
         "--ignore-unknown",
-        ...tsRelative,
     ];
 
-    const result = spawnSync("pnpm", ["exec", ...prettierArgs], {
-        cwd: tsRoot,
-        stdio: "inherit",
-        shell: process.platform === "win32",
-    });
+    const pnpmExecutable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const batches = splitIntoBatches(tsRelative, [
+        pnpmExecutable,
+        "exec",
+        ...prettierArgs,
+    ]);
 
-    if (result.error) {
-        console.error(`error: failed to run prettier: ${result.error.message}`);
-        process.exit(1);
+    for (const batch of batches) {
+        const result = spawnSync(
+            pnpmExecutable,
+            ["exec", ...prettierArgs, ...batch],
+            {
+                cwd: tsRoot,
+                stdio: "inherit",
+            },
+        );
+
+        if (result.error) {
+            console.error(
+                `error: failed to run prettier: ${result.error.message}`,
+            );
+            process.exit(1);
+        }
+        if ((result.status ?? 0) !== 0) {
+            process.exit(result.status ?? 1);
+        }
     }
-    process.exit(result.status ?? 0);
 }
 
 main();
