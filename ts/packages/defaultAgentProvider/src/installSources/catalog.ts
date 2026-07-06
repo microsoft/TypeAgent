@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import { NpmAppAgentInfo } from "dispatcher-node-providers";
 
-// Catalog data model (design §3). A catalog is a JSON file listing the
+// Catalog data model. A catalog is a JSON file listing the
 // available agents: name -> NpmAppAgentInfo. A catalog source resolves an agent
 // short name to a record on explicit `@install`; nothing in a catalog is
 // installed automatically. Catalogs are referenced by filesystem path (the
@@ -35,7 +35,7 @@ function readCatalogFile(file: string): AgentCatalog {
 }
 
 // Resolve a catalog ref (a local filesystem path) to its parsed catalog JSON.
-// Remote URLs are not supported (design §12 Q19).
+// Remote URLs are not supported.
 export function loadCatalog(catalogRef: string): AgentCatalog {
     return readCatalogFile(catalogRef);
 }

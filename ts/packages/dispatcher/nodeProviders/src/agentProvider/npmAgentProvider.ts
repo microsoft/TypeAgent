@@ -230,7 +230,7 @@ export function createNpmAppAgentProvider(
         // Expose whether the shared agent is still loaded so the installed-agent
         // source can VERIFY a torn-down version is fully released (not loaded
         // anywhere) before starting the next version or freeing the name (design
-        // §5.6). `unloadAppAgent` still runs `close()` only at count 0 (unchanged).
+        // ). `unloadAppAgent` still runs `close()` only at count 0 (unchanged).
         isLoaded(appAgentName: string) {
             return moduleAgents.has(appAgentName);
         },

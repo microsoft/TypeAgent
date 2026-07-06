@@ -20,7 +20,7 @@ import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
 
 // Compose a faithful `replaceProvider` for a test host from its own add/remove,
-// modelling the applicator's single-lock section (design §5.7): remove the old
+// modelling the applicator's single-lock section (5.7): remove the old
 // version, quiesce (fill the barrier slot), await the shared `whenReady`, then
 // add the new version (update) or settle (uninstall). This preserves both the
 // recorded remove-then-add op order AND the barrier gating (a host that blocks
@@ -134,7 +134,7 @@ function makePathAgentDir(emojiChar = "🧪"): string {
 // Seed an instance dir whose config.json restricts install sources to a single
 // `catalog` source with one module-resolved entry (an npm-package-based source),
 // so an install/update produces a `module` record whose manifest the structural
-// check (design §5.3) reads. When `installModule` is true a resolvable agent
+// check (5.3) reads. When `installModule` is true a resolvable agent
 // package (readable manifest) is laid under the instance's installDir; omitting
 // it leaves the module unresolvable, so the structural check fails.
 function catalogModuleInstanceDir(
@@ -209,7 +209,7 @@ describe("createInstalledAppAgentProvider(s)", () => {
         expect(manifest.emojiChar).toBe("🧪");
     });
 
-    it("resolves a module from its per-agent version-scoped root (design §5.5)", async () => {
+    it("resolves a module from its per-agent version-scoped root (5.5)", async () => {
         // A record carrying an `installRoot` resolves from
         // installDir/agents/<installRoot>/node_modules, NOT the shared installDir.
         const moduleName = "scoped-feed-agent";
@@ -323,7 +323,7 @@ describe("getDefaultAppAgentProviders", () => {
         await installer.install("namedOnly", agentDir, undefined, noopHost);
 
         // Installed agents are vended by the source at connect(), NOT by the
-        // static provider list (design §3.3).
+        // static provider list (3.3).
         const providers = getDefaultAppAgentProviders(instanceDir, "agent");
         const allNames = new Set(
             providers.flatMap((p) => p.getAppAgentNames()),
@@ -379,7 +379,7 @@ describe("getDefaultAppAgentSource", () => {
             ),
         ).toBe(false);
         // Install, then connect a second session — it must see the new agent
-        // in its initial vended set (design §6 note).
+        // in its initial vended set (6 note).
         await built.testApi.install(
             "later",
             makePathAgentDir(),
@@ -417,7 +417,7 @@ describe("getDefaultAppAgentSource", () => {
         connA.dispose();
         expect(() => connA.dispose()).not.toThrow();
         // A new connection still vends the shared installed provider — a single
-        // session's dispose must not tear it down (design §6).
+        // session's dispose must not tear it down (6).
         const connB = built.connect(hostB);
         expect(
             new Set(connB.providers.flatMap((p) => p.getAppAgentNames())).has(
@@ -451,7 +451,7 @@ describe("getDefaultAppAgentSource", () => {
     });
 });
 
-describe("AppAgentSource fan-out (design §4, §5)", () => {
+describe("AppAgentSource fan-out (4, )", () => {
     type HostCall =
         | { op: "add"; name: string; notify: boolean }
         | { op: "remove"; name: string; notify: boolean };
@@ -501,7 +501,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         );
         await flush();
 
-        // Uniform enqueue model (§5.4): the issuing session enqueues + is
+        // Uniform enqueue model (): the issuing session enqueues + is
         // notified just like a sibling (the inline path was removed).
         expect(issuing.calls).toEqual([
             { op: "add", name: "foo", notify: true },
@@ -646,7 +646,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         );
         await flush();
         // The single client is the issuing session: it enqueues + is notified
-        // like any other session (uniform enqueue, §5.4); no siblings to fan to.
+        // like any other session (uniform enqueue, ); no siblings to fan to.
         expect(only.calls).toEqual([{ op: "add", name: "foo", notify: true }]);
     });
 
@@ -671,7 +671,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         await flush();
 
         // Every session sees remove BEFORE add (no coexistence); every session
-        // — issuing included — enqueues + is notified (uniform enqueue, §5.4).
+        // — issuing included — enqueues + is notified (uniform enqueue, ).
         expect(issuing.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
             { op: "add", name: "foo", notify: true },
@@ -682,7 +682,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
         ]);
     });
 
-    it("vends installed agents honoring their manifest default (Model B, design §5)", async () => {
+    it("vends installed agents honoring their manifest default (Model B, 5)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
@@ -716,7 +716,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
     it("deadlock-free: install/uninstall/update return while the issuing session's command lock is held (idle-gated, not inline)", async () => {
         // Model the issuing session as a real idle-gated applicator: every op is
         // gated on the session's single-slot command lock — the SAME lock the
-        // in-flight `@package` command holds while it runs (§5.4, §7.1). If any
+        // in-flight `@package` command holds while it runs (, ). If any
         // source method AWAITED the issuing host's enqueued op it would block on
         // that held lock forever (deadlock). The uniform-enqueue model must fan
         // out non-blocking, so each op RETURNS while the lock is held and the
@@ -797,7 +797,7 @@ describe("AppAgentSource fan-out (design §4, §5)", () => {
     });
 });
 
-describe("AppAgentSource lifecycle tracker (design §7)", () => {
+describe("AppAgentSource lifecycle tracker (7)", () => {
     // An issuing host whose ops resolve immediately.
     function fastHost(): AppAgentHost {
         return withReplace({
@@ -871,7 +871,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         const uninstalling = built.testApi.uninstall("foo", issuing);
         await flush();
 
-        // Reuse during removing is rejected (design §7.3).
+        // Reuse during removing is rejected (7.3).
         await expect(
             built.testApi.install(
                 "foo",
@@ -909,7 +909,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         const uninstalling = built.testApi.uninstall("foo", issuing);
         await flush();
 
-        // A new session must NOT pick up the draining name (design §7.3).
+        // A new session must NOT pick up the draining name (7.3).
         const late = built.connect(fastHost());
         expect(
             new Set(late.providers.flatMap((p) => p.getAppAgentNames())).has(
@@ -938,7 +938,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         // A session connecting now is excluded from the draining name in its
         // initial set, and its `whenReady` stays pending: the dispatcher blocks
         // on it (under the held command lock) instead of going live, so no
-        // command runs with `foo` in an undecided state (design §7.3).
+        // command runs with `foo` in an undecided state (7.3).
         const lateConn = built.connect(fastHost());
         expect(
             new Set(
@@ -958,7 +958,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
 
         // Commit the update: `whenReady` resolves with the decided v2 so the
         // dispatcher installs it inline and the late joiner converges on the same
-        // version as the participants (design §7.3).
+        // version as the participants (7.3).
         gated.release();
         await updating;
         const decided = await readyProviders;
@@ -980,7 +980,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await flush();
 
         // The gated sibling still pends. Disposing its connection drops it from
-        // the drain, which completes the drain and frees the name (design §7.3).
+        // the drain, which completes the drain and frees the name (7.3).
         gatedConn.dispose();
         await flush();
         await expect(
@@ -1097,7 +1097,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHostForLifecycle();
         // A sibling whose removeProvider always rejects: its barrier slot must
-        // still be filled (the per-host catch → quiesce, design §5.7) so the
+        // still be filled (the per-host catch → quiesce, 5.7) so the
         // barrier completes and the re-add fires — exactly once, never twice.
         const throwingSibling: AppAgentHost = withReplace({
             addProvider: async () => {},
@@ -1236,7 +1236,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         };
     }
 
-    it("a failed update leaves the agent active + vended everywhere (§7.4)", async () => {
+    it("a failed update leaves the agent active + vended everywhere ()", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = fastHost();
@@ -1277,7 +1277,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await installFoo(built, issuing);
 
         // The sibling throws on removeProvider, but its failure still drops it
-        // from `pending` (design §7.4), so the drain completes and the record
+        // from `pending` (7.4), so the drain completes and the record
         // stays committed.
         await built.testApi.uninstall("foo", issuing);
         await flush();
@@ -1294,7 +1294,7 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
     });
 });
 
-describe("Update Coordination — timeout & rollback (design §5.3)", () => {
+describe("Update Coordination — timeout & rollback (5.3)", () => {
     const flush = () => new Promise((r) => setTimeout(r, 0));
     const settle = async () => {
         // Drain the timer + microtask chain a few times so a phase-timeout
@@ -1356,7 +1356,7 @@ describe("Update Coordination — timeout & rollback (design §5.3)", () => {
         return v1Root;
     }
 
-    it("a straggler that won't idle hits the quiesce timeout and rolls back (§5.3)", async () => {
+    it("a straggler that won't idle hits the quiesce timeout and rolls back ()", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
@@ -1395,7 +1395,7 @@ describe("Update Coordination — timeout & rollback (design §5.3)", () => {
         await flush();
     });
 
-    it("a lingering verify-0 refcount parks the barrier until the quiesce timeout rolls back (§5.6)", async () => {
+    it("a lingering verify-0 refcount parks the barrier until the quiesce timeout rolls back ()", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
@@ -1483,7 +1483,7 @@ describe("Update Coordination — timeout & rollback (design §5.3)", () => {
         );
     });
 
-    it("reports `updated` and drops the old install root on a clean commit (§5.3)", async () => {
+    it("reports `updated` and drops the old install root on a clean commit ()", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
@@ -1505,7 +1505,7 @@ describe("Update Coordination — timeout & rollback (design §5.3)", () => {
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 
-    it("a disconnect during a rollback is safe (name stays active on v1) (§5.3)", async () => {
+    it("a disconnect during a rollback is safe (name stays active on v1) ()", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
@@ -1861,7 +1861,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(record.source).toBe("path");
     });
 
-    // GC (design §5.5): a superseded version-scoped install root is pruned once
+    // GC (5.5): a superseded version-scoped install root is pruned once
     // the swap completes. A path re-resolve produces a record with no
     // installRoot, so seeding the pre-update record with an installRoot + a real
     // on-disk root exercises the `oldRoot !== record.installRoot` prune branch.
@@ -1888,7 +1888,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(oldRootDir)).toBe(true);
 
         await installer.update("p", undefined, host);
-        // The swap drains + re-adds asynchronously (uniform enqueue, §5.4); the
+        // The swap drains + re-adds asynchronously (uniform enqueue, ); the
         // old-root prune runs in the GC finalizer once every host has swapped, so
         // let it settle.
         await new Promise((r) => setTimeout(r, 0));
@@ -1899,7 +1899,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(oldRootDir)).toBe(false);
     });
 
-    // GC (design §5.5): uninstall prunes the agent's version-scoped root once the
+    // GC (5.5): uninstall prunes the agent's version-scoped root once the
     // agent is confirmed down everywhere.
     it("uninstall prunes the agent's install root once drained", async () => {
         const instanceDir = pathOnlyInstanceDir();
@@ -1919,14 +1919,14 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(rootDir)).toBe(true);
 
         await installer.uninstall("p", host);
-        // The drain (and its post-drain prune) settles asynchronously (§5.4).
+        // The drain (and its post-drain prune) settles asynchronously ().
         await new Promise((r) => setTimeout(r, 0));
 
         expect(fs.existsSync(rootDir)).toBe(false);
         expect(readAgentsJson(instanceDir)!.agents.p).toBeUndefined();
     });
 
-    // Refcount GC (design §5.5): content-addressed roots (`module@version`) are
+    // Refcount GC (5.5): content-addressed roots (`module@version`) are
     // SHARED across agents that resolve to the same package+version, so a prune
     // must not delete a root a sibling still references.
     it("uninstall keeps a shared root until the LAST referencing agent goes", async () => {
@@ -2025,7 +2025,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
             JSON.stringify({ emojiChar: "🚀" }),
         );
         await built.testApi.update("p", undefined, host);
-        // The swap drains + re-adds asynchronously (uniform enqueue, §5.4); let
+        // The swap drains + re-adds asynchronously (uniform enqueue, ); let
         // it settle so the new version is active before we vend a connection.
         await new Promise((r) => setTimeout(r, 0));
         // The freshly materialized provider is vended on the next connect.
@@ -2084,7 +2084,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
     });
 });
 
-describe("startup orphan sweep (design §5.5 GC)", () => {
+describe("startup orphan sweep (5.5 GC)", () => {
     // Seed an instance dir with a path-only source config plus a hand-written
     // agents.json whose single record points at a version-scoped install root,
     // and populate installedAgents/agents with that recorded root plus a couple
@@ -2208,12 +2208,12 @@ describe("startup orphan sweep (design §5.5 GC)", () => {
     });
 });
 
-// Structural manifest check (design §5.3): every install/update — feed, catalog
+// Structural manifest check (5.3): every install/update — feed, catalog
 // `module`, AND local `path` — validates the freshly-materialized manifest at
 // install/update time, so a corrupt/unreadable agent fails BEFORE anything is
 // recorded (or, on update, before `v1` is torn down) rather than committing a
 // broken agent.
-describe("structural manifest check on install/update (design §5.3)", () => {
+describe("structural manifest check on install/update (5.3)", () => {
     it("install of an npm-package source fails and records nothing when the manifest is unreadable", async () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", false);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
@@ -2254,7 +2254,7 @@ describe("structural manifest check on install/update (design §5.3)", () => {
 
     it("a `path` install is validated too — a manifest-less directory fails and records nothing", async () => {
         // A bare directory (no package.json / manifest) installs via the path
-        // source. The structural check is source-agnostic (design §5.3), so an
+        // source. The structural check is source-agnostic (5.3), so an
         // unreadable manifest fails the install BEFORE anything is recorded —
         // exactly like an npm-package source.
         const instanceDir = pathOnlyInstanceDir();

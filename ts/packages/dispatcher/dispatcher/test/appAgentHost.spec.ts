@@ -178,7 +178,7 @@ describe("AppAgentHostApplicator", () => {
         });
 
         host.dispose();
-        // A late op after teardown is a no-op (design §6).
+        // A late op after teardown is a no-op (6).
         await expect(
             host.addProvider(fakeProvider("foo"), false),
         ).resolves.toBeUndefined();
@@ -622,7 +622,7 @@ describe("AppAgentHostApplicator", () => {
 
         await tick();
         // The teardown leg ran and the host quiesced; the op is parked mid-run
-        // on whenReady (running, so dispose leaves it to finish, §6).
+        // on whenReady (running, so dispose leaves it to finish, ).
         expect(order).toEqual(["remove:v1"]);
         expect(quiesced).toBe(true);
 
@@ -833,7 +833,7 @@ describe("AppAgentManager.removeProvider", () => {
     });
 });
 
-describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
+describe("emitAgentChangeNotification (sibling system messages, )", () => {
     function captureClientIO() {
         const messages: string[] = [];
         return {
@@ -881,7 +881,7 @@ describe("emitAgentChangeNotification (sibling system messages, §5)", () => {
     });
 });
 
-describe("reconcileKnownAgents (load-time reconciliation, §5 Model B)", () => {
+describe("reconcileKnownAgents (load-time reconciliation,  Model B)", () => {
     function makeContext(opts: {
         available: string[];
         known: string[] | undefined;

@@ -18,7 +18,7 @@ import { createLimiter, Limiter } from "@typeagent/common-utils";
 
 /**
  * The host's install-source registry. Owns source listing, ordering,
- * configuration, ordered resolution (design §4.1), and the typed `add(config)`
+ * configuration, ordered resolution, and the typed `add(config)`
  * used by seeding, tests, and the host's `@source` command handlers. This is
  * entirely host-internal - the dispatcher core has no registry interface; it
  * receives the `@source` command table via `InstalledAgentSourceApi.sourceCommands()`.
@@ -47,7 +47,7 @@ export interface DefaultInstallSourceRegistry {
         onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
     // Re-resolve + re-materialize a previously-installed record against its
-    // recorded source (design §5, §12 Q13), for `@update`. The source that
+    // recorded source, for `@update`. The source that
     // produced the record owns the whole policy (which handle to read, how a
     // version `range` applies, corrupt-record validation) via
     // {@link InstallSource.reresolve}; the registry just runs it + materialize
@@ -72,10 +72,10 @@ export interface DefaultInstallSourceRegistry {
 }
 
 export interface RegistryDeps {
-    // Shared npm root all feed sources install into (design §4.1, §12 Q20).
+    // Shared npm root all feed sources install into.
     installDir: string;
     // Shared serialize-to-one limiter; the installer (M2) reuses it so the
-    // record write joins the same serialization domain (design §12 Q5).
+    // record write joins the same serialization domain.
     // Defaults to a fresh createLimiter(1) when omitted.
     limiter?: Limiter;
     // Persist the ordered source list to instance config (wired in M2.5 / M3).
@@ -126,7 +126,7 @@ export function createInstallSourceRegistry(
     type Entry = { config: InstallSourceConfig; source: InstallSource };
     // One map holds each source's config and built source together (always in
     // lockstep). The map iteration order IS the resolution priority order
-    // (first match wins, §4.1).
+    // (first match wins).
     let entries = new Map<string, Entry>();
 
     // Process-lifetime background sink: a source degrade (corrupt catalog,
@@ -247,13 +247,13 @@ export function createInstallSourceRegistry(
             onStatus?.(`Resolving '${ref}' from source '${sourceName}'...`);
             const candidate = await entry.source.find(ref, onWarn);
             if (candidate === undefined) {
-                // Explicit --source non-match is a hard error (§4.1, §12 Q4).
+                // Explicit --source non-match is a hard error .
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
             }
             return entry.source.materialize(candidate);
         }
         // Probe the sources sequentially in resolution (map iteration) order;
-        // first match wins (§4.1), so a later source is never probed once an
+        // first match wins , so a later source is never probed once an
         // earlier one matches.
         const ordered = resolutionSources();
         for (const source of ordered) {
@@ -319,7 +319,7 @@ export function createInstallSourceRegistry(
             onStatus?: SourceStatus,
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
-            // shared limiter (design §12 Q5). The installer (M2) reuses the
+            // shared limiter. The installer (M2) reuses the
             // same limiter for the record write.
             return limiter(() =>
                 resolveUnlocked(ref, sourceName, onWarn, onStatus),
@@ -334,12 +334,12 @@ export function createInstallSourceRegistry(
             onStatus?: SourceStatus,
         ): Promise<MaterializedInstallRecord> {
             // Mirror resolve(): the whole re-resolve -> materialize runs under
-            // the shared limiter (design §12 Q5).
+            // the shared limiter.
             return limiter(async () => {
                 const entry = entries.get(record.source);
                 if (entry === undefined) {
                     // Friendly, actionable message: the recorded source was
-                    // removed since install (design §5).
+                    // removed since install.
                     throw new Error(
                         `Source '${record.source}' for agent '${record.name}' is no longer configured; ` +
                             `re-add it with '@source add' to update, or '@uninstall ${record.name}'.`,
@@ -384,7 +384,7 @@ export function createInstallSourceRegistry(
                 // handle (feed: spec; catalog: key; path: path), so the
                 // re-materialized record is already self-sufficient for the next
                 // update - no host-side carry needed. It builds a fresh
-                // version-scoped root labeled by the package name (design §5.5).
+                // version-scoped root labeled by the package name.
                 return entry.source.materialize(candidate);
             });
         },

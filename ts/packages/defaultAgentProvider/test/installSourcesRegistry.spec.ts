@@ -267,7 +267,7 @@ describe("InstallSourceRegistry add/remove/persist", () => {
     it("sources and order survive a reload from the persisted snapshot", () => {
         // Simulate a restart: capture what the first registry persists, then
         // build a fresh registry from that snapshot and confirm the configured
-        // sources and their resolution order round-trip (design §6).
+        // sources and their resolution order round-trip (6).
         let snapshot: { configs: InstallSourceConfig[] } = {
             configs: [],
         };

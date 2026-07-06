@@ -97,7 +97,7 @@ function computeNoMatchPolicy(
 //       "refetch" → open-ended, backend may know more
 //       "slide"   → wildcard boundary, slide anchor forward
 //
-// Architecture: docs/architecture/core/completion.md — §5 Completion Session
+// Architecture: docs/architecture/core/completion.md —  Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
 export class PartialCompletionSession implements CompletionController {
     // The "anchor" prefix for the current session.  Set to the full input

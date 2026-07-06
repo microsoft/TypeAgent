@@ -16,7 +16,7 @@
 /**
  * The result of a source's `find`: which source matched and how the agent
  * should be acquired. A match is a commitment - if `find` returns a candidate,
- * `materialize` must succeed (design §4.1, Q4). The registry's `find ->
+ * `materialize` must succeed. The registry's `find ->
  * materialize` handoff type; not seen outside this implementation.
  */
 export interface ResolvedCandidate {
@@ -25,7 +25,7 @@ export interface ResolvedCandidate {
     ref?: string; // feed specifier/version
     path?: string; // catalog / path result
     // The concrete package version this candidate resolves to, when the source
-    // can determine it cheaply during `find`/`reresolve` (design §5.5): the feed
+    // can determine it cheaply during `find`/`reresolve`: the feed
     // source reads the packument during the membership check and pins the
     // dist-tag/range to an exact version here. It lets `materialize` name the
     // content-addressed install root (`module@version`) up front and skip the
@@ -41,7 +41,7 @@ export interface ResolvedCandidate {
 
 /**
  * The subdirectory under `installDir` that holds the per-agent, version-scoped
- * install roots (design §5.5). Each feed install materializes into its own
+ * install roots. Each feed install materializes into its own
  * `installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/<installRoot>/node_modules/...` so a
  * new version never clobbers a still-running one; the startup orphan sweep and
  * prune-on-swap GC operate on this directory alone (never the legacy shared
@@ -50,19 +50,19 @@ export interface ResolvedCandidate {
 export const AGENT_INSTALL_ROOTS_SUBDIR = "agents";
 
 /**
- * The single shape the installed-agent provider loads (design §4.2) and the
+ * The single shape the installed-agent provider loads and the
  * `agents.json` persistence schema. A record carries exactly one resolution
  * handle: `module` (package name, npm-resolved) OR `path` (filesystem-resolved).
- * The presence of `path` is the load-time discriminator (§12 Q17).
+ * The presence of `path` is the load-time discriminator .
  */
 export interface InstalledAgentRecord {
     name: string; // dispatcher agent name
-    kind: string; // loading mechanism; "npm" today (reserved seam, see §10)
+    kind: string; // loading mechanism; "npm" today (reserved seam for future kinds)
     module?: string; // package name; present only for npm-resolved records
     path?: string; // present for catalog / path installs
     source: string; // provenance, required
     ref?: string; // feed specifier/version
-    // The per-agent, version-scoped install root leaf name (design §5.5): the
+    // The per-agent, version-scoped install root leaf name: the
     // subdir under `installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/` a feed install
     // materialized into, so the provider derives its require-root from the
     // record instead of the shared `installDir`. Present only for feed
@@ -104,7 +104,7 @@ export type SourceStatus = (message: string) => void;
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
- * `@update` settles asynchronously (design §5.3, §5.4). `updated` = the swap
+ * `@update` settles asynchronously. `updated` = the swap
  * committed to `v2`; `reverted` = a phase timeout (a straggler that would not
  * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1` serving
  * in every session.
@@ -113,14 +113,14 @@ export type UpdateOutcomeStatus = "updated" | "reverted";
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
- * `@uninstall` settles asynchronously (design §5.3, §5.4). `uninstalled` = the
+ * `@uninstall` settles asynchronously. `uninstalled` = the
  * teardown committed and the name is free; `reverted` = a phase timeout rolled
  * back and the agent is still installed and serving in every session.
  */
 export type UninstallOutcomeStatus = "uninstalled" | "reverted";
 
 /**
- * The three install-source kinds (design §3). There is deliberately no
+ * The three install-source kinds. There is deliberately no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/
  * updated). Install sources only resolve user-installed agents.
@@ -161,8 +161,7 @@ export interface FeedSourceConfig {
  * (instant); enumerable. Nothing in a catalog is installed automatically; a
  * catalog only resolves an agent on explicit `@install`.
  *
- * The catalog is a local filesystem path; remote URLs are not supported (§12
- * Q19). Relative package paths resolve against the catalog's dir.
+ * The catalog is a local filesystem path; remote URLs are not supported . Relative package paths resolve against the catalog's dir.
  */
 export interface CatalogSourceConfig {
     kind: "catalog";
@@ -189,7 +188,7 @@ export interface InstallSourceInfo {
 /**
  * A live install source built from a host config. Implements a two-phase
  * contract so the registry can probe cheaply (`find`) before doing any real
- * work (`materialize`) (design §4.1). `ResolvedCandidate` /
+ * work (`materialize`). `ResolvedCandidate` /
  * `MaterializedInstallRecord` (defined above) are host-owned record shapes;
  * everything here is host-internal.
  */
@@ -200,7 +199,7 @@ export interface InstallSource {
      * CHEAP + side-effect free: can this source resolve `ref`? A match is a
      * commitment - if `find` returns a candidate, `materialize` must succeed.
      * Returning `undefined` is a non-match; the registry's ordered walk
-     * continues to the next source (§4.1, Q4). `onWarn`, when supplied, is a
+     * continues to the next source . `onWarn`, when supplied, is a
      * per-command sink for non-fatal degrade messages (corrupt catalog /
      * dropped entry) so the host can surface them for the triggering command.
      */
@@ -214,7 +213,7 @@ export interface InstallSource {
      * (recovered by the host from the persisted record), produce a FRESH
      * candidate for the current version - so `@update` never has to know which
      * candidate field is this source's re-resolution handle, or how a version
-     * `range` applies (design §5, §12 Q13). The source owns that policy
+     * `range` applies. The source owns that policy
      * entirely: which handle it reads (`module` / `path` / the catalog key in
      * `ref`), how `opts.range` narrows the target, and validating a corrupt
      * candidate. Because the source speaks only `ref` / `ResolvedCandidate`, the
@@ -234,7 +233,7 @@ export interface InstallSource {
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
     /** Does the actual work (npm install / copy / record data). A source that
-     * needs a per-agent, version-scoped install root (design §5.5) labels it
+     * needs a per-agent, version-scoped install root labels it
      * from the candidate's package name. Sources whose materialize is already
      * non-destructive (`path`, `catalog`) own no such root. */
     materialize(

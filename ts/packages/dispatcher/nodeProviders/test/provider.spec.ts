@@ -148,7 +148,7 @@ describe("dispatcher", () => {
     });
 });
 
-describe("npm provider refcount (design §5.6 verify-0)", () => {
+describe("npm provider refcount (5.6 verify-0)", () => {
     // Load the test agent in-process (execMode "dispatcher") so the loaded state
     // can be exercised without forking a child per load.
     function makeProvider() {

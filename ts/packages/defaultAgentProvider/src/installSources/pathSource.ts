@@ -10,7 +10,7 @@ import {
     ResolvedCandidate,
 } from "./config.js";
 
-// `path` source (design §3, §4.1, §4.2, §12 Q17).
+// `path` source.
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
 //   materialize = record data { path, source }, omitting `module` and `name`
 //   reresolve   = re-stat the record's absolute `path` (its handle)
@@ -66,7 +66,7 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
                 );
             }
             // Re-stat: a deleted path returns undefined -> host reports it is no
-            // longer resolvable, leaving the old agent intact (design §7.4).
+            // longer resolvable, leaving the old agent intact.
             return find(candidate.path);
         },
         async materialize(

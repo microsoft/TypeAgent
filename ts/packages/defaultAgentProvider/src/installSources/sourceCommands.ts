@@ -98,7 +98,7 @@ class SourceOrderCommandHandler implements CommandHandler {
         }
         // The registry moves the named sources to the front (de-duplicated,
         // unknown names skipped) and keeps the rest in their current relative
-        // order, so reordering never silently drops a source (design §5).
+        // order, so reordering never silently drops a source.
         registry.setOrder(params.args.names);
         const order = registry.list().map((info) => info.name);
         displayResult(`Resolution order: [${order.join(", ")}]`, context);
@@ -226,7 +226,7 @@ class SourceRemoveCommandHandler implements CommandHandler {
         const referencing = recordsUsingSource(name);
         if (referencing.length > 0 && !params.flags.force) {
             // Warn and abort: removal without --force is a no-op when agents
-            // still reference the source (design §5).
+            // still reference the source.
             await displayWarn(
                 `Source '${name}' is still referenced by: ${referencing.join(
                     ", ",
@@ -270,7 +270,7 @@ export function getSourceCommands(
     deps: SourceCommandsDeps,
 ): CommandHandlerTable {
     return {
-        description: "Manage install sources (design §5)",
+        description: "Manage install sources",
         defaultSubCommand: "list",
         commands: {
             list: new SourceListCommandHandler(deps),

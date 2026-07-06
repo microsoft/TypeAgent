@@ -22,10 +22,10 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-// The sentinel keyword an app agent declares in its package.json (design §4.1).
+// The sentinel keyword an app agent declares in its package.json.
 export const AGENT_KEYWORD = "typeagent-agent";
 
-const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h (design §12 Q3)
+const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h
 
 function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
     const fromConfig = config.registry?.trim();
@@ -59,14 +59,14 @@ export function moduleNameFromSpec(spec: string): string {
 
 // A syntactically valid npm package name (optionally scoped). Used as a boundary
 // guard so a corrupt record can never smuggle shell metacharacters into the
-// install spec on the Windows `.cmd` path (design §4.1 hardening).
+// install spec on the Windows `.cmd` path.
 export function isSafeModuleName(name: string): boolean {
     return /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(name);
 }
 
 // A concrete, published npm version (no range operators) -- the only version
 // shape ever handed to `npm install`. Ranges/tags are resolved to one of these
-// by `resolveConcreteVersion` BEFORE materialize (design §5.5).
+// by `resolveConcreteVersion` BEFORE materialize.
 export function isConcreteVersion(version: string): boolean {
     return semver.valid(version) !== null;
 }
@@ -92,7 +92,7 @@ function sanitizeRootLabel(label: string): string {
     return label.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-// A short, unique, filesystem-safe install-id (design §5.5 _Naming_). Used to
+// A short, unique, filesystem-safe install-id. Used to
 // name the TEMPORARY install root (`.tmp-<id>`) a slow-path materialize installs
 // into before atomically adopting it as the content-addressed `module@version`
 // root, so concurrent installs never collide on the temp dir.
@@ -108,7 +108,7 @@ export interface NpmInstallArgs {
 }
 
 export interface FeedSourceDeps {
-    // npm root all feed installs land in (design §4.1, §12 Q20). Holds a
+    // npm root all feed installs land in. Holds a
     // private package.json marker; packages go under its node_modules/.
     installDir: string;
     tokenRunner?: AzTokenRunner;
@@ -158,7 +158,7 @@ function feedsApiBase(info: AzureFeedInfo): string {
 }
 
 async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
-    // Security (design §4.1 hardening): on Windows `npm` is a batch shim, so we
+    // Security: on Windows `npm` is a batch shim, so we
     // invoke `npm.cmd` explicitly under a shell (Node refuses to spawn a
     // `.cmd`/`.bat` without `shell:true`). On every other platform we run the
     // real `npm` binary with NO shell, so an argument is never re-parsed. The
@@ -197,7 +197,7 @@ function ensureInstallRoot(installDir: string): void {
 }
 
 // Walk the paged Azure DevOps Artifacts packages endpoint, filtered to the
-// configured scopes (design §4.1 step 1).
+// configured scopes.
 async function listScopedPackages(
     info: AzureFeedInfo,
     scopes: string[],
@@ -242,7 +242,7 @@ async function listScopedPackages(
 }
 
 // Read a package's packument keywords and decide whether it is an app agent
-// (design §4.1 step 2).
+// based on the sentinel keyword.
 async function isAgentPackage(
     registry: string,
     packageName: string,
@@ -261,7 +261,7 @@ async function isAgentPackage(
     return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
 }
 
-// Fetch and parse a package's packument (design §4.1, §5.5). Returns undefined
+// Fetch and parse a package's packument. Returns undefined
 // on any network / HTTP / parse failure so callers can fall back gracefully
 // (offline -> resolve the version at install time instead).
 async function fetchPackument(
@@ -285,7 +285,7 @@ async function fetchPackument(
 }
 
 // Resolve the version part of an npm specifier against a package's packument to
-// a single concrete published version (design §5.5). Handles the three request
+// a single concrete published version. Handles the three request
 // shapes npm accepts: no version (the `latest` dist-tag), a dist-tag, an exact
 // version, and a semver range (highest satisfying published version). Returns
 // undefined when it cannot be pinned (no packument, unknown tag, unsatisfiable
@@ -345,7 +345,7 @@ export async function enumerateFeedAgents(
     return scoped.filter((_, i) => flags[i]);
 }
 
-// `feed` source (design §3, §4.1, §4.2, §12 Q3, Q16, Q20).
+// `feed` source.
 //   find        = membership check against a cached package list (~1h TTL),
 //                 then a live registry round-trip to pin a concrete version;
 //                 unresolvable (offline / auth / no matching version) -> no match
@@ -407,7 +407,7 @@ export function createFeedSource(
         }
         // Stale or missing: try to refresh. On any failure (offline / REST
         // error) serve the stale cache (or empty) rather than failing the walk
-        // (design §12 Q3).
+        // and continue source resolution.
         try {
             const token = await getFeedAccessToken(tokenRunner);
             const packages = await enumerateFeedAgents(config, token, fetchFn);
@@ -428,7 +428,7 @@ export function createFeedSource(
             if (!packages.includes(moduleName)) {
                 return undefined; // non-match (or skipped when offline+empty)
             }
-            // Membership matched: resolve the concrete version (design §5.5) so
+            // Membership matched: resolve the concrete version so
             // every candidate carries a pinned `version`. `materialize` names the
             // content-addressed install root (`module@version`) from it and skips
             // the npm install entirely when that root already exists (dedup
@@ -466,7 +466,7 @@ export function createFeedSource(
                 // carried separately in `version`.
                 ref,
                 version,
-                loaderConfig: { execMode: "separate" }, // §12 Q16
+                loaderConfig: { execMode: "separate" },
             };
         },
         async reresolve(
@@ -475,7 +475,7 @@ export function createFeedSource(
         ): Promise<ResolvedCandidate | undefined> {
             // The package name (`module`) is the handle; a version `range`
             // narrows the target, omitting it takes the latest available
-            // version (design §5). A candidate without a module is corrupt.
+            // version. A candidate without a module is corrupt.
             const moduleName = candidate.module;
             if (moduleName === undefined) {
                 throw new Error(
@@ -484,7 +484,7 @@ export function createFeedSource(
             }
             // Validate the user-supplied range against the real semver-range
             // grammar (or an npm dist-tag) before it is ever embedded in a spec
-            // (design §4.1 hardening; defense in depth against `@update <range>`
+            // (hardening; defense in depth against `@update <range>`
             // shell injection on Windows).
             if (opts?.range !== undefined && !isSafeVersionRange(opts.range)) {
                 throw new Error(
@@ -528,7 +528,7 @@ export function createFeedSource(
             // Install the exact resolved version -- reproducible, and it matches
             // the content-addressed root name.
             const installSpec = `${moduleName}@${version}`;
-            // Boundary guard (design §4.1 hardening; defense in depth): only a
+            // Boundary guard: only a
             // strict `name@concrete-version` spec is ever handed to `npm install`,
             // so a corrupt record or an unresolved range can never inject shell
             // metacharacters into the install command (the Windows path runs npm
@@ -538,7 +538,7 @@ export function createFeedSource(
                     `feed source '${config.name}': refusing to install unsafe spec '${installSpec}'`,
                 );
             }
-            // Content-addressed install roots (design §5.5): the install unit is
+            // Content-addressed install roots: the install unit is
             // the PACKAGE, keyed by `sanitize(module)@version`. Two agents that
             // resolve to the same package+version share ONE root (dedup), a new
             // version coexists in its own root (non-destructive), and installing
@@ -572,7 +572,7 @@ export function createFeedSource(
 
             // FAST PATH: a completed install already sits at the
             // content-addressed root -> reuse it with no npm install at all
-            // (dedup / same-version no-op, design §5.5).
+            // (dedup / same-version no-op, .5).
             if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
                 return buildRecord();
             }

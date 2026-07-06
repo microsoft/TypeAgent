@@ -89,7 +89,7 @@ describe("@package agent", () => {
 
         const agent = await provider.loadAppAgent(PACKAGE_AGENT_NAME);
         // The agentContext is the host-owned PackageAgentContext — never a
-        // dispatcher CommandHandlerContext (design §3.4).
+        // dispatcher CommandHandlerContext (3.4).
         const agentContext = await agent.initializeAgentContext!();
         expect(agentContext).toBe(ctx);
         expect(typeof agent.getCommands).toBe("function");

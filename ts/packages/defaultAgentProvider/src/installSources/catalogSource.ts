@@ -14,7 +14,7 @@ import { AgentCatalog, loadCatalog } from "./catalog.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 
-// `catalog` source (design §3, §4.1, §4.2, §12 Q6, Q17, Q19).
+// `catalog` source.
 //   find        = map lookup in the catalog JSON
 //   materialize = record data `path` (relative paths resolve against the
 //                 catalog dir) or `module`; carries execMode; stores the key
@@ -37,7 +37,7 @@ export function createCatalogSource(
     // per-command `onWarn` sink, when supplied) every time it is hit; it holds
     // no dedup state of its own. Deciding how often to surface a repeat - once
     // per command vs. once per process for the server log - is the caller's
-    // policy (the registry adds the process-lifetime console dedup; §4.1).
+    // policy (the registry adds process-lifetime console dedup).
     function warn(message: string, onWarn?: SourceWarning): void {
         debug(message);
         onWarn?.(message);
@@ -60,7 +60,7 @@ export function createCatalogSource(
 
     // Resolve a catalog entry to its single resolution handle - a `path`
     // (relative paths resolve against the catalog dir) or a package `name`
-    // (-> module). A matched entry must carry exactly one (§4.2, Q17); an entry
+    // (-> module). A matched entry must carry exactly one ; an entry
     // with neither is a catalog authoring mistake. Rather than throw (which
     // would break the whole resolve walk) it is warned and dropped, i.e.
     // treated as a non-match - the same degrade philosophy as a corrupt file.
@@ -152,7 +152,7 @@ export function createCatalogSource(
                 );
             }
             record.ref = candidate.ref;
-            // Exactly one resolution handle (§4.2, Q17).
+            // Exactly one resolution handle .
             if (candidate.path !== undefined) {
                 record.path = candidate.path;
             } else if (candidate.module !== undefined) {

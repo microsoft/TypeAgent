@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
-// getCommandCompletion): docs/architecture/core/completion.md — §3 Agent SDK
+// getCommandCompletion): docs/architecture/core/completion.md —  Agent SDK
 
 import { ActionResult } from "./action.js";
 import { ActionContext, SessionContext } from "./agentInterface.js";

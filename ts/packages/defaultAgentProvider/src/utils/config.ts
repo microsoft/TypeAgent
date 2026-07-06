@@ -27,13 +27,13 @@ export type InstanceConfig = {
     mcpServers?: {
         [key: string]: McpAppAgentConfig;
     };
-    // Install sources + resolution order (design §6). Runtime edits via
+    // Install sources + resolution order. Runtime edits via
     // @source / @install land here; absent fields fall back to the shipped
     // seed defaults (see getResolvedInstallSources).
     installSources?: InstallSourcesConfig;
 };
 
-// Persisted install-source configuration (design §6). All fields optional; the
+// Persisted install-source configuration. All fields optional; the
 // resolver below merges them over the shipped seed defaults.
 export type InstallSourcesConfig = {
     // Install sources in resolution priority order (first match wins).
@@ -130,14 +130,14 @@ export function getInstanceConfigProvider(
     };
 }
 
-// Path to the optional dev-checkout workspace catalog (design §6). Present only
+// Path to the optional dev-checkout workspace catalog. Present only
 // in a repo checkout; absent in a shipped build. A sibling of this package
 // under ts/packages/agents.
 function getWorkspaceCatalogPath(): string {
     return getPackageFilePath("../agents/agents.catalog.json");
 }
 
-// Host-driven knobs for resolving install sources (design §6). Remote hosts
+// Host-driven knobs for resolving install sources. Remote hosts
 // (e.g. the web API server) set `excludePathSources` to skip `path` sources
 // during resolution, whose refs would otherwise resolve against the server's
 // own filesystem. This only narrows the runtime resolution walk; it never
@@ -146,7 +146,7 @@ export type InstallSourcesResolveOptions = {
     excludePathSources?: boolean;
 };
 
-// The shipped seed install sources in resolution priority order (design §6).
+// The shipped seed install sources in resolution priority order.
 // A dev checkout additionally exposes a `workspace` catalog (only when its
 // catalog JSON exists), so local agents can be installed by short name. This is
 // the full seed list; runtime-only filtering (e.g. `excludePathSources`) is
@@ -156,7 +156,7 @@ export type InstallSourcesResolveOptions = {
 // separate static provider (see createBundledAppAgentProvider) and are always
 // present without being installed.
 //
-// CAVEAT (design §6): the `workspace` entry is seeded *conditionally* on the
+// CAVEAT: the `workspace` entry is seeded *conditionally* on the
 // ambient filesystem, and the seed is recomputed every launch until something
 // is persisted. So one instance dir launched from a dev checkout vs. a shipped
 // build (or two different checkouts) sees a different source list, and the
@@ -178,8 +178,7 @@ function getSeedInstallSources(): InstallSourceConfig[] {
 }
 
 /**
- * Resolve the effective install sources in resolution priority order (design
- * §6): the persisted instance overrides when present, otherwise the shipped
+ * Resolve the effective install sources in resolution priority order : the persisted instance overrides when present, otherwise the shipped
  * seed defaults. This returns the full configured list verbatim — it is what
  * seeds the registry and gets persisted back when `@source` edits the list, so
  * it must never be narrowed here. Runtime-only filtering (e.g.
@@ -195,7 +194,7 @@ export function getResolvedInstallSources(
 }
 
 /**
- * The shared npm root all feed sources install into (design §6): always
+ * The shared npm root all feed sources install into: always
  * `<instanceDir>/installedAgents`, derived at runtime and never persisted. It
  * is `undefined` for the in-memory case (no instance dir), where nothing is
  * ever installed; deliberately not falling back to `process.cwd()`, which

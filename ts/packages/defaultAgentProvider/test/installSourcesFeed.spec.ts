@@ -73,7 +73,7 @@ const goodToken = async () =>
 
 // Fake fetch that answers the packument endpoint with a `versions` map +
 // `dist-tags` so `feedSource.find` can resolve a concrete version up front
-// (design §5.5). Defaults expose 1.0.0 + 2.0.0 with latest=2.0.0.
+// (5.5). Defaults expose 1.0.0 + 2.0.0 with latest=2.0.0.
 function packumentFetch(opts?: {
     versions?: string[];
     distTags?: Record<string, string>;
@@ -417,7 +417,7 @@ describe("feedSource.materialize", () => {
             installDir,
             npmInstall: async ({ spec, cwd }: any) => {
                 // The package now lands under the per-agent version-scoped root
-                // (`cwd`), not the shared installDir (design §5.5).
+                // (`cwd`), not the shared installDir (5.5).
                 const mod = moduleNameFromSpec(spec);
                 const dir = path.join(cwd, "node_modules", ...mod.split("/"));
                 fs.mkdirSync(dir, { recursive: true });
@@ -434,7 +434,7 @@ describe("feedSource.materialize", () => {
         expect(record.ref).toBe("@typeagent/a-agent@1.0.0");
         expect(record.loaderConfig?.execMode).toBe("separate");
         // The record carries the content-addressed install root (which encodes
-        // the resolved version, design §5.5), and that root physically exists
+        // the resolved version, 5.5), and that root physically exists
         // under installDir/agents.
         expect(record.installRoot).toBe("_typeagent_a-agent@1.0.0");
         expect(
@@ -463,7 +463,7 @@ describe("feedSource.materialize", () => {
             (await source.find("@typeagent/a-agent@1.0.0"))!,
         );
         // npm ran with cwd under installDir/agents/<name>@<id>, never the shared
-        // installDir itself (so a running version is never clobbered, §5.5).
+        // installDir itself (so a running version is never clobbered, ).
         expect(seenCwd).toBeDefined();
         expect(
             seenCwd!.startsWith(path.join(installDir, "agents") + path.sep),
@@ -498,7 +498,7 @@ describe("feedSource.materialize", () => {
         );
         // Content-addressed by `module@version`: the same version resolves to
         // the SAME root, and the second materialize is an idempotent no-op that
-        // skips npm entirely (design §5.5 dedup / idempotent install).
+        // skips npm entirely (5.5 dedup / idempotent install).
         expect(second.installRoot).toBe(first.installRoot);
         expect(installs).toBe(1);
         expect(
@@ -635,7 +635,7 @@ describe("feedSource.materialize", () => {
         );
         expect(record.installRoot).toBeDefined();
         // The leaf carries no path separators or scope `@`/`/`, so it cannot
-        // escape installDir/agents (path-traversal defense, §5.5).
+        // escape installDir/agents (path-traversal defense, ).
         expect(record.installRoot).not.toMatch(/[\\/]/);
         expect(record.installRoot!.startsWith("@")).toBe(false);
         // And the created dir is a direct child of installDir/agents.
@@ -669,7 +669,7 @@ describe("feedSource.materialize", () => {
 
         // A subsequent failed install of a DIFFERENT version targets its own new
         // root (via a temp dir) and must not touch the prior root or the shared
-        // installDir (design §5.5 atomic materialize).
+        // installDir (5.5 atomic materialize).
         fail = true;
         await expect(
             source.materialize(

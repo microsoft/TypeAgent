@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Architecture: docs/architecture/core/completion.md — §4 Dispatcher
+// Architecture: docs/architecture/core/completion.md —  Dispatcher
 
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 

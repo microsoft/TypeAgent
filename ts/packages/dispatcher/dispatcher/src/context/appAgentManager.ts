@@ -1164,7 +1164,7 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     /**
-     * Remove a whole provider by identity (design §3.1, §8): derive the
+     * Remove a whole provider by identity (3.1, ): derive the
      * provider's agent name(s) via {@link AppAgentProvider.getAppAgentNames} and
      * tear each one down through the existing name-based {@link removeAgent}
      * (schemas, grammars, embeddings, and any live `SessionContext` are dropped

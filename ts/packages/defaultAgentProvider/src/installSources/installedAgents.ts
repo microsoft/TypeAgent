@@ -13,7 +13,7 @@ import {
 import { getProviderConfig } from "../utils/config.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
-// The single `agents.json` persisted under the instance dir (design §4.2): the
+// The single `agents.json` persisted under the instance dir: the
 // store of USER-INSTALLED agent records only. The bundled agent set is defined
 // separately by the `data/config.json` `agents` map at runtime (see
 // {@link seedRecordsFromConfig} / {@link createBundledAppAgentProvider}) - it
@@ -43,13 +43,13 @@ export function writeAgentsJson(instanceDir: string, data: AgentsJson): void {
 
 // The runtime root the bundled-catalog `module` records resolve against - the
 // default-agent-provider package's own node_modules, exactly as today's
-// defaultNpm provider does (design §4.1 "Module resolution roots").
+// defaultNpm provider does.
 function getAppBundleRequirePath(): string {
     return getPackageFilePath("./package.json");
 }
 
 // ---------------------------------------------------------------------------
-// Seeding (design §7): build InstalledAgentRecords from a catalog / agent map.
+// Seeding: build InstalledAgentRecords from a catalog / agent map.
 // ---------------------------------------------------------------------------
 
 // Map one config `agents` entry to an InstalledAgentRecord. A `path` entry
@@ -107,7 +107,7 @@ export function getBundledAgentNames(configName?: string): Set<string> {
 // Build the static bundled-agent AppAgentProvider (always present, immutable).
 // These agents resolve against the app bundle and are never installed,
 // uninstalled, or updated - they are simply the app's shipped agent set. This
-// replaces the former "builtin" install source (design revert): bundled agents
+// replaces the former "builtin" install source: bundled agents
 // are no longer modeled as an install source.
 export function createBundledAppAgentProvider(
     configName?: string,
@@ -125,11 +125,11 @@ export function createBundledAppAgentProvider(
 }
 
 // ---------------------------------------------------------------------------
-// Provider building (design §4.4): one single-agent provider per install.
+// Provider building: one single-agent provider per install.
 // ---------------------------------------------------------------------------
 
 function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
-    // path records: the loader ignores `name` in its path branch (design §4.2),
+    // path records: the loader ignores `name` in its path branch,
     // so the dispatcher name is fine. module records: `name` is the package.
     const info: NpmAppAgentInfo = {
         name: record.module ?? record.name,
@@ -146,7 +146,7 @@ function recordToNpmInfo(record: InstalledAgentRecord): NpmAppAgentInfo {
 
 /**
  * The absolute require-root a `module` install record resolves its package
- * against (design §5.5). A record carrying a per-agent `installRoot` resolves
+ * against. A record carrying a per-agent `installRoot` resolves
  * from its OWN version-scoped root
  * (`installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/<installRoot>`); a legacy record
  * without one falls back to the shared `installDir` (back-compat with
@@ -169,7 +169,7 @@ export function recordRequirePath(
 }
 
 /**
- * Build the AppAgentProvider for a SINGLE installed agent record (design §4.4).
+ * Build the AppAgentProvider for a SINGLE installed agent record.
  * Installed agents are feed installs materialized under `installDir`, so a
  * `module` record resolves from its own per-agent version-scoped root
  * (`record.installRoot`) — or, for a legacy record without one, from the shared
@@ -191,7 +191,7 @@ export function createInstalledAppAgentProvider(
 }
 
 /**
- * Build one single-agent provider per record (design §4.4). Used for static
+ * Build one single-agent provider per record. Used for static
  * enumeration (the indexing-service registry), which consumes the list; the
  * runtime source builds each agent's provider individually via
  * {@link createInstalledAppAgentProvider}. Returns [] for no records.
@@ -206,7 +206,7 @@ export function createInstalledAppAgentProviders(
 }
 
 /**
- * Load the user-installed agent records from `agents.json` (design §4.2).
+ * Load the user-installed agent records from `agents.json`.
  *
  * The bundled agents are a separate static provider (see
  * {@link createBundledAppAgentProvider}), so this returns ONLY the

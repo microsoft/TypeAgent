@@ -18,7 +18,7 @@ describe("pathSource", () => {
         expect(candidate).toBeDefined();
         expect(candidate!.source).toBe("path");
         expect(candidate!.path).toBe(path.resolve(dir));
-        // path-resolved candidates omit module (§12 Q17).
+        // path-resolved candidates omit module ( Q17).
         expect(candidate!.module).toBeUndefined();
     });
 

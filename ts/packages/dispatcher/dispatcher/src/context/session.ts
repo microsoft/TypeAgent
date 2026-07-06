@@ -469,7 +469,7 @@ type SessionData = {
     tokens?: TokenCounterData;
     indexes?: IndexData[];
     // The set of app agent names this session has already seen (static + dynamic;
-    // design §5, Model B). Used for load-time reconciliation: agents that became
+    // 5, Model B). Used for load-time reconciliation: agents that became
     // available while this session was offline are reported as added, and agents
     // that disappeared as removed. `undefined` means "never recorded" — the first
     // reconciliation establishes a silent baseline (a brand-new session or the
@@ -519,7 +519,7 @@ export class Session {
     private readonly settings: SessionSettings;
     private config: SessionConfig;
     private cacheData: SessionCacheData;
-    // Names of app agents this session has already seen (design §5, Model B).
+    // Names of app agents this session has already seen (5, Model B).
     // `undefined` until the first reconciliation records a baseline.
     private knownAgents: string[] | undefined;
 
@@ -659,7 +659,7 @@ export class Session {
     }
 
     /**
-     * The set of app agent names this session has already seen (design §5,
+     * The set of app agent names this session has already seen (5,
      * Model B), or `undefined` if no baseline has been recorded yet.
      */
     public getKnownAgents(): readonly string[] | undefined {
@@ -668,7 +668,7 @@ export class Session {
 
     /**
      * Record the set of app agent names currently known to this session
-     * (design §5, Model B) and persist it. Called by load-time reconciliation
+     * (5, Model B) and persist it. Called by load-time reconciliation
      * and by live add/remove so the next load reconciles against an accurate
      * baseline.
      */

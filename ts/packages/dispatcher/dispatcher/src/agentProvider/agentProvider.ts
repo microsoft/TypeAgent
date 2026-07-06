@@ -21,7 +21,7 @@ export interface AppAgentProvider {
     getLoadingAgentNames?(): string[];
     // Optional: whether the agent currently has a loaded (refcounted) instance —
     // i.e. some holder has `loadAppAgent`-ed it without a matching
-    // `unloadAppAgent` (design §5.6). The installed-agent source's coordinated
+    // `unloadAppAgent` (5.6). The installed-agent source's coordinated
     // teardown/swap reads this to VERIFY a torn-down version's shared process is
     // fully released (not loaded anywhere) before it starts the new version or
     // frees the name, rather than inferring it from teardown ACKs. Providers that
@@ -31,7 +31,7 @@ export interface AppAgentProvider {
 
 /**
  * The dispatcher-side client callback an {@link AppAgentSource} uses to mutate a
- * single connected session's live agent set (design §3.1). Implemented by the
+ * single connected session's live agent set (3.1). Implemented by the
  * dispatcher (one per `CommandHandlerContext`); the source holds one per
  * connected session and calls it to fan install/uninstall/update out to that
  * session.
@@ -40,22 +40,22 @@ export interface AppAgentProvider {
  * source never reaches into grammars, collision detection, or the embedding
  * cache. Both operations are applied through an idle-gated FIFO applicator and
  * resolve when the op is **applied** (the ack the source's lifecycle tracker
- * waits on, design §7).
+ * waits on, 7).
  */
 export interface AppAgentHost {
     /**
      * Register a provider's agent into this dispatcher's live state. The initial
      * enabled state is derived from session config with the agent's manifest
-     * default as the fallback (design §5, Model B): an installed agent honors its
+     * default as the fallback (5, Model B): an installed agent honors its
      * manifest default just like a bundled agent, and a user's per-session
      * `@config agent` override still wins. Asserts the single-agent invariant
      * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
      * be deferred until the session is idle.
      *
-     * `notify` (design §5): when true, the dispatcher surfaces a system message
+     * `notify` (5): when true, the dispatcher surfaces a system message
      * naming the agent and its resulting state. Because every op — including the
      * issuing session's — now applies asynchronously through the idle-gated
-     * queue (the inline path was removed, §5.4), the issuing session is notified
+     * queue (the inline path was removed, ), the issuing session is notified
      * like a sibling so the terminal outcome is reported when the op settles.
      */
     addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
@@ -67,12 +67,12 @@ export interface AppAgentHost {
      * the name(s) via `getAppAgentNames()` and calls the name-based
      * `removeAgent` per name. Resolves when APPLIED.
      *
-     * `notify` (design §5): when true, the dispatcher surfaces a system message
+     * `notify` (5): when true, the dispatcher surfaces a system message
      * that the agent was uninstalled/updated. As with {@link addProvider}, the
      * issuing session is notified like a sibling now that every op applies
-     * through the idle-gated queue (§5.4).
+     * through the idle-gated queue ().
      *
-     * `dropConfig` (design §5, Model B): when true (default — an explicit
+     * `dropConfig` (5, Model B): when true (default — an explicit
      * `@uninstall`), the agent's persisted enable preference (its
      * schema/action/command overrides) is cleared so a fresh reinstall starts
      * from the manifest default. An `@update` passes `false` so the remove leg
@@ -87,10 +87,10 @@ export interface AppAgentHost {
 
     /**
      * Coordinated teardown/swap of an installed agent as ONE command-lock-held
-     * critical section (design §5.1, §5.7) — the primitive both `@update` and
+     * critical section (5.1, ) — the primitive both `@update` and
      * `@uninstall` fan out through, replacing a separate remove-then-add. On this
      * dispatcher it runs, under a SINGLE command-lock acquisition (no request can
-     * interleave, closing the update request-slip of §5):
+     * interleave, closing the update request-slip of ):
      *
      *   1. remove `oldProvider` (unload its agent — decrement the SHARED
      *      refcount — and drop its routing artifacts), exactly like
@@ -98,11 +98,11 @@ export interface AppAgentHost {
      *   2. call `onQuiesced()` to fill this host's slot in the source's barrier;
      *   3. `await whenReady` — park (still holding the lock) until the source has
      *      every host's quiesce ACK AND has VERIFIED the shared old refcount is 0
-     *      (design §5.6), so the old version is confirmed terminated everywhere
+     *      (5.6), so the old version is confirmed terminated everywhere
      *      before anything new starts;
      *   4. if `newProviderThunk` is given, call it AFTER the barrier releases and
      *      add whatever it returns, exactly like {@link addProvider}. The source
-     *      decides post-barrier what to add (design §5.3): the NEW version on a
+     *      decides post-barrier what to add (5.3): the NEW version on a
      *      committed `@update`, the OLD version on a cancelled/timed-out update
      *      that ROLLS BACK (`v1` restored), or `undefined` (no add) on a
      *      committed `@uninstall` (`old → ∅`). A `newProviderThunk` of `undefined`
@@ -110,7 +110,7 @@ export interface AppAgentHost {
      *      back).
      *
      * No two versions of the name ever coexist, and no session observes the name
-     * absent across the swap. **Leaf-op invariant (§5.7):** the teardown and
+     * absent across the swap. **Leaf-op invariant ():** the teardown and
      * startup legs run under the held command lock and must be leaf ops — process
      * teardown/launch only, never dispatching a command or reacquiring the lock.
      *
@@ -118,7 +118,7 @@ export interface AppAgentHost {
      * {@link removeProvider}/{@link addProvider} (an update passes
      * `dropConfig=false` to preserve the enable preference across the bump; an
      * uninstall passes `true`). On {@link dispose} mid-op the host is dropped
-     * from the barrier and the op auto-acks (design §7.3).
+     * from the barrier and the op auto-acks (7.3).
      */
     replaceProvider(
         oldProvider: AppAgentProvider,
@@ -129,7 +129,7 @@ export interface AppAgentHost {
 
 /**
  * The source-coordinated barrier hooks passed to {@link AppAgentHost.replaceProvider}
- * (design §5.6, §5.7).
+ * (5.6, ).
  */
 export interface ReplaceProviderOptions {
     /**
@@ -139,15 +139,15 @@ export interface ReplaceProviderOptions {
     onQuiesced: () => void;
     /**
      * Resolved by the SOURCE once every host has quiesced AND verify-0 passes
-     * (the shared old refcount is confirmed 0, design §5.6). Each host parks on
+     * (the shared old refcount is confirmed 0, 5.6). Each host parks on
      * it — under its held command lock — before starting the new version / being
      * released, so the old version is confirmed gone everywhere first.
      */
     whenReady: Promise<void>;
-    /** Forwarded to the remove/add legs (sibling fan-out message, design §5). */
+    /** Forwarded to the remove/add legs (sibling fan-out message, 5). */
     notify?: boolean;
     /**
-     * Forwarded to the remove leg (design §5, Model B): `true` for an uninstall
+     * Forwarded to the remove leg (5, Model B): `true` for an uninstall
      * (clear the enable preference), `false` for an update (preserve it).
      */
     dropConfig?: boolean;
@@ -155,7 +155,7 @@ export interface ReplaceProviderOptions {
 
 /**
  * The dispatcher-facing surface of the dynamic (installed) agent set (design
- * §3.2). Injected as `appAgentSources` alongside the static `appAgentProviders`.
+ * ). Injected as `appAgentSources` alongside the static `appAgentProviders`.
  * The concrete host object also carries the write/command surface
  * (`install`/`uninstall`/`update`/`packageCommands`), but the dispatcher is
  * handed only the narrow `connect` view, so it can never drive an install.
@@ -164,14 +164,14 @@ export interface AppAgentSource {
     /**
      * Called once per dispatcher at context init. Returns the provider(s) this
      * source contributes to THIS session plus a teardown handle. The source
-     * records `host` for fan-out (design §4).
+     * records `host` for fan-out (4).
      */
     connect(host: AppAgentHost): AppAgentConnection;
 }
 
 /**
  * The result of {@link AppAgentSource.connect}: the provider(s) to register into
- * the connecting dispatcher plus a teardown handle (design §3.2).
+ * the connecting dispatcher plus a teardown handle (3.2).
  */
 export interface AppAgentConnection {
     /**
@@ -185,7 +185,7 @@ export interface AppAgentConnection {
     /**
      * Resolves once every teardown/swap barrier that was in flight when this
      * session connected (a name mid-`removing`) has decided, yielding the
-     * decided version(s) to register (design §7.3 connect-during-removing). The
+     * decided version(s) to register (7.3 connect-during-removing). The
      * dispatcher awaits this UNDER its held command lock during connect, then
      * registers the resolved provider(s) inline — so the session neither loads a
      * doomed version (verify-0 pollution) nor processes a command while the
