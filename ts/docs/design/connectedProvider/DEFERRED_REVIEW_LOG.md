@@ -9,15 +9,6 @@
 Review round 1 (Explore subagent) found no blockers/majors. Nits deliberately
 **not** actioned, with rationale:
 
-- **Dangling `record.provider` ref after `removeAgent`** (appAgentManager.ts):
-  the record is deleted from the `agents` map and goes out of scope, so GC
-  reclaims it; explicitly nulling `record.provider` is cosmetic. Not changed.
-- **Optional-chaining `record.provider?.unloadAppAgent` clarity comment**: the
-  code already guards on `record.appAgent !== undefined`; comment is
-  nice-to-have. Not changed.
-- **`undefined as unknown as AppAgentHostApplicator` deferred-assignment cast**:
-  intentional, mirrors the existing `requestQueue` wiring pattern in the same
-  file; the applicator is assigned before first use. Kept for consistency.
 - **N+1 `setState` calls when registering source providers at init**:
   behavior-preserving M1 path, logically idempotent. Milestone 2 restructures
   install onto the explicit-enable applicator path, removing the redundancy.

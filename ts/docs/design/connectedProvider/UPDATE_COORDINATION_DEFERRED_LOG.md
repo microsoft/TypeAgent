@@ -54,22 +54,6 @@
 - **Rationale:** Reaching an inactive-entry state at prune time requires contriving a record with no live entry, which does not occur in the normal seed→install→op flow; the branch is a trivial defensive fallback (same `pruneAgentRoot` call, best-effort). The primary drained path is fully covered. Low regression risk.
 - **Follow-up:** none.
 
-### 2026-07-05 — Leaf-op invariant (§5.7) enforced by convention, not at runtime
-
-- **Milestone / gate round:** M3 / review round 2 (LOW)
-- **Finding / gap:** Nothing at runtime prevents `applyAdd`/`applyRemove` (the
-  teardown/startup legs of a `replace` op) from reacquiring the command lock or
-  dispatching a command; the leaf-op rule is a comment. Same as the pre-existing
-  `addProvider`/`removeProvider` legs.
-- **Decision:** Deferred (accept convention + test-side coverage).
-- **Rationale:** A runtime guard (e.g. a re-entrancy flag on the command lock)
-  is a cross-cutting change beyond M3's scope, and the single-slot applicator
-  would self-deadlock if a leg re-acquired it — the "one command-lock section,
-  no interleave" applicator test would fail loudly, so the invariant is
-  effectively pinned by construction.
-- **Follow-up:** Consider a re-entrancy assertion if a future leg grows a nested
-  lock acquisition.
-
 ### 2026-07-05 — DEFERRED: full pre-launch `v2` startability probe
 
 - **Milestone / gate round:** M4 / §5.3

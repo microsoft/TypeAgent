@@ -27,33 +27,6 @@
 
 ## Entries
 
-### 2025-06-18 — Source config fail-fast validation (path/catalog readability)
-
-- **Milestone / gate:** M1 gate
-- **Kind:** Review finding
-- **Raised by:** review round 1 (finding 3, minor)
-- **Summary:** `createPathSource` / `createCatalogSource` do not verify `baseDir` / catalog file readability at construction; errors surface on first `find()`.
-- **Why not addressed:** Sources are constructed eagerly for every configured source at registry init, including ones never used in a given resolve. Failing fast there would turn one bad config entry into a startup failure. `find()` already degrades gracefully (catalog → non-match + debug log; path → stat miss), which is the more robust behavior for the ordered walk. Clear contextual errors were added to catalog loading.
-- **Follow-up:** none.
-
-### 2025-06-18 — Feed cache file symlink safety
-
-- **Milestone / gate:** M1 gate
-- **Kind:** Review finding
-- **Raised by:** review round 1 (finding 4, minor)
-- **Summary:** `writeDiskCache` overwrites the cache path without symlink checks; an attacker with write access to `installDir` could pre-place a symlink.
-- **Why not addressed:** Write access to the per-user `installDir` already implies control of the agent install tree (a far larger capability), and the only content written is benign public package-name JSON. Out of proportion to the threat for M1.
-- **Follow-up:** none.
-
-### 2025-06-18 — Transient npm auth file mode on Windows
-
-- **Milestone / gate:** M1 gate
-- **Kind:** Review finding
-- **Raised by:** review round 1 (finding 5, minor)
-- **Summary:** `{ mode: 0o600 }` on the transient `.npmrc` is not enforced the same way on Windows (ACL-based).
-- **Why not addressed:** The file lives in a freshly `mkdtemp`'d directory under the per-user `os.tmpdir()` and is removed in a `finally`. On Windows per-user temp dirs are ACL-isolated by default, so the token is not exposed to other users. Platform-specific ACL handling is disproportionate for a sub-second transient file.
-- **Follow-up:** none.
-
 ### 2026-06-27 — `getProviderConfig` first-config singleton cache
 
 - **Milestone / gate:** M2 gate
@@ -124,19 +97,6 @@
   coverage; an isolated mock would require changing the test environment for little value.
 - **Follow-up:** none.
 
-### 2026-06-28 — `displayResult` not awaited in the @source/@update handlers
-
-- **Milestone / gate:** M3 gate
-- **Kind:** Review finding
-- **Raised by:** review round 2 (minor)
-- **Summary:** `displayWarn` is awaited (it gates an abort/return) but the terminal
-  `displayResult` confirmations are fire-and-forget, mirroring an inconsistency the M2
-  install/uninstall handlers already have.
-- **Why not addressed:** `displayResult` is the last statement before the handler returns;
-  not awaiting it is the prevailing pattern across the existing committed handlers. Awaiting
-  here only would add churn without changing observable behavior.
-- **Follow-up:** none (consider a sweep if handler display calls are ever standardized).
-
 ### 2026-06-28 — `@source add` duplicate-name error path not unit-tested
 
 - **Milestone / gate:** M3 gate
@@ -174,9 +134,15 @@
   `check:policy` **without** `--fix` and merely verifies; all committed agent package.json
   files are already sorted, so the gate is green. Reordering the rule list (or sorting inside
   the rule) would couple the rule to `sort-package-json` for no enforcement gain.
-- **Follow-up:** none.
+- **Follow-up:** RESOLVED (2026-07-06) — the `repo-policy-check` harness now re-normalizes
+  package.json key ordering after all rules run: in `--fix` mode it applies `sort-package-json`
+  to any matched `package.json` before saving. This moves a field added by a later rule (e.g.
+  `agent-keyword`'s `keywords`, which runs after `npm-package-sort-metadata`) into its sorted
+  position in a single `--fix` pass. The re-sort is idempotent (an already-sorted file
+  serializes unchanged, so nothing is written) and generalizes to any key-adding rule.
 
 ### 2026-06-28 — Multi-host boot consistency is smoke-test scope, not unit scope
+
 - **Milestone / gate:** Final gate
 - **Kind:** Test gap
 - **Raised by:** final-gate test-gap round 1
